@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "okf-doc-parser"
+version = "0.1.0"
+description = "Standalone extraction of DOCX (with reviewer comments and embedded objects), XLSX and PDF into structured blocks / markdown."
+requires-python = ">=3.12"
+dependencies = [
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "pypdf>=5.0",
+    "olefile>=0.47",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "reportlab>=4.0",
+]
+
+[project.scripts]
+doc-parser = "docparser.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

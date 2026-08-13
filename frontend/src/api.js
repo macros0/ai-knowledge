@@ -1,0 +1,55 @@
+const BASE = "/api";
+
+async function request(path, init) {
+  const resp = await fetch(`${BASE}${path}`, init);
+  if (!resp.ok) {
+    const detail = await resp.text();
+    throw new Error(detail || `HTTP ${resp.status}`);
+  }
+  return resp.json();
+}
+
+export function uploadDocument(file, tags = []) {
+  const form = new FormData();
+  form.append("file", file);
+  for (const tag of tags) {
+    form.append("tags", tag);
+  }
+  return request("/documents", { method: "POST", body: form });
+}
+
+export function listTags() {
+  return request("/tags").then((data) => data.tags ?? []);
+}
+
+export function listDocuments() {
+  return request("/documents");
+}
+
+export function deleteDocument(docId) {
+  return request(`/documents/${docId}`, { method: "DELETE" });
+}
+
+export function listOkfFiles(docId) {
+  return request(`/documents/${docId}/okf`);
+}
+
+export function getOkfContent(docId, filename) {
+  return fetch(`${BASE}/documents/${docId}/okf/${encodeURIComponent(filename)}`).then((r) => r.text());
+}
+
+export function search(query, tags = [], topK = 5) {
+  return request("/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, tags, top_k: topK }),
+  });
+}
+
+export function chat(query, tags = [], topK = 5) {
+  return request("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, tags, top_k: topK }),
+  });
+}

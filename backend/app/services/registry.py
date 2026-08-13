@@ -1,0 +1,66 @@
+"""Простой персистентный реестр документов (JSON-файл в data/)."""
+import json
+import threading
+from datetime import datetime, timezone
+
+from app.config import get_settings
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class DocumentRegistry:
+    def __init__(self):
+        self.path = get_settings().data_dir / "documents.json"
+        self._lock = threading.Lock()
+        self._docs: dict[str, dict] = {}
+        self._load()
+
+    def _load(self) -> None:
+        if self.path.exists():
+            try:
+                self._docs = json.loads(self.path.read_text(encoding="utf-8"))
+            except Exception:
+                self._docs = {}
+
+    def _save(self) -> None:
+        self.path.write_text(json.dumps(self._docs, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def create(self, doc_id: str, filename: str, content_type: str, size: int, tags: list[str] | None = None) -> dict:
+        doc = {
+            "id": doc_id,
+            "filename": filename,
+            "content_type": content_type,
+            "size": size,
+            "status": "uploaded",
+            "error": None,
+            "okf_file_count": 0,
+            "tags": tags or [],
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
+        with self._lock:
+            self._docs[doc_id] = doc
+            self._save()
+        return doc
+
+    def get(self, doc_id: str) -> dict | None:
+        return self._docs.get(doc_id)
+
+    def list(self) -> list[dict]:
+        return list(self._docs.values())
+
+    def update(self, doc_id: str, **fields) -> None:
+        with self._lock:
+            if doc_id in self._docs:
+                self._docs[doc_id].update(fields)
+                self._docs[doc_id]["updated_at"] = _now()
+                self._save()
+
+    def delete(self, doc_id: str) -> bool:
+        with self._lock:
+            existed = self._docs.pop(doc_id, None) is not None
+            if existed:
+                self._save()
+        return existed

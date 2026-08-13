@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OKF Knowledge Service</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <h1>OKF Knowledge Service</h1>
+        <nav>
+          <button id="tab-documents" class="tab active">Документы</button>
+          <button id="tab-chat" class="tab">Чат</button>
+        </nav>
+      </header>
+
+      <main>
+        <section id="panel-documents" class="panel">
+          <div class="tag-picker" id="upload-tags">
+            <div class="tag-picker-label">Теги для документа (глобальные):</div>
+            <div class="tag-chips" id="upload-tags-chips"></div>
+            <input type="text" id="upload-tags-input" placeholder="Введите тег и нажмите Enter..." autocomplete="off" list="tag-datalist" />
+          </div>
+          <div class="upload-zone" id="upload-zone">
+            <input type="file" id="file-input" accept=".docx,.xlsx,.pdf" hidden />
+            <p>Перетащите файл (.docx, .xlsx, .pdf) или нажмите для выбора</p>
+          </div>
+          <ul id="document-list" class="document-list"></ul>
+        </section>
+
+        <section id="panel-chat" class="panel hidden">
+          <div class="chat-log" id="chat-log"></div>
+          <div class="tag-picker" id="chat-tags">
+            <div class="tag-picker-label">Фильтр по тегам:</div>
+            <div class="tag-chips" id="chat-tags-chips"></div>
+            <input type="text" id="chat-tags-input" placeholder="Выберите из справочника или напишите новый..." autocomplete="off" list="tag-datalist" />
+          </div>
+          <form id="chat-form" class="chat-form">
+            <input type="text" id="chat-input" placeholder="Задайте вопрос по базе знаний..." autocomplete="off" />
+            <button type="submit">Отправить</button>
+          </form>
+        </section>
+        <datalist id="tag-datalist"></datalist>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
