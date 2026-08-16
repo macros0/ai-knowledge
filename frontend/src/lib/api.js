@@ -23,11 +23,15 @@ export function listTags() {
 }
 
 export function listDocuments() {
-  return request("/documents");
+  return request("/documents").then((data) => data.documents ?? []);
 }
 
 export function deleteDocument(docId) {
   return request(`/documents/${docId}`, { method: "DELETE" });
+}
+
+export function resumeDocument(docId) {
+  return request(`/documents/${docId}/resume`, { method: "POST" });
 }
 
 export function listOkfFiles(docId) {
@@ -35,7 +39,7 @@ export function listOkfFiles(docId) {
 }
 
 export function getOkfContent(docId, filename) {
-  return fetch(`${BASE}/documents/${docId}/okf/${encodeURIComponent(filename)}`).then((r) => r.text());
+  return fetch(`${BASE}/documents/${docId}/okf/${filename}`).then((r) => r.text());
 }
 
 export function search(query, tags = [], topK = 5) {

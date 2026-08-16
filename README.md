@@ -17,8 +17,8 @@ Upload (docx/xlsx/pdf)
                                                                      │ embed
                                                                      ▼
 ┌─────────────────┐    ┌─────────────────────────────────────────────────┐
-│  Chat Web UI    │◄───│  RAG: Qdrant (vectors + payload=YAML meta)     │
-│  (Vite + JS)     │    │  hybrid search: semantic + tag filter          │
+│  Chat Web UI    │◄───│  RAG: Qdrant (vectors + payload=YAML meta)      │
+│  (Next.js + JS) │    │  hybrid search: semantic + tag filter           │
 └─────────────────┘    └─────────────────────────────────────────────────┘
 ```
 
@@ -29,14 +29,14 @@ Upload (docx/xlsx/pdf)
 3. **OKF-генерация** — локальная LLM (через **LiteLLM**, легко переключить на облачную) разбивает текст на смысловые концепты и формирует Markdown-файлы с YAML-фронтматтером (type, title, tags, relations, source).
 4. **RAG-хранилище** — **Qdrant**: вектор (только тело Markdown) + payload (метаданные из YAML). Гибридный поиск: семантический по вектору + фильтрация по тегам.
 5. **Умный поиск** — эмбеддинг запроса → поиск в Qdrant → LLM формирует ответ по найденным концептам с указанием источников.
-6. **Веб-интерфейс** — **Vite + JavaScript**: загрузка файлов, статус обработки, чат со стримингом ответа и блоком "Источники".
+6. **Веб-интерфейс** — **Next.js (App Router) + JavaScript**: загрузка файлов, статус обработки, чат с блоком "Источники".
 
 ## Стек
 
 | Слой | Технология |
 | :-- | :-- |
 | Backend | Python 3.12, FastAPI, LiteLLM, Qdrant client |
-| Frontend | JavaScript, Vite |
+| Frontend | JavaScript, Next.js (App Router) |
 | Vector DB | Qdrant |
 | OKF Storage | Файловая система `./data/okf_bundles/{doc_id}/` |
 | LLM / Embeddings | Любые, совместимые с OpenAI API (Ollama, vLLM, TEI, OpenAI, YandexGPT...) |
@@ -59,7 +59,7 @@ uvicorn app.main:app --reload --port 8000
 # 3. Frontend (в отдельном терминале)
 cd frontend
 npm install
-npm run dev                     # http://localhost:5173
+npm run dev                     # http://localhost:3000
 ```
 
 ## Быстрый старт (Docker)
@@ -69,6 +69,7 @@ cp .env.example .env
 # убедитесь, что QDRANT_URL=http://localhost:6333 (внутри compose он переопределяется на http://qdrant:6333)
 docker compose up --build
 # UI: http://localhost:8080   API docs: http://localhost:8000/docs
+# BACKEND_URL внутри compose переопределяется на http://backend:8000 (прокси /api в Next.js)
 ```
 
 ## Как это работает
@@ -94,6 +95,63 @@ created_at: 2026-08-12
 4. Каждый файл векторизуется, вектор уходит в Qdrant, а YAML-метаданные — в payload точки.
 5. В чате запрос векторизуется, Qdrant возвращает релевантные концепты (с учётом фильтров по тегам), LLM синтезирует ответ и перечисляет источники.
 
+## Обновление Qdrant
+
+Qdrant гарантирует совместимость **storage-формата только на ±1 минорную версию**.
+Прыжок через несколько миноров (например, 1.12 → 1.19) при наличии данных приведёт
+к отказу сервера стартовать. Поэтому перед любым апгрейдом следуйте процедуре ниже.
+
+Правила совместимости:
+- Версии **клиента** (`qdrant-client`) и **сервера** должны совпадать по major и
+  расходиться не более чем на 1 минор. Обновляйте сначала клиент, потом сервер.
+- У нас один узел — апгрейд требует короткого даунтайма (это нормально).
+
+### Процедура апгрейда с данными (через снапшот)
+
+1. **Обновить клиент** (`backend/requirements.txt`), поставить в venv, проверить
+   подключение к старому серверу.
+2. **Снять снапшот коллекции** (сервер сам гасит записи и сбрасывает WAL):
+
+   ```bash
+   curl -X POST http://localhost:6333/collections/okf_knowledge_base/snapshots
+   ```
+
+   Снапшот появится в каталоге snapshots сервера — скопируйте его в бэкап
+   **вне** storage-каталога.
+3. **Остановить старый сервер**, обновить бинарь/образ, **удалить/затереть**
+   storage (старый формат не читается новым сервером).
+4. **Запустить новый сервер**, восстановить коллекцию из снапшота:
+
+   ```bash
+   curl -X PUT http://localhost:6333/collections/okf_knowledge_base/snapshots/recover \
+     -H "Content-Type: application/json" \
+     -d '{"location": "file:///path/to/snapshot.snapshot", "priority": "snapshot"}'
+   ```
+
+   Восстановление создаёт коллекцию и сразу строит индексы — пере-эмбеддинг не нужен.
+5. **Проверить**: количество точек и выборочный payload:
+
+   ```bash
+   curl -X POST http://localhost:6333/collections/okf_knowledge_base/points/count \
+     -H "Content-Type: application/json" -d '{"exact": true}'
+   ```
+
+### Страховка: пересборка индекса из источников
+
+Векторный индекс — **производные данные**; первоисточник лежит в
+`data/okf_bundles/{doc_id}/`. Если снапшот не восстановился, коллекцию можно
+полностью пересобрать без потерь (только время на эмбеддинги):
+
+```bash
+cd backend
+.venv\Scripts\activate
+python scripts/reindex.py          # из data/ в текущем каталоге
+python scripts/reindex.py --data-dir /path/to/data
+```
+
+Скрипт удаляет коллекцию, создаёт её заново и индексирует все OKF-файлы.
+Перед запуском нужен работающий Qdrant и embedding-сервер (или `EMBEDDING_PROVIDER=fake`).
+
 ## Конфигурация (основные переменные `.env`)
 
 | Переменная | Описание |
@@ -103,26 +161,64 @@ created_at: 2026-08-12
 | `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` | Модель и адрес эмбеддингов |
 | `EMBEDDING_DIM` | Размерность вектора (должна совпадать с моделью) |
 | `LLM_MODEL` / `LLM_BASE_URL` / `LLM_API_KEY` | Модель для OKF-генерации и ответов (через LiteLLM) |
+| `BACKEND_URL` | Адрес бэкенда для прокси `/api` в Next.js (dev: `http://localhost:8000`, Docker: `http://backend:8000`) |
 | `OKF_MAX_CHUNK_CHARS` | Макс. размер куска текста для LLM за один вызов |
 
 ## Структура проекта
 
 ```
 ├── backend/            # Python FastAPI
-│   └── app/
-│       ├── api/        # routes: documents, search, chat
-│       ├── models/     # Pydantic-схемы
-│       ├── prompts/    # промпты OKF-генерации и чата
-│       ├── services/   # OKF, эмбеддинги, Qdrant, пайплайн
-│       ├── config.py   # настройки из .env
-│       └── main.py     # точка входа FastAPI
+│   ├── app/
+│   │   ├── api/        # routes: documents, search, chat
+│   │   ├── models/     # Pydantic-схемы
+│   │   ├── prompts/    # промпты OKF-генерации и чата (store + дефолты)
+│   │   ├── services/   # OKF, эмбеддинги, Qdrant, пайплайн
+│   │   ├── config.py   # настройки из .env
+│   │   └── main.py     # точка входа FastAPI
+│   └── prompts/        # канонические файлы промптов (.md, версионируются)
 ├── doc-parser/         # standalone-пакет разбора документов (editable)
 │   └── src/docparser/  # парсеры docx/xlsx/pdf, вложения, CLI
-├── frontend/           # Vite + JavaScript (чат, загрузка, источники)
+├── frontend/           # Next.js (App Router) + JavaScript (чат, загрузка, источники)
 ├── data/               # uploads/ и okf_bundles/ (runtime, в gitignore)
 ├── docker-compose.yml
 └── .env.example
 ```
+
+## Промпты (настройка без рестарта)
+
+Промпты хранятся во внешних Markdown-файлах и перечитываются при каждом обращении
+по изменению `mtime` — правка подхватывается следующим запросом без перезапуска
+бэкенда.
+
+**Каскад разрешения** (первый найденный валидный файл имеет приоритет):
+
+1. `<data_dir>/prompts/<key>.md` — runtime-оверрайд (правится на лету, `.gitignore`).
+2. `backend/prompts/<key>.md` — канонический файл (версионируется в git).
+3. Дефолт-константа в `backend/app/prompts/okf.py` — всегда валидный fallback.
+
+**Файлы промптов:**
+
+| Ключ | Файл | Обязательные плейсхолдеры |
+| :-- | :-- | :-- |
+| `chat_system` | `chat_system.md` | — |
+| `chat_user` | `chat_user.md` | `{context}`, `{query}` |
+| `okf_system` | `okf_system.md` | — |
+| `okf_user` | `okf_user.md` | `{filename}`, `{content}` |
+| `okf_chunk` | `okf_chunk.md` | `{filename}`, `{index}`, `{total}`, `{content}` |
+
+**Как править:**
+
+- Локально: правьте `backend/prompts/<key>.md` (попадёт в git) или создайте
+  `data/prompts/<key>.md` — он перекроет канонический без коммита.
+- В Docker: том `./data:/data` уже смонтирован, поэтому `data/prompts/<key>.md`
+  правится с хоста без пересборки контейнера.
+
+**Защита от ошибок:** если файл пустой, не в UTF-8 или не читается — возвращается
+предыдущее валидное значение (или следующий уровень каскада). Если в файле
+пропущен обязательный плейсхолдер — в лог пишется `WARNING` и используется дефолт.
+Опечатка в плейсхолдере (например, `{контекст}`) не роняет запрос — токен
+сохраняется дословно. Новые файлы сидируются из дефолтов автоматически при старте
+(`PromptStore.ensure()`).
 
 ## API
 

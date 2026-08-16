@@ -7,12 +7,12 @@ from fastapi import APIRouter, Form, HTTPException, UploadFile
 from app.config import get_settings
 from app.models.schemas import DocumentListOut, DocumentOut, OkfFileOut
 from app.services.pipeline import Pipeline, save_upload
-from app.services.registry import DocumentRegistry
+from app.services.registry import get_registry
 from app.services.tag_registry import TagRegistry, normalize_tags
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-_registry = DocumentRegistry()
+_registry = get_registry()
 _pipeline = Pipeline()
 _tag_registry = TagRegistry()
 
@@ -20,7 +20,7 @@ _tag_registry = TagRegistry()
 @router.post("", response_model=DocumentOut)
 async def upload_document(
     file: UploadFile,
-    tags: Annotated[list[str] | None, Form(default=None)] = None,
+    tags: Annotated[list[str] | None, Form()] = None,
 ):
     content = await file.read()
     if not content:
@@ -58,6 +58,20 @@ def delete_document(doc_id: str):
         raise HTTPException(status_code=404, detail="Документ не найден")
     _pipeline.remove(doc_id)
     return {"status": "deleted"}
+
+
+@router.post("/{doc_id}/resume", response_model=DocumentOut)
+def resume_document(doc_id: str):
+    doc = _registry.get(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    if doc.get("status") not in ("paused", "failed"):
+        raise HTTPException(status_code=400, detail="Документ не требует возобновления")
+    try:
+        _pipeline.resume(doc_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _registry.get(doc_id)
 
 
 @router.get("/{doc_id}/okf", response_model=list[OkfFileOut])

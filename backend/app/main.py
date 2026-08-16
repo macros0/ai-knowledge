@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import chat, documents, search, tags
 from app.config import get_settings
+from app.prompts.store import get_store
 from app.services.vector_store import VectorStore
 
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    get_store().ensure()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,

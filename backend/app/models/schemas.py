@@ -12,6 +12,8 @@ class DocumentOut(BaseModel):
     status: str
     error: str | None = None
     okf_file_count: int = 0
+    total_chunks: int = 0
+    processed_chunks: int = 0
     tags: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

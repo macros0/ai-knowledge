@@ -64,10 +64,10 @@ class VectorStore:
         query_filter = None
         if tags:
             query_filter = qm.Filter(must=[qm.FieldCondition(key="tags", match=qm.MatchAny(any=tags))])
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.collection,
-            query_vector=vector,
+            query=vector,
             query_filter=query_filter,
             limit=top_k,
         )
-        return [{"score": r.score, "payload": r.payload} for r in results]
+        return [{"score": r.score, "payload": r.payload} for r in results.points]

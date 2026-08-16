@@ -8,7 +8,7 @@ import yaml
 
 from app.config import get_settings
 from app.models.schemas import Concept, OkfDocument
-from app.prompts.okf import CHUNK_OKF_PROMPT, SYSTEM_OKF_PROMPT, USER_OKF_PROMPT
+from app.prompts.store import get_store
 from app.services.llm_client import LLMClient
 
 VALID_TYPES = {"concept", "procedure", "reference", "example", "note"}
@@ -22,25 +22,27 @@ class OKFGenerator:
     def __init__(self, llm: LLMLike | None = None, bundle_root: Path | None = None):
         self.llm = llm or LLMClient()
         self.settings = get_settings()
+        self.prompts = get_store()
         self.bundle_root = bundle_root
 
     def generate(self, markdown_text: str, filename: str) -> list[Concept]:
-        chunks = _chunk_text(markdown_text, self.settings.okf_max_chunk_chars)
+        chunks = self.chunk_text(markdown_text)
         concepts: list[Concept] = []
-        if len(chunks) == 1:
-            raw = self.llm.chat_json(
-                SYSTEM_OKF_PROMPT,
-                USER_OKF_PROMPT.format(filename=filename, content=chunks[0]),
-            )
-            concepts.extend(_normalize(raw))
-        else:
-            for i, chunk in enumerate(chunks, start=1):
-                raw = self.llm.chat_json(
-                    SYSTEM_OKF_PROMPT,
-                    CHUNK_OKF_PROMPT.format(filename=filename, index=i, total=len(chunks), content=chunk),
-                )
-                concepts.extend(_normalize(raw))
+        for i, chunk in enumerate(chunks, start=1):
+            concepts.extend(self.generate_chunk(chunk, filename, i, len(chunks)))
         return concepts
+
+    def chunk_text(self, markdown_text: str) -> list[str]:
+        return _chunk_text(markdown_text, self.settings.okf_max_chunk_chars)
+
+    def generate_chunk(self, chunk: str, filename: str, index: int, total: int) -> list[Concept]:
+        """Генерация OKF-концептов для одного чанка (индекс — 1-based)."""
+        if total <= 1:
+            prompt = self.prompts.format("okf_user", filename=filename, content=chunk)
+        else:
+            prompt = self.prompts.format("okf_chunk", filename=filename, index=index, total=total, content=chunk)
+        raw = self.llm.chat_json(self.prompts.get("okf_system"), prompt)
+        return _normalize(raw)
 
     def save_bundle(
         self,
@@ -49,10 +51,10 @@ class OKFGenerator:
         concepts: list[Concept],
         attachments: list[dict] | None = None,
         global_tags: list[str] | None = None,
+        slugs: list[str] | None = None,
+        bundle_root: Path | None = None,
     ) -> list[OkfDocument]:
-        bundle_dir = self.bundle_root or self.settings.okf_dir / doc_id
-        if not self.bundle_root:
-            bundle_dir = self.settings.okf_dir / doc_id
+        bundle_dir = bundle_root or self.bundle_root or self.settings.okf_dir / doc_id
         bundle_dir.mkdir(parents=True, exist_ok=True)
         global_tags = global_tags or []
         okf_docs: list[OkfDocument] = []
@@ -60,7 +62,10 @@ class OKFGenerator:
         for i, concept in enumerate(concepts):
             if not concept.title or not concept.content:
                 continue
-            slug = _slugify(concept.title) or concept.id or f"concept-{i}"
+            if slugs is not None and i < len(slugs) and slugs[i]:
+                slug = slugs[i]
+            else:
+                slug = _slugify(concept.title) or concept.id or f"concept-{i}"
             if slug in seen:
                 slug = f"{slug}-{i}"
             seen.add(slug)

@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -e ./doc-parser && \
     pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend/app ./app
+COPY backend/prompts ./prompts
 
 EXPOSE 8000
 

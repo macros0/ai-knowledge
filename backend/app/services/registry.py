@@ -23,6 +23,18 @@ class DocumentRegistry:
                 self._docs = json.loads(self.path.read_text(encoding="utf-8"))
             except Exception:
                 self._docs = {}
+        self._reset_stale_statuses()
+
+    def _reset_stale_statuses(self) -> None:
+        stale = {"splitting", "processing", "indexing", "uploaded"}
+        changed = False
+        for doc in self._docs.values():
+            if doc.get("status") in stale:
+                doc["status"] = "paused"
+                doc["error"] = "Сервер был перезапущен. Нажмите «Возобновить»"
+                changed = True
+        if changed:
+            self._save()
 
     def _save(self) -> None:
         self.path.write_text(json.dumps(self._docs, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -36,6 +48,9 @@ class DocumentRegistry:
             "status": "uploaded",
             "error": None,
             "okf_file_count": 0,
+            "total_chunks": 0,
+            "processed_chunks": 0,
+            "current_chunk": 0,
             "tags": tags or [],
             "created_at": _now(),
             "updated_at": _now(),
@@ -64,3 +79,17 @@ class DocumentRegistry:
             if existed:
                 self._save()
         return existed
+
+
+_INSTANCE: DocumentRegistry | None = None
+_INSTANCE_LOCK = threading.Lock()
+
+
+def get_registry() -> DocumentRegistry:
+    """Общий для процесса реестр — один инстанс на всех потребителей."""
+    global _INSTANCE
+    if _INSTANCE is None:
+        with _INSTANCE_LOCK:
+            if _INSTANCE is None:
+                _INSTANCE = DocumentRegistry()
+    return _INSTANCE

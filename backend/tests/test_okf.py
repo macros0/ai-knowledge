@@ -156,6 +156,86 @@ class TestOkfMarkdown:
         assert "global_tags: []" in md
 
 
+class TestGenerateChunk:
+    def _make_gen(self, tmp_path, llm):
+        from app.services.okf_generator import OKFGenerator
+
+        return OKFGenerator(llm=llm, bundle_root=tmp_path / "okf")
+
+    class FakeLLM:
+        def __init__(self):
+            self.calls = []
+
+        def chat_json(self, system, user):
+            self.calls.append(user)
+            return [
+                {
+                    "id": "k1",
+                    "title": "Concept One",
+                    "type": "concept",
+                    "tags": ["a"],
+                    "content": "Тело концепта.",
+                    "relations": [],
+                }
+            ]
+
+    def test_single_chunk_uses_full_document_prompt(self, tmp_path):
+        llm = self.FakeLLM()
+        gen = self._make_gen(tmp_path, llm)
+        concepts = gen.generate_chunk("текст", "doc.docx", 1, 1)
+        assert len(concepts) == 1
+        assert "Текст документа" in llm.calls[0]
+
+    def test_multi_chunk_uses_chunk_prompt(self, tmp_path):
+        llm = self.FakeLLM()
+        gen = self._make_gen(tmp_path, llm)
+        concepts = gen.generate_chunk("текст", "doc.docx", 2, 5)
+        assert len(concepts) == 1
+        assert "Фрагмент 2 из 5" in llm.calls[0]
+
+    def test_chunk_text_respects_limit(self, tmp_path):
+        from app.config import Settings
+
+        gen = self._make_gen(tmp_path, self.FakeLLM())
+        gen.settings = Settings(okf_max_chunk_chars=100)
+        text = "\n\n".join("абзац " * 40 for _ in range(20))
+        chunks = gen.chunk_text(text)
+        assert len(chunks) > 1
+
+    def test_generate_combines_all_chunks(self, tmp_path):
+        class CountingLLM:
+            def __init__(self):
+                self.n = 0
+
+            def chat_json(self, system, user):
+                self.n += 1
+                return [
+                    {
+                        "id": f"k{self.n}",
+                        "title": f"Concept {self.n}",
+                        "type": "concept",
+                        "tags": [],
+                        "content": f"тело {self.n}",
+                        "relations": [],
+                    }
+                ]
+
+        from app.config import Settings
+
+        llm = CountingLLM()
+        gen = self._make_gen(tmp_path, llm)
+        gen.settings = Settings(okf_max_chunk_chars=100)
+        text = "\n\n".join("абзац " * 40 for _ in range(20))
+        concepts = gen.generate(text, "doc.docx")
+        assert len(concepts) == llm.n > 1
+
+    def test_save_bundle_with_preallocated_slugs(self, tmp_path):
+        gen = self._make_gen(tmp_path, self.FakeLLM())
+        concepts = [_normalize([{"id": "a", "title": "Bridge", "type": "concept", "tags": [], "content": "1", "relations": []}])[0]]
+        okf_docs = gen.save_bundle("doc1", "in.docx", concepts, slugs=["my-slug"])
+        assert Path(okf_docs[0].filepath).name == "my-slug.md"
+
+
 class TestBundleRoundtrip:
     def test_save_and_read(self, tmp_path: Path):
         from app.services.okf_generator import OKFGenerator

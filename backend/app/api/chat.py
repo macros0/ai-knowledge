@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 
 from app.models.schemas import ChatRequest, ChatResponse, ChatSource
-from app.prompts.okf import SYSTEM_CHAT_PROMPT, USER_CHAT_PROMPT
+from app.prompts.store import get_store
 from app.services.embedder import Embedder
 from app.services.llm_client import LLMClient
 from app.services.vector_store import VectorStore
@@ -11,7 +11,8 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 _embedder = Embedder()
 _vector_store = VectorStore()
-_llm = LLMClient()
+_llm = LLMClient(interactive=True)
+_prompts = get_store()
 
 
 @router.post("", response_model=ChatResponse)
@@ -36,5 +37,7 @@ def chat(req: ChatRequest):
         )
 
     context = "\n\n".join(context_parts) or "Контекст пуст."
-    answer = _llm.chat(SYSTEM_CHAT_PROMPT, USER_CHAT_PROMPT.format(context=context, query=req.query))
+    system = _prompts.get("chat_system")
+    user = _prompts.format("chat_user", context=context, query=req.query)
+    answer = _llm.chat(system, user)
     return ChatResponse(query=req.query, answer=answer, sources=sources)

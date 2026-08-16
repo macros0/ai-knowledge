@@ -17,6 +17,8 @@ dist/
 # Node
 node_modules/
 .vite/
+.next/
+next-env.d.ts
 
 # Environment
 .env
@@ -25,6 +27,9 @@ node_modules/
 # Runtime data
 /data/uploads/*
 /data/okf_bundles/*
+/data/staging/*
+/data/prompts/*
+/data/documents.json
 !/data/uploads/.gitkeep
 !/data/okf_bundles/.gitkeep
 

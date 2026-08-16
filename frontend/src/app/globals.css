@@ -22,7 +22,7 @@ body {
   color: var(--text);
 }
 
-#app {
+.app-shell {
   max-width: 960px;
   margin: 0 auto;
   padding: 16px;
@@ -57,6 +57,12 @@ nav {
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.tab:hover {
+  color: var(--text);
 }
 
 .tab.active {
@@ -78,10 +84,6 @@ main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.hidden {
-  display: none !important;
 }
 
 /* ---------- documents ---------- */
@@ -124,6 +126,12 @@ main {
 .document-item .meta {
   font-size: 13px;
   color: var(--muted);
+}
+
+.doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .status {
@@ -205,10 +213,6 @@ main {
 .tag-picker input:focus {
   outline: none;
   border-color: var(--accent);
-}
-
-#chat-tags {
-  margin-bottom: 8px;
 }
 
 .doc-tags {
@@ -295,4 +299,40 @@ main {
 .chat-form button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ---------- OKF viewer ---------- */
+.okf-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.okf-viewer .back-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.okf-viewer h1 {
+  font-size: 16px;
+  margin: 0 0 8px;
+  word-break: break-all;
+}
+
+.okf-viewer pre {
+  flex: 1;
+  overflow: auto;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
 }
