@@ -3,9 +3,11 @@
 Ограничивает параллельные вызовы общим семафором (LLM_MAX_CONCURRENCY)
 и повторяет запросы с экспоненциальным backoff при 429 / 5xx / сетевых сбоях.
 
-Гарантирует прерывание зависших вызовов через threading.Thread(daemon=True)
-с join(timeout) — общий пул не используется, zombie-потоки не блокируют
-последующие вызовы и не мешают завершению интерпретатора.
+Ответ читается стримом: таймаут считается по «тишине» между токенами
+(LLM_STREAM_IDLE_TIMEOUT_SECONDS), а не по общему времени. Это отличает
+медленную, но здоровую генерацию от оборванной сети. Общий жёсткий предел —
+LLM_MAX_TOTAL_TIMEOUT_SECONDS. Каждый вызов выполняется в изолированном
+daemon-потоке — zombie-потоки не блокируют последующие вызовы.
 """
 import json
 import logging
@@ -125,16 +127,21 @@ class LLMClient:
         raise last_exc  # type: ignore[misc]
 
     def _complete_once(self, system: str, user: str) -> str:
-        """Один вызов LLM в изолированном daemon-потоке с жёстким таймаутом.
+        """Один вызов LLM стримом в изолированном daemon-потоке.
 
-        Семафор удерживается вызывающим потоком (в `chat`), поэтому даже при
-        зависании потока слот семафора освобождается вместе с исключением.
+        Таймаут считается по тишине между чанками (idle) — любой пришедший чанк
+        сбрасывает таймер, поэтому медленная, но живая генерация не рвётся.
+        Семафор удерживается вызывающим потоком (в `chat`), поэтому при
+        LLMTimeoutError слот семафора освобождается вместе с исключением.
         """
-        container: dict = {}
+        container: dict = {"parts": [], "done": threading.Event(), "last_activity": 0.0}
+        lock = threading.Lock()
+        idle = max(0.0, self.settings.llm_stream_idle_timeout_seconds)
+        total = max(0.0, self.settings.llm_max_total_timeout_seconds)
 
         def run() -> None:
             try:
-                container["response"] = litellm.completion(
+                stream = litellm.completion(
                     model=self.settings.llm_model,
                     api_base=self.settings.llm_base_url or None,
                     api_key=self.settings.llm_api_key or None,
@@ -144,21 +151,35 @@ class LLMClient:
                     ],
                     temperature=self.settings.llm_temperature,
                     max_tokens=self.settings.llm_max_tokens,
-                    timeout=self.settings.llm_timeout_seconds,
+                    stream=True,
                 )
+                for chunk in stream:
+                    with lock:
+                        container["last_activity"] = time.monotonic()
+                    text = _stream_delta(chunk)
+                    if text:
+                        with lock:
+                            container["parts"].append(text)
             except BaseException as exc:
                 container["error"] = exc
+            finally:
+                container["done"].set()
 
         thread = threading.Thread(target=run, daemon=True, name="llm-call")
         thread.start()
-        thread.join(timeout=self.settings.llm_timeout_seconds)
-        if thread.is_alive():
-            raise LLMTimeoutError(
-                f"LLM вызов превысил {self.settings.llm_timeout_seconds}s"
-            )
+        start = time.monotonic()
+        while not container["done"].is_set():
+            with lock:
+                last = container["last_activity"] or start
+            now = time.monotonic()
+            if now - last >= idle:
+                raise LLMTimeoutError(f"Нет данных от LLM за {idle:.0f}s")
+            if now - start >= total:
+                raise LLMTimeoutError(f"LLM вызов превысил {total:.0f}s")
+            container["done"].wait(timeout=0.1)
         if "error" in container:
             raise container["error"]
-        return container["response"].choices[0].message.content or ""
+        return "".join(container["parts"])
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
@@ -172,6 +193,21 @@ class LLMClient:
     def chat_json(self, system: str, user: str) -> list | dict:
         raw = self.chat(system, user)
         return _parse_json(raw)
+
+
+def _stream_delta(chunk) -> str:
+    """Извлекает текст из стрим-чанка (устойчив к пустым служебным дельтам).
+
+    Некоторые провайдеры шлют reasoning_content или служебные чанки с
+    пустым content — для OKF нужен только итоговый content.
+    """
+    choices = getattr(chunk, "choices", None)
+    if not choices:
+        return ""
+    delta = getattr(choices[0], "delta", None)
+    if delta is None:
+        return ""
+    return getattr(delta, "content", None) or ""
 
 
 def _parse_json(text: str) -> list | dict:

@@ -26,6 +26,8 @@ def _settings(tmp_path: Path) -> Settings:
         llm_timeout_seconds=0.05,
         llm_retry_attempts=1,
         llm_retry_backoff_seconds=0,
+        llm_stream_idle_timeout_seconds=0.05,
+        llm_max_total_timeout_seconds=0.5,
         llm_chunk_retry_attempts=2,
         llm_chunk_retry_backoff_seconds=0.01,
         embedding_provider="fake",

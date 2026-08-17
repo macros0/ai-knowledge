@@ -1,4 +1,5 @@
-"""Тесты для LLMClient: семафор параллельности и ретраи при 429/5xx/сетевых сбоях."""
+"""Тесты для LLMClient: семафор параллельности, ретраи при 429/5xx/сетевых сбоях,
+а также стриминг с idle-timeout (медленная, но живая генерация не рвётся)."""
 import threading
 import time
 
@@ -10,7 +11,24 @@ from litellm.exceptions import RateLimitError
 import app.services.llm_client as llm_module
 from app.services.llm_client import LLMClient, LLMTimeoutError
 
-NORMAL_RESPONSE = litellm.ModelResponse(choices=[litellm.Choices(message=litellm.Message(content="привет"))])
+
+def _stream_chunk(text: str):
+    """Один чанк стрима с заданным текстом."""
+    delta = type("Delta", (), {"content": text})()
+    choice = type("Choice", (), {"delta": delta})()
+    return type("Chunk", (), {"choices": [choice]})()
+
+
+def _stream_response(*parts):
+    """Генератор, эмулирующий стрим litellm.completion(stream=True) — несколько токенов."""
+    for p in parts:
+        yield _stream_chunk(p)
+
+
+def _hang_stream(first_token="первый"):
+    """Генератор: выдаёт первый токен, затем зависает навсегда."""
+    yield _stream_chunk(first_token)
+    time.sleep(999)
 
 
 @pytest.fixture(autouse=True)
@@ -40,12 +58,14 @@ def _settings():
         llm_retry_attempts=3,
         llm_retry_backoff_seconds=0,
         llm_timeout_seconds=120,
+        llm_stream_idle_timeout_seconds=60,
+        llm_max_total_timeout_seconds=600,
     )
 
 
 class TestRetries:
     def test_success_first_try(self, client, monkeypatch):
-        monkeypatch.setattr(litellm, "completion", lambda **kwargs: NORMAL_RESPONSE)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _stream_response("привет"))
         assert client.chat("s", "u") == "привет"
 
     def test_retry_after_two_rate_limits_succeeds(self, client, monkeypatch):
@@ -55,7 +75,7 @@ class TestRetries:
             calls["n"] += 1
             if calls["n"] < 3:
                 raise RateLimitError(message="limit", model="test", llm_provider="test")
-            return NORMAL_RESPONSE
+            return _stream_response("привет")
 
         monkeypatch.setattr(litellm, "completion", flaky)
         assert client.chat("s", "u") == "привет"
@@ -76,7 +96,7 @@ class TestRetries:
             calls["n"] += 1
             if calls["n"] == 1:
                 raise httpx.ConnectError("down")
-            return NORMAL_RESPONSE
+            return _stream_response("привет")
 
         monkeypatch.setattr(litellm, "completion", flaky)
         assert client.chat("s", "u") == "привет"
@@ -104,13 +124,15 @@ class TestSemaphore:
         lock = threading.Lock()
 
         def slow(**kwargs):
-            with lock:
-                active["n"] += 1
-                active["max"] = max(active["max"], active["n"])
-            time.sleep(0.2)
-            with lock:
-                active["n"] -= 1
-            return NORMAL_RESPONSE
+            def gen():
+                with lock:
+                    active["n"] += 1
+                    active["max"] = max(active["max"], active["n"])
+                time.sleep(0.2)
+                with lock:
+                    active["n"] -= 1
+                yield _stream_chunk("привет")
+            return gen()
 
         monkeypatch.setattr(litellm, "completion", slow)
 
@@ -133,7 +155,7 @@ class TestSemaphore:
             calls["n"] += 1
             if calls["n"] < 3:
                 raise RateLimitError(message="limit", model="test", llm_provider="test")
-            return NORMAL_RESPONSE
+            return _stream_response("привет")
 
         monkeypatch.setattr(litellm, "completion", flaky)
 
@@ -155,13 +177,15 @@ class TestSemaphore:
         lock = threading.Lock()
 
         def slow(**kwargs):
-            with lock:
-                active["n"] += 1
-                active["max"] = max(active["max"], active["n"])
-            time.sleep(0.2)
-            with lock:
-                active["n"] -= 1
-            return NORMAL_RESPONSE
+            def gen():
+                with lock:
+                    active["n"] += 1
+                    active["max"] = max(active["max"], active["n"])
+                time.sleep(0.2)
+                with lock:
+                    active["n"] -= 1
+                yield _stream_chunk("привет")
+            return gen()
 
         monkeypatch.setattr(litellm, "completion", slow)
 
@@ -174,16 +198,42 @@ class TestSemaphore:
 
         assert active["max"] == 2
 
-    def test_timeout_passed_to_completion(self, client, monkeypatch):
+    def test_stream_passed_to_completion(self, client, monkeypatch):
         captured = {}
 
         def fake(**kwargs):
             captured.update(kwargs)
-            return NORMAL_RESPONSE
+            return _stream_response("привет")
 
         monkeypatch.setattr(litellm, "completion", fake)
         client.chat("s", "u")
-        assert captured["timeout"] == _settings().llm_timeout_seconds
+        assert captured.get("stream") is True
+
+
+class TestStreamIdleTimeout:
+    """Стриминг: таймаут по тишине vs медленная, но живая генерация."""
+
+    def test_idle_timeout_fires_when_stream_goes_silent(self, client, monkeypatch):
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
+        with pytest.raises(LLMTimeoutError, match="Нет данных от LLM за"):
+            client.chat("s", "u")
+
+    def test_slow_but_healthy_stream_completes(self, client, monkeypatch):
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.2)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
+
+        def slow_stream(**kwargs):
+            def gen():
+                for p in ["a", "b", "c", "d", "e"]:
+                    time.sleep(0.05)
+                    yield _stream_chunk(p)
+            return gen()
+
+        monkeypatch.setattr(litellm, "completion", slow_stream)
+        result = client.chat("s", "u")
+        assert result == "abcde"
 
 
 class TestChaosFailureInjection:
@@ -195,14 +245,15 @@ class TestChaosFailureInjection:
     """
 
     def test_timeout_does_not_block_followup_calls(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
         call_count = {"n": 0}
 
         def hanging(**kwargs):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                time.sleep(999)  # симуляция бесконечного зависания сети
-            return NORMAL_RESPONSE
+                return _hang_stream()
+            return _stream_response("привет")
 
         monkeypatch.setattr(litellm, "completion", hanging)
         with pytest.raises(LLMTimeoutError):
@@ -213,20 +264,22 @@ class TestChaosFailureInjection:
         assert call_count["n"] == 2
 
     def test_semaphore_released_on_timeout(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_timeout_seconds", 0.05)
-        monkeypatch.setattr(litellm, "completion", lambda **kwargs: time.sleep(999))
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
         # chat() захватывает семафор в вызывающем потоке — слот обязан
         # освободиться при LLMTimeoutError из-за контекстного менеджера with.
         with pytest.raises(LLMTimeoutError):
             client.chat("s", "u")
         # Следующий вызов проходит немедленно — слот свободен.
-        monkeypatch.setattr(litellm, "completion", lambda **kwargs: NORMAL_RESPONSE)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _stream_response("привет"))
         assert client.chat("s", "u") == "привет"
 
     def test_semaphore_no_leak_under_concurrent_hangs(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
         monkeypatch.setattr(client.settings, "llm_retry_attempts", 1)
-        monkeypatch.setattr(litellm, "completion", lambda **kwargs: time.sleep(999))
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
 
         sem = llm_module._get_semaphore(interactive=False)
         assert sem is not None, "bulk semaphore must exist for lllm_max_concurrency=1"

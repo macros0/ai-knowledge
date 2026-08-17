@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     llm_retry_backoff_seconds: float = 2.0
     llm_timeout_seconds: float = 120.0
 
+    llm_stream_idle_timeout_seconds: float = 60.0
+    llm_max_total_timeout_seconds: float = 600.0
+
     llm_chunk_retry_attempts: int = 3
     llm_chunk_retry_backoff_seconds: float = 30.0
 
