@@ -90,6 +90,11 @@ class Pipeline:
             done = len(manifest.get("processed_chunks", [])) if manifest else 0
             logger.info("Resume документа %s: продолжено с %d/%d чанков", doc_id, done, total)
         else:
+            if resume:
+                logger.warning(
+                    "[%s] Возобновление без чекпоинтов: staging отсутствует, генерация начнётся с 0",
+                    doc_id,
+                )
             if staging.exists():
                 staging.remove()
             staging.create(total, global_tags=user_tags)
@@ -154,8 +159,10 @@ class Pipeline:
         try:
             self._finalize(doc_id, filename, staging, attachments=attachments, global_tags=user_tags)
         except Exception as exc:
+            # Staging не удаляем: чекпоинты всех чанков сохраняются, чтобы
+            # повторный resume повторил только финализацию (embed+index),
+            # не перегенерируя концепты через LLM.
             logger.exception("Финализация документа %s не удалась", doc_id)
-            staging.remove()
             self.registry.update(doc_id, status="failed", error=str(exc))
             return
 
@@ -191,6 +198,12 @@ class Pipeline:
         _atomic_move(tmp_dir, target)
         for doc in okf_docs:
             doc.filepath = str(target / Path(doc.filepath).name)
+
+        if not okf_docs:
+            logger.warning("[%s] Документ %s не содержит концептов, индексация пропущена", doc_id, filename)
+            staging.remove()
+            self.registry.update(doc_id, status="done", okf_file_count=0, error=None)
+            return
 
         vectors = self.embedder.embed_texts([doc.content for doc in okf_docs])
         self.vector_store.ensure_collection()

@@ -176,11 +176,12 @@ python scripts/reindex.py --data-dir /path/to/data
 | `DATA_DIR` | `./data` | Корень runtime-данных (uploads, okf_bundles, staging) |
 | `QDRANT_URL` | `http://localhost:6333` | Адрес Qdrant |
 | `QDRANT_COLLECTION` | `okf_knowledge_base` | Коллекция Qdrant |
-| `EMBEDDING_DIM` | `1024` | Размерность вектора (bge-m3=1024, text-embedding-3-small=1536) |
-| `EMBEDDING_PROVIDER` | `http` | `http` (OpenAI-совместимый endpoint) или `fake` (без сети) |
-| `EMBEDDING_MODEL` | `bge-m3` | Модель эмбеддингов |
-| `EMBEDDING_BASE_URL` | `http://localhost:11434/v1` | Endpoint эмбеддингов |
-| `EMBEDDING_API_KEY` | `ollama` | Ключ API эмбеддингов |
+| `EMBEDDING_DIMENSIONS` | `1024` | Размерность вектора (bge-m3=1024, text-embedding-3-small=1536) |
+| `EMBEDDING_PROVIDER` | `http` | `http` (шлюз LiteLLM) или `fake` (без сети) |
+| `EMBEDDING_MODEL` | `ollama/bge-m3` | Модель эмбеддингов (через LiteLLM: `ollama/...`, `openai/...`, ...) |
+| `EMBEDDING_API_BASE` | `http://localhost:11434` | Endpoint эмбеддингов (для Ollama — без `/v1`) |
+| `EMBEDDING_API_KEY` | пусто | Ключ API эмбеддингов |
+| `EMBEDDING_BATCH_SIZE` | `64` | Размер батча запросов к провайдеру (защита от 400 при >~330 inputs у Ollama) |
 | `LLM_MODEL` | `ollama/qwen2.5:14b` | Модель LLM (через LiteLLM: `openai/...`, `ollama/...`, `openrouter/...`) |
 | `LLM_BASE_URL` | `http://localhost:11434` | Endpoint LLM |
 | `LLM_API_KEY` | `ollama` | Ключ API LLM |

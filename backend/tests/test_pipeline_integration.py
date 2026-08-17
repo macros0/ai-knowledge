@@ -31,7 +31,7 @@ def _settings(tmp_path: Path) -> Settings:
         llm_chunk_retry_attempts=2,
         llm_chunk_retry_backoff_seconds=0.01,
         embedding_provider="fake",
-        embedding_dim=8,
+        embedding_dimensions=8,
     )
 
 
@@ -131,3 +131,70 @@ class TestPipelineVectorChaos:
         doc = reg.get(doc_id)
         assert doc["status"] == "failed"
         assert "Qdrant" in doc["error"]
+
+
+class TestPipelineFinalizeRetry:
+    def test_finalize_failure_keeps_staging_and_resume_skips_llm(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "fin-retry"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: (_ for _ in ()).throw(
+            ConnectionRefusedError("Qdrant refused")
+        )
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "failed"
+
+        staging_dir = pipeline.settings.staging_dir / doc_id
+        assert staging_dir.is_dir(), "staging должен сохраниться после сбоя финализации"
+        assert (staging_dir / "manifest.json").is_file()
+        assert (staging_dir / "chunk_00.json").is_file()
+
+        llm_calls = {"n": 0}
+
+        def fail_if_llm(*args, **kwargs):
+            llm_calls["n"] += 1
+            raise AssertionError("LLM не должен перегенерировать уже готовые чанки")
+
+        pipeline.okf_generator.generate_chunk = fail_if_llm
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: None
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=True)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "done", f"status={doc['status']} error={doc.get('error')}"
+        assert llm_calls["n"] == 0
+
+
+class TestPipelineNoConcepts:
+    def test_zero_concepts_skips_indexing_and_marks_done(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "no-concepts"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        indexed = {"called": False}
+
+        def fail_if_indexed(*args, **kwargs):
+            indexed["called"] = True
+            raise AssertionError("Индексация не должна вызываться при нуле концептов")
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: []
+        pipeline.vector_store.ensure_collection = fail_if_indexed
+        pipeline.vector_store.index_concepts = fail_if_indexed
+        pipeline.embedder.embed_texts = fail_if_indexed
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "done"
+        assert doc["okf_file_count"] == 0
+        assert doc["error"] is None
+        assert indexed["called"] is False

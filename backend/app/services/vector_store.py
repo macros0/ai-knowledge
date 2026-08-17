@@ -22,7 +22,7 @@ class VectorStore:
             self.client.create_collection(
                 collection_name=self.collection,
                 vectors_config=qm.VectorParams(
-                    size=self.settings.embedding_dim,
+                    size=self.settings.embedding_dimensions,
                     distance=qm.Distance.COSINE,
                 ),
             )

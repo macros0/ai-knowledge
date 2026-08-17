@@ -18,12 +18,13 @@ class Settings(BaseSettings):
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "okf_knowledge_base"
-    embedding_dim: int = 1024
+    embedding_dimensions: int = 1024
 
     embedding_provider: str = "http"  # http | fake
-    embedding_model: str = "bge-m3"
-    embedding_base_url: str = "http://localhost:11434/v1"
-    embedding_api_key: str = "ollama"
+    embedding_model: str = "ollama/bge-m3"
+    embedding_api_base: str | None = "http://localhost:11434"
+    embedding_api_key: str | None = None
+    embedding_batch_size: int = 64
 
     llm_model: str = "ollama/qwen2.5:14b"
     llm_base_url: str = "http://localhost:11434"
