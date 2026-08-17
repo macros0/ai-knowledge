@@ -1,4 +1,5 @@
 """Генерация OKF-файлов (YAML-фронтматтер + Markdown) из текста документа через LLM."""
+import logging
 import re
 from datetime import date
 from pathlib import Path
@@ -9,13 +10,22 @@ import yaml
 from app.config import get_settings
 from app.models.schemas import Concept, OkfDocument
 from app.prompts.store import get_store
-from app.services.llm_client import LLMClient
+from app.services.llm_client import LLMClient, LLMTruncationError
+
+logger = logging.getLogger(__name__)
 
 VALID_TYPES = {"concept", "procedure", "reference", "example", "note"}
 
 
 class LLMLike(Protocol):
-    def chat_json(self, system: str, user: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict: ...
+    def chat_json(
+        self,
+        system: str,
+        user: str,
+        doc_id: str = "unknown",
+        chunk_idx: int = 0,
+        salvage_truncated: bool = False,
+    ) -> list | dict: ...
 
 
 class OKFGenerator:
@@ -36,13 +46,57 @@ class OKFGenerator:
         return _chunk_text(markdown_text, self.settings.okf_max_chunk_chars)
 
     def generate_chunk(self, chunk: str, filename: str, index: int, total: int, doc_id: str = "unknown") -> list[Concept]:
-        """Генерация OKF-концептов для одного чанка (индекс — 1-based)."""
+        """Генерация OKF-концептов для одного чанка (индекс — 1-based).
+
+        Каскад отказоустойчивости при обрезании ответа LLM по лимиту токенов:
+          1. chat_json сам повторяет запрос с увеличенным max_tokens (до cap);
+          2. если всё ещё LLMTruncationError — чанк режется пополам и половинки
+             генерируются рекурсивно (глубина <= okf_split_max_depth, до 4 кусков);
+          3. если сплит невозможен/исчерпан — salvage последней надежды
+             (okf_salvage_truncated): частичный результат сохраняется с WARNING,
+             документ не застревает.
+        """
+        return self._generate_chunk_recursive(chunk, filename, index, total, doc_id, depth=0)
+
+    def _generate_chunk_recursive(
+        self, chunk: str, filename: str, index: int, total: int, doc_id: str, depth: int
+    ) -> list[Concept]:
+        prompt = self._build_prompt(chunk, filename, index, total)
+        system = self.prompts.get("okf_system")
+        try:
+            raw = self.llm.chat_json(system, prompt, doc_id=doc_id, chunk_idx=index)
+            return _normalize(raw)
+        except LLMTruncationError:
+            halves: list[str] = []
+            if self.settings.okf_split_on_truncation and depth < self.settings.okf_split_max_depth:
+                halves = _split_in_half(chunk)
+            if len(halves) >= 2 and all(len(h) < len(chunk) for h in halves):
+                logger.warning(
+                    "[%s] Чанк %s: JSON обрезан, сплит чанка пополам (depth %d, %d+%d символов)",
+                    doc_id,
+                    index,
+                    depth + 1,
+                    len(halves[0]),
+                    len(halves[1]),
+                )
+                result: list[Concept] = []
+                for half in halves:
+                    result.extend(self._generate_chunk_recursive(half, filename, index, total, doc_id, depth + 1))
+                return result
+            if self.settings.okf_salvage_truncated:
+                logger.warning(
+                    "[%s] Чанк %s: сплит невозможен/исчерпан, спасаю частичный результат (данные неполные)",
+                    doc_id,
+                    index,
+                )
+                raw = self.llm.chat_json(system, prompt, doc_id=doc_id, chunk_idx=index, salvage_truncated=True)
+                return _normalize(raw)
+            raise
+
+    def _build_prompt(self, chunk: str, filename: str, index: int, total: int) -> str:
         if total <= 1:
-            prompt = self.prompts.format("okf_user", filename=filename, content=chunk)
-        else:
-            prompt = self.prompts.format("okf_chunk", filename=filename, index=index, total=total, content=chunk)
-        raw = self.llm.chat_json(self.prompts.get("okf_system"), prompt, doc_id=doc_id, chunk_idx=index)
-        return _normalize(raw)
+            return self.prompts.format("okf_user", filename=filename, content=chunk)
+        return self.prompts.format("okf_chunk", filename=filename, index=index, total=total, content=chunk)
 
     def save_bundle(
         self,
@@ -148,6 +202,32 @@ def _chunk_text(text: str, max_chars: int) -> list[str]:
     if current:
         chunks.append(current)
     return chunks or [text]
+
+
+def _split_in_half(text: str) -> list[str]:
+    """Режет текст примерно пополам по границе неделимых единиц (_split_units).
+
+    Единицы копятся в первую половину, пока суммарный размер не дойдёт до
+    половины; единица, которая перевалит за середину, уходит во вторую половину
+    целиком (никогда не разрывается). Возвращает либо [first, second] (обе части
+    непустые и строго меньше исходного текста), либо [text] — когда текст
+    неделим (одна атомарная единица) и резать нечего.
+    """
+    units = _split_units(text.strip())
+    if len(units) < 2:
+        return [text]
+    target = len(text) // 2
+    first: list[str] = []
+    size = 0
+    for unit in units:
+        if first and size + len(unit) >= target:
+            break
+        first.append(unit)
+        size += len(unit)
+    rest = units[len(first):]
+    if not rest:
+        return [text]
+    return ["\n\n".join(first), "\n\n".join(rest)]
 
 
 def _split_units(text: str) -> list[str]:

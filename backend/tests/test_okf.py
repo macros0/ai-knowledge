@@ -2,7 +2,10 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from app.models.schemas import Concept
+from app.services.llm_client import LLMTruncationError
 from app.services.okf_generator import _chunk_text, _normalize, _slugify
 
 
@@ -166,7 +169,7 @@ class TestGenerateChunk:
         def __init__(self):
             self.calls = []
 
-        def chat_json(self, system, user, doc_id="unknown", chunk_idx=0):
+        def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
             self.calls.append(user)
             return [
                 {
@@ -207,7 +210,7 @@ class TestGenerateChunk:
             def __init__(self):
                 self.n = 0
 
-            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0):
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
                 self.n += 1
                 return [
                     {
@@ -236,6 +239,131 @@ class TestGenerateChunk:
         assert Path(okf_docs[0].filepath).name == "my-slug.md"
 
 
+class TestSplitInHalf:
+    def test_splits_roughly_in_half(self):
+        from app.services.okf_generator import _split_in_half
+
+        text = "\n\n".join(f"строка {i} " * 10 for i in range(30))
+        parts = _split_in_half(text)
+        assert len(parts) == 2
+        assert all(0 < len(p) < len(text) for p in parts)
+        assert len(parts[0]) <= len(parts[1]) + len(parts[0]) // 2 + 50
+
+    def test_single_atomic_unit_not_split(self):
+        from app.services.okf_generator import _split_in_half
+
+        text = "```\n" + "код\n" * 50 + "```"
+        assert _split_in_half(text) == [text]
+
+    def test_fence_block_stays_whole(self):
+        from app.services.okf_generator import _split_in_half
+
+        fence = "```xml\n" + "<tag>value</tag>\n" * 40 + "```"
+        text = "Абзац один.\n\n" + fence + "\n\n" + "Абзац два."
+        parts = _split_in_half(text)
+        assert len(parts) == 2
+        assert parts[0].count("```") == 0 or parts[0].rstrip().endswith("```")
+
+
+def _concept_dict(title: str) -> dict:
+    return {"id": title, "title": title, "type": "concept", "tags": [], "content": f"тело {title}", "relations": []}
+
+
+class TestGenerateChunkTruncation:
+    def _make_gen(self, tmp_path, llm, settings=None):
+        from app.config import Settings
+        from app.services.okf_generator import OKFGenerator
+
+        gen = OKFGenerator(llm=llm, bundle_root=tmp_path / "okf")
+        if settings is not None:
+            gen.settings = settings
+        return gen
+
+    def test_split_on_truncation_merges_halves(self, tmp_path):
+        class SplittingLLM:
+            def __init__(self):
+                self.calls = []
+
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+                self.calls.append((chunk_idx, len(user), salvage_truncated))
+                if "первая половина" in user and "вторая половина" in user:
+                    raise LLMTruncationError("обрезано")
+                title = "первая" if "первая половина" in user else "вторая"
+                return [_concept_dict(f"{title} концепт")]
+
+        llm = SplittingLLM()
+        gen = self._make_gen(tmp_path, llm)
+        text = ("первая половина " * 80) + "\n\n" + ("вторая половина " * 80)
+        concepts = gen.generate_chunk(text, "doc.docx", 1, 2)
+        titles = sorted(c.title for c in concepts)
+        assert titles == ["вторая концепт", "первая концепт"]
+        assert len(llm.calls) == 3  # целый чанк + две половинки
+        assert llm.calls[0][2] is False and llm.calls[1][2] is False and llm.calls[2][2] is False
+
+    def test_depth_limit_reached_triggers_salvage(self, tmp_path):
+        from app.config import Settings
+
+        class StubbornLLM:
+            def __init__(self):
+                self.calls = []
+
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+                self.calls.append(salvage_truncated)
+                if "вторая половина" in user:
+                    if salvage_truncated:
+                        return [_concept_dict("вторая (спасено)")]
+                    raise LLMTruncationError("обрезано")
+                return [_concept_dict("первая")]
+
+        llm = StubbornLLM()
+        gen = self._make_gen(tmp_path, llm, settings=Settings(okf_split_max_depth=1))
+        text = ("первая половина " * 80) + "\n\n" + ("вторая половина " * 80)
+        concepts = gen.generate_chunk(text, "doc.docx", 1, 2)
+        titles = sorted(c.title for c in concepts)
+        assert titles == ["вторая (спасено)", "первая"]
+        assert llm.calls[-1] is True  # последняя попытка — salvage
+
+    def test_atomic_chunk_uses_salvage(self, tmp_path):
+        class AlwaysTruncatingLLM:
+            def __init__(self):
+                self.calls = []
+
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+                self.calls.append(salvage_truncated)
+                if salvage_truncated:
+                    return [_concept_dict("частичный")]
+                raise LLMTruncationError("обрезано")
+
+        llm = AlwaysTruncatingLLM()
+        gen = self._make_gen(tmp_path, llm)
+        text = "X" * 500  # одна атомарная единица — резать нечего
+        concepts = gen.generate_chunk(text, "doc.docx", 1, 1)
+        assert [c.title for c in concepts] == ["частичный"]
+        assert llm.calls == [False, True]
+
+    def test_strict_mode_raises_when_split_impossible(self, tmp_path):
+        from app.config import Settings
+
+        class AlwaysTruncatingLLM:
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+                raise LLMTruncationError("обрезано")
+
+        gen = self._make_gen(tmp_path, AlwaysTruncatingLLM(), settings=Settings(okf_salvage_truncated=False))
+        with pytest.raises(LLMTruncationError):
+            gen.generate_chunk("X" * 500, "doc.docx", 1, 1)
+
+    def test_split_disabled_propagates_error(self, tmp_path):
+        from app.config import Settings
+
+        class AlwaysTruncatingLLM:
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+                raise LLMTruncationError("обрезано")
+
+        gen = self._make_gen(tmp_path, AlwaysTruncatingLLM(), settings=Settings(okf_split_on_truncation=False))
+        with pytest.raises(LLMTruncationError):
+            gen.generate_chunk("первая половина " * 80, "doc.docx", 1, 2)
+
+
 class TestBundleRoundtrip:
     def test_save_and_read(self, tmp_path: Path):
         from app.services.okf_generator import OKFGenerator
@@ -244,7 +372,7 @@ class TestBundleRoundtrip:
             def __init__(self, raw):
                 self.raw = raw
 
-            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0):
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
                 return self.raw
 
         raw = [

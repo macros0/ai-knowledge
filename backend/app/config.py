@@ -48,6 +48,9 @@ class Settings(BaseSettings):
 
     okf_max_chunk_chars: int = 8000
     okf_max_concept_chars: int = 4000
+    okf_split_on_truncation: bool = True
+    okf_split_max_depth: int = 2
+    okf_salvage_truncated: bool = True
 
     @field_validator("data_dir", mode="before")
     @classmethod

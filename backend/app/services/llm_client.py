@@ -215,21 +215,32 @@ class LLMClient:
         status = getattr(exc, "status_code", None)
         return status in _retryable_statuses
 
-    def chat_json(self, system: str, user: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict:
+    def chat_json(
+        self,
+        system: str,
+        user: str,
+        doc_id: str = "unknown",
+        chunk_idx: int = 0,
+        salvage_truncated: bool = False,
+    ) -> list | dict:
         semaphore = _get_semaphore(self.interactive)
         if semaphore is None:
-            return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx)
+            return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx, salvage_truncated)
         with semaphore:
-            return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx)
+            return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx, salvage_truncated)
 
-    def _chat_json_with_truncation_retry(self, system: str, user: str, doc_id: str, chunk_idx: int) -> list | dict:
+    def _chat_json_with_truncation_retry(
+        self, system: str, user: str, doc_id: str, chunk_idx: int, salvage_truncated: bool
+    ) -> list | dict:
         """chat_json + повтор при обрезании JSON (потеря данных).
 
         При LLMTruncationError повторяем запрос с увеличенным max_tokens
-        (формула base * multiplier**n, не выше llm_max_tokens_cap), т.к.
-        обрезанный «спасённый» JSON неполон и сохранять его нельзя. После
-        исчерпания попыток исключение уходит наверх — pipeline ставит документ
-        в paused с дампом для диагностики.
+        (формула base * multiplier**n, не выше llm_max_tokens_cap). Если и это
+        не помогло:
+          - salvage_truncated=True  -> спасаем частичный результат (неполный
+            JSON), log WARNING, чтобы конвейер не застревал;
+          - salvage_truncated=False -> LLMTruncationError уходит наверх
+            (строгий режим / диагностика).
         """
         settings = self.settings
         max_attempts = max(1, settings.llm_truncation_retry_attempts + 1)
@@ -240,7 +251,13 @@ class LLMClient:
         for attempt in range(max_attempts):
             text, finish_reason = self._complete_with_retries(system, user, max_tokens=max_tokens)
             try:
-                return _parse_json(text, finish_reason=finish_reason, doc_id=doc_id, chunk_idx=chunk_idx)
+                return _parse_json(
+                    text,
+                    finish_reason=finish_reason,
+                    doc_id=doc_id,
+                    chunk_idx=chunk_idx,
+                    salvage_truncated=salvage_truncated,
+                )
             except LLMTruncationError:
                 if attempt == max_attempts - 1:
                     raise
@@ -289,19 +306,30 @@ def _stream_finish_reason(chunk) -> str | None:
     return None
 
 
-def _parse_json(text: str, finish_reason: str | None = None, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict:
+def _parse_json(
+    text: str,
+    finish_reason: str | None = None,
+    doc_id: str = "unknown",
+    chunk_idx: int = 0,
+    salvage_truncated: bool = False,
+) -> list | dict:
     """Извлекает JSON из ответа LLM.
 
     Каскад:
       1. json.loads (быстрый путь)
-      2. проверка на обрезание (finish_reason="length" / незакрытая структура) —
-         LLMTruncationError, чтобы chat_json переотправил запрос с большим max_tokens
+      2. проверка на обрезание (finish_reason="length" / незакрытая структура)
       3. поиск ближайшего [ / { + восстановление обрезанного хвоста
       4. json_repair — неэкранированные символы, лишние запятые, мусор
       5. дамп ответа в data/debug/ и понятная ошибка
 
-    Обрезанный ответ не возвращается «как есть»: он неполон по определению,
-    а json_repair мог бы молча закрыть оборванный массив и выкинуть хвост.
+    Обрезанный ответ в строгом режиме (salvage_truncated=False) не
+    возвращается «как есть»: он неполон по определению, а json_repair мог бы
+    молча закрыть оборванный массив и выкинуть хвост. Тогда _parse_json бросает
+    LLMTruncationError, чтобы chat_json переотправил запрос с большим max_tokens.
+
+    При salvage_truncated=True (salvage последней надежды) обрезанный ответ
+    всё же пропускается в каскад восстановления: _recover_truncated/json_repair
+    спасают последний валидный префикс, а неполнота фиксируется WARNING-логом.
     """
     if not text:
         raise ValueError("LLM вернул пустой ответ")
@@ -310,9 +338,15 @@ def _parse_json(text: str, finish_reason: str | None = None, doc_id: str = "unkn
     cleaned = re.sub(r"\s*```$", "", cleaned)
 
     if finish_reason == "length":
-        raise LLMTruncationError(
-            f"Ответ LLM обрезан по лимиту токенов (чанк {chunk_idx}). "
-            "Запрос будет повторён с увеличенным max_tokens."
+        if not salvage_truncated:
+            raise LLMTruncationError(
+                f"Ответ LLM обрезан по лимиту токенов (чанк {chunk_idx}). "
+                "Запрос будет повторён с увеличенным max_tokens."
+            )
+        logger.warning(
+            "[%s] Чанк %s: JSON обрезан по лимиту токенов, спасаю частичный результат (данные неполные)",
+            doc_id,
+            chunk_idx,
         )
 
     parsed = _try_load(cleaned)
@@ -326,9 +360,15 @@ def _parse_json(text: str, finish_reason: str | None = None, doc_id: str = "unkn
     fragment = cleaned[start:] if start < len(cleaned) else cleaned
 
     if _is_truncated(fragment):
-        raise LLMTruncationError(
-            f"Ответ LLM обрезан по лимиту токенов (чанк {chunk_idx}): "
-            "незакрытая структура JSON. Запрос будет повторён с увеличенным max_tokens."
+        if not salvage_truncated:
+            raise LLMTruncationError(
+                f"Ответ LLM обрезан по лимиту токенов (чанк {chunk_idx}): "
+                "незакрытая структура JSON. Запрос будет повторён с увеличенным max_tokens."
+            )
+        logger.warning(
+            "[%s] Чанк %s: незакрытая структура JSON, спасаю частичный результат (данные неполные)",
+            doc_id,
+            chunk_idx,
         )
 
     recovered = _recover_truncated(fragment)

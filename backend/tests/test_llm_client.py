@@ -337,6 +337,28 @@ class TestParseJson:
         with pytest.raises(LLMTruncationError, match="обрезан по лимиту токенов"):
             _parse_json(raw, finish_reason="length")
 
+    def test_salvage_truncated_recovers_partial(self):
+        from app.services.llm_client import _parse_json
+
+        # Salvage последней надежды: обрезанный ответ (не дошла внешняя ])
+        # всё же пропускается в каскад восстановления и спасается как неполный.
+        partial = (
+            '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"текст","relations":[]},\n'
+            ' {"id":"b","title":"Два","type":"concept","tags":[],"content":"текст","relations":[]}'
+        )
+        parsed = _parse_json(partial, finish_reason="length", salvage_truncated=True)
+        assert [c["id"] for c in parsed] == ["a", "b"]
+
+    def test_salvage_truncated_garbage_still_raises(self, tmp_path, monkeypatch):
+        from app.services.llm_client import _parse_json
+
+        monkeypatch.setattr("app.services.llm_client.get_settings", lambda: type("S", (), {"data_dir": tmp_path})())
+        monkeypatch.setattr("app.services.llm_client._dump_debug_response", lambda *a, **k: None)
+        # Salvage не помогает от мусора — ошибка сохраняется, чтобы не писать в базу
+        # случайное содержимое.
+        with pytest.raises(ValueError, match="Не удалось распарсить JSON"):
+            _parse_json("совершенный мусор", finish_reason="length", salvage_truncated=True)
+
     def test_valid_json_unaffected(self):
         from app.services.llm_client import _parse_json
 
@@ -452,6 +474,24 @@ class TestChatJsonTruncationRetry:
             client.chat_json("s", "u", doc_id="d", chunk_idx=1)
         # 1 начальная попытка + 2 ретрая
         assert calls["n"] == 3
+
+    def test_salvage_truncated_returns_partial_result(self, client, monkeypatch):
+        client.settings.llm_truncation_retry_attempts = 2
+        calls = {"n": 0}
+        partial = (
+            '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"текст","relations":[]},\n'
+            ' {"id":"b","title":"Два","type":"concept","tags":[],"content":"текст","relations":[]}'
+        )
+
+        def always_truncated(**kwargs):
+            calls["n"] += 1
+            return _stream_response_finished(partial, finish_reason="length")
+
+        monkeypatch.setattr(litellm, "completion", always_truncated)
+        # Salvage последней надежды: неполный результат возвращается, исключение не летит.
+        result = client.chat_json("s", "u", doc_id="d", chunk_idx=1, salvage_truncated=True)
+        assert [c["id"] for c in result] == ["a", "b"]
+        assert calls["n"] == 1  # спасаем сразу, бамп max_tokens уже исчерпан
 
     def test_finish_reason_stop_passes_through_sanitize_path(self, client, monkeypatch):
         monkeypatch.setattr(
