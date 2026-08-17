@@ -8,7 +8,7 @@ import pytest
 from litellm.exceptions import RateLimitError
 
 import app.services.llm_client as llm_module
-from app.services.llm_client import LLMClient
+from app.services.llm_client import LLMClient, LLMTimeoutError
 
 NORMAL_RESPONSE = litellm.ModelResponse(choices=[litellm.Choices(message=litellm.Message(content="привет"))])
 
@@ -184,6 +184,60 @@ class TestSemaphore:
         monkeypatch.setattr(litellm, "completion", fake)
         client.chat("s", "u")
         assert captured["timeout"] == _settings().llm_timeout_seconds
+
+
+class TestChaosFailureInjection:
+    """Chaos-тесты: зависание LLM при стабильной сети.
+
+    Воспроизводят реальный инцидент со zombie-воркерами ThreadPoolExecutor:
+    зависший вызов не должен блокировать последующие и не должен исчерпывать
+    пул ресурсов, а семафор обязан освобождаться даже при LLMTimeoutError.
+    """
+
+    def test_timeout_does_not_block_followup_calls(self, client, monkeypatch):
+        monkeypatch.setattr(client.settings, "llm_timeout_seconds", 0.05)
+        call_count = {"n": 0}
+
+        def hanging(**kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                time.sleep(999)  # симуляция бесконечного зависания сети
+            return NORMAL_RESPONSE
+
+        monkeypatch.setattr(litellm, "completion", hanging)
+        with pytest.raises(LLMTimeoutError):
+            client._complete_once("s", "u")
+        # Следующий вызов должен пройти — zombie-поток не блокирует новые.
+        result = client._complete_once("s", "u")
+        assert result == "привет"
+        assert call_count["n"] == 2
+
+    def test_semaphore_released_on_timeout(self, client, monkeypatch):
+        monkeypatch.setattr(client.settings, "llm_timeout_seconds", 0.05)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: time.sleep(999))
+        # chat() захватывает семафор в вызывающем потоке — слот обязан
+        # освободиться при LLMTimeoutError из-за контекстного менеджера with.
+        with pytest.raises(LLMTimeoutError):
+            client.chat("s", "u")
+        # Следующий вызов проходит немедленно — слот свободен.
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: NORMAL_RESPONSE)
+        assert client.chat("s", "u") == "привет"
+
+    def test_semaphore_no_leak_under_concurrent_hangs(self, client, monkeypatch):
+        monkeypatch.setattr(client.settings, "llm_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_retry_attempts", 1)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: time.sleep(999))
+
+        sem = llm_module._get_semaphore(interactive=False)
+        assert sem is not None, "bulk semaphore must exist for lllm_max_concurrency=1"
+        before = sem._value
+
+        for _ in range(3):
+            with pytest.raises(LLMTimeoutError):
+                client.chat("s", "u")
+
+        after = sem._value
+        assert after == before, f"semaphore leaked: {before} -> {after}"
 
 
 class TestParseJson:
