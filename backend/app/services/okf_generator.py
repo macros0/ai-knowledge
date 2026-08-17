@@ -15,7 +15,7 @@ VALID_TYPES = {"concept", "procedure", "reference", "example", "note"}
 
 
 class LLMLike(Protocol):
-    def chat_json(self, system: str, user: str) -> list | dict: ...
+    def chat_json(self, system: str, user: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict: ...
 
 
 class OKFGenerator:
@@ -35,13 +35,13 @@ class OKFGenerator:
     def chunk_text(self, markdown_text: str) -> list[str]:
         return _chunk_text(markdown_text, self.settings.okf_max_chunk_chars)
 
-    def generate_chunk(self, chunk: str, filename: str, index: int, total: int) -> list[Concept]:
+    def generate_chunk(self, chunk: str, filename: str, index: int, total: int, doc_id: str = "unknown") -> list[Concept]:
         """Генерация OKF-концептов для одного чанка (индекс — 1-based)."""
         if total <= 1:
             prompt = self.prompts.format("okf_user", filename=filename, content=chunk)
         else:
             prompt = self.prompts.format("okf_chunk", filename=filename, index=index, total=total, content=chunk)
-        raw = self.llm.chat_json(self.prompts.get("okf_system"), prompt)
+        raw = self.llm.chat_json(self.prompts.get("okf_system"), prompt, doc_id=doc_id, chunk_idx=index)
         return _normalize(raw)
 
     def save_bundle(

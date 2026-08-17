@@ -166,7 +166,7 @@ class TestGenerateChunk:
         def __init__(self):
             self.calls = []
 
-        def chat_json(self, system, user):
+        def chat_json(self, system, user, doc_id="unknown", chunk_idx=0):
             self.calls.append(user)
             return [
                 {
@@ -207,7 +207,7 @@ class TestGenerateChunk:
             def __init__(self):
                 self.n = 0
 
-            def chat_json(self, system, user):
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0):
                 self.n += 1
                 return [
                     {
@@ -244,7 +244,7 @@ class TestBundleRoundtrip:
             def __init__(self, raw):
                 self.raw = raw
 
-            def chat_json(self, system, user):
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0):
                 return self.raw
 
         raw = [

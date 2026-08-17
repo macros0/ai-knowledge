@@ -320,3 +320,43 @@ class TestParseJson:
         raw = '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"строка 1\nстрока 2\n```\nкод","relations":[]}]'
         parsed = _parse_json(raw)
         assert parsed[0]["content"] == "строка 1\nстрока 2\n```\nкод"
+
+    def test_json_repair_recovers_dirty_llm_output(self):
+        from app.services.llm_client import _parse_json
+
+        dirty = '[{"id":"a","type":"concept","title":"test","content":"line1\nline2","tags":["x",],}]'
+        parsed = _parse_json(dirty)
+        assert parsed[0]["id"] == "a"
+        assert parsed[0]["tags"] == ["x"]
+
+    def test_json_repair_recovers_garbage_wrapped_json(self, tmp_path, monkeypatch):
+        from app.services.llm_client import _parse_json
+
+        garbage = "Вот ответ:\n```\n[\n  {\"id\":\"a\",\"title\":\"One\",\"type\":\"concept\",\"tags\":[],\"content\":\"test\",\"relations\":[]}\n]\n```"
+        parsed = _parse_json(garbage)
+        assert parsed[0]["id"] == "a"
+
+    def test_parse_json_dumps_debug_on_failure(self, tmp_path, monkeypatch):
+        from app.services.llm_client import _parse_json
+
+        monkeypatch.setattr("app.services.llm_client.get_settings", lambda: type("S", (), {"data_dir": tmp_path})())
+        monkeypatch.setattr("app.services.llm_client._dump_debug_response", lambda *a, **k: None)
+
+        with pytest.raises(ValueError, match="Не удалось распарсить JSON"):
+            _parse_json("совершенный мусор без json", doc_id="test123", chunk_idx=42)
+
+    def test_debug_file_is_created_on_failure(self, tmp_path, monkeypatch):
+        from app.services.llm_client import _parse_json, _dump_debug_response
+
+        debug_dir = tmp_path / "debug"
+        monkeypatch.setattr("app.services.llm_client.get_settings", lambda: type("S", (), {"data_dir": tmp_path})())
+
+        try:
+            _parse_json("совершенный мусор без json", doc_id="dump-test", chunk_idx=7)
+        except ValueError:
+            pass
+
+        files = list(debug_dir.glob("llm_raw_dump-test_7_*.txt"))
+        assert len(files) == 1, f"Expected 1 debug file, got {files}"
+        content = files[0].read_text(encoding="utf-8")
+        assert "совершенный мусор" in content

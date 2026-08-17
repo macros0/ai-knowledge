@@ -110,7 +110,7 @@ class Pipeline:
                 for chunk_attempt in range(1, max_chunk_retries + 1):
                     try:
                         self.registry.update(doc_id, current_chunk=i + 1)
-                        concepts = self.okf_generator.generate_chunk(chunk, filename, i + 1, total)
+                        concepts = self.okf_generator.generate_chunk(chunk, filename, i + 1, total, doc_id=doc_id)
                         if self._abort_events.get(doc_id, threading.Event()).is_set():
                             logger.info("Генерация %s прервана после чанка %d", doc_id, i + 1)
                             return

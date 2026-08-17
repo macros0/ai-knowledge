@@ -14,9 +14,11 @@ import logging
 import re
 import threading
 import time
+from pathlib import Path
 
 import httpx
 import litellm
+from json_repair import repair_json
 
 from app.config import get_settings
 
@@ -190,9 +192,9 @@ class LLMClient:
         status = getattr(exc, "status_code", None)
         return status in _retryable_statuses
 
-    def chat_json(self, system: str, user: str) -> list | dict:
+    def chat_json(self, system: str, user: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict:
         raw = self.chat(system, user)
-        return _parse_json(raw)
+        return _parse_json(raw, doc_id=doc_id, chunk_idx=chunk_idx)
 
 
 def _stream_delta(chunk) -> str:
@@ -210,8 +212,15 @@ def _stream_delta(chunk) -> str:
     return getattr(delta, "content", None) or ""
 
 
-def _parse_json(text: str) -> list | dict:
-    """Извлекает JSON из ответа LLM (устойчив к markdown-обёртке и мусору)."""
+def _parse_json(text: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict:
+    """Извлекает JSON из ответа LLM.
+
+    Каскад:
+      1. json.loads (быстрый путь)
+      2. поиск ближайшего [ / { + восстановление обрезанного хвоста
+      3. json_repair — неэкранированные символы, лишние запятые, мусор
+      4. дамп ответа в data/debug/ и понятная ошибка
+    """
     if not text:
         raise ValueError("LLM вернул пустой ответ")
     cleaned = text.strip()
@@ -226,12 +235,37 @@ def _parse_json(text: str) -> list | dict:
         (cleaned.find("[") if "[" in cleaned else len(cleaned)),
         (cleaned.find("{") if "{" in cleaned else len(cleaned)),
     )
-    if start < len(cleaned):
-        fragment = cleaned[start:]
-        recovered = _recover_truncated(fragment)
-        if recovered is not None:
-            return recovered
-    raise ValueError("Не удалось распарсить JSON из ответа LLM")
+    fragment = cleaned[start:] if start < len(cleaned) else cleaned
+
+    recovered = _recover_truncated(fragment)
+    if recovered is not None:
+        return recovered
+
+    try:
+        repaired = repair_json(fragment, return_objects=True)
+        if isinstance(repaired, (list, dict)) and repaired:
+            return repaired
+    except Exception as exc:
+        logger.warning("json_repair не удался (чанк %s/%s): %s", doc_id, chunk_idx, exc)
+
+    _dump_debug_response(text, doc_id, chunk_idx)
+    raise ValueError(
+        f"Не удалось распарсить JSON (чанк {chunk_idx}). "
+        f"Дамп сохранён в data/debug/. Начало ответа: {text[:200]!r}"
+    )
+
+
+def _dump_debug_response(text: str, doc_id: str, chunk_idx: int) -> None:
+    """Сохраняет сырой ответ LLM в data/debug/ для расследования сбоя парсинга."""
+    try:
+        debug_dir: Path = get_settings().data_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        path = debug_dir / f"llm_raw_{doc_id}_{chunk_idx}_{ts}.txt"
+        path.write_text(text, encoding="utf-8")
+        logger.warning("Сырой ответ LLM сохранён: %s", path)
+    except Exception as exc:
+        logger.warning("Не удалось сохранить дамп LLM: %s", exc)
 
 
 def _try_load(text: str) -> list | dict | None:
