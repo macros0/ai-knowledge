@@ -239,11 +239,21 @@ def _parse_json(text: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list 
 
     recovered = _recover_truncated(fragment)
     if recovered is not None:
+        logger.info(
+            "[%s] Чанк %s: JSON восстановлен через _recover_truncated (хвост обрезан)",
+            doc_id,
+            chunk_idx,
+        )
         return recovered
 
     try:
         repaired = repair_json(fragment, return_objects=True)
         if isinstance(repaired, (list, dict)) and repaired:
+            logger.info(
+                "[%s] Чанк %s: JSON успешно восстановлен через json_repair",
+                doc_id,
+                chunk_idx,
+            )
             return repaired
     except Exception as exc:
         logger.warning("json_repair не удался (чанк %s/%s): %s", doc_id, chunk_idx, exc)
