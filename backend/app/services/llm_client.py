@@ -3,15 +3,15 @@
 Ограничивает параллельные вызовы общим семафором (LLM_MAX_CONCURRENCY)
 и повторяет запросы с экспоненциальным backoff при 429 / 5xx / сетевых сбоях.
 
-Гарантирует прерывание зависших вызовов через ThreadPoolExecutor с жёстким
-таймаутом (LLM_TIMEOUT_SECONDS).
+Гарантирует прерывание зависших вызовов через threading.Thread(daemon=True)
+с join(timeout) — общий пул не используется, zombie-потоки не блокируют
+последующие вызовы и не мешают завершению интерпретатора.
 """
 import json
 import logging
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as _ThreadTimeoutError
 
 import httpx
 import litellm
@@ -31,8 +31,6 @@ def is_fatal_error(exc: Exception) -> bool:
     if isinstance(status, int):
         return status in _FATAL_STATUSES
     return False
-
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="llm")
 
 _bulk_semaphore: threading.BoundedSemaphore | None = None
 _interactive_semaphore: threading.BoundedSemaphore | None = None
@@ -96,34 +94,19 @@ class LLMClient:
         backoff = max(0.0, self.settings.llm_retry_backoff_seconds)
         last_exc: Exception | None = None
         for attempt in range(1, attempts + 1):
-            future = None
             try:
-                future = _executor.submit(
-                    litellm.completion,
-                    model=self.settings.llm_model,
-                    api_base=self.settings.llm_base_url or None,
-                    api_key=self.settings.llm_api_key or None,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    temperature=self.settings.llm_temperature,
-                    max_tokens=self.settings.llm_max_tokens,
-                    timeout=self.settings.llm_timeout_seconds,
+                return self._complete_once(system, user)
+            except LLMTimeoutError as exc:
+                last_exc = exc
+                logger.warning(
+                    "LLM вызов не удался (попытка %d/%d): %s — повтор через %.1f с",
+                    attempt,
+                    attempts,
+                    exc,
+                    backoff * (2 ** (attempt - 1)),
                 )
-                response = future.result(timeout=self.settings.llm_timeout_seconds + 5)
-                return response.choices[0].message.content or ""
-            except _ThreadTimeoutError:
-                if future is not None:
-                    future.cancel()
-                last_exc = LLMTimeoutError(
-                    f"LLM вызов превысил {self.settings.llm_timeout_seconds}s "
-                    f"(попытка {attempt}/{attempts})"
-                )
-                logger.warning(str(last_exc))
-                delay = backoff * (2 ** (attempt - 1))
                 if attempt < attempts:
-                    time.sleep(delay)
+                    time.sleep(backoff * (2 ** (attempt - 1)))
                 continue
             except Exception as exc:
                 last_exc = exc
@@ -140,6 +123,42 @@ class LLMClient:
                 if attempt < attempts:
                     time.sleep(delay)
         raise last_exc  # type: ignore[misc]
+
+    def _complete_once(self, system: str, user: str) -> str:
+        """Один вызов LLM в изолированном daemon-потоке с жёстким таймаутом.
+
+        Семафор удерживается вызывающим потоком (в `chat`), поэтому даже при
+        зависании потока слот семафора освобождается вместе с исключением.
+        """
+        container: dict = {}
+
+        def run() -> None:
+            try:
+                container["response"] = litellm.completion(
+                    model=self.settings.llm_model,
+                    api_base=self.settings.llm_base_url or None,
+                    api_key=self.settings.llm_api_key or None,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    temperature=self.settings.llm_temperature,
+                    max_tokens=self.settings.llm_max_tokens,
+                    timeout=self.settings.llm_timeout_seconds,
+                )
+            except BaseException as exc:
+                container["error"] = exc
+
+        thread = threading.Thread(target=run, daemon=True, name="llm-call")
+        thread.start()
+        thread.join(timeout=self.settings.llm_timeout_seconds)
+        if thread.is_alive():
+            raise LLMTimeoutError(
+                f"LLM вызов превысил {self.settings.llm_timeout_seconds}s"
+            )
+        if "error" in container:
+            raise container["error"]
+        return container["response"].choices[0].message.content or ""
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
