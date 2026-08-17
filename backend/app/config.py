@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     llm_api_key: str = "ollama"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 4096
+    llm_max_tokens_cap: int = 16384
+    llm_truncation_retry_attempts: int = 2
+    llm_truncation_max_tokens_multiplier: float = 1.5
 
     llm_max_concurrency: int = 1
     llm_interactive_concurrency: int = 2

@@ -45,6 +45,14 @@ class LLMTimeoutError(Exception):
     """LLM-вызов превысил LLM_TIMEOUT_SECONDS."""
 
 
+class LLMTruncationError(Exception):
+    """Ответ LLM обрезан по лимиту токенов (finish_reason=length или незакрытая структура).
+
+    Означает потерю данных: `_parse_json` не возвращает спасённый хвост,
+    а `chat_json` повторяет запрос с увеличенным max_tokens.
+    """
+
+
 def _get_semaphore(interactive: bool = False) -> threading.BoundedSemaphore | None:
     """Семафор по типу задачи: bulk (фоновая генерация) или interactive (чат).
 
@@ -86,20 +94,22 @@ class LLMClient:
         self.settings = get_settings()
         self.interactive = interactive
 
-    def chat(self, system: str, user: str) -> str:
+    def chat(self, system: str, user: str, max_tokens: int | None = None) -> str:
         semaphore = _get_semaphore(self.interactive)
         if semaphore is None:
-            return self._complete_with_retries(system, user)
+            text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens)
+            return text
         with semaphore:
-            return self._complete_with_retries(system, user)
+            text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens)
+            return text
 
-    def _complete_with_retries(self, system: str, user: str) -> str:
+    def _complete_with_retries(self, system: str, user: str, max_tokens: int | None = None) -> tuple[str, str | None]:
         attempts = max(1, self.settings.llm_retry_attempts)
         backoff = max(0.0, self.settings.llm_retry_backoff_seconds)
         last_exc: Exception | None = None
         for attempt in range(1, attempts + 1):
             try:
-                return self._complete_once(system, user)
+                return self._complete_once(system, user, max_tokens=max_tokens)
             except LLMTimeoutError as exc:
                 last_exc = exc
                 logger.warning(
@@ -128,18 +138,27 @@ class LLMClient:
                     time.sleep(delay)
         raise last_exc  # type: ignore[misc]
 
-    def _complete_once(self, system: str, user: str) -> str:
+    def _complete_once(self, system: str, user: str, max_tokens: int | None = None) -> tuple[str, str | None]:
         """Один вызов LLM стримом в изолированном daemon-потоке.
 
         Таймаут считается по тишине между чанками (idle) — любой пришедший чанк
         сбрасывает таймер, поэтому медленная, но живая генерация не рвётся.
         Семафор удерживается вызывающим потоком (в `chat`), поэтому при
         LLMTimeoutError слот семафора освобождается вместе с исключением.
+
+        Возвращает (текст, finish_reason): finish_reason="length" означает,
+        что генерация прервана лимитом max_tokens — ответ неполон.
         """
-        container: dict = {"parts": [], "done": threading.Event(), "last_activity": 0.0}
+        container: dict = {
+            "parts": [],
+            "done": threading.Event(),
+            "last_activity": 0.0,
+            "finish_reason": None,
+        }
         lock = threading.Lock()
         idle = max(0.0, self.settings.llm_stream_idle_timeout_seconds)
         total = max(0.0, self.settings.llm_max_total_timeout_seconds)
+        limit = max_tokens or self.settings.llm_max_tokens
 
         def run() -> None:
             try:
@@ -152,12 +171,16 @@ class LLMClient:
                         {"role": "user", "content": user},
                     ],
                     temperature=self.settings.llm_temperature,
-                    max_tokens=self.settings.llm_max_tokens,
+                    max_tokens=limit,
                     stream=True,
                 )
                 for chunk in stream:
                     with lock:
                         container["last_activity"] = time.monotonic()
+                    reason = _stream_finish_reason(chunk)
+                    if reason:
+                        with lock:
+                            container["finish_reason"] = reason
                     text = _stream_delta(chunk)
                     if text:
                         with lock:
@@ -181,7 +204,7 @@ class LLMClient:
             container["done"].wait(timeout=0.1)
         if "error" in container:
             raise container["error"]
-        return "".join(container["parts"])
+        return "".join(container["parts"]), container["finish_reason"]
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
@@ -193,8 +216,42 @@ class LLMClient:
         return status in _retryable_statuses
 
     def chat_json(self, system: str, user: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict:
-        raw = self.chat(system, user)
-        return _parse_json(raw, doc_id=doc_id, chunk_idx=chunk_idx)
+        semaphore = _get_semaphore(self.interactive)
+        if semaphore is None:
+            return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx)
+        with semaphore:
+            return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx)
+
+    def _chat_json_with_truncation_retry(self, system: str, user: str, doc_id: str, chunk_idx: int) -> list | dict:
+        """chat_json + повтор при обрезании JSON (потеря данных).
+
+        При LLMTruncationError повторяем запрос с увеличенным max_tokens
+        (формула base * multiplier**n, не выше llm_max_tokens_cap), т.к.
+        обрезанный «спасённый» JSON неполон и сохранять его нельзя. После
+        исчерпания попыток исключение уходит наверх — pipeline ставит документ
+        в paused с дампом для диагностики.
+        """
+        settings = self.settings
+        max_attempts = max(1, settings.llm_truncation_retry_attempts + 1)
+        base = max(1, settings.llm_max_tokens)
+        multiplier = max(1.0, settings.llm_truncation_max_tokens_multiplier)
+        cap = max(base, settings.llm_max_tokens_cap)
+        max_tokens = base
+        for attempt in range(max_attempts):
+            text, finish_reason = self._complete_with_retries(system, user, max_tokens=max_tokens)
+            try:
+                return _parse_json(text, finish_reason=finish_reason, doc_id=doc_id, chunk_idx=chunk_idx)
+            except LLMTruncationError:
+                if attempt == max_attempts - 1:
+                    raise
+                max_tokens = min(int(base * (multiplier ** (attempt + 1))), cap)
+                logger.warning(
+                    "[%s] Чанк %s: JSON обрезан по лимиту токенов, повтор с max_tokens=%d",
+                    doc_id,
+                    chunk_idx,
+                    max_tokens,
+                )
+        raise LLMTruncationError(f"Чанк {chunk_idx}: не удалось получить полный JSON")
 
 
 def _stream_delta(chunk) -> str:
@@ -212,20 +269,51 @@ def _stream_delta(chunk) -> str:
     return getattr(delta, "content", None) or ""
 
 
-def _parse_json(text: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict:
+def _stream_finish_reason(chunk) -> str | None:
+    """Достаёт finish_reason из стрим-чанка (провайдеры кладут его по-разному).
+
+    "length" означает, что генерация прервана max_tokens — ответ неполон.
+    """
+    choices = getattr(chunk, "choices", None)
+    if not choices:
+        return None
+    choice = choices[0]
+    reason = getattr(choice, "finish_reason", None)
+    if reason:
+        return str(reason)
+    delta = getattr(choice, "delta", None)
+    if delta is not None:
+        reason = getattr(delta, "finish_reason", None)
+        if reason:
+            return str(reason)
+    return None
+
+
+def _parse_json(text: str, finish_reason: str | None = None, doc_id: str = "unknown", chunk_idx: int = 0) -> list | dict:
     """Извлекает JSON из ответа LLM.
 
     Каскад:
       1. json.loads (быстрый путь)
-      2. поиск ближайшего [ / { + восстановление обрезанного хвоста
-      3. json_repair — неэкранированные символы, лишние запятые, мусор
-      4. дамп ответа в data/debug/ и понятная ошибка
+      2. проверка на обрезание (finish_reason="length" / незакрытая структура) —
+         LLMTruncationError, чтобы chat_json переотправил запрос с большим max_tokens
+      3. поиск ближайшего [ / { + восстановление обрезанного хвоста
+      4. json_repair — неэкранированные символы, лишние запятые, мусор
+      5. дамп ответа в data/debug/ и понятная ошибка
+
+    Обрезанный ответ не возвращается «как есть»: он неполон по определению,
+    а json_repair мог бы молча закрыть оборванный массив и выкинуть хвост.
     """
     if not text:
         raise ValueError("LLM вернул пустой ответ")
     cleaned = text.strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
     cleaned = re.sub(r"\s*```$", "", cleaned)
+
+    if finish_reason == "length":
+        raise LLMTruncationError(
+            f"Ответ LLM обрезан по лимиту токенов (чанк {chunk_idx}). "
+            "Запрос будет повторён с увеличенным max_tokens."
+        )
 
     parsed = _try_load(cleaned)
     if parsed is not None:
@@ -236,6 +324,12 @@ def _parse_json(text: str, doc_id: str = "unknown", chunk_idx: int = 0) -> list 
         (cleaned.find("{") if "{" in cleaned else len(cleaned)),
     )
     fragment = cleaned[start:] if start < len(cleaned) else cleaned
+
+    if _is_truncated(fragment):
+        raise LLMTruncationError(
+            f"Ответ LLM обрезан по лимиту токенов (чанк {chunk_idx}): "
+            "незакрытая структура JSON. Запрос будет повторён с увеличенным max_tokens."
+        )
 
     recovered = _recover_truncated(fragment)
     if recovered is not None:
@@ -315,6 +409,44 @@ def _sanitize_control_chars(text: str) -> str:
             continue
         out.append(ch)
     return "".join(out)
+
+
+def _is_truncated(fragment: str) -> bool:
+    """True, если JSON-фрагмент оборван: верхний уровень так и не закрылся.
+
+    Считаем глубину вложенности, учитывая строки и экранирование (\" не
+    ломает счётчик). Если к концу фрагмента глубина не вернулась к 0 —
+    не хватает закрывающей скобки верхнего уровня, т.е. ответ обрезан.
+
+    Примеры:
+      [{"id":1}, {"id":2        -> True  (нет внешней ])
+      [{"a":1},{"b":2}          -> True  (внешняя ] не дошла)
+      [{"id":1}] trailing text  -> False (закрыт; хвост — мусор для json_repair)
+    """
+    frag = fragment.lstrip()
+    if not frag or frag[0] not in "[{":
+        return False
+    depth = 0
+    in_string = False
+    escaped = False
+    for ch in frag:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "[{":
+            depth += 1
+        elif ch in "]}":
+            depth -= 1
+            if depth == 0:
+                return False
+    return True
 
 
 def _recover_truncated(fragment: str) -> list | dict | None:

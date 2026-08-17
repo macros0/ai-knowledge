@@ -9,7 +9,7 @@ import pytest
 from litellm.exceptions import RateLimitError
 
 import app.services.llm_client as llm_module
-from app.services.llm_client import LLMClient, LLMTimeoutError
+from app.services.llm_client import LLMClient, LLMTimeoutError, LLMTruncationError
 
 
 def _stream_chunk(text: str):
@@ -23,6 +23,19 @@ def _stream_response(*parts):
     """Генератор, эмулирующий стрим litellm.completion(stream=True) — несколько токенов."""
     for p in parts:
         yield _stream_chunk(p)
+
+
+def _stream_chunk_finished(text: str, finish_reason: str | None):
+    """Чанк с финальным finish_reason (провайдер кладёт его на choices[0])."""
+    delta = type("Delta", (), {"content": text, "finish_reason": None})()
+    choice = type("Choice", (), {"delta": delta, "finish_reason": finish_reason})()
+    return type("Chunk", (), {"choices": [choice]})()
+
+
+def _stream_response_finished(*parts, finish_reason: str = "stop"):
+    """Стрим с finish_reason на последнем чанке — эмуляция конца генерации."""
+    for i, p in enumerate(parts):
+        yield _stream_chunk_finished(p, None if i < len(parts) - 1 else finish_reason)
 
 
 def _hang_stream(first_token="первый"):
@@ -259,8 +272,9 @@ class TestChaosFailureInjection:
         with pytest.raises(LLMTimeoutError):
             client._complete_once("s", "u")
         # Следующий вызов должен пройти — zombie-поток не блокирует новые.
-        result = client._complete_once("s", "u")
+        result, reason = client._complete_once("s", "u")
         assert result == "привет"
+        assert reason is None
         assert call_count["n"] == 2
 
     def test_semaphore_released_on_timeout(self, client, monkeypatch):
@@ -294,7 +308,7 @@ class TestChaosFailureInjection:
 
 
 class TestParseJson:
-    def test_truncated_array_recovers_last_valid_concept(self):
+    def test_truncated_array_raises_truncation_error(self):
         from app.services.llm_client import _parse_json
 
         truncated = (
@@ -302,16 +316,40 @@ class TestParseJson:
             '"content":"текст один","relations":[]},\n'
             '  {"id":"b","title":"Два","type":"concept","tags":["y"],"content":"незавершённ'
         )
-        parsed = _parse_json(truncated)
-        assert isinstance(parsed, list)
-        assert [c["id"] for c in parsed] == ["a"]
-        assert parsed[0]["content"] == "текст один"
+        # Обрезанный ответ неполон — нельзя молча сохранить «спасённый» хвост.
+        with pytest.raises(LLMTruncationError):
+            _parse_json(truncated)
+
+    def test_truncated_missing_outer_bracket_raises(self):
+        from app.services.llm_client import _parse_json
+
+        # Внешняя ] не дошла — верхний уровень не закрыт.
+        truncated = '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"x","relations":[]},{"id":"b"'
+        with pytest.raises(LLMTruncationError):
+            _parse_json(truncated)
+
+    def test_finish_reason_length_raises_even_if_parseable(self):
+        from app.services.llm_client import _parse_json
+
+        raw = '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"текст","relations":[]}]'
+        # finish_reason="length" = модель прервана лимитом: даже валидный JSON мог
+        # быть не дописан (модель собиралась добавить ещё элементы).
+        with pytest.raises(LLMTruncationError, match="обрезан по лимиту токенов"):
+            _parse_json(raw, finish_reason="length")
 
     def test_valid_json_unaffected(self):
         from app.services.llm_client import _parse_json
 
         raw = '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"текст","relations":[]}]'
         parsed = _parse_json(raw)
+        assert parsed[0]["id"] == "a"
+
+    def test_closed_array_with_trailing_text_not_truncated(self):
+        from app.services.llm_client import _parse_json
+
+        # Структура закрыта, хвост — мусор провайдера: ремонт без потерь.
+        garbage = '[{"id":"a","title":"One","type":"concept","tags":[],"content":"test","relations":[]}] blah blah'
+        parsed = _parse_json(garbage)
         assert parsed[0]["id"] == "a"
 
     def test_raw_newlines_inside_string_are_sanitized(self):
@@ -360,3 +398,68 @@ class TestParseJson:
         assert len(files) == 1, f"Expected 1 debug file, got {files}"
         content = files[0].read_text(encoding="utf-8")
         assert "совершенный мусор" in content
+
+
+class TestChatJsonTruncationRetry:
+    """Обрезанный JSON (finish_reason=length / незакрытая структура) -> переотправка
+    с увеличенным max_tokens вместо молчаливого сохранения неполного ответа."""
+
+    _VALID = '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"текст","relations":[]}]'
+
+    def test_truncated_retried_with_bigger_max_tokens(self, client, monkeypatch):
+        client.settings.llm_max_tokens = 4096
+        calls: list[int] = []
+
+        def flaky(**kwargs):
+            mt = kwargs.get("max_tokens")
+            calls.append(mt if isinstance(mt, int) else 0)
+            if len(calls) == 1:
+                return _stream_response_finished('[{"id":"a","title":"Один",', finish_reason="length")
+            return _stream_response_finished(self._VALID, finish_reason="stop")
+
+        monkeypatch.setattr(litellm, "completion", flaky)
+        result = client.chat_json("s", "u", doc_id="d", chunk_idx=1)
+        assert result[0]["id"] == "a"
+        assert calls == [4096, 6144], f"max_tokens: {calls}"
+
+    def test_max_tokens_capped_at_safety_cap(self, client, monkeypatch):
+        client.settings.llm_max_tokens = 4096
+        client.settings.llm_max_tokens_cap = 5000
+        calls: list[int] = []
+
+        def flaky(**kwargs):
+            mt = kwargs.get("max_tokens")
+            calls.append(mt if isinstance(mt, int) else 0)
+            if len(calls) == 1:
+                return _stream_response_finished('[{"id":"a",', finish_reason="length")
+            return _stream_response_finished(self._VALID, finish_reason="stop")
+
+        monkeypatch.setattr(litellm, "completion", flaky)
+        client.chat_json("s", "u", doc_id="d", chunk_idx=1)
+        # 4096*1.5=6144, но cap 5000 -> повтор с 5000
+        assert calls == [4096, 5000], f"max_tokens: {calls}"
+
+    def test_truncation_persists_raises_after_all_attempts(self, client, monkeypatch):
+        client.settings.llm_truncation_retry_attempts = 2
+        calls = {"n": 0}
+
+        def always_truncated(**kwargs):
+            calls["n"] += 1
+            return _stream_response_finished('[{"id":"a",', finish_reason="length")
+
+        monkeypatch.setattr(litellm, "completion", always_truncated)
+        with pytest.raises(LLMTruncationError):
+            client.chat_json("s", "u", doc_id="d", chunk_idx=1)
+        # 1 начальная попытка + 2 ретрая
+        assert calls["n"] == 3
+
+    def test_finish_reason_stop_passes_through_sanitize_path(self, client, monkeypatch):
+        monkeypatch.setattr(
+            litellm, "completion",
+            lambda **kwargs: _stream_response_finished(
+                '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"строка 1\nстрока 2","relations":[]}]',
+                finish_reason="stop",
+            ),
+        )
+        result = client.chat_json("s", "u", doc_id="d", chunk_idx=1)
+        assert result[0]["content"] == "строка 1\nстрока 2"

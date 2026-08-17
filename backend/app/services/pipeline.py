@@ -15,7 +15,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.services.embedder import Embedder
-from app.services.llm_client import is_fatal_error
+from app.services.llm_client import LLMTruncationError, is_fatal_error
 from app.services.okf_generator import OKFGenerator
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
@@ -117,12 +117,16 @@ class Pipeline:
                         self.registry.update(doc_id, error=None)
                         break
                     except Exception as exc:
-                        if is_fatal_error(exc) or chunk_attempt == max_chunk_retries:
+                        if (
+                            isinstance(exc, LLMTruncationError)
+                            or is_fatal_error(exc)
+                            or chunk_attempt == max_chunk_retries
+                        ):
                             self.registry.update(doc_id, error=str(exc))
                             raise
                         delay = chunk_backoff * chunk_attempt
                         msg = (
-                            f"Сетевой сбой ({exc}). "
+                            f"Сбой генерации чанка ({exc}). "
                             f"Повтор {chunk_attempt}/{max_chunk_retries} через {int(delay)}с..."
                         )
                         logger.warning("Чанк %d/%d: %s", i + 1, total, msg)
