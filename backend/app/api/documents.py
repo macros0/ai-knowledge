@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.config import get_settings
 from app.models.schemas import DocumentListOut, DocumentOut, OkfFileOut
@@ -72,6 +73,21 @@ def resume_document(doc_id: str):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _registry.get(doc_id)
+
+
+@router.get("/{doc_id}/download")
+def download_document(doc_id: str):
+    doc = _registry.get(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    matches = sorted(get_settings().uploads_dir.glob(f"{doc_id}.*"))
+    if not matches:
+        raise HTTPException(status_code=404, detail="Исходный файл не найден на диске")
+    return FileResponse(
+        matches[0],
+        media_type="application/octet-stream",
+        filename=doc.get("filename") or matches[0].name,
+    )
 
 
 @router.get("/{doc_id}/okf", response_model=list[OkfFileOut])

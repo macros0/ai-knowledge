@@ -162,6 +162,25 @@ main {
   border-color: var(--danger);
 }
 
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  line-height: 0;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 /* ---------- tag pickers ---------- */
 .tag-picker {
   display: flex;
@@ -227,6 +246,86 @@ main {
   margin-bottom: 12px;
 }
 
+/* ---------- top-k picker ---------- */
+.topk-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.topk-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.topk-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.topk-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.topk-btn.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.topk-custom {
+  width: 80px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.topk-custom:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ---------- mode picker ---------- */
+.mode-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mode-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mode-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.mode-btn.active {
+  color: var(--text);
+  border-color: var(--ok);
+  background: rgba(63, 191, 127, 0.15);
+}
+
 .msg {
   margin-bottom: 16px;
 }
@@ -264,6 +363,23 @@ main {
   margin: 6px 0 0;
   padding-left: 20px;
   color: var(--muted);
+}
+
+/* ---------- search settings spoiler ---------- */
+.search-settings {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.search-settings summary {
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.search-settings[open] summary {
+  margin-bottom: 8px;
 }
 
 .chat-form {
@@ -335,4 +451,117 @@ main {
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
+}
+
+/* ---------- OKF list ---------- */
+.okf-list-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.okf-list-page .back-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.okf-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.okf-list-header h1 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.okf-doc-name {
+  font-size: 13px;
+  color: var(--muted);
+  word-break: break-all;
+  margin-top: 2px;
+}
+
+.download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-dim);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.download-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.okf-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.okf-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.okf-list-item:hover {
+  border-color: var(--accent);
+}
+
+.okf-title {
+  font-weight: 600;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.okf-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.okf-type {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.okf-type-concept { color: var(--accent); }
+.okf-type-procedure { color: var(--ok); }
+.okf-type-reference { color: #d0a64a; }
+.okf-type-example { color: #c07fbf; }
+.okf-type-note { color: var(--muted); }
+
+.okf-empty {
+  color: var(--muted);
+  font-size: 14px;
 }

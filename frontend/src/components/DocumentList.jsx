@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteDocument, listDocuments, listOkfFiles, resumeDocument } from "@/lib/api";
+import { deleteDocument, listDocuments, resumeDocument } from "@/lib/api";
+import { DownloadIcon, EyeIcon } from "./icons";
 
 const STATUS_LABELS = {
   uploaded: "Загружен",
@@ -53,11 +54,8 @@ export default function DocumentList({ refreshKey = 0 }) {
     };
   }, [refreshKey, load]);
 
-  const openOkf = async (doc) => {
-    const files = await listOkfFiles(doc.id);
-    if (!files.length) return;
-    const segments = files[0].filename.split("/");
-    router.push(`/documents/${doc.id}/okf/${segments.map(encodeURIComponent).join("/")}`);
+  const openOkf = (doc) => {
+    router.push(`/documents/${doc.id}/okf`);
   };
 
   const remove = async (doc) => {
@@ -94,9 +92,17 @@ export default function DocumentList({ refreshKey = 0 }) {
           </div>
           <div className="doc-actions">
             <span className={`status ${doc.status}`}>{STATUS_LABELS[doc.status] ?? doc.status}</span>
-            <button className="delete-btn" onClick={() => openOkf(doc)}>
-              OKF
+            <button className="icon-btn" onClick={() => openOkf(doc)} title="Список чанков">
+              <EyeIcon />
             </button>
+            <a
+              className="icon-btn"
+              href={`/api/documents/${doc.id}/download`}
+              download
+              title="Скачать исходный файл"
+            >
+              <DownloadIcon />
+            </a>
             {(doc.status === "paused" || doc.status === "failed") && (
               <button className="delete-btn" onClick={() => resume(doc)}>
                 Возобновить

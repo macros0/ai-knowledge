@@ -33,8 +33,8 @@ export default async function OkfFilePage({ params }) {
 
   return (
     <div className="okf-viewer">
-      <Link className="back-link" href="/">
-        ← Назад к документам
+      <Link className="back-link" href={`/documents/${docId}/okf`}>
+        ← К списку чанков
       </Link>
       <h1>{decodedPath.join("/")}</h1>
       <pre>{text}</pre>

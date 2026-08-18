@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from pydantic import field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,6 +53,34 @@ class Settings(BaseSettings):
     okf_split_on_truncation: bool = True
     okf_split_max_depth: int = 2
     okf_salvage_truncated: bool = True
+
+    chat_top_k_min: int = Field(default=1, ge=1)
+    chat_top_k_max: int = Field(default=10, ge=1)
+    chat_top_k_default: int = Field(default=5, ge=1)
+    chat_top_k_presets: list[int] = Field(default=[4, 5, 10])
+
+    search_mode_default: str = "hybrid"  # dense | bm25 | hybrid
+
+    @field_validator("chat_top_k_presets", mode="before")
+    @classmethod
+    def parse_top_k_presets(cls, v: object) -> Any:
+        if isinstance(v, str):
+            tokens = [item.strip() for item in v.split(",") if item.strip()]
+            return sorted(set(int(x) for x in tokens))
+        if isinstance(v, (list, tuple, set)):
+            return sorted(set(int(x) for x in v))
+        return v
+
+    @model_validator(mode="after")
+    def validate_top_k_bounds(self) -> "Settings":
+        if self.chat_top_k_min > self.chat_top_k_max:
+            raise ValueError("chat_top_k_min cannot exceed chat_top_k_max")
+        if not (self.chat_top_k_min <= self.chat_top_k_default <= self.chat_top_k_max):
+            raise ValueError("chat_top_k_default must be between chat_top_k_min and chat_top_k_max")
+        for preset in self.chat_top_k_presets:
+            if not (self.chat_top_k_min <= preset <= self.chat_top_k_max):
+                raise ValueError(f"Preset {preset} is out of bounds [{self.chat_top_k_min}, {self.chat_top_k_max}]")
+        return self
 
     @field_validator("data_dir", mode="before")
     @classmethod

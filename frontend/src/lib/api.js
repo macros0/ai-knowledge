@@ -42,18 +42,22 @@ export function getOkfContent(docId, filename) {
   return fetch(`${BASE}/documents/${docId}/okf/${filename}`).then((r) => r.text());
 }
 
-export function search(query, tags = [], topK = 5) {
+export function search(query, tags = [], topK = 5, mode = "hybrid") {
   return request("/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, tags, top_k: topK }),
+    body: JSON.stringify({ query, tags, top_k: topK, mode }),
   });
 }
 
-export function chat(query, tags = [], topK = 5) {
+export function chat(query, tags = [], topK = 5, mode = "hybrid") {
   return request("/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, tags, top_k: topK }),
+    body: JSON.stringify({ query, tags, top_k: topK, mode }),
   });
+}
+
+export function getChatSettings() {
+  return request("/settings");
 }

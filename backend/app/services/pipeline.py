@@ -209,9 +209,11 @@ class Pipeline:
         self.vector_store.ensure_collection()
         self.vector_store.index_concepts(doc_id, okf_docs, vectors)
 
+        manifest = staging.load()
+        total_chunks = manifest.get("total_chunks", 0) if manifest else 0
         staging.remove()
-        self.registry.update(doc_id, status="done", okf_file_count=len(okf_docs), error=None)
-        logger.info("Документ %s обработан: %d OKF-концептов", filename, len(okf_docs))
+        self.registry.update(doc_id, status="done", okf_file_count=total_chunks, error=None)
+        logger.info("Документ %s обработан: %d OKF-концептов, %d чанков", filename, len(okf_docs), total_chunks)
 
     def remove(self, doc_id: str) -> None:
         event = self._abort_events.get(doc_id)

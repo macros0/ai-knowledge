@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+SearchMode = Literal["dense", "bm25", "hybrid"]
 
 
 class DocumentOut(BaseModel):
@@ -36,6 +38,7 @@ class SearchRequest(BaseModel):
     query: str
     tags: list[str] = Field(default_factory=list)
     top_k: int = Field(default=5, ge=1, le=50)
+    mode: SearchMode = "hybrid"
 
 
 class SearchHit(BaseModel):
@@ -56,6 +59,16 @@ class ChatRequest(BaseModel):
     query: str
     tags: list[str] = Field(default_factory=list)
     top_k: int = Field(default=5, ge=1, le=50)
+    mode: SearchMode = "hybrid"
+
+
+class ChatSettingsOut(BaseModel):
+    top_k_min: int
+    top_k_max: int
+    top_k_default: int
+    top_k_presets: list[int]
+    search_mode_default: str
+    search_modes: list[str]
 
 
 class ChatSource(BaseModel):

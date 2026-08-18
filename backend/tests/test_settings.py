@@ -1,0 +1,64 @@
+"""Тесты настроек чата: парсинг пресетов top_k, валидация границ и HTTP-контракт."""
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.config import Settings
+from app.main import create_app
+
+
+class TestTopKPresetsParsing:
+    def test_parses_and_sorts_csv(self):
+        s = Settings(
+            chat_top_k_min=1,
+            chat_top_k_max=20,
+            chat_top_k_default=5,
+            chat_top_k_presets="10, 4, 5, 4",
+        )
+        assert s.chat_top_k_presets == [4, 5, 10]
+
+    def test_parses_list_and_dedupes(self):
+        s = Settings(chat_top_k_presets=[10, 4, 5, 4, 10])
+        assert s.chat_top_k_presets == [4, 5, 10]
+
+    def test_defaults(self):
+        s = Settings()
+        assert s.chat_top_k_min == 1
+        assert s.chat_top_k_max == 10
+        assert s.chat_top_k_default == 5
+        assert s.chat_top_k_presets == [4, 5, 10]
+
+
+class TestTopKBounds:
+    def test_min_exceeds_max(self):
+        with pytest.raises(ValueError):
+            Settings(chat_top_k_min=10, chat_top_k_max=1)
+
+    def test_default_out_of_range(self):
+        with pytest.raises(ValueError):
+            Settings(chat_top_k_min=2, chat_top_k_max=8, chat_top_k_default=9)
+
+    def test_preset_out_of_bounds(self):
+        with pytest.raises(ValueError):
+            Settings(chat_top_k_min=2, chat_top_k_max=8, chat_top_k_presets=[1, 4, 5])
+
+    def test_valid_edges_pass(self):
+        s = Settings(chat_top_k_min=1, chat_top_k_max=10, chat_top_k_default=10, chat_top_k_presets=[1, 10])
+        assert s.chat_top_k_presets == [1, 10]
+
+
+class TestSettingsEndpoint:
+    def test_settings_endpoint_returns_valid_schema(self, tmp_path: Path, monkeypatch):
+        settings = Settings(data_dir=tmp_path)
+        monkeypatch.setattr("app.config.get_settings", lambda: settings)
+        monkeypatch.setattr("app.main.get_settings", lambda: settings)
+
+        with TestClient(create_app()) as client:
+            resp = client.get("/api/settings")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["top_k_min"] == 1
+        assert data["top_k_max"] == 10
+        assert data["top_k_default"] == 5
+        assert data["top_k_presets"] == [4, 5, 10]
