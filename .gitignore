@@ -31,6 +31,7 @@ next-env.d.ts
 /data/prompts/*
 /data/documents.json
 /data/debug/*
+/data/cache/*
 !/data/uploads/.gitkeep
 !/data/okf_bundles/.gitkeep
 

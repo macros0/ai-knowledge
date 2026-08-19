@@ -10,6 +10,7 @@ import yaml
 from app.config import get_settings
 from app.models.schemas import Concept, OkfDocument
 from app.prompts.store import get_store
+from app.services.field_table import extract_table_concepts
 from app.services.llm_client import LLMClient, LLMTruncationError
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,14 @@ class OKFGenerator:
     def generate_chunk(self, chunk: str, filename: str, index: int, total: int, doc_id: str = "unknown") -> list[Concept]:
         """Генерация OKF-концептов для одного чанка (индекс — 1-based).
 
+        Таблицы полей XML-сообщений (колонки: поле | тип | длина | кратность |
+        описание) извлекаются ПРОГРАММНО (field_table.extract_field_table_concepts),
+        а не LLM: 12B-модель не справляется с экстракцией всех полей большой
+        таблицы (выбирает несколько и останавливается). Программная экстракция
+        гарантирует все поля (включая скалярные lnState, snils, ...), а LLM
+        получает остаток чанка (без таблицы) — не тонет в ней и обрабатывает
+        семантику (XML-примеры, описания).
+
         Каскад отказоустойчивости при обрезании ответа LLM по лимиту токенов:
           1. chat_json сам повторяет запрос с увеличенным max_tokens (до cap);
           2. если всё ещё LLMTruncationError — чанк режется пополам и половинки
@@ -56,7 +65,15 @@ class OKFGenerator:
              (okf_salvage_truncated): частичный результат сохраняется с WARNING,
              документ не застревает.
         """
-        return self._generate_chunk_recursive(chunk, filename, index, total, doc_id, depth=0)
+        table_concepts, remainder = extract_table_concepts(
+            chunk,
+            chunk_index=index,
+            llm=self.llm,
+            use_llm_classify=self.settings.okf_table_llm_classify,
+            doc_id=doc_id,
+        )
+        llm_concepts = self._generate_chunk_recursive(remainder, filename, index, total, doc_id, depth=0)
+        return table_concepts + llm_concepts
 
     def _generate_chunk_recursive(
         self, chunk: str, filename: str, index: int, total: int, doc_id: str, depth: int
@@ -106,6 +123,7 @@ class OKFGenerator:
         attachments: list[dict] | None = None,
         global_tags: list[str] | None = None,
         slugs: list[str] | None = None,
+        chunk_of_slug: dict[str, int] | None = None,
         bundle_root: Path | None = None,
     ) -> list[OkfDocument]:
         bundle_dir = bundle_root or self.bundle_root or self.settings.okf_dir / doc_id
@@ -124,7 +142,14 @@ class OKFGenerator:
                 slug = f"{slug}-{i}"
             seen.add(slug)
             filepath = bundle_dir / f"{slug}.md"
-            markdown = _build_markdown(concept, filename, doc_id, attachments=attachments, global_tags=global_tags)
+            markdown = _build_markdown(
+                concept,
+                filename,
+                doc_id,
+                attachments=attachments,
+                global_tags=global_tags,
+                chunk_index=(chunk_of_slug or {}).get(slug),
+            )
             filepath.write_text(markdown, encoding="utf-8")
             metadata = {
                 "type": concept.type,
@@ -147,6 +172,7 @@ def _build_markdown(
     doc_id: str,
     attachments: list[dict] | None = None,
     global_tags: list[str] | None = None,
+    chunk_index: int | None = None,
 ) -> str:
     meta = {
         "type": concept.type,
@@ -158,6 +184,8 @@ def _build_markdown(
         "attachments": attachments or [],
         "created_at": date.today().isoformat(),
     }
+    if chunk_index is not None:
+        meta["chunk_index"] = chunk_index
     frontmatter = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, default_flow_style=False)
     body = _truncate_content(concept.content, get_settings().okf_max_concept_chars)
     return f"---\n{frontmatter}---\n\n# {concept.title}\n\n{body}\n"
@@ -300,7 +328,32 @@ def _truncate_content(text: str, max_chars: int) -> str:
     return "\n".join(kept).rstrip()
 
 
+# Транслитерация кириллицы → латиница (ГОСТ-стиль, без внешних зависимостей).
+# Применяется в _slugify для человекочитаемых имён .md-файлов на кириллических
+# концептах (Товар → tovar, Название → nazvanie). W3C XML разрешает кириллицу в
+# именах тегов/атрибутов (CommerceML, 1С), но slug в Latin-ASCII удобнее для
+# файловой системы и путей.
+_CYR_LAT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+}
+
+# Максимум символов в slug: защита от превышения Windows MAX_PATH (~260) при
+# длинных title-предложениях от LLM. Полный путь = data/okf_bundles/{doc_id}/{slug}.md,
+# doc_id (~16) + пути (~100) + slug → ограничиваем slug до 80.
+_SLUG_MAX_LEN = 80
+
+
 def _slugify(text: str) -> str:
-    slug = re.sub(r"[^a-z0-9\s-]", "", text.lower())
+    s = text.lower()
+    s = "".join(_CYR_LAT.get(ch, ch) for ch in s)  # транслитерация кириллицы
+    slug = re.sub(r"[^a-z0-9\s-]", "", s)           # убрать non-ascii/спецсимволы
     slug = re.sub(r"[\s_-]+", "-", slug).strip("-")
+    # обрезать на границе слова (последний '-' до лимита), чтобы slug был читаемым
+    if len(slug) > _SLUG_MAX_LEN:
+        head = slug[:_SLUG_MAX_LEN]
+        slug = head.rsplit("-", 1)[0] or head
     return slug or "concept"

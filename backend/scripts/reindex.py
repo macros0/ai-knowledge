@@ -15,55 +15,11 @@ import argparse
 import sys
 from pathlib import Path
 
-import yaml
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.models.schemas import OkfDocument
+from app.services.bundle import load_bundle
 from app.services.embedder import Embedder
 from app.services.vector_store import VectorStore
-
-
-def parse_okf_file(filepath: Path) -> tuple[dict, str]:
-    """Читает OKF-файл: возвращает метаданные (YAML-frontmatter) и тело концепта."""
-    text = filepath.read_text(encoding="utf-8")
-    if text.startswith("\ufeff"):
-        text = text[1:]
-    if not text.startswith("---"):
-        return {}, _strip_heading(text)
-    try:
-        _, fm, body = text.split("---", 2)
-        meta = yaml.safe_load(fm) or {}
-    except Exception:
-        return {}, _strip_heading(text)
-    if not isinstance(meta, dict):
-        meta = {}
-    return meta, _strip_heading(body)
-
-
-def _strip_heading(body: str) -> str:
-    """Убирает заголовок '# <title>' из начала тела концепта."""
-    lines = body.strip("\n").split("\n")
-    while lines and lines[0].strip().startswith("#"):
-        lines.pop(0)
-    return "\n".join(lines).strip()
-
-
-def load_bundle(bundle_dir: Path) -> list[OkfDocument]:
-    okf_docs: list[OkfDocument] = []
-    for f in sorted(bundle_dir.glob("*.md")):
-        meta, content = parse_okf_file(f)
-        if not content:
-            continue
-        okf_docs.append(
-            OkfDocument(
-                filepath=str(f),
-                metadata=meta,
-                content=content,
-                markdown=f.read_text(encoding="utf-8"),
-            )
-        )
-    return okf_docs
 
 
 def main() -> None:
@@ -95,7 +51,11 @@ def main() -> None:
         if not okf_docs:
             print(f"[{doc_id}] пропущен: OKF-концепты не найдены")
             continue
-        vectors = embedder.embed_texts([d.content for d in okf_docs])
+        # Dense-эмбеддинг из title + content: title содержит коды разделов,
+        # которые иначе не попадают в вектор (см. pipeline.py).
+        vectors = embedder.embed_texts(
+            [f"{d.metadata.get('title', '')}\n{d.content}" for d in okf_docs]
+        )
         vs.index_concepts(doc_id, okf_docs, vectors)
         total_concepts += len(okf_docs)
         print(f"[{doc_id}] индексировано концептов: {len(okf_docs)}")

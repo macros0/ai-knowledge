@@ -6,6 +6,7 @@ staging-каталог (data/staging/{doc_id}/) с manifest.json. При сбо�
 пропускает уже готовые чанки. Финальный бандл собирается в okf_bundles через
 атомарный перенос, затем концепты индексируются в Qdrant.
 """
+import json
 import logging
 import os
 import shutil
@@ -34,6 +35,7 @@ class Pipeline:
         self.okf_generator = OKFGenerator()
         self._abort_events: dict[str, threading.Event] = {}
         self._threads: dict[str, threading.Thread] = {}
+        self._chunk_locks: dict[str, threading.Lock] = {}
 
     def ingest(
         self,
@@ -54,6 +56,40 @@ class Pipeline:
         if not filepath.is_file():
             raise ValueError("Исходный файл документа не найден")
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=True)
+
+    def regenerate(self, doc_id: str) -> None:
+        """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
+
+        Удаляет производные данные (векторы, OKF-бандл, staging) и запускает
+        полный пайплайн: parse -> чанки -> LLM (с текущими промптами) -> индекс.
+        Статус переводится в "processing" синхронно, чтобы клиент сразу видел
+        активную обработку и включил поллинг прогресса.
+        """
+        doc = self.registry.get(doc_id)
+        if not doc:
+            raise ValueError("Документ не найден")
+        thread = self._threads.get(doc_id)
+        if thread and thread.is_alive():
+            raise ValueError("Документ уже обрабатывается")
+        filename = doc["filename"]
+        ext = Path(filename).suffix.lower()
+        filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
+        if not filepath.is_file():
+            raise ValueError("Исходный файл документа не найден")
+
+        try:
+            self.vector_store.delete_document(doc_id)
+        except Exception as exc:
+            logger.warning("Не удалось удалить векторы документа %s: %s", doc_id, exc)
+        target = self.settings.okf_dir / doc_id
+        if target.exists():
+            if target.is_dir():
+                shutil.rmtree(target, ignore_errors=True)
+            else:
+                target.unlink(missing_ok=True)
+        StagingStore(doc_id).remove()
+        self.registry.update(doc_id, status="processing", error=None)
+        self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False)
 
     def _start(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         self._abort_events[doc_id] = threading.Event()
@@ -99,6 +135,9 @@ class Pipeline:
                 staging.remove()
             staging.create(total, global_tags=user_tags)
         self.registry.update(doc_id, status="splitting", total_chunks=total, processed_chunks=len(staging.processed_chunks))
+
+        for i, chunk in enumerate(chunks):
+            staging.save_chunk_text(i, chunk)
 
         max_chunk_retries = self.settings.llm_chunk_retry_attempts
         chunk_backoff = self.settings.llm_chunk_retry_backoff_seconds
@@ -186,6 +225,31 @@ class Pipeline:
         if attach_src.is_dir():
             shutil.copytree(attach_src, tmp_dir / "attachments")
 
+        manifest = staging.load() or {}
+        chunks_data = manifest.get("chunks_data", {}) or {}
+        chunk_of_slug: dict[str, int] = {}
+        for idx_str, info in chunks_data.items():
+            for slug in (info or {}).get("slugs", []):
+                chunk_of_slug.setdefault(slug, int(idx_str))
+
+        chunks_meta: list[dict] = []
+        chunks_dir = tmp_dir / "chunks"
+        chunks_dir.mkdir(parents=True, exist_ok=True)
+        for chunk_file in sorted(staging.dir.glob("chunk_*.md")):
+            idx = int(chunk_file.stem.split("_")[-1])
+            info = chunks_data.get(str(idx), {})
+            chunks_meta.append(
+                {
+                    "index": idx,
+                    "size": chunk_file.stat().st_size,
+                    "concepts_count": info.get("concepts_count", 0),
+                }
+            )
+            shutil.copy2(chunk_file, chunks_dir / chunk_file.name)
+        (chunks_dir / "manifest.json").write_text(
+            json.dumps(chunks_meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
         okf_docs = self.okf_generator.save_bundle(
             doc_id,
             filename,
@@ -194,6 +258,7 @@ class Pipeline:
             global_tags=global_tags,
             bundle_root=tmp_dir,
             slugs=slugs,
+            chunk_of_slug=chunk_of_slug,
         )
         _atomic_move(tmp_dir, target)
         for doc in okf_docs:
@@ -202,17 +267,27 @@ class Pipeline:
         if not okf_docs:
             logger.warning("[%s] Документ %s не содержит концептов, индексация пропущена", doc_id, filename)
             staging.remove()
-            self.registry.update(doc_id, status="done", okf_file_count=0, error=None)
+            self.registry.update(doc_id, status="done", okf_concept_count=0, error=None)
             return
 
-        vectors = self.embedder.embed_texts([doc.content for doc in okf_docs])
+        cap = self.settings.okf_max_concept_chars
+        # Dense-эмбеддинг строится из title + content: title содержит коды/номера
+        # разделов (например, "12410"), которые иначе не попадали в вектор и
+        # концепт не находился по поиску по коду.
+        vectors = self.embedder.embed_texts(
+            [f"{doc.metadata.get('title', '')}\n{doc.content[:cap]}" for doc in okf_docs]
+        )
         self.vector_store.ensure_collection()
+        # Удалить stale-точки от предыдущей (неудачной) финализации этого же
+        # документа: при resume после failed-finalize старые концепты могли
+        # остаться в коллекции и дублироваться/расходиться с бандлом на диске.
+        # Для нового документа (нет старых точек) — no-op.
+        self.vector_store.delete_document(doc_id)
         self.vector_store.index_concepts(doc_id, okf_docs, vectors)
 
-        manifest = staging.load()
         total_chunks = manifest.get("total_chunks", 0) if manifest else 0
         staging.remove()
-        self.registry.update(doc_id, status="done", okf_file_count=total_chunks, error=None)
+        self.registry.update(doc_id, status="done", okf_concept_count=len(okf_docs), error=None)
         logger.info("Документ %s обработан: %d OKF-концептов, %d чанков", filename, len(okf_docs), total_chunks)
 
     def remove(self, doc_id: str) -> None:
@@ -237,6 +312,91 @@ class Pipeline:
         for f in self.settings.uploads_dir.glob(f"{doc_id}.*"):
             f.unlink(missing_ok=True)
         self.registry.delete(doc_id)
+
+    def ensure_chunks(self, doc_id: str) -> list[dict]:
+        """Возвращает мету чанков документа, при необходимости строя их из исходника.
+
+        Источники по приоритету:
+          1. okf_bundles/{doc_id}/chunks/manifest.json — финализированный бандл;
+          2. staging (документ в процессе генерации) — живые чанки;
+          3. ленивый backfill: пере-парсинг исходника (без LLM), кэш в бандл.
+        """
+        bundle_chunks = self.settings.okf_dir / doc_id / "chunks"
+        manifest_path = bundle_chunks / "manifest.json"
+        if manifest_path.is_file():
+            meta = _read_chunks_manifest(manifest_path)
+            if meta:
+                return meta
+
+        staging = StagingStore(doc_id)
+        if staging.exists():
+            return _chunks_meta_from_dir(staging.dir, staging.load())
+
+        lock = self._chunk_locks.setdefault(doc_id, threading.Lock())
+        with lock:
+            if manifest_path.is_file():
+                meta = _read_chunks_manifest(manifest_path)
+                if meta:
+                    return meta
+            self._backfill_chunks(doc_id)
+            return _read_chunks_manifest(manifest_path)
+
+    def _backfill_chunks(self, doc_id: str) -> None:
+        """Строит чанки из исходного файла и кэширует их в бандл (без LLM)."""
+        doc = self.registry.get(doc_id)
+        if not doc:
+            raise ValueError("Документ не найден")
+        filename = doc["filename"]
+        ext = Path(filename).suffix.lower()
+        filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
+        if not filepath.is_file():
+            raise ValueError("Исходный файл документа не найден")
+        scratch = self.settings.okf_dir / f".tmp-chunks-{doc_id}"
+        if scratch.exists():
+            shutil.rmtree(scratch, ignore_errors=True)
+        scratch.mkdir(parents=True, exist_ok=True)
+        try:
+            blocks = parse_document(filepath, filename, attachments_dir=scratch / "attachments")
+            markdown = blocks_to_markdown(blocks)
+            chunks = self.okf_generator.chunk_text(markdown)
+            chunks_dir = scratch / "chunks"
+            chunks_dir.mkdir(parents=True, exist_ok=True)
+            meta: list[dict] = []
+            for i, chunk in enumerate(chunks):
+                f = chunks_dir / f"chunk_{i:02d}.md"
+                f.write_text(chunk, encoding="utf-8")
+                meta.append({"index": i, "size": f.stat().st_size, "concepts_count": 0})
+            (chunks_dir / "manifest.json").write_text(
+                json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            _atomic_move(chunks_dir, self.settings.okf_dir / doc_id / "chunks")
+            logger.info("Backfill чанков %s: %d", doc_id, len(chunks))
+        finally:
+            if scratch.exists():
+                shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _read_chunks_manifest(path: Path) -> list[dict]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _chunks_meta_from_dir(directory: Path, manifest: dict | None = None) -> list[dict]:
+    manifest = manifest or {}
+    meta: list[dict] = []
+    for f in sorted(directory.glob("chunk_*.md")):
+        idx = int(f.stem.split("_")[-1])
+        info = manifest.get("chunks_data", {}).get(str(idx), {})
+        meta.append(
+            {
+                "index": idx,
+                "size": f.stat().st_size,
+                "concepts_count": info.get("concepts_count", 0),
+            }
+        )
+    return meta
 
 
 def save_upload(file_bytes: bytes, original_filename: str) -> tuple[str, Path]:
@@ -282,7 +442,7 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
     base = Path(base_dir).resolve()
     attachments = []
     for b in blocks:
-        if getattr(b, "type", None) != "attachment":
+        if getattr(b, "type", None) not in ("attachment", "image"):
             continue
         meta = b.meta or {}
         saved = meta.get("saved_path")

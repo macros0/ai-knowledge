@@ -66,27 +66,34 @@ class VectorStore:
             )
 
     def index_concepts(self, doc_id: str, okf_docs: list[OkfDocument], vectors: list[list[float]]) -> None:
+        cap = self.settings.okf_max_concept_chars
         points = []
         for okf_doc, vector in zip(okf_docs, vectors):
             meta = okf_doc.metadata
             point_id = uuid.uuid5(uuid.NAMESPACE_URL, okf_doc.filepath)
+            title = meta.get("title", "")
+            capped_content = okf_doc.content[:cap]
+            # Sparse-вектор строится из title + content: title содержит коды/номера
+            # разделов (например, "12410"), которые иначе не попадали в индекс и
+            # концепт не находился по поиску по коду.
+            sparse_text = f"{title}\n{capped_content}" if title else capped_content
             points.append(
                 qm.PointStruct(
                     id=str(point_id),
                     vector={
                         "": vector,
-                        SPARSE_VECTOR_NAME: to_sparse_vector(okf_doc.content),
+                        SPARSE_VECTOR_NAME: to_sparse_vector(sparse_text),
                     },
                     payload={
                         "doc_id": doc_id,
                         "filepath": okf_doc.filepath,
-                        "title": meta.get("title", ""),
+                        "title": title,
                         "type": meta.get("type", "concept"),
                         "tags": meta.get("tags", []),
                         "global_tags": meta.get("global_tags", []),
                         "source_document": meta.get("source_document", {}),
                         "attachments": meta.get("attachments", []),
-                        "content": okf_doc.content[:4000],
+                        "content": capped_content,
                     },
                 )
             )

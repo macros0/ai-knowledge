@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { chat } from "@/lib/api";
 import TagPicker from "./TagPicker";
 import { useChat } from "@/context/ChatContext";
@@ -12,6 +13,35 @@ function getPresetLabel(preset, settings) {
   if (preset === minPreset) return "Кратко";
   if (preset === maxPreset) return "Подробно";
   return String(preset);
+}
+
+function renderAnswer(text, sources) {
+  if (!sources || sources.length === 0) return text;
+  const parts = text.split(/(\[\d+\])/g);
+  return parts.map((part, idx) => {
+    const m = /^\[(\d+)\]$/.exec(part);
+    if (!m) return part;
+    const n = Number(m[1]);
+    if (n < 1 || n > sources.length) return part;
+    const s = sources[n - 1];
+    if (!s.doc_id || !s.filename) {
+      return (
+        <span key={idx} className="cite">
+          {part}
+        </span>
+      );
+    }
+    return (
+      <Link
+        key={idx}
+        className="cite"
+        href={`/documents/${s.doc_id}/okf/${encodeURIComponent(s.filename)}`}
+        title={s.title}
+      >
+        {part}
+      </Link>
+    );
+  });
 }
 
 export default function ChatPanel() {
@@ -81,14 +111,31 @@ export default function ChatPanel() {
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
             <div className="role">{m.role === "user" ? "Вы" : "Ассистент"}</div>
-            <div className="bubble">{m.text}</div>
+            <div className="bubble">
+              {m.role === "assistant" && m.sources && m.sources.length > 0
+                ? renderAnswer(m.text, m.sources)
+                : m.text}
+            </div>
             {m.sources && m.sources.length > 0 && (
               <details className="sources">
                 <summary>Источники</summary>
                 <ol>
                   {m.sources.map((s, j) => (
                     <li key={j}>
-                      {s.title} (релевантность {(s.score * 100).toFixed(0)}%)
+                      {s.doc_id && s.filename ? (
+                        <>
+                          <Link
+                            className="source-link"
+                            href={`/documents/${s.doc_id}/okf/${encodeURIComponent(s.filename)}`}
+                          >
+                            {s.title}
+                          </Link>{" "}
+                        </>
+                      ) : (
+                        s.title
+                      )}
+                      (релевантность {(s.score * 100).toFixed(0)}%)
+                      {s.snippet && <div className="source-snippet">{s.snippet}</div>}
                     </li>
                   ))}
                 </ol>

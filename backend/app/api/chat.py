@@ -1,4 +1,6 @@
 """Роут чата: RAG — поиск по Qdrant (dense / BM25 / гибрид) + синтез ответа LLM с источниками."""
+from pathlib import Path
+
 from fastapi import APIRouter
 
 from app.models.schemas import ChatRequest, ChatResponse, ChatSource
@@ -39,6 +41,9 @@ def chat(req: ChatRequest):
                 filepath=payload.get("filepath", ""),
                 score=round(score, 4),
                 tags=payload.get("tags", []),
+                doc_id=payload.get("doc_id", ""),
+                filename=Path(payload.get("filepath", "")).name,
+                snippet=content[:200],
             )
         )
 

@@ -13,7 +13,7 @@ class DocumentOut(BaseModel):
     size: int
     status: str
     error: str | None = None
-    okf_file_count: int = 0
+    okf_concept_count: int = 0
     total_chunks: int = 0
     processed_chunks: int = 0
     tags: list[str] = Field(default_factory=list)
@@ -32,6 +32,13 @@ class OkfFileOut(BaseModel):
     type: str
     tags: list[str] = Field(default_factory=list)
     size: int
+    chunk_index: int | None = None
+
+
+class ChunkOut(BaseModel):
+    index: int
+    size: int
+    concepts_count: int = 0
 
 
 class SearchRequest(BaseModel):
@@ -76,6 +83,9 @@ class ChatSource(BaseModel):
     filepath: str
     score: float
     tags: list[str] = Field(default_factory=list)
+    doc_id: str = ""
+    filename: str = ""
+    snippet: str = ""
 
 
 class ChatResponse(BaseModel):

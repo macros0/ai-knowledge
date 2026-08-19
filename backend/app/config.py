@@ -53,11 +53,23 @@ class Settings(BaseSettings):
     okf_split_on_truncation: bool = True
     okf_split_max_depth: int = 2
     okf_salvage_truncated: bool = True
+    # Программная экстракция таблиц полей XML-сообщений (обходит LLM для таблиц
+    # со спецификацией полей: поле | тип | длина | кратность | описание).
+    # Порог минимального числа строк-данных, чтобы таблицу обрабатывать
+    # программно (ниже порога — оставляется LLM). 0 или отрицательное значение
+    # полностью выключает программную экстракцию (таблицы обрабатывает LLM).
+    okf_field_table_min_rows: int = 0
+    # LLM-классификатор таблиц-перечней: для каждой markdown-таблицы (≥ порога
+    # строк) LLM решает «требует ли таблица построчного анализа» (каждая строка
+    # = отдельное понятие: поле, ситуация, определение, элемент справочника) и
+    # указывает ключевую колонку. При ошибке/выключении — fallback на XML-
+    # эвристику (okf_field_table_min_rows). Кэш на диск: data/cache/table_classify/.
+    okf_table_llm_classify: bool = False
 
     chat_top_k_min: int = Field(default=1, ge=1)
-    chat_top_k_max: int = Field(default=10, ge=1)
-    chat_top_k_default: int = Field(default=5, ge=1)
-    chat_top_k_presets: list[int] = Field(default=[4, 5, 10])
+    chat_top_k_max: int = Field(default=30, ge=1)
+    chat_top_k_default: int = Field(default=10, ge=1)
+    chat_top_k_presets: list[int] = Field(default=[5, 10, 20])
 
     search_mode_default: str = "hybrid"  # dense | bm25 | hybrid
 
@@ -110,6 +122,10 @@ class Settings(BaseSettings):
     @property
     def prompts_override_dir(self) -> Path:
         return self.data_dir / "prompts"
+
+    @property
+    def cache_dir(self) -> Path:
+        return self.data_dir / "cache"
 
     def ensure_dirs(self) -> None:
         self.uploads_dir.mkdir(parents=True, exist_ok=True)

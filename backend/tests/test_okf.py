@@ -10,14 +10,42 @@ from app.services.okf_generator import _chunk_text, _normalize, _slugify
 
 
 class TestSlugify:
-    def test_cyrillic_title_falls_back_to_concept(self):
-        assert _slugify("Настройка моста") == "concept"
+    def test_cyrillic_transliterated(self):
+        # транслитерация кириллицы → латиница (ГОСТ-стиль, й→y)
+        assert _slugify("Настройка моста") == "nastroyka-mosta"
+        assert _slugify("Товар") == "tovar"
+        assert _slugify("Название") == "nazvanie"
+
+    def test_cyrillic_xml_names(self):
+        # W3C XML поддерживает кириллицу в именах тегов (CommerceML, 1С)
+        assert _slugify("Атрибут Товар") == "atribut-tovar"
 
     def test_latin_slug(self):
         assert _slugify("Network Config") == "network-config"
 
+    def test_pascalcase_preserved_lowercased(self):
+        # PascalCase латиница сохраняется в lowercased-форме
+        assert _slugify("WSResult") == "wsresult"
+        assert _slugify("RowsetWrapper") == "rowsetwrapper"
+
     def test_empty(self):
         assert _slugify("") == "concept"
+
+    def test_long_title_truncated(self):
+        # LLM иногда создаёт title — целое предложение; slug не должен превышать
+        # _SLUG_MAX_LEN (защита от превышения Windows MAX_PATH).
+        long_title = (
+            "Два предшествующих года от даты направления запроса, а если "
+            "заполнен блок fired_zl_uvoleno, то от даты firstelnstartdate, "
+            "даты начала страхового случая, в случае если расчетные годы "
+            "не попадают в список twoprevyears, то необходимо указать их "
+            "в блоке additionalyears"
+        )
+        slug = _slugify(long_title)
+        assert len(slug) <= 80
+        # обрезан на границе слова (нет висячего '-' в конце)
+        assert not slug.endswith("-")
+        assert slug.startswith("dva")
 
 
 class TestChunkText:
@@ -157,6 +185,20 @@ class TestOkfMarkdown:
         concept = Concept(id="c", title="Концепт", type="concept", tags=[], content="тело")
         md = _build_markdown(concept, "doc.docx", "abc123")
         assert "global_tags: []" in md
+
+    def test_frontmatter_with_chunk_index(self):
+        from app.services.okf_generator import _build_markdown
+
+        concept = Concept(id="c", title="Концепт", type="concept", tags=[], content="тело")
+        md = _build_markdown(concept, "doc.docx", "abc123", chunk_index=0)
+        assert "chunk_index: 0" in md
+
+    def test_frontmatter_without_chunk_index_omits_field(self):
+        from app.services.okf_generator import _build_markdown
+
+        concept = Concept(id="c", title="Концепт", type="concept", tags=[], content="тело")
+        md = _build_markdown(concept, "doc.docx", "abc123")
+        assert "chunk_index" not in md
 
 
 class TestGenerateChunk:

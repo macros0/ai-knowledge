@@ -23,11 +23,11 @@ class TestTopKPresetsParsing:
         assert s.chat_top_k_presets == [4, 5, 10]
 
     def test_defaults(self):
-        s = Settings()
+        s = Settings(_env_file=None)
         assert s.chat_top_k_min == 1
-        assert s.chat_top_k_max == 10
-        assert s.chat_top_k_default == 5
-        assert s.chat_top_k_presets == [4, 5, 10]
+        assert s.chat_top_k_max == 30
+        assert s.chat_top_k_default == 10
+        assert s.chat_top_k_presets == [5, 10, 20]
 
 
 class TestTopKBounds:
@@ -50,7 +50,7 @@ class TestTopKBounds:
 
 class TestSettingsEndpoint:
     def test_settings_endpoint_returns_valid_schema(self, tmp_path: Path, monkeypatch):
-        settings = Settings(data_dir=tmp_path)
+        settings = Settings(_env_file=None, data_dir=tmp_path)
         monkeypatch.setattr("app.config.get_settings", lambda: settings)
         monkeypatch.setattr("app.main.get_settings", lambda: settings)
 
@@ -59,6 +59,6 @@ class TestSettingsEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["top_k_min"] == 1
-        assert data["top_k_max"] == 10
-        assert data["top_k_default"] == 5
-        assert data["top_k_presets"] == [4, 5, 10]
+        assert data["top_k_max"] == 30
+        assert data["top_k_default"] == 10
+        assert data["top_k_presets"] == [5, 10, 20]
