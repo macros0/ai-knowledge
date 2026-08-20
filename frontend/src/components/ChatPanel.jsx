@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { chat } from "@/lib/api";
 import TagPicker from "./TagPicker";
+import MarkdownViewer from "./MarkdownViewer";
+import { CheckIcon, CopyIcon } from "./icons";
 import { useChat } from "@/context/ChatContext";
 
 function getPresetLabel(preset, settings) {
@@ -15,33 +17,74 @@ function getPresetLabel(preset, settings) {
   return String(preset);
 }
 
-function renderAnswer(text, sources) {
-  if (!sources || sources.length === 0) return text;
-  const parts = text.split(/(\[\d+\])/g);
-  return parts.map((part, idx) => {
-    const m = /^\[(\d+)\]$/.exec(part);
-    if (!m) return part;
-    const n = Number(m[1]);
-    if (n < 1 || n > sources.length) return part;
-    const s = sources[n - 1];
-    if (!s.doc_id || !s.filename) {
-      return (
-        <span key={idx} className="cite">
-          {part}
-        </span>
-      );
+function remarkCiteLinks() {
+  function splitCites(node) {
+    const parts = node.value.split(/(\[\d+\])/g);
+    if (parts.length === 1) return [node];
+    const out = [];
+    for (const part of parts) {
+      const m = /^\[(\d+)\]$/.exec(part);
+      if (!m) {
+        if (part) out.push({ type: node.type, value: part });
+        continue;
+      }
+      const n = Number(m[1]);
+      out.push({
+        type: "link",
+        url: `#cite-${n}`,
+        children: [{ type: "text", value: `[${n}]` }],
+      });
     }
-    return (
-      <Link
-        key={idx}
-        className="cite"
-        href={`/documents/${s.doc_id}/okf/${encodeURIComponent(s.filename)}`}
-        title={s.title}
-      >
-        {part}
-      </Link>
-    );
-  });
+    return out;
+  }
+
+  function transformChildren(parent) {
+    if (!parent || !Array.isArray(parent.children)) return;
+    const next = [];
+    for (const child of parent.children) {
+      if ((child.type === "text" || child.type === "inlineCode") && child.value) {
+        const converted = splitCites(child);
+        if (converted.length === 1 && converted[0] === child) {
+          next.push(child);
+        } else {
+          next.push(...converted);
+        }
+      } else {
+        next.push(child);
+      }
+      transformChildren(child);
+    }
+    parent.children = next;
+  }
+
+  return (tree) => {
+    transformChildren(tree);
+  };
+}
+
+function sourceHref(s) {
+  if (!s || !s.doc_id) return null;
+  if (s.point_type === "chunk" && s.chunk_index != null)
+    return `/documents/${s.doc_id}/chunks/${s.chunk_index}`;
+  if (s.filename)
+    return `/documents/${s.doc_id}/okf/${encodeURIComponent(s.filename)}`;
+  return `/documents/${s.doc_id}/okf`;
+}
+
+function CiteLink({ href, children, sources, ...props }) {
+  const m = /^#cite-(\d+)$/.exec(href || "");
+  if (!m) return <a href={href} {...props}>{children}</a>;
+  const n = Number(m[1]);
+  const s = sources[n - 1];
+  const url = sourceHref(s);
+  if (!url) {
+    return <span className="cite">{children}</span>;
+  }
+  return (
+    <Link className="cite" href={url} title={s.title}>
+      {children}
+    </Link>
+  );
 }
 
 export default function ChatPanel() {
@@ -50,11 +93,30 @@ export default function ChatPanel() {
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
   const [showCustom, setShowCustom] = useState(false);
   const [customValue, setCustomValue] = useState("");
+  const [copiedIndex, setCopiedIndex] = useState(null);
   const logRef = useRef(null);
+  const copyTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [messages]);
+
+  const copyAnswer = async (index, text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      return;
+    }
+    setCopiedIndex(index);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopiedIndex(null), 2000);
+  };
 
   const clampTopK = (value) => {
     const n = Math.round(value);
@@ -110,34 +172,60 @@ export default function ChatPanel() {
       <div className="chat-log" ref={logRef}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
-            <div className="role">{m.role === "user" ? "Вы" : "Ассистент"}</div>
+            <div className="role-row">
+              <div className="role">{m.role === "user" ? "Вы" : "Ассистент"}</div>
+              {m.role === "assistant" && (
+                <button
+                  type="button"
+                  className="copy-btn"
+                  disabled={pending && i === messages.length - 1}
+                  onClick={() => copyAnswer(i, m.text)}
+                  title="Скопировать ответ в Markdown"
+                >
+                  {copiedIndex === i ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                  {copiedIndex === i ? "Скопировано" : "Копировать"}
+                </button>
+              )}
+            </div>
             <div className="bubble">
-              {m.role === "assistant" && m.sources && m.sources.length > 0
-                ? renderAnswer(m.text, m.sources)
-                : m.text}
+              {m.role === "assistant" ? (
+                <MarkdownViewer
+                  className="okf-markdown chat-markdown"
+                  text={m.text}
+                  remarkPlugins={[remarkCiteLinks]}
+                  components={{
+                    a: (props) => <CiteLink sources={m.sources || []} {...props} />,
+                  }}
+                />
+              ) : (
+                m.text
+              )}
             </div>
             {m.sources && m.sources.length > 0 && (
               <details className="sources">
                 <summary>Источники</summary>
                 <ol>
-                  {m.sources.map((s, j) => (
-                    <li key={j}>
-                      {s.doc_id && s.filename ? (
-                        <>
-                          <Link
-                            className="source-link"
-                            href={`/documents/${s.doc_id}/okf/${encodeURIComponent(s.filename)}`}
-                          >
-                            {s.title}
-                          </Link>{" "}
-                        </>
-                      ) : (
-                        s.title
-                      )}
-                      (релевантность {(s.score * 100).toFixed(0)}%)
-                      {s.snippet && <div className="source-snippet">{s.snippet}</div>}
-                    </li>
-                  ))}
+                  {m.sources.map((s, j) => {
+                    const href = sourceHref(s);
+                    const isChunk = s.point_type === "chunk";
+                    const badge = isChunk ? "\u{1F4E6}" : "\u{1F4C4}";
+                    return (
+                      <li key={j}>
+                        <span className="source-badge">{badge}</span>{" "}
+                        {href ? (
+                          <>
+                            <Link className="source-link" href={href}>
+                              {s.title}
+                            </Link>{" "}
+                          </>
+                        ) : (
+                          s.title
+                        )}
+                        (релевантность {(s.score * 100).toFixed(0)}%)
+                        {s.snippet && <div className="source-snippet">{s.snippet}</div>}
+                      </li>
+                    );
+                  })}
                 </ol>
               </details>
             )}
@@ -160,8 +248,8 @@ export default function ChatPanel() {
           </button>
         ))}
       </div>
-      <div className="topk-picker" role="radiogroup" aria-label="Число концептов для ответа">
-        <span className="topk-label">Концептов:</span>
+      <div className="topk-picker" role="radiogroup" aria-label="Число результатов для ответа">
+        <span className="topk-label">Результатов:</span>
         {settings.top_k_presets.map((preset) => (
           <button
             key={preset}

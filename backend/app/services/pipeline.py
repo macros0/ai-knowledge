@@ -16,6 +16,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.services.embedder import Embedder
+from app.services.errors import DependencyUnavailableError
 from app.services.llm_client import LLMTruncationError, is_fatal_error
 from app.services.okf_generator import OKFGenerator
 from app.services.registry import get_registry
@@ -88,6 +89,11 @@ class Pipeline:
             else:
                 target.unlink(missing_ok=True)
         StagingStore(doc_id).remove()
+        # Сброс кэша классификации таблиц: пользователь явно хочет пересчитать
+        # концепты с нуля (возможно, после правки промпта/логики классификатора).
+        table_cache = self.settings.cache_dir / "table_classify"
+        if table_cache.is_dir():
+            shutil.rmtree(table_cache, ignore_errors=True)
         self.registry.update(doc_id, status="processing", error=None)
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False)
 
@@ -197,6 +203,17 @@ class Pipeline:
         self.registry.update(doc_id, status="indexing")
         try:
             self._finalize(doc_id, filename, staging, attachments=attachments, global_tags=user_tags)
+        except DependencyUnavailableError as exc:
+            # Staging не удаляем: чекпоинты всех чанков сохраняются, чтобы
+            # повторный resume повторил только финализацию (embed+index),
+            # не перегенерируя концепты через LLM.
+            logger.warning("Финализация документа %s прервана (зависимость недоступна): %s", doc_id, exc.user_message)
+            self.registry.update(
+                doc_id,
+                status="paused",
+                error=exc.user_message,
+            )
+            return
         except Exception as exc:
             # Staging не удаляем: чекпоинты всех чанков сохраняются, чтобы
             # повторный resume повторил только финализацию (embed+index),
@@ -278,12 +295,42 @@ class Pipeline:
             [f"{doc.metadata.get('title', '')}\n{doc.content[:cap]}" for doc in okf_docs]
         )
         self.vector_store.ensure_collection()
-        # Удалить stale-точки от предыдущей (неудачной) финализации этого же
-        # документа: при resume после failed-finalize старые концепты могли
-        # остаться в коллекции и дублироваться/расходиться с бандлом на диске.
-        # Для нового документа (нет старых точек) — no-op.
-        self.vector_store.delete_document(doc_id)
-        self.vector_store.index_concepts(doc_id, okf_docs, vectors)
+        # Upsert-before-delete: сначала записываем новые точки, потом удаляем
+        # осиротевшие старые. point_id детерминирован (uuid5 от filepath),
+        # поэтому upsert идемпотентно перезаписывает совпадающие точки.
+        # Если Qdrant отвалится между upsert и cleanup, новые точки уже на месте.
+        concept_point_ids = self.vector_store.index_concepts(doc_id, okf_docs, vectors)
+        keep_point_ids = set(concept_point_ids)
+
+        if self.settings.search_index_chunks_enabled:
+            chunks_dir = target / "chunks"
+            chunk_count = len(chunks_meta)
+            chunk_texts: list[str] = []
+            for i in range(chunk_count):
+                chunk_path = chunks_dir / f"chunk_{i:02d}.md"
+                if chunk_path.is_file():
+                    chunk_texts.append(chunk_path.read_text(encoding="utf-8"))
+                else:
+                    logger.warning("[%s] Чанк %d не найден в бандле, пропускаем индексацию чанков", doc_id, i)
+                    chunk_texts = []
+                    break
+            if chunk_texts:
+                chunk_section_titles = [_extract_section_title(t) for t in chunk_texts]
+                cap = self.settings.okf_max_chunk_index_chars
+                embed_inputs = []
+                for st, t in zip(chunk_section_titles, chunk_texts):
+                    embed_inputs.append(f"{st}\n{t[:cap]}" if st else t[:cap])
+                chunk_vectors = self.embedder.embed_texts(embed_inputs)
+                chunk_point_ids = self.vector_store.index_chunks(
+                    doc_id, filename, chunk_texts, global_tags, chunk_vectors,
+                    section_titles=chunk_section_titles,
+                )
+                keep_point_ids |= chunk_point_ids
+                logger.info("[%s] Проиндексировано %d чанков", doc_id, len(chunk_texts))
+
+        # Очистка осиротевших старых точек (после успешного upsert новых).
+        # Удаляются только точки doc_id, чьи point_id не вошли в новый набор.
+        self.vector_store.delete_orphaned_points(doc_id, keep_point_ids)
 
         total_chunks = manifest.get("total_chunks", 0) if manifest else 0
         staging.remove()
@@ -461,3 +508,19 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
             }
         )
     return attachments
+
+
+def _extract_section_title(chunk_text: str) -> str:
+    """Извлекает ближайший предшествующий заголовок секции из текста чанка.
+
+    Ищет последний '# heading' в первых 50 строках чанка. Если чанк начинается
+    с заголовка — возвращает его. Заголовок даёт семантический якорь для
+    dense-эмбеддинга и отображается в UI как title чанка.
+    """
+    lines = chunk_text.split("\n")
+    last_heading = ""
+    for line in lines[:50]:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            last_heading = stripped.lstrip("#").strip()
+    return last_heading

@@ -19,6 +19,17 @@ CT = "http://schemas.openxmlformats.org/package/2006/content-types"
 
 
 # ---------------------------------------------------------------- helpers
+def _tiny_png(width: int = 4, height: int = 4) -> bytes:
+    """Генерирует маленький валидный PNG для тестов изображений."""
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), (200, 30, 30)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def _read_zip(path) -> dict[str, bytes]:
     with zipfile.ZipFile(str(path)) as zf:
         return {n: zf.read(n) for n in zf.namelist()}
@@ -64,6 +75,21 @@ def make_docx(path: Path, paragraphs: list[str] | None = None, heading: str | No
         doc.add_heading(heading, level=1)
     for p in paragraphs or ["Первый абзац", "Настройка VLAN", "Конец документа"]:
         doc.add_paragraph(p)
+    doc.save(str(path))
+    return path
+
+
+def make_docx_with_image(path: Path, image_bytes: bytes | None = None) -> Path:
+    """DOCX с inline-картинкой между двумя абзацами."""
+    import io
+
+    from docx import Document
+
+    doc = Document()
+    doc.add_paragraph("Перед картинкой")
+    p = doc.add_paragraph()
+    p.add_run().add_picture(io.BytesIO(image_bytes or _tiny_png()))
+    doc.add_paragraph("После картинки")
     doc.save(str(path))
     return path
 
@@ -210,5 +236,21 @@ def make_pdf(path: Path, text: str = "Пример текста из pdf док�
     c = canvas.Canvas(str(path), pagesize=letter)
     c.setFont(font, 12)
     c.drawString(72, 720, text)
+    c.save()
+    return path
+
+
+def make_pdf_with_image(path: Path, image_bytes: bytes | None = None) -> Path:
+    """PDF со страницей, содержащей текст и растровое изображение."""
+    import io
+
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    data = image_bytes or _tiny_png()
+    c = canvas.Canvas(str(path), pagesize=letter)
+    c.drawString(72, 720, "Текст страницы с картинкой")
+    c.drawImage(ImageReader(io.BytesIO(data)), 72, 600, width=50, height=50)
     c.save()
     return path

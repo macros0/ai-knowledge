@@ -8,14 +8,19 @@ export default function UploadZone({ tags = [], onUploaded }) {
   const [busy, setBusy] = useState(false);
   const [dragover, setDragover] = useState(false);
 
-  const handleFile = async (file) => {
-    if (!file) return;
+  const handleFiles = async (files) => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
     setBusy(true);
     try {
-      await uploadDocument(file, tags);
+      for (const file of fileList) {
+        try {
+          await uploadDocument(file, tags);
+        } catch (err) {
+          alert(`Не удалось загрузить "${file.name}": ${err.message}`);
+        }
+      }
       onUploaded?.();
-    } catch (err) {
-      alert(`Не удалось загрузить файл: ${err.message}`);
     } finally {
       setBusy(false);
     }
@@ -33,20 +38,21 @@ export default function UploadZone({ tags = [], onUploaded }) {
       onDrop={(e) => {
         e.preventDefault();
         setDragover(false);
-        handleFile(e.dataTransfer?.files?.[0]);
+        handleFiles(e.dataTransfer?.files);
       }}
     >
       <input
         ref={inputRef}
         type="file"
         accept=".docx,.xlsx,.pdf"
+        multiple
         hidden
         onChange={(e) => {
-          handleFile(e.target.files?.[0]);
+          handleFiles(e.target.files);
           e.target.value = "";
         }}
       />
-      <p>{busy ? "Загрузка..." : "Перетащите файл (.docx, .xlsx, .pdf) или нажмите для выбора"}</p>
+      <p>{busy ? "Загрузка..." : "Перетащите файлы (.docx, .xlsx, .pdf) или нажмите для выбора"}</p>
     </div>
   );
 }

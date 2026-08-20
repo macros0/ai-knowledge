@@ -72,6 +72,15 @@ class StagingStore:
     def has_chunk(self, index: int) -> bool:
         return index in self.processed_chunks
 
+    def save_chunk_text(self, index: int, text: str) -> None:
+        """Сохраняет сырой текст чанка (LLM-вход) для просмотра в UI.
+
+        Файлы chunk_XX.md (текст) не конфликтуют с chunk_XX.json (концепты).
+        Идемпотентно: повторная запись перезаписывает тот же текст.
+        """
+        self.dir.mkdir(parents=True, exist_ok=True)
+        (self.dir / f"chunk_{index:02d}.md").write_text(text, encoding="utf-8")
+
     def append_chunk(self, index: int, concepts: list[Concept]) -> list[str]:
         """Сохраняет концепты чанка и обновляет manifest. Возвращает занятые слаги."""
         with self._lock:

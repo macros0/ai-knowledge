@@ -37,6 +37,21 @@ class TestBlocksToMarkdown:
         assert "Вложение: a.xlsx (zip)" in md
         assert "out/a.xlsx" in md
 
+    def test_image_link(self):
+        blocks = [
+            Block(
+                "image",
+                "",
+                meta={"kind": "image", "name": "image-0.png", "caption": "Схема", "saved_path": "att/image-0.png"},
+            )
+        ]
+        md = blocks_to_markdown(blocks)
+        assert "![Схема](attachments/image-0.png)" in md
+
+    def test_image_without_saved_path(self):
+        md = blocks_to_markdown([Block("image", "", meta={"kind": "image", "caption": "Схема"})])
+        assert "(изображение: Схема)" in md
+
     def test_code_block_fenced(self):
         md = blocks_to_markdown([Block("code", "def f():\n    pass")])
         assert "```" in md

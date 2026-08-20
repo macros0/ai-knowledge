@@ -1,9 +1,9 @@
-"""Разбор PDF: текст по страницам + вложенные файлы (reader.attachments)."""
+"""Разбор PDF: текст по страницам + изображения страниц + вложенные файлы (reader.attachments)."""
 import re
 from pathlib import Path
 
 from docparser.blocks import Block
-from docparser.embedded import process_embedded
+from docparser.embedded import process_embedded, save_image_file
 
 
 def parse_pdf(path: str | Path, attachments_dir: str | Path | None = None) -> list[Block]:
@@ -11,6 +11,7 @@ def parse_pdf(path: str | Path, attachments_dir: str | Path | None = None) -> li
 
     reader = PdfReader(str(path))
     blocks: list[Block] = []
+    image_count = 0
     for i, page in enumerate(reader.pages, start=1):
         text = page.extract_text() or ""
         for para in re.split(r"\n\s*\n", text):
@@ -18,10 +19,31 @@ def parse_pdf(path: str | Path, attachments_dir: str | Path | None = None) -> li
             if para:
                 blocks.append(Block("paragraph", para, meta={"page": i}))
 
+        for image in _page_images(page):
+            saved = save_image_file(
+                image.data,
+                attachments_dir,
+                image_count,
+                preferred_name=image.name or "",
+            )
+            image_count += 1
+            meta: dict = {"kind": "image", "name": image.name or "", "caption": image.name or "", "page": i}
+            if saved is not None:
+                meta["name"] = saved.name
+                meta["saved_path"] = str(saved)
+            blocks.append(Block("image", "", meta=meta))
+
     for idx, (name, data) in enumerate(_attachments(reader)):
         blocks.extend(process_embedded(data, name, "", "", attachments_dir, idx))
 
     return blocks
+
+
+def _page_images(page) -> list:
+    try:
+        return list(page.images)
+    except Exception:
+        return []
 
 
 def _attachments(reader) -> list[tuple[str, bytes]]:

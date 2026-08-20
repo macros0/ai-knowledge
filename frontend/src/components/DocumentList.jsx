@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteDocument, listDocuments, resumeDocument } from "@/lib/api";
-import { DownloadIcon, EyeIcon } from "./icons";
+import { deleteDocument, listDocuments, regenerateDocument, resumeDocument } from "@/lib/api";
+import { DownloadIcon, EyeIcon, RefreshIcon, TrashIcon } from "./icons";
 
 const STATUS_LABELS = {
   uploaded: "Загружен",
@@ -32,6 +32,7 @@ function progressText(doc) {
 export default function DocumentList({ refreshKey = 0 }) {
   const router = useRouter();
   const [docs, setDocs] = useState([]);
+  const [regenerating, setRegenerating] = useState({});
   const mounted = useRef(true);
   const timer = useRef(null);
 
@@ -72,6 +73,26 @@ export default function DocumentList({ refreshKey = 0 }) {
     load();
   };
 
+  const regenerate = async (doc) => {
+    if (regenerating[doc.id]) return;
+    if (
+      !window.confirm(
+        `Перегенерировать концепты документа "${doc.filename}"?\nТекущие концепты и индекс будут удалены и созданы заново.`
+      )
+    ) {
+      return;
+    }
+    setRegenerating((s) => ({ ...s, [doc.id]: true }));
+    try {
+      await regenerateDocument(doc.id);
+      load();
+    } catch (err) {
+      window.alert(`Не удалось перегенерировать: ${err.message}`);
+    } finally {
+      setRegenerating((s) => ({ ...s, [doc.id]: false }));
+    }
+  };
+
   return (
     <ul className="document-list">
       {docs.map((doc) => (
@@ -81,7 +102,7 @@ export default function DocumentList({ refreshKey = 0 }) {
             <div className="meta">
               {doc.error
                 ? `Ошибка: ${doc.error}`
-                : (progressText(doc) ?? `${(doc.size / 1024).toFixed(1)} КБ · OKF-файлов: ${doc.okf_file_count}`)}
+                : (progressText(doc) ?? `${(doc.size / 1024).toFixed(1)} КБ · Концептов: ${doc.okf_concept_count}`)}
               {doc.tags && doc.tags.length > 0 && (
                 <>
                   <br />
@@ -92,7 +113,7 @@ export default function DocumentList({ refreshKey = 0 }) {
           </div>
           <div className="doc-actions">
             <span className={`status ${doc.status}`}>{STATUS_LABELS[doc.status] ?? doc.status}</span>
-            <button className="icon-btn" onClick={() => openOkf(doc)} title="Список чанков">
+            <button className="icon-btn" onClick={() => openOkf(doc)} title="Концепты и чанки">
               <EyeIcon />
             </button>
             <a
@@ -103,13 +124,23 @@ export default function DocumentList({ refreshKey = 0 }) {
             >
               <DownloadIcon />
             </a>
+            {!["uploaded", "processing", "splitting", "indexing"].includes(doc.status) && (
+              <button
+                className="icon-btn"
+                onClick={() => regenerate(doc)}
+                title="Перегенерировать концепты (LLM)"
+                disabled={regenerating[doc.id]}
+              >
+                <RefreshIcon className={regenerating[doc.id] ? "spin" : undefined} />
+              </button>
+            )}
             {(doc.status === "paused" || doc.status === "failed") && (
               <button className="delete-btn" onClick={() => resume(doc)}>
                 Возобновить
               </button>
             )}
-            <button className="delete-btn" onClick={() => remove(doc)}>
-              Удалить
+            <button className="delete-btn" onClick={() => remove(doc)} title="Удалить">
+              <TrashIcon />
             </button>
           </div>
         </li>

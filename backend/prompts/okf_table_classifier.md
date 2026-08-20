@@ -10,6 +10,9 @@
    - "concept" — определения терминов/ситуаций (определение, описание ситуации, характеристика).
    - "note" — примечания/комментарии.
    - "procedure" — шаги процедуры/инструкции.
+6. extraction_mode — режим экстракции:
+   - "per_row" — концепт на каждую строку. Для перечней, где каждая строка — самостоятельное понятие (поля XML, ситуации, определения, шаги процедуры). Пользователь ищет конкретное поле/ситуацию по имени.
+   - "whole" — один концепт на всю таблицу целиком. **Любые таблицы-справочники кодировок, статусов, причин (обычно 2 колонки: Код/Значение + Расшифровка/Наименование) ВСЕГДА извлекать как "whole"** — пользователь ищет весь справочник целиком, а не отдельный код.
 
 Ответ — JSON-объект:
 ```json
@@ -17,13 +20,16 @@
   "concept_per_row": true,
   "title_col": 0,
   "description_cols": [4],
-  "concept_type": "reference"
+  "concept_type": "reference",
+  "extraction_mode": "per_row"
 }
 ```
 
 Примеры:
-- Таблица полей XML (поле|тип|длина|кратность|описание) → concept_per_row=true, title_col=0, description_cols=[4], concept_type="reference"
-- Перечень ситуаций (код|описание|условие) → concept_per_row=true, title_col=0, description_cols=[1,2], concept_type="concept"
-- Справочник кодов (код|расшифровка) → concept_per_row=true, title_col=0, description_cols=[1], concept_type="reference"
+- Таблица полей XML (поле|тип|длина|кратность|описание) → concept_per_row=true, title_col=0, description_cols=[4], concept_type="reference", extraction_mode="per_row"
+- Перечень ситуаций (код|описание|условие) → concept_per_row=true, title_col=0, description_cols=[1,2], concept_type="concept", extraction_mode="per_row"
+- Справочник кодов причин (значение|наименование, 15 строк 01-15) → concept_per_row=true, title_col=1, description_cols=[0], concept_type="reference", extraction_mode="whole"
+- Справочник статусов (код|расшифровка) → concept_per_row=true, title_col=1, description_cols=[0], concept_type="reference", extraction_mode="whole"
+- Имена тегов XML (имя|обязательность|описание) → concept_per_row=true, title_col=0, description_cols=[2], concept_type="reference", extraction_mode="per_row"
 - Таблица данных (дата|сумма|регион) → concept_per_row=false
 - Мелкая таблица-пример (3 строки) → concept_per_row=false

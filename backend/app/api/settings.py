@@ -1,4 +1,4 @@
-"""Роут настроек чата: параметры выбора числа концептов (top_k) и режима поиска для UI."""
+"""Роут настроек чата: параметры выбора числа результатов и режимов поиска для UI."""
 from fastapi import APIRouter, Depends
 
 from app.config import Settings, get_settings
@@ -18,4 +18,5 @@ def get_chat_settings(settings: Settings = Depends(get_settings)) -> ChatSetting
         top_k_presets=settings.chat_top_k_presets,
         search_mode_default=default_mode,
         search_modes=list(SEARCH_MODES),
+        search_index_chunks_enabled=settings.search_index_chunks_enabled,
     )

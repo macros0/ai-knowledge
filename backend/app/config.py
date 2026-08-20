@@ -5,6 +5,15 @@ from typing import Any
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Пресеты режимов поиска: mode (из API/настроек) → набор включённых веток.
+# mode в API трактуется как пресет; явные флаги dense/bm25/metadata в запросе
+# имеют приоритет над пресетом.
+SEARCH_MODE_PRESETS: dict[str, set[str]] = {
+    "dense": {"dense"},
+    "bm25": {"bm25"},
+    "hybrid": {"dense", "bm25"},
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -26,6 +35,9 @@ class Settings(BaseSettings):
     embedding_api_base: str | None = "http://localhost:11434"
     embedding_api_key: str | None = None
     embedding_batch_size: int = 64
+    embedding_timeout_seconds: float = 30.0
+    embedding_retry_attempts: int = 1
+    embedding_retry_backoff_seconds: float = 2.0
 
     llm_model: str = "ollama/qwen2.5:14b"
     llm_base_url: str = "http://localhost:11434"
@@ -41,6 +53,11 @@ class Settings(BaseSettings):
     llm_retry_attempts: int = 5
     llm_retry_backoff_seconds: float = 2.0
     llm_timeout_seconds: float = 120.0
+
+    # Интерактивный чат: меньше ретраев и короче idle-таймаут, чтобы не висеть
+    # на «Думаю...» при недоступности/лимите провайдера LLM.
+    llm_interactive_retry_attempts: int = 2
+    llm_interactive_stream_idle_timeout_seconds: float = 30.0
 
     llm_stream_idle_timeout_seconds: float = 60.0
     llm_max_total_timeout_seconds: float = 600.0
@@ -73,6 +90,41 @@ class Settings(BaseSettings):
 
     search_mode_default: str = "hybrid"  # dense | bm25 | hybrid
 
+    # --- Индексация чанков (dual-index: концепты + чанки) ---
+    # Чанки индексируются как отдельные точки Qdrant (point_type="chunk") с
+    # полным сырым текстом, чтобы поиск находил детали, которые LLM могла
+    # уронить при генерации концептов.
+    search_index_chunks_enabled: bool = True
+    # Сколько текста чанка сохранять в payload и векторизовать.
+    okf_max_chunk_index_chars: int = 8000
+
+    # --- Ветки поиска (query-time, не влияют на хранимые данные) ---
+    # Каждую ветку можно включать/выключать независимо. Пресеты (mode в API)
+    # разворачиваются в наборы этих флагов.
+    search_dense_enabled: bool = True
+    search_bm25_enabled: bool = True
+    search_graph_expansion_enabled: bool = True
+
+    # --- RRF (Reciprocal Rank Fusion) в Python ---
+    # Каждая ветка отдаёт per_branch_top_k кандидатов, fusion сливает.
+    search_per_branch_top_k: int = 30
+    # k=60 — стандарт TREC. Малое k → голосование большинством; большое →
+    # игнорирует ранг, учитывает только частоту появления в списках.
+    search_rrf_k: int = 60
+    # Веса веток: влияют на относительный вклад каждой ветки в fused score.
+    # Graph expansion намеренно ниже, чтобы не вытеснять прямые
+    # семантические/лексические попадания.
+    search_rrf_dense_weight: float = 1.0
+    search_rrf_bm25_weight: float = 1.0
+    search_rrf_graph_expansion_weight: float = 0.5
+
+    # --- Контекст LLM (форматирование после merge/collapse) ---
+    # Жёсткий лимит на суммарный объём контекста, передаваемого в LLM.
+    chat_max_context_chars: int = 32000
+    # Обрезка отдельного блока в контексте (концепт vs чанк).
+    chat_concept_max_chars: int = 4000
+    chat_chunk_max_chars: int = 6000
+
     @field_validator("chat_top_k_presets", mode="before")
     @classmethod
     def parse_top_k_presets(cls, v: object) -> Any:
@@ -82,6 +134,15 @@ class Settings(BaseSettings):
         if isinstance(v, (list, tuple, set)):
             return sorted(set(int(x) for x in v))
         return v
+
+    @model_validator(mode="after")
+    def validate_search_mode(self) -> "Settings":
+        valid = SEARCH_MODE_PRESETS.keys()
+        if self.search_mode_default not in valid:
+            raise ValueError(
+                f"search_mode_default must be one of {sorted(valid)}, got '{self.search_mode_default}'"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_top_k_bounds(self) -> "Settings":

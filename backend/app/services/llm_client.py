@@ -95,21 +95,23 @@ class LLMClient:
         self.interactive = interactive
 
     def chat(self, system: str, user: str, max_tokens: int | None = None) -> str:
+        attempts = self.settings.llm_interactive_retry_attempts
+        idle = self.settings.llm_interactive_stream_idle_timeout_seconds
         semaphore = _get_semaphore(self.interactive)
         if semaphore is None:
-            text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens)
+            text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens, attempts=attempts, idle_timeout=idle)
             return text
         with semaphore:
-            text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens)
+            text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens, attempts=attempts, idle_timeout=idle)
             return text
 
-    def _complete_with_retries(self, system: str, user: str, max_tokens: int | None = None) -> tuple[str, str | None]:
-        attempts = max(1, self.settings.llm_retry_attempts)
+    def _complete_with_retries(self, system: str, user: str, max_tokens: int | None = None, attempts: int | None = None, idle_timeout: float | None = None) -> tuple[str, str | None]:
+        attempts = max(1, attempts if attempts is not None else self.settings.llm_retry_attempts)
         backoff = max(0.0, self.settings.llm_retry_backoff_seconds)
         last_exc: Exception | None = None
         for attempt in range(1, attempts + 1):
             try:
-                return self._complete_once(system, user, max_tokens=max_tokens)
+                return self._complete_once(system, user, max_tokens=max_tokens, idle_timeout=idle_timeout)
             except LLMTimeoutError as exc:
                 last_exc = exc
                 logger.warning(
@@ -138,7 +140,7 @@ class LLMClient:
                     time.sleep(delay)
         raise last_exc  # type: ignore[misc]
 
-    def _complete_once(self, system: str, user: str, max_tokens: int | None = None) -> tuple[str, str | None]:
+    def _complete_once(self, system: str, user: str, max_tokens: int | None = None, idle_timeout: float | None = None) -> tuple[str, str | None]:
         """Один вызов LLM стримом в изолированном daemon-потоке.
 
         Таймаут считается по тишине между чанками (idle) — любой пришедший чанк
@@ -156,7 +158,7 @@ class LLMClient:
             "finish_reason": None,
         }
         lock = threading.Lock()
-        idle = max(0.0, self.settings.llm_stream_idle_timeout_seconds)
+        idle = max(0.0, idle_timeout if idle_timeout is not None else self.settings.llm_stream_idle_timeout_seconds)
         total = max(0.0, self.settings.llm_max_total_timeout_seconds)
         limit = max_tokens or self.settings.llm_max_tokens
 

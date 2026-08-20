@@ -45,16 +45,21 @@ class SearchRequest(BaseModel):
     query: str
     tags: list[str] = Field(default_factory=list)
     top_k: int = Field(default=5, ge=1, le=50)
-    mode: SearchMode = "hybrid"
+    mode: SearchMode | None = None
+    dense: bool | None = None
+    bm25: bool | None = None
 
 
 class SearchHit(BaseModel):
     score: float
     title: str
     type: str
+    point_type: str = "concept"
     tags: list[str] = Field(default_factory=list)
     filepath: str
     snippet: str
+    chunk_index: int | None = None
+    source_filename: str = ""
 
 
 class SearchResponse(BaseModel):
@@ -66,7 +71,9 @@ class ChatRequest(BaseModel):
     query: str
     tags: list[str] = Field(default_factory=list)
     top_k: int = Field(default=5, ge=1, le=50)
-    mode: SearchMode = "hybrid"
+    mode: SearchMode | None = None
+    dense: bool | None = None
+    bm25: bool | None = None
 
 
 class ChatSettingsOut(BaseModel):
@@ -76,6 +83,7 @@ class ChatSettingsOut(BaseModel):
     top_k_presets: list[int]
     search_mode_default: str
     search_modes: list[str]
+    search_index_chunks_enabled: bool = True
 
 
 class ChatSource(BaseModel):
@@ -86,6 +94,8 @@ class ChatSource(BaseModel):
     doc_id: str = ""
     filename: str = ""
     snippet: str = ""
+    point_type: str = "concept"
+    chunk_index: int | None = None
 
 
 class ChatResponse(BaseModel):

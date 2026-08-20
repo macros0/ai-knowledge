@@ -129,6 +129,28 @@ def save_attachment(att: Attachment, dest_dir: str | Path, index: int = 0) -> Pa
     return target
 
 
+def save_image_file(
+    data: bytes,
+    dest_dir: str | Path | None,
+    index: int,
+    preferred_name: str = "",
+    ext: str = "",
+) -> Path | None:
+    """Сохраняет извлечённое изображение с уникальным именем `image-{index}{ext}`.
+
+    Если dest_dir не задан — файл не пишется, возвращается None.
+    """
+    if dest_dir is None:
+        return None
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    if not ext:
+        ext = Path(preferred_name).suffix.lower() or ".png"
+    target = _unique(dest / f"image-{index}{ext}")
+    target.write_bytes(data)
+    return target
+
+
 # ---------------------------------------------------------------- internal
 def _parse_payload(payload: bytes, ext: str, att: Attachment, attachments_dir, index: int) -> list[Block]:
     from docparser.parser import parse_document  # локальный импорт — избегаем цикла

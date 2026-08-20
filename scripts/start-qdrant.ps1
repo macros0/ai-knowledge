@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Starts local Qdrant (binary, not Docker) as a detached background process
     and waits until it is ready on :6333.

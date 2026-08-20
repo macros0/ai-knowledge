@@ -1,4 +1,6 @@
 """Преобразование блоков в Markdown (используется сервисом и CLI)."""
+from pathlib import Path
+
 from docparser.blocks import Block
 
 
@@ -22,7 +24,23 @@ def blocks_to_markdown(blocks: list[Block]) -> str:
             lines.append(f"**{b.text}**")
             if b.meta.get("saved_path"):
                 lines.append(f"*(файл: {b.meta['saved_path']})*")
+        elif b.type == "image":
+            lines.append(_image_to_markdown(b))
         else:
             lines.append(b.text)
         lines.append("")
     return "\n".join(lines).strip()
+
+
+def _image_to_markdown(b: Block) -> str:
+    """Рендерит image-блок как Markdown-ссылку `![caption](attachments/<файл>)`.
+
+    Путь — относительно корня бандла (attachments/), что сохраняет переносимость
+    при локальном просмотре бандла.
+    """
+    caption = (b.meta.get("caption") or b.meta.get("name") or "изображение").replace("]", "\\]").replace("[", "\\[")
+    saved = b.meta.get("saved_path")
+    if not saved:
+        return f"*(изображение: {caption})*"
+    link = f"attachments/{Path(saved).name}"
+    return f"![{caption}]({link})"

@@ -191,6 +191,26 @@ def _build_markdown(
     return f"---\n{frontmatter}---\n\n# {concept.title}\n\n{body}\n"
 
 
+def _parse_relation(r: str) -> str:
+    """Нормализует relation к чистому filepath/id.
+
+    LLM иногда возвращает stringified dict: "{'id': 'x', 'type': 'part_of'}"
+    вместо чистой строки. Извлекаем 'id' из такого dict-формата.
+    Если строка не является dict-форматом, возвращаем как есть.
+    """
+    r = r.strip()
+    if r.startswith("{") and "id" in r:
+        try:
+            import ast
+
+            d = ast.literal_eval(r)
+            if isinstance(d, dict) and "id" in d:
+                return str(d["id"]).strip()
+        except (ValueError, SyntaxError):
+            pass
+    return r
+
+
 def _normalize(raw: list | dict) -> list[Concept]:
     items = raw if isinstance(raw, list) else [raw]
     concepts: list[Concept] = []
@@ -210,7 +230,7 @@ def _normalize(raw: list | dict) -> list[Concept]:
                 type=ctype,
                 tags=[str(t).strip() for t in item.get("tags", []) if str(t).strip()],
                 content=content,
-                relations=[str(r).strip() for r in item.get("relations", []) if str(r).strip()],
+                relations=[_parse_relation(str(r)) for r in item.get("relations", []) if str(r).strip()],
             )
         )
     return concepts

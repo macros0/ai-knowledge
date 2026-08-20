@@ -379,10 +379,40 @@ main {
   margin-bottom: 16px;
 }
 
+.msg .role-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
 .msg .role {
   font-size: 12px;
   color: var(--muted);
-  margin-bottom: 4px;
+}
+
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.copy-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.copy-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .msg .bubble {
@@ -715,6 +745,20 @@ main {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
+/* chat answers reuse okf-markdown typography but without the viewer box */
+.bubble .chat-markdown {
+  background: none;
+  border: none;
+  padding: 0;
+  overflow: visible;
+  flex: none;
+  min-height: 0;
+}
+
+.bubble .chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+
 /* ---------- OKF list ---------- */
 .okf-list-page {
   display: flex;
@@ -931,4 +975,89 @@ main {
 
 .okf-chunk-link:hover {
   text-decoration: underline;
+}
+
+/* --- Toast notifications --- */
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 400px;
+}
+
+.toast {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  animation: toast-slide-in 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.toast-error {
+  background: var(--danger);
+  color: #fff;
+}
+
+.toast-success {
+  background: var(--ok);
+  color: #fff;
+}
+
+.toast-warning {
+  background: #e8a838;
+  color: #1a1a1a;
+}
+
+@keyframes toast-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* --- Health banner --- */
+.health-banner {
+  padding: 8px 16px;
+  font-size: 13px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.health-banner.degraded {
+  background: rgba(232, 168, 56, 0.15);
+  color: #e8a838;
+}
+
+.health-banner.down {
+  background: rgba(255, 92, 92, 0.15);
+  color: var(--danger);
+}
+
+.health-banner.ok {
+  background: rgba(63, 191, 127, 0.1);
+  color: var(--ok);
+}
+
+/* --- Chat retry button --- */
+.chat-retry-btn {
+  margin-top: 8px;
+  padding: 6px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.chat-retry-btn:hover {
+  background: var(--accent-dim);
+}
+
+.chat-error-msg {
+  color: var(--danger);
+  font-size: 14px;
 }

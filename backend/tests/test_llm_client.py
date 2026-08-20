@@ -73,6 +73,10 @@ def _settings():
         llm_timeout_seconds=120,
         llm_stream_idle_timeout_seconds=60,
         llm_max_total_timeout_seconds=600,
+        # Интерактивные настройки (chat() использует именно их):
+        # ретраев столько же, сколько в llm_retry_attempts — тесты ожидают 3.
+        llm_interactive_retry_attempts=3,
+        llm_interactive_stream_idle_timeout_seconds=60,
     )
 
 
@@ -161,7 +165,6 @@ class TestSemaphore:
         settings = _settings()
         settings.llm_max_concurrency = 0
         monkeypatch.setattr(llm_module, "get_settings", lambda: settings)
-
         calls = {"n": 0}
 
         def flaky(**kwargs):
@@ -227,14 +230,14 @@ class TestStreamIdleTimeout:
     """Стриминг: таймаут по тишине vs медленная, но живая генерация."""
 
     def test_idle_timeout_fires_when_stream_goes_silent(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_interactive_stream_idle_timeout_seconds", 0.05)
         monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
         monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
         with pytest.raises(LLMTimeoutError, match="Нет данных от LLM за"):
             client.chat("s", "u")
 
     def test_slow_but_healthy_stream_completes(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.2)
+        monkeypatch.setattr(client.settings, "llm_interactive_stream_idle_timeout_seconds", 0.2)
         monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
 
         def slow_stream(**kwargs):
@@ -278,7 +281,7 @@ class TestChaosFailureInjection:
         assert call_count["n"] == 2
 
     def test_semaphore_released_on_timeout(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_interactive_stream_idle_timeout_seconds", 0.05)
         monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
         monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
         # chat() захватывает семафор в вызывающем потоке — слот обязан
@@ -290,9 +293,9 @@ class TestChaosFailureInjection:
         assert client.chat("s", "u") == "привет"
 
     def test_semaphore_no_leak_under_concurrent_hangs(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_interactive_stream_idle_timeout_seconds", 0.05)
         monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
-        monkeypatch.setattr(client.settings, "llm_retry_attempts", 1)
+        monkeypatch.setattr(client.settings, "llm_interactive_retry_attempts", 1)
         monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
 
         sem = llm_module._get_semaphore(interactive=False)

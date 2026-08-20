@@ -6,7 +6,7 @@ import pytest
 
 from app.models.schemas import Concept
 from app.services.llm_client import LLMTruncationError
-from app.services.okf_generator import _chunk_text, _normalize, _slugify
+from app.services.okf_generator import _chunk_text, _normalize, _parse_relation, _slugify
 
 
 class TestSlugify:
@@ -438,3 +438,32 @@ class TestBundleRoundtrip:
         assert Path(okf_docs[0].filepath).exists()
         assert "Concept One" in okf_docs[0].markdown
         assert okf_docs[0].metadata["attachments"][0]["name"] == "a.xlsx"
+
+
+class TestParseRelation:
+    def test_plain_filepath(self):
+        assert _parse_relation("routing.md") == "routing.md"
+
+    def test_stringified_dict_extracts_id(self):
+        assert _parse_relation("{'id': 'eln-instruction-test-ecp', 'type': 'part_of'}") == "eln-instruction-test-ecp"
+
+    def test_concept_id(self):
+        assert _parse_relation("concept_01") == "concept_01"
+
+    def test_empty_string(self):
+        assert _parse_relation("") == ""
+
+    def test_strips_whitespace(self):
+        assert _parse_relation("  routing.md  ") == "routing.md"
+
+    def test_invalid_dict_returns_original(self):
+        assert _parse_relation("{invalid}") == "{invalid}"
+
+    def test_dict_without_id_returns_original(self):
+        assert _parse_relation("{'type': 'part_of'}") == "{'type': 'part_of'}"
+
+    def test_normalize_applies_parse_relation(self):
+        raw = [{"id": "a", "title": "T", "type": "concept", "tags": [], "content": "x",
+                "relations": ["{'id': 'target', 'type': 'part_of'}", "plain.md"]}]
+        concepts = _normalize(raw)
+        assert concepts[0].relations == ["target", "plain.md"]

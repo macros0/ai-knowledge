@@ -35,6 +35,13 @@ UI: http://localhost:3000
   модель должна быть загружена в Ollama (`ollama pull bge-m3`).
 - Qdrant — локальный бинарь (не Docker): `%TEMP%\opencode\qdrant\v1.19.0\qdrant.exe`, данные в
   `%TEMP%\opencode\qdrant\storage` (сохраняются между запусками).
+- **Dual-index**: Qdrant хранит два типа точек — `point_type="concept"` (LLM-выжимки) и
+  `point_type="chunk"` (сырой текст чанка, минимальный payload: doc_id, chunk_index,
+  tags, section_title, content). Поиск идёт по обоим типам, RRF-fusion в Python
+  (services/fusion.py), merge/collapse после fusion (services/context_builder.py).
+  Tags — жёсткий pre-filter для dense/bm25. Переключатели `SEARCH_*_ENABLED` —
+  query-time, реиндекс не требуется.
+  Реиндекс нужен только при смене `embedding_dimensions` или sparse-токенайзера.
 
 ## Фоновые процессы
 

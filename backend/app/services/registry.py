@@ -24,6 +24,29 @@ class DocumentRegistry:
             except Exception:
                 self._docs = {}
         self._reset_stale_statuses()
+        self._reconcile_okf_counts()
+
+    def _reconcile_okf_counts(self) -> None:
+        """Держит okf_concept_count в синхроне с фактическим числом .md-файлов бандла.
+
+        Миграция со старого поля okf_file_count (где могло храниться число чанков
+        из-за регрессии) — пересчёт из производных данных на диске.
+        """
+        okf_dir = get_settings().okf_dir
+        changed = False
+        for doc in self._docs.values():
+            if doc.get("status") != "done":
+                continue
+            bundle = okf_dir / doc["id"]
+            count = len(list(bundle.glob("*.md"))) if bundle.is_dir() else 0
+            if doc.get("okf_concept_count") != count:
+                doc["okf_concept_count"] = count
+                changed = True
+            if "okf_file_count" in doc:
+                doc.pop("okf_file_count")
+                changed = True
+        if changed:
+            self._save()
 
     def _reset_stale_statuses(self) -> None:
         stale = {"splitting", "processing", "indexing", "uploaded"}
@@ -47,7 +70,7 @@ class DocumentRegistry:
             "size": size,
             "status": "uploaded",
             "error": None,
-            "okf_file_count": 0,
+            "okf_concept_count": 0,
             "total_chunks": 0,
             "processed_chunks": 0,
             "current_chunk": 0,

@@ -1,12 +1,16 @@
-"""Роут чата: RAG — поиск по Qdrant (dense / BM25 / гибрид) + синтез ответа LLM с источниками."""
+"""Роут чата: RAG — композитный поиск (dense/BM25 + чанки) + синтез ответа LLM."""
 from pathlib import Path
 
 from fastapi import APIRouter
 
+from app.config import get_settings
 from app.models.schemas import ChatRequest, ChatResponse, ChatSource
 from app.prompts.store import get_store
+from app.services.context_builder import format_context, merge_and_format, resolve_branches
 from app.services.embedder import Embedder
+from app.services.errors import LLMError
 from app.services.llm_client import LLMClient
+from app.services.registry import get_registry
 from app.services.sparse import to_sparse_vector
 from app.services.vector_store import VectorStore
 
@@ -20,35 +24,46 @@ _prompts = get_store()
 
 @router.post("", response_model=ChatResponse)
 def chat(req: ChatRequest):
-    vector = _embedder.embed(req.query) if req.mode in ("dense", "hybrid") else None
-    sparse_vec = to_sparse_vector(req.query) if req.mode in ("bm25", "hybrid") else None
-    hits = _vector_store.search(vector, sparse_vec, mode=req.mode, tags=req.tags or None, top_k=req.top_k)
+    settings = get_settings()
+    branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
+    vector = _embedder.embed(req.query) if "dense" in branches else None
+    sparse_vec = to_sparse_vector(req.query) if "bm25" in branches else None
 
-    max_score = max((h["score"] for h in hits), default=0.0)
-    context_parts = []
+    hits = _vector_store.search_composite(
+        dense_vec=vector,
+        sparse_vec=sparse_vec,
+        tags=req.tags or None,
+        branches=branches,
+        top_k=req.top_k,
+    )
+
+    reg = get_registry()
+    filename_lookup = {did: (reg.get(did) or {}).get("filename", "")
+                       for did in {h.payload.get("doc_id", "") for h in hits}}
+    merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)
+    context = format_context(merged)
+    max_score = max((m["score"] for m in merged), default=0.0)
     sources = []
-    for i, hit in enumerate(hits, start=1):
-        payload = hit["payload"]
-        title = payload.get("title", "Без названия")
-        content = payload.get("content", "")
-        score = hit["score"]
-        if req.mode in ("bm25", "hybrid") and max_score > 0:
-            score = score / max_score
-        context_parts.append(f"[{i}] ({title})\n{content}")
+    for m in merged:
+        score = m["score"] / max_score if max_score > 0 else m["score"]
         sources.append(
             ChatSource(
-                title=title,
-                filepath=payload.get("filepath", ""),
+                title=m["title"],
+                filepath=m["filepath"],
                 score=round(score, 4),
-                tags=payload.get("tags", []),
-                doc_id=payload.get("doc_id", ""),
-                filename=Path(payload.get("filepath", "")).name,
-                snippet=content[:200],
+                tags=m["tags"],
+                doc_id=m["doc_id"],
+                filename=m["source_filename"] or Path(m["filepath"]).name,
+                snippet=m["content"][:200],
+                point_type=m["point_type"],
+                chunk_index=m["chunk_index"],
             )
         )
 
-    context = "\n\n".join(context_parts) or "Контекст пуст."
     system = _prompts.get("chat_system")
     user = _prompts.format("chat_user", context=context, query=req.query)
-    answer = _llm.chat(system, user)
+    try:
+        answer = _llm.chat(system, user)
+    except Exception as exc:
+        raise LLMError(cause=exc) from exc
     return ChatResponse(query=req.query, answer=answer, sources=sources)

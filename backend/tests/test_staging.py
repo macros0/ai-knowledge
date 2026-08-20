@@ -68,6 +68,24 @@ class TestStagingResume:
         assert not store.dir.exists()
 
 
+class TestStagingChunkText:
+    def test_save_and_read_chunk_text(self, tmp_path):
+        store = StagingStore("doc1", staging_root=tmp_path)
+        store.create(2)
+        store.save_chunk_text(0, "первый чанк")
+        store.save_chunk_text(1, "второй чанк")
+        assert (store.dir / "chunk_00.md").read_text(encoding="utf-8") == "первый чанк"
+        assert (store.dir / "chunk_01.md").read_text(encoding="utf-8") == "второй чанк"
+        assert store.has_chunk(0) is False, "текст чанка не должен влиять на processed_chunks"
+
+    def test_save_chunk_text_idempotent(self, tmp_path):
+        store = StagingStore("doc1", staging_root=tmp_path)
+        store.create(1)
+        store.save_chunk_text(0, "версия 1")
+        store.save_chunk_text(0, "версия 2")
+        assert (store.dir / "chunk_00.md").read_text(encoding="utf-8") == "версия 2"
+
+
 class TestStagingEmpty:
     def test_no_manifest(self, tmp_path):
         store = StagingStore("doc1", staging_root=tmp_path)

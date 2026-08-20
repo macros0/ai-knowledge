@@ -399,20 +399,44 @@ class TestLLMClassifier:
         s = get_settings()
         monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
         monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        # промпт-хеш стабилен в рамках теста (PromptStore отдаёт дефолт)
         llm = FakeClassifierLLM([{
             "concept_per_row": True, "title_col": 0,
-            "description_cols": [4], "concept_type": "reference",
+            "description_cols": [4], "concept_type": "reference", "extraction_mode": "per_row",
         }])
-        # первый вызов — LLM звался
         extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=llm, use_llm_classify=True)
         assert llm.call_count == 1
-        # второй вызов с тем же заголовком — LLM не должен зваться (кэш)
+        # второй вызов с тем же промптом — LLM не должен зваться (кэш)
         llm2 = FakeClassifierLLM([{
             "concept_per_row": True, "title_col": 0,
-            "description_cols": [4], "concept_type": "reference",
+            "description_cols": [4], "concept_type": "reference", "extraction_mode": "per_row",
         }])
         extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=llm2, use_llm_classify=True)
         assert llm2.call_count == 0
+
+    def test_cache_miss_on_prompt_change(self, tmp_path, monkeypatch):
+        """Смена промпта классификатора → cache-key меняется → cache miss → LLM зовётся."""
+        from app.services import field_table
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        # первый вызов — промпт v1
+        monkeypatch.setattr(field_table, "_get_prompt_hash", lambda: "aaa")
+        llm1 = FakeClassifierLLM([{
+            "concept_per_row": True, "title_col": 0,
+            "description_cols": [4], "concept_type": "reference", "extraction_mode": "per_row",
+        }])
+        extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=llm1, use_llm_classify=True)
+        assert llm1.call_count == 1
+        # второй вызов — промпт изменился (другой hash)
+        monkeypatch.setattr(field_table, "_get_prompt_hash", lambda: "bbb")
+        llm2 = FakeClassifierLLM([{
+            "concept_per_row": True, "title_col": 0,
+            "description_cols": [4], "concept_type": "reference", "extraction_mode": "per_row",
+        }])
+        extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=llm2, use_llm_classify=True)
+        assert llm2.call_count == 1  # cache miss, LLM звался заново
 
     def test_cache_persisted_to_disk(self, tmp_path, monkeypatch):
         monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
@@ -484,3 +508,99 @@ class TestLLMClassifier:
         s01 = next(c for c in concepts if c.title == "S01")
         assert "Первичная подача" in s01.content
         assert s01.type == "concept"
+
+    def test_whole_mode_creates_one_concept(self, tmp_path, monkeypatch):
+        """extraction_mode='whole' → один концепт с content = вся таблица."""
+        from app.services.field_table import RawTableBlock, TableClassification, build_row_concepts
+        lines = [
+            "Текст перед таблицей.",
+            "",
+            "## Справочник причин нетрудоспособности",
+            "",
+            "| Значение | Наименование |",
+            "|---|---|",
+            "| 01 | заболевание |",
+            "| 02 | травма |",
+            "| 03 | карантии |",
+            "| 05 | отпуск по БиР |",
+            "| 06 | протезирование |",
+        ]
+        block = RawTableBlock(start=4, end=11, header=["Значение", "Наименование"], raw_rows=lines[6:11])
+        cls = TableClassification(
+            concept_per_row=True, title_col=1,
+            description_cols=[0], concept_type="reference",
+            extraction_mode="whole",
+        )
+        concepts = build_row_concepts(block, cls, code=None, lines=lines)
+        assert len(concepts) == 1
+        c = concepts[0]
+        assert "Справочник причин нетрудоспособности" in c.title
+        # content содержит всю таблицу
+        assert "| 01 |" in c.content
+        assert "| 06 |" in c.content
+        assert c.type == "reference"
+
+    def test_whole_mode_fallback_title_without_heading(self):
+        """whole-режим без заголовка над таблицей → title из header[0]."""
+        from app.services.field_table import RawTableBlock, TableClassification, build_row_concepts
+        block = RawTableBlock(
+            start=0, end=5,
+            header=["Код", "Описание"],
+            raw_rows=["| 01 | первое |", "| 02 | второе |", "| 03 | третье |", "| 04 | четвёртое |", "| 05 | пятое |"],
+        )
+        cls = TableClassification(
+            concept_per_row=True, title_col=0,
+            concept_type="reference", extraction_mode="whole",
+        )
+        concepts = build_row_concepts(block, cls, code=None, lines=None)
+        assert len(concepts) == 1
+        assert "Код" in concepts[0].title
+
+    def test_per_row_overview_title_from_heading(self):
+        """per_row-режим: обзорный title из заголовка над таблицей, не header[0].
+        Обзорный содержит все колонки (коды + наименования), не только title_col."""
+        from app.services.field_table import RawTableBlock, TableClassification, build_row_concepts
+        lines = [
+            "## Перечень ситуаций",
+            "",
+            "| Код | Описание |",
+            "|---|---|",
+            "| S01 | Первичная |",
+            "| S02 | Исправление |",
+            "| S03 | Отзыв |",
+            "| S04 | Дубликат |",
+            "| S05 | Аннулирование |",
+        ]
+        block = RawTableBlock(start=2, end=9, header=["Код", "Описание"], raw_rows=lines[4:9])
+        cls = TableClassification(
+            concept_per_row=True, title_col=1,
+            concept_type="concept", extraction_mode="per_row",
+        )
+        concepts = build_row_concepts(block, cls, code=None, lines=lines)
+        # 5 строк + обзорный
+        assert len(concepts) == 6
+        overview = next(c for c in concepts if c.tags and "table-overview" in c.tags)
+        assert "Перечень ситуаций" in overview.title
+        # обзорный содержит все колонки: коды S01-S05 и описания
+        assert "S01" in overview.content
+        assert "Первичная" in overview.content
+        assert "S05" in overview.content
+        assert "Аннулирование" in overview.content
+
+    def test_dedup_skips_duplicate_titles(self, tmp_path, monkeypatch):
+        """Дедуп: концепты с одинаковым title из разных таблиц — только первый."""
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        # две одинаковые таблицы (как из разных чанков) → LLM вернёт одинаковый title
+        llm = FakeClassifierLLM([
+            {"concept_per_row": True, "title_col": 0, "description_cols": [], "concept_type": "reference", "extraction_mode": "whole"},
+            {"concept_per_row": True, "title_col": 0, "description_cols": [], "concept_type": "reference", "extraction_mode": "whole"},
+        ])
+        # chunk с двумя одинаковыми таблицами под одинаковым заголовком
+        chunk = "## Справочник кодов\n\n" + FIELD_TABLE.strip() + "\n\n## Справочник кодов\n\n" + FIELD_TABLE.strip()
+        concepts, _r = extract_table_concepts(chunk, chunk_index=1, llm=llm, use_llm_classify=True)
+        # dedup: только 2 концепта (по одному на таблицу, но второй дубликат пропущен)
+        whole_concepts = [c for c in concepts if c.tags and "table-whole" in c.tags]
+        assert len(whole_concepts) == 1  # второй пропущен дедупом

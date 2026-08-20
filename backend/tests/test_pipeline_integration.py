@@ -6,12 +6,15 @@
   - Qdrant недоступен на финализации -> status="failed" + понятная ошибка
 Всё изолировано: settings и реестр перенаправляются в tmp_path.
 """
+import json
+import time
 from pathlib import Path
 
 import pytest
 
 from app.config import Settings
 from app.models.schemas import Concept
+from app.services.errors import EmbedderError, VectorStoreError
 from app.services.llm_client import LLMTimeoutError
 from app.services.pipeline import Pipeline
 from app.services.registry import DocumentRegistry
@@ -84,7 +87,10 @@ class TestPipelineLLMChaos:
         pipeline = Pipeline()
         pipeline.okf_generator.generate_chunk = flaky_generate
         pipeline.vector_store.ensure_collection = lambda: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -104,7 +110,7 @@ class TestPipelineLLMChaos:
         pipeline = Pipeline()
         pipeline.okf_generator.generate_chunk = always_timeout
         pipeline.vector_store.ensure_collection = lambda: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -114,7 +120,8 @@ class TestPipelineLLMChaos:
 
 
 class TestPipelineVectorChaos:
-    def test_qdrant_connection_error_fails_gracefully(self, isolated_env, monkeypatch):
+    def test_qdrant_unavailable_pauses_document(self, isolated_env, monkeypatch):
+        """Qdrant недоступен на финализации -> paused (transient, можно resume)."""
         reg, src = isolated_env
         doc_id = "qd-doc"
         reg.create(doc_id, "test.doc", "doc", 100)
@@ -122,15 +129,16 @@ class TestPipelineVectorChaos:
         pipeline = Pipeline()
         pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
         pipeline.vector_store.ensure_collection = lambda: (_ for _ in ()).throw(
-            ConnectionRefusedError("Qdrant refused")
+            VectorStoreError("Qdrant недоступен", cause=ConnectionRefusedError("refused"))
         )
-        pipeline.vector_store.index_concepts = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
         doc = reg.get(doc_id)
-        assert doc["status"] == "failed"
-        assert "Qdrant" in doc["error"]
+        assert doc["status"] == "paused", f"status={doc['status']} error={doc.get('error')}"
+        assert "Qdrant" in doc["error"] or "недоступ" in doc["error"]
 
 
 class TestPipelineFinalizeRetry:
@@ -142,14 +150,17 @@ class TestPipelineFinalizeRetry:
         pipeline = Pipeline()
         pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
         pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
         pipeline.vector_store.index_concepts = lambda *a, **k: (_ for _ in ()).throw(
-            ConnectionRefusedError("Qdrant refused")
+            VectorStoreError("Qdrant недоступен", cause=ConnectionRefusedError("refused"))
         )
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
         doc = reg.get(doc_id)
-        assert doc["status"] == "failed"
+        assert doc["status"] == "paused"
 
         staging_dir = pipeline.settings.staging_dir / doc_id
         assert staging_dir.is_dir(), "staging должен сохраниться после сбоя финализации"
@@ -164,7 +175,10 @@ class TestPipelineFinalizeRetry:
 
         pipeline.okf_generator.generate_chunk = fail_if_llm
         pipeline.vector_store.ensure_collection = lambda: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=True)
 
@@ -195,6 +209,169 @@ class TestPipelineNoConcepts:
 
         doc = reg.get(doc_id)
         assert doc["status"] == "done"
-        assert doc["okf_file_count"] == 0
+        assert doc["okf_concept_count"] == 0
         assert doc["error"] is None
         assert indexed["called"] is False
+
+    def test_okf_concept_count_is_concept_count_not_chunk_count(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "multi-concept"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept(), _concept(), _concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "done"
+        assert doc["okf_concept_count"] == 3
+        assert doc["okf_concept_count"] == len(list((pipeline.settings.okf_dir / doc_id).glob("*.md")))
+
+    def test_chunks_persisted_in_bundle(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "chunk-persist"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        chunks_dir = pipeline.settings.okf_dir / doc_id / "chunks"
+        assert (chunks_dir / "chunk_00.md").is_file(), "текст чанка должен попадать в бандл"
+        assert (chunks_dir / "manifest.json").is_file()
+        meta = json.loads((chunks_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert meta == [{"index": 0, "size": meta[0]["size"], "concepts_count": 1}]
+        assert (chunks_dir / "chunk_00.md").read_text(encoding="utf-8") == "тестовый текст"
+
+    def test_concept_frontmatter_has_chunk_index(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "chunk-link"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        md_files = list((pipeline.settings.okf_dir / doc_id).glob("*.md"))
+        assert md_files, "концепт должен быть записан в бандл"
+        assert "chunk_index: 0" in md_files[0].read_text(encoding="utf-8")
+
+
+class TestEnsureChunks:
+    def test_backfill_from_source_and_cache(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "backfill"
+        reg.create(doc_id, "test.doc", "doc", 100)
+        reg.update(doc_id, status="done")
+
+        pipeline = Pipeline()
+        pipeline.settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+        (pipeline.settings.uploads_dir / "backfill.doc").write_text("исходник", encoding="utf-8")
+
+        chunks = ["чанк 1", "чанк 2"]
+        pipeline.okf_generator.chunk_text = lambda *a, **k: chunks
+
+        meta = pipeline.ensure_chunks(doc_id)
+        assert [m["index"] for m in meta] == [0, 1]
+
+        chunks_dir = pipeline.settings.okf_dir / doc_id / "chunks"
+        assert (chunks_dir / "chunk_00.md").read_text(encoding="utf-8") == "чанк 1"
+        assert (chunks_dir / "manifest.json").is_file()
+
+        calls = {"n": 0}
+
+        def fail_parse(*a, **k):
+            calls["n"] += 1
+            raise AssertionError("backfill не должен повторяться из кэша")
+
+        monkeypatch.setattr("app.services.pipeline.parse_document", fail_parse)
+        meta2 = pipeline.ensure_chunks(doc_id)
+        assert len(meta2) == 2
+        assert calls["n"] == 0
+
+
+class TestPipelineRegenerate:
+    def _setup_done_doc(self, reg, pipeline, doc_id) -> Path:
+        pipeline.settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+        (pipeline.settings.uploads_dir / f"{doc_id}.doc").write_text("исходник", encoding="utf-8")
+        bundle = pipeline.settings.okf_dir / doc_id
+        bundle.mkdir(parents=True, exist_ok=True)
+        (bundle / "old_concept.md").write_text("---\ntitle: Старый\n---\nстарый концепт", encoding="utf-8")
+        reg.create(doc_id, "test.doc", "doc", 100)
+        reg.update(doc_id, status="done", okf_concept_count=1)
+        return bundle
+
+    def test_regenerate_resets_state_synchronously(self, isolated_env):
+        reg, _ = isolated_env
+        doc_id = "regen-sync"
+        pipeline = Pipeline()
+        bundle = self._setup_done_doc(reg, pipeline, doc_id)
+
+        delete_calls = {"n": 0}
+        started = {"n": 0}
+        pipeline.vector_store.delete_document = lambda *a, **k: delete_calls.__setitem__("n", delete_calls["n"] + 1)
+        pipeline._start = lambda *a, **k: started.__setitem__("n", started["n"] + 1)
+
+        pipeline.regenerate(doc_id)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "processing", "статус должен стать processing сразу"
+        assert doc["error"] is None
+        assert delete_calls["n"] == 1, "старые векторы должны удаляться"
+        assert not (bundle / "old_concept.md").exists(), "старый бандл должен быть удалён"
+        assert not pipeline.settings.staging_dir.joinpath(doc_id).exists(), "staging должен очищаться"
+        assert started["n"] == 1, "должен запускаться новый прогон"
+
+    def test_regenerate_full_rerun_rebuilds_bundle(self, isolated_env):
+        reg, _ = isolated_env
+        doc_id = "regen-full"
+        pipeline = Pipeline()
+        bundle = self._setup_done_doc(reg, pipeline, doc_id)
+
+        llm_calls = {"n": 0}
+        delete_calls = {"n": 0}
+
+        def generate(*args, **kwargs):
+            llm_calls["n"] += 1
+            return [_concept()]
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline.vector_store.delete_document = lambda *a, **k: delete_calls.__setitem__("n", delete_calls["n"] + 1)
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        pipeline.regenerate(doc_id)
+
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            doc = reg.get(doc_id)
+            if doc and doc.get("status") not in ("processing", "splitting", "indexing"):
+                break
+            time.sleep(0.01)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "done", f"status={doc['status']} error={doc.get('error')}"
+        assert llm_calls["n"] >= 1, "LLM должен перегенерировать концепты с нуля"
+        assert delete_calls["n"] >= 1, "векторы должны пересоздаваться"
+        assert not (bundle / "old_concept.md").exists(), "старый бандл должен быть удалён"
+        assert (bundle / "chunks").is_dir(), "новый бандл должен пересоздаваться"
+        assert len(list(bundle.glob("*.md"))) == 1

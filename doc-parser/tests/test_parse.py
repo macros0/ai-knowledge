@@ -7,7 +7,9 @@ from docparser import ParseError, SUPPORTED_EXTENSIONS, parse_document
 from tests.fixtures import (
     inject_comment,
     make_docx,
+    make_docx_with_image,
     make_pdf,
+    make_pdf_with_image,
     make_xlsx,
 )
 
@@ -74,6 +76,28 @@ class TestDocx:
         assert "    return True" in code[0].text
         assert [b.text for b in blocks if b.type == "paragraph"] == ["Обычный текст"]
 
+    def test_inline_images_extracted(self, tmp_path: Path):
+        docx = make_docx_with_image(tmp_path / "img.docx")
+        att_dir = tmp_path / "attachments"
+        blocks = parse_document(docx, attachments_dir=att_dir)
+
+        paragraphs = [b.text for b in blocks if b.type == "paragraph"]
+        assert paragraphs == ["Перед картинкой", "После картинки"]
+
+        images = [b for b in blocks if b.type == "image"]
+        assert len(images) == 1
+        assert images[0].meta["kind"] == "image"
+        saved = Path(images[0].meta["saved_path"])
+        assert saved.exists()
+        assert saved.suffix in (".png", ".jpg", ".jpeg")
+
+    def test_inline_images_without_attachments_dir(self, tmp_path: Path):
+        docx = make_docx_with_image(tmp_path / "img.docx")
+        blocks = parse_document(docx)
+        images = [b for b in blocks if b.type == "image"]
+        assert len(images) == 1
+        assert "saved_path" not in images[0].meta
+
 
 class TestXlsx:
     def test_sheets_to_tables(self, tmp_path: Path):
@@ -95,3 +119,17 @@ class TestPdf:
         assert all(b.type == "paragraph" for b in blocks)
         assert any("мини-pdf" in b.text for b in blocks)
         assert blocks[0].meta["page"] == 1
+
+    def test_page_images_extracted(self, tmp_path: Path):
+        pdf = make_pdf_with_image(tmp_path / "p.pdf")
+        att_dir = tmp_path / "attachments"
+        blocks = parse_document(pdf, attachments_dir=att_dir)
+
+        assert any(b.type == "paragraph" for b in blocks)
+        images = [b for b in blocks if b.type == "image"]
+        assert len(images) == 1
+        assert images[0].meta["kind"] == "image"
+        assert images[0].meta["page"] == 1
+        saved = Path(images[0].meta["saved_path"])
+        assert saved.exists()
+        assert saved.read_bytes() == att_dir.joinpath(saved.name).read_bytes()

@@ -1,28 +1,96 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api import chat, documents, search, tags
 from app.api.settings import router as settings_router
 from app.config import get_settings
 from app.prompts.store import get_store
+from app.services.errors import DependencyUnavailableError
+from app.services.health import get_health
 from app.services.vector_store import VectorStore
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class CatchAllErrorsMiddleware(BaseHTTPMiddleware):
+    """Перехватывает не-DependencyUnavailableError исключения → 500 с русским сообщением.
+
+    DependencyUnavailableError пропускается дальше к ExceptionMiddleware,
+    где зарегистрирован handler → 503 с code/service.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except DependencyUnavailableError:
+            raise
+        except Exception as exc:
+            logger.exception("Необработанная ошибка: %s", exc)
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": "Внутренняя ошибка сервера. Обратитесь к администратору.",
+                    "code": "internal_error",
+                },
+            )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    vs = VectorStore()
-    vs.ensure_collection()
+    # Мягкий старт: не валить процесс, если Qdrant недоступен.
+    # ensure_collection будет повторена при первом запросе или бэкфилле.
     try:
-        n = vs.backfill_sparse()
-        if n:
-            logging.info("Бэкфилл sparse-векторов: %d точек", n)
-    except Exception:
-        logging.exception("Бэкфилл sparse-векторов не удался — поиск BM25/гибрид может быть неполным")
+        vs = VectorStore()
+        vs.ensure_collection()
+    except DependencyUnavailableError as exc:
+        logging.warning("Qdrant недоступен при старте: %s. Поиск будет возвращать 503.", exc.user_message)
+    except Exception as exc:
+        logging.warning("Не удалось инициализировать Qdrant при старте: %s", exc)
+
+    def run_backfills():
+        try:
+            vs = VectorStore()
+            vs.ensure_collection()
+        except Exception:
+            logging.warning("Бэкфиллы пропущены: Qdrant недоступен")
+            return
+        try:
+            n = vs.backfill_sparse()
+            if n:
+                logging.info("Бэкфилл sparse-векторов: %d точек", n)
+        except Exception:
+            logging.exception("Бэкфилл sparse-векторов не удался — поиск BM25/гибрид может быть неполным")
+        try:
+            n = vs.backfill_point_type()
+            if n:
+                logging.info("Бэкфилл point_type: %d точек", n)
+        except Exception:
+            logging.exception("Бэкфилл point_type не удался")
+        try:
+            n = vs.backfill_relations()
+            if n:
+                logging.info("Бэкфилл relations: %d точек", n)
+        except Exception:
+            logging.exception("Бэкфилл relations не удался")
+        try:
+            from app.services.embedder import Embedder
+
+            emb = Embedder()
+            n = vs.backfill_chunks(emb)
+            if n:
+                logging.info("Бэкфилл чанков: %d точек", n)
+        except Exception:
+            logging.exception("Бэкфилл чанков не удался — поиск по чанкам может быть неполным")
+
+    t = threading.Thread(target=run_backfills, daemon=True)
+    t.start()
     yield
 
 
@@ -30,6 +98,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     get_store().ensure()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    app.add_middleware(CatchAllErrorsMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -42,9 +111,20 @@ def create_app() -> FastAPI:
     app.include_router(tags.router, prefix=settings.api_prefix)
     app.include_router(settings_router, prefix=settings.api_prefix)
 
+    @app.exception_handler(DependencyUnavailableError)
+    async def dependency_error_handler(request: Request, exc: DependencyUnavailableError):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": exc.user_message,
+                "code": "dependency_unavailable",
+                "service": exc.service,
+            },
+        )
+
     @app.get("/health")
     def health() -> dict:
-        return {"status": "ok"}
+        return get_health()
 
     return app
 

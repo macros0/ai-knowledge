@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DownloadIcon } from "@/components/icons";
+import OkfFileList from "@/components/OkfFileList";
 
 export const dynamic = "force-dynamic";
 
 export default async function OkfListPage({ params }) {
   const { docId } = await params;
 
-  const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
+  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
   const [docResp, filesResp] = await Promise.all([
     fetch(`${backendUrl}/api/documents/${docId}`, { cache: "no-store" }),
     fetch(`${backendUrl}/api/documents/${docId}/okf`, { cache: "no-store" }),
@@ -28,7 +29,7 @@ export default async function OkfListPage({ params }) {
       </Link>
       <div className="okf-list-header">
         <div>
-          <h1>Список чанков</h1>
+          <h1>Концепты и чанки</h1>
           <div className="okf-doc-name">{doc.filename}</div>
         </div>
         <a
@@ -40,29 +41,7 @@ export default async function OkfListPage({ params }) {
           <DownloadIcon /> Скачать
         </a>
       </div>
-      {files.length === 0 ? (
-        <p className="okf-empty">Чанки не найдены</p>
-      ) : (
-        <ul className="okf-list">
-          {files.map((f) => (
-            <li key={f.filename}>
-              <Link
-                href={`/documents/${docId}/okf/${encodeURIComponent(f.filename)}`}
-                className="okf-list-item"
-              >
-                <span className="okf-title">{f.title || f.filename}</span>
-                <span className="okf-meta">
-                  <span className={`okf-type okf-type-${f.type}`}>{f.type}</span>
-                  {f.tags && f.tags.length > 0 && (
-                    <span className="okf-tags">Теги: {f.tags.join(", ")}</span>
-                  )}
-                  <span className="okf-size">{(f.size / 1024).toFixed(1)} КБ</span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <OkfFileList docId={docId} files={files} />
     </div>
   );
 }

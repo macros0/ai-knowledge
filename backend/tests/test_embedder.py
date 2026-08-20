@@ -16,6 +16,9 @@ def _settings() -> Settings:
         embedding_api_base="http://localhost:11434",
         embedding_batch_size=64,
         embedding_dimensions=8,
+        embedding_timeout_seconds=30,
+        embedding_retry_attempts=1,
+        embedding_retry_backoff_seconds=0,
         llm_timeout_seconds=120,
     )
 
@@ -85,12 +88,14 @@ def test_single_batch_when_small(monkeypatch):
     assert len(vectors) == 2
 
 
-def test_batch_error_is_raised(monkeypatch):
+def test_batch_error_raises_embedder_error(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("embedding server down")
 
     monkeypatch.setattr("app.services.embedder.litellm.embedding", boom)
     monkeypatch.setattr("app.config.get_settings", lambda: _settings())
 
-    with pytest.raises(RuntimeError, match="embedding server down"):
+    from app.services.errors import EmbedderError
+
+    with pytest.raises(EmbedderError, match="эмбеддинг"):
         Embedder().embed_texts(["x"] * 10)

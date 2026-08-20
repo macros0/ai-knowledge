@@ -1,12 +1,13 @@
 """Роуты загрузки и управления документами."""
+import mimetypes
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import get_settings
-from app.models.schemas import DocumentListOut, DocumentOut, OkfFileOut
+from app.models.schemas import ChunkOut, DocumentListOut, DocumentOut, OkfFileOut
 from app.services.pipeline import Pipeline, save_upload
 from app.services.registry import get_registry
 from app.services.tag_registry import TagRegistry, normalize_tags
@@ -75,6 +76,24 @@ def resume_document(doc_id: str):
     return _registry.get(doc_id)
 
 
+@router.post("/{doc_id}/regenerate", response_model=DocumentOut)
+def regenerate_document(doc_id: str):
+    """Полная перегенерация концептов документа через LLM (с текущими промптами).
+
+    Удаляет старый OKF-бандл, staging и векторы, затем запускает пайплайн с нуля.
+    """
+    doc = _registry.get(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    if doc.get("status") in ("uploaded", "processing", "splitting", "indexing"):
+        raise HTTPException(status_code=409, detail="Документ уже обрабатывается")
+    try:
+        _pipeline.regenerate(doc_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _registry.get(doc_id)
+
+
 @router.get("/{doc_id}/download")
 def download_document(doc_id: str):
     doc = _registry.get(doc_id)
@@ -106,6 +125,7 @@ def list_okf_files(doc_id: str):
                 type=meta.get("type", "concept"),
                 tags=meta.get("tags", []),
                 size=f.stat().st_size,
+                chunk_index=meta.get("chunk_index"),
             )
         )
     return files
@@ -117,7 +137,56 @@ def get_okf_file(doc_id: str, filename: str):
     filepath = (bundle_dir / filename).resolve()
     if not str(filepath).startswith(str(bundle_dir.resolve())) or not filepath.is_file():
         raise HTTPException(status_code=404, detail="Файл не найден")
-    return filepath.read_text(encoding="utf-8")
+    return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+
+
+@router.get("/{doc_id}/okf/attachments/{filename}")
+def get_okf_attachment(doc_id: str, filename: str):
+    attach_dir = (get_settings().okf_dir / doc_id / "attachments").resolve()
+    filepath = (attach_dir / filename).resolve()
+    if not str(filepath).startswith(str(attach_dir)) or not filepath.is_file():
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    media_type = mimetypes.guess_type(filepath.name)[0] or "application/octet-stream"
+    return FileResponse(filepath, media_type=media_type)
+
+
+@router.get("/{doc_id}/chunks", response_model=list[ChunkOut])
+def list_chunks(doc_id: str):
+    try:
+        meta = _pipeline.ensure_chunks(doc_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return meta
+
+
+@router.get("/{doc_id}/chunks/{chunk_index}")
+def get_chunk(doc_id: str, chunk_index: int):
+    try:
+        _pipeline.ensure_chunks(doc_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    chunks_dir = (get_settings().okf_dir / doc_id / "chunks").resolve()
+    filepath = (chunks_dir / f"chunk_{chunk_index:02d}.md").resolve()
+    if not str(filepath).startswith(str(chunks_dir)) or not filepath.is_file():
+        raise HTTPException(status_code=404, detail="Чанк не найден")
+    return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+
+
+@router.get("/{doc_id}/fulltext")
+def get_document_fulltext(doc_id: str):
+    try:
+        _pipeline.ensure_chunks(doc_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    chunks_dir = (get_settings().okf_dir / doc_id / "chunks").resolve()
+    if not chunks_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Текст документа не найден")
+    parts = []
+    for f in sorted(chunks_dir.glob("chunk_*.md"), key=lambda p: int(p.stem.split("_")[-1])):
+        parts.append(f.read_text(encoding="utf-8"))
+    if not parts:
+        raise HTTPException(status_code=404, detail="Текст документа не найден")
+    return Response(content="\n\n".join(parts), media_type="text/plain; charset=utf-8")
 
 
 def _read_frontmatter(path: Path) -> dict:

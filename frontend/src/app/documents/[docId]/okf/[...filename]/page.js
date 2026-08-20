@@ -1,5 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import ContentViewer from "@/components/ContentViewer";
+import { DownloadIcon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -22,22 +24,54 @@ export default async function OkfFilePage({ params }) {
   const decodedPath = filename.map(decodeSegment);
   const filePath = decodedPath.map(encodeURIComponent).join("/");
 
-  const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
-  const resp = await fetch(`${backendUrl}/api/documents/${docId}/okf/${filePath}`, {
-    cache: "no-store",
-  });
+  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+  const [docResp, resp] = await Promise.all([
+    fetch(`${backendUrl}/api/documents/${docId}`, { cache: "no-store" }),
+    fetch(`${backendUrl}/api/documents/${docId}/okf/${filePath}`, {
+      cache: "no-store",
+    }),
+  ]);
 
-  if (!resp.ok) notFound();
+  if (!docResp.ok) notFound();
+  if (!resp.ok) redirect(`/documents/${docId}/okf`);
+  const doc = await docResp.json();
 
   const text = await resp.text();
+
+  const chunkMatch = text.match(/^chunk_index:\s*(\d+)/m);
+  const chunkIndex = chunkMatch ? Number(chunkMatch[1]) : null;
 
   return (
     <div className="okf-viewer">
       <Link className="back-link" href={`/documents/${docId}/okf`}>
-        ← К списку чанков
+        ← К списку концептов и чанков
       </Link>
+      <div className="okf-doc-bar">
+        <span className="okf-doc-name">{doc.filename}</span>
+        <div className="okf-doc-actions">
+          <Link className="okf-doc-open" href={`/documents/${docId}/fulltext`}>
+            Открыть весь документ →
+          </Link>
+          <a
+            className="download-btn"
+            href={`/api/documents/${docId}/download`}
+            download
+            title="Скачать исходный файл"
+          >
+            <DownloadIcon /> Скачать
+          </a>
+        </div>
+      </div>
       <h1>{decodedPath.join("/")}</h1>
-      <pre>{text}</pre>
+      {chunkIndex != null && (
+        <Link
+          className="okf-chunk-link"
+          href={`/documents/${docId}/chunks/${chunkIndex}`}
+        >
+          Связанный чанк: {chunkIndex + 1}
+        </Link>
+      )}
+      <ContentViewer text={text} docId={docId} stripFrontmatter />
     </div>
   );
 }

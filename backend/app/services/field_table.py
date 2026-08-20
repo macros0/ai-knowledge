@@ -439,12 +439,19 @@ class RawTableBlock:
 
 @dataclass
 class TableClassification:
-    """Решение LLM-классификатора о таблице."""
+    """Решение LLM-классификатора о таблице.
+
+    extraction_mode:
+      - "per_row" — концепт на каждую строку (поля XML, ситуации, определения).
+      - "whole" — один концепт на всю таблицу (справочники, перечни кодов,
+        где пользователь ищет весь справочник целиком, а не отдельный код).
+    """
 
     concept_per_row: bool
     title_col: int = 0
     description_cols: list[int] = field(default_factory=list)
     concept_type: str = "reference"
+    extraction_mode: str = "per_row"
 
 
 def detect_tables(text: str) -> list[RawTableBlock]:
@@ -502,10 +509,39 @@ def detect_tables(text: str) -> list[RawTableBlock]:
     return blocks
 
 
-def _cache_key(header: list[str], raw_rows: list[str]) -> str:
-    """SHA256-хэш сигнатуры таблицы (заголовок + первые 2 строки-данных)."""
-    sig = "|".join(header) + "\n" + "\n".join(raw_rows[:2])
-    return hashlib.sha256(sig.encode("utf-8")).hexdigest()
+# Версия схемы классификатора. Бампить при изменении TableClassification
+# (добавление/удаление/переименование полей) — старый кэш инвалидируется.
+CLASSIFIER_CACHE_VERSION = "1.0"
+
+
+def _get_prompt_hash() -> str:
+    """SHA256 промпта классификатора (okf_table_classifier).
+
+    Правка промпта → hash меняется → cache-key меняется → cache miss.
+    """
+    from app.prompts.store import get_store
+
+    prompt_text = get_store().get("okf_table_classifier")
+    return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16]
+
+
+def _build_cache_key(header: list[str], raw_rows: list[str]) -> str:
+    """Составной cache-key: version + prompt_hash + model + header + rows[:2].
+
+    Инвалидируется автоматически при:
+      - правке okf_table_classifier.md (p_hash);
+      - смене llm_model в .env (model);
+      - изменении CLASSIFIER_CACHE_VERSION (v) — бампить при правке TableClassification.
+    """
+    payload = {
+        "v": CLASSIFIER_CACHE_VERSION,
+        "p_hash": _get_prompt_hash(),
+        "model": get_settings().llm_model,
+        "header": header,
+        "rows": raw_rows[:2],
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _cache_path(key: str) -> Path:
@@ -518,11 +554,15 @@ def _load_cached_classification(key: str) -> TableClassification | None:
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        mode = str(data.get("extraction_mode", "per_row"))
+        if mode not in ("per_row", "whole"):
+            mode = "per_row"
         return TableClassification(
             concept_per_row=bool(data["concept_per_row"]),
             title_col=int(data.get("title_col", 0)),
             description_cols=list(data.get("description_cols", [])),
             concept_type=str(data.get("concept_type", "reference")),
+            extraction_mode=mode,
         )
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         logger.warning("Повреждённый кэш классификации %s: %s", path, e)
@@ -537,6 +577,7 @@ def _save_cached_classification(key: str, cls: TableClassification) -> None:
         "title_col": cls.title_col,
         "description_cols": cls.description_cols,
         "concept_type": cls.concept_type,
+        "extraction_mode": cls.extraction_mode,
     }
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
@@ -549,7 +590,7 @@ def _llm_classify_table(
     Возвращает TableClassification. При ошибке LLM/невалидном ответе бросает
     исключение — вызывающий код откатывается на fallback-эвристику.
     """
-    key = _cache_key(header, raw_rows)
+    key = _build_cache_key(header, raw_rows)
     cached = _load_cached_classification(key)
     if cached is not None:
         logger.debug("Кэш-попадание классификации таблицы %s", key[:12])
@@ -567,11 +608,15 @@ def _llm_classify_table(
     user = f"Заголовок таблицы: {header}\n\nПервые строки:\n\n{table_preview}\n\nКлассифицируй таблицу."
     raw = llm.chat_json(system, user, doc_id=doc_id, chunk_idx=chunk_idx)
     if isinstance(raw, dict):
+        mode = str(raw.get("extraction_mode", "per_row"))
+        if mode not in ("per_row", "whole"):
+            mode = "per_row"
         cls = TableClassification(
             concept_per_row=bool(raw.get("concept_per_row", False)),
             title_col=int(raw.get("title_col", 0)),
             description_cols=[int(x) for x in raw.get("description_cols", []) if isinstance(x, (int, str))],
             concept_type=str(raw.get("concept_type", "reference")),
+            extraction_mode=mode,
         )
     else:
         raise ValueError(f"LLM-классификатор вернул не dict: {type(raw)}")
@@ -582,25 +627,50 @@ def _llm_classify_table(
 
 
 def build_row_concepts(
-    block: RawTableBlock, cls: TableClassification, code: str | None
+    block: RawTableBlock, cls: TableClassification, code: str | None, lines: list[str] | None = None
 ) -> list[Concept]:
-    """Обобщённый экстрактор: концепт на каждую строку таблицы-перечня.
+    """Обобщённый экстрактор концептов из таблицы-перечня.
 
-    title берётся из cls.title_col, content — markdown-таблица всех колонок
-    (имя колонки из header + значение ячейки). Плюс обзорный концепт.
+    Режимы (cls.extraction_mode):
+      - "whole": один концепт на всю таблицу. title — из markdown-заголовка
+        над таблицей (lines[block.start-1] вверх до первого #/## заголовка),
+        fallback на header[0]. content — вся markdown-таблица дословно.
+      - "per_row": концепт на каждую строку. title из cls.title_col, content —
+        таблица «Свойство | Значение» из всех колонок. Плюс обзорный.
     """
     if not cls.concept_per_row:
         return []
-    concepts: list[Concept] = []
     tag = code or "table"
     header = block.header
+
+    # whole: один концепт на всю таблицу
+    if cls.extraction_mode == "whole":
+        heading = _find_table_heading(lines, block.start) if lines else None
+        title = heading or (header[0] if header else "Таблица")
+        content_lines = ["| " + " | ".join(header) + " |"]
+        content_lines.append("| " + " | ".join("---" for _ in header) + " |")
+        for raw in block.raw_rows:
+            content_lines.append(raw.strip())
+        content = "\n".join(content_lines)
+        return [
+            Concept(
+                id="",
+                title=title[:200],
+                type=cls.concept_type,
+                tags=[tag, "table-whole"],
+                content=content,
+                relations=[],
+            )
+        ]
+
+    # per_row: концепт на каждую строку + обзорный
+    concepts: list[Concept] = []
     for raw in block.raw_rows:
         cells = _parse_row_cells(raw)
         if not cells:
             continue
         title_idx = cls.title_col if 0 <= cls.title_col < len(cells) else 0
         row_title = cells[title_idx].strip() if cells[title_idx].strip() else "?"
-        # content: таблица «Свойство | Значение» из всех колонок
         content_lines = ["| Свойство | Значение |", "|---|---|"]
         for ci, val in enumerate(cells):
             col_name = header[ci] if ci < len(header) and header[ci] else f"Колонка {ci}"
@@ -616,19 +686,21 @@ def build_row_concepts(
                 relations=[],
             )
         )
-    # обзорный концепт
-    overview_title = f"Перечень: {header[0] if header else 'таблица'}"
+    # обзорный концепт — title из заголовка над таблицей
+    heading = _find_table_heading(lines, block.start) if lines else None
+    overview_title = heading or f"Перечень: {header[0] if header else 'таблица'}"
     overview_lines = [overview_title + ".", ""]
     for raw in block.raw_rows:
         cells = _parse_row_cells(raw)
-        title_idx = cls.title_col if 0 <= cls.title_col < len(cells) else 0
-        name = cells[title_idx].strip() if cells else ""
-        if name:
-            overview_lines.append(f"- {name}")
+        # показывать все непустые колонки через " — ", не только title_col —
+        # иначе теряются коды (01, 02) при title_col=1 (наименование)
+        parts = [c.strip() for c in cells if c and c.strip()]
+        if parts:
+            overview_lines.append(f"- {' — '.join(parts)}")
     concepts.append(
         Concept(
             id="",
-            title=overview_title,
+            title=overview_title[:200],
             type="concept",
             tags=[tag, "table-overview"],
             content="\n".join(overview_lines),
@@ -636,6 +708,21 @@ def build_row_concepts(
         )
     )
     return concepts
+
+
+def _find_table_heading(lines: list[str], table_start: int) -> str | None:
+    """Искать вверх от таблицы markdown-заголовок (# / ## / ###).
+
+    Возвращает текст заголовка (без #) или None. Идёт вверх максимум 15 строк,
+    берёт первое совпадение (ближайший заголовок над таблицей).
+    """
+    for j in range(table_start - 1, max(-1, table_start - 16), -1):
+        if j < 0:
+            break
+        line = lines[j].strip()
+        if line.startswith("#"):
+            return line.lstrip("#").strip()
+    return None
 
 
 def extract_table_concepts(
@@ -672,14 +759,22 @@ def _extract_with_llm_classify(
     concepts: list[Concept] = []
     lines = chunk.split("\n")
     codes = [_find_message_code(lines, b.start) for b in blocks]
+    seen_titles: set[str] = set()  # дедуп по title (дубли из разных чанков)
     extracted_blocks: list[tuple[RawTableBlock, str]] = []
     for bi, b in enumerate(blocks):
         code = codes[bi]
         try:
             cls = _llm_classify_table(b.header, b.raw_rows, llm, doc_id, chunk_index or 0)
             if cls.concept_per_row:
-                row_concepts = build_row_concepts(b, cls, code)
-                concepts.extend(row_concepts)
+                row_concepts = build_row_concepts(b, cls, code, lines=lines)
+                # дедуп по title: пропустить концепты с уже существующим title
+                for c in row_concepts:
+                    key = c.title.strip().lower()
+                    if key in seen_titles:
+                        logger.debug("Дедуп: пропущен дубликат title=%r", c.title)
+                        continue
+                    seen_titles.add(key)
+                    concepts.append(c)
                 extracted_blocks.append((b, f"[Таблица-перечень извлечена программно: {len(b.raw_rows)} строк]"))
             # если concept_per_row=False — таблица остаётся LLM (не извлекаем)
         except Exception as e:
@@ -689,7 +784,11 @@ def _extract_with_llm_classify(
                 rows = [_parse_field_row(_parse_row_cells(r), b.header) for r in b.raw_rows]
                 rows = [r for r in rows if r and r.name]
                 if len(rows) >= _min_rows():
-                    concepts.extend(build_field_concepts(rows, code))
+                    for c in build_field_concepts(rows, code):
+                        key = c.title.strip().lower()
+                        if key not in seen_titles:
+                            seen_titles.add(key)
+                            concepts.append(c)
                     ov = build_overview_concept(rows, code)
                     if ov:
                         concepts.append(ov)
