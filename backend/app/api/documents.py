@@ -1,4 +1,5 @@
 """Роуты загрузки и управления документами."""
+import json
 import mimetypes
 from pathlib import Path
 from typing import Annotated
@@ -7,9 +8,11 @@ from fastapi import APIRouter, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import get_settings
-from app.models.schemas import ChunkOut, DocumentListOut, DocumentOut, OkfFileOut
+from app.models.schemas import Concept, ChunkOut, DocumentListOut, DocumentOut, OkfFileOut
+from app.services.okf_generator import _build_markdown
 from app.services.pipeline import Pipeline, save_upload
 from app.services.registry import get_registry
+from app.services.staging import StagingStore
 from app.services.tag_registry import TagRegistry, normalize_tags
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -112,32 +115,58 @@ def download_document(doc_id: str):
 @router.get("/{doc_id}/okf", response_model=list[OkfFileOut])
 def list_okf_files(doc_id: str):
     bundle_dir = get_settings().okf_dir / doc_id
-    if not bundle_dir.is_dir():
-        return []
-    files = []
-    for f in sorted(bundle_dir.glob("*.md")):
-        meta = _read_frontmatter(f)
-        files.append(
-            OkfFileOut(
-                filename=f.name,
-                filepath=str(f),
-                title=meta.get("title", f.stem),
-                type=meta.get("type", "concept"),
-                tags=meta.get("tags", []),
-                size=f.stat().st_size,
-                chunk_index=meta.get("chunk_index"),
+    if bundle_dir.is_dir():
+        files = []
+        for f in sorted(bundle_dir.glob("*.md")):
+            meta = _read_frontmatter(f)
+            files.append(
+                OkfFileOut(
+                    filename=f.name,
+                    filepath=str(f),
+                    title=meta.get("title", f.stem),
+                    type=meta.get("type", "concept"),
+                    tags=meta.get("tags", []),
+                    size=f.stat().st_size,
+                    chunk_index=meta.get("chunk_index"),
+                )
             )
-        )
-    return files
+        if files:
+            return files
+    try:
+        staging = StagingStore(doc_id)
+        if staging.exists():
+            return _staging_to_okf_files(staging)
+    except Exception:
+        pass
+    return []
 
 
 @router.get("/{doc_id}/okf/{filename}")
 def get_okf_file(doc_id: str, filename: str):
     bundle_dir = get_settings().okf_dir / doc_id
     filepath = (bundle_dir / filename).resolve()
-    if not str(filepath).startswith(str(bundle_dir.resolve())) or not filepath.is_file():
-        raise HTTPException(status_code=404, detail="Файл не найден")
-    return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+    if str(filepath).startswith(str(bundle_dir.resolve())) and filepath.is_file():
+        return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+    slug = filename.removesuffix(".md")
+    try:
+        staging = StagingStore(doc_id)
+        if staging.exists():
+            hit = _find_concept_in_staging(staging, slug)
+            if hit:
+                concept, chunk_index = hit
+                doc = _registry.get(doc_id) or {}
+                global_tags = (staging.load() or {}).get("global_tags", [])
+                md = _build_markdown(
+                    concept,
+                    doc.get("filename", ""),
+                    doc_id,
+                    global_tags=global_tags,
+                    chunk_index=chunk_index,
+                )
+                return Response(content=md, media_type="text/plain; charset=utf-8")
+    except Exception:
+        pass
+    raise HTTPException(status_code=404, detail="Файл не найден")
 
 
 @router.get("/{doc_id}/okf/attachments/{filename}")
@@ -200,3 +229,66 @@ def _read_frontmatter(path: Path) -> dict:
         except Exception:
             return {}
     return {}
+
+
+def _staging_to_okf_files(staging: StagingStore) -> list[OkfFileOut]:
+    """Строит OkfFileOut[] из staging (живая генерация) — концепты по мере создания."""
+    manifest = staging.load()
+    if not manifest:
+        return []
+    files: list[OkfFileOut] = []
+    chunks_data = manifest.get("chunks_data", {})
+    for index in sorted(int(k) for k in chunks_data):
+        info = chunks_data[str(index)]
+        slugs: list[str] = info.get("slugs", [])
+        chunk_path = staging.dir / info.get("file", f"chunk_{index:02d}.json")
+        if not chunk_path.is_file():
+            continue
+        try:
+            raw = json.loads(chunk_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for pos, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            slug = slugs[pos] if pos < len(slugs) else f"concept-{index}-{pos}"
+            content = item.get("content", "")
+            files.append(
+                OkfFileOut(
+                    filename=f"{slug}.md",
+                    filepath=str(chunk_path),
+                    title=item.get("title", slug),
+                    type=item.get("type", "concept"),
+                    tags=item.get("tags", []),
+                    size=len(content.encode("utf-8")),
+                    chunk_index=index,
+                )
+            )
+    return files
+
+
+def _find_concept_in_staging(staging: StagingStore, slug: str) -> tuple[Concept, int] | None:
+    """Ищет концепт в staging по slug. Возвращает (Concept, chunk_index) или None."""
+    manifest = staging.load()
+    if not manifest:
+        return None
+    chunks_data = manifest.get("chunks_data", {})
+    for index in sorted(int(k) for k in chunks_data):
+        info = chunks_data[str(index)]
+        slugs: list[str] = info.get("slugs", [])
+        if slug not in slugs:
+            continue
+        chunk_path = staging.dir / info.get("file", f"chunk_{index:02d}.json")
+        if not chunk_path.is_file():
+            continue
+        try:
+            raw = json.loads(chunk_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        pos = slugs.index(slug)
+        if pos < len(raw) and isinstance(raw[pos], dict):
+            try:
+                return Concept(**raw[pos]), index
+            except Exception:
+                continue
+    return None

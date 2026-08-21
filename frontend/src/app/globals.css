@@ -819,6 +819,32 @@ main {
   color: var(--text);
 }
 
+.okf-live-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  padding: 6px 12px;
+  background: var(--accent-dim);
+  border-radius: 8px;
+  width: fit-content;
+}
+
+.okf-live-progress .live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 .okf-filename {
   font-weight: 500;
   font-family: Consolas, "Cascadia Mono", monospace;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 const VIEWS = [
@@ -8,10 +8,29 @@ const VIEWS = [
   { id: "chunks", label: "Чанки" },
 ];
 
-export default function OkfFileList({ docId, files }) {
+const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
+
+export default function OkfFileList({
+  docId,
+  files,
+  docStatus,
+  totalChunks = 0,
+  processedChunks = 0,
+  currentChunk = null,
+}) {
   const [view, setView] = useState("concepts");
+  const [fileList, setFileList] = useState(files);
+  const [status, setStatus] = useState(docStatus);
+  const [progress, setProgress] = useState({
+    total: totalChunks,
+    processed: processedChunks,
+    current: currentChunk,
+  });
   const [chunks, setChunks] = useState(null);
   const [chunkError, setChunkError] = useState(null);
+  const timer = useRef(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
 
   useEffect(() => {
     if (view !== "chunks" || chunks !== null) return;
@@ -32,8 +51,67 @@ export default function OkfFileList({ docId, files }) {
     };
   }, [view, chunks, docId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!BUSY_STATUSES.includes(status)) return;
+
+    const tick = async () => {
+      const [docResp, okfResp] = await Promise.all([
+        fetch(`/api/documents/${docId}`),
+        fetch(`/api/documents/${docId}/okf`),
+      ]);
+      if (cancelled) return;
+
+      let nextStatus = status;
+      if (docResp.ok) {
+        const d = await docResp.json();
+        nextStatus = d.status;
+        setStatus(d.status);
+        setProgress({
+          total: d.total_chunks,
+          processed: d.processed_chunks,
+          current: d.current_chunk,
+        });
+      }
+      if (okfResp.ok) {
+        setFileList(await okfResp.json());
+      }
+
+      if (viewRef.current === "chunks") {
+        try {
+          const chunksResp = await fetch(`/api/documents/${docId}/chunks`);
+          if (!cancelled && chunksResp.ok) {
+            setChunks(await chunksResp.json());
+          }
+        } catch {
+          // best-effort refetch
+        }
+      }
+
+      if (!cancelled && BUSY_STATUSES.includes(nextStatus)) {
+        timer.current = setTimeout(tick, 1500);
+      }
+    };
+
+    timer.current = setTimeout(tick, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer.current);
+    };
+  }, [docId, status]);
+
+  const isBusy = BUSY_STATUSES.includes(status);
+  const activeChunk = progress.current ?? progress.processed;
+
   return (
     <>
+      {isBusy && progress.total > 0 && (
+        <div className="okf-live-progress">
+          <span className="live-dot" />
+          Генерация чанка {activeChunk} из {progress.total}
+        </div>
+      )}
+
       <div className="okf-tabs">
         {VIEWS.map((v) => (
           <button
@@ -47,11 +125,13 @@ export default function OkfFileList({ docId, files }) {
       </div>
 
       {view === "concepts" ? (
-        files.length === 0 ? (
-          <p className="okf-empty">Концепты не найдены</p>
+        fileList.length === 0 ? (
+          <p className="okf-empty">
+            {isBusy ? "Концепты ещё не сгенерированы…" : "Концепты не найдены"}
+          </p>
         ) : (
           <ul className="okf-list">
-            {files.map((f) => (
+            {fileList.map((f) => (
               <li key={f.filename} className="okf-item-row">
                 <Link
                   href={`/documents/${docId}/okf/${encodeURIComponent(f.filename)}`}
@@ -99,7 +179,7 @@ export default function OkfFileList({ docId, files }) {
       ) : (
         <ul className="okf-list">
           {chunks.map((c) => {
-            const chunkFiles = files.filter((f) => f.chunk_index === c.index);
+            const chunkFiles = fileList.filter((f) => f.chunk_index === c.index);
             return (
               <li key={c.index}>
                 <Link

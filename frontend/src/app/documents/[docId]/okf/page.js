@@ -41,7 +41,14 @@ export default async function OkfListPage({ params }) {
           <DownloadIcon /> Скачать
         </a>
       </div>
-      <OkfFileList docId={docId} files={files} />
+      <OkfFileList
+        docId={docId}
+        files={files}
+        docStatus={doc.status}
+        totalChunks={doc.total_chunks}
+        processedChunks={doc.processed_chunks}
+        currentChunk={doc.current_chunk}
+      />
     </div>
   );
 }
