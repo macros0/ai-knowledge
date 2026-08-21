@@ -1,4 +1,5 @@
 """Генерация OKF-файлов (YAML-фронтматтер + Markdown) из текста документа через LLM."""
+import json
 import logging
 import re
 from datetime import date
@@ -131,6 +132,7 @@ class OKFGenerator:
         global_tags = global_tags or []
         okf_docs: list[OkfDocument] = []
         seen: set[str] = set()
+        manifest: list[dict] = []
         for i, concept in enumerate(concepts):
             if not concept.title or not concept.content:
                 continue
@@ -142,13 +144,14 @@ class OKFGenerator:
                 slug = f"{slug}-{i}"
             seen.add(slug)
             filepath = bundle_dir / f"{slug}.md"
+            chunk_index = (chunk_of_slug or {}).get(slug)
             markdown = _build_markdown(
                 concept,
                 filename,
                 doc_id,
                 attachments=attachments,
                 global_tags=global_tags,
-                chunk_index=(chunk_of_slug or {}).get(slug),
+                chunk_index=chunk_index,
             )
             filepath.write_text(markdown, encoding="utf-8")
             metadata = {
@@ -163,6 +166,19 @@ class OKFGenerator:
             okf_docs.append(
                 OkfDocument(filepath=str(filepath), metadata=metadata, content=concept.content, markdown=markdown)
             )
+            manifest.append(
+                {
+                    "filename": filepath.name,
+                    "title": concept.title,
+                    "type": concept.type,
+                    "tags": concept.tags,
+                    "size": len(markdown.encode("utf-8")),
+                    "chunk_index": chunk_index,
+                }
+            )
+        (bundle_dir / "_files.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return okf_docs
 
 

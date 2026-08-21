@@ -1087,3 +1087,25 @@ main {
   color: var(--danger);
   font-size: 14px;
 }
+
+/* --- OKF loading skeleton --- */
+.okf-skeleton {
+  pointer-events: none;
+}
+
+.okf-skeleton-bar {
+  display: block;
+  height: 14px;
+  border-radius: 6px;
+  background: var(--border);
+  margin-bottom: 6px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.okf-skeleton-bar.w-60 { width: 60%; }
+.okf-skeleton-bar.w-30 { width: 30%; margin-bottom: 0; }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}

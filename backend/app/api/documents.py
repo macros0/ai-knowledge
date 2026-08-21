@@ -1,6 +1,7 @@
 """Роуты загрузки и управления документами."""
 import json
 import mimetypes
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -115,8 +116,27 @@ def download_document(doc_id: str):
 @router.get("/{doc_id}/okf", response_model=list[OkfFileOut])
 def list_okf_files(doc_id: str):
     bundle_dir = get_settings().okf_dir / doc_id
+    manifest_path = bundle_dir / "_files.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            return [
+                OkfFileOut(
+                    filename=entry["filename"],
+                    filepath=str(bundle_dir / entry["filename"]),
+                    title=entry.get("title", entry["filename"]),
+                    type=entry.get("type", "concept"),
+                    tags=entry.get("tags", []),
+                    size=entry.get("size", 0),
+                    chunk_index=entry.get("chunk_index"),
+                )
+                for entry in manifest
+            ]
+        except Exception:
+            pass
     if bundle_dir.is_dir():
         files = []
+        manifest = []
         for f in sorted(bundle_dir.glob("*.md")):
             meta = _read_frontmatter(f)
             files.append(
@@ -130,7 +150,18 @@ def list_okf_files(doc_id: str):
                     chunk_index=meta.get("chunk_index"),
                 )
             )
+            manifest.append(
+                {
+                    "filename": f.name,
+                    "title": meta.get("title", f.stem),
+                    "type": meta.get("type", "concept"),
+                    "tags": meta.get("tags", []),
+                    "size": files[-1].size,
+                    "chunk_index": meta.get("chunk_index"),
+                }
+            )
         if files:
+            _write_okf_manifest(bundle_dir, manifest)
             return files
     try:
         staging = StagingStore(doc_id)
@@ -233,6 +264,17 @@ def _read_frontmatter(path: Path) -> dict:
         except Exception:
             return {}
     return {}
+
+
+def _write_okf_manifest(bundle_dir: Path, manifest: list[dict]) -> None:
+    tmp_path = bundle_dir / "._files.json.tmp"
+    try:
+        tmp_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        os.replace(tmp_path, bundle_dir / "_files.json")
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
 
 
 def _staging_to_okf_files(staging: StagingStore) -> list[OkfFileOut]:
