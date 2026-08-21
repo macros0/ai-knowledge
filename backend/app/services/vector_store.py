@@ -2,14 +2,14 @@
 
 Хранит два типа точек в одной коллекции:
   - point_type="concept" — LLM-выжимки (title, tags, relations, content[:4000]);
-  - point_type="chunk"    — сырой текст чанка (content[:8000], chunk_index).
+  - point_type="chunk"    — сырой текст чанка (content[:8000], chunk_index, section_title).
 
 Ветки поиска (query-time, управляются флагами в config.py):
   - dense    — семантический поиск по dense-вектору (BGE-M3);
   - bm25     — лексический поиск по sparse-вектору (BM25, Qdrant IDF);
-  - metadata — filter-only по payload-полям (tags, type, doc_id, relations, ...);
   - graph    — expansion: соседи по relations концептов (вес 0.5).
 
+Tags — жёсткий pre-filter для dense и bm25 (MatchAny).
 Слияние — RRF (Reciprocal Rank Fusion) в Python (services/fusion.py), не
 встроенный Qdrant fusion. Каждая ветка отдаёт per_branch_top_k кандидатов.
 """
@@ -44,7 +44,7 @@ def _qdrant_call(func, *args, **kwargs):
         ) from exc
 
 SPARSE_VECTOR_NAME = "sparse"
-SEARCH_MODES = ("dense", "bm25", "hybrid", "full")
+SEARCH_MODES = ("dense", "bm25", "hybrid")
 
 CONCEPT_POINT_TYPE = "concept"
 CHUNK_POINT_TYPE = "chunk"
@@ -56,11 +56,8 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "slug": "keyword",
     "type": "keyword",
     "tags": "keyword",
-    "global_tags": "keyword",
     "relations": "keyword",
     "section_title": "keyword",
-    "source_document.author": "keyword",
-    "source_document.date": "datetime",
 }
 
 

@@ -1,7 +1,7 @@
-# Воспроизведение поиска по чанкам (все ветки + merge/collapse)
+# Воспроизведение поиска по чанкам (dense + bm25 + merge/collapse)
 
-Практический гайд: как руками проверить, что поиск по чанкам (dual-index)
-работает во всех ветках (`dense` / `bm25` / `hybrid` / `full`) и что merge/collapse
+Практический гайд: как руками проверить, что dual-index (концепты + чанки)
+работает во всех режимах (`dense` / `bm25` / `hybrid`) и что merge/collapse
 сливает концепты и чанки по всем трём случаям (A/B/C).
 
 Все примеры ниже прогнаны на реальных данных проекта и проверены через
@@ -49,8 +49,7 @@ curl -X POST http://localhost:8000/api/search \
   -H "Content-Type: application/json" -d '{
     "query": "…",
     "top_k": 8,
-    "mode": "full",
-    "metadata_filter": {"doc_id": "aba437ae0475408e"}
+    "mode": "hybrid"
   }'
 ```
 
@@ -60,15 +59,15 @@ curl -X POST http://localhost:8000/api/search \
 | :-- | :-- | :-- |
 | `query` | string | Текст запроса (эмбеддится + токенизируется в BM25) |
 | `top_k` | int | Число результатов (1–50) |
-| `mode` | string | Пресет: `dense` / `bm25` / `hybrid` / `full` |
-| `dense` / `bm25` / `metadata` | bool? | Явные флаги веток — **переопределяют** `mode` |
-| `metadata_filter` | dict | Фильтр: `type`, `doc_id`, `point_type`, `tags`, `global_tags`, `relations`, `author`, `date` |
+| `mode` | string | Пресет: `dense` / `bm25` / `hybrid` |
+| `dense` / `bm25` | bool? | Явные флаги веток — **переопределяют** `mode` |
+| `tags` | list[string] | Жёсткий pre-filter для dense и bm25 (MatchAny по payload tags) |
 
 Ключевое поле ответа — `point_type` (`concept` или `chunk`) и `chunk_index`
 (номер раздела, `null` у концептов без привязки). Поле `type` в ответе —
 это `"raw_text"` для чанка и `"concept"` для концепта.
 
-## 3. Все ветки поиска (матрица)
+## 3. Все режимы поиска (матрица)
 
 Каждый режим = набор веток, слитых через RRF (`fusion.py`). В ответе ждите
 хиты **обоих** типов точек (концепты + чанки), если в базе есть и то и другое.
@@ -78,39 +77,31 @@ curl -X POST http://localhost:8000/api/search \
 | `dense` | семантика | `дополнительные выходные дни для ухода за детьми-инвалидами` | Концепт-обзор по теме наверху; точные термины-коды могут не попасть (их нет в dense) |
 | `bm25` | ключевые слова | `disabilityChildrenStatement` | Точные лексические попадания: `chunk` с этим именем + концепт «Атрибуты …» из того же документа |
 | `hybrid` | dense + bm25 | `DisabilityChildrenRequestType` | Дубликаты, найденные обеими ветками, получают буст RRF; наверху и чанк, и концепт |
-| `full` | dense + bm25 + metadata | `Клинковская` | Фамилия утверждающего, которой **нет** в концептах, находится по чанкам (см. случай C ниже) |
 
 ### Явные флаги веток (вместо пресета)
 
 ```bash
-# Только dense + metadata, без bm25
+# Только dense, без bm25
 curl -X POST http://localhost:8000/api/search \
   -H "Content-Type: application/json" -d '{
     "query": "Клинковская", "top_k": 5,
-    "mode": "full", "dense": true, "bm25": false, "metadata": true
+    "mode": "hybrid", "dense": true, "bm25": false
   }'
 ```
 
-Если хотя бы один из `dense`/`bm25`/`metadata` задан явно — используется набор
+Если хотя бы один из `dense`/`bm25` задан явно — используется набор
 флагов, пресет `mode` игнорируется (`resolve_branches` в `context_builder.py`).
 
-### Фильтрация по метаданным (`metadata_filter`)
+### Фильтрация по тегам (`tags`)
 
 ```bash
-# Только чанки (отключить концепты)
+# Только точки с тегом "network"
 curl -X POST http://localhost:8000/api/search \
   -H "Content-Type: application/json" -d '{
-    "query": "Клинковская", "top_k": 5, "mode": "full",
-    "metadata_filter": {"point_type": "chunk"}
+    "query": "VLAN маршрутизация", "top_k": 5, "mode": "hybrid",
+    "tags": ["network"]
   }'
-# → все хиты с point_type="chunk"
-
-# Один документ
-curl -X POST http://localhost:8000/api/search \
-  -H "Content-Type: application/json" -d '{
-    "query": "Клинковская", "top_k": 5, "mode": "full",
-    "metadata_filter": {"doc_id": "aba437ae0475408e"}
-  }'
+# → все хиты с тегом "network" (pre-filter для dense и bm25)
 ```
 
 ## 4. Воспроизведение merge/collapse (случаи A/B/C)
@@ -126,8 +117,7 @@ Query, попадающий в концепт и в его сырой чанк �
 ```bash
 curl -X POST http://localhost:8000/api/search \
   -H "Content-Type: application/json" -d '{
-    "query": "DisabilityChildrenRequestType", "top_k": 10, "mode": "full",
-    "metadata_filter": {"doc_id": "aba437ae0475408e"}
+    "query": "DisabilityChildrenRequestType", "top_k": 10, "mode": "hybrid"
   }'
 ```
 
@@ -138,13 +128,13 @@ curl -X POST http://localhost:8000/api/search \
 
 ### Случай B — только концепт
 
-То же query, но ветка/фильтр оставляют только концепты:
+Запрос, релевантный только концепту (семантическое попадание без лексического
+дублирования в чанке):
 
 ```bash
 curl -X POST http://localhost:8000/api/search \
   -H "Content-Type: application/json" -d '{
-    "query": "DisabilityChildrenRequestType", "top_k": 5, "mode": "full",
-    "metadata_filter": {"doc_id": "aba437ae0475408e", "point_type": "concept"}
+    "query": "порядок обработки уведомлений", "top_k": 5, "mode": "dense"
   }'
 ```
 
@@ -158,13 +148,12 @@ curl -X POST http://localhost:8000/api/search \
 ```bash
 curl -X POST http://localhost:8000/api/search \
   -H "Content-Type: application/json" -d '{
-    "query": "Клинковская", "top_k": 5, "mode": "full",
-    "metadata_filter": {"doc_id": "aba437ae0475408e"}
+    "query": "Клинковская", "top_k": 5, "mode": "hybrid"
   }'
 ```
 
-Ожидание: `point_type="chunk"`, **синтетический title** вида
-`Спецификация_…_12010_v3_3_0…docx (Раздел 1)`, `chunk_index=0`. Именно такие
+Ожидание: `point_type="chunk"`, **title из `section_title`** или синтетический
+`{filename} (Раздел {N})`, `chunk_index=0`. Именно такие
 детали (URL, коды, конфиги, ФИО) — причина, по которой чанки индексируются
 отдельно от концептов.
 
@@ -174,7 +163,7 @@ curl -X POST http://localhost:8000/api/search \
 | :-- | :-- | :-- | :-- |
 | A (концепт+чанк) | `concept` | title из концепта | полный текст чанка |
 | B (только концепт) | `concept` | title из концепта | краткая выжимка |
-| C (только чанк) | `chunk` | `{filename} (Раздел {N})` | сырой текст |
+| C (только чанк) | `chunk` | `section_title` или `{filename} (Раздел N)` | сырой текст |
 
 ## 5. Поля ответа
 
@@ -183,29 +172,23 @@ curl -X POST http://localhost:8000/api/search \
 | Поле | Описание |
 | :-- | :-- |
 | `score` | Нормализован к топу: `score / max_score` (топ = 1.0) |
-| `title` | Концепт или синтетический `{filename} (Раздел N)` |
+| `title` | Концепт, `section_title` или синтетический `{filename} (Раздел N)` |
 | `type` | `"raw_text"` (чанк) / `"concept"` |
 | `point_type` | `chunk` / `concept` |
 | `filepath` | Путь к OKF-файлу или `{doc_id}/chunks/chunk_NN.md` |
 | `snippet` | Первые 300 символов content |
 | `chunk_index` | Номер раздела (`null` у концептов без чанка) |
-| `source_filename` | Имя исходного документа |
+| `source_filename` | Имя исходного документа (из DocumentRegistry по `doc_id`) |
 
 ## 6. Troubleshooting
 
 **В ответе нет чанков (только концепты).**
 - Проверьте `SEARCH_INDEX_CHUNKS_ENABLED=true` в `.env`.
-- Чанки могли не индексироваться для старых документов — добейте их:
-
-  ```bash
-  cd backend
-  .venv\Scripts\activate
-  python scripts/backfill_chunks.py --doc-id aba437ae0475408e
-  ```
-
-  (скрипт идемпотентен, требует остановленный/неиспользующийся Qdrant с точек).
-  После смены `okf_max_chunk_index_chars` или эмбеддинг-модели — полный
-  `python scripts/reindex.py`.
+- Чанки могли не индексироваться для старых документов — бэкфилл запускается
+  автоматически при старте бэкенда (daemon-поток в `main.py`). Логи:
+  `%TEMP%\opencode\python-err.log` (ищите «Бэкфилл чанков»).
+- После смены `okf_max_chunk_index_chars` или эмбеддинг-модели — полный
+  reindex через `regenerate` документа.
 
 **Ветка `bm25` не находит ничего** — проверьте, что коллекция имеет sparse-вектор
 `"sparse"` (`GET /collections/okf_knowledge_base`), и что Ollama (порт **12400**,

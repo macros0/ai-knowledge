@@ -4,7 +4,7 @@ RRFscore(d) = sum over ranked-lists m:  w_m / (k + rank_m(d))
 
 где:
   - d — документ (point_id),
-  - m — каждая ветка поиска (dense, bm25, metadata, graph expansion),
+  - m — каждая ветка поиска (dense, bm25, graph expansion),
   - rank_m(d) — позиция d в ranked-list ветки m (0-based),
   - w_m — вес ветки (настраивается в config.py),
   - k — константа RRF (стандарт TREC = 60).

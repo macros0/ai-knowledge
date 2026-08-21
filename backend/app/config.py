@@ -6,7 +6,7 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Пресеты режимов поиска: mode (из API/настроек) → набор включённых веток.
-# mode в API трактуется как пресет; явные флаги dense/bm25/metadata в запросе
+# mode в API трактуется как пресет; явные флаги dense/bm25 в запросе
 # имеют приоритет над пресетом.
 SEARCH_MODE_PRESETS: dict[str, set[str]] = {
     "dense": {"dense"},

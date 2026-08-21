@@ -16,6 +16,7 @@ class DocumentOut(BaseModel):
     okf_concept_count: int = 0
     total_chunks: int = 0
     processed_chunks: int = 0
+    current_chunk: int | None = None
     tags: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
