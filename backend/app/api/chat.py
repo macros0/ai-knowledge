@@ -53,7 +53,7 @@ def chat(req: ChatRequest):
                 score=round(score, 4),
                 tags=m["tags"],
                 doc_id=m["doc_id"],
-                filename=m["source_filename"] or Path(m["filepath"]).name,
+                filename=Path(m["filepath"]).name,
                 snippet=m["content"][:200],
                 point_type=m["point_type"],
                 chunk_index=m["chunk_index"],

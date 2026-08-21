@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DownloadIcon } from "@/components/icons";
+import { DownloadIcon, FileTextIcon } from "@/components/icons";
 import OkfFileList from "@/components/OkfFileList";
 
 export const dynamic = "force-dynamic";
@@ -32,14 +32,23 @@ export default async function OkfListPage({ params }) {
           <h1>Концепты и чанки</h1>
           <div className="okf-doc-name">{doc.filename}</div>
         </div>
-        <a
-          className="download-btn"
-          href={`/api/documents/${docId}/download`}
-          download
-          title="Скачать исходный файл"
-        >
-          <DownloadIcon /> Скачать
-        </a>
+        <div className="okf-doc-actions">
+          <Link
+            className="download-btn"
+            href={`/documents/${docId}/fulltext`}
+            title="Открыть весь документ"
+          >
+            <FileTextIcon /> Весь документ
+          </Link>
+          <a
+            className="download-btn"
+            href={`/api/documents/${docId}/download`}
+            download
+            title="Скачать исходный файл"
+          >
+            <DownloadIcon /> Скачать
+          </a>
+        </div>
       </div>
       <OkfFileList
         docId={docId}

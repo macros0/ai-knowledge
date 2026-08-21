@@ -190,15 +190,19 @@ def list_chunks(doc_id: str):
 
 @router.get("/{doc_id}/chunks/{chunk_index}")
 def get_chunk(doc_id: str, chunk_index: int):
-    try:
-        _pipeline.ensure_chunks(doc_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     chunks_dir = (get_settings().okf_dir / doc_id / "chunks").resolve()
     filepath = (chunks_dir / f"chunk_{chunk_index:02d}.md").resolve()
-    if not str(filepath).startswith(str(chunks_dir)) or not filepath.is_file():
-        raise HTTPException(status_code=404, detail="Чанк не найден")
-    return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+    if str(filepath).startswith(str(chunks_dir)) and filepath.is_file():
+        return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+    try:
+        staging = StagingStore(doc_id)
+        if staging.exists():
+            staging_path = staging.dir / f"chunk_{chunk_index:02d}.md"
+            if staging_path.is_file():
+                return Response(content=staging_path.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+    except Exception:
+        pass
+    raise HTTPException(status_code=404, detail="Чанк не найден")
 
 
 @router.get("/{doc_id}/fulltext")
