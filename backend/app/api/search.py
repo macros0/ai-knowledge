@@ -3,6 +3,7 @@ from fastapi import APIRouter
 
 from app.config import get_settings
 from app.models.schemas import SearchHit, SearchRequest, SearchResponse
+from app.services.concept_store import enrich_concept_hits
 from app.services.context_builder import merge_and_format, resolve_branches
 from app.services.embedder import Embedder
 from app.services.registry import get_registry
@@ -29,6 +30,7 @@ def search(req: SearchRequest):
         branches=branches,
         top_k=req.top_k,
     )
+    enrich_concept_hits(hits)
 
     reg = get_registry()
     filename_lookup = {did: (reg.get(did) or {}).get("filename", "")

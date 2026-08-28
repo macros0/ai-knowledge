@@ -15,6 +15,7 @@ import uuid
 from pathlib import Path
 
 from app.config import get_settings
+from app.services.concept_store import replace_concepts
 from app.services.embedder import Embedder
 from app.services.errors import DependencyUnavailableError
 from app.services.llm_client import LLMTruncationError, is_fatal_error
@@ -89,6 +90,7 @@ class Pipeline:
             else:
                 target.unlink(missing_ok=True)
         StagingStore(doc_id).remove()
+        replace_concepts(doc_id, [])
         # Сброс кэша классификации таблиц: пользователь явно хочет пересчитать
         # концепты с нуля (возможно, после правки промпта/логики классификатора).
         table_cache = self.settings.cache_dir / "table_classify"
@@ -280,6 +282,10 @@ class Pipeline:
         _atomic_move(tmp_dir, target)
         for doc in okf_docs:
             doc.filepath = str(target / Path(doc.filepath).name)
+
+        # Canonical-копия концептов в БД (полный текст, без обрезки до
+        # okf_max_concept_chars). При нуле концептов очищает устаревшие записи.
+        replace_concepts(doc_id, okf_docs)
 
         if not okf_docs:
             logger.warning("[%s] Документ %s не содержит концептов, индексация пропущена", doc_id, filename)

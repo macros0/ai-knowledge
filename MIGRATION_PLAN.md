@@ -2,8 +2,30 @@
 
 Дата составления: 18.08.2026.
 
+> **Статус: реализовано (28.08.2026).** Код по этому плану написан. Отклонения от
+> исходного плана, зафиксированные при реализации:
+> 1. **Синхронный SQLAlchemy 2.0** вместо async (`psycopg` v3, а не `asyncpg`/
+>    `aiosqlite`) — приложение целиком синхронное (эндпоинты `def` + pipeline в
+>    `threading.Thread`), перевод на async не давал выгоды.
+> 2. **`tags.count` не хранится** — счётчик вычисляется на чтение агрегатом по
+>    `document_tags` (нет триггера и дрейфа).
+> 3. **Массивы/JSON** (`okf_concepts.tags/relations`, staging-массивы) — JSON-колонки,
+>    а не нативные Postgres ARRAY (портативность с SQLite-dev).
+> 4. **`documents.uploaded_by`** — строка (username из сессии), без FK; `owner_id`/
+>    `org_id` — nullable FK (наполняются на Этапах 3/при авторизации в БД).
+> 5. **slim payload Qdrant** оставляет `slug` + `relations` + `filepath` (маленькие,
+>    нужны для graph expansion и реконструкции ссылки на источник); убираются только
+>    `content`/`global_tags`/`source_document`/`attachments`. Join-ключ — `(doc_id, slug)`.
+> 6. **`okf_concepts.content`** — полный текст для новых документов; для
+>    существующих `.md`-бандлов восстановим только уже обрезанный текст (полный
+>    текст из старых бандлов не восстановить).
+> 7. `audit_log` — по-прежнему отложен (зависит от требований ИБ).
+>
+> См. реализацию: `backend/app/db/` (модели/сессии), `backend/alembic/`,
+> `backend/scripts/migrate_json_to_db.py`, `backend/scripts/migrate_payload.py`,
+> `backend/app/services/{registry,tag_registry,staging,concept_store}.py`.
+
 Детализация Этапа 2 (`OKF_Knowledge_Service_Roadmap.md`) — «Перенос хранения данных во внешнюю БД».
-Доработка откладывается в планы; этот документ — проект реализации, код по нему пока не пишется.
 
 ## 1. Принцип
 

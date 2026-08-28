@@ -152,16 +152,12 @@ class VectorStore:
                         "point_type": CONCEPT_POINT_TYPE,
                         "doc_id": doc_id,
                         "filepath": okf_doc.filepath,
-                        "slug": Path(okf_doc.filepath).name,
+                        "slug": Path(okf_doc.filepath).stem,
                         "title": title,
                         "type": meta.get("type", "concept"),
                         "tags": meta.get("tags", []),
-                        "global_tags": meta.get("global_tags", []),
-                        "source_document": meta.get("source_document", {}),
-                        "attachments": meta.get("attachments", []),
                         "relations": meta.get("relations", []),
                         "chunk_index": meta.get("chunk_index"),
-                        "content": capped_content,
                     },
                 )
             )

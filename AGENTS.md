@@ -42,6 +42,13 @@ UI: http://localhost:3000
   в `.env`). На этой машине параллельно живёт **служба PostgreSQL 10** (`postgresql-x64-10`,
   порт 5433) — **её не трогать**. `postgres.exe` отказывается работать от админа — стек поднимать
   из НЕ-elevated shell. Русские данные требуют `UTF8` (кластер инициализирован с `-E UTF8`).
+- **Метаданные в реляционной БД** (Этап 2, `MIGRATION_PLAN.md`): `backend/app/db/` — синхронный
+  SQLAlchemy 2.0 + psycopg3 (Postgres) / SQLite (dev). Документы/теги/staging/OKF-концепты в БД,
+  бинарники и `.md`-бандлы — в FS. Таблицы создаются на старте (`init_db`/`create_all`), Alembic
+  (`backend/alembic/`) — для версионированных миграций. Одноразовый перенос JSON→БД:
+  `backend/scripts/migrate_json_to_db.py`; slim-payload Qdrant: `backend/scripts/migrate_payload.py`.
+  Полный текст концепта — в `okf_concepts` (payload Qdrant больше не хранит `content`), поиск
+  достаёт его по `(doc_id, slug)` через `services/concept_store.py`.
 - **Dual-index**: Qdrant хранит два типа точек — `point_type="concept"` (LLM-выжимки) и
   `point_type="chunk"` (сырой текст чанка, минимальный payload: doc_id, chunk_index,
   tags, section_title, content). Поиск идёт по обоим типам, RRF-fusion в Python

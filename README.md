@@ -168,6 +168,38 @@ python scripts/reindex.py --data-dir /path/to/data
 Скрипт удаляет коллекцию, создаёт её заново и индексирует все OKF-файлы.
 Перед запуском нужен работающий Qdrant и embedding-сервер (или `EMBEDDING_PROVIDER=fake`).
 
+### Реляционная БД: схема и миграция
+
+Метаданные (документы, теги, OKF-концепты, staging) хранятся в PostgreSQL
+(прод) / SQLite (dev) через SQLAlchemy — см. `MIGRATION_PLAN.md`. Таблицы
+создаются автоматически на старте приложения (`create_all`, идемпотентно); для
+версионированных миграций есть Alembic:
+
+```bash
+cd backend
+.venv\Scripts\activate
+alembic upgrade head                          # применить миграции схемы
+```
+
+Одноразовый перенос существующих данных из JSON/FS в БД (бэкапит `*.json` в `*.bak`):
+
+```bash
+python scripts/migrate_json_to_db.py --data-dir /path/to/data
+python scripts/migrate_json_to_db.py --data-dir /path/to/data --reset   # очистить и перечитать
+```
+
+Slim-payload Qdrant: полный текст концепта теперь живёт в БД (`okf_concepts`),
+payload точки хранит только `doc_id`/`slug`/`title`/`tags`/`relations`. Миграция
+существующих точек (удаляет тяжёлые поля из payload):
+
+```bash
+python scripts/migrate_payload.py             # удаляет content/global_tags/... из payload
+python scripts/migrate_payload.py --fix-slugs # + привести slug к stem (медленно)
+```
+
+После миграции поиск достаёт полный текст концепта из БД по `(doc_id, slug)`.
+Полную пересборку Qdrant с новой slim-схемой даёт `reindex.py` (см. выше).
+
 ## Конфигурация (переменные `.env`)
 
 | Переменная | По умолчанию | Описание |
@@ -175,8 +207,8 @@ python scripts/reindex.py --data-dir /path/to/data
 | `APP_NAME` | `OKF Knowledge Service` | Название сервиса |
 | `API_PREFIX` | `/api` | Префикс путей API |
 | `DATA_DIR` | `./data` | Корень runtime-данных (uploads, okf_bundles, staging) |
-| `DATABASE_URL` | `postgresql+asyncpg://postgres:…@127.0.0.1:5432/okf_knowledge` | Строка подключения к PostgreSQL (метаданные: документы, теги, OKF-концепты). См. `MIGRATION_PLAN.md` |
-| `DATABASE_URL_DEV` | `sqlite+aiosqlite:///./data/app.db` | Dev-фолбэк на SQLite (zero-config, без внешнего сервера) |
+| `DATABASE_URL` | `postgresql+psycopg://postgres:…@127.0.0.1:5432/okf_knowledge` | Строка подключения к PostgreSQL (метаданные: документы, теги, OKF-концепты). См. `MIGRATION_PLAN.md` |
+| `DATABASE_URL_DEV` | `sqlite:///./data/app.db` | Dev-фолбэк на SQLite (zero-config, без внешнего сервера) |
 | `QDRANT_URL` | `http://localhost:6333` | Адрес Qdrant |
 | `QDRANT_COLLECTION` | `okf_knowledge_base` | Коллекция Qdrant |
 | `EMBEDDING_DIMENSIONS` | `1024` | Размерность вектора (bge-m3=1024, text-embedding-3-small=1536) |

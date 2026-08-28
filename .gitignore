@@ -30,6 +30,9 @@ next-env.d.ts
 /data/staging/*
 /data/prompts/*
 /data/documents.json
+/data/tags.json
+/data/app.db*
+/data/*.bak
 /data/debug/*
 /data/cache/*
 !/data/uploads/.gitkeep
