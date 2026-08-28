@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
     data_dir: Path = Path("./data")
 
+    # --- Реляционная БД (метаданные: документы, теги, OKF-концепты) ---
+    # Прод: PostgreSQL (синхронный драйвер psycopg3). Пример строки:
+    #   postgresql+psycopg://postgres:password@127.0.0.1:5432/okf_knowledge
+    # Локально (dev) при пустом database_url — SQLite data/app.db (zero-config).
+    # Подробности миграции: MIGRATION_PLAN.md.
+    database_url: str | None = None
+    database_url_dev: str | None = None
+
     # --- Авторизация ---
     # auth_provider — какой провайдер аутентификации активен:
     #   disabled        — всё открыто (локальная разработка/тесты, по умолчанию)
@@ -306,6 +314,15 @@ class Settings(BaseSettings):
         if path.is_absolute():
             return path
         return Path(__file__).resolve().parents[2] / path
+
+    @property
+    def db_url(self) -> str:
+        """Эффективный URL БД: database_url → database_url_dev → SQLite в data_dir."""
+        if self.database_url:
+            return self.database_url
+        if self.database_url_dev:
+            return self.database_url_dev
+        return f"sqlite:///{(self.data_dir / 'app.db').as_posix()}"
 
     @property
     def uploads_dir(self) -> Path:

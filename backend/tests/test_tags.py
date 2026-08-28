@@ -1,8 +1,7 @@
 """Юнит-тесты для глобального справочника тегов и слияния тегов в концепты."""
-import threading
-
 from scripts.rebuild_tags import collect_tags, read_global_tags
 from app.services.pipeline import _merge_tags
+from app.services.registry import get_registry
 from app.services.tag_registry import TagRegistry, normalize_tags
 
 
@@ -30,42 +29,24 @@ class TestMergeTags:
 
 
 class TestTagRegistry:
-    def test_add_and_all(self, tmp_path):
-        reg = TagRegistry()
-        reg.path = tmp_path / "tags.json"
-        reg._tags = {}
-        reg.add(["proxmox", "network"])
-        reg.add(["proxmox", "vlan"])
-        tags = reg.all()
-        by_name = {t["name"]: t["count"] for t in tags}
+    def test_all_counts_from_documents(self):
+        reg = get_registry()
+        reg.create("d1", "a.docx", "x", 10, tags=["proxmox", "network"])
+        reg.create("d2", "b.docx", "x", 10, tags=["proxmox", "vlan"])
+        tr = TagRegistry()
+        tr.add(["proxmox", "network", "vlan"])
+        by_name = {t["name"]: t["count"] for t in tr.all()}
         assert by_name == {"proxmox": 2, "network": 1, "vlan": 1}
-        assert reg.path.exists()
 
-    def test_persists_to_disk(self, tmp_path):
-        reg = TagRegistry()
-        reg.path = tmp_path / "tags.json"
-        reg._tags = {}
-        reg.add(["devops"])
-        reg2 = TagRegistry()
-        reg2.path = tmp_path / "tags.json"
-        reg2._load()
-        assert "devops" in reg2._tags
+    def test_add_registers_name_without_documents(self):
+        tr = TagRegistry()
+        tr.add(["solo"])
+        assert tr.all() == [{"name": "solo", "count": 0}]
 
-    def test_concurrent_add_is_thread_safe(self, tmp_path):
-        reg = TagRegistry()
-        reg.path = tmp_path / "tags.json"
-        reg._tags = {}
-
-        def worker():
-            for _ in range(50):
-                reg.add(["proxmox"])
-
-        threads = [threading.Thread(target=worker) for _ in range(4)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        assert reg._tags == {"proxmox": 200}
+    def test_add_normalizes_and_ignores_empty(self):
+        tr = TagRegistry()
+        tr.add(["  proxmox  ", "", "   "])
+        assert [t["name"] for t in tr.all()] == ["proxmox"]
 
 
 class TestRebuildTags:

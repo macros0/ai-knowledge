@@ -1,118 +1,131 @@
-"""Простой персистентный реестр документов (JSON-файл в data/)."""
-import json
-import threading
-from datetime import datetime, timezone
+"""Реестр документов на реляционной БД (замена data/documents.json).
 
-from app.config import get_settings
+Интерфейс совместим с прежним JSON-реестром: те же методы (create/get/list/
+update/delete) и та же форма возвращаемых dict (id, filename, status, tags,
+created_at/updated_at как datetime). Внутренности — SQLAlchemy-сессии поверх
+PostgreSQL (prod) / SQLite (dev). Отличие: нет in-memory словаря и полной
+перезаписи файла — каждая операция в отдельной транзакции.
+"""
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.db.models import (
+    Document,
+    DocumentStaging,
+    DocumentTag,
+    OkfAttachment,
+    OkfConcept,
+)
+from app.db.session import session_scope
+
+# Статусы, которые на старте считаются «зависшими» (сервер перезапустили посреди
+# обработки) и сбрасываются в paused для ручного возобновления.
+STALE_STATUSES = {"splitting", "processing", "indexing", "uploaded"}
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _to_dict(doc: Document) -> dict:
+    return {
+        "id": doc.id,
+        "filename": doc.filename,
+        "content_type": doc.content_type,
+        "size": doc.size,
+        "status": doc.status,
+        "error": doc.error,
+        "okf_concept_count": doc.okf_concept_count,
+        "total_chunks": doc.total_chunks,
+        "processed_chunks": doc.processed_chunks,
+        "current_chunk": doc.current_chunk,
+        "tags": [t.tag for t in doc.tags_rel],
+        "created_at": doc.created_at,
+        "updated_at": doc.updated_at,
+    }
 
 
 class DocumentRegistry:
-    def __init__(self):
-        self.path = get_settings().data_dir / "documents.json"
-        self._lock = threading.Lock()
-        self._docs: dict[str, dict] = {}
-        self._load()
-
-    def _load(self) -> None:
-        if self.path.exists():
-            try:
-                self._docs = json.loads(self.path.read_text(encoding="utf-8"))
-            except Exception:
-                self._docs = {}
-        self._reset_stale_statuses()
-        self._reconcile_okf_counts()
-
-    def _reconcile_okf_counts(self) -> None:
-        """Держит okf_concept_count в синхроне с фактическим числом .md-файлов бандла.
-
-        Миграция со старого поля okf_file_count (где могло храниться число чанков
-        из-за регрессии) — пересчёт из производных данных на диске.
-        """
-        okf_dir = get_settings().okf_dir
-        changed = False
-        for doc in self._docs.values():
-            if doc.get("status") != "done":
-                continue
-            bundle = okf_dir / doc["id"]
-            count = len(list(bundle.glob("*.md"))) if bundle.is_dir() else 0
-            if doc.get("okf_concept_count") != count:
-                doc["okf_concept_count"] = count
-                changed = True
-            if "okf_file_count" in doc:
-                doc.pop("okf_file_count")
-                changed = True
-        if changed:
-            self._save()
-
-    def _reset_stale_statuses(self) -> None:
-        stale = {"splitting", "processing", "indexing", "uploaded"}
-        changed = False
-        for doc in self._docs.values():
-            if doc.get("status") in stale:
-                doc["status"] = "paused"
-                doc["error"] = "Сервер был перезапущен. Нажмите «Возобновить»"
-                changed = True
-        if changed:
-            self._save()
-
-    def _save(self) -> None:
-        self.path.write_text(json.dumps(self._docs, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    def create(self, doc_id: str, filename: str, content_type: str, size: int, tags: list[str] | None = None) -> dict:
-        doc = {
-            "id": doc_id,
-            "filename": filename,
-            "content_type": content_type,
-            "size": size,
-            "status": "uploaded",
-            "error": None,
-            "okf_concept_count": 0,
-            "total_chunks": 0,
-            "processed_chunks": 0,
-            "current_chunk": 0,
-            "tags": tags or [],
-            "created_at": _now(),
-            "updated_at": _now(),
-        }
-        with self._lock:
-            self._docs[doc_id] = doc
-            self._save()
-        return doc
+    def create(
+        self,
+        doc_id: str,
+        filename: str,
+        content_type: str,
+        size: int,
+        tags: list[str] | None = None,
+        uploaded_by: str | None = None,
+    ) -> dict:
+        with session_scope() as s:
+            doc = Document(
+                id=doc_id,
+                filename=filename,
+                content_type=content_type,
+                size=size,
+                tags_rel=[DocumentTag(tag=t) for t in (tags or [])],
+                uploaded_by=uploaded_by,
+            )
+            s.add(doc)
+        return self.get(doc_id)
 
     def get(self, doc_id: str) -> dict | None:
-        return self._docs.get(doc_id)
+        with session_scope() as s:
+            doc = s.get(Document, doc_id)
+            return _to_dict(doc) if doc else None
 
     def list(self) -> list[dict]:
-        return list(self._docs.values())
+        with session_scope() as s:
+            docs = (
+                s.execute(select(Document).options(selectinload(Document.tags_rel)))
+                .scalars()
+                .all()
+            )
+            return [_to_dict(d) for d in docs]
 
     def update(self, doc_id: str, **fields) -> None:
-        with self._lock:
-            if doc_id in self._docs:
-                self._docs[doc_id].update(fields)
-                self._docs[doc_id]["updated_at"] = _now()
-                self._save()
+        tags = fields.pop("tags", None)
+        if not fields and tags is None:
+            return
+        with session_scope() as s:
+            doc = s.get(Document, doc_id)
+            if doc is None:
+                return
+            for key, value in fields.items():
+                setattr(doc, key, value)
+            if tags is not None:
+                doc.tags_rel.clear()
+                for t in tags:
+                    doc.tags_rel.append(DocumentTag(tag=t))
 
     def delete(self, doc_id: str) -> bool:
-        with self._lock:
-            existed = self._docs.pop(doc_id, None) is not None
-            if existed:
-                self._save()
-        return existed
+        with session_scope() as s:
+            for model in (OkfConcept, OkfAttachment, DocumentStaging, DocumentTag):
+                s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
+            doc = s.get(Document, doc_id)
+            if doc is None:
+                return False
+            s.delete(doc)
+            return True
+
+    def reset_stale_statuses(self) -> None:
+        """Переводит зависшие статусы в paused (вызывается на старте сервера)."""
+        with session_scope() as s:
+            docs = s.query(Document).filter(Document.status.in_(STALE_STATUSES)).all()
+            for d in docs:
+                d.status = "paused"
+                d.error = "Сервер был перезапущен. Нажмите «Возобновить»"
 
 
 _INSTANCE: DocumentRegistry | None = None
-_INSTANCE_LOCK = threading.Lock()
 
 
 def get_registry() -> DocumentRegistry:
     """Общий для процесса реестр — один инстанс на всех потребителей."""
     global _INSTANCE
     if _INSTANCE is None:
-        with _INSTANCE_LOCK:
-            if _INSTANCE is None:
-                _INSTANCE = DocumentRegistry()
+        _INSTANCE = DocumentRegistry()
     return _INSTANCE
+
+
+def reset_stale_statuses() -> None:
+    """Точка входа из lifespan: сброс зависших статусов после init_db()."""
+    get_registry().reset_stale_statuses()

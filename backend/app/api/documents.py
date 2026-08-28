@@ -5,9 +5,11 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 
+from app.auth.models import User
+from app.auth.service import require_user
 from app.config import get_settings
 from app.models.schemas import Concept, ChunkOut, DocumentListOut, DocumentOut, OkfFileOut
 from app.services.okf_generator import _build_markdown
@@ -27,6 +29,7 @@ _tag_registry = TagRegistry()
 async def upload_document(
     file: UploadFile,
     tags: Annotated[list[str] | None, Form()] = None,
+    user: User = Depends(require_user),
 ):
     content = await file.read()
     if not content:
@@ -38,7 +41,14 @@ async def upload_document(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     _tag_registry.add(user_tags)
-    doc = _registry.create(doc_id, file.filename or "unknown", file.content_type or "", len(content), tags=user_tags)
+    doc = _registry.create(
+        doc_id,
+        file.filename or "unknown",
+        file.content_type or "",
+        len(content),
+        tags=user_tags,
+        uploaded_by=user.username,
+    )
     _pipeline.ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
     return doc
 

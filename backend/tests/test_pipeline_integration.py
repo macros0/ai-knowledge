@@ -18,6 +18,7 @@ from app.services.errors import EmbedderError, VectorStoreError
 from app.services.llm_client import LLMTimeoutError
 from app.services.pipeline import Pipeline
 from app.services.registry import DocumentRegistry
+from app.services.staging import StagingStore
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -45,7 +46,6 @@ def isolated_env(tmp_path, monkeypatch):
         "app.config",
         "app.services.pipeline",
         "app.services.staging",
-        "app.services.registry",
         "app.services.embedder",
         "app.services.llm_client",
         "app.services.okf_generator",
@@ -53,8 +53,8 @@ def isolated_env(tmp_path, monkeypatch):
     ):
         monkeypatch.setattr(f"{mod}.get_settings", lambda: settings)
 
+    # БД уже сконфигурирована автозапускаемой фикстурой _db (conftest.py).
     reg = DocumentRegistry()
-    reg._docs = {}
     monkeypatch.setattr("app.services.pipeline.get_registry", lambda: reg)
 
     monkeypatch.setattr("app.services.pipeline.parse_document", lambda *a, **k: [])
@@ -164,7 +164,7 @@ class TestPipelineFinalizeRetry:
 
         staging_dir = pipeline.settings.staging_dir / doc_id
         assert staging_dir.is_dir(), "staging должен сохраниться после сбоя финализации"
-        assert (staging_dir / "manifest.json").is_file()
+        assert StagingStore(doc_id).exists(), "manifest должен сохраниться в БД"
         assert (staging_dir / "chunk_00.json").is_file()
 
         llm_calls = {"n": 0}

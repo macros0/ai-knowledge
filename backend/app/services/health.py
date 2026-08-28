@@ -54,6 +54,20 @@ def _check_qdrant() -> dict:
         return {"status": "down", "error": str(exc)[:120]}
 
 
+def _check_database() -> dict:
+    """Проверка реляционной БД (SELECT 1)."""
+    try:
+        from sqlalchemy import text
+
+        from app.db.session import get_engine
+
+        with get_engine().connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "down", "error": str(exc)[:120]}
+
+
 def get_health() -> dict:
     """Возвращает агрегированный статус здоровья зависимостей.
 
@@ -72,6 +86,7 @@ def get_health() -> dict:
         "llm": _check_llm(),
         "ollama": _check_embeddings(),
         "qdrant": _check_qdrant(),
+        "database": _check_database(),
     }
 
     qdrant_ok = deps["qdrant"]["status"] == "ok"

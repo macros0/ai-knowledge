@@ -1,15 +1,20 @@
 """Staging-хранилище инкрементальной генерации OKF (checkpointing/resume).
 
-Задача (doc_id) занимает каталог data/staging/{doc_id}/:
-  manifest.json  — состояние: обработанные чанки, занятые слаги, теги
-  chunk_XX.json  — нормализованные концепты чанка (JSON-массив dict)
+Состояние задачи (manifest) хранится в реляционной БД (document_staging), сырые
+файлы чанков — в FS под data/staging/{doc_id}/:
+  chunk_XX.json — нормализованные концепты чанка (JSON-массив dict)
+  chunk_XX.md   — сырой текст чанка (LLM-вход)
 
-Результаты каждого чанка пишутся на диск сразу после генерации LLM, поэтому
-при падении на N-м чанке обработанные чанки сохраняются, а повторный запуск
-пропускает их (has_chunk / processed_chunks). При финализации концепты
-читаются из чанков в порядке индексов, бандл собирается в okf_bundles,
-а staging удаляется.
+Результаты каждого чанка пишутся сразу после генерации LLM, поэтому при падении
+обработанные чанки сохраняются, а повторный запуск пропускает их (has_chunk /
+processed_chunks). При финализации концепты читаются из чанков в порядке
+индексов, бандл собирается в okf_bundles, staging удаляется.
+
+Замена data/staging/{doc_id}/manifest.json → таблица document_staging (JSONB),
+как в MIGRATION_PLAN.md §3.3/§5.
 """
+from __future__ import annotations
+
 import json
 import shutil
 import threading
@@ -17,6 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import get_settings
+from app.db.models import DocumentStaging
+from app.db.session import session_scope
 from app.models.schemas import Concept
 from app.services.okf_generator import _slugify
 
@@ -29,11 +36,10 @@ class StagingStore:
     def __init__(self, doc_id: str, staging_root: Path | None = None):
         self.doc_id = doc_id
         self.dir = staging_root or get_settings().staging_dir / doc_id
-        self.manifest_path = self.dir / "manifest.json"
         self._lock = threading.Lock()
 
     def exists(self) -> bool:
-        return self.manifest_path.is_file()
+        return self.load() is not None
 
     def create(self, total_chunks: int, global_tags: list[str] | None = None) -> dict:
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -51,16 +57,33 @@ class StagingStore:
         return manifest
 
     def load(self) -> dict | None:
-        if not self.exists():
-            return None
-        try:
-            return json.loads(self.manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            return None
+        with session_scope() as s:
+            row = s.get(DocumentStaging, self.doc_id)
+            if row is None:
+                return None
+            return {
+                "task_id": row.doc_id,
+                "status": row.status,
+                "total_chunks": row.total_chunks,
+                "last_updated": row.updated_at.isoformat() if row.updated_at else None,
+                "processed_chunks": list(row.processed_chunks or []),
+                "used_slugs": list(row.used_slugs or []),
+                "global_tags": list(row.global_tags or []),
+                "chunks_data": dict(row.chunks_data or {}),
+            }
 
     def _write(self, manifest: dict) -> None:
-        manifest["last_updated"] = _now()
-        self.manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        with session_scope() as s:
+            row = s.get(DocumentStaging, self.doc_id)
+            if row is None:
+                row = DocumentStaging(doc_id=self.doc_id)
+                s.add(row)
+            row.total_chunks = manifest.get("total_chunks", 0)
+            row.processed_chunks = list(manifest.get("processed_chunks", []))
+            row.used_slugs = list(manifest.get("used_slugs", []))
+            row.global_tags = list(manifest.get("global_tags", []))
+            row.chunks_data = dict(manifest.get("chunks_data", {}))
+            row.status = manifest.get("status", "in_progress")
 
     @property
     def processed_chunks(self) -> list[int]:
@@ -140,6 +163,10 @@ class StagingStore:
         return slugs
 
     def remove(self) -> None:
+        with session_scope() as s:
+            row = s.get(DocumentStaging, self.doc_id)
+            if row is not None:
+                s.delete(row)
         if self.dir.exists():
             shutil.rmtree(self.dir, ignore_errors=True)
 
