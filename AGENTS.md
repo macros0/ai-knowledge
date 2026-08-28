@@ -5,7 +5,7 @@
 ## Быстрый старт (все зависимости одной командой)
 
 ```powershell
-.\scripts\start-all.ps1    # поднять весь стек: Qdrant, Ollama, backend, frontend
+.\scripts\start-all.ps1    # поднять весь стек: Qdrant, Ollama, PostgreSQL, backend, frontend
 .\scripts\stop-all.ps1     # остановить всё
 ```
 
@@ -18,6 +18,7 @@
 |---|---|---|
 | Qdrant | http://localhost:6333 | `GET /collections` |
 | Ollama | http://localhost:12400 | `GET /api/tags` |
+| PostgreSQL | 127.0.0.1:5432 | `pg_isready -h 127.0.0.1 -p 5432` |
 | Backend (FastAPI) | http://localhost:8000 | `GET /health` |
 | Frontend (Next.js) | http://localhost:3000 | `GET /` |
 
@@ -35,6 +36,12 @@ UI: http://localhost:3000
   модель должна быть загружена в Ollama (`ollama pull bge-m3`).
 - Qdrant — локальный бинарь (не Docker): `%TEMP%\opencode\qdrant\v1.19.0\qdrant.exe`, данные в
   `%TEMP%\opencode\qdrant\storage` (сохраняются между запусками).
+- **PostgreSQL 17 — portable-бинарь (не Docker, не служба)**: бинари в `C:\postgresql17\pgsql\bin`,
+  данные в `C:\postgresql17\data`, порт 5432. Запуск `postgres.exe -D <data>` через хелпер
+  (`scripts/start-postgres.ps1`). Суперюзер `postgres`, пароль dev-only `okf_dev_pg` (см. `DATABASE_URL`
+  в `.env`). На этой машине параллельно живёт **служба PostgreSQL 10** (`postgresql-x64-10`,
+  порт 5433) — **её не трогать**. `postgres.exe` отказывается работать от админа — стек поднимать
+  из НЕ-elevated shell. Русские данные требуют `UTF8` (кластер инициализирован с `-E UTF8`).
 - **Dual-index**: Qdrant хранит два типа точек — `point_type="concept"` (LLM-выжимки) и
   `point_type="chunk"` (сырой текст чанка, минимальный payload: doc_id, chunk_index,
   tags, section_title, content). Поиск идёт по обоим типам, RRF-fusion в Python
@@ -46,8 +53,8 @@ UI: http://localhost:3000
 ## Фоновые процессы
 
 Только через глобальный хелпер `start-background.ps1` (правила — в глобальном AGENTS.md).
-PID-файлы: `%TEMP%\opencode\{qdrant,ollama,backend,next}.pid`
-Логи: `%TEMP%\opencode\{qdrant,ollama,python,node}-{out,err}.log`
+PID-файлы: `%TEMP%\opencode\{qdrant,ollama,postgres,backend,next}.pid`
+Логи: `%TEMP%\opencode\{qdrant,ollama,postgres,python,node}-{out,err}.log`
 
 ## Кодировка .ps1-скриптов (важно)
 

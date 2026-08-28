@@ -2,13 +2,16 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.api import chat, documents, search, tags
 from app.api.settings import router as settings_router
+from app.auth.api import router as auth_router
+from app.auth.service import require_user
 from app.config import get_settings
 from app.prompts.store import get_store
 from app.services.errors import DependencyUnavailableError
@@ -100,16 +103,29 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(CatchAllErrorsMiddleware)
     app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.app_secret_key,
+        max_age=settings.auth_session_ttl_seconds,
+        same_site="lax",
+        https_only=settings.auth_session_https_only,
+    )
+    app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.include_router(documents.router, prefix=settings.api_prefix)
-    app.include_router(search.router, prefix=settings.api_prefix)
-    app.include_router(chat.router, prefix=settings.api_prefix)
-    app.include_router(tags.router, prefix=settings.api_prefix)
-    app.include_router(settings_router, prefix=settings.api_prefix)
+    app.include_router(auth_router, prefix=settings.api_prefix)
+
+    # Защищённые роуты: в disabled-режиме require_user пропускает всех,
+    # в simulation/sso — требует сессию (401 без неё).
+    protected = APIRouter(dependencies=[Depends(require_user)])
+    protected.include_router(documents.router)
+    protected.include_router(search.router)
+    protected.include_router(chat.router)
+    protected.include_router(tags.router)
+    protected.include_router(settings_router)
+    app.include_router(protected, prefix=settings.api_prefix)
 
     @app.exception_handler(DependencyUnavailableError)
     async def dependency_error_handler(request: Request, exc: DependencyUnavailableError):

@@ -3,7 +3,7 @@
     Stop all services of the AI Knowledge stack (Qdrant, Ollama, backend, frontend).
 
 .DESCRIPTION
-    Kills processes by PID files in %TEMP%\opencode and by ports 6333/12400/8000/3000.
+    Kills processes by PID files in %TEMP%\opencode and by ports 6333/12400/5432/8000/3000.
     PID files are removed afterwards.
 
 .EXAMPLE
@@ -16,6 +16,7 @@ Write-Output "=== Остановка по PID-файлам ==="
 $PidFiles = @(
     (Join-Path $LogDir 'qdrant.pid'),
     (Join-Path $LogDir 'ollama.pid'),
+    (Join-Path $LogDir 'postgres.pid'),
     (Join-Path $LogDir 'backend.pid'),
     (Join-Path $LogDir 'next.pid')
 )
@@ -32,7 +33,7 @@ foreach ($f in $PidFiles) {
 }
 
 Write-Output "=== Остановка по портам ==="
-foreach ($p in 6333, 12400, 8000, 3000) {
+foreach ($p in 6333, 12400, 5432, 8000, 3000) {
     $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
     foreach ($c in $conns) {
         try {

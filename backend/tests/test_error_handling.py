@@ -1,4 +1,4 @@
-"""Тесты centralized exception handler и /health endpoint.
+﻿"""Тесты centralized exception handler и /health endpoint.
 
 Проверяют:
   - DependencyUnavailableError -> 503 JSON с code/service
@@ -36,12 +36,14 @@ def client(tmp_path, monkeypatch):
     from app.config import Settings
 
     settings = Settings(
+        _env_file=None,
         data_dir=tmp_path,
         embedding_provider="fake",
         embedding_dimensions=8,
         llm_model="openai/test",
         llm_base_url="http://localhost",
         llm_api_key="key",
+        auth_provider="disabled",
     )
     monkeypatch.setattr("app.config.get_settings", lambda: settings)
 

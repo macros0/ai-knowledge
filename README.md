@@ -38,6 +38,7 @@ Upload (docx/xlsx/pdf)
 | Backend | Python 3.12, FastAPI, LiteLLM, Qdrant client |
 | Frontend | JavaScript, Next.js (App Router) |
 | Vector DB | Qdrant |
+| Metadata DB | PostgreSQL 17 (portable-бинарь, порт 5432, БД `okf_knowledge`) |
 | OKF Storage | Файловая система `./data/okf_bundles/{doc_id}/` |
 | LLM / Embeddings | Любые, совместимые с OpenAI API (Ollama, vLLM, TEI, OpenAI, YandexGPT...) |
 
@@ -174,6 +175,8 @@ python scripts/reindex.py --data-dir /path/to/data
 | `APP_NAME` | `OKF Knowledge Service` | Название сервиса |
 | `API_PREFIX` | `/api` | Префикс путей API |
 | `DATA_DIR` | `./data` | Корень runtime-данных (uploads, okf_bundles, staging) |
+| `DATABASE_URL` | `postgresql+asyncpg://postgres:…@127.0.0.1:5432/okf_knowledge` | Строка подключения к PostgreSQL (метаданные: документы, теги, OKF-концепты). См. `MIGRATION_PLAN.md` |
+| `DATABASE_URL_DEV` | `sqlite+aiosqlite:///./data/app.db` | Dev-фолбэк на SQLite (zero-config, без внешнего сервера) |
 | `QDRANT_URL` | `http://localhost:6333` | Адрес Qdrant |
 | `QDRANT_COLLECTION` | `okf_knowledge_base` | Коллекция Qdrant |
 | `EMBEDDING_DIMENSIONS` | `1024` | Размерность вектора (bge-m3=1024, text-embedding-3-small=1536) |
@@ -537,6 +540,33 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | POST | `/api/search` | Поиск по концептам (top-k + фильтр по тегам + режим `mode`) |
 | POST | `/api/chat` | Вопрос к базе знаний (ответ + источники + режим `mode`) |
 | GET | `/api/tags` | Список тегов с частотой использования |
+| GET | `/api/auth/me` | Текущий режим авторизации + пользователь (+демо-юзеры в simulation) |
+| POST | `/api/auth/simulate` | Войти как демо-пользователь (режим `simulation`) |
+| POST | `/api/auth/logout` | Завершить сессию |
+| GET | `/api/auth/login` | (sso) редирект на Keycloak |
+| GET | `/api/auth/callback` | (sso) OIDC callback → сессия → редирект на `/` |
+
+### Авторизация
+
+Авторизация включается переменной `AUTH_PROVIDER` (см. `.env.example`):
+
+- **`disabled`** (по умолчанию) — все `/api/*` открыты, `/api/auth/me` отдаёт анонима. Для локальной разработки.
+- **`simulation`** — `/api/*` требуют сессию; вход через `/api/auth/simulate` выбором демо-юзера из `AUTH_SIM_USERS` (внешний Keycloak не нужен).
+- **`keycloak_oidc`** — вход через Keycloak/OIDC (Authorization Code Flow): `/api/auth/login` → Keycloak → `/api/auth/callback` → сессия. Требует `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`. Под корпоративную схему **IDP + IDB** приложение направляется на IDB (broker); форма group-claim настраивается через `KEYCLOAK_FIELD_MAPPING` (частичный override) и `KEYCLOAK_GROUP_PATH_MODE` (`leaf`/`full_path`).
+- **`direct_ldap`** / **`custom_client`** — точки расширения (заглушки `NotImplementedError`) для будущих клиентов с прямым LDAP или собственной авторизацией.
+
+Сессия — signed-cookie (`SessionMiddleware`), TTL и HTTPS-флаг настраиваются через `AUTH_SESSION_TTL_SECONDS` / `AUTH_SESSION_HTTPS_ONLY`.
+
+Архитектурно авторизация разделена на слои (см. `backend/app/auth/`):
+
+- **Аутентификация** — `AuthProvider` (интерфейс) + реализации (`providers/`): каждый провайдер отдаёт нормализованную `AuthenticatedIdentity` (`identity.py`). Добавление нового способа входа = новый класс + строка в фабрике `factory.py`, без правки существующего кода.
+- **Авторизация** — `GroupRoleAuthorizer` (`authorizer.py`): изолированный маппинг групп → роли, работает только с `list[str]` групп и ничего не знает о провайдере.
+
+Роли (Этап 1 роадмапа, 4 штуки): **`viewer`**, **`editor`**, **`admin`**, **`security`**. Роль вычисляется из групп пользователя (claim `group`) через маппинг `AUTH_ROLE_GROUPS` с приоритетом `security > admin > editor > viewer`. Если ни одна группа не совпала — берётся `AUTH_DEFAULT_ROLE`; если он пуст (`None`) — вход отклоняется (`403`, **fail-closed по умолчанию**, для контура ИБ). Роль пересчитывается на каждый запрос и не кэшируется в сессии. На этом этапе роль **передаётся на фронтенд** (`user.roles` в `/api/auth/me`), но не гейтит API — разграничение прав (RBAC) реализуется на Этапах 2а/3/4а.
+
+Group-claim любой формы (список / строка / JSON-объект / вложенный dict) нормализуется в `list[str]` (`identity.py::normalize_groups`, dedup с сохранением порядка), а имя claim и форма путей настраиваются через `KEYCLOAK_FIELD_MAPPING` и `KEYCLOAK_GROUP_PATH_MODE` — приложение не зависит от того, как IDB отдаёт группы.
+
+`GET /api/auth/me` возвращает текущего пользователя в формате, выровненном под будущую схему БД (`MIGRATION_PLAN.md`): `user_id` (sub), `username`, `email`, `groups`, `roles`.
 
 ### Режимы поиска
 

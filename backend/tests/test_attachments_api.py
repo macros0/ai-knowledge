@@ -1,4 +1,4 @@
-"""Тесты эндпоинта раздачи вложений/картинок бандла (/okf/attachments/{filename})."""
+﻿"""Тесты эндпоинта раздачи вложений/картинок бандла (/okf/attachments/{filename})."""
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -27,14 +27,15 @@ class TestOkfAttachmentsEndpoint:
         )
 
     def _client(self, tmp_path: Path, monkeypatch) -> TestClient:
-        settings = Settings(data_dir=tmp_path)
+        settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
         monkeypatch.setattr("app.api.documents.get_settings", lambda: settings)
+        monkeypatch.setattr("app.config.get_settings", lambda: settings)
         monkeypatch.setattr("app.main.get_settings", lambda: settings)
         monkeypatch.setattr("app.main.VectorStore", FakeVectorStore)
         return TestClient(create_app())
 
     def test_serves_attachment(self, tmp_path: Path, monkeypatch):
-        settings = Settings(data_dir=tmp_path)
+        settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
         self._make_bundle(settings)
         client = self._client(tmp_path, monkeypatch)
 
@@ -46,7 +47,7 @@ class TestOkfAttachmentsEndpoint:
         assert resp.content == PNG_MAGIC + b"fake-image"
 
     def test_missing_attachment_returns_404(self, tmp_path: Path, monkeypatch):
-        settings = Settings(data_dir=tmp_path)
+        settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
         self._make_bundle(settings)
         client = self._client(tmp_path, monkeypatch)
 
@@ -56,7 +57,7 @@ class TestOkfAttachmentsEndpoint:
         assert resp.status_code == 404
 
     def test_path_traversal_blocked(self, tmp_path: Path, monkeypatch):
-        settings = Settings(data_dir=tmp_path)
+        settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
         self._make_bundle(settings)
         (tmp_path / "secret.txt").write_text("secret", encoding="utf-8")
         client = self._client(tmp_path, monkeypatch)

@@ -1,4 +1,5 @@
 from functools import lru_cache
+import json
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,85 @@ class Settings(BaseSettings):
     app_name: str = "OKF Knowledge Service"
     api_prefix: str = "/api"
     data_dir: Path = Path("./data")
+
+    # --- Авторизация ---
+    # auth_provider — какой провайдер аутентификации активен:
+    #   disabled        — всё открыто (локальная разработка/тесты, по умолчанию)
+    #   simulation      — демо-пользователи из AUTH_SIM_USERS
+    #   keycloak_oidc   — Keycloak/OIDC через authlib (требует KEYCLOAK_*)
+    #   direct_ldap     — прямая интеграция с AD/LDAP (заглушка)
+    #   custom_client   — собственная система авторизации клиента (заглушка)
+    auth_provider: str = "disabled"
+    app_secret_key: str = "dev-secret-change-me"
+    # Время жизни signed-cookie сессии (секунды).
+    auth_session_ttl_seconds: int = 28800
+    # Кука только по HTTPS — включать в проде, ложь локально (http://localhost).
+    auth_session_https_only: bool = False
+    # Маппинг групп → роли (4 роли Этапа 1 роадмапа). Роль считается по первому
+    # совпадению с приоритетом security > admin > editor > viewer (authorizer.py).
+    # В проде переопределяется под корпоративные группы IDB (JSON-объект группа→роль).
+    auth_role_groups: dict[str, str] = Field(default_factory=lambda: {
+        "KB_Viewer": "viewer",
+        "KB_Editor": "editor",
+        "KB_Admin": "admin",
+        "KB_Security": "security",
+    })
+    # Роль по умолчанию, если ни одна группа не совпала с маппингом.
+    # None (пусто) = fail-closed: пользователь без опознанной роли получает 403.
+    auth_default_role: str | None = None
+    # Демо-пользователи для режима simulation: [{user_id, username, email, groups}]
+    auth_sim_users: list[dict[str, Any]] = Field(default_factory=lambda: [
+        {
+            "user_id": "sim-user",
+            "username": "demo.user",
+            "email": "user@demo.local",
+            "groups": ["KB_Viewer"],
+        },
+        {
+            "user_id": "sim-editor",
+            "username": "demo.editor",
+            "email": "editor@demo.local",
+            "groups": ["KB_Editor"],
+        },
+        {
+            "user_id": "sim-admin",
+            "username": "demo.admin",
+            "email": "admin@demo.local",
+            "groups": ["KB_Admin"],
+        },
+        {
+            "user_id": "sim-security",
+            "username": "demo.security",
+            "email": "security@demo.local",
+            "groups": ["KB_Security"],
+        },
+        {
+            "user_id": "sim-guest",
+            "username": "demo.guest",
+            "email": "guest@demo.local",
+            "groups": [],
+        },
+    ])
+
+    # --- SSO (Keycloak) — активен только при AUTH_PROVIDER=keycloak_oidc ---
+    keycloak_url: str | None = None
+    keycloak_realm: str | None = None
+    keycloak_client_id: str | None = None
+    keycloak_client_secret: str | None = None
+    # Внешний URL callback. На локальном стенде фронтенд ходит на бэкенд через
+    # Next.js-прокси, поэтому Keycloak должен вернуть браузер на порт фронта
+    # (http://localhost:3000/api/auth/callback), а бэкенд видит :8000.
+    sso_redirect_uri: str | None = None
+    # Частичное переопределение claim-имён из userinfo → поля identity.
+    # JSON-объект: {"groups": "roles", "username": "name", "external_id": "sub"}.
+    # Незаданные поля остаются стандартными OIDC-именами (sub/preferred_username/
+    # email/group). Полезно, когда IDB (broker) отдаёт группы не в claim "group".
+    keycloak_field_mapping: dict[str, str] | None = None
+    # Форма имён групп в claim: "leaf" — берём текст после последнего "/"
+    # (KB_Viewer), "full_path" — оставляем как есть (/IDB/KB_Viewer).
+    keycloak_group_path_mode: str = "leaf"
+    # Разделитель, если group-claim пришёл строкой, а не списком.
+    keycloak_group_separator: str = ","
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "okf_knowledge_base"
@@ -153,6 +233,65 @@ class Settings(BaseSettings):
         for preset in self.chat_top_k_presets:
             if not (self.chat_top_k_min <= preset <= self.chat_top_k_max):
                 raise ValueError(f"Preset {preset} is out of bounds [{self.chat_top_k_min}, {self.chat_top_k_max}]")
+        return self
+
+    @field_validator("auth_role_groups", mode="before")
+    @classmethod
+    def _parse_role_groups(cls, v: object) -> object:
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
+
+    @field_validator("auth_sim_users", mode="before")
+    @classmethod
+    def _parse_sim_users(cls, v: object) -> object:
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
+
+    @field_validator("keycloak_field_mapping", mode="before")
+    @classmethod
+    def _parse_field_mapping(cls, v: object) -> object:
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
+
+    @field_validator("keycloak_group_path_mode")
+    @classmethod
+    def _validate_group_path_mode(cls, v: str) -> str:
+        if v not in {"leaf", "full_path"}:
+            raise ValueError(
+                f"keycloak_group_path_mode must be 'leaf' or 'full_path', got '{v}'"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def validate_auth_provider(self) -> "Settings":
+        valid = {"disabled", "simulation", "keycloak_oidc", "direct_ldap", "custom_client"}
+        if self.auth_provider not in valid:
+            raise ValueError(
+                f"auth_provider must be one of {sorted(valid)}, got '{self.auth_provider}'"
+            )
+        if self.auth_provider == "keycloak_oidc":
+            missing = [
+                name
+                for name, value in (
+                    ("KEYCLOAK_URL", self.keycloak_url),
+                    ("KEYCLOAK_REALM", self.keycloak_realm),
+                    ("KEYCLOAK_CLIENT_ID", self.keycloak_client_id),
+                    ("KEYCLOAK_CLIENT_SECRET", self.keycloak_client_secret),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError(
+                    f"auth_provider='keycloak_oidc' requires {', '.join(missing)} "
+                    "to be set (Keycloak подключение из .env)"
+                )
+        if self.auth_provider == "simulation" and not self.auth_sim_users:
+            raise ValueError(
+                "auth_provider='simulation' requires at least one user in AUTH_SIM_USERS"
+            )
         return self
 
     @field_validator("data_dir", mode="before")

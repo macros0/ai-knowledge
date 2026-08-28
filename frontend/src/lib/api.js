@@ -123,6 +123,22 @@ export function getChatSettings() {
   return request("/settings");
 }
 
+export function getMe() {
+  return request("/auth/me");
+}
+
+export function simulateAuth(username) {
+  return request("/auth/simulate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+}
+
+export async function logout() {
+  await request("/auth/logout", { method: "POST" });
+}
+
 export function getHealth() {
   return fetch("/health").then((r) => r.json());
 }
