@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alexey
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Роуты загрузки и управления документами."""
 import json
 import mimetypes
@@ -5,15 +8,26 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.auth.models import User
-from app.auth.service import require_user
+from app.auth.service import require_role, require_user
 from app.config import get_settings
-from app.models.schemas import Concept, ChunkOut, DocumentListOut, DocumentOut, OkfFileOut
+from app.models.schemas import (
+    BulkOperationRequest,
+    BulkPreviewOut,
+    Concept,
+    ChunkOut,
+    DocumentListOut,
+    DocumentOut,
+    OkfFileOut,
+)
+from app.services import audit
+from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, QueueOverloadedError, get_job_queue
 from app.services.okf_generator import _build_markdown
 from app.services.pipeline import Pipeline, save_upload
+from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
 from app.services.tag_registry import TagRegistry, normalize_tags
@@ -69,10 +83,23 @@ def get_document(doc_id: str):
 
 
 @router.delete("/{doc_id}")
-def delete_document(doc_id: str):
-    if not _registry.get(doc_id):
+def delete_document(
+    doc_id: str,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    doc = _registry.get(doc_id)
+    if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
     _pipeline.remove(doc_id)
+    audit.record(
+        user,
+        audit.DOCUMENT_DELETE,
+        audit.TARGET_DOCUMENT,
+        target_id=doc_id,
+        old_value={"filename": doc.get("filename")},
+        ip_address=_client_ip(request),
+    )
     return {"status": "deleted"}
 
 
@@ -91,7 +118,11 @@ def resume_document(doc_id: str):
 
 
 @router.post("/{doc_id}/regenerate", response_model=DocumentOut)
-def regenerate_document(doc_id: str):
+def regenerate_document(
+    doc_id: str,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
     """Полная перегенерация концептов документа через LLM (с текущими промптами).
 
     Удаляет старый OKF-бандл, staging и векторы, затем запускает пайплайн с нуля.
@@ -105,7 +136,90 @@ def regenerate_document(doc_id: str):
         _pipeline.regenerate(doc_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit.record(
+        user,
+        audit.DOCUMENT_REGENERATE,
+        audit.TARGET_DOCUMENT,
+        target_id=doc_id,
+        old_value={"filename": doc.get("filename")},
+        ip_address=_client_ip(request),
+    )
     return _registry.get(doc_id)
+
+
+@router.post("/bulk-preview", response_model=BulkPreviewOut)
+def bulk_preview(
+    body: BulkOperationRequest,
+    user: User = Depends(require_role("admin")),
+):
+    """Предпросмотр масштаба массовой операции без её выполнения."""
+    doc_ids = list(dict.fromkeys(body.doc_ids))
+    documents = []
+    missing = []
+    for doc_id in doc_ids:
+        doc = _registry.get(doc_id)
+        if doc is None:
+            missing.append(doc_id)
+        else:
+            documents.append(
+                {"id": doc["id"], "filename": doc["filename"], "status": doc["status"]}
+            )
+    estimated = len(documents) * get_settings().bulk_regenerate_est_minutes_per_doc
+    return BulkPreviewOut(
+        requested=len(doc_ids),
+        matched=len(documents),
+        missing=missing,
+        documents=documents,
+        estimated_minutes=estimated,
+    )
+
+
+@router.post("/bulk-delete")
+def bulk_delete(
+    body: BulkOperationRequest,
+    request: Request,
+    user: User = Depends(require_role("admin")),
+):
+    """Массовое удаление документов (ставится в очередь, four-eyes выше порога)."""
+    doc_ids = _resolve_doc_ids(body.doc_ids, get_settings().bulk_delete_max_docs)
+    try:
+        job = get_job_queue().submit(
+            BULK_DELETE, doc_ids, user, ip_address=_client_ip(request)
+        )
+    except QueueOverloadedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return job
+
+
+@router.post("/bulk-regenerate")
+def bulk_regenerate(
+    body: BulkOperationRequest,
+    request: Request,
+    user: User = Depends(require_role("admin")),
+):
+    """Массовая перегенерация концептов (очередь + per-user rate limit)."""
+    settings = get_settings()
+    doc_ids = _resolve_doc_ids(body.doc_ids, settings.bulk_regenerate_max_docs)
+    try:
+        get_rate_limiter().check_bulk_regenerate(
+            user.user_id,
+            len(doc_ids),
+            max_ops_per_hour=settings.bulk_regenerate_max_ops_per_hour,
+            max_docs_per_hour=settings.bulk_regenerate_max_docs_per_hour,
+        )
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(max(1, int(exc.retry_after)))},
+        ) from exc
+    try:
+        job = get_job_queue().submit(
+            BULK_REGENERATE, doc_ids, user, ip_address=_client_ip(request)
+        )
+    except QueueOverloadedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return job
 
 
 @router.get("/{doc_id}/download")
@@ -261,6 +375,28 @@ def get_document_fulltext(doc_id: str):
     if not parts:
         raise HTTPException(status_code=404, detail="Текст документа не найден")
     return Response(content="\n\n".join(parts), media_type="text/plain; charset=utf-8")
+
+
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
+def _resolve_doc_ids(doc_ids: list[str], max_docs: int) -> list[str]:
+    """Проверяет и дедуплицирует список ID документов для массовой операции."""
+    unique = list(dict.fromkeys(doc_ids))
+    if not unique:
+        raise HTTPException(status_code=400, detail="Список документов пуст")
+    if len(unique) > max_docs:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Превышен лимит {max_docs} документов на одну операцию",
+        )
+    missing = [d for d in unique if _registry.get(d) is None]
+    if missing:
+        raise HTTPException(
+            status_code=404, detail="Документы не найдены: " + ", ".join(missing)
+        )
+    return unique
 
 
 def _read_frontmatter(path: Path) -> dict:

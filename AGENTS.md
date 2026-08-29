@@ -63,6 +63,23 @@ UI: http://localhost:3000
 PID-файлы: `%TEMP%\opencode\{qdrant,ollama,postgres,backend,next}.pid`
 Логи: `%TEMP%\opencode\{qdrant,ollama,postgres,python,node}-{out,err}.log`
 
+### Пайплайн: программные триггеры обязаны ждать завершения
+
+Пайплайн документов работает в **daemon-потоке** внутри процесса сервера. Вызов
+`Pipeline().regenerate/ingest/resume` из **отдельного** скрипта возвращается сразу,
+а поток умирает вместе со скриптом — документ зависает в промежуточном статусе
+(`processing`/`splitting`/`indexing`). Через API проблемы нет (сервер живёт постоянно),
+риск — только во внешних батч/диагностических скриптах.
+
+Правило: любой программный вызов пайплайна обязан держать процесс живым до
+терминального статуса. Использовать `Pipeline.wait_for(doc_id, timeout)`:
+
+```python
+p = Pipeline()
+p.regenerate(doc_id)
+result = p.wait_for(doc_id)   # блокирует до done/error/failed/paused
+```
+
 ## Кодировка .ps1-скриптов (важно)
 
 PowerShell 5.1 читает `.ps1`-файлы **без BOM** как ANSI (CP1251) — кириллица в них ломает

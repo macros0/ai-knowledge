@@ -574,7 +574,18 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | GET | `/api/documents` | Список документов и статусов |
 | GET | `/api/documents/{doc_id}` | Статус обработки документа |
 | POST | `/api/documents/{doc_id}/resume` | Возобновить приостановленную обработку |
-| DELETE | `/api/documents/{doc_id}` | Удалить документ и все связанные файлы |
+| POST | `/api/documents/{doc_id}/regenerate` | Перегенерировать концепты документа (роли `editor`/`admin`) |
+| DELETE | `/api/documents/{doc_id}` | Удалить документ и все связанные файлы (роли `editor`/`admin`) |
+| POST | `/api/documents/bulk-preview` | Предпросмотр масштаба массовой операции (роль `admin`) |
+| POST | `/api/documents/bulk-delete` | Массовое удаление (очередь + four-eyes, роль `admin`) |
+| POST | `/api/documents/bulk-regenerate` | Массовая перегенерация (очередь + rate limit, роль `admin`) |
+| GET | `/api/jobs` | Список системных задач (роль `admin`) |
+| GET | `/api/jobs/{job_id}` | Статус задачи (роль `admin`) |
+| POST | `/api/jobs/{job_id}/approve` | Одобрить задачу (four-eyes, роль `admin`) |
+| POST | `/api/jobs/{job_id}/cancel` | Отменить задачу (роль `admin`) |
+| GET | `/api/audit` | Журнал ИБ (read-only, роль `security`) |
+| POST | `/api/users/{external_id}/block` | Заблокировать пользователя (роль `security`) |
+| POST | `/api/users/{external_id}/unblock` | Разблокировать пользователя (роль `security`) |
 | GET | `/api/documents/{doc_id}/okf` | Список сгенерированных OKF-файлов |
 | GET | `/api/documents/{doc_id}/okf/{filename}` | Содержимое OKF-файла |
 | POST | `/api/search` | Поиск по концептам (top-k + фильтр по тегам + режим `mode`) |
@@ -608,11 +619,61 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 - **Аутентификация** — `AuthProvider` (интерфейс) + реализации (`providers/`): каждый провайдер отдаёт нормализованную `AuthenticatedIdentity` (`identity.py`). Добавление нового способа входа = новый класс + строка в фабрике `factory.py`, без правки существующего кода.
 - **Авторизация** — `GroupRoleAuthorizer` (`authorizer.py`): изолированный маппинг групп → роли, работает только с `list[str]` групп и ничего не знает о провайдере.
 
-Роли (Этап 1 роадмапа, 4 штуки): **`viewer`**, **`editor`**, **`admin`**, **`security`**. Роль вычисляется из групп пользователя (claim `group`) через маппинг `AUTH_ROLE_GROUPS` с приоритетом `security > admin > editor > viewer`. Если ни одна группа не совпала — берётся `AUTH_DEFAULT_ROLE`; если он пуст (`None`) — вход отклоняется (`403`, **fail-closed по умолчанию**, для контура ИБ). Роль пересчитывается на каждый запрос и не кэшируется в сессии. На этом этапе роль **передаётся на фронтенд** (`user.roles` в `/api/auth/me`), но не гейтит API — разграничение прав (RBAC) реализуется на Этапах 2а/3/4а.
+Роли (Этап 1 роадмапа, 4 штуки): **`viewer`**, **`editor`**, **`admin`**, **`security`**. Роль вычисляется из групп пользователя (claim `group`) через маппинг `AUTH_ROLE_GROUPS` с приоритетом `security > admin > editor > viewer`. Если ни одна группа не совпала — берётся `AUTH_DEFAULT_ROLE`; если он пуст (`None`) — вход отклоняется (`403`, **fail-closed по умолчанию**, для контура ИБ). Роль пересчитывается на каждый запрос и не кэшируется в сессии. Роль передаётся на фронтенд (`user.roles` в `/api/auth/me`).
+
+Разграничение прав (RBAC) реализовано через зависимость `require_role(*roles)` (`app/auth/service.py`), см. ниже раздел «Защита от массовых операций и журнал ИБ».
 
 Group-claim любой формы (список / строка / JSON-объект / вложенный dict) нормализуется в `list[str]` (`identity.py::normalize_groups`, dedup с сохранением порядка), а имя claim и форма путей настраиваются через `KEYCLOAK_FIELD_MAPPING` и `KEYCLOAK_GROUP_PATH_MODE` — приложение не зависит от того, как IDB отдаёт группы.
 
 `GET /api/auth/me` возвращает текущего пользователя в формате, выровненном под будущую схему БД (`MIGRATION_PLAN.md`): `user_id` (sub), `username`, `email`, `groups`, `roles`.
+
+### Защита от массовых операций и журнал ИБ (Этап 2а)
+
+Реализован бэкенд-фундамент защиты от случайного/намеренного массового удаления
+и перегрузки очереди LLM-запросов (UI-часть — отдельной итерацией):
+
+- **Ролевая авторизация** — `require_role(*roles)` (`app/auth/service.py`): одиночные
+  `delete`/`regenerate` требуют `editor`/`admin`; массовые операции и управление
+  задачами — `admin`; чтение журнала и блокировка пользователей — `security`.
+  В режиме `disabled` все проверки пропускаются (локальная разработка).
+
+- **Журнал ИБ `audit_log`** (`app/services/audit.py`) — **append-only**: сервис
+  предоставляет только `append()`/`query()`, методов update/delete нет. Фиксируются:
+  `document_delete`, `document_bulk_delete`, `document_regenerate`,
+  `document_bulk_regenerate`, `job_approve`, `job_cancel`, `user_block`, `user_unblock`.
+  Массовая операция пишется **по записи на каждый документ**, а не одной записью на
+  задачу. Состав записи: `created_at`, `user_id`, `username`, `action_type`,
+  `target_type`, `target_id`, `old_value`, `new_value`, `ip_address`, `meta`.
+  Срок хранения — `AUDIT_RETENTION_DAYS` (по умолчанию 365 дней).
+
+  **Хардненинг audit_log (Postgres):** неизменяемость на уровне приложения (append-only
+  в коде) дополняется на проде выделенным сервисным аккаунтом БД с правами **только
+  `INSERT`** на `audit_log` (без `UPDATE`/`DELETE`/`TRUNCATE`) — тогда журнал не может
+  быть изменён даже скомпрометированным приложением. В SQLite-dev это не применимо
+  (однопользовательская БД), поэтому полагаемся на append-only в коде.
+
+- **Очередь массовых задач `jobs`** (`app/services/job_queue.py`) — массовые операции
+  ставятся в очередь и выполняются фоновым worker-потоком (не синхронно в запросе),
+  со статусами `queued`/`running`/`awaiting_approval`/`completed`/`failed`/`cancelled`.
+
+- **Four-eyes (второй администратор)** — операция с числом документов не ниже порога
+  переходит в `awaiting_approval` и требует одобрения вторым администратором
+  (`POST /jobs/{id}/approve`). Пороги по типу операции: `APPROVAL_THRESHOLD_DOCS_DELETE`
+  (50) и `APPROVAL_THRESHOLD_DOCS_REGENERATE` (15) — разведены, чтобы порог перегенерации
+  был достижим в пределах soft-лимита `BULK_REGENERATE_MAX_DOCS` (20).
+
+- **Rate limit (per-user)** — `app/services/rate_limiter.py` (in-memory sliding window):
+  `BULK_REGENERATE_MAX_OPS_PER_HOUR` и `BULK_REGENERATE_MAX_DOCS_PER_HOUR` → `429`.
+  Хранение in-memory достаточно для однопроцессного приложения; для multi-worker
+  прода потребуется внешнее хранилище (Redis/БД).
+
+- **Circuit breaker** — если число ожидающих задач достигает `JOB_QUEUE_MAX_PENDING`,
+  новые массовые операции отклоняются с `503` («Очередь перегружена») **до** создания
+  записи в `jobs`.
+
+- **Блоклист пользователей** — `app/services/blocklist.py` (`user_blocks`): роль
+  `security` может временно заблокировать пользователя/сессии; проверка выполняется в
+  `require_user` (заблокированный пользователь получает `403` даже с валидной сессией).
 
 ### Режимы поиска
 
@@ -672,3 +733,16 @@ pytest -q
 
 Бэкенд подключает пакет через editable-установку (`pip install -e ../doc-parser`),
 а в Docker — через `COPY doc-parser` + `pip install -e ./doc-parser`.
+
+## Лицензия
+
+Проект лицензирован под [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+См. файл [LICENSE](LICENSE) для полного текста лицензии.
+
+### Причина выбора AGPL
+
+Зависимость [`pymupdf`](https://github.com/pymupdf/PyMuPDF) (используется для извлечения
+текста из PDF) лицензирована под AGPL-3.0. Согласно условиям этой лицензии, любой проект,
+использующий PyMuPDF, должен быть распространён на тех же условиях. AGPL также требует
+предоставления исходного кода при доступе к сервису через сеть — это обеспечивает
+copyleft-защиту для пользователей облачных развёртываний.

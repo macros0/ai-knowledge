@@ -254,3 +254,19 @@ def make_pdf_with_image(path: Path, image_bytes: bytes | None = None) -> Path:
     c.drawImage(ImageReader(io.BytesIO(data)), 72, 600, width=50, height=50)
     c.save()
     return path
+
+
+def make_pdf_scanned_like(path: Path) -> Path:
+    """PDF-страница без текста и без растровых изображений (только векторная фигура).
+
+    Имитирует скан: pypdf не извлекает ни текст, ни картинки — активирует фолбэк
+    рендера страницы через PyMuPDF.
+    """
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(path), pagesize=letter)
+    c.setFillColorRGB(0.95, 0.95, 0.95)
+    c.rect(72, 72, 468, 648, stroke=1, fill=1)
+    c.save()
+    return path

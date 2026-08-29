@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -19,6 +20,36 @@ export default function MarkdownViewer({
   components = {},
   remarkPlugins = [],
 }) {
+  const [lightbox, setLightbox] = useState(null);
+  const lastFocusRef = useRef(null);
+
+  const openLightbox = useCallback((src, alt) => {
+    lastFocusRef.current = document.activeElement;
+    setLightbox({ src, alt });
+  }, []);
+
+  const closeLightbox = useCallback(() => {
+    setLightbox(null);
+  }, []);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") closeLightbox();
+    };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    const focusTarget = document.getElementById("okf-lightbox");
+    if (focusTarget) focusTarget.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+      const prev = lastFocusRef.current;
+      if (prev && typeof prev.focus === "function") prev.focus();
+      lastFocusRef.current = null;
+    };
+  }, [lightbox, closeLightbox]);
+
   let body = text || "";
   if (stripFrontmatter) {
     body = body.replace(/^---[\s\S]*?---\s*/, "");
@@ -26,7 +57,24 @@ export default function MarkdownViewer({
 
   const defaultComponents = {
     img({ src, alt, ...props }) {
-      return <img className="okf-image" src={resolveAttachment(src, docId)} alt={alt || ""} {...props} />;
+      const resolved = resolveAttachment(src, docId);
+      const label = alt || "Изображение";
+      return (
+        <figure className="okf-figure">
+          <img
+            className="okf-image"
+            src={resolved}
+            alt={label}
+            loading="lazy"
+            onClick={() => openLightbox(resolved, label)}
+            {...props}
+          />
+          <figcaption className="okf-figure-caption">
+            <span className="okf-figure-badge" aria-hidden="true">🖼</span>
+            {label}
+          </figcaption>
+        </figure>
+      );
     },
     a({ href, children, ...props }) {
       if (href && /^attachments\//.test(href)) {
@@ -50,6 +98,28 @@ export default function MarkdownViewer({
       <ReactMarkdown remarkPlugins={[remarkGfm, ...remarkPlugins]} components={defaultComponents}>
         {body}
       </ReactMarkdown>
+      {lightbox && (
+        <div
+          className="okf-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightbox.alt || "Просмотр изображения"}
+          onClick={closeLightbox}
+        >
+          <button className="okf-lightbox-close" aria-label="Закрыть" onClick={closeLightbox}>
+            ✕
+          </button>
+          <div
+            id="okf-lightbox"
+            className="okf-lightbox-content"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img src={lightbox.src} alt={lightbox.alt || ""} />
+            <div className="okf-lightbox-caption">{lightbox.alt || "Изображение"}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

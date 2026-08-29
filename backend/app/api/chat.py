@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alexey
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Роут чата: RAG — композитный поиск (dense/BM25 + чанки) + синтез ответа LLM."""
 from pathlib import Path
 

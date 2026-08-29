@@ -361,17 +361,30 @@ class TestPipelineRegenerate:
 
         pipeline.regenerate(doc_id)
 
-        deadline = time.time() + 10
-        while time.time() < deadline:
-            doc = reg.get(doc_id)
-            if doc and doc.get("status") not in ("processing", "splitting", "indexing"):
-                break
-            time.sleep(0.01)
+        result = pipeline.wait_for(doc_id, timeout=10)
 
-        doc = reg.get(doc_id)
-        assert doc["status"] == "done", f"status={doc['status']} error={doc.get('error')}"
+        assert result["status"] == "done", f"status={result['status']} error={result.get('error')}"
         assert llm_calls["n"] >= 1, "LLM должен перегенерировать концепты с нуля"
         assert delete_calls["n"] >= 1, "векторы должны пересоздаваться"
         assert not (bundle / "old_concept.md").exists(), "старый бандл должен быть удалён"
         assert (bundle / "chunks").is_dir(), "новый бандл должен пересоздаваться"
         assert len(list(bundle.glob("*.md"))) == 1
+
+    def test_wait_for_blocks_until_terminal_status(self, isolated_env):
+        reg, _ = isolated_env
+        doc_id = "regen-wait"
+        pipeline = Pipeline()
+        self._setup_done_doc(reg, pipeline, doc_id)
+
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        pipeline.regenerate(doc_id)
+        result = pipeline.wait_for(doc_id, timeout=30)
+
+        assert result["status"] == "done", f"status={result['status']} error={result.get('error')}"
+        assert result["okf_concept_count"] == 1
+        assert not pipeline._threads.get(doc_id), "поток должен завершиться и очиститься"

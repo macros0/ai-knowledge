@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alexey
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """docparser — извлечение текста из DOCX / XLSX / PDF в структурированные блоки.
 
 Контракт (стабильная публичная API):

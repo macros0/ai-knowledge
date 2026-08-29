@@ -9,6 +9,7 @@ from tests.fixtures import (
     make_docx,
     make_docx_with_image,
     make_pdf,
+    make_pdf_scanned_like,
     make_pdf_with_image,
     make_xlsx,
 )
@@ -130,6 +131,22 @@ class TestPdf:
         assert len(images) == 1
         assert images[0].meta["kind"] == "image"
         assert images[0].meta["page"] == 1
+        assert "Страница 1" in images[0].meta["caption"]
         saved = Path(images[0].meta["saved_path"])
         assert saved.exists()
         assert saved.read_bytes() == att_dir.joinpath(saved.name).read_bytes()
+
+    def test_scanned_page_rendered_via_fallback(self, tmp_path: Path):
+        pdf = make_pdf_scanned_like(tmp_path / "scan.pdf")
+        att_dir = tmp_path / "attachments"
+        blocks = parse_document(pdf, attachments_dir=att_dir)
+
+        assert not any(b.type == "paragraph" for b in blocks)
+        images = [b for b in blocks if b.type == "image"]
+        assert len(images) == 1
+        assert images[0].meta["kind"] == "image"
+        assert images[0].meta["page"] == 1
+        assert "Страница 1" in images[0].meta["caption"]
+        saved = Path(images[0].meta["saved_path"])
+        assert saved.exists()
+        assert saved.suffix == ".jpg"

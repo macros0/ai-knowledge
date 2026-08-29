@@ -64,6 +64,13 @@ def _forbidden() -> NoReturn:
     )
 
 
+def _blocked_user() -> NoReturn:
+    raise HTTPException(
+        status_code=403,
+        detail="Пользователь заблокирован. Обратитесь к администратору безопасности.",
+    )
+
+
 def _resolve(identity: AuthenticatedIdentity) -> User | None:
     """identity → User; None при fail-closed (роль не опознана)."""
     settings = config_mod.get_settings()
@@ -74,12 +81,22 @@ def _resolve(identity: AuthenticatedIdentity) -> User | None:
     return identity.to_user(authorizer)
 
 
+def _blocked(identity: AuthenticatedIdentity) -> bool:
+    """Проверка блоклиста (user_blocks) — единственное активное действие Security."""
+    if not identity.external_id:
+        return False
+    from app.services.blocklist import get_blocklist
+
+    return get_blocklist().is_blocked(identity.external_id)
+
+
 def require_user(request: Request) -> User:
     """FastAPI-зависимость: текущий пользователь либо 401/403.
 
     В disabled-режиме провайдер is_disabled() → аноним. Иначе:
     - нет сессии → 401;
-    - роль не опознана и fail-closed (auth_default_role=None) → 403.
+    - роль не опознана и fail-closed (auth_default_role=None) → 403;
+    - пользователь в активном блоклисте → 403 (заблокирован Security).
     """
     settings = config_mod.get_settings()
     provider = build_auth_provider(settings)
@@ -89,6 +106,9 @@ def require_user(request: Request) -> User:
     identity = identity_from_session(request)
     if identity is None:
         _unauthorized()
+
+    if _blocked(identity):
+        _blocked_user()
 
     user = _resolve(identity)
     if user is None:
@@ -106,5 +126,29 @@ def current_user(request: Request) -> User:
     identity = identity_from_session(request)
     if identity is None:
         return public_user()
+    if _blocked(identity):
+        return public_user()
     user = _resolve(identity)
     return user if user is not None else public_user()
+
+
+def require_role(*roles: str):
+    """FastAPI-зависимость: пользователь должен обладать хотя бы одной из ролей.
+
+    В disabled-режиме пропускает всех (локальная разработка). Иначе делегирует
+    require_user (401/403/блоклист) и дополнительно проверяет роль → 403.
+    """
+
+    def dependency(request: Request) -> User:
+        settings = config_mod.get_settings()
+        provider = build_auth_provider(settings)
+        if provider.is_disabled():
+            return public_user()
+        user = require_user(request)
+        if not (set(roles) & set(user.roles)):
+            raise HTTPException(
+                status_code=403, detail="Недостаточно прав для выполнения операции"
+            )
+        return user
+
+    return dependency

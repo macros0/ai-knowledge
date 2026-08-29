@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -98,6 +99,34 @@ class Pipeline:
             shutil.rmtree(table_cache, ignore_errors=True)
         self.registry.update(doc_id, status="processing", error=None)
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False)
+
+    def wait_for(self, doc_id: str, timeout: float = 3600) -> dict:
+        """Блокирующее ожидание терминального статуса документа.
+
+        Пайплайн работает в daemon-потоке, который умирает вместе с процессом.
+        Поэтому программные триггеры (скрипты, батчи, диагностика) из отдельного
+        процесса обязаны держать процесс живым до завершения — иначе документ
+        зависнет в промежуточном статусе (processing/splitting/...).
+
+        Пример:
+            p = Pipeline()
+            p.regenerate(doc_id)
+            result = p.wait_for(doc_id)  # блокирует до done/error/failed/paused
+
+        Возвращает финальную запись документа (или текущую по истечении timeout).
+        """
+        thread = self._threads.get(doc_id)
+        if thread and thread.is_alive():
+            thread.join(timeout=timeout)
+        deadline = time.monotonic() + timeout
+        terminal = {"done", "error", "failed", "paused"}
+        while True:
+            doc = self.registry.get(doc_id)
+            if doc and doc.get("status") in terminal:
+                return doc
+            if time.monotonic() >= deadline:
+                return doc or {}
+            time.sleep(2)
 
     def _start(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         self._abort_events[doc_id] = threading.Event()

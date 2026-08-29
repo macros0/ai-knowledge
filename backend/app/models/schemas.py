@@ -128,3 +128,30 @@ class TagOut(BaseModel):
 
 class TagListOut(BaseModel):
     tags: list[TagOut]
+
+
+class BulkOperationRequest(BaseModel):
+    doc_ids: list[str]
+
+
+class BulkPreviewOut(BaseModel):
+    requested: int
+    matched: int
+    missing: list[str] = Field(default_factory=list)
+    documents: list[dict[str, Any]] = Field(default_factory=list)
+    estimated_minutes: float = 0.0
+
+
+class AuditQueryParams(BaseModel):
+    action_type: str | None = None
+    user_id: str | None = None
+    target_id: str | None = None
+    since: datetime | None = None
+    until: datetime | None = None
+    limit: int = Field(default=100, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+
+
+class BlockUserRequest(BaseModel):
+    reason: str | None = None
+    expires_at: datetime | None = None

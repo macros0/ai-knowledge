@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alexey
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 from functools import lru_cache
 import json
 from pathlib import Path
@@ -185,6 +188,30 @@ class Settings(BaseSettings):
     chat_top_k_max: int = Field(default=30, ge=1)
     chat_top_k_default: int = Field(default=10, ge=1)
     chat_top_k_presets: list[int] = Field(default=[5, 10, 20])
+
+    # --- Защита от массовых операций (Этап 2а roadmap) ---
+    # Журнал ИБ: срок хранения записей audit_log (дни). Очистка — отдельной
+    # задачей; здесь фиксируется только срок для документации/будущей очистки.
+    audit_retention_days: int = 365
+    # Soft-лимит числа документов на одну массовую операцию.
+    bulk_delete_max_docs: int = 50
+    bulk_regenerate_max_docs: int = 20
+    # Per-user лимиты массовой перегенерации (независимо от системного лимита).
+    bulk_regenerate_max_ops_per_hour: int = 3
+    bulk_regenerate_max_docs_per_hour: int = 50
+    # Грубая оценка времени перегенерации одного документа (мин) для предпросмотра
+    # масштаба массовой операции в UI (Этап 2а).
+    bulk_regenerate_est_minutes_per_doc: float = 5.0
+    # Порог four-eyes (второй администратор) — по типу операции, чтобы порог
+    # был достижим в пределах soft-лимита соответствующей операции.
+    approval_threshold_docs_delete: int = 50
+    approval_threshold_docs_regenerate: int = 15
+    # Circuit breaker: максимум ожидающих массовых задач в очереди. При
+    # превышении новые массовые операции отклоняются (503 «очередь перегружена»).
+    job_queue_max_pending: int = 5
+    # Максимальное время ожидания завершения обработки одного документа внутри
+    # массовой задачи (сек). По истечении документ помечается ошибкой, job идёт дальше.
+    job_doc_timeout_seconds: float = 3600.0
 
     search_mode_default: str = "hybrid"  # dense | bm25 | hybrid
 
