@@ -18,6 +18,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.models.schemas import Concept
+from app.services.jsonio import write_json_atomic
 from app.services.okf_generator import _slugify
 
 
@@ -25,30 +26,49 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# Локи на каталог staging, общие для всех StagingStore одного документа.
+# Экземпляров на документ много — пайплайн пишет, эндпоинты читают, — и лок
+# в поле экземпляра не даёт взаимного исключения вообще: у каждого свой.
+_DIR_LOCKS: dict[str, threading.RLock] = {}
+_DIR_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(directory: Path) -> threading.RLock:
+    key = str(directory)
+    with _DIR_LOCKS_GUARD:
+        lock = _DIR_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _DIR_LOCKS[key] = lock
+        return lock
+
+
 class StagingStore:
     def __init__(self, doc_id: str, staging_root: Path | None = None):
         self.doc_id = doc_id
         self.dir = staging_root or get_settings().staging_dir / doc_id
         self.manifest_path = self.dir / "manifest.json"
-        self._lock = threading.Lock()
+        # RLock: append_chunk держит лок и внутри может позвать create()
+        self._lock = _lock_for(self.dir)
 
     def exists(self) -> bool:
         return self.manifest_path.is_file()
 
     def create(self, total_chunks: int, global_tags: list[str] | None = None) -> dict:
-        self.dir.mkdir(parents=True, exist_ok=True)
-        manifest = {
-            "task_id": self.doc_id,
-            "status": "in_progress",
-            "total_chunks": total_chunks,
-            "last_updated": _now(),
-            "processed_chunks": [],
-            "used_slugs": [],
-            "global_tags": global_tags or [],
-            "chunks_data": {},
-        }
-        self._write(manifest)
-        return manifest
+        with self._lock:
+            self.dir.mkdir(parents=True, exist_ok=True)
+            manifest = {
+                "task_id": self.doc_id,
+                "status": "in_progress",
+                "total_chunks": total_chunks,
+                "last_updated": _now(),
+                "processed_chunks": [],
+                "used_slugs": [],
+                "global_tags": global_tags or [],
+                "chunks_data": {},
+            }
+            self._write(manifest)
+            return manifest
 
     def load(self) -> dict | None:
         if not self.exists():
@@ -60,7 +80,10 @@ class StagingStore:
 
     def _write(self, manifest: dict) -> None:
         manifest["last_updated"] = _now()
-        self.manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        # manifest.json — единственная запись о том, какие чанки уже сгенерированы;
+        # усечь его при обрыве значит потерять ровно ту точку восстановления,
+        # ради которой существует staging
+        write_json_atomic(self.manifest_path, manifest)
 
     @property
     def processed_chunks(self) -> list[int]:
@@ -93,10 +116,8 @@ class StagingStore:
             slugs = self._allocate_slugs(concepts, used)
             used.extend(slugs)
             chunk_file = f"chunk_{index:02d}.json"
-            (self.dir / chunk_file).write_text(
-                json.dumps([c.model_dump() for c in concepts], ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            # сначала данные, затем manifest, который на них ссылается
+            write_json_atomic(self.dir / chunk_file, [c.model_dump() for c in concepts])
             chunks_data = dict(manifest.get("chunks_data", {}))
             chunks_data[str(index)] = {"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs}
             manifest.update(
@@ -140,8 +161,9 @@ class StagingStore:
         return slugs
 
     def remove(self) -> None:
-        if self.dir.exists():
-            shutil.rmtree(self.dir, ignore_errors=True)
+        with self._lock:
+            if self.dir.exists():
+                shutil.rmtree(self.dir, ignore_errors=True)
 
     @staticmethod
     def _allocate_slugs(concepts: list[Concept], used: list[str]) -> list[str]:

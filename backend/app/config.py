@@ -1,3 +1,4 @@
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,10 @@ class Settings(BaseSettings):
     app_name: str = "OKF Knowledge Service"
     api_prefix: str = "/api"
     data_dir: Path = Path("./data")
+
+    # Потолок размера загружаемого документа. Без него один большой файл
+    # исчерпывает память процесса: раньше тело читалось в память целиком.
+    upload_max_size_mb: int = Field(default=100, ge=1)
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "okf_knowledge_base"
@@ -82,6 +87,11 @@ class Settings(BaseSettings):
     # указывает ключевую колонку. При ошибке/выключении — fallback на XML-
     # эвристику (okf_field_table_min_rows). Кэш на диск: data/cache/table_classify/.
     okf_table_llm_classify: bool = False
+    # Собственный порог режима классификатора — намеренно отдельный от
+    # okf_field_table_min_rows. Тот выключает XML-эвристику и по умолчанию
+    # равен 0; если бы классификатор смотрел на него же, okf_table_llm_classify
+    # был бы включаемым no-op. Здесь <= 0 выключает уже сам классификатор.
+    okf_table_classify_min_rows: int = 5
 
     chat_top_k_min: int = Field(default=1, ge=1)
     chat_top_k_max: int = Field(default=30, ge=1)
@@ -153,6 +163,16 @@ class Settings(BaseSettings):
         for preset in self.chat_top_k_presets:
             if not (self.chat_top_k_min <= preset <= self.chat_top_k_max):
                 raise ValueError(f"Preset {preset} is out of bounds [{self.chat_top_k_min}, {self.chat_top_k_max}]")
+        return self
+
+    @model_validator(mode="after")
+    def warn_classifier_disabled_by_threshold(self) -> "Settings":
+        if self.okf_table_llm_classify and self.okf_table_classify_min_rows <= 0:
+            logging.getLogger(__name__).warning(
+                "okf_table_llm_classify=True, но okf_table_classify_min_rows=%d (<= 0) — "
+                "классификатор таблиц выключен порогом и не будет вызван ни разу",
+                self.okf_table_classify_min_rows,
+            )
         return self
 
     @field_validator("data_dir", mode="before")

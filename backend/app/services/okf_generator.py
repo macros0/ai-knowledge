@@ -1,5 +1,4 @@
 """Генерация OKF-файлов (YAML-фронтматтер + Markdown) из текста документа через LLM."""
-import json
 import logging
 import re
 from datetime import date
@@ -12,6 +11,7 @@ from app.config import get_settings
 from app.models.schemas import Concept, OkfDocument
 from app.prompts.store import get_store
 from app.services.field_table import extract_table_concepts
+from app.services.jsonio import write_json_atomic
 from app.services.llm_client import LLMClient, LLMTruncationError
 
 logger = logging.getLogger(__name__)
@@ -145,7 +145,7 @@ class OKFGenerator:
             seen.add(slug)
             filepath = bundle_dir / f"{slug}.md"
             chunk_index = (chunk_of_slug or {}).get(slug)
-            markdown = _build_markdown(
+            markdown = build_markdown(
                 concept,
                 filename,
                 doc_id,
@@ -162,6 +162,7 @@ class OKFGenerator:
                 "source_document": {"filename": filename, "doc_id": doc_id},
                 "relations": concept.relations,
                 "attachments": attachments or [],
+                "chunk_index": chunk_index,
             }
             okf_docs.append(
                 OkfDocument(filepath=str(filepath), metadata=metadata, content=concept.content, markdown=markdown)
@@ -176,13 +177,11 @@ class OKFGenerator:
                     "chunk_index": chunk_index,
                 }
             )
-        (bundle_dir / "_files.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        write_json_atomic(bundle_dir / "_files.json", manifest)
         return okf_docs
 
 
-def _build_markdown(
+def build_markdown(
     concept: Concept,
     filename: str,
     doc_id: str,
@@ -190,6 +189,11 @@ def _build_markdown(
     global_tags: list[str] | None = None,
     chunk_index: int | None = None,
 ) -> str:
+    """Рендерит концепт в OKF-файл: YAML-фронтматтер + markdown-тело.
+
+    Публичная часть API генератора: тем же рендерингом пользуется эндпоинт
+    выдачи концепта из staging, пока бандл ещё не собран.
+    """
     meta = {
         "type": concept.type,
         "title": concept.title,

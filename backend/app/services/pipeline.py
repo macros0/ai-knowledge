@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.services.embedder import Embedder
 from app.services.errors import DependencyUnavailableError
 from app.services.llm_client import LLMTruncationError, is_fatal_error
+from app.services.markdown import extract_section_title
 from app.services.okf_generator import OKFGenerator
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
@@ -25,6 +26,14 @@ from app.services.vector_store import VectorStore
 from docparser import SUPPORTED_EXTENSIONS, blocks_to_markdown, parse_document
 
 logger = logging.getLogger(__name__)
+
+
+class AlreadyProcessingError(ValueError):
+    """Документ уже обрабатывается живым потоком.
+
+    Наследует ValueError: вызывающие, которые ловят ValueError, продолжают
+    работать, а те, кому нужен отдельный ответ (409), ловят этот тип.
+    """
 
 
 class Pipeline:
@@ -37,6 +46,7 @@ class Pipeline:
         self._abort_events: dict[str, threading.Event] = {}
         self._threads: dict[str, threading.Thread] = {}
         self._chunk_locks: dict[str, threading.Lock] = {}
+        self._start_lock = threading.Lock()
 
     def ingest(
         self,
@@ -69,9 +79,11 @@ class Pipeline:
         doc = self.registry.get(doc_id)
         if not doc:
             raise ValueError("Документ не найден")
+        # ранний отказ: ниже удаляются векторы, бандл и staging — нельзя
+        # сносить их, чтобы затем упереться в проверку внутри _start
         thread = self._threads.get(doc_id)
         if thread and thread.is_alive():
-            raise ValueError("Документ уже обрабатывается")
+            raise AlreadyProcessingError("Документ уже обрабатывается")
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
@@ -98,14 +110,25 @@ class Pipeline:
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False)
 
     def _start(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
-        self._abort_events[doc_id] = threading.Event()
-        thread = threading.Thread(
-            target=self._run,
-            args=(doc_id, filepath, filename, user_tags, resume),
-            daemon=True,
-        )
-        self._threads[doc_id] = thread
-        thread.start()
+        """Единственная точка запуска обработки — здесь же защита от второго потока.
+
+        Проверка и регистрация под одним локом: иначе два запроса успевают оба
+        пройти проверку до того, как хоть один запишется в _threads. Второй
+        поток перезатирал бы _threads и _abort_events, и первый становился
+        неуправляемым — его нельзя ни отменить, ни дождаться.
+        """
+        with self._start_lock:
+            running = self._threads.get(doc_id)
+            if running and running.is_alive():
+                raise AlreadyProcessingError("Документ уже обрабатывается")
+            self._abort_events[doc_id] = threading.Event()
+            thread = threading.Thread(
+                target=self._run,
+                args=(doc_id, filepath, filename, user_tags, resume),
+                daemon=True,
+            )
+            self._threads[doc_id] = thread
+            thread.start()
 
     def _run(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         try:
@@ -315,7 +338,7 @@ class Pipeline:
                     chunk_texts = []
                     break
             if chunk_texts:
-                chunk_section_titles = [_extract_section_title(t) for t in chunk_texts]
+                chunk_section_titles = [extract_section_title(t) for t in chunk_texts]
                 cap = self.settings.okf_max_chunk_index_chars
                 embed_inputs = []
                 for st, t in zip(chunk_section_titles, chunk_texts):
@@ -358,6 +381,9 @@ class Pipeline:
         StagingStore(doc_id).remove()
         for f in self.settings.uploads_dir.glob(f"{doc_id}.*"):
             f.unlink(missing_ok=True)
+        # _threads и _abort_events чистит _run в finally; у _chunk_locks своего
+        # такого места нет — документ удалён, лок больше не нужен
+        self._chunk_locks.pop(doc_id, None)
         self.registry.delete(doc_id)
 
     def ensure_chunks(self, doc_id: str) -> list[dict]:
@@ -446,15 +472,19 @@ def _chunks_meta_from_dir(directory: Path, manifest: dict | None = None) -> list
     return meta
 
 
-def save_upload(file_bytes: bytes, original_filename: str) -> tuple[str, Path]:
+def prepare_upload(original_filename: str) -> tuple[str, Path]:
+    """Валидирует расширение и выделяет doc_id с путём назначения.
+
+    Файл не создаётся: вызывающий пишет в dest потоком, чтобы не держать
+    документ целиком в памяти.
+    """
     ext = Path(original_filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}")
     settings = get_settings()
+    settings.uploads_dir.mkdir(parents=True, exist_ok=True)
     doc_id = uuid.uuid4().hex[:16]
-    dest = settings.uploads_dir / f"{doc_id}{ext}"
-    dest.write_bytes(file_bytes)
-    return doc_id, dest
+    return doc_id, settings.uploads_dir / f"{doc_id}{ext}"
 
 
 def _atomic_move(src: Path, dst: Path) -> None:
@@ -510,17 +540,3 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
     return attachments
 
 
-def _extract_section_title(chunk_text: str) -> str:
-    """Извлекает ближайший предшествующий заголовок секции из текста чанка.
-
-    Ищет последний '# heading' в первых 50 строках чанка. Если чанк начинается
-    с заголовка — возвращает его. Заголовок даёт семантический якорь для
-    dense-эмбеддинга и отображается в UI как title чанка.
-    """
-    lines = chunk_text.split("\n")
-    last_heading = ""
-    for line in lines[:50]:
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            last_heading = stripped.lstrip("#").strip()
-    return last_heading

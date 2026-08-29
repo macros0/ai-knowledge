@@ -25,6 +25,7 @@ from app.config import get_settings
 from app.models.schemas import OkfDocument
 from app.services.errors import VectorStoreError
 from app.services.fusion import Hit
+from app.services.markdown import extract_section_title, read_frontmatter
 from app.services.sparse import to_sparse_vector
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,17 @@ SEARCH_MODES = ("dense", "bm25", "hybrid")
 
 CONCEPT_POINT_TYPE = "concept"
 CHUNK_POINT_TYPE = "chunk"
+
+
+def _chunk_point_id(doc_id: str, chunk_index: int) -> str:
+    """Детерминированный id точки-чанка; префикс "chunk:" изолирует от концептов.
+
+    Один на index_chunks и backfill_chunks: бэкфилл пропускает уже
+    проиндексированные чанки по этому id, и разъехавшиеся формулы молча
+    выключили бы пропуск, вернув пере-эмбеддинг всего корпуса на каждом старте.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{chunk_index:02d}.md"))
+
 
 PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "point_type": "keyword",
@@ -84,7 +96,8 @@ class VectorStore:
 
     def ensure_collection(self) -> None:
         if not _qdrant_call(self.client.collection_exists, self.collection):
-            self.client.create_collection(
+            _qdrant_call(
+                self.client.create_collection,
                 collection_name=self.collection,
                 vectors_config=qm.VectorParams(
                     size=self.settings.embedding_dimensions,
@@ -94,10 +107,11 @@ class VectorStore:
             )
             self._ensure_payload_indexes()
             return
-        info = self.client.get_collection(self.collection)
+        info = _qdrant_call(self.client.get_collection, self.collection)
         sparse_config = info.config.params.sparse_vectors
         if not sparse_config or SPARSE_VECTOR_NAME not in sparse_config:
-            self.client.create_vector_name(
+            _qdrant_call(
+                self.client.create_vector_name,
                 collection_name=self.collection,
                 vector_name=SPARSE_VECTOR_NAME,
                 vector_name_config=self._sparse_name_config(),
@@ -197,16 +211,13 @@ class VectorStore:
         points = []
         point_ids: set[str] = set()
         for i, (text, vector, section_title) in enumerate(zip(chunk_texts, vectors, section_titles)):
-            point_id = uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                f"chunk:{doc_id}/chunks/chunk_{i:02d}.md",
-            )
-            point_ids.add(str(point_id))
+            point_id = _chunk_point_id(doc_id, i)
+            point_ids.add(point_id)
             capped = text[:cap]
             sparse_text = f"{section_title}\n{capped}" if section_title else capped
             points.append(
                 qm.PointStruct(
-                    id=str(point_id),
+                    id=point_id,
                     vector={
                         "": vector,
                         SPARSE_VECTOR_NAME: to_sparse_vector(sparse_text),
@@ -277,52 +288,6 @@ class VectorStore:
         except Exception:
             return False
 
-    def search(
-        self,
-        vector: list[float] | None,
-        sparse_vec: qm.SparseVector | None,
-        mode: str,
-        tags: list[str] | None = None,
-        top_k: int = 5,
-    ) -> list[dict]:
-        if mode not in SEARCH_MODES:
-            raise ValueError(f"Неизвестный режим поиска: {mode}. Допустимы: {SEARCH_MODES}")
-        query_filter = None
-        if tags:
-            query_filter = qm.Filter(must=[qm.FieldCondition(key="tags", match=qm.MatchAny(any=tags))])
-
-        if mode == "dense":
-            query = vector
-            prefetch = None
-            using = None
-        elif mode == "bm25":
-            query = sparse_vec
-            prefetch = None
-            using = SPARSE_VECTOR_NAME
-        else:
-            prefetch = []
-            if vector is not None:
-                prefetch.append(qm.Prefetch(query=vector, limit=max(top_k, 16)))
-            if sparse_vec is not None and sparse_vec.indices:
-                prefetch.append(qm.Prefetch(query=sparse_vec, using=SPARSE_VECTOR_NAME, limit=max(top_k, 16)))
-            query = qm.FusionQuery(fusion=qm.Fusion.RRF)
-            using = None
-
-        if prefetch is not None and not prefetch:
-            query = vector or []
-            prefetch = None
-            using = None
-
-        results = self.client.query_points(
-            collection_name=self.collection,
-            query=query,
-            prefetch=prefetch,
-            using=using,
-            query_filter=query_filter,
-            limit=top_k,
-        )
-        return [{"score": r.score, "payload": r.payload} for r in results.points]
-
     # --- Ветки композитного поиска ---
 
     def search_dense(
@@ -382,7 +347,8 @@ class VectorStore:
         slug_filter = qm.Filter(
             must=[qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))]
         )
-        records, _ = self.client.scroll(
+        records, _ = _qdrant_call(
+            self.client.scroll,
             collection_name=self.collection,
             scroll_filter=slug_filter,
             limit=self.settings.search_per_branch_top_k,
@@ -464,7 +430,8 @@ class VectorStore:
         existing_ids: set[str] = set()
         next_offset = None
         while True:
-            batch = self.client.scroll(
+            batch = _qdrant_call(
+                self.client.scroll,
                 collection_name=self.collection,
                 limit=1000,
                 with_vectors=False,
@@ -493,7 +460,7 @@ class VectorStore:
         total = len(points)
         for start in range(0, total, batch_size):
             batch = points[start : start + batch_size]
-            self.client.update_vectors(collection_name=self.collection, points=batch)
+            _qdrant_call(self.client.update_vectors, collection_name=self.collection, points=batch)
         return total
 
     def backfill_point_type(self, batch_size: int = 500) -> int:
@@ -505,7 +472,8 @@ class VectorStore:
         need_update: list[str] = []
         next_offset = None
         while True:
-            batch, next_offset = self.client.scroll(
+            batch, next_offset = _qdrant_call(
+                self.client.scroll,
                 collection_name=self.collection,
                 limit=batch_size,
                 with_payload=True,
@@ -520,7 +488,8 @@ class VectorStore:
                 break
         if not need_update:
             return 0
-        self.client.set_payload(
+        _qdrant_call(
+            self.client.set_payload,
             collection_name=self.collection,
             payload={"point_type": CONCEPT_POINT_TYPE},
             points=need_update,
@@ -533,6 +502,11 @@ class VectorStore:
         Для каждого бандла читает chunk_XX.md, вычисляет dense+sparse-векторы,
         upsert как point_type="chunk". Идемпотентно: точки уже существуют
         (детерминированный point_id) — upsert перезаписывает без дублирования.
+
+        Уже проиндексированные чанки пропускаются до вызова embedder: иначе
+        каждый рестарт прогонял бы весь корпус через embedding-сервис заново.
+        Обновление содержимого чанка идёт не через бэкфилл, а через
+        regenerate/index_chunks, которые сначала удаляют старые точки.
         """
         if not self.settings.okf_dir.is_dir():
             return 0
@@ -542,10 +516,11 @@ class VectorStore:
         existing_ids: set[str] = set()
         next_offset = None
         while True:
-            batch, next_offset = self.client.scroll(
+            batch, next_offset = _qdrant_call(
+                self.client.scroll,
                 collection_name=self.collection,
                 limit=1000,
-                with_payload=True,
+                with_payload=False,  # нужны только id — payload чанка это до 8000 символов
                 with_vectors=False,
                 offset=next_offset,
             )
@@ -565,18 +540,20 @@ class VectorStore:
 
             chunk_texts: list[str] = []
             chunk_indices: list[int] = []
+            chunk_ids: list[str] = []
             for md in sorted(chunks_dir.glob("chunk_*.md")):
                 idx = int(md.stem.split("_")[-1])
+                point_id = _chunk_point_id(doc_id, idx)
+                if point_id in existing_ids:
+                    continue
                 chunk_texts.append(md.read_text(encoding="utf-8"))
                 chunk_indices.append(idx)
+                chunk_ids.append(point_id)
 
             if not chunk_texts:
                 continue
 
-            # Извлекаем section_title и global_tags
-            from app.services.pipeline import _extract_section_title
-
-            section_titles = [_extract_section_title(t) for t in chunk_texts]
+            section_titles = [extract_section_title(t) for t in chunk_texts]
             cap = self.settings.okf_max_chunk_index_chars
             embed_inputs = []
             for st, t in zip(section_titles, chunk_texts):
@@ -587,7 +564,7 @@ class VectorStore:
             for md in sorted(bundle_dir.glob("*.md")):
                 if md.parent.name == "chunks":
                     continue
-                frontmatter = _read_frontmatter(md)
+                frontmatter = read_frontmatter(md)
                 gt = frontmatter.get("global_tags", [])
                 if isinstance(gt, list) and gt:
                     global_tags = gt
@@ -595,7 +572,7 @@ class VectorStore:
 
             for i, (text, vec, st) in enumerate(zip(chunk_texts, vectors, section_titles)):
                 idx = chunk_indices[i]
-                point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{idx:02d}.md"))
+                point_id = chunk_ids[i]
                 capped = text[:cap]
                 sparse_text = f"{st}\n{capped}" if st else capped
                 chunk_points.append(
@@ -619,7 +596,7 @@ class VectorStore:
         total = len(chunk_points)
         for start in range(0, total, batch_size):
             batch = chunk_points[start : start + batch_size]
-            self.client.upsert(collection_name=self.collection, points=batch)
+            _qdrant_call(self.client.upsert, collection_name=self.collection, points=batch)
         return total
 
     def backfill_relations(self, batch_size: int = 500) -> int:
@@ -645,7 +622,7 @@ class VectorStore:
                 if md.parent.name == "chunks":
                     continue
                 point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(md)))
-                frontmatter = _read_frontmatter(md)
+                frontmatter = read_frontmatter(md)
                 raw_relations = frontmatter.get("relations", [])
                 if not isinstance(raw_relations, list):
                     continue
@@ -659,7 +636,8 @@ class VectorStore:
         existing: dict[str, list[str]] = {}
         next_offset = None
         while True:
-            batch, next_offset = self.client.scroll(
+            batch, next_offset = _qdrant_call(
+                self.client.scroll,
                 collection_name=self.collection,
                 limit=batch_size,
                 with_payload=True,
@@ -694,28 +672,11 @@ class VectorStore:
 
         total = 0
         for relations_tuple, point_ids in groups.items():
-            self.client.set_payload(
+            _qdrant_call(
+                self.client.set_payload,
                 collection_name=self.collection,
                 payload={"relations": list(relations_tuple)},
                 points=point_ids,
             )
             total += len(point_ids)
         return total
-
-
-def _read_frontmatter(path: Path) -> dict:
-    """Читает YAML frontmatter из .md файла (между --- и ---)."""
-    import yaml
-
-    try:
-        text = path.read_text(encoding="utf-8")
-        if not text.startswith("---"):
-            return {}
-        end = text.find("\n---", 4)
-        if end == -1:
-            return {}
-        frontmatter_text = text[4:end]
-        result = yaml.safe_load(frontmatter_text)
-        return result if isinstance(result, dict) else {}
-    except Exception:
-        return {}

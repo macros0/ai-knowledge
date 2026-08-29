@@ -3,6 +3,7 @@ import json
 import threading
 
 from app.config import get_settings
+from app.services.jsonio import write_json_atomic
 
 
 def normalize_tags(tags: list[str] | None) -> list[str]:
@@ -34,7 +35,7 @@ class TagRegistry:
                 self._tags = {}
 
     def _save(self) -> None:
-        self.path.write_text(json.dumps(self._tags, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_atomic(self.path, self._tags)
 
     def add(self, tags: list[str] | None) -> None:
         normalized = normalize_tags(tags)

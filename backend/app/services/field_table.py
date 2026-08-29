@@ -15,6 +15,10 @@ LLM (mistral-nemo 12B) не справляется с экстракцией в�
   2. XML-эвристика (okf_field_table_min_rows>0, fallback): детектирует только
      таблицы полей XML-сообщений по заголовку (поле/элемент/атрибут + тип) и
      camelCase/кириллическим именам. Не требует LLM.
+
+У режимов свои пороги строк: okf_table_classify_min_rows у первого,
+okf_field_table_min_rows у второго. Общий порог означал бы, что включение
+классификатора при выключенной эвристике (значение 0) ничего не делает.
 """
 import hashlib
 import json
@@ -34,6 +38,16 @@ logger = logging.getLogger(__name__)
 # программную экстракцию — таблицы остаются на LLM.
 def _min_rows() -> int:
     return get_settings().okf_field_table_min_rows
+
+
+def _classify_min_rows() -> int:
+    """Порог режима LLM-классификатора — отдельный от XML-эвристики.
+
+    Один порог на два режима означал бы, что okf_table_llm_classify=True с
+    дефолтным okf_field_table_min_rows=0 — включаемый no-op: detect_tables
+    возвращал бы пустой список, и классификатор не вызывался ни разу.
+    """
+    return get_settings().okf_table_classify_min_rows
 
 # XML Name (упрощённо по W3C XML 1.0 NameStartChar/NameChar): первый символ —
 # буква Unicode (латиница ИЛИ кириллица — CommerceML/1С используют кириллические
@@ -72,26 +86,16 @@ class TableBlock:
     rows: list[FieldRow]
 
 
-def detect_field_tables(text: str) -> list[TableBlock]:
-    """Найти в тексте markdown-таблицы, являющиеся спецификациями полей XML-сообщения.
+def _scan_markdown_tables(text: str) -> list[tuple[int, int, list[str], list[str]]]:
+    """Найти все markdown-таблицы: список (start, end, header, raw_rows).
 
-    Таблица = блок подряд идущих строк вида `| ... | ... |` после строки
-    разделителя `|---|---|`. Эвристика «таблица полей XML»:
-      - заголовок содержит колонку с полем/элементом/атрибутом И колонку типа;
-      - первая колонка строк-данных матчит camelCase/xml-имя;
-      - минимум okf_field_table_min_rows строк-данных.
-
-    Возвращает пустой список, если okf_field_table_min_rows <= 0 (программная
-    экстракция выключена — таблицы остаются на LLM).
-
-    Многострочные ячейки (строки не начинающиеся с `|`) склеиваются в
-    предыдущую строку-данных.
+    Общий сканер для detect_field_tables и detect_tables: разбор структуры
+    (заголовок, строка-разделитель, границы блока, многострочные ячейки) у них
+    одинаков, различается только фильтрация результата. Многострочные ячейки
+    (строки, не начинающиеся с `|`) склеиваются в предыдущую строку-данных.
     """
-    min_rows = _min_rows()
-    if min_rows <= 0:
-        return []
     lines = text.split("\n")
-    blocks: list[TableBlock] = []
+    found: list[tuple[int, int, list[str], list[str]]] = []
     i = 0
     n = len(lines)
     while i < n:
@@ -106,8 +110,6 @@ def detect_field_tables(text: str) -> list[TableBlock]:
         header = _parse_row_cells(line)
         start = i
         i += 2  # пропустить заголовок и разделитель
-        # соберем raw строк данных; многострочные ячейки (строка начинается с "|"
-        # но не закрыта "|") склеиваются со следующими строками пока не закроется.
         raw_rows: list[str] = []
         while i < n:
             cur = lines[i]
@@ -137,16 +139,33 @@ def detect_field_tables(text: str) -> list[TableBlock]:
                     i += 1
                 else:
                     break
-        if not raw_rows:
-            continue
-        # проверим, таблица ли это полей
-        if not _is_field_table(header, raw_rows):
+        found.append((start, i, header, raw_rows))
+    return found
+
+
+def detect_field_tables(text: str) -> list[TableBlock]:
+    """Найти в тексте markdown-таблицы, являющиеся спецификациями полей XML-сообщения.
+
+    Эвристика «таблица полей XML»:
+      - заголовок содержит колонку с полем/элементом/атрибутом И колонку типа;
+      - первая колонка строк-данных матчит camelCase/xml-имя;
+      - минимум okf_field_table_min_rows строк-данных.
+
+    Возвращает пустой список, если okf_field_table_min_rows <= 0 (программная
+    экстракция выключена — таблицы остаются на LLM).
+    """
+    min_rows = _min_rows()
+    if min_rows <= 0:
+        return []
+    blocks: list[TableBlock] = []
+    for start, end, header, raw_rows in _scan_markdown_tables(text):
+        if not raw_rows or not _is_field_table(header, raw_rows):
             continue
         rows = [_parse_field_row(_parse_row_cells(r), header) for r in raw_rows]
         rows = [r for r in rows if r and r.name]
         if len(rows) < min_rows:
             continue
-        blocks.append(TableBlock(start=start, end=i, header=header, rows=rows))
+        blocks.append(TableBlock(start=start, end=end, header=header, rows=rows))
     return blocks
 
 
@@ -230,7 +249,7 @@ def _parse_field_row(cells: list[str], header: list[str]) -> FieldRow | None:
     idx_type = _find_col(header, _HEADER_TYPE_KEYS)
     idx_len = _find_col(header, ("длина", "length", "огранич"))
     idx_card = _find_col(header, ("кратност", "обязат", "cardinality", "required", "множ", "вхож"))
-    idx_desc = _find_col(header, ("описан", "description", "<UNK>", "comment"))
+    idx_desc = _find_col(header, ("описан", "description", "коммент", "comment"))
 
     # positional fallback для типовых таблиц полей XML (с учётом сдвига):
     # [0]=№/имя, [shift]=имя, [shift+1]=тип, [shift+2]=длина, [shift+3]=кратность, [shift+4]=описание
@@ -368,10 +387,6 @@ def extract_field_table_concepts(
     lines = chunk.split("\n")
     # сначала найдем code для каждого блока на оригинальных lines (до мутаций)
     codes = [_find_message_code(lines, b.start) for b in blocks]
-    # затем обработаем блоки, заменяя их на stub (индексы последующих блоков
-    # становятся невалидными после замены, поэтому перечитываем lines заново
-    # для каждой замены по оригинальному b.start, компенсируя сдвиг)
-    offset = 0  # накопленный сдвиг из-за замен (каждая замена уменьшает lines)
     for bi, b in enumerate(blocks):
         code = codes[bi]
         field_concepts = build_field_concepts(b.rows, code)
@@ -380,8 +395,10 @@ def extract_field_table_concepts(
         if overview:
             concepts.append(overview)
         all_rows.extend(b.rows)
-    # собрать remainder: заменить каждую таблицу на stub в оригинальных lines
-    for b in blocks:
+    # собрать remainder: заменить каждую таблицу на stub. Идём с конца — замена
+    # укорачивает lines, и индексы блоков левее остаются валидными только пока
+    # мы до них не дошли (blocks отсортированы по start и не пересекаются).
+    for b in reversed(blocks):
         stub = f"[Таблица полей извлечена программно: {len(b.rows)} полей]"
         lines[b.start : b.end] = [stub]
     remainder = "\n".join(lines)
@@ -455,58 +472,22 @@ class TableClassification:
 
 
 def detect_tables(text: str) -> list[RawTableBlock]:
-    """Найти ВСЕ markdown-таблицы с >= okf_field_table_min_rows строк-данных.
+    """Найти ВСЕ markdown-таблицы с >= okf_table_classify_min_rows строк-данных.
 
     В отличие от detect_field_tables, НЕ проверяет заголовок/имена — только
     структуру markdown-таблицы и порог строк. Классификацию (таблица-перечень
     или таблица данных) делает LLM-классификатор или fallback-эвристика.
 
-    Возвращает пустой список, если okf_field_table_min_rows <= 0.
+    Возвращает пустой список, если okf_table_classify_min_rows <= 0.
     """
-    min_rows = _min_rows()
+    min_rows = _classify_min_rows()
     if min_rows <= 0:
         return []
-    lines = text.split("\n")
-    blocks: list[RawTableBlock] = []
-    i = 0
-    n = len(lines)
-    while i < n:
-        line = lines[i]
-        if not _is_table_row(line):
-            i += 1
-            continue
-        if i + 1 >= n or not _is_separator_row(lines[i + 1]):
-            i += 1
-            continue
-        header = _parse_row_cells(line)
-        start = i
-        i += 2
-        raw_rows: list[str] = []
-        while i < n:
-            cur = lines[i]
-            cur_stripped = cur.strip()
-            if cur_stripped == "":
-                break
-            if cur_stripped.startswith("|"):
-                merged = cur
-                i += 1
-                while i < n and not merged.rstrip().endswith("|"):
-                    nxt = lines[i]
-                    if nxt.strip().startswith("|") and nxt.strip() != "|":
-                        break
-                    merged = merged + "\n" + nxt
-                    i += 1
-                raw_rows.append(merged)
-            else:
-                if raw_rows and not raw_rows[-1].rstrip().endswith("|"):
-                    raw_rows[-1] = raw_rows[-1] + "\n" + cur
-                    i += 1
-                else:
-                    break
-        if len(raw_rows) < min_rows:
-            continue
-        blocks.append(RawTableBlock(start=start, end=i, header=header, raw_rows=raw_rows))
-    return blocks
+    return [
+        RawTableBlock(start=start, end=end, header=header, raw_rows=raw_rows)
+        for start, end, header, raw_rows in _scan_markdown_tables(text)
+        if len(raw_rows) >= min_rows
+    ]
 
 
 # Версия схемы классификатора. Бампить при изменении TableClassification
@@ -783,7 +764,7 @@ def _extract_with_llm_classify(
             if _is_field_table(b.header, b.raw_rows):
                 rows = [_parse_field_row(_parse_row_cells(r), b.header) for r in b.raw_rows]
                 rows = [r for r in rows if r and r.name]
-                if len(rows) >= _min_rows():
+                if len(rows) >= _classify_min_rows():
                     for c in build_field_concepts(rows, code):
                         key = c.title.strip().lower()
                         if key not in seen_titles:
@@ -793,8 +774,9 @@ def _extract_with_llm_classify(
                     if ov:
                         concepts.append(ov)
                     extracted_blocks.append((b, f"[Таблица полей извлечена программно: {len(rows)} полей]"))
-    # заменить извлечённые таблицы на stub
-    for b, stub in extracted_blocks:
+    # заменить извлечённые таблицы на stub — с конца, чтобы замена не сдвигала
+    # индексы ещё не обработанных блоков (см. extract_field_table_concepts)
+    for b, stub in reversed(extracted_blocks):
         lines[b.start : b.end] = [stub]
     remainder = "\n".join(lines)
     logger.info(

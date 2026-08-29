@@ -186,3 +186,37 @@ class TestFormatContext:
         assert 'id="2"' in ctx
         assert "Type: concept" in ctx
         assert "Type: chunk" in ctx
+
+
+class TestContextCharLimit:
+    """Лимит проверялся до добавления блока, поэтому итог мог превысить
+    chat_max_context_chars на размер целого блока (до 6000 символов)."""
+
+    def _hit(self, i: int, size: int) -> Hit:
+        return Hit(
+            f"c{i}", 1.0 / (i + 1),
+            {"point_type": "concept", "doc_id": f"d{i}", "chunk_index": 0,
+             "title": f"Концепт {i}", "content": "я" * size, "tags": [],
+             "source_document": {"filename": "doc.docx"}, "filepath": f"d{i}/c.md"},
+        )
+
+    def test_total_never_exceeds_limit(self):
+        settings = Settings(chat_max_context_chars=1000, chat_concept_max_chars=400)
+        hits = [self._hit(i, 400) for i in range(10)]
+        merged = merge_and_format(hits, settings=settings)
+        total = sum(len(m["content"]) for m in merged)
+        assert total <= 1000, f"контекст {total} символов при лимите 1000"
+        assert len(merged) == 2
+
+    def test_single_oversized_block_still_returned(self):
+        """Пустой контекст хуже небольшого перебора — первый блок берём всегда."""
+        settings = Settings(chat_max_context_chars=100, chat_concept_max_chars=5000)
+        merged = merge_and_format([self._hit(0, 3000)], settings=settings)
+        assert len(merged) == 1
+
+    def test_stops_before_oversized_block_not_after(self):
+        settings = Settings(chat_max_context_chars=1000, chat_concept_max_chars=900)
+        hits = [self._hit(0, 600), self._hit(1, 600)]
+        merged = merge_and_format(hits, settings=settings)
+        assert len(merged) == 1
+        assert sum(len(m["content"]) for m in merged) == 600

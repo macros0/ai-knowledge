@@ -138,7 +138,7 @@ class TestNormalize:
 
 class TestOkfMarkdown:
     def test_frontmatter_and_body(self):
-        from app.services.okf_generator import _build_markdown
+        from app.services.okf_generator import build_markdown
 
         concept = Concept(
             id="bridge",
@@ -148,7 +148,7 @@ class TestOkfMarkdown:
             content="## VLAN\n\nтаблица",
             relations=["vlan.md"],
         )
-        md = _build_markdown(concept, "doc.docx", "abc123")
+        md = build_markdown(concept, "doc.docx", "abc123")
         assert md.startswith("---")
         assert "title: Настройка моста" in md
         assert "tags:" in md
@@ -157,10 +157,10 @@ class TestOkfMarkdown:
         assert md.rstrip().endswith("таблица")
 
     def test_frontmatter_with_attachments(self):
-        from app.services.okf_generator import _build_markdown
+        from app.services.okf_generator import build_markdown
 
         concept = Concept(id="c", title="Концепт", type="concept", tags=[], content="тело")
-        md = _build_markdown(
+        md = build_markdown(
             concept,
             "doc.docx",
             "abc123",
@@ -171,33 +171,33 @@ class TestOkfMarkdown:
         assert "attachments/embedded.xlsx" in md
 
     def test_frontmatter_with_global_tags(self):
-        from app.services.okf_generator import _build_markdown
+        from app.services.okf_generator import build_markdown
 
         concept = Concept(id="c", title="Концепт", type="concept", tags=["llm-tag"], content="тело")
-        md = _build_markdown(concept, "doc.docx", "abc123", global_tags=["proxmox", "network"])
+        md = build_markdown(concept, "doc.docx", "abc123", global_tags=["proxmox", "network"])
         assert "global_tags:" in md
         assert "proxmox" in md
         assert "network" in md
 
     def test_frontmatter_global_tags_default_empty(self):
-        from app.services.okf_generator import _build_markdown
+        from app.services.okf_generator import build_markdown
 
         concept = Concept(id="c", title="Концепт", type="concept", tags=[], content="тело")
-        md = _build_markdown(concept, "doc.docx", "abc123")
+        md = build_markdown(concept, "doc.docx", "abc123")
         assert "global_tags: []" in md
 
     def test_frontmatter_with_chunk_index(self):
-        from app.services.okf_generator import _build_markdown
+        from app.services.okf_generator import build_markdown
 
         concept = Concept(id="c", title="Концепт", type="concept", tags=[], content="тело")
-        md = _build_markdown(concept, "doc.docx", "abc123", chunk_index=0)
+        md = build_markdown(concept, "doc.docx", "abc123", chunk_index=0)
         assert "chunk_index: 0" in md
 
     def test_frontmatter_without_chunk_index_omits_field(self):
-        from app.services.okf_generator import _build_markdown
+        from app.services.okf_generator import build_markdown
 
         concept = Concept(id="c", title="Концепт", type="concept", tags=[], content="тело")
-        md = _build_markdown(concept, "doc.docx", "abc123")
+        md = build_markdown(concept, "doc.docx", "abc123")
         assert "chunk_index" not in md
 
 
@@ -279,6 +279,29 @@ class TestGenerateChunk:
         concepts = [_normalize([{"id": "a", "title": "Bridge", "type": "concept", "tags": [], "content": "1", "relations": []}])[0]]
         okf_docs = gen.save_bundle("doc1", "in.docx", concepts, slugs=["my-slug"])
         assert Path(okf_docs[0].filepath).name == "my-slug.md"
+
+    def test_save_bundle_metadata_carries_chunk_index(self, tmp_path):
+        """metadata уходит в index_concepts как payload: без chunk_index все
+        концепты документа схлопываются в одну группу в merge_and_format."""
+        gen = self._make_gen(tmp_path, self.FakeLLM())
+        raw = [
+            {"id": "a", "title": "A", "type": "concept", "tags": [], "content": "1", "relations": []},
+            {"id": "b", "title": "B", "type": "concept", "tags": [], "content": "2", "relations": []},
+        ]
+        okf_docs = gen.save_bundle(
+            "doc1",
+            "in.docx",
+            _normalize(raw),
+            slugs=["slug-a", "slug-b"],
+            chunk_of_slug={"slug-a": 0, "slug-b": 3},
+        )
+        assert [d.metadata["chunk_index"] for d in okf_docs] == [0, 3]
+
+    def test_save_bundle_metadata_chunk_index_none_without_mapping(self, tmp_path):
+        gen = self._make_gen(tmp_path, self.FakeLLM())
+        concepts = _normalize([{"id": "a", "title": "A", "type": "concept", "tags": [], "content": "1", "relations": []}])
+        okf_docs = gen.save_bundle("doc1", "in.docx", concepts, slugs=["slug-a"])
+        assert okf_docs[0].metadata["chunk_index"] is None
 
 
 class TestSplitInHalf:
