@@ -7,8 +7,10 @@ authorize_redirect → callback → token → userinfo → AuthenticatedIdentity
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlencode
 
 from fastapi import Request
+from fastapi.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth
 
 from app.auth.identity import AuthenticatedIdentity
@@ -63,7 +65,41 @@ class KeycloakOidcProvider(AuthProvider):
             group_separator=self._settings.keycloak_group_separator,
         )
         identity.groups = self._normalize_paths(identity.groups)
+
+        # id_token нужен для RP-Initiated Logout (id_token_hint) — храним в
+        # attributes (попадает только в signed-cookie сессию, клиенту не отдаётся).
+        id_token = token.get("id_token")
+        if id_token:
+            attrs = dict(identity.attributes or {})
+            attrs["id_token"] = id_token
+            identity.attributes = attrs
         return identity
+
+    async def logout(self, request: Request):
+        """RP-Initiated Logout: завершаем и SSO-сессию Keycloak, а не только нашу.
+
+        Возвращает RedirectResponse на end_session_endpoint Keycloak (браузерный
+        flow: приложение → Keycloak logout → post_logout_redirect_uri).
+        """
+        identity_raw = request.session.get("identity") or {}
+        attributes = identity_raw.get("attributes") or {}
+        id_token = attributes.get("id_token")
+        request.session.clear()
+        return RedirectResponse(url=self._end_session_url(id_token), status_code=303)
+
+    def _end_session_url(self, id_token: str | None) -> str:
+        base = (
+            (self._settings.keycloak_url or "").rstrip("/")
+            + "/realms/"
+            + (self._settings.keycloak_realm or "")
+            + "/protocol/openid-connect/logout"
+        )
+        params: dict[str, str] = {
+            "post_logout_redirect_uri": self._settings.sso_post_logout_redirect_uri,
+        }
+        if id_token:
+            params["id_token_hint"] = id_token
+        return base + "?" + urlencode(params)
 
     def _normalize_paths(self, groups: list[str]) -> list[str]:
         """leaf: берём текст после последнего '/'; full_path: как есть."""

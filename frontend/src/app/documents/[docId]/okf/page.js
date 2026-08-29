@@ -2,16 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DownloadIcon, FileTextIcon } from "@/components/icons";
 import OkfFileList from "@/components/OkfFileList";
+import { backendFetch } from "@/lib/backendFetch";
 
 export const dynamic = "force-dynamic";
 
 export default async function OkfListPage({ params }) {
   const { docId } = await params;
 
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
   const [docResp, filesResp] = await Promise.all([
-    fetch(`${backendUrl}/api/documents/${docId}`, { cache: "no-store" }),
-    fetch(`${backendUrl}/api/documents/${docId}/okf`, { cache: "no-store" }),
+    backendFetch(`/api/documents/${docId}`),
+    backendFetch(`/api/documents/${docId}/okf`),
   ]);
 
   if (!docResp.ok) notFound();

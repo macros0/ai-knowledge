@@ -135,10 +135,6 @@ export function simulateAuth(username) {
   });
 }
 
-export async function logout() {
-  await request("/auth/logout", { method: "POST" });
-}
-
 export function getHealth() {
   return fetch("/health").then((r) => r.json());
 }

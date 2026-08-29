@@ -19,6 +19,7 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
       - DATA_DIR=/data
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     ports:
       - "8000:8000"
     volumes:

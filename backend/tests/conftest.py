@@ -24,6 +24,9 @@ def _flush_auth_env(monkeypatch):
     ]
     for var in auth_vars:
         monkeypatch.delenv(var, raising=False)
+    # Явно development: fail-fast проверки config.Settings активны только в
+    # production, тесты не должны зависеть от дефолта класса или env процесса.
+    monkeypatch.setenv("ENVIRONMENT", "development")
     yield
 
 

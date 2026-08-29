@@ -5,8 +5,11 @@
 должен уйти в authorize_access_token для валидации state.
 """
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
+import httpx
 import pytest
+from authlib.integrations.base_client.errors import OAuthError
 from fastapi.testclient import TestClient
 
 from app.config import Settings
@@ -42,16 +45,32 @@ class FakeClient:
 
     async def authorize_access_token(self, request, **kwargs):
         self.token_redirect_uri = kwargs.get("redirect_uri")
+        return {
+            "id_token": "fake-id-token",
+            "userinfo": {
+                "sub": "kc-sub-123",
+                "preferred_username": "idb.user",
+                "email": "idb@company.local",
+                "group": ["KB_Viewer"],
+            },
+        }
+
+    async def userinfo(self, token=None):
+        self.userinfo_calls += 1
+        return {}
+
+
+class NoIdTokenClient(FakeClient):
+    """Callback без id_token (например, старые сессии) — logout без id_token_hint."""
+
+    async def authorize_access_token(self, request, **kwargs):
+        self.token_redirect_uri = kwargs.get("redirect_uri")
         return {"userinfo": {
             "sub": "kc-sub-123",
             "preferred_username": "idb.user",
             "email": "idb@company.local",
             "group": ["KB_Viewer"],
         }}
-
-    async def userinfo(self, token=None):
-        self.userinfo_calls += 1
-        return {}
 
 
 class NoRoleClient(FakeClient):
@@ -65,6 +84,20 @@ class NoRoleClient(FakeClient):
             "email": "x@company.local",
             "group": [],
         }}
+
+
+class OAuthErrorClient(FakeClient):
+    """Keycloak вернул error/error_description (например authentication_expired)."""
+
+    async def authorize_access_token(self, request, **kwargs):
+        raise OAuthError(error="temporarily_unavailable", description="authentication_expired")
+
+
+class KeycloakDownClient(FakeClient):
+    """Keycloak недоступен при старте входа (обрыв соединения)."""
+
+    async def authorize_redirect(self, request, redirect_uri):
+        raise httpx.ConnectError("connection refused")
 
 
 class FakeOAuth:
@@ -113,3 +146,49 @@ def test_sso_fail_closed_403(tmp_path, monkeypatch):
     c = build_sso_client(tmp_path, monkeypatch, client_cls=NoRoleClient, auth_default_role=None)
     resp = c.get("/api/auth/callback")
     assert resp.status_code == 403
+
+
+def test_sso_callback_oauth_error_redirects(tmp_path, monkeypatch):
+    """Keycloak вернул error (authentication_expired) → редирект с сообщением, не 500."""
+    c = build_sso_client(tmp_path, monkeypatch, client_cls=OAuthErrorClient)
+    resp = c.get("/api/auth/callback")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/?auth_error=session_expired"
+
+
+def test_sso_login_keycloak_unavailable_redirects(tmp_path, monkeypatch):
+    """Keycloak недоступен при старте входа → редирект с сообщением, не 500."""
+    c = build_sso_client(tmp_path, monkeypatch, client_cls=KeycloakDownClient)
+    resp = c.get("/api/auth/login")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/?auth_error=unavailable"
+
+
+def _logout_after_login(tmp_path, monkeypatch, client_cls=FakeClient):
+    c = build_sso_client(tmp_path, monkeypatch, client_cls=client_cls)
+    assert c.get("/api/auth/callback").status_code == 303  # вход
+    resp = c.get("/api/auth/logout", follow_redirects=False)
+    return resp
+
+
+def test_sso_logout_redirects_to_keycloak_with_id_token(tmp_path, monkeypatch):
+    """RP-Initiated Logout: редирект на end_session_endpoint с id_token_hint."""
+    resp = _logout_after_login(tmp_path, monkeypatch, client_cls=FakeClient)
+    assert resp.status_code == 303
+    parsed = urlparse(resp.headers["location"])
+    assert parsed.netloc == "kc.example"
+    assert parsed.path == "/realms/myrealm/protocol/openid-connect/logout"
+    q = parse_qs(parsed.query)
+    assert unquote(q["post_logout_redirect_uri"][0]) == "http://localhost:3000/"
+    assert q["id_token_hint"][0] == "fake-id-token"
+
+
+def test_sso_logout_without_id_token_still_redirects(tmp_path, monkeypatch):
+    """Сессия без id_token не должна ломать logout — идёт без id_token_hint."""
+    resp = _logout_after_login(tmp_path, monkeypatch, client_cls=NoIdTokenClient)
+    assert resp.status_code == 303
+    parsed = urlparse(resp.headers["location"])
+    assert parsed.path == "/realms/myrealm/protocol/openid-connect/logout"
+    q = parse_qs(parsed.query)
+    assert unquote(q["post_logout_redirect_uri"][0]) == "http://localhost:3000/"
+    assert "id_token_hint" not in q

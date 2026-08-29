@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import ContentViewer from "@/components/ContentViewer";
+import { backendFetch } from "@/lib/backendFetch";
 
 export const dynamic = "force-dynamic";
 
@@ -8,10 +9,7 @@ export default async function ChunkPage({ params }) {
   const { docId, chunkIndex } = await params;
   const index = Number(chunkIndex);
 
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
-  const resp = await fetch(`${backendUrl}/api/documents/${docId}/chunks/${index}`, {
-    cache: "no-store",
-  });
+  const resp = await backendFetch(`/api/documents/${docId}/chunks/${index}`);
 
   if (!resp.ok) notFound();
 

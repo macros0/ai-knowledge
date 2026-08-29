@@ -73,6 +73,14 @@ docker compose up --build
 # BACKEND_URL внутри compose переопределяется на http://backend:8000 (прокси /api в Next.js)
 ```
 
+## Развёртывание в production
+
+Перед публикацией в прод пройдите чек-лист из [`PRODUCTION_DEPLOYMENT.md`](PRODUCTION_DEPLOYMENT.md):
+генерация `APP_SECRET_KEY`, `ENVIRONMENT=production`, `AUTH_SESSION_HTTPS_ONLY=true`,
+секреты вне git, HTTPS/reverse-proxy и настройки Keycloak/IDB. Бэкенд при
+`ENVIRONMENT=production` падает на старте (fail-fast), если секрет слабый/дефолтный
+или cookie-флаг не HTTPS — это блокер, а не рекомендация.
+
 ## Как это работает
 
 1. Загрузите `.docx` / `.xlsx` / `.pdf` в веб-интерфейсе.
@@ -588,6 +596,12 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 - **`direct_ldap`** / **`custom_client`** — точки расширения (заглушки `NotImplementedError`) для будущих клиентов с прямым LDAP или собственной авторизацией.
 
 Сессия — signed-cookie (`SessionMiddleware`), TTL и HTTPS-флаг настраиваются через `AUTH_SESSION_TTL_SECONDS` / `AUTH_SESSION_HTTPS_ONLY`.
+
+**Обязательно перед продакшеном.** Окружение задаётся `ENVIRONMENT` (`development` | `production`). При `ENVIRONMENT=production` бэкенд на старте **fail-fast** падает с ошибкой конфигурации, если:
+- `APP_SECRET_KEY` не задан, равен дефолту `dev-secret-change-me` или короче 32 символов — ключ подписи сессионной cookie, со слабым/дефолтным значением сессию можно подделать (обход авторизации). Сгенерировать: `python -c "import secrets; print(secrets.token_urlsafe(32))"`;
+- `AUTH_SESSION_HTTPS_ONLY=false` — cookie должна ходить только по HTTPS.
+
+Проверка срабатывает при импорте приложения (до поднятия uvicorn), поэтому «забыть» поменять значения в проде невозможно. В `docker-compose.yml` для бэкенда задан дефолт `ENVIRONMENT=${ENVIRONMENT:-production}` — контейнер не поднимется в незащищённом режиме. Для локального запуска явно ставьте `ENVIRONMENT=development`.
 
 Архитектурно авторизация разделена на слои (см. `backend/app/auth/`):
 

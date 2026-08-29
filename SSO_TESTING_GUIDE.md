@@ -184,7 +184,18 @@ cd backend
 - **Юзер**: Users → Add user (username/email), потом Credentials → Set password (нулевое число «temporary»), затем Groups → группа.
 - **Группы**: Groups → Create group (`KB_Viewer`, `KB_Editor`, …).
 - **Клиент**: Clients → `my-app` → Settings (redirect URI `http://localhost:3000/api/auth/callback`, Client authentication on), Credentials (client secret), Client scopes → `group` mapper.
+  - **Valid post logout redirect URIs** → `http://localhost:3000/` — обязателен для RP-Initiated Logout («Выйти» в UI завершает и SSO-сессию Keycloak). Без него после logout Keycloak откажет в редиректе (`invalid_redirect_uri`). Настройка живёт в Docker-volume `keycloak-data` (не в git): при пересоздании контейнера с чистым volume её надо внести заново (см. ниже).
 - Смена маппинга групп прода → только в `.env`: `AUTH_ROLE_GROUPS={"corp_group_admins":"admin", ...}`.
+
+### 11.1 Внести post-logout URI через admin API (без консоли)
+
+```powershell
+# Выйти из приложения (наш logout), затем Keycloak вернёт на post_logout_redirect_uri.
+# Клиенту my-app нужно зарегистрировать этот URI:
+#   admin API: PUT /admin/realms/myrealm/clients/{id}
+#   attributes["post.logout.redirect.uris"] = "http://localhost:3000/"
+# Либо консоль: Clients → my-app → Settings → "Valid post logout redirect URIs".
+```
 
 ---
 
@@ -205,6 +216,7 @@ KEYCLOAK_REALM=<realm на IDB>
 KEYCLOAK_CLIENT_ID=<клиент, зарегистрированный на IDB>
 KEYCLOAK_CLIENT_SECRET=<client secret IDB>
 SSO_REDIRECT_URI=https://<наш-host>/api/auth/callback
+SSO_POST_LOGOUT_REDIRECT_URI=https://<наш-host>/   # куда Keycloak вернёт после RP-Initiated Logout
 ```
 
 ### 12.2 Выясните, как IDB отдаёт группы

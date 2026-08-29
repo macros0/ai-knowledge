@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/Toast";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthBar from "@/components/AuthBar";
 import RequireAuth from "@/components/RequireAuth";
+import AuthErrorBanner from "@/components/AuthErrorBanner";
 import HealthBanner from "@/components/HealthBanner";
 
 export const metadata = {
@@ -30,6 +31,7 @@ export default function RootLayout({ children }) {
                 </header>
                 <HealthBanner />
                 <main>
+                  <AuthErrorBanner />
                   <RequireAuth>{children}</RequireAuth>
                 </main>
               </div>

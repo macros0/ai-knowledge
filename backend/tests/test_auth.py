@@ -175,7 +175,9 @@ def test_simulate_allows_protected(client):
 def test_logout_clears_session(client):
     client.post("/api/auth/simulate", json={"username": "demo.user"})
     assert client.get("/api/auth/me").json()["user"]["username"] == "demo.user"
-    client.post("/api/auth/logout")
+    resp = client.get("/api/auth/logout", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
     assert client.get("/api/documents").status_code == 401
 
 

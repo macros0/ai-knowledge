@@ -9,6 +9,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from starlette.responses import Response
+
 if TYPE_CHECKING:
     from fastapi import Request
 
@@ -39,6 +41,12 @@ class AuthProvider(ABC):
         """Доступные тестовые идентичности (для simulation); по умолчанию None."""
         return None
 
-    async def logout(self, request: "Request") -> None:
-        """Очистка локальной сессии (необязательно переопределять)."""
+    async def logout(self, request: "Request") -> Response | None:
+        """Очистка локальной сессии.
+
+        Базовая реализация возвращает None (контракт: endpoint сам делает
+        редирект на "/"). OIDC-провайдеры переопределяют метод и возвращают
+        RedirectResponse на end_session_endpoint (RP-Initiated Logout).
+        """
         request.session.clear()
+        return None

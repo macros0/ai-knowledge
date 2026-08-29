@@ -12,6 +12,10 @@
   GET   /auth/callback — завершить вход → identity → сессия → редирект на /.
   POST  /auth/logout   — очистить сессию.
 """
+import logging
+
+import httpx
+from authlib.integrations.base_client.errors import OAuthError
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
@@ -19,7 +23,6 @@ from app.auth.factory import build_auth_provider, build_authorizer
 from app.auth.identity import AuthenticatedIdentity
 from app.auth.models import AuthMeOut, SimulateLoginIn
 from app.auth.service import (
-    clear_identity,
     identity_from_session,
     public_user,
     store_identity,
@@ -28,6 +31,8 @@ from app.auth.providers.simulation import SimulationProvider
 from app.config import get_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_to_user(identity: AuthenticatedIdentity):
@@ -93,13 +98,16 @@ def auth_simulate(body: SimulateLoginIn, request: Request):
     }
 
 
-@router.post("/logout")
+@router.get("/logout", name="auth_logout")
 async def logout(request: Request):
     settings = get_settings()
     provider = build_auth_provider(settings)
-    await provider.logout(request)
-    clear_identity(request)
-    return {"ok": True}
+    resp = await provider.logout(request)
+    if resp is not None:
+        # OIDC: RP-Initiated Logout — редирект на end_session_endpoint Keycloak.
+        return resp
+    # simulation/disabled: сессия уже очищена — редирект на корень (login-gate).
+    return RedirectResponse(url="/", status_code=303)
 
 
 @router.get("/login", name="auth_login")
@@ -108,7 +116,13 @@ async def login(request: Request):
     provider = build_auth_provider(settings)
     if provider.is_disabled():
         raise HTTPException(status_code=400, detail="Авторизация отключена")
-    return await provider.start_login(request)
+    try:
+        return await provider.start_login(request)
+    except httpx.HTTPError as exc:
+        # Keycloak недоступен при старте входа (браузерный переход) —
+        # редирект с сообщением, а не 500.
+        logger.warning("Keycloak недоступен при старте входа: %s", exc)
+        return RedirectResponse(url="/?auth_error=unavailable", status_code=303)
 
 
 @router.get("/callback", name="auth_callback")
@@ -118,7 +132,17 @@ async def auth_callback(request: Request):
     if provider.is_disabled():
         raise HTTPException(status_code=400, detail="Авторизация отключена")
 
-    identity = await provider.handle_callback(request)
+    try:
+        identity = await provider.handle_callback(request)
+    except OAuthError as exc:
+        # Keycloak вернул error/error_description (например authentication_expired).
+        # Не 500, а понятное сообщение с возможностью войти заново.
+        logger.warning(
+            "OAuth callback: Keycloak вернул ошибку (%s %s)",
+            getattr(exc, "error", None),
+            getattr(exc, "description", None),
+        )
+        return RedirectResponse(url="/?auth_error=session_expired", status_code=303)
 
     user = _resolve_to_user(identity)
     if user is None:

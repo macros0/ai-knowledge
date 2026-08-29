@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     #   direct_ldap     — прямая интеграция с AD/LDAP (заглушка)
     #   custom_client   — собственная система авторизации клиента (заглушка)
     auth_provider: str = "disabled"
+    # Окружение развёртывания: development | production. В production включается
+    # fail-fast проверка auth-конфигурации (см. validate_auth_provider):
+    # слабый/дефолтный APP_SECRET_KEY или AUTH_SESSION_HTTPS_ONLY=false → ValueError
+    # на старте, а не молчаливый запуск в незащищённом режиме.
+    environment: str = "development"
     app_secret_key: str = "dev-secret-change-me"
     # Время жизни signed-cookie сессии (секунды).
     auth_session_ttl_seconds: int = 28800
@@ -103,6 +108,11 @@ class Settings(BaseSettings):
     # Next.js-прокси, поэтому Keycloak должен вернуть браузер на порт фронта
     # (http://localhost:3000/api/auth/callback), а бэкенд видит :8000.
     sso_redirect_uri: str | None = None
+    # Куда Keycloak вернёт браузер после RP-Initiated Logout (end_session_endpoint).
+    # Корень фронтенда (публичная точка входа с login-gate), чтобы не попасть на
+    # защищённую страницу. Должен быть зарегистрирован в "Valid post logout
+    # redirect URIs" клиента в Keycloak.
+    sso_post_logout_redirect_uri: str = "http://localhost:3000/"
     # Частичное переопределение claim-имён из userinfo → поля identity.
     # JSON-объект: {"groups": "roles", "username": "name", "external_id": "sub"}.
     # Незаданные поля остаются стандартными OIDC-именами (sub/preferred_username/
@@ -273,6 +283,15 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("environment")
+    @classmethod
+    def _validate_environment(cls, v: str) -> str:
+        if v not in {"development", "production"}:
+            raise ValueError(
+                f"environment must be 'development' or 'production', got '{v}'"
+            )
+        return v
+
     @model_validator(mode="after")
     def validate_auth_provider(self) -> "Settings":
         valid = {"disabled", "simulation", "keycloak_oidc", "direct_ldap", "custom_client"}
@@ -300,6 +319,22 @@ class Settings(BaseSettings):
             raise ValueError(
                 "auth_provider='simulation' requires at least one user in AUTH_SIM_USERS"
             )
+        if self.environment == "production":
+            if (
+                not self.app_secret_key
+                or self.app_secret_key == "dev-secret-change-me"
+                or len(self.app_secret_key) < 32
+            ):
+                raise ValueError(
+                    "APP_SECRET_KEY небезопасен для production: задайте случайный "
+                    "секрет длиной >= 32 символов "
+                    "(например: python -c \"import secrets; print(secrets.token_urlsafe(32))\")"
+                )
+            if not self.auth_session_https_only:
+                raise ValueError(
+                    "AUTH_SESSION_HTTPS_ONLY=false недопустимо для production: "
+                    "сессионная cookie должна передаваться только по HTTPS"
+                )
         return self
 
     @field_validator("data_dir", mode="before")

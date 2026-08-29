@@ -10,7 +10,6 @@ import {
 } from "react";
 import {
   getMe,
-  logout as logoutRequest,
   simulateAuth,
 } from "@/lib/api";
 
@@ -52,19 +51,11 @@ export function AuthProvider({ children }) {
     [apply]
   );
 
-  const logout = useCallback(async () => {
-    try {
-      await logoutRequest();
-    } catch {
-      // session всё равно чистим клиентски
-    }
-    try {
-      apply(await getMe());
-    } catch {
-      setUser(null);
-      setSimUsers([]);
-    }
-  }, [apply]);
+  const logout = useCallback(() => {
+    // RP-Initiated Logout — браузерная навигация (приложение → Keycloak logout →
+    // post_logout_redirect_uri). fetch не последует за цепочкой редиректов.
+    window.location.assign("/api/auth/logout");
+  }, []);
 
   const value = useMemo(
     () => ({ user, mode, simUsers, loading, login, logout, refresh }),

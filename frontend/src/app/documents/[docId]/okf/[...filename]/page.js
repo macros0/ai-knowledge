@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import ContentViewer from "@/components/ContentViewer";
 import { DownloadIcon } from "@/components/icons";
+import { backendFetch } from "@/lib/backendFetch";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +25,9 @@ export default async function OkfFilePage({ params }) {
   const decodedPath = filename.map(decodeSegment);
   const filePath = decodedPath.map(encodeURIComponent).join("/");
 
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
   const [docResp, resp] = await Promise.all([
-    fetch(`${backendUrl}/api/documents/${docId}`, { cache: "no-store" }),
-    fetch(`${backendUrl}/api/documents/${docId}/okf/${filePath}`, {
-      cache: "no-store",
-    }),
+    backendFetch(`/api/documents/${docId}`),
+    backendFetch(`/api/documents/${docId}/okf/${filePath}`),
   ]);
 
   if (!docResp.ok) notFound();
