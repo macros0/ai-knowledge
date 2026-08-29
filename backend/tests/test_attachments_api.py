@@ -18,7 +18,7 @@ class FakeVectorStore:
 
 
 class TestOkfAttachmentsEndpoint:
-    def _make_bundle(self, settings: Settings, doc_id: str = "doc1") -> None:
+    def _make_bundle(self, settings: Settings, doc_id: str = "a1b2c3d4e5f60718") -> None:
         attach_dir = settings.okf_dir / doc_id / "attachments"
         attach_dir.mkdir(parents=True, exist_ok=True)
         (attach_dir / "image-0.png").write_bytes(PNG_MAGIC + b"fake-image")
@@ -40,7 +40,7 @@ class TestOkfAttachmentsEndpoint:
         client = self._client(tmp_path, monkeypatch)
 
         with client:
-            resp = client.get("/api/documents/doc1/okf/attachments/image-0.png")
+            resp = client.get("/api/documents/a1b2c3d4e5f60718/okf/attachments/image-0.png")
 
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("image/png")
@@ -52,7 +52,7 @@ class TestOkfAttachmentsEndpoint:
         client = self._client(tmp_path, monkeypatch)
 
         with client:
-            resp = client.get("/api/documents/doc1/okf/attachments/nope.png")
+            resp = client.get("/api/documents/a1b2c3d4e5f60718/okf/attachments/nope.png")
 
         assert resp.status_code == 404
 
@@ -63,6 +63,6 @@ class TestOkfAttachmentsEndpoint:
         client = self._client(tmp_path, monkeypatch)
 
         with client:
-            resp = client.get("/api/documents/doc1/okf/attachments/..%2F..%2Fsecret.txt")
+            resp = client.get("/api/documents/a1b2c3d4e5f60718/okf/attachments/..%2F..%2Fsecret.txt")
 
         assert resp.status_code == 404

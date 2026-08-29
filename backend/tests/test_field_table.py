@@ -211,6 +211,46 @@ class TestExtractFieldTableConcepts:
         assert concepts == []
         assert "| 2024-01-01 |" in remainder
 
+    def test_two_tables_keep_text_between_and_after(self):
+        # Две таблицы полей в одном чанке: замена первой на stub не должна
+        # сдвигать индексы второй — текст между таблицами и после них сохраняется.
+        TWO_TABLE_CHUNK = """# Вид сообщения 111
+
+| Поле/Элемент | Тип | Длина | Кратность | Описание |
+|---|---|---|---|---|
+| snils | p:snils |  | 1..1 | СНИЛС |
+| surname | com:surname | Тип.Длина: 60 | 1..1 | Фамилия |
+| lnState | com:lnState | Тип.Длина: 3 | 1..1 | Код статуса ЭЛН |
+| gender | xs:int |  | 1..1 | Пол |
+| innPerson | p:inn | Тип.Длина: 12 | 0..1 | ИНН |
+
+Текст между таблицами: пояснение к второй таблице.
+
+# Вид сообщения 222
+
+| Поле/Элемент | Тип | Длина | Кратность | Описание |
+|---|---|---|---|---|
+| code | com:code |  | 1..1 | Код сообщения |
+| date | xs:date |  | 1..1 | Дата |
+| employer | xs:string |  | 0..1 | Работодатель |
+| fio | com:fio |  | 1..1 | ФИО |
+| address | xs:string |  | 0..1 | Адрес |
+
+Текст после второй таблицы: финальное примечание.
+"""
+        concepts, rows, remainder = extract_field_table_concepts(TWO_TABLE_CHUNK, chunk_index=1)
+        # 5 + 5 полей + 2 обзорных
+        assert len(concepts) == 12
+        assert len(rows) == 10
+        # stub обеих таблиц
+        assert remainder.count("Таблица полей извлечена программно") == 2
+        # текст между таблицами и после них сохранился
+        assert "Текст между таблицами" in remainder
+        assert "Текст после второй таблицы" in remainder
+        # строки обеих таблиц удалены из remainder
+        assert "p:snils" not in remainder
+        assert "com:code" not in remainder
+
 
 # Таблицы полей с поддержкой кириллицы (W3C XML) и нумерованной первой колонки.
 

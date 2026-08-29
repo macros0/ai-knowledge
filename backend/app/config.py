@@ -168,6 +168,10 @@ class Settings(BaseSettings):
 
     okf_max_chunk_chars: int = 8000
     okf_max_concept_chars: int = 4000
+    # Максимальный размер загружаемого файла (МБ). Проверяется и по объявленному
+    # content-length, и по факту дочитывания — защита от блокировки event loop
+    # гигантской загрузкой и от переполнения диска.
+    max_upload_mb: int = 100
     okf_split_on_truncation: bool = True
     okf_split_max_depth: int = 2
     okf_salvage_truncated: bool = True

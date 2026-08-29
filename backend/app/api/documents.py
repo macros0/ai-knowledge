@@ -5,6 +5,7 @@
 import json
 import mimetypes
 import os
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -26,7 +27,7 @@ from app.models.schemas import (
 from app.services import audit
 from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, QueueOverloadedError, get_job_queue
 from app.services.okf_generator import _build_markdown
-from app.services.pipeline import Pipeline, save_upload
+from app.services.pipeline import Pipeline, save_upload_stream
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
@@ -38,28 +39,54 @@ _registry = get_registry()
 _pipeline = Pipeline()
 _tag_registry = TagRegistry()
 
+# doc_id генерируется как uuid.uuid4().hex[:16] (16 hex-символов нижнего
+# регистра). Строгий формат не даёт doc_id уйти из okf_bundles через `..`
+# или разделители пути — все запросы с несоответствующим id получают 404.
+_DOC_ID_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def _valid_doc_id(doc_id: str) -> bool:
+    return bool(_DOC_ID_RE.fullmatch(doc_id))
+
 
 @router.post("", response_model=DocumentOut)
-async def upload_document(
+def upload_document(
     file: UploadFile,
     tags: Annotated[list[str] | None, Form()] = None,
     user: User = Depends(require_user),
 ):
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Файл пустой")
-    user_tags = normalize_tags(tags)
-    try:
-        doc_id, _ = save_upload(content, file.filename or "unknown")
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    """Загрузка документа.
 
+    Обычный def-эндпоинт: FastAPI уводит его в threadpool, поэтому синхронная
+    потоковая запись файла не блокирует event loop. Размер ограничен настройкой
+    max_upload_mb (проверка по факту дочитывания + по объявленному content-length).
+    """
+    settings = get_settings()
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    declared = file.size or 0
+    if declared > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Файл превышает максимальный размер {settings.max_upload_mb} МБ",
+        )
+    try:
+        doc_id, _dest, size = save_upload_stream(
+            file.file, file.filename or "unknown", max_bytes=max_bytes
+        )
+    except ValueError as exc:
+        if "максимальный размер" in str(exc):
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if size == 0:
+        raise HTTPException(status_code=400, detail="Файл пустой")
+
+    user_tags = normalize_tags(tags)
     _tag_registry.add(user_tags)
     doc = _registry.create(
         doc_id,
         file.filename or "unknown",
         file.content_type or "",
-        len(content),
+        size,
         tags=user_tags,
         uploaded_by=user.username,
     )
@@ -298,9 +325,11 @@ def list_okf_files(doc_id: str):
 
 @router.get("/{doc_id}/okf/{filename}")
 def get_okf_file(doc_id: str, filename: str):
-    bundle_dir = get_settings().okf_dir / doc_id
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    bundle_dir = (get_settings().okf_dir / doc_id).resolve()
     filepath = (bundle_dir / filename).resolve()
-    if str(filepath).startswith(str(bundle_dir.resolve())) and filepath.is_file():
+    if filepath.is_relative_to(bundle_dir) and filepath.is_file():
         return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
     slug = filename.removesuffix(".md")
     try:
@@ -326,9 +355,11 @@ def get_okf_file(doc_id: str, filename: str):
 
 @router.get("/{doc_id}/okf/attachments/{filename}")
 def get_okf_attachment(doc_id: str, filename: str):
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Файл не найден")
     attach_dir = (get_settings().okf_dir / doc_id / "attachments").resolve()
     filepath = (attach_dir / filename).resolve()
-    if not str(filepath).startswith(str(attach_dir)) or not filepath.is_file():
+    if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
         raise HTTPException(status_code=404, detail="Файл не найден")
     media_type = mimetypes.guess_type(filepath.name)[0] or "application/octet-stream"
     return FileResponse(filepath, media_type=media_type)
@@ -345,9 +376,11 @@ def list_chunks(doc_id: str):
 
 @router.get("/{doc_id}/chunks/{chunk_index}")
 def get_chunk(doc_id: str, chunk_index: int):
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Чанк не найден")
     chunks_dir = (get_settings().okf_dir / doc_id / "chunks").resolve()
     filepath = (chunks_dir / f"chunk_{chunk_index:02d}.md").resolve()
-    if str(filepath).startswith(str(chunks_dir)) and filepath.is_file():
+    if filepath.is_relative_to(chunks_dir) and filepath.is_file():
         return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
     try:
         staging = StagingStore(doc_id)

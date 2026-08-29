@@ -368,10 +368,9 @@ def extract_field_table_concepts(
     lines = chunk.split("\n")
     # сначала найдем code для каждого блока на оригинальных lines (до мутаций)
     codes = [_find_message_code(lines, b.start) for b in blocks]
-    # затем обработаем блоки, заменяя их на stub (индексы последующих блоков
-    # становятся невалидными после замены, поэтому перечитываем lines заново
-    # для каждой замены по оригинальному b.start, компенсируя сдвиг)
-    offset = 0  # накопленный сдвиг из-за замен (каждая замена уменьшает lines)
+    # затем обработаем блоки, заменяя их на stub. Итерация в обратном порядке:
+    # замена блока меняет длину lines, поэтому индексы следующих (в обратном
+    # порядке — уже обработанных) блоков не сдвигаются.
     for bi, b in enumerate(blocks):
         code = codes[bi]
         field_concepts = build_field_concepts(b.rows, code)
@@ -381,7 +380,7 @@ def extract_field_table_concepts(
             concepts.append(overview)
         all_rows.extend(b.rows)
     # собрать remainder: заменить каждую таблицу на stub в оригинальных lines
-    for b in blocks:
+    for b in reversed(blocks):
         stub = f"[Таблица полей извлечена программно: {len(b.rows)} полей]"
         lines[b.start : b.end] = [stub]
     remainder = "\n".join(lines)
@@ -793,8 +792,10 @@ def _extract_with_llm_classify(
                     if ov:
                         concepts.append(ov)
                     extracted_blocks.append((b, f"[Таблица полей извлечена программно: {len(rows)} полей]"))
-    # заменить извлечённые таблицы на stub
-    for b, stub in extracted_blocks:
+    # заменить извлечённые таблицы на stub. Итерация в обратном порядке:
+    # замена блока меняет длину lines, поэтому индексы следующих (в обратном
+    # порядке — уже обработанных) блоков не сдвигаются.
+    for b, stub in reversed(extracted_blocks):
         lines[b.start : b.end] = [stub]
     remainder = "\n".join(lines)
     logger.info(

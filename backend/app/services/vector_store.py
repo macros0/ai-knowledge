@@ -309,7 +309,8 @@ class VectorStore:
             prefetch = None
             using = None
 
-        results = self.client.query_points(
+        results = _qdrant_call(
+            self.client.query_points,
             collection_name=self.collection,
             query=query,
             prefetch=prefetch,
@@ -378,7 +379,8 @@ class VectorStore:
         slug_filter = qm.Filter(
             must=[qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))]
         )
-        records, _ = self.client.scroll(
+        records, _ = _qdrant_call(
+            self.client.scroll,
             collection_name=self.collection,
             scroll_filter=slug_filter,
             limit=self.settings.search_per_branch_top_k,
@@ -592,6 +594,8 @@ class VectorStore:
             for i, (text, vec, st) in enumerate(zip(chunk_texts, vectors, section_titles)):
                 idx = chunk_indices[i]
                 point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{idx:02d}.md"))
+                if point_id in existing_ids:
+                    continue  # точка уже проиндексирована — не пере-эмбеддим при рестарте
                 capped = text[:cap]
                 sparse_text = f"{st}\n{capped}" if st else capped
                 chunk_points.append(

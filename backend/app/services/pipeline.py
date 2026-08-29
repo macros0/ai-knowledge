@@ -14,11 +14,13 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from typing import BinaryIO
 
 from app.config import get_settings
 from app.services.concept_store import replace_concepts
 from app.services.embedder import Embedder
 from app.services.errors import DependencyUnavailableError
+from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMTruncationError, is_fatal_error
 from app.services.okf_generator import OKFGenerator
 from app.services.registry import get_registry
@@ -53,12 +55,23 @@ class Pipeline:
         doc = self.registry.get(doc_id)
         if not doc:
             raise ValueError("Документ не найден")
+        self._ensure_not_running(doc_id)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
             raise ValueError("Исходный файл документа не найден")
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=True)
+
+    def _ensure_not_running(self, doc_id: str) -> None:
+        """Единая защита от запуска второго потока на один и тот же staging.
+
+        Используется всеми входами пайплайна (ingest/resume/regenerate):
+        если по doc_id уже живёт поток, повторный запуск отклоняется.
+        """
+        thread = self._threads.get(doc_id)
+        if thread and thread.is_alive():
+            raise ValueError("Документ уже обрабатывается")
 
     def regenerate(self, doc_id: str) -> None:
         """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
@@ -71,9 +84,7 @@ class Pipeline:
         doc = self.registry.get(doc_id)
         if not doc:
             raise ValueError("Документ не найден")
-        thread = self._threads.get(doc_id)
-        if thread and thread.is_alive():
-            raise ValueError("Документ уже обрабатывается")
+        self._ensure_not_running(doc_id)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
@@ -129,6 +140,7 @@ class Pipeline:
             time.sleep(2)
 
     def _start(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
+        self._ensure_not_running(doc_id)
         self._abort_events[doc_id] = threading.Event()
         thread = threading.Thread(
             target=self._run,
@@ -294,9 +306,7 @@ class Pipeline:
                 }
             )
             shutil.copy2(chunk_file, chunks_dir / chunk_file.name)
-        (chunks_dir / "manifest.json").write_text(
-            json.dumps(chunks_meta, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        write_json_atomic(chunks_dir / "manifest.json", chunks_meta)
 
         okf_docs = self.okf_generator.save_bundle(
             doc_id,
@@ -448,9 +458,7 @@ class Pipeline:
                 f = chunks_dir / f"chunk_{i:02d}.md"
                 f.write_text(chunk, encoding="utf-8")
                 meta.append({"index": i, "size": f.stat().st_size, "concepts_count": 0})
-            (chunks_dir / "manifest.json").write_text(
-                json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            write_json_atomic(chunks_dir / "manifest.json", meta)
             _atomic_move(chunks_dir, self.settings.okf_dir / doc_id / "chunks")
             logger.info("Backfill чанков %s: %d", doc_id, len(chunks))
         finally:
@@ -481,15 +489,43 @@ def _chunks_meta_from_dir(directory: Path, manifest: dict | None = None) -> list
     return meta
 
 
-def save_upload(file_bytes: bytes, original_filename: str) -> tuple[str, Path]:
+def save_upload_stream(
+    fileobj: BinaryIO,
+    original_filename: str,
+    max_bytes: int | None = None,
+) -> tuple[str, Path, int]:
+    """Потоково сохраняет загруженный файл чанками по 1 МБ.
+
+    Вызывается из обычного def-эндпоинта — FastAPI сам уводит его в threadpool,
+    поэтому event loop не блокируется на больших файлах. Лимит размера проверяется
+    по факту дочитывания (max_bytes), при превышении файл удаляется и бросается
+    ValueError. Возвращает (doc_id, dest, записанные байты).
+    """
     ext = Path(original_filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}")
     settings = get_settings()
+    limit = max_bytes or settings.max_upload_mb * 1024 * 1024
     doc_id = uuid.uuid4().hex[:16]
     dest = settings.uploads_dir / f"{doc_id}{ext}"
-    dest.write_bytes(file_bytes)
-    return doc_id, dest
+    written = 0
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with dest.open("wb") as out:
+            while True:
+                chunk = fileobj.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > limit:
+                    raise ValueError(
+                        f"Файл превышает максимальный размер {limit // (1024 * 1024)} МБ"
+                    )
+                out.write(chunk)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return doc_id, dest, written
 
 
 def _atomic_move(src: Path, dst: Path) -> None:

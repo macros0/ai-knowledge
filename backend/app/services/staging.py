@@ -25,6 +25,7 @@ from app.config import get_settings
 from app.db.models import DocumentStaging
 from app.db.session import session_scope
 from app.models.schemas import Concept
+from app.services.json_atomic import write_json_atomic
 from app.services.okf_generator import _slugify
 
 
@@ -32,11 +33,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# Лок на append_chunk общий для всех экземпляров StagingStore одного doc_id:
+# per-instance threading.Lock() не защищал бы при двух потоках пайплайна на один
+# staging (у каждого экземпляра был бы свой лок). Ключ — doc_id.
+_STAGING_LOCKS: dict[str, threading.Lock] = {}
+_STAGING_LOCKS_GUARD = threading.Lock()
+
+
+def _staging_lock(doc_id: str) -> threading.Lock:
+    with _STAGING_LOCKS_GUARD:
+        lock = _STAGING_LOCKS.get(doc_id)
+        if lock is None:
+            lock = threading.Lock()
+            _STAGING_LOCKS[doc_id] = lock
+        return lock
+
+
 class StagingStore:
     def __init__(self, doc_id: str, staging_root: Path | None = None):
         self.doc_id = doc_id
         self.dir = staging_root or get_settings().staging_dir / doc_id
-        self._lock = threading.Lock()
+        self._lock = _staging_lock(doc_id)
 
     def exists(self) -> bool:
         return self.load() is not None
@@ -116,10 +133,7 @@ class StagingStore:
             slugs = self._allocate_slugs(concepts, used)
             used.extend(slugs)
             chunk_file = f"chunk_{index:02d}.json"
-            (self.dir / chunk_file).write_text(
-                json.dumps([c.model_dump() for c in concepts], ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            write_json_atomic(self.dir / chunk_file, [c.model_dump() for c in concepts])
             chunks_data = dict(manifest.get("chunks_data", {}))
             chunks_data[str(index)] = {"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs}
             manifest.update(
