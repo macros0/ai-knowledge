@@ -1,9 +1,13 @@
 """Простой персистентный реестр документов (JSON-файл в data/)."""
 import json
+import logging
 import threading
 from datetime import datetime, timezone
 
 from app.config import get_settings
+from app.services.jsonio import write_json_atomic
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -20,11 +24,40 @@ class DocumentRegistry:
     def _load(self) -> None:
         if self.path.exists():
             try:
-                self._docs = json.loads(self.path.read_text(encoding="utf-8"))
-            except Exception:
-                self._docs = {}
+                raw = json.loads(self.path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                logger.warning("Реестр %s не разобран (%s) — стартуем с пустым", self.path, exc)
+                raw = {}
+            self._docs = self._sane_entries(raw)
         self._reset_stale_statuses()
         self._reconcile_okf_counts()
+
+    def _sane_entries(self, raw: object) -> dict[str, dict]:
+        """Отбрасывает записи неверной формы.
+
+        Битый JSON конструктор переживал и раньше, а вот валидный JSON неверной
+        формы ронял его — и вместе с ним весь backend: get_registry() вызывается
+        на уровне модуля в api/documents.py, так что сервис не стартовал вовсе и
+        отдавал трейсбек вместо объяснения. documents.json при этом ровно тот
+        файл, который правят руками.
+        """
+        if not isinstance(raw, dict):
+            logger.warning(
+                "Реестр %s: ожидался объект, получен %s — стартуем с пустым реестром",
+                self.path,
+                type(raw).__name__,
+            )
+            return {}
+        good = {k: v for k, v in raw.items() if isinstance(v, dict)}
+        dropped = sorted(set(raw) - set(good))
+        if dropped:
+            logger.warning(
+                "Реестр %s: записи неверной формы пропущены и будут удалены из файла "
+                "при следующей записи: %s",
+                self.path,
+                ", ".join(dropped),
+            )
+        return good
 
     def _reconcile_okf_counts(self) -> None:
         """Держит okf_concept_count в синхроне с фактическим числом .md-файлов бандла.
@@ -34,10 +67,12 @@ class DocumentRegistry:
         """
         okf_dir = get_settings().okf_dir
         changed = False
-        for doc in self._docs.values():
+        for doc_id, doc in self._docs.items():
             if doc.get("status") != "done":
                 continue
-            bundle = okf_dir / doc["id"]
+            # ключ словаря и есть doc_id (см. create) — подстраховка на случай
+            # записи без "id" после ручной правки или частичного восстановления
+            bundle = okf_dir / (doc.get("id") or doc_id)
             count = len(list(bundle.glob("*.md"))) if bundle.is_dir() else 0
             if doc.get("okf_concept_count") != count:
                 doc["okf_concept_count"] = count
@@ -60,7 +95,7 @@ class DocumentRegistry:
             self._save()
 
     def _save(self) -> None:
-        self.path.write_text(json.dumps(self._docs, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_atomic(self.path, self._docs)
 
     def create(self, doc_id: str, filename: str, content_type: str, size: int, tags: list[str] | None = None) -> dict:
         doc = {

@@ -58,6 +58,9 @@ def merge_and_format(
     for (doc_id, chunk_idx), group_hits in groups.items():
         if total_chars >= settings.chat_max_context_chars:
             break
+        # проверка «до» пропускала блок, переваливающий за лимит: итог мог
+        # превысить chat_max_context_chars на размер целого блока (до 6000
+        # символов). Точное решение — ниже, когда известна длина content.
 
         chunks_in_group = [h for h in group_hits if h.payload.get("point_type") == CHUNK_TYPE]
         concepts_in_group = [h for h in group_hits if h.payload.get("point_type") == CONCEPT_TYPE]
@@ -109,6 +112,9 @@ def merge_and_format(
             point_type = CHUNK_TYPE
             kind = "chunk"
 
+        # первый блок берём всегда: пустой контекст хуже небольшого перебора
+        if merged and total_chars + len(content) > settings.chat_max_context_chars:
+            break
         total_chars += len(content)
         merged.append(
             {

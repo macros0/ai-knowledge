@@ -1,17 +1,20 @@
 """Роуты загрузки и управления документами."""
 import json
 import mimetypes
-import os
+import re
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Form, HTTPException, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from app.config import get_settings
 from app.models.schemas import Concept, ChunkOut, DocumentListOut, DocumentOut, OkfFileOut
-from app.services.okf_generator import _build_markdown
-from app.services.pipeline import Pipeline, save_upload
+from app.services.jsonio import write_json_atomic
+from app.services.markdown import read_frontmatter
+from app.services.okf_generator import build_markdown
+from app.services.pipeline import AlreadyProcessingError, Pipeline, prepare_upload
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
 from app.services.tag_registry import TagRegistry, normalize_tags
@@ -22,24 +25,68 @@ _registry = get_registry()
 _pipeline = Pipeline()
 _tag_registry = TagRegistry()
 
+# doc_id генерируется как uuid4().hex[:16] — всё остальное отбрасываем.
+# Без этого traversal, сидящий в самом doc_id, уводит bundle_dir наружу,
+# и проверка вложенности сравнивает путь с уже уведённой наружу директорией.
+_DOC_ID_RE = re.compile(r"[0-9a-f]{16}")
+
+
+def _validate_doc_id(doc_id: str) -> str:
+    # fullmatch, а не $: `$` в Python матчится и перед завершающим \n
+    if not _DOC_ID_RE.fullmatch(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    return doc_id
+
+
+# Файл пишется на диск порциями: целиком в памяти он держаться не должен.
+_UPLOAD_CHUNK_SIZE = 1024 * 1024
+
 
 @router.post("", response_model=DocumentOut)
 async def upload_document(
+    request: Request,
     file: UploadFile,
     tags: Annotated[list[str] | None, Form()] = None,
 ):
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Файл пустой")
-    user_tags = normalize_tags(tags)
+    max_bytes = get_settings().upload_max_size_mb * 1024 * 1024
+    too_large = f"Файл больше допустимых {get_settings().upload_max_size_mb} МБ"
+
+    # Быстрый отказ до чтения тела. Content-Length включает multipart-обвязку,
+    # поэтому это лишь верхняя оценка — точная проверка ниже, по факту чтения.
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > max_bytes:
+        raise HTTPException(status_code=413, detail=too_large)
+
     try:
-        doc_id, _ = save_upload(content, file.filename or "unknown")
+        doc_id, dest = prepare_upload(file.filename or "unknown")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    size = 0
+    try:
+        # запись блокирующая — уводим её в пул, иначе на время загрузки
+        # event loop стоит и backend не отвечает даже на поллинг прогресса
+        out = await run_in_threadpool(dest.open, "wb")
+        try:
+            while chunk := await file.read(_UPLOAD_CHUNK_SIZE):
+                size += len(chunk)
+                if size > max_bytes:
+                    raise HTTPException(status_code=413, detail=too_large)
+                await run_in_threadpool(out.write, chunk)
+        finally:
+            await run_in_threadpool(out.close)
+    except BaseException:
+        dest.unlink(missing_ok=True)
+        raise
+
+    if size == 0:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Файл пустой")
+
+    user_tags = normalize_tags(tags)
     _tag_registry.add(user_tags)
-    doc = _registry.create(doc_id, file.filename or "unknown", file.content_type or "", len(content), tags=user_tags)
-    _pipeline.ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
+    doc = _registry.create(doc_id, file.filename or "unknown", file.content_type or "", size, tags=user_tags)
+    _pipeline.ingest(doc_id, dest, doc["filename"], user_tags=user_tags)
     return doc
 
 
@@ -75,6 +122,10 @@ def resume_document(doc_id: str):
         raise HTTPException(status_code=400, detail="Документ не требует возобновления")
     try:
         _pipeline.resume(doc_id)
+    except AlreadyProcessingError as exc:
+        # проверка статуса выше — гонка: второй клик приходит раньше, чем
+        # первый поток успевает перевести документ в processing
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _registry.get(doc_id)
@@ -93,6 +144,8 @@ def regenerate_document(doc_id: str):
         raise HTTPException(status_code=409, detail="Документ уже обрабатывается")
     try:
         _pipeline.regenerate(doc_id)
+    except AlreadyProcessingError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _registry.get(doc_id)
@@ -115,6 +168,7 @@ def download_document(doc_id: str):
 
 @router.get("/{doc_id}/okf", response_model=list[OkfFileOut])
 def list_okf_files(doc_id: str):
+    _validate_doc_id(doc_id)
     bundle_dir = get_settings().okf_dir / doc_id
     manifest_path = bundle_dir / "_files.json"
     if manifest_path.is_file():
@@ -138,7 +192,7 @@ def list_okf_files(doc_id: str):
         files = []
         manifest = []
         for f in sorted(bundle_dir.glob("*.md")):
-            meta = _read_frontmatter(f)
+            meta = read_frontmatter(f)
             files.append(
                 OkfFileOut(
                     filename=f.name,
@@ -174,9 +228,10 @@ def list_okf_files(doc_id: str):
 
 @router.get("/{doc_id}/okf/{filename}")
 def get_okf_file(doc_id: str, filename: str):
-    bundle_dir = get_settings().okf_dir / doc_id
+    _validate_doc_id(doc_id)
+    bundle_dir = (get_settings().okf_dir / doc_id).resolve()
     filepath = (bundle_dir / filename).resolve()
-    if str(filepath).startswith(str(bundle_dir.resolve())) and filepath.is_file():
+    if filepath.is_relative_to(bundle_dir) and filepath.is_file():
         return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
     slug = filename.removesuffix(".md")
     try:
@@ -187,7 +242,7 @@ def get_okf_file(doc_id: str, filename: str):
                 concept, chunk_index = hit
                 doc = _registry.get(doc_id) or {}
                 global_tags = (staging.load() or {}).get("global_tags", [])
-                md = _build_markdown(
+                md = build_markdown(
                     concept,
                     doc.get("filename", ""),
                     doc_id,
@@ -202,9 +257,10 @@ def get_okf_file(doc_id: str, filename: str):
 
 @router.get("/{doc_id}/okf/attachments/{filename}")
 def get_okf_attachment(doc_id: str, filename: str):
+    _validate_doc_id(doc_id)
     attach_dir = (get_settings().okf_dir / doc_id / "attachments").resolve()
     filepath = (attach_dir / filename).resolve()
-    if not str(filepath).startswith(str(attach_dir)) or not filepath.is_file():
+    if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
         raise HTTPException(status_code=404, detail="Файл не найден")
     media_type = mimetypes.guess_type(filepath.name)[0] or "application/octet-stream"
     return FileResponse(filepath, media_type=media_type)
@@ -212,6 +268,7 @@ def get_okf_attachment(doc_id: str, filename: str):
 
 @router.get("/{doc_id}/chunks", response_model=list[ChunkOut])
 def list_chunks(doc_id: str):
+    _validate_doc_id(doc_id)
     try:
         meta = _pipeline.ensure_chunks(doc_id)
     except ValueError as exc:
@@ -221,9 +278,10 @@ def list_chunks(doc_id: str):
 
 @router.get("/{doc_id}/chunks/{chunk_index}")
 def get_chunk(doc_id: str, chunk_index: int):
+    _validate_doc_id(doc_id)
     chunks_dir = (get_settings().okf_dir / doc_id / "chunks").resolve()
     filepath = (chunks_dir / f"chunk_{chunk_index:02d}.md").resolve()
-    if str(filepath).startswith(str(chunks_dir)) and filepath.is_file():
+    if filepath.is_relative_to(chunks_dir) and filepath.is_file():
         return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
     try:
         staging = StagingStore(doc_id)
@@ -238,6 +296,7 @@ def get_chunk(doc_id: str, chunk_index: int):
 
 @router.get("/{doc_id}/fulltext")
 def get_document_fulltext(doc_id: str):
+    _validate_doc_id(doc_id)
     try:
         _pipeline.ensure_chunks(doc_id)
     except ValueError as exc:
@@ -253,28 +312,12 @@ def get_document_fulltext(doc_id: str):
     return Response(content="\n\n".join(parts), media_type="text/plain; charset=utf-8")
 
 
-def _read_frontmatter(path: Path) -> dict:
-    import yaml
-
-    text = path.read_text(encoding="utf-8")
-    if text.startswith("---"):
-        try:
-            _, fm, _ = text.split("---", 2)
-            return yaml.safe_load(fm) or {}
-        except Exception:
-            return {}
-    return {}
-
-
 def _write_okf_manifest(bundle_dir: Path, manifest: list[dict]) -> None:
-    tmp_path = bundle_dir / "._files.json.tmp"
+    # кэш листинга: сорванная запись не должна ронять запрос
     try:
-        tmp_path.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        os.replace(tmp_path, bundle_dir / "_files.json")
+        write_json_atomic(bundle_dir / "_files.json", manifest)
     except Exception:
-        tmp_path.unlink(missing_ok=True)
+        pass
 
 
 def _staging_to_okf_files(staging: StagingStore) -> list[OkfFileOut]:

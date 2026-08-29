@@ -155,3 +155,82 @@ def test_health_reports_degraded_when_ollama_down(client, monkeypatch):
     data = resp.json()
     assert data["status"] == "degraded"
     assert data["dependencies"]["ollama"]["status"] == "down"
+
+
+class _DeadQdrant:
+    """Qdrant отвалился: любой вызов — сетевая ошибка."""
+
+    def __getattr__(self, name):
+        def boom(*args, **kwargs):
+            raise ConnectionError("[Errno 61] Connection refused")
+
+        return boom
+
+
+def _dead_store(tmp_path, monkeypatch):
+    from app.config import Settings
+    from app.services.vector_store import VectorStore
+
+    settings = Settings(data_dir=tmp_path, embedding_dimensions=8)
+    monkeypatch.setattr("app.services.vector_store.get_settings", lambda: settings)
+    vs = VectorStore()
+    vs.client = _DeadQdrant()
+    return vs
+
+
+class TestQdrantFailuresAreTyped:
+    """Сбой Qdrant должен доходить до пользователя как 503 «База знаний
+    недоступна», а не как 500 «Внутренняя ошибка сервера»."""
+
+    def test_graph_expansion_raises_vector_store_error(self, tmp_path, monkeypatch):
+        """Горячий путь чата: ветка graph рядом с dense/bm25, которые обёрнуты."""
+        from app.services.fusion import Hit
+
+        vs = _dead_store(tmp_path, monkeypatch)
+        concept = Hit("p1", 0.9, {"point_type": "concept", "relations": ["neighbour"]}, rank=0)
+        with pytest.raises(VectorStoreError):
+            vs._graph_expansion([([concept], 1.0)])
+
+    def test_search_branches_raise_vector_store_error(self, tmp_path, monkeypatch):
+        from qdrant_client import models as qm
+
+        vs = _dead_store(tmp_path, monkeypatch)
+        with pytest.raises(VectorStoreError):
+            vs.search_dense([0.1] * 8, None, 5)
+        with pytest.raises(VectorStoreError):
+            vs.search_bm25(qm.SparseVector(indices=[1], values=[1.0]), None, 5)
+
+    def test_ensure_collection_raises_vector_store_error(self, tmp_path, monkeypatch):
+        vs = _dead_store(tmp_path, monkeypatch)
+        with pytest.raises(VectorStoreError):
+            vs.ensure_collection()
+
+    def test_backfill_point_type_raises_vector_store_error(self, tmp_path, monkeypatch):
+        """Единственный бэкфилл, идущий в Qdrant без чтения диска."""
+        vs = _dead_store(tmp_path, monkeypatch)
+        with pytest.raises(VectorStoreError):
+            vs.backfill_point_type()
+
+    @pytest.mark.parametrize("name", ["backfill_sparse", "backfill_chunks", "backfill_relations"])
+    def test_disk_reading_backfills_raise_vector_store_error(self, tmp_path, monkeypatch, name):
+        """Эти три сначала читают бандлы с диска — каталог должен существовать,
+        иначе ранний return скроет обращение к Qdrant."""
+
+        class FakeEmbedder:
+            def embed_texts(self, texts):
+                return [[0.1] * 8 for _ in texts]
+
+        vs = _dead_store(tmp_path, monkeypatch)
+        bundle = vs.settings.okf_dir / "a1b2c3d4e5f60718"
+        (bundle / "chunks").mkdir(parents=True, exist_ok=True)
+        (bundle / "chunks" / "chunk_00.md").write_text("текст", encoding="utf-8")
+        (bundle / "concept.md").write_text("---\ntitle: C\nrelations: [x]\n---\nтело", encoding="utf-8")
+
+        args = (FakeEmbedder(),) if name == "backfill_chunks" else ()
+        with pytest.raises(VectorStoreError):
+            getattr(vs, name)(*args)
+
+    def test_ping_reports_false_instead_of_raising(self, tmp_path, monkeypatch):
+        """ping намеренно не обёрнут: /health нужен bool, а не исключение."""
+        vs = _dead_store(tmp_path, monkeypatch)
+        assert vs.ping() is False

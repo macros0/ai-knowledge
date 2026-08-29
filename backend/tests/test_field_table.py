@@ -46,6 +46,34 @@ DATA_TABLE = """| Дата | Сумма | Регион |
 | 2024-05-01 | 2500 | Центр |
 """
 
+# Чанк с ДВУМЯ таблицами полей и содержательным текстом между ними и после.
+# Замена таблиц на заглушку укорачивает список строк, поэтому идти нужно с конца:
+# при прямом порядке индексы второй таблицы «уезжают».
+TWO_FIELD_TABLES = """# Вид сообщения 111: уведомление об изменении ЭЛН
+
+| Поле/Элемент | Тип | Длина | Кратность | Описание |
+|---|---|---|---|---|
+| snils | p:snils |  | 1..1 | СНИЛС |
+| surname | com:surname | Тип.Длина: 60 | 1..1 | Фамилия застрахованного лица |
+| lnState | com:lnState | Тип.Длина: 3 | 1..1 | Код статуса ЭЛН |
+| gender | xs:int |  | 1..1 | Пол застрахованного лица |
+| innPerson | p:inn | Тип.Длина: 12 | 0..1 | ИНН застрахованного |
+
+МАРКЕР_МЕЖДУ: пояснение между двумя таблицами.
+
+# Вид сообщения 222: запрос сведений о страхователе
+
+| Поле/Элемент | Тип | Длина | Кратность | Описание |
+|---|---|---|---|---|
+| ogrn | p:ogrn | Тип.Длина: 13 | 1..1 | ОГРН страхователя |
+| kpp | p:kpp | Тип.Длина: 9 | 0..1 | КПП страхователя |
+| regNum | com:regNum | Тип.Длина: 10 | 1..1 | Регистрационный номер |
+| period | xs:date |  | 1..1 | Отчётный период |
+| docType | com:docType | Тип.Длина: 2 | 1..1 | Тип документа |
+
+МАРКЕР_ПОСЛЕ: важный текст после последней таблицы.
+"""
+
 
 class TestDetectFieldTables:
     def test_detects_field_table(self):
@@ -211,6 +239,26 @@ class TestExtractFieldTableConcepts:
         assert concepts == []
         assert "| 2024-01-01 |" in remainder
 
+    def test_two_tables_remainder_keeps_all_text(self):
+        """Две таблицы в одном чанке: текст между ними И после последней
+        должен дойти до LLM, а обрывки таблиц — не должны."""
+        concepts, rows, remainder = extract_field_table_concepts(TWO_FIELD_TABLES, chunk_index=1)
+        assert len(rows) == 10
+        assert remainder.count("Таблица полей извлечена программно") == 2
+        assert "МАРКЕР_МЕЖДУ" in remainder
+        assert "МАРКЕР_ПОСЛЕ" in remainder
+
+    def test_two_tables_no_row_leaks_into_remainder(self):
+        _c, _rows, remainder = extract_field_table_concepts(TWO_FIELD_TABLES, chunk_index=1)
+        for marker in ("p:snils", "com:lnState", "p:ogrn", "com:docType"):
+            assert marker not in remainder, f"обрывок таблицы утёк в промпт: {marker}"
+
+    def test_two_tables_concepts_from_both(self):
+        concepts, _rows, _r = extract_field_table_concepts(TWO_FIELD_TABLES, chunk_index=1)
+        titles = " ".join(c.title for c in concepts)
+        assert "lnState" in titles
+        assert "docType" in titles
+
 
 # Таблицы полей с поддержкой кириллицы (W3C XML) и нумерованной первой колонки.
 
@@ -360,6 +408,81 @@ class TestLLMClassifier:
         assert len(concepts) >= 6  # 5 полей + обзорный
         assert llm.call_count == 1
         assert "Таблица-перечень извлечена программно" in remainder
+
+    def test_two_tables_remainder_keeps_all_text(self, tmp_path, monkeypatch):
+        """LLM-путь: обе таблицы извлекаются, текст между ними и после — цел."""
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        cls = {"concept_per_row": True, "title_col": 0,
+               "description_cols": [4], "concept_type": "reference"}
+        llm = FakeClassifierLLM([cls, cls])
+        concepts, remainder = extract_table_concepts(
+            TWO_FIELD_TABLES, chunk_index=1, llm=llm, use_llm_classify=True
+        )
+        assert llm.call_count == 2
+        assert remainder.count("Таблица-перечень извлечена программно") == 2
+        assert "МАРКЕР_МЕЖДУ" in remainder
+        assert "МАРКЕР_ПОСЛЕ" in remainder
+        for marker in ("p:snils", "com:lnState", "p:ogrn", "com:docType"):
+            assert marker not in remainder, f"обрывок таблицы утёк в промпт: {marker}"
+        titles = " ".join(c.title for c in concepts)
+        assert "lnState" in titles
+        assert "docType" in titles
+
+    def test_classifier_works_with_xml_heuristic_disabled(self, tmp_path, monkeypatch):
+        """Порог классификатора отдельный от okf_field_table_min_rows.
+
+        Раньше detect_tables смотрел на тот же okf_field_table_min_rows, и при
+        его дефолтном 0 включение okf_table_llm_classify не делало ничего:
+        ни ошибки, ни лога, классификатор не вызывался ни разу.
+        """
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 0)  # XML-эвристика выключена
+        monkeypatch.setattr(s, "okf_table_classify_min_rows", 5)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        llm = FakeClassifierLLM([{
+            "concept_per_row": True, "title_col": 0,
+            "description_cols": [4], "concept_type": "reference",
+        }])
+        concepts, remainder = extract_table_concepts(
+            FIELD_TABLE, chunk_index=1, llm=llm, use_llm_classify=True
+        )
+        assert llm.call_count == 1, "классификатор не был вызван"
+        assert len(concepts) >= 6
+        assert "p:snils" not in remainder, "таблица ушла в промпт LLM целиком"
+
+    def test_classifier_threshold_zero_disables_classifier(self, tmp_path, monkeypatch):
+        """0 в собственном пороге выключает уже сам классификатор."""
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(s, "okf_table_classify_min_rows", 0)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        llm = FakeClassifierLLM([])
+        concepts, remainder = extract_table_concepts(
+            FIELD_TABLE, chunk_index=1, llm=llm, use_llm_classify=True
+        )
+        assert llm.call_count == 0
+        assert concepts == []
+        assert remainder == FIELD_TABLE
+
+    def test_table_below_classify_threshold_left_to_llm(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 0)
+        monkeypatch.setattr(s, "okf_table_classify_min_rows", 5)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        small = "\n".join(FIELD_TABLE.split("\n")[:6])  # заголовок + разделитель + 3 строки
+        llm = FakeClassifierLLM([])
+        concepts, remainder = extract_table_concepts(
+            small, chunk_index=1, llm=llm, use_llm_classify=True
+        )
+        assert llm.call_count == 0
+        assert concepts == []
+        assert remainder == small
 
     def test_llm_classifies_data_table_as_not_concept_per_row(self, tmp_path, monkeypatch):
         monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
@@ -604,3 +727,20 @@ class TestLLMClassifier:
         # dedup: только 2 концепта (по одному на таблицу, но второй дубликат пропущен)
         whole_concepts = [c for c in concepts if c.tags and "table-whole" in c.tags]
         assert len(whole_concepts) == 1  # второй пропущен дедупом
+
+
+class TestClassifierConfigWarning:
+    def test_warns_when_threshold_disables_enabled_classifier(self, caplog):
+        from app.config import Settings
+
+        with caplog.at_level("WARNING", logger="app.config"):
+            Settings(okf_table_llm_classify=True, okf_table_classify_min_rows=0)
+        assert "классификатор таблиц выключен порогом" in caplog.text
+
+    def test_no_warning_for_workable_combination(self, caplog):
+        from app.config import Settings
+
+        with caplog.at_level("WARNING", logger="app.config"):
+            Settings(okf_table_llm_classify=True, okf_table_classify_min_rows=5)
+            Settings(okf_table_llm_classify=False, okf_table_classify_min_rows=0)
+        assert "классификатор таблиц выключен порогом" not in caplog.text
