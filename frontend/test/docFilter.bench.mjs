@@ -73,10 +73,10 @@ test("алгоритмика фильтра: globToRegExp + filterDocuments (з�
     for (const s of SCENARIOS) {
       const { p50, p95 } = measure(() => {
         globToRegExp(s.mask); // свежая компиляция на каждую итерацию
-        filterDocuments(docs, { mask: s.mask, scope: "all" });
+        filterDocuments(docs, { mask: s.mask });
       }, REPS);
 
-      const filtered = filterDocuments(docs, { mask: s.mask, scope: "all" });
+      const filtered = filterDocuments(docs, { mask: s.mask });
       const expected = s.expected(n);
       assert.equal(filtered.length, expected, `${n}/${s.label}: ожидалось ${expected}, получено ${filtered.length}`);
 

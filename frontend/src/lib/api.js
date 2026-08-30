@@ -12,12 +12,13 @@ export function getServiceMessage(service) {
 }
 
 export class ApiError extends Error {
-  constructor(message, { status, code, service } = {}) {
+  constructor(message, { status, code, service, data } = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.service = service;
+    this.data = data;
   }
 
   get isDependencyUnavailable() {
@@ -38,15 +39,17 @@ async function request(path, init, timeoutMs) {
       let message = detail || `HTTP ${resp.status}`;
       let code = null;
       let service = null;
+      let data = null;
       try {
         const parsed = JSON.parse(detail);
         if (parsed && typeof parsed.detail === "string") message = parsed.detail;
         if (parsed && typeof parsed.code === "string") code = parsed.code;
         if (parsed && typeof parsed.service === "string") service = parsed.service;
+        data = parsed;
       } catch {
         // not JSON — use raw text
       }
-      throw new ApiError(message, { status: resp.status, code, service });
+      throw new ApiError(message, { status: resp.status, code, service, data });
     }
     return resp.json();
   } catch (err) {
@@ -75,9 +78,13 @@ export function listTags() {
   return request("/tags").then((data) => data.tags ?? []);
 }
 
-export function listDocuments(scope = "mine") {
-  const qs = scope ? `?scope=${encodeURIComponent(scope)}` : "";
+export function listDocuments(uploader) {
+  const qs = uploader ? `?uploader=${encodeURIComponent(uploader)}` : "";
   return request(`/documents${qs}`).then((data) => data.documents ?? []);
+}
+
+export function listUploaders() {
+  return request("/documents/uploaders").then((data) => data.uploaders ?? []);
 }
 
 export function deleteDocument(docId) {
@@ -204,4 +211,90 @@ export function simulateAuth(username) {
 
 export function getHealth() {
   return fetch("/health").then((r) => r.json());
+}
+
+// --- Справочник разработок (Этап 4) ---
+
+export function listDevelopments() {
+  return request("/developments").then((data) => data.developments ?? []);
+}
+
+export function listDevelopmentsPage(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") qs.set(k, v);
+  }
+  const s = qs.toString();
+  return request(`/developments${s ? `?${s}` : ""}`).then((data) => ({
+    developments: data.developments ?? [],
+    total: data.total ?? 0,
+    limit: data.limit ?? null,
+    offset: data.offset ?? 0,
+  }));
+}
+
+export function getDevelopment(devId) {
+  return request(`/developments/${devId}`);
+}
+
+export function createDevelopment({ number, name, module }) {
+  return request("/developments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ number, name, module }),
+  });
+}
+
+export function updateDevelopment(devId, { number, name, module }) {
+  return request(`/developments/${devId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ number, name, module }),
+  });
+}
+
+export function deleteDevelopment(devId) {
+  return request(`/developments/${devId}`, { method: "DELETE" });
+}
+
+export function listDevelopmentDocuments(devId) {
+  return request(`/developments/${devId}/documents`).then((d) => d.documents ?? []);
+}
+
+// --- Generic атрибуты (module и т.п.) ---
+
+export function listAttributeValues(key) {
+  return request(`/attributes/${key}`).then((data) => data.values ?? []);
+}
+
+export function addAttributeValue(key, value) {
+  return request(`/attributes/${key}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value }),
+  });
+}
+
+export function deleteAttributeValue(key, value) {
+  return request(`/attributes/${key}/${encodeURIComponent(value)}`, {
+    method: "DELETE",
+  });
+}
+
+// --- Связь документа с разработкой ---
+
+export function setDocumentDevelopment(docId, developmentId, confirmed = false) {
+  return request(`/documents/${docId}/development`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ development_id: developmentId, confirmed }),
+  });
+}
+
+export function detectDocumentDevelopment(docId) {
+  return request(`/documents/${docId}/detect-development`, { method: "POST" });
+}
+
+export function listDocumentDuplicates(docId) {
+  return request(`/documents/${docId}/duplicates`);
 }

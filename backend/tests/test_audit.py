@@ -25,10 +25,16 @@ EXPECTED_ACTION_TYPES = {
     "document_regenerate",
     "document_bulk_regenerate",
     "document_resume",
+    "document_development_set",
     "job_approve",
     "job_cancel",
     "user_block",
     "user_unblock",
+    "development_create",
+    "development_update",
+    "development_delete",
+    "attribute_create",
+    "attribute_delete",
 }
 
 
@@ -101,6 +107,7 @@ def make_client(tmp_path: Path, monkeypatch, **overrides) -> TestClient:
         "auth_provider": "simulation",
         "auth_role_groups": ROLE_GROUPS,
         "auth_default_role": "viewer",
+        "dedup_enabled": False,  # дедупликация покрыта отдельно (test_deduplication.py)
         "auth_sim_users": [
             {"user_id": "sim-admin", "username": "demo.admin", "email": "a@d.local", "groups": ["KB_Admin"]},
         ],
@@ -123,12 +130,15 @@ def login(client, username="demo.admin"):
 
 
 class TestUploadAuditHook:
-    def test_upload_records_document_upload(self, client, monkeypatch):
+    def test_upload_records_document_upload(self, client, monkeypatch, tmp_path):
         from app.api import documents as docs
+
+        dest = tmp_path / "0123456789abcdef.pdf"
+        dest.write_bytes(b"%PDF-1.4")
 
         login(client)
         monkeypatch.setattr(
-            docs, "save_upload_stream", lambda *a, **k: ("0123456789abcdef", None, 123)
+            docs, "save_upload_stream", lambda *a, **k: ("0123456789abcdef", dest, 123)
         )
         monkeypatch.setattr(docs._pipeline, "ingest", lambda *a, **k: None)
 

@@ -20,7 +20,9 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -41,6 +43,49 @@ class Organization(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class Development(Base):
+    """Справочник номеров разработки (Этап 4 roadmap).
+
+    `module` — строковое значение, мягко валидируемое против attribute_values
+    (attribute_key='module'), а НЕ enum/CHECK: module-подобные поля живут как
+    данные, а не как схема (см. AGENTS.md / OKF_Knowledge_Service_Roadmap.md).
+    """
+
+    __tablename__ = "developments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    number: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    module: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class AttributeValue(Base):
+    """Generic мини-справочник строковых атрибутов (module, component, ...).
+
+    Значения хранятся как данные (attribute_key + value), а не как CHECK/enum в
+    схеме. org_id=NULL — общее/системное значение; иначе — привязано к организации.
+    Уникальность (key, value, org_id) — в БД; мягкое дублирование (NULL org) гасится
+    идемпотентностью сервиса (attribute_registry.py).
+    """
+
+    __tablename__ = "attribute_values"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    attribute_key: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    value: Mapped[str] = mapped_column(String(255), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("attribute_key", "value", "org_id", name="uq_attribute_values_key_value_org"),
+    )
 
 
 class User(Base):
@@ -97,10 +142,28 @@ class Document(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
+    development_id: Mapped[int | None] = mapped_column(
+        ForeignKey("developments.id"), nullable=True, index=True
+    )
+    development_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    development_confirmed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Кандидат автоопределения (number/name/module) для UI «требует уточнения»,
+    # когда в справочнике не нашлось совпадения. Хранится, чтобы не гонять LLM повторно.
+    development_suggestion: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Дедупликация (Этап 4.2): SHA-256 байтов файла и нормализованного текста.
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # MinHash-подпись (k=128) документа, список uint32.
+    minhash: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Есть ли почти-дубликаты (уровень 2/3): выставляется пайплайном после
+    # расчёта сигнатуры. Бейдж «Дубликат» в UI.
+    has_duplicates: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
 
     tags_rel: Mapped[list["DocumentTag"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
+
+    development: Mapped["Development | None"] = relationship()
 
 
 class DocumentTag(Base):
@@ -112,6 +175,33 @@ class DocumentTag(Base):
     tag: Mapped[str] = mapped_column(String(255), primary_key=True)
 
     document: Mapped[Document] = relationship(back_populates="tags_rel")
+
+
+class DocumentLshBucket(Base):
+    """LSH-бакеты MinHash-подписи документа (Этап 4.2 дедупликация).
+
+    Одна подпись (k=128) бандируется двумя схемами:
+      - strict (b=8, r=16)  — порог Jaccard ~0.88 (почти идентичные);
+      - loose  (b=16, r=8)  — порог Jaccard ~0.71 (ревизии/похожие).
+    Каждая полоса (band) хэшируется в bucket_hash; поиск кандидатов — по
+    (variant, band_index, bucket_hash). Уникальность (doc_id, variant, band_index)
+    гарантирует, что повторная индексация не плодит дубликаты.
+    """
+
+    __tablename__ = "document_lsh_buckets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    doc_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    variant: Mapped[str] = mapped_column(String(16), nullable=False)  # strict | loose
+    band_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    bucket_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("doc_id", "variant", "band_index", name="uq_lsh_doc_variant_band"),
+        Index("ix_lsh_lookup", "variant", "band_index", "bucket_hash"),
+    )
 
 
 class Tag(Base):

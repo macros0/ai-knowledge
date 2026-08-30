@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import (
     Document,
+    DocumentLshBucket,
     DocumentStaging,
     DocumentTag,
     OkfAttachment,
@@ -28,6 +29,7 @@ STALE_STATUSES = {"splitting", "processing", "indexing", "uploaded"}
 
 
 def _to_dict(doc: Document) -> dict:
+    dev = doc.development
     return {
         "id": doc.id,
         "filename": doc.filename,
@@ -43,6 +45,14 @@ def _to_dict(doc: Document) -> dict:
         "uploaded_by": doc.uploaded_by,
         "created_at": doc.created_at,
         "updated_at": doc.updated_at,
+        "development_id": doc.development_id,
+        "development_number": dev.number if dev else None,
+        "development_name": dev.name if dev else None,
+        "development_module": dev.module if dev else None,
+        "development_confidence": doc.development_confidence,
+        "development_confirmed_by": doc.development_confirmed_by,
+        "development_suggestion": doc.development_suggestion,
+        "has_duplicates": bool(doc.has_duplicates),
     }
 
 
@@ -75,11 +85,23 @@ class DocumentRegistry:
 
     def list(self, uploaded_by: str | None = None) -> list[dict]:
         with session_scope() as s:
-            stmt = select(Document).options(selectinload(Document.tags_rel))
+            stmt = select(Document).options(
+                selectinload(Document.tags_rel), selectinload(Document.development)
+            )
             if uploaded_by is not None:
                 stmt = stmt.where(Document.uploaded_by == uploaded_by)
             docs = s.execute(stmt).scalars().all()
             return [_to_dict(d) for d in docs]
+
+    def distinct_uploaders(self) -> list[str]:
+        with session_scope() as s:
+            stmt = (
+                select(Document.uploaded_by)
+                .where(Document.uploaded_by.isnot(None))
+                .distinct()
+            )
+            names = [u for u in s.execute(stmt).scalars().all() if u]
+            return sorted(names)
 
     def update(self, doc_id: str, **fields) -> None:
         tags = fields.pop("tags", None)
@@ -98,7 +120,7 @@ class DocumentRegistry:
 
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
-            for model in (OkfConcept, OkfAttachment, DocumentStaging, DocumentTag):
+            for model in (OkfConcept, OkfAttachment, DocumentStaging, DocumentTag, DocumentLshBucket):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             doc = s.get(Document, doc_id)
             if doc is None:

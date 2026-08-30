@@ -10,6 +10,7 @@ const baseItems = [
 ];
 
 const roleItems = [
+  { href: "/developments", label: "Разработки", exact: false, roles: ["editor", "admin"] },
   { href: "/admin", label: "Системные операции", exact: false, roles: ["admin"] },
   { href: "/security", label: "Аудит", exact: false, roles: ["security"] },
 ];

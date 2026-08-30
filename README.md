@@ -592,6 +592,18 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | POST | `/api/search` | Поиск по концептам (top-k + фильтр по тегам + режим `mode`) |
 | POST | `/api/chat` | Вопрос к базе знаний (ответ + источники + режим `mode`) |
 | GET | `/api/tags` | Список тегов с частотой использования |
+| POST | `/api/documents/{doc_id}/development` | Привязать/отвязать разработку, подтвердить автоопределение (роли `editor`/`admin`) |
+| POST | `/api/documents/{doc_id}/detect-development` | On-demand автоопределение номера разработки (роли `editor`/`admin`) |
+| GET | `/api/documents/{doc_id}/duplicates` | Кандидаты-дубликаты (Level 2/3: content-hash + MinHash/LSH) |
+| GET | `/api/developments` | Список разработок с числом документов |
+| POST | `/api/developments` | Создать разработку (роли `editor`/`admin`) |
+| GET | `/api/developments/{dev_id}` | Карточка разработки |
+| PATCH | `/api/developments/{dev_id}` | Переименовать/изменить разработку (запускает реиндекс `dev_tags`) |
+| DELETE | `/api/developments/{dev_id}` | Удалить разработку (роль `admin`; документы отвязываются) |
+| GET | `/api/developments/{dev_id}/documents` | Документы разработки |
+| GET | `/api/attributes/{key}` | Значения generic-атрибута (напр. `module`) |
+| POST | `/api/attributes/{key}` | Добавить значение атрибута (роли `editor`/`admin`) |
+| DELETE | `/api/attributes/{key}/{value}` | Удалить значение атрибута (роли `editor`/`admin`) |
 | GET | `/api/auth/me` | Текущий режим авторизации + пользователь (+демо-юзеры в simulation) |
 | POST | `/api/auth/simulate` | Войти как демо-пользователь (режим `simulation`) |
 | POST | `/api/auth/logout` | Завершить сессию |

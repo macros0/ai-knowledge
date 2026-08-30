@@ -56,6 +56,21 @@ UI: http://localhost:3000
   Tags — жёсткий pre-filter для dense/bm25. Переключатели `SEARCH_*_ENABLED` —
   query-time, реиндекс не требуется.
   Реиндекс нужен только при смене `embedding_dimensions` или sparse-токенайзера.
+- **Справочник разработок + дедупликация (Этап 4, 30.08.2026)**:
+  - Каноническая связь — `documents.development_id` (FK → `developments`). Проекция для
+    поиска — payload Qdrant `dev_tags=[number,name,module]` на ВСЕХ точках (отдельное поле,
+    НЕ сливается с `tags`); pre-filter матчит тег, если он в `tags` ИЛИ `dev_tags`.
+    Переименование разработки = `set_payload(dev_tags=...)` по `doc_id` без пере-эмбеддинга
+    (`services/dev_sync.py`).
+  - `developments.module` — строка, мягко валидируемая против generic-справочника
+    `attribute_values` (`attribute_key='module'`, `org_id` nullable = привязка к инсталляции).
+    Значение вне справочника → 422. Сид `PY/PT/OM/PA` — **отдельный скрипт**
+    `backend/scripts/seed_attribute_values.py` (не входит в Alembic-миграцию).
+  - Автоопределение: regex по имени файла (upload) + LLM с титульного листа (pipeline, тот же
+    `llm_model`); кандидат без совпадения — в `documents.development_suggestion`.
+  - Дедупликация: `documents.file_hash` (SHA-256, блокирующий Level 1), `content_hash` +
+    `minhash` (k=128, `mmh3`) + `document_lsh_buckets` (strict 8×16 / loose 16×8).
+    Level 2/3 кандидаты — `GET /documents/{id}/duplicates`.
 
 ## Фоновые процессы
 

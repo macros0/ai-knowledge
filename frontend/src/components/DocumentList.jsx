@@ -1,14 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { deleteDocument, listDocuments, regenerateDocument, resumeDocument } from "@/lib/api";
-import { filterDocuments } from "@/lib/docFilter.mjs";
-import { DownloadIcon, EyeIcon, RefreshIcon, TrashIcon } from "./icons";
+import { deleteDocument, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment } from "@/lib/api";
+import { filterDocuments, sortDocuments, SORT_OPTIONS } from "@/lib/docFilter.mjs";
+import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
 import BulkActionsBar from "./BulkActionsBar";
 import PreviewModal from "./PreviewModal";
+import DevelopmentPicker from "./DevelopmentPicker";
+import DuplicateModal from "./DuplicateModal";
 
 const STATUS_LABELS = {
   uploaded: "Загружен",
@@ -36,59 +39,77 @@ function progressText(doc) {
 
 export default function DocumentList({ refreshKey = 0 }) {
   const router = useRouter();
-  const { mode, hasRole, loading } = useAuth();
+  const { mode, hasRole, loading, user } = useAuth();
   const { showToast } = useToast();
   const [docs, setDocs] = useState([]);
   const [regenerating, setRegenerating] = useState({});
   const [selected, setSelected] = useState({});
   const [showPreview, setShowPreview] = useState(false);
   const [filenameMask, setFilenameMask] = useState("");
-  const [uploaderFilter, setUploaderFilter] = useState("");
+  // Выбор в дропдауне: null — ещё не выбирал (действует дефолт по роли),
+  // "" — все, "__me__" — мои, иначе — конкретный username.
+  const [chosenUploader, setChosenUploader] = useState(null);
+  const [uploaders, setUploaders] = useState([]);
+  const [sortKey, setSortKey] = useState("date_desc");
+  const [developments, setDevelopments] = useState([]);
+  const [dupDoc, setDupDoc] = useState(null);
   const mounted = useRef(true);
   const timer = useRef(null);
+  const loadSeq = useRef(0);
 
   // В disabled-режиме (всё открыто) действия доступны, как и на бэкенде.
   const canEdit = mode === "disabled" || hasRole("editor", "admin");
   const isAdmin = mode === "disabled" || hasRole("admin");
 
-  // Вкладки «Мои документы»/«Все документы» — только для editor/admin (у них
-  // есть «свои» загрузки). viewer/security/аноним своих не заводят — всегда
-  // видят общий список (scope=all).
-  const canSeeTabs = mode !== "disabled" && hasRole("editor", "admin");
-  const [scope, setScope] = useState(canSeeTabs ? "mine" : "all");
-  const scopeChosen = useRef(false);
+  // Единый фильтр по загрузчику: дефолт — «мои» для editor/admin, иначе «все».
+  // "__me__" — спец-значение только для UI; на бэкенд уходит либо ничего (все),
+  // либо резолвленный username текущего пользователя.
+  const selectedUploader =
+    chosenUploader ?? (hasRole("editor", "admin") ? "__me__" : "");
 
-  // После загрузки профиля выставляем корректный дефолт (editor/admin → «mine»,
-  // остальные → «all»), но не перебиваем уже сделанный пользователем выбор.
-  useEffect(() => {
-    if (loading) return;
-    if (scopeChosen.current) return;
-    setScope(canSeeTabs ? "mine" : "all");
-  }, [loading, canSeeTabs]);
+  const chooseUploader = (next) => setChosenUploader(next);
 
-  const chooseScope = (next) => {
-    scopeChosen.current = true;
-    setScope(next);
-  };
+  const resolvedUploader =
+    selectedUploader === "__me__" ? user?.username ?? "" : selectedUploader;
 
   const load = useCallback(async () => {
-    const list = await listDocuments(scope);
-    if (!mounted.current) return;
+    const seq = ++loadSeq.current;
+    const list = await listDocuments(resolvedUploader);
+    if (seq !== loadSeq.current || !mounted.current) return;
     setDocs(list);
     const busy = list.some((d) => BUSY_STATUSES.includes(d.status));
     if (busy && mounted.current) {
       timer.current = setTimeout(load, 1500);
     }
-  }, [scope]);
+  }, [resolvedUploader]);
+
+  const loadUploaders = useCallback(async () => {
+    try {
+      setUploaders(await listUploaders());
+    } catch {
+      // не критично — дропдаун просто останется без реальных username
+    }
+  }, []);
+
+  const loadDevelopments = useCallback(async () => {
+    try {
+      setDevelopments(await listDevelopments());
+    } catch {
+      setDevelopments([]);
+    }
+  }, []);
 
   useEffect(() => {
+    if (loading) return;
     mounted.current = true;
     load();
+    loadUploaders();
+    loadDevelopments();
     return () => {
       mounted.current = false;
       clearTimeout(timer.current);
     };
-  }, [refreshKey, load]);
+  }, [loading, refreshKey, load, loadUploaders, loadDevelopments]);
 
   const openOkf = (doc) => {
     router.push(`/documents/${doc.id}/okf`);
@@ -145,6 +166,19 @@ export default function DocumentList({ refreshKey = 0 }) {
     }
   };
 
+  const changeDevelopment = async (doc, value) => {
+    const devId = value === null || value === "" ? null : Number(value);
+    try {
+      const res = await setDocumentDevelopment(doc.id, devId, devId !== null);
+      if (res?.dev_tags_sync_pending) {
+        showToast("Документ привязан, индексация обновится в фоне", { type: "warning" });
+      }
+      load();
+    } catch (err) {
+      showToast(`Не удалось изменить разработку: ${err.message}`, { type: "error" });
+    }
+  };
+
   const toggleSelect = (id) => {
     setSelected((s) => {
       const next = { ...s };
@@ -156,18 +190,10 @@ export default function DocumentList({ refreshKey = 0 }) {
 
   const selectedIds = Object.keys(selected);
 
-  const uploaders = useMemo(() => {
-    const set = new Set();
-    for (const d of docs) {
-      if (d.uploaded_by) set.add(d.uploaded_by);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [docs]);
-
-  const filteredDocs = useMemo(
-    () => filterDocuments(docs, { mask: filenameMask, uploaderFilter, scope }),
-    [docs, filenameMask, uploaderFilter, scope]
-  );
+  const filteredDocs = useMemo(() => {
+    const sort = SORT_OPTIONS[sortKey];
+    return sortDocuments(filterDocuments(docs, { mask: filenameMask }), sort);
+  }, [docs, filenameMask, sortKey]);
 
   return (
     <>
@@ -189,27 +215,13 @@ export default function DocumentList({ refreshKey = 0 }) {
           }}
         />
       )}
-      {canSeeTabs && (
-        <div className="scope-tabs" role="tablist" aria-label="Фильтр документов">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={scope === "mine"}
-            className={scope === "mine" ? "scope-tab active" : "scope-tab"}
-            onClick={() => chooseScope("mine")}
-          >
-            Мои документы
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={scope === "all"}
-            className={scope === "all" ? "scope-tab active" : "scope-tab"}
-            onClick={() => chooseScope("all")}
-          >
-            Все документы
-          </button>
-        </div>
+      {dupDoc && (
+        <DuplicateModal
+          doc={dupDoc}
+          canDelete={canEdit}
+          onClose={() => setDupDoc(null)}
+          onDeleted={() => load()}
+        />
       )}
       <div className="doc-filter-bar">
         <input
@@ -220,21 +232,43 @@ export default function DocumentList({ refreshKey = 0 }) {
           onChange={(e) => setFilenameMask(e.target.value)}
           aria-label="Поиск по названию"
         />
-        {scope === "all" && (
-          <select
-            className="doc-filter-select"
-            value={uploaderFilter}
-            onChange={(e) => setUploaderFilter(e.target.value)}
-            aria-label="Фильтр по загрузчику"
-          >
+        <select
+          className="doc-filter-select"
+          value={selectedUploader}
+          onChange={(e) => chooseUploader(e.target.value)}
+          aria-label="Фильтр по загрузчику"
+        >
+          <optgroup label="Быстрый выбор">
+            <option value="__me__">Мои документы</option>
             <option value="">Все загрузчики</option>
+          </optgroup>
+          <optgroup label="Загрузчики">
             {uploaders.map((u) => (
               <option key={u} value={u}>
                 {u}
               </option>
             ))}
-          </select>
-        )}
+          </optgroup>
+        </select>
+        <select
+          className="doc-filter-select"
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value)}
+          aria-label="Сортировка"
+        >
+          <optgroup label="Дата">
+            <option value="date_desc">Новые сначала</option>
+            <option value="date_asc">Старые сначала</option>
+          </optgroup>
+          <optgroup label="Название">
+            <option value="name_asc">А–Я</option>
+            <option value="name_desc">Я–А</option>
+          </optgroup>
+          <optgroup label="Загрузчик">
+            <option value="uploader_asc">А–Я</option>
+            <option value="uploader_desc">Я–А</option>
+          </optgroup>
+        </select>
       </div>
       <ul className="document-list">
         {filteredDocs.map((doc) => (
@@ -260,7 +294,52 @@ export default function DocumentList({ refreshKey = 0 }) {
                     <span className="doc-tags">Теги: {doc.tags.join(", ")}</span>
                   </>
                 )}
-                {scope === "all" && doc.uploaded_by && (
+                {doc.development_number && (!canEdit || developments.length === 0) && (
+                  <>
+                    <br />
+                    <Link
+                      className="dev-tag-link"
+                      href={`/developments/${doc.development_id}`}
+                      title={`Разработка: ${doc.development_name || ""}`}
+                    >
+                      <LinkIcon size={12} />
+                      {doc.development_number}
+                      {doc.development_name ? ` · ${doc.development_name}` : ""}
+                    </Link>
+                  </>
+                )}
+                {doc.development_suggestion && !doc.development_id && (
+                  <>
+                    <br />
+                    <span className="dev-suggestion">
+                      Требует уточнения: {doc.development_suggestion.number || doc.development_suggestion.name || "—"}
+                    </span>
+                  </>
+                )}
+                {doc.has_duplicates && (
+                  <>
+                    <br />
+                    <button
+                      type="button"
+                      className="dup-badge"
+                      onClick={() => setDupDoc(doc)}
+                      title="Показать дубликаты"
+                    >
+                      Дубликат
+                    </button>
+                  </>
+                )}
+                {canEdit && developments.length > 0 && (
+                  <>
+                    <br />
+                    <DevelopmentPicker
+                      developments={developments}
+                      value={doc.development_id ?? null}
+                      onChange={(devId) => changeDevelopment(doc, devId)}
+                    />
+                  </>
+                )}
+                {doc.uploaded_by && (
                   <>
                     <br />
                     <span className="doc-uploader">Загрузил: {doc.uploaded_by}</span>

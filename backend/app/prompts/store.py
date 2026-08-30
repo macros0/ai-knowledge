@@ -26,6 +26,8 @@ PROMPT_DEFAULTS: Final = {
     "okf_user": _defaults.USER_OKF_PROMPT,
     "okf_chunk": _defaults.CHUNK_OKF_PROMPT,
     "okf_table_classifier": _defaults.TABLE_CLASSIFIER_PROMPT,
+    "dev_number_system": _defaults.SYSTEM_DEV_NUMBER_PROMPT,
+    "dev_number_user": _defaults.USER_DEV_NUMBER_PROMPT,
 }
 
 REQUIRED_PLACEHOLDERS: Final = {
@@ -35,6 +37,8 @@ REQUIRED_PLACEHOLDERS: Final = {
     "okf_user": ("filename", "content"),
     "okf_chunk": ("filename", "index", "total", "content"),
     "okf_table_classifier": (),
+    "dev_number_system": (),
+    "dev_number_user": ("filename", "content"),
 }
 
 CANONICAL_DIR: Final = Path(__file__).resolve().parents[2] / "prompts"

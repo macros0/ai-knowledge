@@ -18,6 +18,8 @@ from typing import BinaryIO
 
 from app.config import get_settings
 from app.services.concept_store import replace_concepts
+from app.services.dev_detector import attach_development, detect
+from app.services.development_registry import get_development_registry
 from app.services.embedder import Embedder
 from app.services.errors import DependencyUnavailableError
 from app.services.json_atomic import write_json_atomic
@@ -167,6 +169,32 @@ class Pipeline:
         markdown = blocks_to_markdown(blocks)
         attachments = _collect_attachments(blocks, attachments_dir)
 
+        # Автоопределение номера разработки: только на «свежем» проходе и если
+        # regex по имени файла (на этапе upload) ничего не нашёл. Non-fatal —
+        # ошибка LLM/справочника не прерывает обработку документа.
+        if not resume and self.settings.dev_detection_enabled:
+            doc = self.registry.get(doc_id)
+            if doc and not doc.get("development_id"):
+                detection = detect(markdown, filename, doc_id)
+                if detection.confidence is not None:
+                    attach_development(doc_id, detection)
+
+        # Дедупликация (Этап 4.2): content_hash + MinHash/LSH-бакеты. Non-fatal —
+        # сбой сигнатуры не прерывает обработку, документ просто не участвует в
+        # поиске дублей до следующего реиндекса.
+        if self.settings.dedup_enabled:
+            try:
+                from app.services.deduplication import find_duplicates_for_document, index_document
+
+                index_document(doc_id, markdown)
+                dup = find_duplicates_for_document(doc_id)
+                if dup["level2"] or dup["level3"]:
+                    self.registry.update(doc_id, has_duplicates=True)
+            except Exception:
+                logger.warning(
+                    "[%s] Индексация сигнатуры дедупликации не удалась", doc_id, exc_info=True
+                )
+
         chunks = self.okf_generator.chunk_text(markdown)
         total = len(chunks)
         staging = StagingStore(doc_id)
@@ -273,6 +301,13 @@ class Pipeline:
         attachments: list[dict],
         global_tags: list[str],
     ) -> None:
+        # Денормализованная проекция разработки (номер/название/модуль) в payload
+        # Qdrant `dev_tags` — отдельное поле, не смешивается с `tags`.
+        dev_tags: list[str] = []
+        doc = self.registry.get(doc_id)
+        if doc and doc.get("development_id"):
+            dev_tags = get_development_registry().dev_tags(doc["development_id"])
+
         concepts = staging.concepts()
         slugs = staging.slugs()
         target = self.settings.okf_dir / doc_id
@@ -344,7 +379,7 @@ class Pipeline:
         # осиротевшие старые. point_id детерминирован (uuid5 от filepath),
         # поэтому upsert идемпотентно перезаписывает совпадающие точки.
         # Если Qdrant отвалится между upsert и cleanup, новые точки уже на месте.
-        concept_point_ids = self.vector_store.index_concepts(doc_id, okf_docs, vectors)
+        concept_point_ids = self.vector_store.index_concepts(doc_id, okf_docs, vectors, dev_tags=dev_tags)
         keep_point_ids = set(concept_point_ids)
 
         if self.settings.search_index_chunks_enabled:
@@ -368,7 +403,7 @@ class Pipeline:
                 chunk_vectors = self.embedder.embed_texts(embed_inputs)
                 chunk_point_ids = self.vector_store.index_chunks(
                     doc_id, filename, chunk_texts, global_tags, chunk_vectors,
-                    section_titles=chunk_section_titles,
+                    section_titles=chunk_section_titles, dev_tags=dev_tags,
                 )
                 keep_point_ids |= chunk_point_ids
                 logger.info("[%s] Проиндексировано %d чанков", doc_id, len(chunk_texts))

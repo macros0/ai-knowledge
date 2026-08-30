@@ -388,3 +388,94 @@ class TestPipelineRegenerate:
         assert result["status"] == "done", f"status={result['status']} error={result.get('error')}"
         assert result["okf_concept_count"] == 1
         assert not pipeline._threads.get(doc_id), "поток должен завершиться и очиститься"
+
+
+class TestFinalizeDevTagsHealing:
+    def test_finalize_rereads_dev_tags_from_db_after_desync(self, isolated_env):
+        """Самовосстановление рассинхрона dev_tags через _finalize.
+
+        Воспроизводит конечное состояние после «убитого» daemon-потока
+        (рестарт процесса во время фонового реиндекса): development_id уже
+        записан в БД, а dev_tags в Qdrant отстаёт. _finalize обязан перечитать
+        development_id из БД и записать актуальные dev_tags — независимо от
+        того, что происходило с фоновой синхронизацией до этого.
+        """
+        from app.services.attribute_registry import get_attribute_registry
+        from app.services.development_registry import get_development_registry
+
+        reg, src = isolated_env
+        get_attribute_registry().add("module", "PY")
+        dev = get_development_registry().create("12010", "СЭДО", module="PY")
+
+        doc_id = "heal-doc"
+        reg.create(doc_id, "test.doc", "doc", 100)
+        # БД актуальна (development_id), Qdrant «отстал» — dev_tags ещё не записаны.
+        reg.update(doc_id, development_id=dev["id"])
+
+        captured: dict = {}
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+
+        def cap_concepts(*args, **kwargs):
+            captured["concepts_dev_tags"] = kwargs.get("dev_tags")
+            return set()
+
+        def cap_chunks(*args, **kwargs):
+            captured["chunks_dev_tags"] = kwargs.get("dev_tags")
+            return set()
+
+        pipeline.vector_store.index_concepts = cap_concepts
+        pipeline.vector_store.index_chunks = cap_chunks
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        assert captured["concepts_dev_tags"] == ["12010", "СЭДО", "PY"]
+        assert captured["chunks_dev_tags"] == ["12010", "СЭДО", "PY"]
+
+
+class TestHasDuplicatesFlag:
+    def test_process_sets_has_duplicates_when_near_duplicate(self, isolated_env):
+        from app.services.deduplication import index_document
+
+        reg, src = isolated_env
+        # Существующий документ с тем же содержимым, что и markdown в пайплайне.
+        reg.create("aaaaaaaaaaaaaaaa", "existing.doc", "doc", 100)
+        index_document("aaaaaaaaaaaaaaaa", "тестовый текст")
+
+        doc_id = "bbbbbbbbbbbbbbbb"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        doc = reg.get(doc_id)
+        assert doc["has_duplicates"] is True
+
+    def test_process_no_duplicates_flag_false(self, isolated_env):
+        reg, src = isolated_env
+        doc_id = "cccccccccccccccc"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        doc = reg.get(doc_id)
+        assert doc["has_duplicates"] is False

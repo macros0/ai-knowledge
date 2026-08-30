@@ -25,10 +25,16 @@ DOCUMENT_BULK_DELETE = "document_bulk_delete"
 DOCUMENT_REGENERATE = "document_regenerate"
 DOCUMENT_BULK_REGENERATE = "document_bulk_regenerate"
 DOCUMENT_RESUME = "document_resume"
+DOCUMENT_DEVELOPMENT_SET = "document_development_set"
 JOB_APPROVE = "job_approve"
 JOB_CANCEL = "job_cancel"
 USER_BLOCK = "user_block"
 USER_UNBLOCK = "user_unblock"
+DEVELOPMENT_CREATE = "development_create"
+DEVELOPMENT_UPDATE = "development_update"
+DEVELOPMENT_DELETE = "development_delete"
+ATTRIBUTE_CREATE = "attribute_create"
+ATTRIBUTE_DELETE = "attribute_delete"
 
 ACTION_TYPES = frozenset(
     {
@@ -38,16 +44,24 @@ ACTION_TYPES = frozenset(
         DOCUMENT_REGENERATE,
         DOCUMENT_BULK_REGENERATE,
         DOCUMENT_RESUME,
+        DOCUMENT_DEVELOPMENT_SET,
         JOB_APPROVE,
         JOB_CANCEL,
         USER_BLOCK,
         USER_UNBLOCK,
+        DEVELOPMENT_CREATE,
+        DEVELOPMENT_UPDATE,
+        DEVELOPMENT_DELETE,
+        ATTRIBUTE_CREATE,
+        ATTRIBUTE_DELETE,
     }
 )
 
 TARGET_DOCUMENT = "document"
 TARGET_JOB = "job"
 TARGET_USER = "user"
+TARGET_DEVELOPMENT = "development"
+TARGET_ATTRIBUTE = "attribute"
 
 
 def _to_dict(entry: AuditLog) -> dict:

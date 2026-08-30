@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api import audit, chat, documents, jobs, search, tags, users
+from app.api import attributes, audit, chat, developments, documents, jobs, search, tags, users
 from app.api.settings import router as settings_router
 from app.auth.api import router as auth_router
 from app.auth.service import require_user
@@ -139,6 +139,8 @@ def create_app() -> FastAPI:
     protected.include_router(search.router)
     protected.include_router(chat.router)
     protected.include_router(tags.router)
+    protected.include_router(developments.router)
+    protected.include_router(attributes.router)
     protected.include_router(settings_router)
     protected.include_router(jobs.router)
     protected.include_router(audit.router)

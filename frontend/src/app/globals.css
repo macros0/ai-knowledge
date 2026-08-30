@@ -438,34 +438,6 @@ main {
   font-size: 13px;
 }
 
-.scope-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.scope-tab {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-.scope-tab:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.scope-tab.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(79, 140, 255, 0.15);
-}
-
 /* ---------- chat ---------- */
 .chat-log {
   flex: 1;
@@ -1790,4 +1762,473 @@ main {
 
 .block-expired {
   color: var(--muted);
+}
+
+/* --- Этап 4: справочник разработок --- */
+
+.btn {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.ghost {
+  background: transparent;
+}
+
+.btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn.danger:hover {
+  background: rgba(255, 92, 92, 0.15);
+}
+
+.dev-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.dev-input {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  min-width: 140px;
+  flex: 1;
+}
+
+.dev-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.dev-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dev-table th,
+.dev-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.dev-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.dev-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.dev-link:hover {
+  text-decoration: underline;
+}
+
+.dev-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.dev-empty {
+  color: var(--muted);
+  padding: 16px 10px;
+  text-align: center;
+}
+
+.dev-modules-hint {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.breadcrumbs a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.breadcrumbs a:hover {
+  text-decoration: underline;
+}
+
+.dev-tag-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.dev-tag-link:hover {
+  background: rgba(79, 140, 255, 0.12);
+}
+
+.dev-suggestion {
+  color: #e0a83c;
+  font-size: 12px;
+}
+
+.dev-select {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+  max-width: 260px;
+}
+
+.dev-modules-block {
+  margin-bottom: 16px;
+}
+
+.dev-spoiler-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dev-spoiler-toggle:hover {
+  border-color: var(--accent);
+}
+
+.dev-spoiler-arrow {
+  color: var(--muted);
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+
+.dev-modules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.dev-module-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 6px 3px 12px;
+  font-size: 13px;
+}
+
+.dev-module-remove {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 50%;
+}
+
+.dev-module-remove:hover {
+  color: var(--danger);
+}
+
+.dev-module-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dev-module-add .dev-input {
+  max-width: 220px;
+}
+
+.dev-filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.dev-filter-bar .dev-input {
+  max-width: 320px;
+}
+
+.dev-sort {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+}
+
+.dev-sort:hover {
+  color: var(--text);
+}
+
+.dev-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.dev-page-indicator {
+  color: var(--muted);
+}
+
+.dev-picker {
+  position: relative;
+  display: inline-block;
+  max-width: 280px;
+}
+
+.dev-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dev-picker-trigger:hover {
+  border-color: var(--accent);
+}
+
+.dev-picker-assigned {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dev-picker-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  padding: 1px 6px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dev-picker-link:hover {
+  background: rgba(79, 140, 255, 0.12);
+}
+
+.dev-picker-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+}
+
+.dev-picker-edit:hover {
+  color: var(--accent);
+}
+
+.dev-picker-pop {
+  position: fixed;
+  z-index: 1000;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  width: 280px;
+  padding: 6px;
+}
+
+.dev-picker-input {
+  width: 100%;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.dev-picker-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.dev-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.dev-picker-option {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.dev-picker-option:hover {
+  background: rgba(79, 140, 255, 0.12);
+}
+
+.dev-picker-num {
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 52px;
+}
+
+.dev-picker-name {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dev-picker-empty {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.dup-badge {
+  display: inline-block;
+  background: rgba(224, 168, 60, 0.15);
+  color: #e0a83c;
+  border: 1px solid #e0a83c;
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dup-badge:hover {
+  background: rgba(224, 168, 60, 0.25);
+}
+
+.dup-hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.dup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dup-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.dup-item.current {
+  border-color: var(--accent);
+  background: rgba(79, 140, 255, 0.08);
+}
+
+.dup-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dup-filename {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.dup-newest {
+  font-size: 11px;
+  color: #4caf50;
+  border: 1px solid #4caf50;
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.dup-current-label {
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.dup-meta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
 }

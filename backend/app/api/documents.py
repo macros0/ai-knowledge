@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.auth.models import User
 from app.auth.service import require_role, require_user
@@ -20,11 +20,18 @@ from app.models.schemas import (
     BulkPreviewOut,
     Concept,
     ChunkOut,
+    DetectDevelopmentOut,
+    DocumentDevelopmentSet,
     DocumentListOut,
     DocumentOut,
     OkfFileOut,
+    UploaderListOut,
 )
 from app.services import audit
+from app.services.deduplication import file_hash_exists, find_duplicates_for_document, set_file_hash, sha256_file
+from app.services.dev_detector import attach_development, detect
+from app.services.dev_sync import reindex_document_dev_tags, schedule_document_dev_tags_sync
+from app.services.development_registry import get_development_registry
 from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, QueueOverloadedError, get_job_queue
 from app.services.okf_generator import _build_markdown
 from app.services.pipeline import Pipeline, save_upload_stream
@@ -81,6 +88,23 @@ def upload_document(
     if size == 0:
         raise HTTPException(status_code=400, detail="Файл пустой")
 
+    # Дедупликация, уровень 1: точное совпадение байтов (SHA-256 файла).
+    settings = get_settings()
+    file_hash = None
+    if settings.dedup_enabled:
+        file_hash = sha256_file(_dest)
+        existing = file_hash_exists(file_hash)
+        if existing is not None:
+            _dest.unlink(missing_ok=True)
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "detail": f"Файл уже загружен как «{existing['filename']}»",
+                    "code": "duplicate",
+                    "duplicate": existing,
+                },
+            )
+
     user_tags = normalize_tags(tags)
     _tag_registry.add(user_tags)
     doc = _registry.create(
@@ -91,6 +115,14 @@ def upload_document(
         tags=user_tags,
         uploaded_by=user.username,
     )
+    if file_hash:
+        set_file_hash(doc_id, file_hash)
+    # Автоопределение номера разработки по имени файла (regex, без LLM) до
+    # запуска пайплайна. LLM-детекция с титульного листа — позже, в pipeline.
+    detection = detect("", file.filename or "unknown", doc_id)
+    if detection.confidence is not None:
+        attach_development(doc_id, detection)
+        doc = _registry.get(doc_id) or doc
     _pipeline.ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
     audit.record(
         user,
@@ -105,27 +137,25 @@ def upload_document(
 
 @router.get("", response_model=DocumentListOut)
 def list_documents(
-    scope: str | None = None,
+    uploader: str | None = None,
     user: User = Depends(require_user),
 ):
     """Список документов.
 
-    scope=mine — только документы текущего пользователя (uploaded_by == username);
-    scope=all — полный список. По умолчанию: «mine» для ролей, способных
-    загружать (editor/admin), иначе «all» (viewer/security/аноним — своих
-    документов у них нет, они всегда видят общий список).
+    uploader=None/отсутствует — полный список; uploader=<username> — только
+    документы этого пользователя (uploaded_by == username). Значения «mine»/«all»
+    бэкенду неизвестны — выбор «мои документы» фронтенд резолвит в конкретный
+    username текущего пользователя.
     """
-    can_own = bool({"editor", "admin"} & set(user.roles))
-    if scope is None:
-        scope = "mine" if can_own else "all"
-    if scope == "mine":
-        docs = _registry.list(uploaded_by=user.username)
-    elif scope == "all":
-        docs = _registry.list()
-    else:
-        raise HTTPException(status_code=422, detail="scope должен быть 'mine' или 'all'")
+    docs = _registry.list(uploaded_by=uploader)
     docs.sort(key=lambda d: d.get("created_at", ""), reverse=True)
     return DocumentListOut(documents=docs)
+
+
+@router.get("/uploaders", response_model=UploaderListOut)
+def list_uploaders(user: User = Depends(require_user)):
+    """Отдельные username загрузчиков (для дропдауна фильтра на фронтенде)."""
+    return UploaderListOut(uploaders=_registry.distinct_uploaders())
 
 
 @router.get("/{doc_id}", response_model=DocumentOut)
@@ -134,6 +164,92 @@ def get_document(doc_id: str):
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
     return doc
+
+
+@router.post("/{doc_id}/development", response_model=DocumentOut)
+def set_document_development(
+    doc_id: str,
+    body: DocumentDevelopmentSet,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    """Ручная привязка/отвязка разработки и подтверждение автоопределения.
+
+    Связывает документ с разработкой из справочника (или отвязывает при
+    development_id=None) и обновляет денормализованные dev_tags в Qdrant.
+    """
+    doc = _registry.get(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    new_dev_id = body.development_id
+    if new_dev_id is not None and get_development_registry().get(new_dev_id) is None:
+        raise HTTPException(status_code=422, detail="Разработка не найдена")
+
+    old_dev_id = doc.get("development_id")
+    fields: dict = {
+        "development_id": new_dev_id,
+        "development_suggestion": None,
+    }
+    if new_dev_id is None:
+        fields["development_confidence"] = None
+        fields["development_confirmed_by"] = None
+    elif body.confirmed:
+        fields["development_confidence"] = 1.0
+        fields["development_confirmed_by"] = user.username
+    _registry.update(doc_id, **fields)
+
+    dev_tags = get_development_registry().dev_tags(new_dev_id) if new_dev_id else []
+    ok = reindex_document_dev_tags(doc_id, dev_tags)
+    sync_pending = False
+    if not ok:
+        schedule_document_dev_tags_sync(doc_id)
+        sync_pending = True
+
+    audit.record(
+        user,
+        audit.DOCUMENT_DEVELOPMENT_SET,
+        audit.TARGET_DOCUMENT,
+        target_id=doc_id,
+        old_value={"development_id": old_dev_id},
+        new_value={"development_id": new_dev_id},
+        ip_address=_client_ip(request),
+    )
+    result = _registry.get(doc_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    result["dev_tags_sync_pending"] = sync_pending
+    return result
+
+
+@router.post("/{doc_id}/detect-development", response_model=DetectDevelopmentOut)
+def detect_document_development(
+    doc_id: str,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    """On-demand автоопределение номера разработки (regex + LLM) и возврат кандидата."""
+    doc = _registry.get(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    markdown = _document_head(doc_id, doc)
+    detection = detect(markdown, doc["filename"], doc_id)
+    if detection.confidence is not None:
+        attach_development(doc_id, detection)
+    return DetectDevelopmentOut(
+        development_id=detection.development_id,
+        number=detection.number,
+        name=detection.name,
+        module=detection.module,
+        confidence=detection.confidence,
+        matched=detection.matched,
+    )
+
+
+@router.get("/{doc_id}/duplicates")
+def list_document_duplicates(doc_id: str, user: User = Depends(require_user)):
+    """Кандидаты-дубликаты документа (Level 2 — почти идентичные, Level 3 — похожие)."""
+    if not _registry.get(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    return find_duplicates_for_document(doc_id)
 
 
 @router.delete("/{doc_id}")
@@ -450,6 +566,25 @@ def get_document_fulltext(doc_id: str):
 
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
+
+
+def _document_head(doc_id: str, doc: dict) -> str:
+    """Голова текста документа («титульный лист») для автоопределения разработки.
+
+    Читает первый чанк из бандла; если бандла нет — строит чанки из исходника
+    через ensure_chunks (ленивый backfill без LLM). Возвращает до dev_title_page_chars.
+    """
+    settings = get_settings()
+    chunks_dir = settings.okf_dir / doc_id / "chunks"
+    chunk0 = chunks_dir / "chunk_00.md"
+    if not chunk0.is_file():
+        try:
+            _pipeline.ensure_chunks(doc_id)
+        except Exception:
+            pass
+    if chunk0.is_file():
+        return chunk0.read_text(encoding="utf-8")[: settings.dev_title_page_chars]
+    return ""
 
 
 def _resolve_doc_ids(doc_ids: list[str], max_docs: int) -> list[str]:

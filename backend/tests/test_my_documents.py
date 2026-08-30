@@ -1,4 +1,4 @@
-"""Тесты Этапа 3: разделение списка документов «мои / все» (query-параметр scope)."""
+"""Тесты фильтра списка документов по загрузчику (query-параметр uploader)."""
 from pathlib import Path
 
 import pytest
@@ -52,56 +52,51 @@ def seed_docs():
     DocumentRegistry().create("b" * 16, "other.docx", "doc", 20, uploaded_by="demo.admin")
 
 
-class TestScopeDefault:
-    def test_editor_default_is_mine(self, client):
-        """Граничный случай: editor без scope (scope=None) должен получить МОИ документы.
-
-        Важно проверить порядок условий: `scope=None` резолвится в «mine» для
-        can_own-ролей, а не в «all» по ошибке (можно перепутать местами в коде).
-        """
+class TestUploaderFilter:
+    def test_absent_returns_all(self, client):
         seed_docs()
         login(client, "demo.editor")
         resp = client.get("/api/documents")
         assert resp.status_code == 200
-        assert {d["filename"] for d in resp.json()["documents"]} == {"mine.docx"}
+        assert {d["filename"] for d in resp.json()["documents"]} == {"mine.docx", "other.docx"}
 
-    def test_editor_explicit_mine(self, client):
+    def test_uploader_filters_by_username(self, client):
         seed_docs()
         login(client, "demo.editor")
-        resp = client.get("/api/documents?scope=mine")
+        resp = client.get("/api/documents?uploader=demo.editor")
         assert {d["filename"] for d in resp.json()["documents"]} == {"mine.docx"}
 
-    def test_editor_all_includes_others(self, client):
+    def test_uploader_other_username(self, client):
         seed_docs()
         login(client, "demo.editor")
-        resp = client.get("/api/documents?scope=all")
-        assert {d["filename"] for d in resp.json()["documents"]} == {"mine.docx", "other.docx"}
+        resp = client.get("/api/documents?uploader=demo.admin")
+        assert {d["filename"] for d in resp.json()["documents"]} == {"other.docx"}
 
-    def test_viewer_default_is_all(self, client):
-        """viewer не заводит своих документов — без scope видит весь список."""
+    def test_unknown_uploader_returns_empty(self, client):
         seed_docs()
-        login(client, "demo.user")
-        resp = client.get("/api/documents")
-        assert {d["filename"] for d in resp.json()["documents"]} == {"mine.docx", "other.docx"}
-
-    def test_security_default_is_all(self, client):
-        seed_docs()
-        login(client, "demo.security")
-        resp = client.get("/api/documents")
-        assert {d["filename"] for d in resp.json()["documents"]} == {"mine.docx", "other.docx"}
+        login(client, "demo.editor")
+        resp = client.get("/api/documents?uploader=nobody")
+        assert resp.status_code == 200
+        assert resp.json()["documents"] == []
 
     def test_uploaded_by_present(self, client):
         seed_docs()
         login(client, "demo.editor")
-        resp = client.get("/api/documents?scope=all")
+        resp = client.get("/api/documents")
         by_filename = {d["filename"]: d.get("uploaded_by") for d in resp.json()["documents"]}
         assert by_filename["mine.docx"] == "demo.editor"
         assert by_filename["other.docx"] == "demo.admin"
 
-    def test_invalid_scope_422(self, client):
-        seed_docs()
+
+class TestUploadersEndpoint:
+    def test_distinct_sorted(self, client):
+        DocumentRegistry().create("a" * 16, "a.docx", "doc", 10, uploaded_by="demo.admin")
+        DocumentRegistry().create("b" * 16, "b.docx", "doc", 10, uploaded_by="demo.editor")
+        DocumentRegistry().create("c" * 16, "c.docx", "doc", 10, uploaded_by="demo.admin")
         login(client, "demo.editor")
-        assert client.get("/api/documents?scope=nope").status_code == 422
+        resp = client.get("/api/documents/uploaders")
+        assert resp.status_code == 200
+        assert resp.json()["uploaders"] == ["demo.admin", "demo.editor"]
 
 
 def test_disabled_mode_returns_all(tmp_path, monkeypatch):

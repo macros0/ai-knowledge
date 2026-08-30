@@ -21,10 +21,26 @@ class DocumentOut(BaseModel):
     uploaded_by: str | None = None
     created_at: datetime
     updated_at: datetime
+    development_id: int | None = None
+    development_number: str | None = None
+    development_name: str | None = None
+    development_module: str | None = None
+    development_confidence: float | None = None
+    development_confirmed_by: str | None = None
+    development_suggestion: dict[str, Any] | None = None
+    # True — синхронный реиндекс dev_tags не удался, обновление поставлено в фоновую
+    # очередь. Одноразовый флаг в ответе на привязку разработки (не состояние БД).
+    dev_tags_sync_pending: bool = False
+    # Есть почти-дубликаты (уровень 2/3 дедупликации).
+    has_duplicates: bool = False
 
 
 class DocumentListOut(BaseModel):
     documents: list[DocumentOut]
+
+
+class UploaderListOut(BaseModel):
+    uploaders: list[str]
 
 
 class OkfFileOut(BaseModel):
@@ -156,3 +172,66 @@ class AuditQueryParams(BaseModel):
 class BlockUserRequest(BaseModel):
     reason: str | None = None
     expires_at: datetime | None = None
+
+
+class DevelopmentOut(BaseModel):
+    id: int
+    number: str
+    name: str
+    module: str | None = None
+    created_at: datetime
+    created_by: str | None = None
+    documents_count: int = 0
+
+
+class DevelopmentListOut(BaseModel):
+    developments: list[DevelopmentOut]
+    total: int
+    limit: int | None = None
+    offset: int = 0
+
+
+class DevelopmentCreate(BaseModel):
+    number: str
+    name: str
+    module: str | None = None
+
+
+class DevelopmentUpdate(BaseModel):
+    number: str | None = None
+    name: str | None = None
+    module: str | None = None
+
+
+class DocumentDevelopmentSet(BaseModel):
+    development_id: int | None = None
+    confirmed: bool = False
+
+
+class DetectDevelopmentOut(BaseModel):
+    development_id: int | None = None
+    number: str | None = None
+    name: str | None = None
+    module: str | None = None
+    confidence: float | None = None
+    matched: bool = False
+
+
+class AttributeValueOut(BaseModel):
+    id: int
+    attribute_key: str
+    value: str
+    label: str | None = None
+    sort_order: int = 0
+    org_id: int | None = None
+    created_by: str | None = None
+
+
+class AttributeListOut(BaseModel):
+    values: list[AttributeValueOut]
+
+
+class AttributeCreate(BaseModel):
+    value: str
+    label: str | None = None
+    sort_order: int = 0

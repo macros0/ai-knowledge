@@ -58,7 +58,26 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "tags": "keyword",
     "relations": "keyword",
     "section_title": "keyword",
+    "dev_tags": "keyword",
 }
+
+
+def _tag_match_filter(tags: list[str]) -> qm.Filter:
+    """Точка матчится, если хотя бы один тег запроса есть в `tags` ИЛИ `dev_tags`.
+
+    dev_tags — денормализованный номер/название/модуль разработки (Этап 4).
+    OR между двумя полями реализуется через вложенный should внутри must.
+    """
+    return qm.Filter(
+        must=[
+            qm.Filter(
+                should=[
+                    qm.FieldCondition(key="tags", match=qm.MatchAny(any=tags)),
+                    qm.FieldCondition(key="dev_tags", match=qm.MatchAny(any=tags)),
+                ]
+            )
+        ]
+    )
 
 
 class VectorStore:
@@ -126,9 +145,16 @@ class VectorStore:
             except Exception:
                 pass
 
-    def index_concepts(self, doc_id: str, okf_docs: list[OkfDocument], vectors: list[list[float]]) -> set[str]:
+    def index_concepts(
+        self,
+        doc_id: str,
+        okf_docs: list[OkfDocument],
+        vectors: list[list[float]],
+        dev_tags: list[str] | None = None,
+    ) -> set[str]:
         """Индексирует концепты в Qdrant. Возвращает set point_id для последующей очистки орфанов."""
         cap = self.settings.okf_max_concept_chars
+        dev_tags = dev_tags or []
         points = []
         point_ids: set[str] = set()
         for okf_doc, vector in zip(okf_docs, vectors):
@@ -158,6 +184,7 @@ class VectorStore:
                         "tags": meta.get("tags", []),
                         "relations": meta.get("relations", []),
                         "chunk_index": meta.get("chunk_index"),
+                        "dev_tags": dev_tags,
                     },
                 )
             )
@@ -173,6 +200,7 @@ class VectorStore:
         global_tags: list[str],
         vectors: list[list[float]],
         section_titles: list[str] | None = None,
+        dev_tags: list[str] | None = None,
     ) -> set[str]:
         """Индексирует сырые чанки как отдельные точки Qdrant (point_type="chunk").
 
@@ -189,6 +217,7 @@ class VectorStore:
         Возвращает set point_id для последующей очистки орфанов.
         """
         section_titles = section_titles or [""] * len(chunk_texts)
+        dev_tags = dev_tags or []
         cap = self.settings.okf_max_chunk_index_chars
         points = []
         point_ids: set[str] = set()
@@ -214,6 +243,7 @@ class VectorStore:
                         "tags": global_tags or [],
                         "section_title": section_title,
                         "content": capped,
+                        "dev_tags": dev_tags,
                     },
                 )
             )
@@ -265,6 +295,24 @@ class VectorStore:
                 points_selector=qm.PointIdsList(points=orphan_ids),
             )
 
+    def reindex_document_dev_tags(self, doc_id: str, dev_tags: list[str]) -> None:
+        """Обновляет payload `dev_tags` на всех точках документа (без пере-эмбеддинга).
+
+        Используется при связывании/переименовании разработки: денормализованная
+        проекция dev_tags (номер/название/модуль) обновляется точечно через
+        set_payload по фильтру doc_id — dense/sparse-векторы не затрагиваются.
+        """
+        _qdrant_call(
+            self.client.set_payload,
+            collection_name=self.collection,
+            payload={"dev_tags": list(dev_tags)},
+            points=qm.FilterSelector(
+                filter=qm.Filter(
+                    must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))]
+                )
+            ),
+        )
+
     def ping(self) -> bool:
         """Лёгкая проверка доступности Qdrant (для /health)."""
         try:
@@ -285,7 +333,7 @@ class VectorStore:
             raise ValueError(f"Неизвестный режим поиска: {mode}. Допустимы: {SEARCH_MODES}")
         query_filter = None
         if tags:
-            query_filter = qm.Filter(must=[qm.FieldCondition(key="tags", match=qm.MatchAny(any=tags))])
+            query_filter = _tag_match_filter(tags)
 
         if mode == "dense":
             query = vector
@@ -439,12 +487,14 @@ class VectorStore:
 
     @staticmethod
     def _build_search_filter(tags: list[str] | None) -> qm.Filter | None:
-        """Жёсткий pre-filter по tags для dense и bm25 веток."""
+        """Жёсткий pre-filter по tags для dense и bm25 веток.
+
+        Матчит тег, если он есть в `tags` ИЛИ в `dev_tags` (денормализованный
+        номер/название/модуль разработки — Этап 4).
+        """
         if not tags:
             return None
-        return qm.Filter(
-            must=[qm.FieldCondition(key="tags", match=qm.MatchAny(any=tags))]
-        )
+        return _tag_match_filter(tags)
 
     def backfill_sparse(self, batch_size: int = 100) -> int:
         """Добивает sparse-векторы для старых точек из OKF-бандлов.

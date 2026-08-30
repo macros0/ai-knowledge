@@ -254,6 +254,36 @@ class Settings(BaseSettings):
     chat_concept_max_chars: int = 4000
     chat_chunk_max_chars: int = 6000
 
+    # --- Этап 4: справочник разработок + автоопределение ---
+    # Автоопределение номера разработки (regex по имени файла + LLM с титула).
+    dev_detection_enabled: bool = True
+    dev_llm_title_page_enabled: bool = True
+    # Сколько первых символов markdown считать «титульным листом» (Block не несёт
+    # page-границ — берём голову документа как приближение титула).
+    dev_title_page_chars: int = 3000
+    # Порог fuzzy-совпадения названия разработки (difflib ratio 0..1).
+    dev_fuzzy_name_threshold: float = 0.85
+    # Regex для извлечения номера разработки из имени файла (одна группа захвата).
+    # lookaround не даёт захватить хвост более длинной цифровой последовательности
+    # (например, дату 20240115), а "_" после номера (12010_СЭДО) не является
+    # word-boundary — поэтому \b здесь не годится.
+    dev_filename_pattern: str = r"(?<!\d)(\d{4,6})(?!\d)"
+
+    # --- Этап 4.2: дедупликация при загрузке ---
+    dedup_enabled: bool = True
+    dedup_minhash_k: int = 128
+    # Две banding-схемы над одной подписью (k = bands * rows):
+    #   strict: b=8,  r=16 → Jaccard ~0.88 (почти идентичные);
+    #   loose:  b=16, r=8  → Jaccard ~0.71 (ревизии/похожие).
+    dedup_strict_bands: int = 8
+    dedup_strict_rows: int = 16
+    dedup_loose_bands: int = 16
+    dedup_loose_rows: int = 8
+    # n-грамма (по словам) для shingling MinHash.
+    dedup_shingle_n: int = 5
+    dedup_jaccard_strict_threshold: float = 0.88
+    dedup_jaccard_loose_threshold: float = 0.71
+
     @field_validator("chat_top_k_presets", mode="before")
     @classmethod
     def parse_top_k_presets(cls, v: object) -> Any:
