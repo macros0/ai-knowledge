@@ -73,6 +73,41 @@ class TestSingleDeleteRoleGate:
         assert resp.status_code == expected
 
 
+class TestUploadRoleGate:
+    @pytest.mark.parametrize(
+        "username,expected",
+        [
+            ("demo.user", 403),      # viewer — не может загружать
+            ("demo.security", 403),  # security — не editor/admin
+            ("demo.editor", 400),    # прошёл гейт, но .txt не поддерживается
+            ("demo.admin", 400),
+        ],
+    )
+    def test_upload_gate(self, client, username, expected):
+        login(client, username)
+        resp = client.post(
+            "/api/documents",
+            files={"file": ("a.txt", b"hello", "text/plain")},
+        )
+        assert resp.status_code == expected
+
+
+class TestResumeRoleGate:
+    @pytest.mark.parametrize(
+        "username,expected",
+        [
+            ("demo.user", 403),      # viewer — read-only
+            ("demo.security", 403),
+            ("demo.editor", 404),    # прошёл гейт, но документа нет
+            ("demo.admin", 404),
+        ],
+    )
+    def test_resume_gate(self, client, username, expected):
+        login(client, username)
+        resp = client.post("/api/documents/0123456789abcdef/resume")
+        assert resp.status_code == expected
+
+
 class TestBulkPreviewRoleGate:
     @pytest.mark.parametrize(
         "username,expected",
@@ -120,6 +155,19 @@ class TestBlockUserRoleGate:
         login(client, "demo.security")
         resp = client.post("/api/users/sim-editor/block", json={"reason": "инцидент"})
         assert resp.status_code == 200
+
+    def test_list_blocks_requires_security(self, client):
+        login(client, "demo.admin")
+        assert client.get("/api/users/blocks").status_code == 403
+
+        login(client, "demo.security")
+        assert client.get("/api/users/blocks").status_code == 200
+
+    def test_list_blocks_shows_active(self, client):
+        login(client, "demo.security")
+        assert client.post("/api/users/sim-editor/block", json={"reason": "x"}).status_code == 200
+        blocks = client.get("/api/users/blocks").json()["blocks"]
+        assert any(b["external_id"] == "sim-editor" for b in blocks)
 
     def test_blocked_user_gets_403(self, client):
         login(client, "demo.security")

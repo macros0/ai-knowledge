@@ -57,9 +57,20 @@ export function AuthProvider({ children }) {
     window.location.assign("/api/auth/logout");
   }, []);
 
+  const role = user?.roles?.[0] ?? null;
+
+  const hasRole = useCallback(
+    (...roles) => {
+      if (!user) return false;
+      const userRoles = user.roles ?? [];
+      return roles.some((r) => userRoles.includes(r));
+    },
+    [user]
+  );
+
   const value = useMemo(
-    () => ({ user, mode, simUsers, loading, login, logout, refresh }),
-    [user, mode, simUsers, loading, login, logout, refresh]
+    () => ({ user, mode, simUsers, loading, login, logout, refresh, role, hasRole }),
+    [user, mode, simUsers, loading, login, logout, refresh, role, hasRole]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

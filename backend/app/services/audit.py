@@ -19,10 +19,12 @@ from app.db.models import AuditLog
 from app.db.session import session_scope
 
 # Канонический перечень типов действий (Этап 2а, текущий объём).
+DOCUMENT_UPLOAD = "document_upload"
 DOCUMENT_DELETE = "document_delete"
 DOCUMENT_BULK_DELETE = "document_bulk_delete"
 DOCUMENT_REGENERATE = "document_regenerate"
 DOCUMENT_BULK_REGENERATE = "document_bulk_regenerate"
+DOCUMENT_RESUME = "document_resume"
 JOB_APPROVE = "job_approve"
 JOB_CANCEL = "job_cancel"
 USER_BLOCK = "user_block"
@@ -30,10 +32,12 @@ USER_UNBLOCK = "user_unblock"
 
 ACTION_TYPES = frozenset(
     {
+        DOCUMENT_UPLOAD,
         DOCUMENT_DELETE,
         DOCUMENT_BULK_DELETE,
         DOCUMENT_REGENERATE,
         DOCUMENT_BULK_REGENERATE,
+        DOCUMENT_RESUME,
         JOB_APPROVE,
         JOB_CANCEL,
         USER_BLOCK,

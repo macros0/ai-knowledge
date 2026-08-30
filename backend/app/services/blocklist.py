@@ -79,6 +79,36 @@ class Blocklist:
                 n += 1
             return n
 
+    def list_active(self) -> list[dict]:
+        """Список блокировок со статусом is_active=True (для панели Security).
+
+        Возвращает и уже истёкшие по времени записи (их is_active ещё True) —
+        поле active показывает фактическое состояние с учётом expires_at.
+        """
+        with session_scope() as s:
+            rows = (
+                s.execute(
+                    select(UserBlock)
+                    .where(UserBlock.is_active.is_(True))
+                    .order_by(UserBlock.created_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            return [
+                {
+                    "id": b.id,
+                    "external_id": b.external_id,
+                    "username": b.username,
+                    "reason": b.reason,
+                    "blocked_by": b.blocked_by,
+                    "created_at": b.created_at,
+                    "expires_at": b.expires_at,
+                    "active": _is_active(b),
+                }
+                for b in rows
+            ]
+
 
 _INSTANCE: Blocklist | None = None
 

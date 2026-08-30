@@ -52,8 +52,9 @@ def _valid_doc_id(doc_id: str) -> bool:
 @router.post("", response_model=DocumentOut)
 def upload_document(
     file: UploadFile,
+    request: Request,
     tags: Annotated[list[str] | None, Form()] = None,
-    user: User = Depends(require_user),
+    user: User = Depends(require_role("editor", "admin")),
 ):
     """Загрузка документа.
 
@@ -91,12 +92,38 @@ def upload_document(
         uploaded_by=user.username,
     )
     _pipeline.ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
+    audit.record(
+        user,
+        audit.DOCUMENT_UPLOAD,
+        audit.TARGET_DOCUMENT,
+        target_id=doc_id,
+        new_value={"filename": doc.get("filename"), "size": size},
+        ip_address=_client_ip(request),
+    )
     return doc
 
 
 @router.get("", response_model=DocumentListOut)
-def list_documents():
-    docs = _registry.list()
+def list_documents(
+    scope: str | None = None,
+    user: User = Depends(require_user),
+):
+    """Список документов.
+
+    scope=mine — только документы текущего пользователя (uploaded_by == username);
+    scope=all — полный список. По умолчанию: «mine» для ролей, способных
+    загружать (editor/admin), иначе «all» (viewer/security/аноним — своих
+    документов у них нет, они всегда видят общий список).
+    """
+    can_own = bool({"editor", "admin"} & set(user.roles))
+    if scope is None:
+        scope = "mine" if can_own else "all"
+    if scope == "mine":
+        docs = _registry.list(uploaded_by=user.username)
+    elif scope == "all":
+        docs = _registry.list()
+    else:
+        raise HTTPException(status_code=422, detail="scope должен быть 'mine' или 'all'")
     docs.sort(key=lambda d: d.get("created_at", ""), reverse=True)
     return DocumentListOut(documents=docs)
 
@@ -131,7 +158,11 @@ def delete_document(
 
 
 @router.post("/{doc_id}/resume", response_model=DocumentOut)
-def resume_document(doc_id: str):
+def resume_document(
+    doc_id: str,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
     doc = _registry.get(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
@@ -141,6 +172,13 @@ def resume_document(doc_id: str):
         _pipeline.resume(doc_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit.record(
+        user,
+        audit.DOCUMENT_RESUME,
+        audit.TARGET_DOCUMENT,
+        target_id=doc_id,
+        ip_address=_client_ip(request),
+    )
     return _registry.get(doc_id)
 
 

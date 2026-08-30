@@ -18,6 +18,7 @@ class DocumentOut(BaseModel):
     processed_chunks: int = 0
     current_chunk: int | None = None
     tags: list[str] = Field(default_factory=list)
+    uploaded_by: str | None = None
     created_at: datetime
     updated_at: datetime
 

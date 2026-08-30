@@ -12,6 +12,12 @@ router = APIRouter(prefix="/users", tags=["users"])
 _blocklist = get_blocklist()
 
 
+@router.get("/blocks")
+def list_blocks(user: User = Depends(require_role("security"))):
+    """Список активных блокировок (read-only для роли Security)."""
+    return {"blocks": _blocklist.list_active()}
+
+
 @router.post("/{external_id}/block")
 def block_user(
     external_id: str,

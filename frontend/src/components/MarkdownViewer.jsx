@@ -90,6 +90,19 @@ export default function MarkdownViewer({
         </a>
       );
     },
+    p({ node, children, ...props }) {
+      // TODO: inline-изображение внутри текста абзаца (`текст ![img](src) ещё`) всё
+      // равно даст <figure> внутри <p> — в текущем пайплайне не встречается (снимки
+      // страниц идут отдельной строкой), но если формат OKF-генерации изменится,
+      // этот случай нужно обработать отдельно.
+      const kids = (node?.children || []).filter(
+        (c) => c.type !== "text" || (c.value ?? "").trim() !== ""
+      );
+      if (kids.length === 1 && kids[0].tagName === "img") {
+        return <>{children}</>;
+      }
+      return <p {...props}>{children}</p>;
+    },
     ...components,
   };
 

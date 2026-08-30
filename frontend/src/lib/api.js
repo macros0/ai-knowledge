@@ -75,8 +75,9 @@ export function listTags() {
   return request("/tags").then((data) => data.tags ?? []);
 }
 
-export function listDocuments() {
-  return request("/documents").then((data) => data.documents ?? []);
+export function listDocuments(scope = "mine") {
+  const qs = scope ? `?scope=${encodeURIComponent(scope)}` : "";
+  return request(`/documents${qs}`).then((data) => data.documents ?? []);
 }
 
 export function deleteDocument(docId) {
@@ -89,6 +90,72 @@ export function resumeDocument(docId) {
 
 export function regenerateDocument(docId) {
   return request(`/documents/${docId}/regenerate`, { method: "POST" });
+}
+
+export function bulkPreview(docIds) {
+  return request("/documents/bulk-preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_ids: docIds }),
+  });
+}
+
+export function bulkDelete(docIds) {
+  return request("/documents/bulk-delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_ids: docIds }),
+  });
+}
+
+export function bulkRegenerate(docIds) {
+  return request("/documents/bulk-regenerate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_ids: docIds }),
+  });
+}
+
+export function listJobs() {
+  return request("/jobs").then((data) => data.jobs ?? []);
+}
+
+export function getJob(jobId) {
+  return request(`/jobs/${jobId}`);
+}
+
+export function approveJob(jobId) {
+  return request(`/jobs/${jobId}/approve`, { method: "POST" });
+}
+
+export function cancelJob(jobId) {
+  return request(`/jobs/${jobId}/cancel`, { method: "POST" });
+}
+
+export function listAudit(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === "") continue;
+    qs.set(k, v);
+  }
+  const q = qs.toString();
+  return request(`/audit${q ? `?${q}` : ""}`).then((data) => data.entries ?? []);
+}
+
+export function listBlocks() {
+  return request("/users/blocks").then((data) => data.blocks ?? []);
+}
+
+export function blockUser(externalId, { reason, expires_at } = {}) {
+  return request(`/users/${externalId}/block`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason, expires_at }),
+  });
+}
+
+export function unblockUser(externalId) {
+  return request(`/users/${externalId}/unblock`, { method: "POST" });
 }
 
 export function listOkfFiles(docId) {

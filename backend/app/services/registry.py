@@ -40,6 +40,7 @@ def _to_dict(doc: Document) -> dict:
         "processed_chunks": doc.processed_chunks,
         "current_chunk": doc.current_chunk,
         "tags": [t.tag for t in doc.tags_rel],
+        "uploaded_by": doc.uploaded_by,
         "created_at": doc.created_at,
         "updated_at": doc.updated_at,
     }
@@ -72,13 +73,12 @@ class DocumentRegistry:
             doc = s.get(Document, doc_id)
             return _to_dict(doc) if doc else None
 
-    def list(self) -> list[dict]:
+    def list(self, uploaded_by: str | None = None) -> list[dict]:
         with session_scope() as s:
-            docs = (
-                s.execute(select(Document).options(selectinload(Document.tags_rel)))
-                .scalars()
-                .all()
-            )
+            stmt = select(Document).options(selectinload(Document.tags_rel))
+            if uploaded_by is not None:
+                stmt = stmt.where(Document.uploaded_by == uploaded_by)
+            docs = s.execute(stmt).scalars().all()
             return [_to_dict(d) for d in docs]
 
     def update(self, doc_id: str, **fields) -> None:
