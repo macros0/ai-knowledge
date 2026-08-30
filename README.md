@@ -208,6 +208,34 @@ python scripts/migrate_payload.py --fix-slugs # + привести slug к stem 
 После миграции поиск достаёт полный текст концепта из БД по `(doc_id, slug)`.
 Полную пересборку Qdrant с новой slim-схемой даёт `reindex.py` (см. выше).
 
+### Справочник разработок и дедупликация (Этап 4): предзаполнение
+
+Схема Этапа 4 (`developments`, `attribute_values`, `document_lsh_buckets`, колонки
+`documents.*`) приезжает через `alembic upgrade head`. Значения предзаполняются
+**отдельными скриптами** (в миграции не входят — они привязаны к инсталляции):
+
+- **Модули разработок** (`attribute_values`, ключ `module`). Дефолт заточен под
+  текущего клиента (`--org "SAP HCM"`, модули `PY,PT,OM,PA`). Для другого
+  направления/заказчика передавайте свои `--org` и `--values`:
+
+  ```bash
+  python scripts/seed_attribute_values.py                              # SAP HCM: PY,PT,OM,PA
+  python scripts/seed_attribute_values.py --org "Другое" --values "MD,TR,CA"
+  ```
+
+  Без этих значений создание разработки с `module` вернёт 422 (модуль вне
+  справочника). Скрипт идемпотентен.
+
+- **Отпечатки дедупликации** (`file_hash`/`content_hash`/`minhash`/LSH-бакеты) —
+  бэкфилл для документов, загруженных до появления Этапа 4. Без него повторная
+  загрузка файла, совпадающего со «старым» документом, не даст предупреждения о
+  дубле (у старого документа нет отпечатков). Идемпотентен:
+
+  ```bash
+  python scripts/backfill_dedup.py              # все документы
+  python scripts/backfill_dedup.py --doc-id <id>  # один документ
+  ```
+
 ## Конфигурация (переменные `.env`)
 
 | Переменная | По умолчанию | Описание |
@@ -403,6 +431,9 @@ python scripts/migrate_payload.py --fix-slugs # + привести slug к stem 
 | `okf_system` | `okf_system.md` | — |
 | `okf_user` | `okf_user.md` | `{filename}`, `{content}` |
 | `okf_chunk` | `okf_chunk.md` | `{filename}`, `{index}`, `{total}`, `{content}` |
+| `okf_table_classifier` | `okf_table_classifier.md` | — |
+| `dev_number_system` | `dev_number_system.md` | — |
+| `dev_number_user` | `dev_number_user.md` | `{filename}`, `{content}` |
 
 **Ключевые правила OKF-генерации (`okf_system.md`):**
 
