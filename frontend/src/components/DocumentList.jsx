@@ -54,6 +54,9 @@ export default function DocumentList({ refreshKey = 0 }) {
   const [total, setTotal] = useState(0);
   const [regenerating, setRegenerating] = useState({});
   const [selected, setSelected] = useState({});
+  // Id документов, которые выделил toggle «Выделить все» (по фильтру). Нужны,
+  // чтобы отличать «включено» (✓) от частично снятого вручную (◐).
+  const [filterSelectedIds, setFilterSelectedIds] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   // Поиск теперь серверный: searchInput — что ввёл пользователь (без задержки),
   // search — дебаунснутое значение, уходящее в запрос.
@@ -279,15 +282,18 @@ export default function DocumentList({ refreshKey = 0 }) {
   }, [selectedIds.length]);
 
   const pageDocIds = docs.map((d) => d.id);
-  const allOnPageSelected =
-    pageDocIds.length > 0 && pageDocIds.every((id) => selected[id]);
-  const someOnPageSelected = pageDocIds.some((id) => selected[id]);
 
-  const toggleSelectPage = () => {
+  const allByFilterOn =
+    filterSelectedIds.length > 0 && filterSelectedIds.every((id) => selected[id]);
+  const allByFilterPartial =
+    filterSelectedIds.length > 0 &&
+    !allByFilterOn &&
+    filterSelectedIds.some((id) => selected[id]);
+
+  const selectPage = () => {
     setSelected((s) => {
       const next = { ...s };
-      if (allOnPageSelected) pageDocIds.forEach((id) => delete next[id]);
-      else pageDocIds.forEach((id) => {
+      pageDocIds.forEach((id) => {
         next[id] = true;
       });
       return next;
@@ -313,6 +319,7 @@ export default function DocumentList({ refreshKey = 0 }) {
         next[id] = true;
       });
       setSelected(next);
+      setFilterSelectedIds(ids);
       if (result.total > ids.length) {
         showToast(
           `Выделено ${ids.length} из ${result.total} (лимит массовой операции). Уточните фильтр, чтобы обработать остальные`,
@@ -324,6 +331,15 @@ export default function DocumentList({ refreshKey = 0 }) {
     }
   };
 
+  const toggleAllByFilter = async () => {
+    if (allByFilterOn) {
+      setSelected({});
+      setFilterSelectedIds([]);
+      return;
+    }
+    await selectAllFiltered();
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -331,16 +347,14 @@ export default function DocumentList({ refreshKey = 0 }) {
       {canEdit && (
         <SelectionBar
           selectedIds={selectedIds}
-          pageDocIds={pageDocIds}
           total={total}
-          allOnPageSelected={allOnPageSelected}
-          someOnPageSelected={someOnPageSelected}
+          allByFilterOn={allByFilterOn}
+          allByFilterPartial={allByFilterPartial}
           canDelete={isAdmin}
           open={bulkOpen}
           onToggle={() => setBulkOpen((v) => !v)}
-          onTogglePage={toggleSelectPage}
-          onSelectAll={selectAllFiltered}
-          onClear={() => setSelected({})}
+          onToggleAllByFilter={toggleAllByFilter}
+          onSelectPage={selectPage}
           onOpenPreview={() => setShowPreview(true)}
           onDone={(result) => {
             const n = result?.updated?.length ?? 0;

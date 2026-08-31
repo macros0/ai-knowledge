@@ -1685,13 +1685,37 @@ main {
   cursor: pointer;
 }
 
-/* Главный чекбокс «вся страница» в панели выделения. */
-.selection-page-checkbox {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  accent-color: var(--accent);
+/* Переключатель «Выделить все» — двухпозиционный toggle с индикатором
+   состояния: active (✓, заливка) / partial (◐, приглушённая заливка). */
+.all-by-filter-btn {
+  background: var(--accent-dim);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 5px 12px;
   cursor: pointer;
+  font-size: 13px;
+}
+
+.all-by-filter-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.all-by-filter-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.all-by-filter-btn.partial {
+  background: var(--accent);
+  color: #fff;
+  opacity: 0.6;
+}
+
+.all-by-filter-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Выбранная карточка — заметная подсветка, чтобы не искать галки по карточкам. */
@@ -1866,30 +1890,13 @@ main {
   background: var(--accent-dim);
 }
 
-.bulk-preview-btn:disabled,
-.bulk-clear-btn:disabled {
+.bulk-preview-btn:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
 .bulk-preview-btn:disabled:hover {
   background: var(--accent);
-}
-
-/* «Снять выделение» — заметная кнопка danger-темы, не прятать в конце панели. */
-.bulk-clear-btn {
-  background: transparent;
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  border-radius: 8px;
-  padding: 6px 14px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.bulk-clear-btn:hover:not(:disabled) {
-  border-color: var(--danger);
-  background: rgba(255, 92, 92, 0.08);
 }
 
 .modal-overlay {
