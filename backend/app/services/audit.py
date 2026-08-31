@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.models import AuditLog
 from app.db.session import session_scope
@@ -42,6 +42,8 @@ TAG_CLEANUP = "tag_cleanup"
 DOCUMENT_RESTORE = "document_restore"
 DOCUMENT_BULK_RESTORE = "document_bulk_restore"
 DOCUMENT_AUTO_DELETE = "document_auto_delete"
+CHAT_HISTORY_VIEW = "chat_history_view"
+CHAT_HISTORY_AUTO_DELETE = "chat_history_auto_delete"
 
 ACTION_TYPES = frozenset(
     {
@@ -68,6 +70,8 @@ ACTION_TYPES = frozenset(
         DOCUMENT_RESTORE,
         DOCUMENT_BULK_RESTORE,
         DOCUMENT_AUTO_DELETE,
+        CHAT_HISTORY_VIEW,
+        CHAT_HISTORY_AUTO_DELETE,
     }
 )
 
@@ -77,6 +81,7 @@ TARGET_USER = "user"
 TARGET_DEVELOPMENT = "development"
 TARGET_ATTRIBUTE = "attribute"
 TARGET_TAG = "tag"
+TARGET_CHAT = "chat_session"
 
 
 def _to_dict(entry: AuditLog) -> dict:
@@ -154,6 +159,23 @@ class AuditService:
                 stmt = stmt.where(AuditLog.created_at <= until)
             stmt = stmt.limit(limit).offset(offset)
             return [_to_dict(e) for e in s.execute(stmt).scalars().all()]
+
+    def distinct_users(self) -> list[dict]:
+        """Distinct пользователей из журнала (user_id, username) — справочник фильтра."""
+        with session_scope() as s:
+            rows = s.execute(
+                select(
+                    AuditLog.user_id,
+                    AuditLog.username,
+                    func.count(AuditLog.id).label("cnt"),
+                )
+                .group_by(AuditLog.user_id, AuditLog.username)
+                .order_by(func.count(AuditLog.id).desc())
+            ).all()
+            return [
+                {"user_id": r.user_id, "username": r.username, "count": r.cnt}
+                for r in rows
+            ]
 
 
 _INSTANCE: AuditService | None = None

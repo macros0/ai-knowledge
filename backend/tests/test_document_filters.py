@@ -134,21 +134,44 @@ class TestModuleFilter:
 
 
 class TestProblemFilter:
-    def test_problem_unites_stopped_and_duplicates(self, client):
+    def test_problem_unites_stopped_duplicates_and_drafts(self, client):
         seed_docs()
         login(client, "demo.editor")
         got = filenames(client.get("/api/documents?problem=true"))
-        assert got == {"paused.docx", "failed.docx", "dup.docx"}
+        assert got == {"paused.docx", "failed.docx", "dup.docx", "done.docx"}
 
     def test_problem_with_uploader(self, client):
         seed_docs()
         login(client, "demo.editor")
         got = filenames(client.get("/api/documents?problem=true&uploader=demo.editor"))
-        assert got == {"paused.docx", "failed.docx", "dup.docx"}
+        assert got == {"paused.docx", "failed.docx", "dup.docx", "done.docx"}
 
-    def test_problem_empty_when_no_problems(self, client):
-        DocumentRegistry().create("e" * 16, "ok.docx", "doc", 10, uploaded_by="demo.editor")
+    def test_problem_includes_draft_without_development(self, client):
+        # Готовый документ без привязанной разработки — «черновик, требует разметки».
+        DocumentRegistry().create("e" * 16, "draft.docx", "doc", 10, uploaded_by="demo.editor")
         DocumentRegistry().update("e" * 16, status="done", has_duplicates=False)
+        login(client, "demo.editor")
+        assert filenames(client.get("/api/documents?problem=true")) == {"draft.docx"}
+
+    def test_problem_includes_suggestion_without_development(self, client):
+        # «Требует уточнения»: готовый документ с suggestion (кандидат) без привязки.
+        reg = DocumentRegistry()
+        reg.create("e" * 16, "suggest.docx", "doc", 10, uploaded_by="demo.editor")
+        reg.update(
+            "e" * 16,
+            status="done",
+            has_duplicates=False,
+            development_suggestion={"number": "12010", "name": "Кандидат"},
+        )
+        login(client, "demo.editor")
+        assert filenames(client.get("/api/documents?problem=true")) == {"suggest.docx"}
+
+    def test_problem_excludes_done_with_development(self, client):
+        # Готовый + размеченный (есть development) + без дубликатов → не «проблемный».
+        dev_id = seed_dev("Пр_10", "Проактив", None)
+        reg = DocumentRegistry()
+        reg.create("e" * 16, "ok.docx", "doc", 10, uploaded_by="demo.editor")
+        reg.update("e" * 16, status="done", has_duplicates=False, development_id=dev_id)
         login(client, "demo.editor")
         assert filenames(client.get("/api/documents?problem=true")) == set()
 
@@ -157,4 +180,4 @@ def test_disabled_mode_filters(tmp_path, monkeypatch):
     client = make_client(tmp_path, monkeypatch, auth_provider="disabled")
     seed_docs()
     got = filenames(client.get("/api/documents?problem=true"))
-    assert got == {"paused.docx", "failed.docx", "dup.docx"}
+    assert got == {"paused.docx", "failed.docx", "dup.docx", "done.docx"}

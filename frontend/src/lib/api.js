@@ -232,6 +232,14 @@ export function listAudit(params = {}) {
   return request(`/audit${q ? `?${q}` : ""}`).then((data) => data.entries ?? []);
 }
 
+export function listAuditActionTypes() {
+  return request("/audit/action-types").then((data) => data.action_types ?? []);
+}
+
+export function listAuditUsers() {
+  return request("/audit/users").then((data) => data.users ?? []);
+}
+
 export function listBlocks() {
   return request("/users/blocks").then((data) => data.blocks ?? []);
 }
@@ -264,15 +272,59 @@ export function search(query, tags = [], topK = 5, mode = "hybrid") {
   });
 }
 
-export function chat(query, tags = [], topK = 5, mode = "hybrid") {
+export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null) {
+  const body = { query, tags, top_k: topK, mode };
+  if (sessionId) body.session_id = sessionId;
   return request(
     "/chat",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, tags, top_k: topK, mode }),
+      body: JSON.stringify(body),
     },
     CHAT_TIMEOUT_MS
+  );
+}
+
+export function listChatSessions(params = {}) {
+  const qs = new URLSearchParams();
+  if (params.limit != null) qs.set("limit", String(params.limit));
+  if (params.offset != null) qs.set("offset", String(params.offset));
+  const s = qs.toString();
+  return request(`/chat/history${s ? `?${s}` : ""}`).then((data) => ({
+    sessions: data.sessions ?? [],
+    total: data.total ?? 0,
+  }));
+}
+
+export function getChatThread(sessionId) {
+  return request(`/chat/history/${encodeURIComponent(sessionId)}`);
+}
+
+export function deleteChatSession(sessionId) {
+  return request(`/chat/history/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+}
+
+export function listAdminChatUsers() {
+  return request("/chat/admin/history/users").then((data) => data.users ?? []);
+}
+
+export function listAdminChatSessions(userId, params = {}) {
+  const qs = new URLSearchParams();
+  if (params.limit != null) qs.set("limit", String(params.limit));
+  if (params.offset != null) qs.set("offset", String(params.offset));
+  const s = qs.toString();
+  return request(
+    `/chat/admin/history/${encodeURIComponent(userId)}${s ? `?${s}` : ""}`
+  ).then((data) => ({
+    sessions: data.sessions ?? [],
+    total: data.total ?? 0,
+  }));
+}
+
+export function getAdminChatThread(userId, sessionId) {
+  return request(
+    `/chat/admin/history/${encodeURIComponent(userId)}/${encodeURIComponent(sessionId)}`
   );
 }
 

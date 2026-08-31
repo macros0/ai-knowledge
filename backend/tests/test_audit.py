@@ -42,6 +42,8 @@ EXPECTED_ACTION_TYPES = {
     "document_restore",
     "document_bulk_restore",
     "document_auto_delete",
+    "chat_history_view",
+    "chat_history_auto_delete",
 }
 
 
@@ -181,3 +183,43 @@ class TestResumeAuditHook:
         entries = AuditService().query(action_type=DOCUMENT_RESUME)
         assert len(entries) == 1
         assert entries[0]["target_id"] == "0123456789abcdef"
+
+
+SECURITY_USERS = [
+    {"user_id": "sim-security", "username": "demo.security", "email": "s@d.local", "groups": ["KB_Security"]},
+]
+
+
+class TestAuditMetaEndpoints:
+    def test_action_types_complete(self, tmp_path, monkeypatch):
+        client = make_client(tmp_path, monkeypatch, auth_sim_users=SECURITY_USERS)
+        login(client, "demo.security")
+        resp = client.get("/api/audit/action-types")
+        assert resp.status_code == 200, resp.text
+        types = resp.json()["action_types"]
+        assert types == sorted(types)
+        assert "chat_history_view" in types
+        assert "chat_history_auto_delete" in types
+        assert "document_upload" in types
+
+    def test_users_directory(self, tmp_path, monkeypatch):
+        client = make_client(tmp_path, monkeypatch, auth_sim_users=SECURITY_USERS)
+        svc = AuditService()
+        svc.append(action_type=DOCUMENT_UPLOAD, user_id="u1", username="alice")
+        svc.append(action_type=DOCUMENT_DELETE, user_id="u1", username="alice")
+        svc.append(action_type="chat_history_view", user_id="u2", username="bob")
+
+        login(client, "demo.security")
+        resp = client.get("/api/audit/users")
+        assert resp.status_code == 200, resp.text
+        users = {u["user_id"]: u for u in resp.json()["users"]}
+        assert set(users) == {"u1", "u2"}
+        assert users["u1"]["username"] == "alice"
+        assert users["u1"]["count"] == 2
+
+    def test_meta_requires_security_role(self, tmp_path, monkeypatch):
+        # sim-admin (роль admin) не имеет доступа к метаданным журнала.
+        client = make_client(tmp_path, monkeypatch)
+        login(client, "demo.admin")
+        assert client.get("/api/audit/action-types").status_code == 403
+        assert client.get("/api/audit/users").status_code == 403

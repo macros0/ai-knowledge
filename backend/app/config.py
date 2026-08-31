@@ -305,6 +305,16 @@ class Settings(BaseSettings):
     # Интервал прогона фоновой очистки (секунды).
     trash_purge_interval_seconds: float = 3600.0
 
+    # --- История чата (Этап 6) ---
+    # Окно хранения soft-deleted тредов (дней). Активная история хранится
+    # бессрочно; после ручного удаления сессии она физически удаляется фоновой
+    # задачей по истечении окна (аналог корзины документов, 4a.2).
+    chat_history_retention_days: int = 90
+    # Автозапуск фоновой очистки удалённых тредов (демон-поток при старте).
+    chat_history_purge_enabled: bool = True
+    # Интервал прогона фоновой очистки (секунды).
+    chat_history_purge_interval_seconds: float = 3600.0
+
     @field_validator("chat_top_k_presets", mode="before")
     @classmethod
     def parse_top_k_presets(cls, v: object) -> Any:

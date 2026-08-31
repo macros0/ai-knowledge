@@ -7,12 +7,14 @@ import { useAuth } from "@/context/AuthContext";
 const baseItems = [
   { href: "/", label: "Документы", exact: true },
   { href: "/chat", label: "Вопросы к документам", exact: false },
+  { href: "/chat/history", label: "История", exact: false },
 ];
 
 const roleItems = [
   { href: "/developments", label: "Разработки", exact: false, roles: ["editor", "admin"] },
   { href: "/admin", label: "Системные операции", exact: false, roles: ["admin"] },
   { href: "/security", label: "Аудит", exact: false, roles: ["security"] },
+  { href: "/chat/history/admin", label: "История пользователей", exact: false, roles: ["security", "admin"] },
 ];
 
 export default function Nav() {

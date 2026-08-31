@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
@@ -186,7 +186,8 @@ class DocumentRegistry:
             уникальному developments.number через связь;
           - module — через development.module (JOIN по development_id);
           - problem — объединённое «Проблемные»: status IN (PROBLEM_STATUSES)
-            OR has_duplicates = true. Набор условий — в одном месте, новые
+            OR has_duplicates = true OR (status='done' AND development_id IS NULL,
+            «черновик — требует разметки»). Набор условий — в одном месте, новые
             «проблемные» флаги добавляются туда же.
         """
         docs, _ = self.list_page(
@@ -241,6 +242,13 @@ class DocumentRegistry:
                 or_(
                     Document.status.in_(PROBLEM_STATUSES),
                     Document.has_duplicates.is_(True),
+                    # Готовый документ без привязанной разработки — «черновик,
+                    # требует разметки» (без suggestion) либо «требует уточнения»
+                    # (с development_suggestion). Оба — «не размечен», в «Проблемные».
+                    and_(
+                        Document.status == "done",
+                        Document.development_id.is_(None),
+                    ),
                 )
             )
         search_conditions = _search_conditions(search)

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api import attributes, audit, chat, developments, documents, jobs, search, tags, users
+from app.api import attributes, audit, chat, chat_history, developments, documents, jobs, search, tags, users
 from app.api.settings import router as settings_router
 from app.auth.api import router as auth_router
 from app.auth.service import require_user
@@ -120,6 +120,15 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logging.warning("Автоочистка корзины не запущена: %s", exc)
 
+    # Автоочистка истории чата (Этап 6): фоновый демон-поток физически удаляет
+    # soft-deleted треды по истечении окна хранения (chat_history_retention_days).
+    try:
+        from app.services.chat_history import start_chat_purge_loop
+
+        start_chat_purge_loop()
+    except Exception as exc:
+        logging.warning("Автоочистка истории чата не запущена: %s", exc)
+
     yield
 
 
@@ -149,6 +158,7 @@ def create_app() -> FastAPI:
     protected.include_router(documents.router)
     protected.include_router(search.router)
     protected.include_router(chat.router)
+    protected.include_router(chat_history.router)
     protected.include_router(tags.router)
     protected.include_router(developments.router)
     protected.include_router(attributes.router)

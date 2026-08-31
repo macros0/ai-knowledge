@@ -1,22 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { blockUser, listAudit, listBlocks, unblockUser } from "@/lib/api";
+import { blockUser, listAudit, listAuditActionTypes, listAuditUsers, listBlocks, unblockUser } from "@/lib/api";
 import { useToast } from "./Toast";
 
 const ACTION_LABELS = {
+  document_upload: "Загрузка документа",
   document_delete: "Удаление документа",
   document_bulk_delete: "Массовое удаление",
   document_regenerate: "Перегенерация документа",
   document_bulk_regenerate: "Массовая перегенерация",
+  document_resume: "Возобновление документа",
+  document_development_set: "Привязка разработки",
+  document_tags_update: "Правка тегов документа",
+  document_bulk_tags_update: "Массовая правка тегов",
   job_approve: "Одобрение задачи",
   job_cancel: "Отмена задачи",
   user_block: "Блокировка пользователя",
   user_unblock: "Разблокировка пользователя",
-  document_tags_update: "Правка тегов документа",
-  document_bulk_tags_update: "Массовая правка тегов",
+  development_create: "Создание разработки",
+  development_update: "Обновление разработки",
+  development_delete: "Удаление разработки",
+  attribute_create: "Создание значения атрибута",
+  attribute_delete: "Удаление значения атрибута",
   tag_delete: "Удаление тега из справочника",
   tag_cleanup: "Очистка неиспользуемых тегов",
+  document_restore: "Восстановление документа",
+  document_bulk_restore: "Массовое восстановление",
+  document_auto_delete: "Автоудаление документа (система)",
+  chat_history_view: "Просмотр чужой истории чата",
+  chat_history_auto_delete: "Автоочистка истории чата (система)",
 };
 
 const ACTION_OPTIONS = Object.keys(ACTION_LABELS);
@@ -68,6 +81,8 @@ export default function SecurityPanel() {
   const { showToast } = useToast();
   const [entries, setEntries] = useState([]);
   const [blocks, setBlocks] = useState([]);
+  const [actionTypes, setActionTypes] = useState([]);
+  const [users, setUsers] = useState([]);
   const [filters, setFilters] = useState({});
   const [draft, setDraft] = useState({ user_id: "", action_type: "", since: "", until: "" });
   const [blockForm, setBlockForm] = useState({ external_id: "", reason: "", expires_at: "" });
@@ -93,6 +108,12 @@ export default function SecurityPanel() {
       mounted.current = false;
     };
   }, [load]);
+
+  // Справочники для фильтров: полный перечень действий и пользователи журнала.
+  useEffect(() => {
+    listAuditActionTypes().then(setActionTypes).catch(() => {});
+    listAuditUsers().then(setUsers).catch(() => {});
+  }, []);
 
   const applyFilters = (e) => {
     e.preventDefault();
@@ -150,21 +171,27 @@ export default function SecurityPanel() {
         <div className="sec-col">
           <h3>Журнал ИБ</h3>
           <form className="audit-filters" onSubmit={applyFilters}>
-            <input
+            <select
               className="filter-input"
-              placeholder="Пользователь (id)"
               value={draft.user_id}
               onChange={(e) => setDraft((d) => ({ ...d, user_id: e.target.value }))}
-            />
+            >
+              <option value="">Все пользователи</option>
+              {users.map((u) => (
+                <option key={u.user_id} value={u.user_id}>
+                  {u.username ?? u.user_id}
+                </option>
+              ))}
+            </select>
             <select
               className="filter-input"
               value={draft.action_type}
               onChange={(e) => setDraft((d) => ({ ...d, action_type: e.target.value }))}
             >
               <option value="">Все действия</option>
-              {ACTION_OPTIONS.map((a) => (
+              {(actionTypes.length > 0 ? actionTypes : ACTION_OPTIONS).map((a) => (
                 <option key={a} value={a}>
-                  {ACTION_LABELS[a]}
+                  {ACTION_LABELS[a] ?? a}
                 </option>
               ))}
             </select>

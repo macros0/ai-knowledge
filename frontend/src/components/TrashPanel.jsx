@@ -24,6 +24,9 @@ export default function TrashPanel() {
   const [selected, setSelected] = useState({});
   const [busy, setBusy] = useState({});
   const [conflict, setConflict] = useState(null);
+  // Пока идёт первый запрос — показываем индикатор, а не «Корзина пуста»
+  // (иначе при холодном бэкенде виден flash и пауза без индикации).
+  const [loaded, setLoaded] = useState(false);
 
   const canEdit = mode === "disabled" || hasRole("editor", "admin");
 
@@ -32,6 +35,7 @@ export default function TrashPanel() {
     setDocs(result.documents);
     setTotal(result.total);
     setRetentionDays(result.retention_days ?? 14);
+    setLoaded(true);
   }, [page]);
 
   useEffect(() => {
@@ -104,7 +108,9 @@ export default function TrashPanel() {
       <p className="trash-hint">
         Документы хранятся в корзине {retentionDays} дн. и затем удаляются окончательно.
       </p>
-      {docs.length === 0 ? (
+      {!loaded ? (
+        <p className="trash-empty">Загрузка корзины…</p>
+      ) : docs.length === 0 ? (
         <p className="trash-empty">Корзина пуста</p>
       ) : (
         <ul className="document-list">

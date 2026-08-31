@@ -334,3 +334,54 @@ class UserBlock(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ChatSession(Base):
+    """Тред чата (история, Этап 6).
+
+    `id` — клиентский UUID (фронтенд генерирует при «Новом чате» и передаёт в
+    каждом запросе); бэкенд валидирует формат и привязывает сессию к текущему
+    аутентифицированному `user_id` — а не к тому, что клиент мог подставить.
+    Soft delete через `deleted_at`/`deleted_by` (окно хранения — аналог корзины
+    документов, 4a.2); физическая очистка — services/chat_history.py.
+    """
+
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    title: Mapped[str] = mapped_column(String(1024), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    deleted_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    messages_rel: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
+
+
+class ChatMessage(Base):
+    """Одно сообщение треда (роль user/assistant).
+
+    `sources` — снапшот источников (ChatSource[]) на момент ответа: хранится у
+    assistant-сообщений и не «протухает» при последующих переиндексациях.
+    """
+
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)  # user | assistant
+    content: Mapped[str] = mapped_column(Text, default="")
+    sources: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    session: Mapped[ChatSession] = relationship(back_populates="messages_rel")

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { chat, listAttributeValues, listDevelopments } from "@/lib/api";
+import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
 import ModulePicker from "./ModulePicker";
@@ -20,78 +21,8 @@ function getPresetLabel(preset, settings) {
   return String(preset);
 }
 
-function remarkCiteLinks() {
-  function splitCites(node) {
-    const parts = node.value.split(/(\[\d+\])/g);
-    if (parts.length === 1) return [node];
-    const out = [];
-    for (const part of parts) {
-      const m = /^\[(\d+)\]$/.exec(part);
-      if (!m) {
-        if (part) out.push({ type: node.type, value: part });
-        continue;
-      }
-      const n = Number(m[1]);
-      out.push({
-        type: "link",
-        url: `#cite-${n}`,
-        children: [{ type: "text", value: `[${n}]` }],
-      });
-    }
-    return out;
-  }
-
-  function transformChildren(parent) {
-    if (!parent || !Array.isArray(parent.children)) return;
-    const next = [];
-    for (const child of parent.children) {
-      if ((child.type === "text" || child.type === "inlineCode") && child.value) {
-        const converted = splitCites(child);
-        if (converted.length === 1 && converted[0] === child) {
-          next.push(child);
-        } else {
-          next.push(...converted);
-        }
-      } else {
-        next.push(child);
-      }
-      transformChildren(child);
-    }
-    parent.children = next;
-  }
-
-  return (tree) => {
-    transformChildren(tree);
-  };
-}
-
-function sourceHref(s) {
-  if (!s || !s.doc_id) return null;
-  if (s.point_type === "chunk" && s.chunk_index != null)
-    return `/documents/${s.doc_id}/chunks/${s.chunk_index}`;
-  if (s.filename)
-    return `/documents/${s.doc_id}/okf/${encodeURIComponent(s.filename)}`;
-  return `/documents/${s.doc_id}/okf`;
-}
-
-function CiteLink({ href, children, sources, ...props }) {
-  const m = /^#cite-(\d+)$/.exec(href || "");
-  if (!m) return <a href={href} {...props}>{children}</a>;
-  const n = Number(m[1]);
-  const s = sources[n - 1];
-  const url = sourceHref(s);
-  if (!url) {
-    return <span className="cite">{children}</span>;
-  }
-  return (
-    <Link className="cite" href={url} title={s.title}>
-      {children}
-    </Link>
-  );
-}
-
 export default function ChatPanel() {
-  const { messages, tags, pending, settings, selectedMode, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
+  const { messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
@@ -212,7 +143,8 @@ export default function ChatPanel() {
     setPending(true);
     setMessages((m) => [...m, { role: "assistant", text: "Думаю...", sources: [] }]);
     try {
-      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode);
+      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId);
+      if (resp.session_id) setSessionId(resp.session_id);
       setMessages((m) => {
         const copy = [...m];
         copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, uploadHint };
@@ -231,6 +163,20 @@ export default function ChatPanel() {
 
   return (
     <section className="panel">
+      <div className="chat-toolbar">
+        <Link href="/chat/history" className="btn ghost">
+          История
+        </Link>
+        <button
+          type="button"
+          className="btn ghost"
+          onClick={startNewChat}
+          disabled={pending || messages.length === 0}
+          title="Начать новый чат (текущий сохранится в истории)"
+        >
+          Новый чат
+        </button>
+      </div>
       <div className="chat-log" ref={logRef}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>

@@ -74,6 +74,14 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
 Единственное активное действие роли Security — блоклист (`app/services/blocklist.py`),
 проверяется в `require_user` (заблокированный не проходит даже с валидной сессией).
 
+Чтение чужой истории чата (Этап 6) доступно ролям `security` и `admin` через
+`/chat/admin/history/*` (`require_role("security","admin")`). Открытие содержимого
+чужого треда пишется в журнал ИБ (`chat_history_view`); просмотр только списка
+сессий и собственной истории — не логируется. Владелец видит только свою историю:
+`session_id` валидируется на бэкенде и привязывается к текущему `user_id`
+(`app/services/chat_history.py`), поэтому подменить чужой тред нельзя
+(`store_turn`/`get_thread` бросают `ChatOwnershipError`).
+
 ## 3. Сетевая топология
 
 - **Наружу публикуется только frontend**: `docker-compose.yml` — `frontend: "8080:3000"`.
@@ -148,6 +156,13 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
   активных документов (`find_active_duplicates_for_document`) — конфликт
   возвращает 409 `code=duplicate`; force-восстановление доступно по явному
   `?force=true`.
+- **История чата** (Этап 6): хранится в `chat_sessions`/`chat_messages`
+  (PostgreSQL/SQLite). Активная история хранится бессрочно; ручное удаление треда —
+  soft delete (`deleted_at`/`deleted_by`), физическая очистка — фоновой задачей
+  (`app/services/chat_history.py:start_chat_purge_loop`) после истечения
+  `chat_history_retention_days` (90 дней), с записью `chat_history_auto_delete`
+  (`user_id="system"`). Сообщения хранят снапшот источников (`sources`) на момент
+  ответа — не «протухает» при переиндексации.
 - **Retention**: `audit_retention_days=365` (`app/config.py`) задаёт срок журнала ИБ,
   но автоматическая очистка не реализована (см. «принятые риски»).
 - **Журнал ИБ** (`app/services/audit.py`): append-only (есть только `append`/`query`,
@@ -155,7 +170,9 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
   массовые операции, смена разработки, правки тегов — включая каждую запись
   массовой правки тегов на затронутый документ, удаление/очистку тегов
   справочника (`tag_delete`/`tag_cleanup`), блокировки, CRUD разработок/
-  атрибутов) с `username`, `target_id`, `old_value`/`new_value`, `ip_address`.
+  атрибутов, просмотр чужой истории чата (`chat_history_view`) и автоочистку
+  истории чата (`chat_history_auto_delete`)) с `username`, `target_id`,
+  `old_value`/`new_value`, `ip_address`.
   Читает только роль `security` (`app/api/audit.py`). Для PostgreSQL-прода
   рекомендуется отдельный сервисный аккаунт с правами только на INSERT
   (см. `README.md`, «Хардненинг audit_log»).
@@ -177,6 +194,18 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
   компрометация `APP_SECRET_KEY` = компрометация всех сессий.
 
 ## 7. Журнал security-изменений
+
+### 2026-08-31 — История чата (Этап 6)
+Изменение: введена персистентная история чата (`chat_sessions`/`chat_messages`) с
+мягким удалением и автоочисткой. Приватность: владелец видит только свою историю,
+`session_id` привязывается к `user_id` на бэкенде (`ChatOwnershipError` при попытке
+подменить чужой тред); чужую историю читают только `security`/`admin`, открытие
+треда логируется (`chat_history_view`), а список сессий и собственная история — нет.
+Retention: активная история бессрочна, удалённые треды физически чистятся фоном после
+`chat_history_retention_days` (90), с записью `chat_history_auto_delete` (system).
+Причина: история сохранялась только в памяти клиента; нужен управляемый доступ к
+ней (владелец + аудируемый просмотр для ИБ) с той же моделью retention, что и у
+корзины документов (4a.2).
 
 ### 2026-08-31 — Корзина / soft delete (Этап 4a.2)
 Изменение: удаление документа больше не необратимое — введена двухслойная

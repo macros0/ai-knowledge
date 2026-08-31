@@ -55,6 +55,12 @@ function progressText(doc) {
   return null;
 }
 
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("ru-RU");
+}
+
 function initialParam(searchParams, key, fallback) {
   const v = searchParams.get(key);
   return v == null ? fallback : v;
@@ -578,10 +584,14 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                 />
               </>
             )}
-            {doc.uploaded_by && (
+            {(doc.uploaded_by || doc.created_at) && (
               <>
                 <br />
-                <span className="doc-uploader">Загрузил: {doc.uploaded_by}</span>
+                <span className="doc-uploader">
+                  {doc.uploaded_by ? `Загрузил: ${doc.uploaded_by}` : "Загружен"}
+                  {doc.uploaded_by && doc.created_at ? " · " : ""}
+                  {doc.created_at ? fmtDate(doc.created_at) : ""}
+                </span>
               </>
             )}
           </div>

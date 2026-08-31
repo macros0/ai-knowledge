@@ -3076,3 +3076,152 @@ main {
   border-color: var(--border);
   color: var(--muted);
 }
+
+/* ---------- история чата (Этап 6) ---------- */
+
+.chat-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--panel);
+}
+
+.history-open {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  font-family: inherit;
+}
+
+.history-open:hover .history-item-title {
+  color: var(--accent);
+}
+
+.history-item-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.history-empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 16px 0;
+}
+
+.history-link {
+  color: var(--accent);
+}
+
+.history-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-thread-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-thread-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-thread-title strong {
+  word-break: break-word;
+}
+
+.history-log {
+  max-height: 60vh;
+}
+
+.history-bubble {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.history-sources {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.history-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px 8px;
+}
+
+.history-source-link {
+  text-decoration: none;
+}
+
+.history-source-link:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.history-admin-hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.history-admin-search input {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.history-admin-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.history-admin-banner {
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text);
+}

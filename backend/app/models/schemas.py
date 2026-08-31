@@ -118,6 +118,8 @@ class ChatRequest(BaseModel):
     mode: SearchMode | None = None
     dense: bool | None = None
     bm25: bool | None = None
+    # Клиентский UUID треда (Этап 6). Если не задан — бэкенд создаёт новую сессию.
+    session_id: str | None = None
 
 
 class ChatSettingsOut(BaseModel):
@@ -150,6 +152,50 @@ class ChatResponse(BaseModel):
     query: str
     answer: str
     sources: list[ChatSource]
+    # UUID треда, к которому относится обмен (для продолжения «Нового чата»).
+    session_id: str | None = None
+
+
+class ChatHistoryMessageOut(BaseModel):
+    role: str
+    content: str
+    sources: list[ChatSource] = Field(default_factory=list)
+    created_at: datetime
+
+
+class ChatHistorySessionOut(BaseModel):
+    session_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+    deleted_at: datetime | None = None
+
+
+class ChatHistoryListOut(BaseModel):
+    sessions: list[ChatHistorySessionOut]
+    total: int = 0
+    limit: int | None = None
+    offset: int = 0
+
+
+class ChatHistoryThreadOut(BaseModel):
+    session_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    messages: list[ChatHistoryMessageOut]
+    deleted_at: datetime | None = None
+
+
+class ChatAdminUserOut(BaseModel):
+    user_id: str
+    username: str | None = None
+    session_count: int = 0
+
+
+class ChatAdminUserListOut(BaseModel):
+    users: list[ChatAdminUserOut]
 
 
 class Concept(BaseModel):

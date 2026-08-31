@@ -141,6 +141,33 @@ UI: http://localhost:3000
     обогащается в `chat.py` из `doc_lookup`.
   - Не реализовано (отложено по решению): 5.2a (предупреждение о неточности списочных
     запросов) и 5.2b (structured-путь через реестр) — см. условие перехода в roadmap.
+- **История чата (Этап 6, 31.08.2026)**:
+  - Модели `chat_sessions` + `chat_messages` (`db/models.py`), Alembic-миграция
+    `d1e2f3a4b5c6` (после `c9d4e5f6a7b8`). Сообщение хранит `sources` (JSON-снапшот
+    источников на момент ответа, не протухает).
+  - `session_id` — **клиентский UUID** (фронт генерит при «Новом чате», передаёт в
+    каждом `/chat`); бэкенд валидирует формат (`chat_history.is_valid_session_id`) и
+    **привязывает сессию к текущему `user_id`** — `store_turn`/`get_thread` бросают
+    `ChatOwnershipError` при подмене чужого треда (не «присваивают» его). Запись в
+    `/chat` — после ответа, не блокирует и не роняет чат (try/except → warning).
+  - Сервис `services/chat_history.py` (по образцу `trash.py`): `list_sessions`,
+    `get_thread`, `soft_delete_session`, `list_distinct_users`, `purge_expired_sessions`,
+    `start_chat_purge_loop`. Роуты — `api/chat_history.py` (prefix `/chat`):
+    own `/history`, `/history/{sid}`, `DELETE /history/{sid}`; admin
+    `/admin/history/users`, `/admin/history/{user_id}`, `/admin/history/{user_id}/{sid}`
+    (`require_role("security","admin")`).
+  - Audit: `chat_history_view` — только при открытии чужого треда (admin-путь);
+    список сессий и собственная история **не** логируются. `chat_history_auto_delete`
+    (user_id=system) — автоочистка. Оба типа добавлены в `ACTION_TYPES` и в
+    `EXPECTED_ACTION_TYPES` (`test_audit.py`).
+  - Retention: активная история бессрочна; soft-deleted треды чистятся фоном после
+    `chat_history_retention_days` (90, `.env`-override; `chat_history_purge_enabled`,
+    `chat_history_purge_interval_seconds`). Purge-loop цепляется в `main.py` lifespan.
+  - Фронт: `ChatContext` держит `sessionId` + `startNewChat`; `ChatPanel` — кнопки
+    «История»/«Новый чат»; панели `ChatHistoryPanel` (своя, delete с подтверждением)
+    и `AdminChatHistoryPanel` (поиск пользователя → сессии → read-only тред с плашкой
+    «просмотр логируется»); страницы `app/chat/history/` и `app/chat/history/admin/`
+    (gate `RequireRole`); ссылки в `Nav.jsx`.
 
 ## Фоновые процессы
 

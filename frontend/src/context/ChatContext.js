@@ -24,8 +24,16 @@ export function ChatProvider({ children }) {
   const [messages, setMessages] = useState([]);
   const [tags, setTags] = useState([]);
   const [pending, setPending] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
+
+  // «Новый чат»: сбрасывает ленту и UUID треда — следующее сообщение откроет
+  // новую сессию истории (Этап 6).
+  const startNewChat = () => {
+    setMessages([]);
+    setSessionId(null);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +55,7 @@ export function ChatProvider({ children }) {
   }, []);
 
   return (
-    <ChatContext.Provider value={{ messages, tags, pending, settings, selectedMode, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }}>
+    <ChatContext.Provider value={{ messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }}>
       {children}
     </ChatContext.Provider>
   );
