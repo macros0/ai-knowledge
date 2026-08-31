@@ -13,6 +13,10 @@ const ACTION_LABELS = {
   job_cancel: "Отмена задачи",
   user_block: "Блокировка пользователя",
   user_unblock: "Разблокировка пользователя",
+  document_tags_update: "Правка тегов документа",
+  document_bulk_tags_update: "Массовая правка тегов",
+  tag_delete: "Удаление тега из справочника",
+  tag_cleanup: "Очистка неиспользуемых тегов",
 };
 
 const ACTION_OPTIONS = Object.keys(ACTION_LABELS);

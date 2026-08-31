@@ -154,6 +154,20 @@ class BulkOperationRequest(BaseModel):
     doc_ids: list[str]
 
 
+class DocumentTagsUpdate(BaseModel):
+    """Полная замена набора глобальных тегов документа (Этап 4a)."""
+
+    tags: list[str] = Field(default_factory=list)
+
+
+class BulkTagsRequest(BaseModel):
+    """Массовое редактирование тегов (Этап 4a): delta add/remove по списку документов."""
+
+    doc_ids: list[str]
+    add: list[str] = Field(default_factory=list)
+    remove: list[str] = Field(default_factory=list)
+
+
 class BulkPreviewOut(BaseModel):
     requested: int
     matched: int

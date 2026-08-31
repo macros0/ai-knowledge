@@ -78,6 +78,30 @@ export function listTags() {
   return request("/tags").then((data) => data.tags ?? []);
 }
 
+export function deleteTag(name) {
+  return request(`/tags/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+export function cleanupTags() {
+  return request("/tags/cleanup", { method: "POST" });
+}
+
+export function updateDocumentTags(docId, tags) {
+  return request(`/documents/${docId}/tags`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tags }),
+  });
+}
+
+export function bulkUpdateTags(docIds, { add = [], remove = [] } = {}) {
+  return request("/documents/bulk-tags", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_ids: docIds, add, remove }),
+  });
+}
+
 export function listDocuments(params = {}) {
   const qs = new URLSearchParams();
   if (params.uploader) qs.set("uploader", params.uploader);
@@ -88,6 +112,7 @@ export function listDocuments(params = {}) {
   if (params.developmentId) qs.set("development_id", String(params.developmentId));
   if (params.developmentNumber) qs.set("development_number", params.developmentNumber);
   if (params.module) qs.set("module", params.module);
+  if (params.tag) qs.set("tag", params.tag);
   if (params.problem) qs.set("problem", "true");
   if (params.search) qs.set("search", params.search);
   if (params.sort) qs.set("sort", params.sort);

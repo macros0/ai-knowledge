@@ -153,6 +153,50 @@ class TestSearchEscaping:
         assert filenames(client.get("/api/documents?search=100%")) == {"100%_план.docx"}
 
 
+class TestTagFilter:
+    def test_exact_match(self, client):
+        seed_doc("doc1.docx", doc_id="a" * 16, tags=["Проактив", "ФС"])
+        seed_doc("doc2.docx", doc_id="b" * 16, tags=["Другое"])
+        login(client, "demo.editor")
+        assert filenames(client.get("/api/documents?tag=Проактив")) == {"doc1.docx"}
+
+    def test_exact_not_substring(self, client):
+        # tag — точное совпадение по document_tags, в отличие от search (подстрока).
+        seed_doc("doc1.docx", doc_id="a" * 16, tags=["Проактив"])
+        login(client, "demo.editor")
+        assert filenames(client.get("/api/documents?tag=Проа")) == set()
+
+    def test_case_sensitive(self, client):
+        seed_doc("doc1.docx", doc_id="a" * 16, tags=["Проактив"])
+        login(client, "demo.editor")
+        assert filenames(client.get("/api/documents?tag=проактив")) == set()
+
+    def test_unknown_tag_empty(self, client):
+        seed_doc("doc1.docx", doc_id="a" * 16, tags=["Проактив"])
+        login(client, "demo.editor")
+        resp = client.get("/api/documents?tag=НетТакого")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+        assert resp.json()["documents"] == []
+
+    def test_combined_with_uploader(self, client):
+        seed_doc("alice.docx", doc_id="a" * 16, tags=["Проактив"], uploaded_by="alice.editor")
+        seed_doc("bob.docx", doc_id="b" * 16, tags=["Проактив"], uploaded_by="bob.editor")
+        login(client, "demo.editor")
+        assert filenames(client.get("/api/documents?tag=Проактив&uploader=alice.editor")) == {
+            "alice.docx"
+        }
+
+    def test_total_respects_tag(self, client):
+        seed_doc("doc1.docx", doc_id="a" * 16, tags=["Проактив"])
+        seed_doc("doc2.docx", doc_id="b" * 16, tags=["Проактив"])
+        seed_doc("doc3.docx", doc_id="c" * 16, tags=["Другое"])
+        login(client, "demo.editor")
+        body = client.get("/api/documents?tag=Проактив&limit=1").json()
+        assert body["total"] == 2
+        assert len(body["documents"]) == 1
+
+
 class TestPagination:
     def _seed_five(self):
         for i, name in enumerate(["a", "b", "c", "d", "e"]):

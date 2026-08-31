@@ -616,7 +616,7 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | Метод | Путь | Описание |
 | :-- | :-- | :-- |
 | POST | `/api/documents` | Загрузка документа (multipart) |
-| GET | `/api/documents` | Список документов и статусов |
+| GET | `/api/documents` | Список документов и статусов (фильтры: `uploader`, `module`, `development_id`/`development_number`, `tag` — exact-match, `problem`, `search`, `sort`, `limit`/`offset`) |
 | GET | `/api/documents/{doc_id}` | Статус обработки документа |
 | POST | `/api/documents/{doc_id}/resume` | Возобновить приостановленную обработку |
 | POST | `/api/documents/{doc_id}/regenerate` | Перегенерировать концепты документа (роли `editor`/`admin`) |
@@ -624,6 +624,8 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | POST | `/api/documents/bulk-preview` | Предпросмотр масштаба массовой операции (роль `admin`) |
 | POST | `/api/documents/bulk-delete` | Массовое удаление (очередь + four-eyes, роль `admin`) |
 | POST | `/api/documents/bulk-regenerate` | Массовая перегенерация (очередь + rate limit, роль `admin`) |
+| PATCH | `/api/documents/{doc_id}/tags` | Полная замена набора глобальных тегов документа (роли `editor`/`admin`, Этап 4a; синхронизация проекций + реиндекс dev_tags) |
+| POST | `/api/documents/bulk-tags` | Массовое добавление/удаление тега (роли `editor`/`admin`, Этап 4a; audit на каждый документ) |
 | GET | `/api/jobs` | Список системных задач (роль `admin`) |
 | GET | `/api/jobs/{job_id}` | Статус задачи (роль `admin`) |
 | POST | `/api/jobs/{job_id}/approve` | Одобрить задачу (four-eyes, роль `admin`) |
@@ -637,6 +639,8 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | POST | `/api/search` | Поиск по концептам (top-k + фильтр по тегам + режим `mode`) |
 | POST | `/api/chat` | Вопрос к базе знаний (ответ + источники + режим `mode`) |
 | GET | `/api/tags` | Список тегов с частотой использования |
+| DELETE | `/api/tags/{tag}` | Удалить неиспользуемый тег из справочника (роли `editor`/`admin`; 409, если тег используется) |
+| POST | `/api/tags/cleanup` | Удалить все неиспользуемые теги из справочника (роли `editor`/`admin`) |
 | POST | `/api/documents/{doc_id}/development` | Привязать/отвязать разработку, подтвердить автоопределение (роли `editor`/`admin`) |
 | POST | `/api/documents/{doc_id}/detect-development` | On-demand автоопределение номера разработки (роли `editor`/`admin`) |
 | GET | `/api/documents/{doc_id}/duplicates` | Кандидаты-дубликаты (Level 2/3: content-hash + MinHash/LSH) |

@@ -1,8 +1,9 @@
 """Юнит-тесты для глобального справочника тегов и слияния тегов в концепты."""
+import pytest
 from scripts.rebuild_tags import collect_tags, read_global_tags
 from app.services.pipeline import _merge_tags
 from app.services.registry import get_registry
-from app.services.tag_registry import TagRegistry, normalize_tags
+from app.services.tag_registry import TagInUseError, TagRegistry, normalize_tags
 
 
 class TestNormalizeTags:
@@ -47,6 +48,66 @@ class TestTagRegistry:
         tr = TagRegistry()
         tr.add(["  proxmox  ", "", "   "])
         assert [t["name"] for t in tr.all()] == ["proxmox"]
+
+
+class TestTagRegistryDelete:
+    def test_delete_unused_name(self):
+        tr = TagRegistry()
+        tr.add(["solo"])
+        assert tr.delete("solo") is True
+        assert tr.all() == []
+
+    def test_delete_missing_returns_false(self):
+        assert TagRegistry().delete("nope") is False
+
+    def test_delete_used_raises(self):
+        reg = get_registry()
+        reg.create("d1", "a.docx", "x", 10, tags=["proxmox"])
+        TagRegistry().add(["proxmox"])
+        with pytest.raises(TagInUseError):
+            TagRegistry().delete("proxmox")
+
+    def test_delete_unused_only_keeps_used(self):
+        reg = get_registry()
+        reg.create("d1", "a.docx", "x", 10, tags=["keep"])
+        tr = TagRegistry()
+        tr.add(["keep", "garbage1", "garbage2"])
+        deleted = tr.delete_unused()
+        assert sorted(deleted) == ["garbage1", "garbage2"]
+        by_name = {t["name"]: t["count"] for t in tr.all()}
+        assert by_name == {"keep": 1}
+
+    def test_delete_unused_empty(self):
+        assert TagRegistry().delete_unused() == []
+
+    def test_delete_raises_when_tag_became_used_after_listing(self):
+        """Гонка «модалка прочитала справочник → документ начал использовать тег
+        → клик удалить». delete перечитывает счётчик в момент удаления."""
+        tr = TagRegistry()
+        tr.add(["race"])
+        # Состояние, которое видела модалка до клика «удалить».
+        assert [t for t in tr.all() if t["name"] == "race"] == [{"name": "race", "count": 0}]
+        # Между чтением и удалением документ начинает использовать тег.
+        get_registry().create("d1", "a.docx", "x", 10, tags=["race"])
+        with pytest.raises(TagInUseError):
+            tr.delete("race")
+        assert [t for t in tr.all() if t["name"] == "race"] == [{"name": "race", "count": 1}]
+
+    def test_delete_unused_respects_usage_changed_after_listing(self):
+        """delete_unused считает used из document_tags на момент выполнения, а не
+        доверяет ранее прочитанному списку."""
+        tr = TagRegistry()
+        tr.add(["g"])
+        get_registry().create("d1", "a.docx", "x", 10, tags=["g"])
+        assert tr.delete_unused() == []
+        assert {t["name"] for t in tr.all()} == {"g"}
+
+    def test_document_tag_outlives_pool_removal(self):
+        """Тег используется документом, но отсутствует в пуле (legacy либо удалён
+        из пула в окне гонки) — all() всё равно показывает его по document_tags,
+        данные не теряются."""
+        get_registry().create("d1", "a.docx", "x", 10, tags=["legacy"])
+        assert {t["name"]: t["count"] for t in TagRegistry().all()} == {"legacy": 1}
 
 
 class TestRebuildTags:

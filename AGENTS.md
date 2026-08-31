@@ -75,6 +75,36 @@ UI: http://localhost:3000
   - Дедупликация: `documents.file_hash` (SHA-256, блокирующий Level 1), `content_hash` +
     `minhash` (k=128, `mmh3`) + `document_lsh_buckets` (strict 8×16 / loose 16×8).
     Level 2/3 кандидаты — `GET /documents/{id}/duplicates`.
+- **Редактирование тегов после загрузки (Этап 4a, 31.08.2026)**:
+  - `PATCH /documents/{id}/tags` — полная замена набора (роли editor/admin, любой документ);
+    `POST /documents/bulk-tags` — delta `{doc_ids, add, remove}` (editor/admin, лимит
+    `bulk_tags_max_docs=50`, синхронно, без four-eyes). Сервис `services/document_tag_service.py`.
+  - Правка обновляет 4 слоя (дрейк тегов, MIGRATION_PLAN §10): `document_tags` (canonical),
+    `okf_concepts.tags` (БД), frontmatter `.md`-бандлов (`tags`+`global_tags`, тело байт-в-байт),
+    payload Qdrant `tags` (concept-точки — из `okf_concepts`, point_id = uuid5 от filepath
+    бандла, БЕЗ scroll; chunk-точки — полный набор через filter set_payload). Синк Qdrant —
+    фоновый (каждый set_payload ~2с, синхронно замораживал бы ответ), сериализован по документу
+    с dirty-флагом; идемпотентен и самовосстанавливается на regenerate/resume.
+  - Тег, равный номеру разработки: привязка/отвязка `development_id` + реиндекс `dev_tags`
+    через `dev_sync` (без параллельного механизма); флаг `dev_tags_sync_pending` в ответе.
+  - Каждая правка — `audit_log`: `document_tags_update` (одна) / `document_bulk_tags_update`
+    (на каждый документ в bulk). Виджет — `TagPicker` (кастомный combobox: фильтр по подстроке,
+    счётчики, топ-20 совпадений, клавиатура), общий словарь `lib/tagDictionary.js` (один
+    `GET /api/tags` на страницу, `bumpTagVersion()` после любой мутации). Панель
+    выделения `SelectionBar` (свёрнута под спойлер «Массовые действия», было
+    `BulkActionsBar`; авто-раскрытие при появлении выделения):
+    главный чекбокс страницы (indeterminate через ref — React не даёт prop),
+    «Выделить все по фильтру» (кап 50 = `bulk_tags_max_docs`, тост при превышении),
+    «Снять выделение»; массовые теги — одиночные
+    `TagCombobox` (добавить — новый/существующий, убрать — только существующий).
+    В карточке редактор тегов свёрнут под спойлер (read-only чипы + «✎»), раскрытие —
+    по клику. Фильтр по тегу — селект «Все теги/тег (N)» в фильтр-баре, exact-match по
+    `document_tags` (query-параметр `tag` в GET /documents); учитывается «Выделить все
+    по фильтру».
+  - **Чистка справочника («мусор»)**: `DELETE /tags/{tag}` и `POST /tags/cleanup` (editor/admin)
+    удаляют только имена из пула автодополнения (`tags`) со счётчиком 0 (используемый тег → 409);
+    связи документов не трогаются. Audit: `tag_delete`/`tag_cleanup`. UI — модалка
+    `TagManagerModal` (кнопка «Справочник тегов» в фильтр-баре).
 
 ## Фоновые процессы
 

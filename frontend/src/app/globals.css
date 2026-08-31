@@ -403,6 +403,148 @@ main {
   color: var(--accent);
 }
 
+/* Свёрнутый редактор тегов в карточке: read-only чипы + кнопка «✎». */
+.doc-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.doc-tags-muted {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tag-chip-readonly {
+  cursor: default;
+  background: var(--accent-dim);
+  border: 1px solid var(--border);
+}
+
+.tag-edit-toggle {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tag-edit-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* Компактный тег-пикер в карточке документа (Этап 4a): не растягивает строку
+   списка, как полноразмерный пикер зоны загрузки. */
+.tag-picker-inline {
+  margin: 4px 0 0;
+  gap: 6px;
+}
+
+.tag-picker-inline input {
+  flex: 0 1 auto;
+  width: 150px;
+  min-width: 120px;
+  padding: 3px 10px;
+}
+
+/* ---------- tag combobox (фильтруемый выбор тега) ---------- */
+.tag-combobox {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.tag-combobox input {
+  width: 100%;
+}
+
+.tag-combobox-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 500;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.tag-combobox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.tag-combobox-item.active {
+  background: var(--accent-dim);
+}
+
+.tag-combobox-item.unused .tag-combobox-name {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+}
+
+.tag-combobox-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-combobox-count {
+  flex-shrink: 0;
+  min-width: 22px;
+  text-align: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--accent-dim);
+  color: var(--muted);
+}
+
+.tag-combobox-item.unused .tag-combobox-count {
+  color: var(--danger);
+}
+
+.tag-combobox-empty {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Компактный вариант в карточке документа: комбобокс фиксированной ширины. */
+.tag-picker-inline .tag-combobox {
+  flex: 0 1 auto;
+  width: 150px;
+}
+
+.tag-picker-inline .tag-combobox input {
+  width: 100%;
+}
+
 .doc-uploader {
   color: var(--muted);
 }
@@ -456,6 +598,22 @@ main {
 .doc-filter-problem input {
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+.doc-filter-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.doc-filter-btn:hover {
+  background: var(--accent);
+  color: #fff;
 }
 
 .doc-pagination {
@@ -1462,11 +1620,26 @@ main {
 /* ---------- Stage 2a: role-gated docs, bulk ops, admin/security panels ---------- */
 
 .doc-checkbox {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+/* Главный чекбокс «вся страница» в панели выделения. */
+.selection-page-checkbox {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Выбранная карточка — заметная подсветка, чтобы не искать галки по карточкам. */
+.document-item.selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .danger-group {
@@ -1484,10 +1657,97 @@ main {
   flex-wrap: wrap;
   padding: 10px 14px;
   margin-bottom: 12px;
-  border: 1px solid var(--danger);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(255, 92, 92, 0.08);
+  background: var(--panel);
   font-size: 13px;
+}
+
+/* Панель массовых действий свёрнута под спойлер: виден только заголовок-кнопка. */
+.selection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.selection-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.selection-toggle:hover {
+  border-color: var(--accent);
+}
+
+.selection-count {
+  color: var(--muted);
+}
+
+.selection-count strong {
+  color: var(--text);
+}
+
+.selection-chevron {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Массовые действия только для admin (bulk-delete/regenerate) — danger-подсветка. */
+.bulk-bar-danger {
+  border-color: var(--danger);
+  background: rgba(255, 92, 92, 0.08);
+}
+
+/* Массовое редактирование тегов (Editor/Admin, Этап 4a) — нейтральная тема. */
+.bulk-bar-soft {
+  border-color: var(--accent);
+  background: rgba(43, 74, 128, 0.06);
+}
+
+.bulk-tag-input {
+  flex: 0 1 160px;
+  min-width: 130px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.bulk-tag-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.bulk-tag-btn {
+  background: var(--accent-dim);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.bulk-tag-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.bulk-tag-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .bulk-count {
@@ -1511,19 +1771,30 @@ main {
   background: var(--accent-dim);
 }
 
+.bulk-preview-btn:disabled,
+.bulk-clear-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.bulk-preview-btn:disabled:hover {
+  background: var(--accent);
+}
+
+/* «Снять выделение» — заметная кнопка danger-темы, не прятать в конце панели. */
 .bulk-clear-btn {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--muted);
+  border: 1px solid var(--danger);
+  color: var(--danger);
   border-radius: 8px;
   padding: 6px 14px;
   cursor: pointer;
   font-size: 13px;
 }
 
-.bulk-clear-btn:hover {
-  color: var(--text);
-  border-color: var(--accent);
+.bulk-clear-btn:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: rgba(255, 92, 92, 0.08);
 }
 
 .modal-overlay {
@@ -1554,6 +1825,141 @@ main {
 .modal-title {
   margin: 0;
   font-size: 17px;
+}
+
+/* ---------- Справочник тегов (TagManagerModal) ---------- */
+.tag-manager {
+  max-width: 520px;
+}
+
+.tag-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tag-manager-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tag-manager-close:hover {
+  color: var(--text);
+  border-color: var(--danger);
+}
+
+.tag-manager-search {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.tag-manager-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tag-manager-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.tag-manager-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  max-height: 45vh;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tag-manager-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.tag-manager-item:hover {
+  background: var(--panel);
+}
+
+.tag-manager-item.unused {
+  opacity: 0.7;
+}
+
+.tag-manager-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-manager-count {
+  min-width: 24px;
+  text-align: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--accent-dim);
+  color: var(--muted);
+}
+
+.tag-manager-item.unused .tag-manager-count {
+  color: var(--danger);
+}
+
+.tag-manager-delete {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tag-manager-delete:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.tag-manager-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tag-manager-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .modal-body {

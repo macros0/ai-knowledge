@@ -3,15 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { deleteDocument, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment } from "@/lib/api";
+import { deleteDocument, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, updateDocumentTags } from "@/lib/api";
+import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
-import BulkActionsBar from "./BulkActionsBar";
+import SelectionBar from "./SelectionBar";
 import PreviewModal from "./PreviewModal";
 import DevelopmentFilter from "./DevelopmentFilter";
 import DevelopmentPicker from "./DevelopmentPicker";
 import DuplicateModal from "./DuplicateModal";
+import TagPicker from "./TagPicker";
+import TagManagerModal from "./TagManagerModal";
 
 const STATUS_LABELS = {
   uploaded: "Загружен",
@@ -27,6 +30,9 @@ const STATUS_LABELS = {
 const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
 
 const PAGE_SIZE = 50;
+// Кап «Выделить все по фильтру» — совпадает с bulk_tags_max_docs. Бэкенд всё равно
+// отклоняет превышение реального лимита понятным 400; кап защищает от лишнего набора.
+const MAX_SELECT = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
 function progressText(doc) {
@@ -64,10 +70,22 @@ export default function DocumentList({ refreshKey = 0 }) {
   const [problemOnly, setProblemOnly] = useState(false);
   const [moduleFilter, setModuleFilter] = useState("");
   const [devFilter, setDevFilter] = useState(null);
+  const [tagFilter, setTagFilter] = useState("");
   const [dupDoc, setDupDoc] = useState(null);
+  const [showTags, setShowTags] = useState(false);
+  // Спойлер редактора тегов в карточке: по умолчанию свёрнут (чипы + «✎»),
+  // раскрытие — только когда нужно редактировать (не частая операция).
+  const [editingTags, setEditingTags] = useState({});
+  // Спойлер панели массовых действий: свёрнут по умолчанию, раскрывается по клику
+  // или автоматически при появлении выделения.
+  const [bulkOpen, setBulkOpen] = useState(false);
   const mounted = useRef(true);
   const timer = useRef(null);
   const loadSeq = useRef(0);
+
+  // Словарь тегов для селекта фильтра (общий с пикерами, обновляется по bumpTagVersion).
+  const tagDictionary = useTagDictionary();
+  const filterTags = tagDictionary.filter((t) => t.count > 0);
 
   // В disabled-режиме (всё открыто) действия доступны, как и на бэкенде.
   const canEdit = mode === "disabled" || hasRole("editor", "admin");
@@ -91,6 +109,7 @@ export default function DocumentList({ refreshKey = 0 }) {
       problem: problemOnly ? true : undefined,
       module: moduleFilter || undefined,
       developmentId: devFilter ? Number(devFilter) : undefined,
+      tag: tagFilter || undefined,
       search: search || undefined,
       sort: sortKey,
       limit: PAGE_SIZE,
@@ -103,7 +122,7 @@ export default function DocumentList({ refreshKey = 0 }) {
     if (busy && mounted.current) {
       timer.current = setTimeout(load, 1500);
     }
-  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, search, sortKey, page]);
+  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, search, sortKey, page]);
 
   const loadUploaders = useCallback(async () => {
     try {
@@ -141,7 +160,7 @@ export default function DocumentList({ refreshKey = 0 }) {
   // окажемся на середине старой страницы с новым набором результатов).
   useEffect(() => {
     setPage(0);
-  }, [search, sortKey, resolvedUploader, problemOnly, moduleFilter, devFilter]);
+  }, [search, sortKey, resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter]);
 
   useEffect(() => {
     if (loading) return;
@@ -224,6 +243,20 @@ export default function DocumentList({ refreshKey = 0 }) {
     }
   };
 
+  const changeTags = async (doc, tags) => {
+    try {
+      const res = await updateDocumentTags(doc.id, tags);
+      if (res?.dev_tags_sync_pending) {
+        showToast("Теги сохранены, индексация разработки обновится в фоне", { type: "warning" });
+      }
+      bumpTagVersion();
+      load();
+    } catch (err) {
+      showToast(`Не удалось изменить теги: ${err.message}`, { type: "error" });
+      load();
+    }
+  };
+
   const toggleSelect = (id) => {
     setSelected((s) => {
       const next = { ...s };
@@ -233,17 +266,89 @@ export default function DocumentList({ refreshKey = 0 }) {
     });
   };
 
+  const toggleEditTags = (id) => {
+    setEditingTags((s) => ({ ...s, [id]: !s[id] }));
+  };
+
   const selectedIds = Object.keys(selected);
+
+  // При появлении выделения панель массовых действий раскрывается автоматически
+  // (чтобы можно было сразу применить операцию); ручное сворачивание сохраняется.
+  useEffect(() => {
+    if (selectedIds.length > 0) setBulkOpen(true);
+  }, [selectedIds.length]);
+
+  const pageDocIds = docs.map((d) => d.id);
+  const allOnPageSelected =
+    pageDocIds.length > 0 && pageDocIds.every((id) => selected[id]);
+  const someOnPageSelected = pageDocIds.some((id) => selected[id]);
+
+  const toggleSelectPage = () => {
+    setSelected((s) => {
+      const next = { ...s };
+      if (allOnPageSelected) pageDocIds.forEach((id) => delete next[id]);
+      else pageDocIds.forEach((id) => {
+        next[id] = true;
+      });
+      return next;
+    });
+  };
+
+  const selectAllFiltered = async () => {
+    try {
+      const result = await listDocuments({
+        uploader: resolvedUploader || undefined,
+        problem: problemOnly ? true : undefined,
+        module: moduleFilter || undefined,
+        developmentId: devFilter ? Number(devFilter) : undefined,
+        tag: tagFilter || undefined,
+        search: search || undefined,
+        sort: sortKey,
+        limit: MAX_SELECT,
+        offset: 0,
+      });
+      const ids = result.documents.map((d) => d.id);
+      const next = {};
+      ids.forEach((id) => {
+        next[id] = true;
+      });
+      setSelected(next);
+      if (result.total > ids.length) {
+        showToast(
+          `Выделено ${ids.length} из ${result.total} (лимит массовой операции). Уточните фильтр, чтобы обработать остальные`,
+          { type: "warning" }
+        );
+      }
+    } catch (err) {
+      showToast(`Не удалось выделить документы: ${err.message}`, { type: "error" });
+    }
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <>
-      {isAdmin && (
-        <BulkActionsBar
+      {canEdit && (
+        <SelectionBar
           selectedIds={selectedIds}
+          pageDocIds={pageDocIds}
+          total={total}
+          allOnPageSelected={allOnPageSelected}
+          someOnPageSelected={someOnPageSelected}
+          canDelete={isAdmin}
+          open={bulkOpen}
+          onToggle={() => setBulkOpen((v) => !v)}
+          onTogglePage={toggleSelectPage}
+          onSelectAll={selectAllFiltered}
           onClear={() => setSelected({})}
           onOpenPreview={() => setShowPreview(true)}
+          onDone={(result) => {
+            const n = result?.updated?.length ?? 0;
+            showToast(
+              n > 0 ? `Теги обновлены у ${n} документ(ов)` : "Состав тегов не изменился"
+            );
+            load();
+          }}
         />
       )}
       {showPreview && (
@@ -265,6 +370,7 @@ export default function DocumentList({ refreshKey = 0 }) {
           onDeleted={() => load()}
         />
       )}
+      {showTags && <TagManagerModal onClose={() => setShowTags(false)} />}
       <div className="doc-filter-bar">
         <input
           type="text"
@@ -314,11 +420,29 @@ export default function DocumentList({ refreshKey = 0 }) {
             </option>
           ))}
         </select>
+        <select
+          className="doc-filter-select"
+          value={tagFilter}
+          onChange={(e) => setTagFilter(e.target.value)}
+          aria-label="Фильтр по тегу"
+        >
+          <option value="">Все теги</option>
+          {filterTags.map((t) => (
+            <option key={t.name} value={t.name}>
+              {t.name} ({t.count})
+            </option>
+          ))}
+        </select>
         <DevelopmentFilter
           developments={developments}
           value={devFilter}
           onChange={setDevFilter}
         />
+        {canEdit && (
+          <button className="doc-filter-btn" onClick={() => setShowTags(true)}>
+            Справочник тегов
+          </button>
+        )}
         <select
           className="doc-filter-select"
           value={sortKey}
@@ -341,8 +465,8 @@ export default function DocumentList({ refreshKey = 0 }) {
       </div>
       <ul className="document-list">
         {docs.map((doc) => (
-          <li key={doc.id} className="document-item">
-            {isAdmin && (
+          <li key={doc.id} className={`document-item ${selected[doc.id] ? "selected" : ""}`}>
+            {canEdit && (
               <input
                 type="checkbox"
                 className="doc-checkbox"
@@ -357,11 +481,55 @@ export default function DocumentList({ refreshKey = 0 }) {
                 {doc.error
                   ? `Ошибка: ${doc.error}`
                   : (progressText(doc) ?? `${(doc.size / 1024).toFixed(1)} КБ · Концептов: ${doc.okf_concept_count}`)}
-                {doc.tags && doc.tags.length > 0 && (
+                {canEdit ? (
                   <>
                     <br />
-                    <span className="doc-tags">Теги: {doc.tags.join(", ")}</span>
+                    {editingTags[doc.id] ? (
+                      <>
+                        <TagPicker
+                          label=""
+                          className="tag-picker-inline"
+                          selected={doc.tags || []}
+                          onChange={(tags) => changeTags(doc, tags)}
+                          placeholder="Добавить тег..."
+                        />
+                        <button
+                          className="tag-edit-toggle"
+                          onClick={() => toggleEditTags(doc.id)}
+                          aria-label="Свернуть редактирование тегов"
+                        >
+                          −
+                        </button>
+                      </>
+                    ) : (
+                      <div className="doc-tags-row">
+                        {doc.tags && doc.tags.length > 0 ? (
+                          doc.tags.map((t) => (
+                            <span key={t} className="tag-chip tag-chip-readonly">
+                              {t}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="doc-tags-muted">Теги: —</span>
+                        )}
+                        <button
+                          className="tag-edit-toggle"
+                          onClick={() => toggleEditTags(doc.id)}
+                          aria-label="Редактировать теги"
+                        >
+                          ✎
+                        </button>
+                      </div>
+                    )}
                   </>
+                ) : (
+                  doc.tags &&
+                  doc.tags.length > 0 && (
+                    <>
+                      <br />
+                      <span className="doc-tags">Теги: {doc.tags.join(", ")}</span>
+                    </>
+                  )
                 )}
                 {doc.development_number && (!canEdit || developments.length === 0) && (
                   <>

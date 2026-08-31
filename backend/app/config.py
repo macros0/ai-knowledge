@@ -204,6 +204,10 @@ class Settings(BaseSettings):
     # Soft-лимит числа документов на одну массовую операцию.
     bulk_delete_max_docs: int = 50
     bulk_regenerate_max_docs: int = 20
+    # Лимит массового редактирования тегов (Этап 4a). Синхронная, недеструктивная
+    # операция — лимит НЕ ниже порога более опасной перегенерации
+    # (bulk_regenerate_max_docs=20 / approval_threshold_docs_regenerate=15).
+    bulk_tags_max_docs: int = 50
     # Per-user лимиты массовой перегенерации (независимо от системного лимита).
     bulk_regenerate_max_ops_per_hour: int = 3
     bulk_regenerate_max_docs_per_hour: int = 50

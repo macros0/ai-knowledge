@@ -12,6 +12,7 @@ import HealthBanner from "@/components/HealthBanner";
 export const metadata = {
   title: "OKF Knowledge Service",
   description: "Загрузка документов и умный поиск по базе знаний",
+  icons: { icon: "/icon.png" },
 };
 
 export default function RootLayout({ children }) {
@@ -24,6 +25,7 @@ export default function RootLayout({ children }) {
               <div className="app-shell">
                 <header className="topbar">
                   <Link href="/" className="brand">
+                    <img src="/icon.png" alt="" className="brand-logo" width="32" height="32" />
                     <h1>OKF Knowledge Service</h1>
                   </Link>
                   <Nav />

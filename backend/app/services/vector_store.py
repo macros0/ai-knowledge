@@ -313,6 +313,59 @@ class VectorStore:
             ),
         )
 
+    def set_document_tags_payload(
+        self,
+        doc_id: str,
+        new_tags: list[str],
+        removed: list[str] | None = None,
+        added: list[str] | None = None,
+        *,
+        concept_points: list[tuple[str, list[str]]] | None = None,
+    ) -> None:
+        """Обновляет payload `tags` всех точек документа после правки тегов (Этап 4a).
+
+        **Без scroll**: медленный scroll с фильтром по doc_id (и тем более с полным
+        payload) делал синхронную правку тегов недопустимо медленной (секунды).
+        Вместо этого:
+          - chunk-точки несут `tags` = глобальные теги документа (user_tags) —
+            обновляются одним filter-based set_payload (как dev_sync);
+          - concept-точки: point_id детерминирован (uuid5 от filepath бандла),
+            поэтому tags берутся из `okf_concepts` (уже пересчитаны правкой)
+            и проставляются группированным set_payload по point_id.
+
+        `concept_points` — список (point_id, tags) для concept-точек. Идемпотентно:
+        повторный вызов приводит Qdrant к состоянию БД, порядок правок не важен.
+        Бросает VectorStoreError при недоступности Qdrant — вызывающий решает.
+        """
+        del removed, added  # дельта больше не нужна — состояние читается из БД
+        global_tags = list(new_tags or [])
+        _qdrant_call(
+            self.client.set_payload,
+            collection_name=self.collection,
+            payload={"tags": global_tags},
+            points=qm.FilterSelector(
+                filter=qm.Filter(
+                    must=[
+                        qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id)),
+                        qm.FieldCondition(
+                            key="point_type", match=qm.MatchValue(value=CHUNK_POINT_TYPE)
+                        ),
+                    ]
+                )
+            ),
+        )
+
+        groups: dict[tuple[str, ...], list[str]] = {}
+        for point_id, tags in concept_points or []:
+            groups.setdefault(tuple(tags or []), []).append(str(point_id))
+        for tag_tuple, point_ids in groups.items():
+            _qdrant_call(
+                self.client.set_payload,
+                collection_name=self.collection,
+                payload={"tags": list(tag_tuple)},
+                points=point_ids,
+            )
+
     def ping(self) -> bool:
         """Лёгкая проверка доступности Qdrant (для /health)."""
         try:

@@ -26,6 +26,8 @@ EXPECTED_ACTION_TYPES = {
     "document_bulk_regenerate",
     "document_resume",
     "document_development_set",
+    "document_tags_update",
+    "document_bulk_tags_update",
     "job_approve",
     "job_cancel",
     "user_block",
@@ -35,6 +37,8 @@ EXPECTED_ACTION_TYPES = {
     "development_delete",
     "attribute_create",
     "attribute_delete",
+    "tag_delete",
+    "tag_cleanup",
 }
 
 

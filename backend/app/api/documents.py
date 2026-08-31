@@ -18,12 +18,14 @@ from app.config import get_settings
 from app.models.schemas import (
     BulkOperationRequest,
     BulkPreviewOut,
+    BulkTagsRequest,
     Concept,
     ChunkOut,
     DetectDevelopmentOut,
     DocumentDevelopmentSet,
     DocumentListOut,
     DocumentOut,
+    DocumentTagsUpdate,
     OkfFileOut,
     UploaderListOut,
 )
@@ -32,6 +34,7 @@ from app.services.deduplication import file_hash_exists, find_duplicates_for_doc
 from app.services.dev_detector import attach_development, detect
 from app.services.dev_sync import reindex_document_dev_tags, schedule_document_dev_tags_sync
 from app.services.development_registry import get_development_registry
+from app.services.document_tag_service import bulk_update_tags, update_document_tags
 from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, QueueOverloadedError, get_job_queue
 from app.services.okf_generator import _build_markdown
 from app.services.pipeline import Pipeline, save_upload_stream
@@ -145,6 +148,7 @@ def list_documents(
     module: str | None = None,
     problem: bool | None = None,
     search: str | None = None,
+    tag: str | None = None,
     sort: str = "date_desc",
     limit: Annotated[int | None, Query(ge=1)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -180,6 +184,7 @@ def list_documents(
         module=module,
         problem=problem,
         search=search,
+        tag=tag,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -254,6 +259,32 @@ def set_document_development(
         raise HTTPException(status_code=404, detail="Документ не найден")
     result["dev_tags_sync_pending"] = sync_pending
     return result
+
+
+@router.patch("/{doc_id}/tags", response_model=DocumentOut)
+def update_document_tags_endpoint(
+    doc_id: str,
+    body: DocumentTagsUpdate,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    """Полная замена набора глобальных тегов документа (Этап 4a).
+
+    Обновляет canonical (`document_tags`) и проекции (`okf_concepts.tags`,
+    frontmatter .md-бандлов, Qdrant payload). Тег, равный номеру разработки,
+    синхронизируется через dev_sync (Этап 4). Каждое изменение — в audit_log.
+    """
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    try:
+        result = update_document_tags(
+            doc_id, body.tags, user, ip_address=_client_ip(request)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    doc = result["doc"]
+    doc["dev_tags_sync_pending"] = result["dev_tags_sync_pending"]
+    return doc
 
 
 @router.post("/{doc_id}/detect-development", response_model=DetectDevelopmentOut)
@@ -436,6 +467,25 @@ def bulk_regenerate(
     except QueueOverloadedError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return job
+
+
+@router.post("/bulk-tags")
+def bulk_tags(
+    body: BulkTagsRequest,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    """Массовое редактирование тегов (Этап 4a): delta add/remove по списку документов.
+
+    Синхронная операция (правки тегов дешёвые, в отличие от bulk-delete/regenerate).
+    Синхронно с `set_document_development`-семантикой: тег-номер разработки
+    реиндексируется через dev_sync. Каждый затронутый документ — отдельная запись
+    в audit_log (action_type=document_bulk_tags_update).
+    """
+    doc_ids = _resolve_doc_ids(body.doc_ids, get_settings().bulk_tags_max_docs)
+    result = bulk_update_tags(doc_ids, body.add, body.remove, user, ip_address=_client_ip(request))
+    result["total"] = len(doc_ids)
+    return result
 
 
 @router.get("/{doc_id}/download")

@@ -208,6 +208,7 @@ class DocumentRegistry:
         module: str | None = None,
         problem: bool | None = None,
         search: str | None = None,
+        tag: str | None = None,
     ) -> list:
         conditions: list = []
         if uploaded_by is not None:
@@ -222,6 +223,8 @@ class DocumentRegistry:
             conditions.append(Document.development.has(Development.number == development_number))
         if module is not None:
             conditions.append(Document.development.has(Development.module == module))
+        if tag is not None:
+            conditions.append(Document.tags_rel.any(DocumentTag.tag == tag))
         if problem:
             conditions.append(
                 or_(
@@ -244,6 +247,7 @@ class DocumentRegistry:
         module: str | None = None,
         problem: bool | None = None,
         search: str | None = None,
+        tag: str | None = None,
         sort: str = "date_desc",
         limit: int | None = None,
         offset: int = 0,
@@ -264,6 +268,7 @@ class DocumentRegistry:
             module=module,
             problem=problem,
             search=search,
+            tag=tag,
         )
         with session_scope() as s:
             total_stmt = select(func.count()).select_from(Document)
