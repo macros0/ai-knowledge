@@ -67,8 +67,13 @@ npm run dev                     # http://localhost:3000
 
 ```bash
 cp .env.example .env
-# убедитесь, что QDRANT_URL=http://localhost:6333 (внутри compose он переопределяется на http://qdrant:6333)
-docker compose up --build
+# Полностью локальный стек (qdrant + postgres + backend + frontend, без внешних зависимостей):
+#   DATABASE_URL=postgresql+psycopg://postgres:okf_dev_pg@postgres:5432/okf_knowledge
+#   QDRANT_URL=http://qdrant:6333
+docker compose --profile local-qdrant --profile local-postgres up --build
+# Только локальный Qdrant (БД — внешняя/SQLite): docker compose --profile local-qdrant up --build
+# Только локальный Postgres:                     docker compose --profile local-postgres up --build
+# Без локальных зависимостей (корпоративные Qdrant/Postgres по .env): docker compose up --build
 # UI: http://localhost:8080   API docs: http://localhost:8000/docs
 # BACKEND_URL внутри compose переопределяется на http://backend:8000 (прокси /api в Next.js)
 ```
@@ -257,9 +262,10 @@ Read-only проверка: документы, «зависшие» в акти
 | `APP_NAME` | `OKF Knowledge Service` | Название сервиса |
 | `API_PREFIX` | `/api` | Префикс путей API |
 | `DATA_DIR` | `./data` | Корень runtime-данных (uploads, okf_bundles, staging) |
-| `DATABASE_URL` | `postgresql+psycopg://postgres:…@127.0.0.1:5432/okf_knowledge` | Строка подключения к PostgreSQL (метаданные: документы, теги, OKF-концепты). См. `MIGRATION_PLAN.md` |
-| `DATABASE_URL_DEV` | `sqlite:///./data/app.db` | Dev-фолбэк на SQLite (zero-config, без внешнего сервера) |
-| `QDRANT_URL` | `http://localhost:6333` | Адрес Qdrant |
+| `DATABASE_URL` | `postgresql+psycopg://postgres:…@127.0.0.1:5432/okf_knowledge` | Строка подключения к PostgreSQL (метаданные: документы, теги, OKF-концепты). Локальный compose — хост `postgres:5432` (профиль `local-postgres`); корпоративный — внешний хост. См. `MIGRATION_PLAN.md` |
+| `DATABASE_URL_DEV` | `sqlite:///./data/app.db` | Dev-фолбэк на SQLite (zero-config, без внешнего сервера; активируется, когда `DATABASE_URL` пуст) |
+| `QDRANT_URL` | `http://localhost:6333` | Адрес Qdrant (локальный compose: `http://qdrant:6333`; корпоративный: `https://…:6333`) |
+| `QDRANT_API_KEY` | пусто | Опциональный API-ключ Qdrant (корпоративный Qdrant с авторизацией) |
 | `QDRANT_COLLECTION` | `okf_knowledge_base` | Коллекция Qdrant |
 | `EMBEDDING_DIMENSIONS` | `1024` | Размерность вектора (bge-m3=1024, text-embedding-3-small=1536) |
 | `EMBEDDING_PROVIDER` | `http` | `http` (шлюз LiteLLM) или `fake` (без сети) |

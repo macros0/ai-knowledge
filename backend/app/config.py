@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     keycloak_group_separator: str = ","
 
     qdrant_url: str = "http://localhost:6333"
+    # Опциональный API-ключ Qdrant. Локальный compose (профиль local-qdrant) и
+    # локальный бинарь без авторизации — не нужен (None). Корпоративный Qdrant,
+    # требующий авторизации по инфраструктурной политике, — задать здесь.
+    qdrant_api_key: str | None = None
     qdrant_collection: str = "okf_knowledge_base"
     embedding_dimensions: int = 1024
 

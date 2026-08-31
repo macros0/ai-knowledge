@@ -63,8 +63,9 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 | `KEYCLOAK_URL` / `KEYCLOAK_REALM` / `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | указывают на **IDB** (broker), не на AD/IDP |
 | `SSO_REDIRECT_URI` | `https://<host>/api/auth/callback` |
 | `SSO_POST_LOGOUT_REDIRECT_URI` | `https://<host>/` |
-| `DATABASE_URL` | `postgresql+psycopg://user:pass@host:5432/okf_knowledge` |
-| `QDRANT_URL` | прод-эндпоинт Qdrant |
+| `DATABASE_URL` | `postgresql+psycopg://user:pass@host:5432/okf_knowledge` (внешний прод-хост; НЕ `postgres:5432` compose-профиля `local-postgres`) |
+| `QDRANT_URL` | прод-эндпоинт Qdrant (`https://…:6333`) |
+| `QDRANT_API_KEY` | API-ключ Qdrant, если корпоративный Qdrant требует авторизации |
 | `LLM_BASE_URL` / `LLM_API_KEY` | прод-провайдер LLM |
 | `EMBEDDING_API_BASE` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | прод-провайдер эмбеддингов |
 
@@ -79,9 +80,17 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 - **БД**: PostgreSQL (синхронный драйвер psycopg3). Схема создаётся на старте
   (`init_db`/`create_all`); версионированные миграции — Alembic (`backend/alembic/`).
-  В проде использовать Postgres, а не SQLite-фолбэк.
+  В проде использовать Postgres, а не SQLite-фолбэк. Сервис `postgres` в
+  `docker-compose.yml` — опциональный (профиль `local-postgres`, по умолчанию не
+  поднимается). В проде композ не включает локальный Postgres: backend ходит на
+  внешний корпоративный инстанс по `DATABASE_URL` — трафик вне доверенной
+  compose-сети, см. `SECURITY.md` §3.
 - **Qdrant**: прод-инстанс с персистентным томом. Версии клиента и сервера
-  согласовывать (процедура апгрейда — в `README.md`).
+  согласовывать (процедура апгрейда — в `README.md`). Сервис `qdrant` в
+  `docker-compose.yml` — опциональный (профиль `local-qdrant`, по умолчанию не
+  поднимается). В проде композ не включает локальный Qdrant: backend ходит на
+  внешний корпоративный инстанс по `QDRANT_URL` (HTTPS) и, при необходимости,
+  `QDRANT_API_KEY` — трафик вне доверенной compose-сети, см. `SECURITY.md` §3.
 - **LLM / эмбеддинги**: прод-эндпоинты; `LLM_API_KEY` / `EMBEDDING_API_KEY` — из
   секрет-хранилища.
 - **HTTPS и reverse-proxy** (обязательно): TLS терминируется на прокси
@@ -95,11 +104,13 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
   (фронтенд на домене A, бэкенд на домене B без прокси) — оно **несовместимо** с
   текущей схемой signed-cookie сессий: браузер не отправит cookie на другой origin.
 - **Публикация портов**: в `docker-compose.yml` наружу публикуется **только
-  frontend** (`8080:3000`). `backend` (`8000`) и `qdrant` (`6333`/`6334`) host-портов
-  не публикуют — они доступны только внутри compose-сети. Единственный путь к данным
+  frontend** (`8080:3000`). `backend` (`8000`), `qdrant` (`6333`/`6334`) и
+  `postgres` (`5432`) host-портов не публикуют — они доступны только внутри
+  compose-сети (qdrant/postgres при этом вообще опциональны: профили `local-qdrant`
+  и `local-postgres`). Единственный путь к данным
   из сети — через frontend (который сам за reverse-proxy). Не возвращайте `ports`
-  для backend/qdrant обратно: это открывает корпус документов напрямую, минуя
-  аутентификацию frontend-слоя.
+  для backend/qdrant/postgres обратно: это открывает корпус документов напрямую,
+  минуя аутентификацию frontend-слоя.
 
 ### 3.1 Грабли: `BACKEND_URL` и Next.js rewrites
 

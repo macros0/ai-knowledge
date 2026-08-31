@@ -83,7 +83,11 @@ def _tag_match_filter(tags: list[str]) -> qm.Filter:
 class VectorStore:
     def __init__(self):
         self.settings = get_settings()
-        self.client = QdrantClient(url=self.settings.qdrant_url, timeout=10)
+        self.client = QdrantClient(
+            url=self.settings.qdrant_url,
+            api_key=self.settings.qdrant_api_key,
+            timeout=10,
+        )
 
     @property
     def collection(self) -> str:

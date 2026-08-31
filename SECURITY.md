@@ -78,6 +78,18 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
 
 - **Наружу публикуется только frontend**: `docker-compose.yml` — `frontend: "8080:3000"`.
   `backend` и `qdrant` host-портов не публикуют (доступны только внутри compose-сети).
+- **Qdrant — опциональный сервис compose** (`profiles: ["local-qdrant"]`). По умолчанию
+  не поднимается; backend подключается по `QDRANT_URL` из `.env` — либо к внутреннему
+  `http://qdrant:6333` (профиль включён, доверенная compose-сеть), либо к внешнему
+  корпоративному Qdrant. В последнем случае трафик backend → Qdrant выходит за пределы
+  доверенной сети, поэтому **обязателен HTTPS** и, если требует инфраструктурная
+  политика, `QDRANT_API_KEY` — тот же принцип, что и для внешних LLM/embeddings.
+- **Postgres — опциональный сервис compose** (`profiles: ["local-postgres"]`). По умолчанию
+  не поднимается; backend подключается по `DATABASE_URL` из `.env` — либо к внутреннему
+  `postgres:5432` (профиль включён, доверенная compose-сеть), либо к
+  внешнему корпоративному Postgres. В последнем случае трафик backend → Postgres выходит
+  за пределы доверенной сети — сетевое соединение должен защищать сам корпоративный
+  контур (TLS/VPN); пароль передаётся в `DATABASE_URL`.
 - **Bind backend** (`backend/Dockerfile`): `uvicorn --host ${UVICORN_HOST:-0.0.0.0}` —
   `0.0.0.0` нужен для межконтейнерной связи; изоляция достигается отсутствием
   host-публикации порта, а не выбором host. Локальный запуск (`scripts/start-all.ps1`)
@@ -99,6 +111,8 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
 | `APP_SECRET_KEY` | подпись сессионной cookie (`TimestampSigner`, Starlette `SessionMiddleware`); дефолт `dev-secret-change-me` — подделка сессии → обход авторизации |
 | `KEYCLOAK_CLIENT_SECRET` | конфиденциальный OIDC-клиент |
 | `DATABASE_URL` | пароль PostgreSQL |
+| `POSTGRES_PASSWORD` | пароль суперпользователя для compose-сервиса `postgres` (профиль `local-postgres`, dev-дефолт `okf_dev_pg`) |
+| `QDRANT_API_KEY` | доступ к корпоративному Qdrant (если тот требует авторизации) |
 | `LLM_API_KEY`, `EMBEDDING_API_KEY` | доступ к внешним LLM/embedding-провайдерам |
 
 Инварианты, проверяемые `validate_auth_provider` в `app/config.py` (production):
@@ -152,6 +166,29 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
   компрометация `APP_SECRET_KEY` = компрометация всех сессий.
 
 ## 7. Журнал security-изменений
+
+### 2026-08-31 — Qdrant опциональный (compose-профиль) + единый QDRANT_URL
+Изменение: сервис `qdrant` в `docker-compose.yml` помечен профилем
+`local-qdrant` (по умолчанию не поднимается), хардкод `QDRANT_URL=http://qdrant:6333`
+в `environment` backend'а убран — URL приходит только из `.env`. Добавлена
+опциональная `QDRANT_API_KEY` (передаётся в `QdrantClient(api_key=...)` только
+если задана). Код приложения не различает локальный и корпоративный Qdrant.
+Безопасностный нюанс: при внешнем Qdrant трафик выходит за доверенную
+compose-сеть — обязателен HTTPS и (по политике) `QDRANT_API_KEY`; зафиксировано
+в §3 и §4. Host-порт Qdrant по-прежнему не публикуется.
+
+### 2026-08-31 — Postgres опциональный (compose-профиль) + единый DATABASE_URL
+Изменение: в `docker-compose.yml` добавлен сервис `postgres` (`postgres:17`) с профилем
+`local-postgres` (по умолчанию не поднимается). Backend подключается по `DATABASE_URL`
+из `.env` — либо к внутреннему `postgres:5432` (профиль включён, доверенная
+compose-сеть), либо к внешнему корпоративному Postgres; код приложения не различает
+эти случаи. `DATABASE_URL_DEV` (SQLite) сохранён как третий zero-config вариант.
+Пароль суперпользователя для compose-сервиса — `POSTGRES_PASSWORD` (dev-дефолт
+`okf_dev_pg`). Безопасностный нюанс: при внешнем Postgres трафик выходит за доверенную
+compose-сеть — сетевая защита возлагается на корпоративный контур (TLS/VPN); пароль в
+`DATABASE_URL`. Host-порт Postgres не публикуется. Симметрично Qdrant (§3, §4) и
+позволяет поднять полностью локальный стек одной командой
+(`docker compose --profile local-qdrant --profile local-postgres up`).
 
 ### 2026-08-31 — Привязка разработки на upload (Этап 4a.1)
 Изменение: `POST /documents` принимает необязательный form-параметр `development_id`
