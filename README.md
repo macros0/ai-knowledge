@@ -120,9 +120,11 @@ created_at: 2026-08-12
 
 Обработка идёт **инкрементально**: результат каждого чанка пишется в staging,
 поэтому при паузе/перезапуске обработанные чанки не генерируются заново —
-`resume` пропускает их. Удалить документ в процессе генерации можно из любого
-статуса — генерация будет остановлена, а все связанные файлы удалены. При
-перезапуске сервера зависшие статусы автоматически сбрасываются в `paused`.
+`resume` пропускает их. Удалить документ можно из любого статуса — генерация
+будет остановлена, а документ перемещён в корзину (soft delete, Этап 4a.2):
+файлы и точки Qdrant не удаляются до истечения `TRASH_RETENTION_DAYS`, документ
+можно восстановить. При перезапуске сервера зависшие статусы автоматически
+сбрасываются в `paused`.
 
 ## Обновление Qdrant
 
@@ -308,6 +310,9 @@ Read-only проверка: документы, «зависшие» в акти
 | `CHAT_CONCEPT_MAX_CHARS` | `4000` | Обрезка концепта в контексте |
 | `CHAT_CHUNK_MAX_CHARS` | `6000` | Обрезка чанка в контексте |
 | `BACKEND_URL` | `http://localhost:8000` | Адрес бэкенда для прокси `/api` в Next.js (Docker: `http://backend:8000`) |
+| `TRASH_RETENTION_DAYS` | `14` | Окно хранения в корзине (дней), до истечения которого документ можно восстановить; после — фоновая автоочистка (Этап 4a.2) |
+| `TRASH_PURGE_ENABLED` | `true` | Автозапуск фоновой очистки корзины при старте сервера |
+| `TRASH_PURGE_INTERVAL_SECONDS` | `3600` | Интервал прогона фоновой очистки корзины (сек) |
 
 ### Модель устойчивости к сбоям LLM
 
@@ -626,9 +631,12 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | GET | `/api/documents/{doc_id}` | Статус обработки документа |
 | POST | `/api/documents/{doc_id}/resume` | Возобновить приостановленную обработку |
 | POST | `/api/documents/{doc_id}/regenerate` | Перегенерировать концепты документа (роли `editor`/`admin`) |
-| DELETE | `/api/documents/{doc_id}` | Удалить документ и все связанные файлы (роли `editor`/`admin`) |
+| DELETE | `/api/documents/{doc_id}` | Мягкое удаление в корзину (роли `editor`/`admin`; документ скрывается, точки Qdrant и файлы помечаются `deleted`, не удаляются — Этап 4a.2) |
+| GET | `/api/documents/trash` | Список корзины: удалённые документы с индикацией срока до автоочистки (`days_left`/`purge_at`/`retention_days`) |
+| POST | `/api/documents/{doc_id}/restore` | Восстановить из корзины без пере-эмбеддинга (роли `editor`/`admin`; `?force=true` пропускает конфликт дедупликации → 409 `code=duplicate`) |
+| POST | `/api/documents/bulk-restore` | Массовое восстановление из корзины (роли `editor`/`admin`, лимит `bulk_tags_max_docs`) |
 | POST | `/api/documents/bulk-preview` | Предпросмотр масштаба массовой операции (роль `admin`) |
-| POST | `/api/documents/bulk-delete` | Массовое удаление (очередь + four-eyes, роль `admin`) |
+| POST | `/api/documents/bulk-delete` | Массовое удаление в корзину (очередь + four-eyes, роль `admin`) |
 | POST | `/api/documents/bulk-regenerate` | Массовая перегенерация (очередь + rate limit, роль `admin`) |
 | PATCH | `/api/documents/{doc_id}/tags` | Полная замена набора глобальных тегов документа (роли `editor`/`admin`, Этап 4a; синхронизация проекций + реиндекс dev_tags) |
 | POST | `/api/documents/bulk-tags` | Массовое добавление/удаление тега (роли `editor`/`admin`, Этап 4a; audit на каждый документ) |
@@ -708,7 +716,9 @@ Group-claim любой формы (список / строка / JSON-объек
 - **Журнал ИБ `audit_log`** (`app/services/audit.py`) — **append-only**: сервис
   предоставляет только `append()`/`query()`, методов update/delete нет. Фиксируются:
   `document_delete`, `document_bulk_delete`, `document_regenerate`,
-  `document_bulk_regenerate`, `job_approve`, `job_cancel`, `user_block`, `user_unblock`.
+  `document_bulk_regenerate`, `document_restore`, `document_bulk_restore`,
+  `document_auto_delete` (автоочистка корзины, системное действие),
+  `job_approve`, `job_cancel`, `user_block`, `user_unblock`.
   Массовая операция пишется **по записи на каждый документ**, а не одной записью на
   задачу. Состав записи: `created_at`, `user_id`, `username`, `action_type`,
   `target_type`, `target_id`, `old_value`, `new_value`, `ip_address`, `meta`.

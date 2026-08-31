@@ -101,9 +101,10 @@ title                current_chunk          ────────────
 type                 okf_concept_count      id PK
 tags[]               created_at             doc_id FK CASCADE
 content TEXT         updated_at             name
-relations JSONB                              kind
-chunk_index NULL     document_staging       caption
-created_at           ────────────────       saved_path
+relations JSONB      deleted_at             kind
+chunk_index NULL     deleted_by             caption
+created_at           document_staging       saved_path
+                     ────────────────
                      doc_id PK FK CASCADE
                      total_chunks
                      processed_chunks INT[]
@@ -120,6 +121,7 @@ created_at           ────────────────       save
 - `okf_concepts.tags` — Postgres-массив; даёт SQL-фильтрацию по тегам в дополнение к Qdrant-фильтру.
 - `document_staging.chunks_data` — JSONB, повтор структуры `manifest.json`. `processed_chunks`/`used_slugs` — массивы Postgres.
 - `tags.count` — денормализованный счётчик; поддерживается триггером на `document_tags` (INSERT/DELETE) либо пересчётом в VIEW/materialized, если нагрузка на чтение тегов невысокая.
+- `documents.deleted_at`/`deleted_by` — корзина / soft delete (реализована, Этап 4a.2 roadmap, 31.08.2026): `deleted_at IS NULL` = активен. Парный флаг — payload Qdrant `deleted=true`; все пути поиска обязаны фильтровать через `vector_store._not_deleted()`. Физическое удаление — фоновая автоочистка по `trash_retention_days`. См. `SECURITY.md` §5.
 - `roles` содержит `security` — заготовка под роль ИБ (`audit_log` в roadmap Этап 2). Сама `audit_log` здесь не моделируется — она описана в roadmap отдельно и зависит от ИБ-требований.
 
 ## 6. Repository pattern (минимум изменений в API)
