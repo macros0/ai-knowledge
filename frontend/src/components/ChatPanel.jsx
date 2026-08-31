@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { chat } from "@/lib/api";
+import { chat, listAttributeValues, listDevelopments } from "@/lib/api";
 import TagPicker from "./TagPicker";
+import DevelopmentFilter from "./DevelopmentFilter";
 import MarkdownViewer from "./MarkdownViewer";
 import { CheckIcon, CopyIcon } from "./icons";
 import { useChat } from "@/context/ChatContext";
@@ -94,6 +95,12 @@ export default function ChatPanel() {
   const [showCustom, setShowCustom] = useState(false);
   const [customValue, setCustomValue] = useState("");
   const [copiedIndex, setCopiedIndex] = useState(null);
+  const [modules, setModules] = useState([]);
+  const [developments, setDevelopments] = useState([]);
+  // Исключающий scope-фильтр (Этап 4a.1, развитие плана): активен не более один из
+  // moduleFilter / devFilter — иначе backend-OR даёт объединение, а не пересечение.
+  const [moduleFilter, setModuleFilter] = useState("");
+  const [devFilter, setDevFilter] = useState(null);
   const logRef = useRef(null);
   const copyTimerRef = useRef(null);
 
@@ -102,6 +109,44 @@ export default function ChatPanel() {
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listAttributeValues("module")
+      .then((vals) => {
+        if (!cancelled) setModules(vals.map((v) => v.value));
+      })
+      .catch(() => {});
+    listDevelopments()
+      .then((devs) => {
+        if (!cancelled) setDevelopments(devs);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Контекст «поиск → загрузка» (Этап 4a.1): сопоставляет активные теги фильтра
+  // со справочником модулей/разработок. Возвращает ссылку на префилл загрузки.
+  const resolveUploadHint = (filterTags) => {
+    const set = new Set(filterTags || []);
+    const dev = developments.find((d) => set.has(d.number) || set.has(d.name));
+    if (dev) {
+      return {
+        href: `/?upload_dev=${dev.id}`,
+        label: `Загрузить документ в разработку ${dev.number}${dev.name ? ` · ${dev.name}` : ""}`,
+      };
+    }
+    const module = modules.find((m) => set.has(m));
+    if (module) {
+      return {
+        href: `/?upload_module=${encodeURIComponent(module)}`,
+        label: `Загрузить документ в модуль ${module}`,
+      };
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -141,19 +186,27 @@ export default function ChatPanel() {
     setCustomValue("");
   };
 
+  // Scope-тег: модуль ИЛИ номер разработки (ровно один, взаимоисключающие).
+  const selectedDev = developments.find((d) => d.id === Number(devFilter)) || null;
+  const devNumber = selectedDev ? String(selectedDev.number) : "";
+  const effectiveTags = Array.from(
+    new Set([...tags, ...(moduleFilter ? [moduleFilter] : []), ...(devNumber ? [devNumber] : [])])
+  );
+
   const send = async (e) => {
     e.preventDefault();
     const q = query.trim();
     if (!q || pending) return;
+    const uploadHint = resolveUploadHint(effectiveTags);
     setMessages((m) => [...m, { role: "user", text: q }]);
     setQuery("");
     setPending(true);
     setMessages((m) => [...m, { role: "assistant", text: "Думаю...", sources: [] }]);
     try {
-      const resp = await chat(q, tags, selectedTopK, selectedMode);
+      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode);
       setMessages((m) => {
         const copy = [...m];
-        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources };
+        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, uploadHint };
         return copy;
       });
     } catch (err) {
@@ -229,6 +282,14 @@ export default function ChatPanel() {
                 </ol>
               </details>
             )}
+            {m.role === "assistant" && m.uploadHint && (!m.sources || m.sources.length === 0) && (
+              <div className="chat-upload-hint">
+                Источники не найдены.{" "}
+                <Link className="chat-upload-hint-link" href={m.uploadHint.href}>
+                  {m.uploadHint.label}
+                </Link>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -293,6 +354,35 @@ export default function ChatPanel() {
         selected={tags}
         onChange={setTags}
       />
+      <div className="chat-scope-filter">
+        <span className="tag-picker-label">Модуль:</span>
+        <select
+          className="chat-scope-select"
+          value={moduleFilter}
+          onChange={(e) => {
+            const v = e.target.value;
+            setModuleFilter(v);
+            if (v) setDevFilter(null);
+          }}
+          aria-label="Фильтр по модулю"
+        >
+          <option value="">Все модули</option>
+          {modules.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <span className="tag-picker-label">Разработка:</span>
+        <DevelopmentFilter
+          developments={developments}
+          value={devFilter}
+          onChange={(devId) => {
+            setDevFilter(devId);
+            if (devId != null) setModuleFilter("");
+          }}
+        />
+      </div>
       <form className="chat-form" onSubmit={send}>
         <input
           value={query}

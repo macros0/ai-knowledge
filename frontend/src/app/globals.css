@@ -360,6 +360,24 @@ main {
   color: var(--muted);
 }
 
+/* Строка выбора разработки при загрузке + префилл модуля из чата (Этап 4a.1). */
+.upload-dev-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.upload-module-hint {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent-dim);
+  font-size: 13px;
+  color: var(--text);
+}
+
 .tag-chips {
   display: flex;
   flex-wrap: wrap;
@@ -469,12 +487,12 @@ main {
   width: 100%;
 }
 
+/* Попап рендерится в портале (document.body) с position:fixed — позиция/ширина
+   задаются inline из bounding rect combobox (см. TagPicker). Иначе его обрезает
+   scroll-контейнер предка (.panel/.document-list с overflow). */
 .tag-combobox-list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 500;
+  position: fixed;
+  z-index: 1000;
   margin: 0;
   padding: 4px;
   list-style: none;
@@ -688,6 +706,29 @@ main {
   font-size: 13px;
 }
 
+/* Исключающий scope-фильтр в чате (модуль ИЛИ разработка). */
+.chat-scope-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chat-scope-select {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.chat-scope-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* ---------- chat ---------- */
 .chat-log {
   flex: 1;
@@ -863,6 +904,23 @@ main {
   line-height: 1.4;
   white-space: normal;
   overflow-wrap: break-word;
+}
+
+/* Замыкание цикла «поиск → загрузка» (Этап 4a.1): подсказка при пустом результате. */
+.msg .chat-upload-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.msg .chat-upload-hint-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.msg .chat-upload-hint-link:hover {
+  text-decoration: underline;
 }
 
 .msg .bubble a.cite {
@@ -1698,6 +1756,43 @@ main {
 }
 
 .selection-chevron {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Общий спойлер (загрузка документов и пр.): заголовок-кнопка + тело. */
+.upload-spoiler {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.upload-spoiler-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.spoiler-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.spoiler-toggle:hover {
+  border-color: var(--accent);
+}
+
+.spoiler-chevron {
   color: var(--muted);
   font-size: 11px;
 }

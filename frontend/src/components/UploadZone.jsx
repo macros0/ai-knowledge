@@ -12,7 +12,7 @@ const extOf = (name) => {
   return i === -1 ? "" : name.slice(i).toLowerCase();
 };
 
-export default function UploadZone({ tags = [], onUploaded }) {
+export default function UploadZone({ tags = [], developmentId = null, onUploaded }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [dragover, setDragover] = useState(false);
@@ -47,7 +47,7 @@ export default function UploadZone({ tags = [], onUploaded }) {
     try {
       for (const file of supported) {
         try {
-          await uploadDocument(file, tags);
+          await uploadDocument(file, tags, { developmentId });
         } catch (err) {
           if (err.code === "duplicate") {
             duplicateInfo = { file: file.name, existing: err.data?.duplicate };

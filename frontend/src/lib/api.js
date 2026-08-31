@@ -65,11 +65,14 @@ async function request(path, init, timeoutMs) {
   }
 }
 
-export function uploadDocument(file, tags = []) {
+export function uploadDocument(file, tags = [], { developmentId = null } = {}) {
   const form = new FormData();
   form.append("file", file);
   for (const tag of tags) {
     form.append("tags", tag);
+  }
+  if (developmentId != null) {
+    form.append("development_id", String(developmentId));
   }
   return request("/documents", { method: "POST", body: form });
 }

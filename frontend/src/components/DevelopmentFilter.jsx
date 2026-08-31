@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { positionPopup } from "@/lib/popupPosition";
 
 /**
  * Поисковый фильтр по разработке для панели фильтров списка документов.
@@ -16,7 +17,6 @@ import { createPortal } from "react-dom";
 export default function DevelopmentFilter({ developments, value, onChange }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [pos, setPos] = useState({ top: 0, left: 0 });
   const rootRef = useRef(null);
   const popupRef = useRef(null);
   const inputRef = useRef(null);
@@ -24,16 +24,20 @@ export default function DevelopmentFilter({ developments, value, onChange }) {
   const current = developments.find((d) => d.id === Number(value)) || null;
 
   const openPopup = () => {
-    const r = rootRef.current?.getBoundingClientRect();
-    if (r) {
-      setPos({ top: r.bottom + 4, left: r.left });
-    }
     setQuery("");
     setOpen(true);
   };
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (open) {
+      const trigger = rootRef.current;
+      const popup = popupRef.current;
+      if (trigger && popup) positionPopup(trigger, popup);
+    }
   }, [open]);
 
   useEffect(() => {
@@ -88,7 +92,6 @@ export default function DevelopmentFilter({ developments, value, onChange }) {
           <div
             className="dev-picker-pop"
             ref={popupRef}
-            style={{ top: pos.top, left: pos.left }}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <input

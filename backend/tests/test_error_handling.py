@@ -76,13 +76,28 @@ def test_dependency_error_returns_503_with_code_and_service(client, monkeypatch)
 def test_llm_error_returns_503_with_llm_service(client, monkeypatch):
     """LLM RuntimeError оборачивается в LLMError в chat.py → 503 dependency_unavailable."""
     from app.api import chat as chat_module
+    from app.services.fusion import Hit
 
     def raise_runtime(system, user, **kw):
         raise RuntimeError("OpenRouter 502")
 
+    chunk_hit = Hit(
+        point_id="chunk-1",
+        score=0.9,
+        payload={
+            "point_type": "chunk",
+            "doc_id": "0123456789abcdef",
+            "chunk_index": 0,
+            "section_title": "Раздел",
+            "content": "текст чанка",
+            "tags": [],
+            "filepath": "",
+        },
+    )
+
     monkeypatch.setattr(chat_module._llm, "chat", raise_runtime)
     monkeypatch.setattr(chat_module._embedder, "embed", lambda text: [0.0] * 8)
-    monkeypatch.setattr(chat_module._vector_store, "search_composite", lambda **k: [])
+    monkeypatch.setattr(chat_module._vector_store, "search_composite", lambda **k: [chunk_hit])
 
     resp = client.post("/api/chat", json={"query": "test", "mode": "dense"})
     assert resp.status_code == 503
@@ -94,9 +109,24 @@ def test_llm_error_returns_503_with_llm_service(client, monkeypatch):
 def test_generic_exception_returns_500_with_russian_message(client, monkeypatch):
     """Необработанная ошибка (не DependencyUnavailableError) → 500 с code=internal_error."""
     from app.api import chat as chat_module
+    from app.services.fusion import Hit
+
+    chunk_hit = Hit(
+        point_id="chunk-1",
+        score=0.9,
+        payload={
+            "point_type": "chunk",
+            "doc_id": "0123456789abcdef",
+            "chunk_index": 0,
+            "section_title": "Раздел",
+            "content": "текст чанка",
+            "tags": [],
+            "filepath": "",
+        },
+    )
 
     monkeypatch.setattr(chat_module._embedder, "embed", lambda text: [0.0] * 8)
-    monkeypatch.setattr(chat_module._vector_store, "search_composite", lambda **k: [])
+    monkeypatch.setattr(chat_module._vector_store, "search_composite", lambda **k: [chunk_hit])
     monkeypatch.setattr(chat_module._prompts, "format", lambda *a, **k: (_ for _ in ()).throw(ValueError("bug in prompts")))
 
     resp = client.post("/api/chat", json={"query": "test", "mode": "dense"})

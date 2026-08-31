@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
+import { positionPopup } from "@/lib/popupPosition";
 
 const MAX_OPTIONS = 20;
 
@@ -17,7 +19,8 @@ export default function TagPicker({
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  const boxRef = useRef(null);
+  const boxRef = useRef(null); // обёртка combobox (для позиционирования и клика)
+  const popupRef = useRef(null); // попап в портале
   // Уникальный id listbox на экземпляр: связка combobox ↔ listbox через
   // aria-controls/aria-activedescendant (в отличие от datalist, id не коллизирует).
   const listId = useId();
@@ -28,18 +31,55 @@ export default function TagPicker({
     if (refreshKey > 0) bumpTagVersion();
   }, [refreshKey]);
 
+  // Попап — в портале (document.body, position:fixed), иначе его обрезает любой
+  // scroll-контейнер предка (.panel/.document-list с overflow). Позиция — с
+  // разворотом вверх при нехватке места снизу (positionPopup); на скролл страницы
+  // закрываем, на resize закрываем (позиция могла устареть).
+  useLayoutEffect(() => {
+    if (!open) return;
+    const trigger = boxRef.current;
+    const popup = popupRef.current;
+    if (trigger && popup) {
+      positionPopup(trigger, popup, { width: trigger.getBoundingClientRect().width });
+    }
+
+    const onScroll = (e) => {
+      if (popupRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    const onResize = () => setOpen(false);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open]);
+
   useEffect(() => {
     const onDocClick = (e) => {
-      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+      if (boxRef.current && boxRef.current.contains(e.target)) return;
+      if (popupRef.current && popupRef.current.contains(e.target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
   const q = input.trim().toLowerCase();
-  const filtered = (
-    q ? dictionary.filter((t) => t.name.toLowerCase().includes(q)) : dictionary
-  ).slice(0, MAX_OPTIONS);
+  let filtered = dictionary;
+  if (q) {
+    // Быстрый поиск: сначала префикс-совпадения, затем вхождение в середине.
+    const starts = [];
+    const contains = [];
+    for (const t of dictionary) {
+      const n = t.name.toLowerCase();
+      if (n.startsWith(q)) starts.push(t);
+      else if (n.includes(q)) contains.push(t);
+    }
+    filtered = [...starts, ...contains];
+  }
+  filtered = filtered.slice(0, MAX_OPTIONS);
 
   const addTag = (value) => {
     const v = value.trim();
@@ -102,34 +142,41 @@ export default function TagPicker({
           aria-controls={listId}
           aria-activedescendant={open && active >= 0 ? `${listId}-opt-${active}` : undefined}
         />
-        {open && (
-          <ul className="tag-combobox-list" role="listbox" id={listId}>
-            {filtered.length === 0 && (
-              <li className="tag-combobox-empty">
-                {input.trim() ? `Добавить «${input.trim()}»` : "Нет тегов в справочнике"}
-              </li>
-            )}
-            {filtered.map((t, i) => (
-              <li
-                key={t.name}
-                id={`${listId}-opt-${i}`}
-                role="option"
-                aria-selected={i === active}
-                className={`tag-combobox-item ${i === active ? "active" : ""} ${t.count === 0 ? "unused" : ""}`}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  addTag(t.name);
-                }}
-                onMouseEnter={() => setActive(i)}
-              >
-                <span className="tag-combobox-name">{t.name}</span>
-                <span className="tag-combobox-count" title={`Используется в ${t.count} документ(ах)`}>
-                  {t.count}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {open &&
+          createPortal(
+            <ul
+              className="tag-combobox-list"
+              role="listbox"
+              id={listId}
+              ref={popupRef}
+            >
+              {filtered.length === 0 && (
+                <li className="tag-combobox-empty">
+                  {input.trim() ? `Добавить «${input.trim()}»` : "Нет тегов в справочнике"}
+                </li>
+              )}
+              {filtered.map((t, i) => (
+                <li
+                  key={t.name}
+                  id={`${listId}-opt-${i}`}
+                  role="option"
+                  aria-selected={i === active}
+                  className={`tag-combobox-item ${i === active ? "active" : ""} ${t.count === 0 ? "unused" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    addTag(t.name);
+                  }}
+                  onMouseEnter={() => setActive(i)}
+                >
+                  <span className="tag-combobox-name">{t.name}</span>
+                  <span className="tag-combobox-count" title={`Используется в ${t.count} документ(ах)`}>
+                    {t.count}
+                  </span>
+                </li>
+              ))}
+            </ul>,
+            document.body
+          )}
       </div>
     </div>
   );

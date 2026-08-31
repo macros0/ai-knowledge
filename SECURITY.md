@@ -153,6 +153,14 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
 
 ## 7. Журнал security-изменений
 
+### 2026-08-31 — Привязка разработки на upload (Этап 4a.1)
+Изменение: `POST /documents` принимает необязательный form-параметр `development_id`
+(пред-привязка разработки при загрузке из контекста чата). В журнал ИБ попадает в
+существующую запись `document_upload` — поле `new_value.development_id` добавляется
+только при явной привязке (форма `new_value` без привязки не меняется). Нового
+action_type не вводилось; права — прежние `require_role("editor","admin")`. Влияния
+на границы доверия/сетевую топологию нет.
+
 ### 2026-08-31 — Открытая сетевая поверхность в production
 Найдено: `AUTH_PROVIDER=disabled/simulation` не запрещались в production
 (`app/config.py` — валидатор проверял только секрет и HTTPS-cookie, но не провайдер);

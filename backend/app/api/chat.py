@@ -40,6 +40,15 @@ def chat(req: ChatRequest):
         branches=branches,
         top_k=req.top_k,
     )
+    # Короткое замыкание (Этап 4a.1): при нуле хитов не зовём LLM — ответ
+    # без источников формируется здесь, фронтенд по пустому `sources` покажет
+    # переход «загрузить документ» при активном фильтре модуля/разработки.
+    if not hits:
+        return ChatResponse(
+            query=req.query,
+            answer="Источники не найдены. Попробуйте изменить запрос или убрать фильтры.",
+            sources=[],
+        )
     enrich_concept_hits(hits)
 
     reg = get_registry()

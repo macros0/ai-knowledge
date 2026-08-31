@@ -615,7 +615,7 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 
 | Метод | Путь | Описание |
 | :-- | :-- | :-- |
-| POST | `/api/documents` | Загрузка документа (multipart) |
+| POST | `/api/documents` | Загрузка документа (multipart; опц. form-поле `development_id` — пред-привязка разработки, Этап 4a.1, 422 «Разработка не найдена» при несуществующем) |
 | GET | `/api/documents` | Список документов и статусов (фильтры: `uploader`, `module`, `development_id`/`development_number`, `tag` — exact-match, `problem`, `search`, `sort`, `limit`/`offset`) |
 | GET | `/api/documents/{doc_id}` | Статус обработки документа |
 | POST | `/api/documents/{doc_id}/resume` | Возобновить приостановленную обработку |
@@ -637,7 +637,7 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | GET | `/api/documents/{doc_id}/okf` | Список сгенерированных OKF-файлов |
 | GET | `/api/documents/{doc_id}/okf/{filename}` | Содержимое OKF-файла |
 | POST | `/api/search` | Поиск по концептам (top-k + фильтр по тегам + режим `mode`) |
-| POST | `/api/chat` | Вопрос к базе знаний (ответ + источники + режим `mode`) |
+| POST | `/api/chat` | Вопрос к базе знаний (ответ + источники + режим `mode`; при 0 хитов — короткое замыкание без LLM, Этап 4a.1) |
 | GET | `/api/tags` | Список тегов с частотой использования |
 | DELETE | `/api/tags/{tag}` | Удалить неиспользуемый тег из справочника (роли `editor`/`admin`; 409, если тег используется) |
 | POST | `/api/tags/cleanup` | Удалить все неиспользуемые теги из справочника (роли `editor`/`admin`) |

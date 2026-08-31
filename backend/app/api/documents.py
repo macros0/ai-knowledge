@@ -64,6 +64,7 @@ def upload_document(
     file: UploadFile,
     request: Request,
     tags: Annotated[list[str] | None, Form()] = None,
+    development_id: Annotated[int | None, Form()] = None,
     user: User = Depends(require_role("editor", "admin")),
 ):
     """Загрузка документа.
@@ -120,19 +121,39 @@ def upload_document(
     )
     if file_hash:
         set_file_hash(doc_id, file_hash)
+    # Явная привязка разработки из контекста загрузки (Этап 4a.1, «поиск →
+    # загрузка»): важнее автоопределения — при заданном development_id regex/
+    # LLM-детект не запускается, dev_tags проставит пайплайн в _finalize.
+    bound_development_id: int | None = None
+    if development_id is not None:
+        if get_development_registry().get(development_id) is None:
+            raise HTTPException(status_code=422, detail="Разработка не найдена")
+        _registry.update(
+            doc_id,
+            development_id=development_id,
+            development_confidence=1.0,
+            development_confirmed_by=user.username,
+            development_suggestion=None,
+        )
+        doc = _registry.get(doc_id) or doc
+        bound_development_id = development_id
     # Автоопределение номера разработки по имени файла (regex, без LLM) до
     # запуска пайплайна. LLM-детекция с титульного листа — позже, в pipeline.
-    detection = detect("", file.filename or "unknown", doc_id)
-    if detection.confidence is not None:
-        attach_development(doc_id, detection)
-        doc = _registry.get(doc_id) or doc
+    if bound_development_id is None:
+        detection = detect("", file.filename or "unknown", doc_id)
+        if detection.confidence is not None:
+            attach_development(doc_id, detection)
+            doc = _registry.get(doc_id) or doc
     _pipeline.ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
+    audit_value = {"filename": doc.get("filename"), "size": size}
+    if bound_development_id is not None:
+        audit_value["development_id"] = bound_development_id
     audit.record(
         user,
         audit.DOCUMENT_UPLOAD,
         audit.TARGET_DOCUMENT,
         target_id=doc_id,
-        new_value={"filename": doc.get("filename"), "size": size},
+        new_value=audit_value,
         ip_address=_client_ip(request),
     )
     return doc
