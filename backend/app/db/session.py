@@ -17,7 +17,7 @@ from __future__ import annotations
 import threading
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -34,7 +34,30 @@ def _make_engine(url: str) -> Engine:
         # Фоновые потоки пайплайна и request-потоки делят один SQLite-файл:
         # отключаем привязку соединения к потоку.
         kwargs["connect_args"] = {"check_same_thread": False}
-    return create_engine(url, **kwargs)
+    engine = create_engine(url, **kwargs)
+    if url.startswith("sqlite"):
+        # Встроенные LOWER()/UPPER() в SQLite регистронезависимы только для
+        # ASCII — кириллица (основной язык корпуса) остаётся регистрозависимой.
+        # Переопределяем их на Python-реализацию str.lower/upper, которая
+        # корректно работает с Unicode. Это нужно для .ilike()/func.lower()
+        # в поиске по списку документов, чтобы он вёл себя одинаково на
+        # SQLite (dev/тесты) и PostgreSQL (ILIKE).
+        event.listen(engine, "connect", _on_sqlite_connect)
+    return engine
+
+
+def _on_sqlite_connect(dbapi_connection, _connection_record) -> None:
+    # Встроенные LOWER()/UPPER() в SQLite регистронезависимы только для ASCII,
+    # а кириллица (основной язык корпуса) остаётся регистрозависимой. Обёртки
+    # null-safe: LOWER(NULL) должен возвращать NULL, как встроенная функция (а не
+    # кидать TypeError) — иначе ILIKE по nullable-колонкам (uploaded_by, module)
+    # падает при NULL-значениях.
+    dbapi_connection.create_function(
+        "lower", 1, lambda v: v.lower() if v is not None else None, deterministic=True
+    )
+    dbapi_connection.create_function(
+        "upper", 1, lambda v: v.upper() if v is not None else None, deterministic=True
+    )
 
 
 def get_engine() -> Engine:

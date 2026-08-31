@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     auth_session_ttl_seconds: int = 28800
     # Кука только по HTTPS — включать в проде, ложь локально (http://localhost).
     auth_session_https_only: bool = False
+    # CORS allow-list (список origin). Пусто по умолчанию: браузер не обращается
+    # к бэкенду напрямую — Next.js rewrites проксируют /api серверно (same-origin),
+    # поэтому cross-origin доступ бэкенду не нужен и `*` здесь был бы чистой дырой.
+    cors_allowed_origins: list[str] = Field(default_factory=list)
     # Маппинг групп → роли (4 роли Этапа 1 роадмапа). Роль считается по первому
     # совпадению с приоритетом security > admin > editor > viewer (authorizer.py).
     # В проде переопределяется под корпоративные группы IDB (JSON-объект группа→роль).
@@ -328,6 +332,13 @@ class Settings(BaseSettings):
             return json.loads(v)
         return v
 
+    @field_validator("cors_allowed_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v: object) -> object:
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
+
     @field_validator("keycloak_field_mapping", mode="before")
     @classmethod
     def _parse_field_mapping(cls, v: object) -> object:
@@ -381,6 +392,18 @@ class Settings(BaseSettings):
                 "auth_provider='simulation' requires at least one user in AUTH_SIM_USERS"
             )
         if self.environment == "production":
+            # Fail-closed: в production авторизация не может быть отключена или
+            # заменена на демо-провайдер. `disabled` открывает всё без логина,
+            # `simulation` выдаёт демо-админа через /auth/simulate без внешней
+            # проверки — с точки зрения угрозы это эквивалентно disabled. Один
+            # забытый/скопированный из dev .env с AUTH_PROVIDER=disabled|simulation
+            # не должен тихо открывать корпоративные документы.
+            if self.auth_provider in {"disabled", "simulation"}:
+                raise ValueError(
+                    f"auth_provider='{self.auth_provider}' недопустим для production: "
+                    "требуется внешняя аутентификация (keycloak_oidc). "
+                    "disabled/simulation — только для локальной разработки."
+                )
             if (
                 not self.app_secret_key
                 or self.app_secret_key == "dev-secret-change-me"

@@ -62,3 +62,23 @@ class TestSettingsEndpoint:
         assert data["top_k_max"] == 30
         assert data["top_k_default"] == 10
         assert data["top_k_presets"] == [5, 10, 20]
+
+
+class TestProductionAuthGuard:
+    """В production авторизация не может быть отключена или заменена демо-провайдером."""
+
+    def test_disabled_rejected_in_production(self):
+        with pytest.raises(ValueError, match="недопустим для production"):
+            Settings(_env_file=None, environment="production", auth_provider="disabled")
+
+    def test_simulation_rejected_in_production(self):
+        with pytest.raises(ValueError, match="недопустим для production"):
+            Settings(_env_file=None, environment="production", auth_provider="simulation")
+
+    def test_disabled_allowed_in_development(self):
+        s = Settings(_env_file=None, environment="development", auth_provider="disabled")
+        assert s.auth_provider == "disabled"
+
+    def test_simulation_allowed_in_development(self):
+        s = Settings(_env_file=None, environment="development", auth_provider="simulation")
+        assert s.auth_provider == "simulation"

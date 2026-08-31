@@ -89,8 +89,17 @@ export function listDocuments(params = {}) {
   if (params.developmentNumber) qs.set("development_number", params.developmentNumber);
   if (params.module) qs.set("module", params.module);
   if (params.problem) qs.set("problem", "true");
+  if (params.search) qs.set("search", params.search);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.limit != null) qs.set("limit", String(params.limit));
+  if (params.offset != null) qs.set("offset", String(params.offset));
   const s = qs.toString();
-  return request(`/documents${s ? `?${s}` : ""}`).then((data) => data.documents ?? []);
+  return request(`/documents${s ? `?${s}` : ""}`).then((data) => ({
+    documents: data.documents ?? [],
+    total: data.total ?? 0,
+    limit: data.limit ?? null,
+    offset: data.offset ?? 0,
+  }));
 }
 
 export function listUploaders() {
@@ -267,8 +276,19 @@ export function deleteDevelopment(devId) {
   return request(`/developments/${devId}`, { method: "DELETE" });
 }
 
-export function listDevelopmentDocuments(devId) {
-  return request(`/developments/${devId}/documents`).then((d) => d.documents ?? []);
+export function listDevelopmentDocuments(devId, params = {}) {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.limit != null) qs.set("limit", String(params.limit));
+  if (params.offset != null) qs.set("offset", String(params.offset));
+  const s = qs.toString();
+  return request(`/developments/${devId}/documents${s ? `?${s}` : ""}`).then((d) => ({
+    documents: d.documents ?? [],
+    total: d.total ?? 0,
+    limit: d.limit ?? null,
+    offset: d.offset ?? 0,
+  }));
 }
 
 // --- Generic атрибуты (module и т.п.) ---

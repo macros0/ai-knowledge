@@ -219,19 +219,15 @@ class DevelopmentRegistry:
         return True
 
     def documents_for(self, dev_id: int) -> list[dict]:
+        """Документы разработки (без пагинации) — тонкая обёртка над list_page.
+
+        Возвращает все документы с development_id == dev_id в порядке date_desc.
+        Обратная совместимость: прежний N+1 (select id + reg.get на каждый) убран.
+        """
         from app.services.registry import get_registry
 
-        with session_scope() as s:
-            ids = s.execute(
-                select(Document.id).where(Document.development_id == dev_id)
-            ).scalars().all()
-        reg = get_registry()
-        result: list[dict] = []
-        for doc_id in ids:
-            doc = reg.get(doc_id)
-            if doc:
-                result.append(doc)
-        return result
+        docs, _ = get_registry().list_page(development_id=dev_id)
+        return docs
 
     # --- Проекция dev_tags ---
 

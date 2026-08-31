@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """Роут справочника номеров разработки (Этап 4)."""
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.auth.models import User
@@ -134,7 +136,23 @@ def delete_development(
 
 
 @router.get("/{dev_id}/documents")
-def list_development_documents(dev_id: int, user: User = Depends(require_user)):
+def list_development_documents(
+    dev_id: int,
+    search: str | None = None,
+    sort: str = "date_desc",
+    limit: Annotated[int | None, Query(ge=1)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    user: User = Depends(require_user),
+):
     if _registry.get(dev_id) is None:
         raise HTTPException(status_code=404, detail="Разработка не найдена")
-    return {"documents": _registry.documents_for(dev_id)}
+    from app.services.registry import get_registry
+
+    docs, total = get_registry().list_page(
+        development_id=dev_id,
+        search=search,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+    return {"documents": docs, "total": total, "limit": limit, "offset": offset}

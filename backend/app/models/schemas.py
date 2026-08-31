@@ -37,6 +37,9 @@ class DocumentOut(BaseModel):
 
 class DocumentListOut(BaseModel):
     documents: list[DocumentOut]
+    total: int = 0
+    limit: int | None = None
+    offset: int = 0
 
 
 class UploaderListOut(BaseModel):

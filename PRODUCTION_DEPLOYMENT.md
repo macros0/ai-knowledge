@@ -5,6 +5,9 @@
 Keycloak/IDB — в `SSO_TESTING_GUIDE.md` (разделы 11–12). Здесь — только то, что
 отличает прод от локального стенда, и то, что нельзя пропустить.
 
+Модель безопасности (угрозы, роли, границы доверия, журнал инцидентов) — в
+`SECURITY.md`. Этот файл — операционный чек-лист деплоя и ссылается на неё.
+
 ## 0. Чек-лист
 
 | # | Шаг | Обязательно |
@@ -12,13 +15,14 @@ Keycloak/IDB — в `SSO_TESTING_GUIDE.md` (разделы 11–12). Здесь 
 | 1 | Сгенерировать `APP_SECRET_KEY` (не дефолт, ≥ 32 симв.) и положить только в секрет-хранилище | ✅ блокер |
 | 2 | `ENVIRONMENT=production` в реальном прод-окружении | ✅ блокер |
 | 3 | `AUTH_SESSION_HTTPS_ONLY=true` | ✅ блокер |
-| 4 | Секреты `KEYCLOAK_CLIENT_SECRET`, БД, LLM/embedding — вне git и README | ✅ блокер |
-| 5 | HTTPS/TLS терминируется на reverse-proxy, cookie ходит только по HTTPS | ✅ блокер |
-| 6 | Зарегистрировать redirect/post-logout URIs на **прод**-Keycloak (IDB) | ✅ блокер |
-| 7 | БД PostgreSQL, Qdrant, LLM/embeddings — прод-эндпоинты | ✅ |
-| 8 | Проверить fail-fast: бэкенд не стартует с дефолтным секретом / без HTTPS | ✅ |
-| 9 | `alembic upgrade head` + сид модулей (`seed_attribute_values.py`, с учётом модулей клиента) | ✅ |
-| 10 | `backfill_dedup.py` при переносе документов, загруженных до Этапа 4 | при миграции данных |
+| 4 | `AUTH_PROVIDER=keycloak_oidc` (НЕ `disabled` и НЕ `simulation` — бэкенд в prod падает с ними на старте) | ✅ блокер |
+| 5 | Секреты `KEYCLOAK_CLIENT_SECRET`, БД, LLM/embedding — вне git и README | ✅ блокер |
+| 6 | HTTPS/TLS терминируется на reverse-proxy, cookie ходит только по HTTPS | ✅ блокер |
+| 7 | Зарегистрировать redirect/post-logout URIs на **прод**-Keycloak (IDB) | ✅ блокер |
+| 8 | БД PostgreSQL, Qdrant, LLM/embeddings — прод-эндпоинты | ✅ |
+| 9 | Проверить fail-fast: бэкенд не стартует с дефолтным секретом / без HTTPS / с `disabled|simulation` | ✅ |
+| 10 | `alembic upgrade head` + сид модулей (`seed_attribute_values.py`, с учётом модулей клиента) | ✅ |
+| 11 | `backfill_dedup.py` при переносе документов, загруженных до Этапа 4 | при миграции данных |
 
 ---
 
@@ -83,13 +87,19 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 - **HTTPS и reverse-proxy** (обязательно): TLS терминируется на прокси
   (nginx/Ingress/ALB). Сессия работает через same-origin — проксируйте `/api/*` и
   `/health` на бэкенд с одного домена, что и фронтенд.
-  В `main.py` CORS задан как `allow_origins=["*"]` **без** `allow_credentials`
-  (`backend/app/main.py:124-129`). Это работает только потому, что деплой same-origin:
-  браузер ходит на один origin (прокси пересылает на бэкенд), и CORS для таких
-  запросов вообще не задействуется. Cross-origin развёртывание (фронтенд на домене A,
-  бэкенд на домене B без прокси) **не заработает вовсе**: браузер не отправит
-  сессионную cookie на другой origin, а `*` + credentials запрещены спецификацией
-  CORS. Это не «не рекомендуется», а несовместимо с текущей схемой сессий.
+  CORS в `main.py` задан как `allow_origins=settings.cors_allowed_origins`
+  (дефолт — пустой список, `CORS_ALLOWED_ORIGINS` в env). Пустой список — намеренно:
+  браузер не обращается к бэкенду напрямую (Next.js rewrites проксируют `/api`
+  серверно, same-origin), поэтому cross-origin CORS бэкенду не нужен, а wildcard
+  `*` был бы чистой дырой. Если когда-то появится cross-origin развёртывание
+  (фронтенд на домене A, бэкенд на домене B без прокси) — оно **несовместимо** с
+  текущей схемой signed-cookie сессий: браузер не отправит cookie на другой origin.
+- **Публикация портов**: в `docker-compose.yml` наружу публикуется **только
+  frontend** (`8080:3000`). `backend` (`8000`) и `qdrant` (`6333`/`6334`) host-портов
+  не публикуют — они доступны только внутри compose-сети. Единственный путь к данным
+  из сети — через frontend (который сам за reverse-proxy). Не возвращайте `ports`
+  для backend/qdrant обратно: это открывает корпус документов напрямую, минуя
+  аутентификацию frontend-слоя.
 
 ### 3.1 Грабли: `BACKEND_URL` и Next.js rewrites
 
@@ -143,6 +153,8 @@ Next.js 16 URL-кодирует значения cookie при `cookieStore.toSt
 ## 5. Проверка fail-fast (до и после деплоя)
 
 Бэкенд падает на старте, если в `ENVIRONMENT=production`:
+- `AUTH_PROVIDER` равен `disabled` или `simulation` (оба дают доступ без внешней
+  проверки; `simulation` выдаёт демо-админа через `/auth/simulate`);
 - `APP_SECRET_KEY` пуст / равен `dev-secret-change-me` / короче 32 символов;
 - `AUTH_SESSION_HTTPS_ONLY=false`.
 
@@ -154,9 +166,13 @@ $py = ".venv\Scripts\python.exe"
 $env:ENVIRONMENT="production"; $env:APP_SECRET_KEY="dev-secret-change-me"
 & $py -c "from app.config import Settings; Settings()"
 
-# Должно ПОДНЯТЬСЯ: валидный секрет + HTTPS-only
-$env:APP_SECRET_KEY=(& $py -c "import secrets; print(secrets.token_urlsafe(32))")
-$env:AUTH_SESSION_HTTPS_ONLY="true"
+# Должно УПАСТЬ: AUTH_PROVIDER=disabled запрещён в production
+$env:ENVIRONMENT="production"; $env:APP_SECRET_KEY=(& $py -c "import secrets; print(secrets.token_urlsafe(32))")
+$env:AUTH_SESSION_HTTPS_ONLY="true"; $env:AUTH_PROVIDER="disabled"
+& $py -c "from app.config import Settings; Settings()"
+
+# Должно ПОДНЯТЬСЯ: keycloak_oidc + валидный секрет + HTTPS-only
+$env:AUTH_PROVIDER="keycloak_oidc"
 & $py -c "from app.config import Settings; print('OK')"
 ```
 

@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteDocument, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment } from "@/lib/api";
-import { filterDocuments, sortDocuments, SORT_OPTIONS } from "@/lib/docFilter.mjs";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
@@ -27,6 +26,9 @@ const STATUS_LABELS = {
 
 const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
 
+const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+
 function progressText(doc) {
   if (doc.status === "splitting" && doc.total_chunks > 0) {
     const active = doc.current_chunk ?? doc.processed_chunks;
@@ -43,10 +45,15 @@ export default function DocumentList({ refreshKey = 0 }) {
   const { mode, hasRole, loading, user } = useAuth();
   const { showToast } = useToast();
   const [docs, setDocs] = useState([]);
+  const [total, setTotal] = useState(0);
   const [regenerating, setRegenerating] = useState({});
   const [selected, setSelected] = useState({});
   const [showPreview, setShowPreview] = useState(false);
-  const [filenameMask, setFilenameMask] = useState("");
+  // Поиск теперь серверный: searchInput — что ввёл пользователь (без задержки),
+  // search — дебаунснутое значение, уходящее в запрос.
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
   // Выбор в дропдауне: null — ещё не выбирал (действует дефолт по роли),
   // "" — все, "__me__" — мои, иначе — конкретный username.
   const [chosenUploader, setChosenUploader] = useState(null);
@@ -79,19 +86,24 @@ export default function DocumentList({ refreshKey = 0 }) {
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
-    const list = await listDocuments({
+    const result = await listDocuments({
       uploader: resolvedUploader || undefined,
       problem: problemOnly ? true : undefined,
       module: moduleFilter || undefined,
       developmentId: devFilter ? Number(devFilter) : undefined,
+      search: search || undefined,
+      sort: sortKey,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
     });
     if (seq !== loadSeq.current || !mounted.current) return;
-    setDocs(list);
-    const busy = list.some((d) => BUSY_STATUSES.includes(d.status));
+    setDocs(result.documents);
+    setTotal(result.total);
+    const busy = result.documents.some((d) => BUSY_STATUSES.includes(d.status));
     if (busy && mounted.current) {
       timer.current = setTimeout(load, 1500);
     }
-  }, [resolvedUploader, problemOnly, moduleFilter, devFilter]);
+  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, search, sortKey, page]);
 
   const loadUploaders = useCallback(async () => {
     try {
@@ -116,6 +128,20 @@ export default function DocumentList({ refreshKey = 0 }) {
       setDevelopments([]);
     }
   }, []);
+
+  // Debounce серверного поиска: не слать запрос на каждое нажатие клавиши.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Смена поиска/сортировки/фильтра сбрасывает страницу к началу (иначе
+  // окажемся на середине старой страницы с новым набором результатов).
+  useEffect(() => {
+    setPage(0);
+  }, [search, sortKey, resolvedUploader, problemOnly, moduleFilter, devFilter]);
 
   useEffect(() => {
     if (loading) return;
@@ -209,10 +235,7 @@ export default function DocumentList({ refreshKey = 0 }) {
 
   const selectedIds = Object.keys(selected);
 
-  const filteredDocs = useMemo(() => {
-    const sort = SORT_OPTIONS[sortKey];
-    return sortDocuments(filterDocuments(docs, { mask: filenameMask }), sort);
-  }, [docs, filenameMask, sortKey]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <>
@@ -246,10 +269,10 @@ export default function DocumentList({ refreshKey = 0 }) {
         <input
           type="text"
           className="doc-filter-input"
-          placeholder="Поиск по названию (* ? — маска)"
-          value={filenameMask}
-          onChange={(e) => setFilenameMask(e.target.value)}
-          aria-label="Поиск по названию"
+          placeholder="Поиск: название, тег, разработка, загрузчик"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          aria-label="Поиск по документам"
         />
         <select
           className="doc-filter-select"
@@ -317,7 +340,7 @@ export default function DocumentList({ refreshKey = 0 }) {
         </select>
       </div>
       <ul className="document-list">
-        {filteredDocs.map((doc) => (
+        {docs.map((doc) => (
           <li key={doc.id} className="document-item">
             {isAdmin && (
               <input
@@ -431,15 +454,36 @@ export default function DocumentList({ refreshKey = 0 }) {
             </div>
           </li>
         ))}
-        {filteredDocs.length === 0 &&
-          (docs.length > 0 ||
-            filenameMask.trim() ||
+        {docs.length === 0 &&
+          (total > 0 ||
+            search ||
             problemOnly ||
             moduleFilter ||
             devFilter) && (
             <li className="document-empty">Ничего не найдено</li>
           )}
       </ul>
+      {totalPages > 1 && (
+        <div className="doc-pagination">
+          <button
+            className="page-btn"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+          >
+            ← Назад
+          </button>
+          <span className="page-indicator">
+            {page + 1} из {totalPages}
+          </span>
+          <button
+            className="page-btn"
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={page >= totalPages - 1}
+          >
+            Вперёд →
+          </button>
+        </div>
+      )}
     </>
   );
 }
