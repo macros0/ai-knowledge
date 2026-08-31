@@ -103,7 +103,8 @@ class TestMergeAndFormat:
         assert merged[0]["title"] == "Настройка сервера"
 
     def test_many_to_one_two_concepts_one_chunk(self, settings):
-        """2 концепта из одного чанка + сам чанк → merge, title через ' / ', content один раз."""
+        """2 концепта из одного чанка + сам чанк → merge, title из репрезентативного
+        концепта (первый по score), content один раз. Заголовок и filepath согласованы."""
         c1 = Hit("c1", 0.9, {"point_type": "concept", "doc_id": "d1", "chunk_index": 0,
                             "title": "Настройка", "tags": ["a"], "content": "summary1",
                             "filepath": "d1/setup.md", "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 0)
@@ -114,9 +115,8 @@ class TestMergeAndFormat:
                              "tags": ["a"], "content": "полный текст", "section_title": ""}, 2)
         merged = merge_and_format([c1, c2, ch], settings)
         assert len(merged) == 1
-        assert "Настройка" in merged[0]["title"]
-        assert "Проверка" in merged[0]["title"]
-        assert " / " in merged[0]["title"]
+        assert merged[0]["title"] == "Настройка"
+        assert merged[0]["filepath"] == "d1/setup.md"
         assert merged[0]["content"] == "полный текст"
         assert sorted(merged[0]["tags"]) == ["a", "b"]
         assert merged[0]["kind"] == "concept+chunk"

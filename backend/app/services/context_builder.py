@@ -81,8 +81,13 @@ def merge_and_format(
 
         if chunks_in_group and concepts_in_group:
             chunk = chunks_in_group[0]
-            titles = [c.payload.get("title", "") for c in concepts_in_group if c.payload.get("title")]
-            merged_title = " / ".join(titles) if titles else ""
+            # Несколько концептов могут делить один chunk_index (например,
+            # «Перечень: Элемент/Атрибут» и «reason1» из одной таблицы). Склейка
+            # заголовков через " / " давала misleading-заголовок и ссылку не на
+            # тот концепт — берём один репрезентативный концепт (первый по fused
+            # score, он же используется для filepath ниже).
+            primary = concepts_in_group[0]
+            merged_title = primary.payload.get("title", "")
             content = chunk.payload.get("content", "")[: settings.chat_chunk_max_chars]
             if not merged_title:
                 section_title = chunk.payload.get("section_title", "")
