@@ -67,6 +67,7 @@ def chat(req: ChatRequest):
     sources = []
     for m in merged:
         score = m["score"] / max_score if max_score > 0 else m["score"]
+        src_doc = doc_lookup.get(m["doc_id"]) or {}
         sources.append(
             ChatSource(
                 title=m["title"],
@@ -78,6 +79,9 @@ def chat(req: ChatRequest):
                 snippet=m["content"][:200],
                 point_type=m["point_type"],
                 chunk_index=m["chunk_index"],
+                development_number=src_doc.get("development_number"),
+                development_name=src_doc.get("development_name"),
+                development_module=src_doc.get("development_module"),
             )
         )
 

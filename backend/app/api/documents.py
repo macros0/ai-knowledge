@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import re
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -25,6 +26,7 @@ from app.models.schemas import (
     DocumentDevelopmentSet,
     DocumentListOut,
     DocumentOut,
+    DocumentStatsOut,
     DocumentTagsUpdate,
     OkfFileOut,
     TrashItemOut,
@@ -173,6 +175,8 @@ def list_documents(
     problem: bool | None = None,
     search: str | None = None,
     tag: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     sort: str = "date_desc",
     limit: Annotated[int | None, Query(ge=1)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -189,7 +193,9 @@ def list_documents(
     DocumentRegistry.list_page): status — одно значение или через запятую
     (paused,failed,error); has_duplicates — булев флаг; development_id /
     development_number — по разработке; module — по модулю разработки;
-    problem=true — объединённое «Проблемные» (остановившиеся + дубликаты).
+    problem=true — объединённое «Проблемные» (остановившиеся + дубликаты);
+    date_from/date_to — диапазон дат загрузки (ISO YYYY-MM-DD, включительно,
+    date_to трактуется как конец дня в UTC).
 
     search — текстовый поиск по filename / uploaded_by / тегам / разработке
     (подстрока; * и ? — glob только для filename); sort — ключ сортировки
@@ -209,11 +215,19 @@ def list_documents(
         problem=problem,
         search=search,
         tag=tag,
+        date_from=_parse_date_boundary(date_from, end_of_day=False),
+        date_to=_parse_date_boundary(date_to, end_of_day=True),
         sort=sort,
         limit=limit,
         offset=offset,
     )
     return DocumentListOut(documents=docs, total=total, limit=limit, offset=offset)
+
+
+@router.get("/stats", response_model=DocumentStatsOut)
+def document_stats(user: User = Depends(require_user)):
+    """Прогресс разметки по активной базе (Этап 4.1/5): total и с development_id."""
+    return _registry.markup_stats()
 
 
 @router.get("/uploaders", response_model=UploaderListOut)
@@ -770,6 +784,22 @@ def get_document_fulltext(doc_id: str):
 
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
+
+
+def _parse_date_boundary(value: str | None, end_of_day: bool) -> datetime | None:
+    """Парсит ISO-дату (YYYY-MM-DD) в timezone-aware UTC-границу для фильтра.
+
+    start_of_day → 00:00:00, end_of_day → 23:59:59.999999 (включительно). Некорректное
+    значение возвращает None (фильтр не применяется) — мягкая деградация, не 422.
+    """
+    if not value:
+        return None
+    try:
+        d = date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    boundary = time.max if end_of_day else time.min
+    return datetime.combine(d, boundary, tzinfo=timezone.utc)
 
 
 def _to_trash_item(doc: dict, retention_days: int) -> dict:

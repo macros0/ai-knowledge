@@ -119,6 +119,28 @@ UI: http://localhost:3000
     Восстановление/масс-восстановление — `document_restore`/`document_bulk_restore`.
   - UI: переключатель «Документы/Корзина» в `DocumentsPanel.jsx` → `TrashPanel.jsx`;
     toast после удаления со ссылкой «Открыть корзину» (Toast поддерживает `action`).
+- **Формы отображения: группировка + фильтры + URL-синк (Этап 5, 31.08.2026)**:
+  - Группировка списка — на клиенте (`DocumentList.jsx`, `buildGroups`), НЕ SQL `GROUP BY`:
+    режим «по тегам» требует multi-membership (док с N тегами входит в N групп), что JOIN
+    размножает в дубли. В grouped-режиме `limit=None`, серверная пагинация отключена.
+    Секции со sticky-заголовками; «Без тега»/«Без разработки» — в конце. В режиме
+    «по тегам» селект тег-фильтра скрыт (вырожденный случай).
+  - Фильтры дополнены статусом OKF (`status`: done / busy / failed,error) и диапазоном дат
+    (`date_from`/`date_to` → `created_at`, `date_to` = конец дня UTC). Все фильтры списка
+    перенесены в query-параметры URL (`q,uploader,module,tag,dev,problem,status,from,to,
+    sort,page,group`) — shareable view; чтение только при init стейта, запись `router.replace`.
+  - Прогресс разметки — `GET /documents/stats` → `{total, with_development}` по активной базе;
+    плашка «Черновик — требует разметки» у готовых доков без `development_id`.
+  - Чат (5.1): фильтр модуля — ряд «последних использованных» чипов (кап 6,
+    персонально, `localStorage` `okf.recentModules.<username>`, чистая рекуррентность
+    без таймстемпов; хелпер `lib/recentModules.mjs`, node-тестируемый) + inline-
+    автодополнение `ModulePicker.jsx` (поиск по закрытому справочнику, не создаёт
+    новые модули) вместо select/чипов всех модулей; выбор чипом или поиском идёт через
+    один `onChange` (сброс `devFilter` — в ChatPanel). Бейджи «номер разработки»+
+    «модуль» у цитат источников — `ChatSource` дополнен `development_number/name/module`,
+    обогащается в `chat.py` из `doc_lookup`.
+  - Не реализовано (отложено по решению): 5.2a (предупреждение о неточности списочных
+    запросов) и 5.2b (structured-путь через реестр) — см. условие перехода в roadmap.
 
 ## Фоновые процессы
 

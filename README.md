@@ -627,7 +627,8 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | Метод | Путь | Описание |
 | :-- | :-- | :-- |
 | POST | `/api/documents` | Загрузка документа (multipart; опц. form-поле `development_id` — пред-привязка разработки, Этап 4a.1, 422 «Разработка не найдена» при несуществующем) |
-| GET | `/api/documents` | Список документов и статусов (фильтры: `uploader`, `module`, `development_id`/`development_number`, `tag` — exact-match, `problem`, `search`, `sort`, `limit`/`offset`) |
+| GET | `/api/documents` | Список документов и статусов (фильтры: `uploader`, `module`, `development_id`/`development_number`, `tag` — exact-match, `problem`, `status`, `date_from`/`date_to`, `search`, `sort`, `limit`/`offset`) |
+| GET | `/api/documents/stats` | Прогресс разметки по активной базе: `{total, with_development}` (Этап 4.1/5) |
 | GET | `/api/documents/{doc_id}` | Статус обработки документа |
 | POST | `/api/documents/{doc_id}/resume` | Возобновить приостановленную обработку |
 | POST | `/api/documents/{doc_id}/regenerate` | Перегенерировать концепты документа (роли `editor`/`admin`) |

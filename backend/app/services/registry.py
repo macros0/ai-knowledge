@@ -211,6 +211,8 @@ class DocumentRegistry:
         problem: bool | None = None,
         search: str | None = None,
         tag: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
         active_only: bool = True,
     ) -> list:
         conditions: list = []
@@ -230,6 +232,10 @@ class DocumentRegistry:
             conditions.append(Document.development.has(Development.module == module))
         if tag is not None:
             conditions.append(Document.tags_rel.any(DocumentTag.tag == tag))
+        if date_from is not None:
+            conditions.append(Document.created_at >= date_from)
+        if date_to is not None:
+            conditions.append(Document.created_at <= date_to)
         if problem:
             conditions.append(
                 or_(
@@ -253,6 +259,8 @@ class DocumentRegistry:
         problem: bool | None = None,
         search: str | None = None,
         tag: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
         sort: str = "date_desc",
         limit: int | None = None,
         offset: int = 0,
@@ -277,6 +285,8 @@ class DocumentRegistry:
             problem=problem,
             search=search,
             tag=tag,
+            date_from=date_from,
+            date_to=date_to,
             active_only=True,
         )
         with session_scope() as s:
@@ -311,6 +321,25 @@ class DocumentRegistry:
             )
             names = [u for u in s.execute(stmt).scalars().all() if u]
             return sorted(names)
+
+    def markup_stats(self) -> dict:
+        """Прогресс разметки по активной базе (Этап 4.1, отложен в Этап 5).
+
+        Возвращает {total, with_development}: долю активных документов с непустым
+        development_id. Считается по ВСЕЙ активной базе (deleted_at IS NULL), а не
+        по текущему фильтру — это общий индикатор здоровья разметки, он не должен
+        «скакать» при изменении фильтра списка.
+        """
+        with session_scope() as s:
+            total = s.execute(
+                select(func.count()).select_from(Document).where(Document.deleted_at.is_(None))
+            ).scalar_one()
+            with_development = s.execute(
+                select(func.count())
+                .select_from(Document)
+                .where(Document.deleted_at.is_(None), Document.development_id.isnot(None))
+            ).scalar_one()
+        return {"total": total, "with_development": with_development}
 
     def update(self, doc_id: str, **fields) -> None:
         tags = fields.pop("tags", None)

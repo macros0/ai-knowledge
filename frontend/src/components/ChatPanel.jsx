@@ -5,9 +5,11 @@ import Link from "next/link";
 import { chat, listAttributeValues, listDevelopments } from "@/lib/api";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
+import ModulePicker from "./ModulePicker";
 import MarkdownViewer from "./MarkdownViewer";
 import { CheckIcon, CopyIcon } from "./icons";
 import { useChat } from "@/context/ChatContext";
+import { useAuth } from "@/context/AuthContext";
 
 function getPresetLabel(preset, settings) {
   if (preset === settings.top_k_default) return "Стандартно";
@@ -90,6 +92,7 @@ function CiteLink({ href, children, sources, ...props }) {
 
 export default function ChatPanel() {
   const { messages, tags, pending, settings, selectedMode, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
   const [showCustom, setShowCustom] = useState(false);
@@ -188,6 +191,12 @@ export default function ChatPanel() {
 
   // Scope-тег: модуль ИЛИ номер разработки (ровно один, взаимоисключающие).
   const selectedDev = developments.find((d) => d.id === Number(devFilter)) || null;
+  // Если выбран модуль — в списке разработок показываем только разработки этого
+  // модуля (иначе можно было бы выбрать разработку из другого модуля, что ломало
+  // бы семантику исключающего scope-фильтра).
+  const scopeDevelopments = moduleFilter
+    ? developments.filter((d) => d.module === moduleFilter)
+    : developments;
   const devNumber = selectedDev ? String(selectedDev.number) : "";
   const effectiveTags = Array.from(
     new Set([...tags, ...(moduleFilter ? [moduleFilter] : []), ...(devNumber ? [devNumber] : [])])
@@ -275,6 +284,19 @@ export default function ChatPanel() {
                           s.title
                         )}
                         (релевантность {(s.score * 100).toFixed(0)}%)
+                        {s.development_number && (
+                          <span
+                            className="source-dev-badge"
+                            title={s.development_name || "Разработка"}
+                          >
+                            {s.development_number}
+                          </span>
+                        )}
+                        {s.development_module && (
+                          <span className="source-dev-badge source-module-badge">
+                            {s.development_module}
+                          </span>
+                        )}
                         {s.snippet && <div className="source-snippet">{s.snippet}</div>}
                       </li>
                     );
@@ -356,26 +378,18 @@ export default function ChatPanel() {
       />
       <div className="chat-scope-filter">
         <span className="tag-picker-label">Модуль:</span>
-        <select
-          className="chat-scope-select"
+        <ModulePicker
+          modules={modules}
           value={moduleFilter}
-          onChange={(e) => {
-            const v = e.target.value;
+          username={user?.username || ""}
+          onChange={(v) => {
             setModuleFilter(v);
             if (v) setDevFilter(null);
           }}
-          aria-label="Фильтр по модулю"
-        >
-          <option value="">Все модули</option>
-          {modules.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+        />
         <span className="tag-picker-label">Разработка:</span>
         <DevelopmentFilter
-          developments={developments}
+          developments={scopeDevelopments}
           value={devFilter}
           onChange={(devId) => {
             setDevFilter(devId);

@@ -2907,3 +2907,172 @@ main {
 .toast-action:hover {
   opacity: 0.85;
 }
+
+/* --- Этап 5: группировка, прогресс разметки, фильтры, чипы модулей --- */
+
+.doc-view-mode {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.document-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.document-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.group-count {
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 12px;
+}
+
+.markup-progress {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.markup-progress-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.markup-progress-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.markup-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.dev-draft-badge {
+  color: #e0a83c;
+  font-size: 12px;
+}
+
+.doc-filter-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.doc-filter-date-input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.doc-filter-date-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.chat-module-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.module-chip {
+  background: var(--accent-dim);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.module-chip:hover {
+  border-color: var(--accent);
+}
+
+.module-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Модульный фильтр в чате (Этап 5.1): ряд «последних» чипов + inline-поиск. */
+.module-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.module-combobox {
+  position: relative;
+  flex: 0 1 auto;
+}
+
+.module-search-input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 13px;
+  width: 120px;
+  transition: width 0.15s ease;
+}
+
+.module-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  width: 180px;
+}
+
+.module-search-input::placeholder {
+  color: var(--muted);
+}
+
+.source-dev-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.source-module-badge {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+}

@@ -60,6 +60,11 @@ class DocumentListOut(BaseModel):
     offset: int = 0
 
 
+class DocumentStatsOut(BaseModel):
+    total: int = 0
+    with_development: int = 0
+
+
 class UploaderListOut(BaseModel):
     uploaders: list[str]
 
@@ -135,6 +140,10 @@ class ChatSource(BaseModel):
     snippet: str = ""
     point_type: str = "concept"
     chunk_index: int | None = None
+    # Бейджи модуль/разработка в источниках (Этап 5.1).
+    development_number: str | None = None
+    development_name: str | None = None
+    development_module: str | None = None
 
 
 class ChatResponse(BaseModel):

@@ -117,6 +117,8 @@ export function listDocuments(params = {}) {
   if (params.module) qs.set("module", params.module);
   if (params.tag) qs.set("tag", params.tag);
   if (params.problem) qs.set("problem", "true");
+  if (params.dateFrom) qs.set("date_from", params.dateFrom);
+  if (params.dateTo) qs.set("date_to", params.dateTo);
   if (params.search) qs.set("search", params.search);
   if (params.sort) qs.set("sort", params.sort);
   if (params.limit != null) qs.set("limit", String(params.limit));
@@ -128,6 +130,10 @@ export function listDocuments(params = {}) {
     limit: data.limit ?? null,
     offset: data.offset ?? 0,
   }));
+}
+
+export function getDocumentStats() {
+  return request("/documents/stats");
 }
 
 export function listUploaders() {
