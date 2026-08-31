@@ -131,7 +131,10 @@ class DevelopmentRegistry:
         with session_scope() as s:
             count_subq = (
                 select(func.count(Document.id))
-                .where(Document.development_id == Development.id)
+                .where(
+                    Document.development_id == Development.id,
+                    Document.deleted_at.is_(None),
+                )
                 .correlate(Development)
                 .scalar_subquery()
                 .label("documents_count")
@@ -245,7 +248,9 @@ class DevelopmentRegistry:
     def _count(s, dev_id: int) -> int:
         return (
             s.execute(
-                select(func.count(Document.id)).where(Document.development_id == dev_id)
+                select(func.count(Document.id)).where(
+                    Document.development_id == dev_id, Document.deleted_at.is_(None)
+                )
             ).scalar_one()
             or 0
         )

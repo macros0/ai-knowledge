@@ -2832,3 +2832,78 @@ main {
   font-size: 12px;
   margin-top: 4px;
 }
+
+/* --- Корзина (Этап 4a.2) --- */
+
+.doc-view-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.view-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.view-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.trash-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trash-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.trash-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.trash-empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 24px 0;
+}
+
+.trash-days {
+  color: var(--warning, #e6a23c);
+  font-size: 12px;
+}
+
+.toast-msg {
+  cursor: pointer;
+}
+
+.toast-action {
+  margin-left: 12px;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.toast-action:hover {
+  opacity: 0.85;
+}

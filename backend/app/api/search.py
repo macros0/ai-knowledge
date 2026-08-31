@@ -33,11 +33,20 @@ def search(req: SearchRequest):
         branches=branches,
         top_k=req.top_k,
     )
-    enrich_concept_hits(hits)
 
     reg = get_registry()
-    filename_lookup = {did: (reg.get(did) or {}).get("filename", "")
-                       for did in {h.payload.get("doc_id", "") for h in hits}}
+    doc_lookup = {
+        did: reg.get(did)
+        for did in {h.payload.get("doc_id", "") for h in hits}
+        if did
+    }
+    # Defense-in-depth к Qdrant-фильтру `must_not deleted`: отсекает хиты, чей
+    # документ удалён в БД, но payload ещё не синхронизирован (гонка софт-делита).
+    hits = [h for h in hits if not (doc_lookup.get(h.payload.get("doc_id", "")) or {}).get("deleted_at")]
+
+    enrich_concept_hits(hits)
+
+    filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
     merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)
     max_score = max((m["score"] for m in merged), default=0.0)
     result = []

@@ -109,6 +109,17 @@ async def lifespan(app: FastAPI):
 
     t = threading.Thread(target=run_backfills, daemon=True)
     t.start()
+
+    # Автоочистка корзины (Этап 4a.2): фоновый демон-поток физически удаляет
+    # документы с истёкшим окном хранения. Ленивый импорт — поток не роняет
+    # сервер, если trash-сервис недоступен на старте.
+    try:
+        from app.services.trash import start_purge_loop
+
+        start_purge_loop()
+    except Exception as exc:
+        logging.warning("Автоочистка корзины не запущена: %s", exc)
+
     yield
 
 

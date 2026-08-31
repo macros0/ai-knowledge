@@ -107,6 +107,7 @@ def _summarize(doc: Document) -> dict:
         "status": doc.status,
         "uploaded_by": doc.uploaded_by,
         "created_at": doc.created_at.isoformat() if doc.created_at else None,
+        "deleted_at": doc.deleted_at.isoformat() if doc.deleted_at else None,
     }
 
 
@@ -246,3 +247,18 @@ def _dedupe_by_id(items: list[dict]) -> list[dict]:
     for item in items:
         out[item["doc"]["id"]] = item
     return list(out.values())
+
+
+def find_active_duplicates_for_document(doc_id: str) -> dict:
+    """Кандидаты-дубликаты ТОЛЬКО среди активных (не удалённых) документов.
+
+    Используется при восстановлении из корзины (Этап 4a.2): если за время
+    нахождения документа в корзине кто-то загрузил похожий активный документ,
+    восстановление показывает конфликт. Документы в самой корзине исключаются.
+    """
+    result = find_duplicates_for_document(doc_id)
+
+    def _active(items: list[dict]) -> list[dict]:
+        return [it for it in items if not (it.get("doc") or {}).get("deleted_at")]
+
+    return {"level2": _active(result["level2"]), "level3": _active(result["level3"])}

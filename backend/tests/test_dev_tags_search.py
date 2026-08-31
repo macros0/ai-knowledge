@@ -22,12 +22,17 @@ class TestTagMatchFilter:
     def test_build_search_filter_none(self):
         from app.services.vector_store import VectorStore
 
-        assert VectorStore._build_search_filter(None) is None
-        assert VectorStore._build_search_filter([]) is None
+        # Этап 4a.2: фильтр больше не None без тегов — всегда исключает корзину.
+        f = VectorStore._build_search_filter(None)
+        assert f is not None
+        assert {c.key for c in f.must_not} == {"deleted"}
+        assert VectorStore._build_search_filter([]).must is None
 
     def test_build_search_filter_uses_or(self):
         from app.services.vector_store import VectorStore
 
         f = VectorStore._build_search_filter(["PY"])
         assert f is not None
-        assert {c.key for c in f.must[0].should} == {"tags", "dev_tags"}
+        # f.must[0] — тег-фильтр (OR по tags/dev_tags), must_not — исключение корзины.
+        assert {c.key for c in f.must[0].must[0].should} == {"tags", "dev_tags"}
+        assert {c.key for c in f.must_not} == {"deleted"}

@@ -39,6 +39,9 @@ EXPECTED_ACTION_TYPES = {
     "attribute_delete",
     "tag_delete",
     "tag_cleanup",
+    "document_restore",
+    "document_bulk_restore",
+    "document_auto_delete",
 }
 
 

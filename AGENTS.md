@@ -105,6 +105,20 @@ UI: http://localhost:3000
     удаляют только имена из пула автодополнения (`tags`) со счётчиком 0 (используемый тег → 409);
     связи документов не трогаются. Audit: `tag_delete`/`tag_cleanup`. UI — модалка
     `TagManagerModal` (кнопка «Справочник тегов» в фильтр-баре).
+- **Корзина / soft delete (Этап 4a.2, 31.08.2026)**:
+  - Удаление — мягкое: `documents.deleted_at`/`deleted_by` + payload Qdrant `deleted=true`
+    (set_payload по doc_id, БЕЗ Delete Points). Восстановление — `POST /documents/{id}/restore`
+    (`?force=true` пропускает дедуп-конфликт), массовое — `POST /documents/bulk-restore`.
+    Список корзины — `GET /documents/trash` (объявлен ДО `/{doc_id}`!).
+  - **Дисциплина `deleted`**: все пути поиска к Qdrant обязаны добавлять `must_not deleted`
+    через `vector_store._not_deleted()`/`_build_search_filter()` (одно место). Дополнительно
+    `/chat` и `/search` отсекают хиты, чей doc удалён в БД (защита от гонки синка payload).
+    НЕ рассыпать фильтр по коду — новые сценарии поиска идут через обёртку.
+  - Физическая очистка — фоновый демон-поток `services/trash.py` (`start_purge_loop` из
+    lifespan) по `trash_retention_days=14`; audit `document_auto_delete` (system).
+    Восстановление/масс-восстановление — `document_restore`/`document_bulk_restore`.
+  - UI: переключатель «Документы/Корзина» в `DocumentsPanel.jsx` → `TrashPanel.jsx`;
+    toast после удаления со ссылкой «Открыть корзину» (Toast поддерживает `action`).
 
 ## Фоновые процессы
 

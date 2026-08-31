@@ -16,9 +16,9 @@ export function ToastProvider({ children }) {
   }, []);
 
   const showToast = useCallback(
-    (message, { type = "error", duration = 5000 } = {}) => {
+    (message, { type = "error", duration = 5000, action = null } = {}) => {
       const id = Date.now() + Math.random();
-      setToasts((t) => [...t, { id, message, type }]);
+      setToasts((t) => [...t, { id, message, type, action }]);
       if (duration > 0) {
         setTimeout(() => dismiss(id), duration);
       }
@@ -33,8 +33,22 @@ export function ToastProvider({ children }) {
         createPortal(
           <div className="toast-container">
             {toasts.map((t) => (
-              <div key={t.id} className={`toast toast-${t.type}`} onClick={() => dismiss(t.id)}>
-                {t.message}
+              <div key={t.id} className={`toast toast-${t.type}`}>
+                <span className="toast-msg" onClick={() => dismiss(t.id)}>
+                  {t.message}
+                </span>
+                {t.action && (
+                  <button
+                    type="button"
+                    className="toast-action"
+                    onClick={() => {
+                      dismiss(t.id);
+                      t.action.onClick?.();
+                    }}
+                  >
+                    {t.action.label}
+                  </button>
+                )}
               </div>
             ))}
           </div>,

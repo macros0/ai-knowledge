@@ -158,6 +158,13 @@ class Document(Base):
     # Есть ли почти-дубликаты (уровень 2/3): выставляется пайплайном после
     # расчёта сигнатуры. Бейдж «Дубликат» в UI.
     has_duplicates: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    # Корзина / soft delete (Этап 4a.2): удалённый документ помечается, но не
+    # удаляется физически до истечения окна хранения. `deleted_at = NULL` —
+    # документ активен. `deleted_by` — username, инициировавший удаление.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    deleted_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     tags_rel: Mapped[list["DocumentTag"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"

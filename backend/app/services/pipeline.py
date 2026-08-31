@@ -417,6 +417,40 @@ class Pipeline:
         self.registry.update(doc_id, status="done", okf_concept_count=len(okf_docs), error=None)
         logger.info("Документ %s обработан: %d OKF-концептов, %d чанков", filename, len(okf_docs), total_chunks)
 
+    def soft_delete(self, doc_id: str, deleted_by: str | None = None) -> None:
+        """Мягкое удаление в корзину (Этап 4a.2): помечает, но не удаляет данные.
+
+        Прерывает живой пайплайн, ставит `deleted=true` в Qdrant (set_payload, без
+        Delete Points) и `deleted_at` в БД. Векторы/файлы/концепты остаются на
+        месте — восстановление не требует пере-эмбеддинга.
+        """
+        event = self._abort_events.get(doc_id)
+        if event:
+            event.set()
+        thread = self._threads.get(doc_id)
+        if thread and thread.is_alive():
+            thread.join(timeout=2.0)
+        try:
+            self.vector_store.set_document_deleted(doc_id, True)
+        except Exception as exc:
+            logger.warning(
+                "Не удалось пометить документ %s удалённым в Qdrant: %s", doc_id, exc
+            )
+        self.registry.soft_delete(doc_id, deleted_by)
+
+    def restore(self, doc_id: str) -> None:
+        """Восстановление из корзины: снимает флаг deleted в Qdrant и БД.
+
+        Точки физически не удалялись — эмбеддинги не пересчитываются.
+        """
+        try:
+            self.vector_store.set_document_deleted(doc_id, False)
+        except Exception as exc:
+            logger.warning(
+                "Не удалось снять флаг удаления документа %s в Qdrant: %s", doc_id, exc
+            )
+        self.registry.restore(doc_id)
+
     def remove(self, doc_id: str) -> None:
         event = self._abort_events.get(doc_id)
         if event:

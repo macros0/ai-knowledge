@@ -244,7 +244,7 @@ class JobQueue:
                 if job["job_type"] == BULK_DELETE:
                     if pipeline.registry.get(doc_id) is None:
                         raise ValueError("Документ не найден")
-                    pipeline.remove(doc_id)
+                    pipeline.soft_delete(doc_id, deleted_by=job.get("created_by"))
                     audit_mod.record(
                         _JobUser(job),
                         audit_mod.DOCUMENT_BULK_DELETE,

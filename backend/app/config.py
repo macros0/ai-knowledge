@@ -296,6 +296,15 @@ class Settings(BaseSettings):
     dedup_jaccard_strict_threshold: float = 0.88
     dedup_jaccard_loose_threshold: float = 0.71
 
+    # --- Корзина / soft delete (Этап 4a.2 roadmap) ---
+    # Единое окно хранения в корзине (дней). По истечении документ физически
+    # удаляется фоновой задачей (Delete Points в Qdrant + DELETE из БД + файлы).
+    trash_retention_days: int = 14
+    # Автозапуск фоновой очистки корзины (демон-поток при старте сервера).
+    trash_purge_enabled: bool = True
+    # Интервал прогона фоновой очистки (секунды).
+    trash_purge_interval_seconds: float = 3600.0
+
     @field_validator("chat_top_k_presets", mode="before")
     @classmethod
     def parse_top_k_presets(cls, v: object) -> Any:

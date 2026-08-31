@@ -59,7 +59,20 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "relations": "keyword",
     "section_title": "keyword",
     "dev_tags": "keyword",
+    "deleted": "bool",
 }
+
+
+def _not_deleted() -> qm.Filter:
+    """Фильтр-обёртка, исключающий мягко удалённые точки (Этап 4a.2 корзина).
+
+    Единственная точка применения дисциплины `deleted`: все пути поиска обязаны
+    добавлять этот must_not. Точки с `deleted=true` (документ в корзине) не
+    участвуют в RAG-поиске, автодополнении и graph-expansion.
+    """
+    return qm.Filter(
+        must_not=[qm.FieldCondition(key="deleted", match=qm.MatchValue(value=True))]
+    )
 
 
 def _tag_match_filter(tags: list[str]) -> qm.Filter:
@@ -137,6 +150,7 @@ class VectorStore:
             "keyword": qm.PayloadSchemaType.KEYWORD,
             "integer": qm.PayloadSchemaType.INTEGER,
             "datetime": qm.PayloadSchemaType.DATETIME,
+            "bool": qm.PayloadSchemaType.BOOL,
         }
         for field, schema_str in PAYLOAD_INDEX_FIELDS.items():
             schema_type = schema_map.get(schema_str, qm.PayloadSchemaType.KEYWORD)
@@ -317,6 +331,24 @@ class VectorStore:
             ),
         )
 
+    def set_document_deleted(self, doc_id: str, deleted: bool) -> None:
+        """Ставит/снимает payload-флаг `deleted` на всех точках документа (корзина).
+
+        Soft delete (Этап 4a.2): точки физически НЕ удаляются — только помечаются
+        `deleted=true`, чтобы поиск их исключал через _not_deleted(). Восстановление
+        снимает флаг (`deleted=false`) без пересчёта эмбеддингов.
+        """
+        _qdrant_call(
+            self.client.set_payload,
+            collection_name=self.collection,
+            payload={"deleted": bool(deleted)},
+            points=qm.FilterSelector(
+                filter=qm.Filter(
+                    must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))]
+                )
+            ),
+        )
+
     def set_document_tags_payload(
         self,
         doc_id: str,
@@ -388,9 +420,7 @@ class VectorStore:
     ) -> list[dict]:
         if mode not in SEARCH_MODES:
             raise ValueError(f"Неизвестный режим поиска: {mode}. Допустимы: {SEARCH_MODES}")
-        query_filter = None
-        if tags:
-            query_filter = _tag_match_filter(tags)
+        query_filter = self._build_search_filter(tags)
 
         if mode == "dense":
             query = vector
@@ -482,7 +512,8 @@ class VectorStore:
         if not relations_set:
             return []
         slug_filter = qm.Filter(
-            must=[qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))]
+            must=[qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))],
+            must_not=_not_deleted().must_not,
         )
         records, _ = _qdrant_call(
             self.client.scroll,
@@ -543,15 +574,18 @@ class VectorStore:
         return fused[:top_k]
 
     @staticmethod
-    def _build_search_filter(tags: list[str] | None) -> qm.Filter | None:
-        """Жёсткий pre-filter по tags для dense и bm25 веток.
+    def _build_search_filter(tags: list[str] | None) -> qm.Filter:
+        """Жёсткий pre-filter по tags для dense и bm25 веток + исключение корзины.
 
         Матчит тег, если он есть в `tags` ИЛИ в `dev_tags` (денормализованный
-        номер/название/модуль разработки — Этап 4).
+        номер/название/модуль разработки — Этап 4). Всегда добавляет
+        `must_not deleted` (Этап 4a.2) — единая обёртка, чтобы удалённые точки
+        не попадали в поиск из любого нового сценария.
         """
+        must_not = _not_deleted().must_not
         if not tags:
-            return None
-        return _tag_match_filter(tags)
+            return qm.Filter(must_not=must_not)
+        return qm.Filter(must=[_tag_match_filter(tags)], must_not=must_not)
 
     def backfill_sparse(self, batch_size: int = 100) -> int:
         """Добивает sparse-векторы для старых точек из OKF-бандлов.

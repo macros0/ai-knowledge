@@ -33,6 +33,24 @@ class DocumentOut(BaseModel):
     dev_tags_sync_pending: bool = False
     # Есть почти-дубликаты (уровень 2/3 дедупликации).
     has_duplicates: bool = False
+    # Корзина (Этап 4a.2): не None — документ удалён и находится в корзине.
+    deleted_at: datetime | None = None
+    deleted_by: str | None = None
+
+
+class TrashItemOut(DocumentOut):
+    """Элемент корзины: документ + индикация срока до окончательного удаления."""
+
+    days_left: int = 0
+    purge_at: datetime | None = None
+
+
+class TrashListOut(BaseModel):
+    documents: list[TrashItemOut]
+    total: int = 0
+    limit: int | None = None
+    offset: int = 0
+    retention_days: int = 14
 
 
 class DocumentListOut(BaseModel):

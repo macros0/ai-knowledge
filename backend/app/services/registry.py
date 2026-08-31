@@ -8,7 +8,7 @@ PostgreSQL (prod) / SQLite (dev). Отличие: нет in-memory словар�
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
@@ -133,6 +133,8 @@ def _to_dict(doc: Document) -> dict:
         "development_confirmed_by": doc.development_confirmed_by,
         "development_suggestion": doc.development_suggestion,
         "has_duplicates": bool(doc.has_duplicates),
+        "deleted_at": doc.deleted_at,
+        "deleted_by": doc.deleted_by,
     }
 
 
@@ -209,8 +211,11 @@ class DocumentRegistry:
         problem: bool | None = None,
         search: str | None = None,
         tag: str | None = None,
+        active_only: bool = True,
     ) -> list:
         conditions: list = []
+        if active_only:
+            conditions.append(Document.deleted_at.is_(None))
         if uploaded_by is not None:
             conditions.append(Document.uploaded_by == uploaded_by)
         if statuses:
@@ -258,6 +263,9 @@ class DocumentRegistry:
         что и выборка (без limit/offset), чтобы фронт мог рисовать пагинацию.
         sort — ключ из SORT_COLUMNS (совпадает с SORT_OPTIONS фронта);
         limit=None — вернуть всё (обратная совместимость с прежним list()).
+
+        По умолчанию возвращает ТОЛЬКО активные документы (deleted_at IS NULL);
+        удалённые (корзина) — через list_trash (Этап 4a.2).
         """
         conditions = self._conditions(
             uploaded_by=uploaded_by,
@@ -269,6 +277,7 @@ class DocumentRegistry:
             problem=problem,
             search=search,
             tag=tag,
+            active_only=True,
         )
         with session_scope() as s:
             total_stmt = select(func.count()).select_from(Document)
@@ -297,7 +306,7 @@ class DocumentRegistry:
         with session_scope() as s:
             stmt = (
                 select(Document.uploaded_by)
-                .where(Document.uploaded_by.isnot(None))
+                .where(Document.uploaded_by.isnot(None), Document.deleted_at.is_(None))
                 .distinct()
             )
             names = [u for u in s.execute(stmt).scalars().all() if u]
@@ -328,10 +337,86 @@ class DocumentRegistry:
             s.delete(doc)
             return True
 
+    def soft_delete(self, doc_id: str, deleted_by: str | None = None) -> bool:
+        """Помечает документ удалённым (корзина, Этап 4a.2), не удаляя данные."""
+        with session_scope() as s:
+            doc = s.get(Document, doc_id)
+            if doc is None:
+                return False
+            doc.deleted_at = datetime.now(timezone.utc)
+            doc.deleted_by = deleted_by
+            return True
+
+    def restore(self, doc_id: str) -> bool:
+        """Снимает флаг удаления (восстановление из корзины)."""
+        with session_scope() as s:
+            doc = s.get(Document, doc_id)
+            if doc is None:
+                return False
+            doc.deleted_at = None
+            doc.deleted_by = None
+            return True
+
+    def list_trash(
+        self,
+        uploaded_by: str | None = None,
+        search: str | None = None,
+        sort: str = "date_desc",
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> tuple[list[dict], int]:
+        """Список удалённых документов (корзина) с поиском/пагинацией.
+
+        Только документы с deleted_at IS NOT NULL; uploader/search — те же
+        фильтры, что и в активном списке. Сортировка по deleted_at desc
+        (свежие удаления первыми) поверх обычного sort-ключа.
+        """
+        conditions: list = [Document.deleted_at.isnot(None)]
+        if uploaded_by is not None:
+            conditions.append(Document.uploaded_by == uploaded_by)
+        search_conditions = _search_conditions(search)
+        if search_conditions:
+            conditions.append(or_(*search_conditions))
+
+        with session_scope() as s:
+            total_stmt = select(func.count()).select_from(Document).where(*conditions)
+            total = s.execute(total_stmt).scalar_one()
+
+            stmt = select(Document).options(
+                selectinload(Document.tags_rel), selectinload(Document.development)
+            ).where(*conditions)
+            column, direction = SORT_COLUMNS.get(sort, SORT_COLUMNS["date_desc"])
+            order_expr = column.asc() if direction == "asc" else column.desc()
+            stmt = stmt.order_by(Document.deleted_at.desc(), order_expr.nulls_last())
+            if offset:
+                stmt = stmt.offset(offset)
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            docs = s.execute(stmt).scalars().all()
+            return [_to_dict(d) for d in docs], total
+
+    def purge_expired(self, cutoff: datetime) -> list[str]:
+        """Возвращает doc_id документов, чей срок корзины истёк (deleted_at <= cutoff).
+
+        Само физическое удаление выполняет вызывающий (trash-сервис через
+        Pipeline.remove), чтобы объединить БД + Qdrant + файлы в одном месте.
+        """
+        with session_scope() as s:
+            rows = s.execute(
+                select(Document.id).where(
+                    Document.deleted_at.isnot(None), Document.deleted_at <= cutoff
+                )
+            ).scalars().all()
+            return list(rows)
+
     def reset_stale_statuses(self) -> None:
         """Переводит зависшие статусы в paused (вызывается на старте сервера)."""
         with session_scope() as s:
-            docs = s.query(Document).filter(Document.status.in_(STALE_STATUSES)).all()
+            docs = (
+                s.query(Document)
+                .filter(Document.status.in_(STALE_STATUSES), Document.deleted_at.is_(None))
+                .all()
+            )
             for d in docs:
                 d.status = "paused"
                 d.error = "Сервер был перезапущен. Нажмите «Возобновить»"

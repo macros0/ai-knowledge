@@ -27,6 +27,8 @@ from app.models.schemas import (
     DocumentOut,
     DocumentTagsUpdate,
     OkfFileOut,
+    TrashItemOut,
+    TrashListOut,
     UploaderListOut,
 )
 from app.services import audit
@@ -42,6 +44,7 @@ from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
 from app.services.tag_registry import TagRegistry, normalize_tags
+from app.services.trash import RestoreConflictError, bulk_restore, restore_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -219,6 +222,39 @@ def list_uploaders(user: User = Depends(require_user)):
     return UploaderListOut(uploaders=_registry.distinct_uploaders())
 
 
+@router.get("/trash", response_model=TrashListOut)
+def list_trash(
+    uploader: str | None = None,
+    search: str | None = None,
+    sort: str = "date_desc",
+    limit: Annotated[int | None, Query(ge=1)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    user: User = Depends(require_user),
+):
+    """Список корзины: удалённые документы с индикацией срока до автоочистки.
+
+    Объявлен ДО `/{doc_id}` (иначе «trash» попал бы в параметр doc_id). Видимость
+    «своя»/«все» решается uploader-фильтром тем же способом, что и в списке
+    документов (frontend резолвит «mine» в username).
+    """
+    settings = get_settings()
+    docs, total = _registry.list_trash(
+        uploaded_by=uploader,
+        search=search,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+    items = [_to_trash_item(d, settings.trash_retention_days) for d in docs]
+    return TrashListOut(
+        documents=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        retention_days=settings.trash_retention_days,
+    )
+
+
 @router.get("/{doc_id}", response_model=DocumentOut)
 def get_document(doc_id: str):
     doc = _registry.get(doc_id)
@@ -345,10 +381,18 @@ def delete_document(
     request: Request,
     user: User = Depends(require_role("editor", "admin")),
 ):
+    """Удаление документа в корзину (мягкое, Этап 4a.2).
+
+    Документ скрывается из списков немедленно, но точки Qdrant и файлы не
+    удаляются — помечаются `deleted=true` (payload) + `deleted_at` (БД).
+    Окончательное физическое удаление — фоновой автоочисткой корзины.
+    """
     doc = _registry.get(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
-    _pipeline.remove(doc_id)
+    if doc.get("deleted_at") is not None:
+        raise HTTPException(status_code=409, detail="Документ уже находится в корзине")
+    _pipeline.soft_delete(doc_id, deleted_by=user.username)
     audit.record(
         user,
         audit.DOCUMENT_DELETE,
@@ -358,6 +402,60 @@ def delete_document(
         ip_address=_client_ip(request),
     )
     return {"status": "deleted"}
+
+
+@router.post("/{doc_id}/restore", response_model=DocumentOut)
+def restore_document_endpoint(
+    doc_id: str,
+    request: Request,
+    force: bool = False,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    """Восстановление документа из корзины (снятие обоих флагов).
+
+    Без force — при конфликте дедупликации с активным документом возвращает 409
+    с code=duplicate и кандидатами; frontend показывает тот же UI конфликта, что
+    при загрузке. force=true — восстановить как отдельный без проверки.
+    """
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    try:
+        return restore_document(doc_id, user, ip_address=_client_ip(request), force=force)
+    except RestoreConflictError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "code": "duplicate",
+                "duplicates": exc.duplicates,
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/bulk-restore")
+def bulk_restore_documents(
+    body: BulkOperationRequest,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    """Массовое восстановление из корзины (симметрично массовому удалению).
+
+    Синхронная операция: восстановление дешёвое (set_payload + UPDATE), не
+    требует очереди. Каждый восстановленный документ — отдельная запись в audit.
+    """
+    doc_ids = list(dict.fromkeys(body.doc_ids))
+    if not doc_ids:
+        raise HTTPException(status_code=400, detail="Список документов пуст")
+    if len(doc_ids) > get_settings().bulk_tags_max_docs:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Превышен лимит {get_settings().bulk_tags_max_docs} документов на одну операцию",
+        )
+    result = bulk_restore(doc_ids, user, ip_address=_client_ip(request))
+    result["total"] = len(doc_ids)
+    return result
 
 
 @router.post("/{doc_id}/resume", response_model=DocumentOut)
@@ -672,6 +770,25 @@ def get_document_fulltext(doc_id: str):
 
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
+
+
+def _to_trash_item(doc: dict, retention_days: int) -> dict:
+    """Обогащает документ корзины индикацией срока до окончательного удаления."""
+    from datetime import datetime, timedelta, timezone
+
+    deleted_at = doc.get("deleted_at")
+    purge_at = None
+    days_left = 0
+    if deleted_at is not None:
+        if deleted_at.tzinfo is None:
+            deleted_at = deleted_at.replace(tzinfo=timezone.utc)
+        purge_at = deleted_at + timedelta(days=retention_days)
+        delta = purge_at - datetime.now(timezone.utc)
+        days_left = max(0, int(delta.total_seconds() // 86400) + (1 if delta.total_seconds() % 86400 else 0))
+    item = dict(doc)
+    item["days_left"] = days_left
+    item["purge_at"] = purge_at
+    return item
 
 
 def _document_head(doc_id: str, doc: dict) -> str:

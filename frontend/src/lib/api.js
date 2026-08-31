@@ -134,6 +134,36 @@ export function listUploaders() {
   return request("/documents/uploaders").then((data) => data.uploaders ?? []);
 }
 
+export function listTrashDocuments(params = {}) {
+  const qs = new URLSearchParams();
+  if (params.uploader) qs.set("uploader", params.uploader);
+  if (params.search) qs.set("search", params.search);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.limit != null) qs.set("limit", String(params.limit));
+  if (params.offset != null) qs.set("offset", String(params.offset));
+  const s = qs.toString();
+  return request(`/documents/trash${s ? `?${s}` : ""}`).then((data) => ({
+    documents: data.documents ?? [],
+    total: data.total ?? 0,
+    limit: data.limit ?? null,
+    offset: data.offset ?? 0,
+    retention_days: data.retention_days ?? 14,
+  }));
+}
+
+export function restoreDocument(docId, { force = false } = {}) {
+  const qs = force ? "?force=true" : "";
+  return request(`/documents/${docId}/restore${qs}`, { method: "POST" });
+}
+
+export function bulkRestoreDocuments(docIds) {
+  return request("/documents/bulk-restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_ids: docIds }),
+  });
+}
+
 export function deleteDocument(docId) {
   return request(`/documents/${docId}`, { method: "DELETE" });
 }

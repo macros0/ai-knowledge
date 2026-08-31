@@ -46,7 +46,7 @@ function progressText(doc) {
   return null;
 }
 
-export default function DocumentList({ refreshKey = 0 }) {
+export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const router = useRouter();
   const { mode, hasRole, loading, user } = useAuth();
   const { showToast } = useToast();
@@ -198,6 +198,10 @@ export default function DocumentList({ refreshKey = 0 }) {
       const next = { ...s };
       delete next[doc.id];
       return next;
+    });
+    showToast(`Документ «${doc.filename}» перемещён в корзину`, {
+      type: "success",
+      action: onOpenTrash ? { label: "Открыть корзину", onClick: onOpenTrash } : null,
     });
     load();
   };

@@ -39,6 +39,9 @@ ATTRIBUTE_CREATE = "attribute_create"
 ATTRIBUTE_DELETE = "attribute_delete"
 TAG_DELETE = "tag_delete"
 TAG_CLEANUP = "tag_cleanup"
+DOCUMENT_RESTORE = "document_restore"
+DOCUMENT_BULK_RESTORE = "document_bulk_restore"
+DOCUMENT_AUTO_DELETE = "document_auto_delete"
 
 ACTION_TYPES = frozenset(
     {
@@ -62,6 +65,9 @@ ACTION_TYPES = frozenset(
         ATTRIBUTE_DELETE,
         TAG_DELETE,
         TAG_CLEANUP,
+        DOCUMENT_RESTORE,
+        DOCUMENT_BULK_RESTORE,
+        DOCUMENT_AUTO_DELETE,
     }
 )
 
