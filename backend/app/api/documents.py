@@ -138,6 +138,12 @@ def upload_document(
 @router.get("", response_model=DocumentListOut)
 def list_documents(
     uploader: str | None = None,
+    status: str | None = None,
+    has_duplicates: bool | None = None,
+    development_id: int | None = None,
+    development_number: str | None = None,
+    module: str | None = None,
+    problem: bool | None = None,
     user: User = Depends(require_user),
 ):
     """Список документов.
@@ -146,8 +152,25 @@ def list_documents(
     документы этого пользователя (uploaded_by == username). Значения «mine»/«all»
     бэкенду неизвестны — выбор «мои документы» фронтенд резолвит в конкретный
     username текущего пользователя.
+
+    Остальные фильтры — дешёвые WHERE-pushdown по хранимым полям (см.
+    DocumentRegistry.list): status — одно значение или через запятую
+    (paused,failed,error); has_duplicates — булев флаг; development_id /
+    development_number — по разработке; module — по модулю разработки;
+    problem=true — объединённое «Проблемные» (остановившиеся + дубликаты).
     """
-    docs = _registry.list(uploaded_by=uploader)
+    statuses = None
+    if status:
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+    docs = _registry.list(
+        uploaded_by=uploader,
+        statuses=statuses,
+        has_duplicates=has_duplicates,
+        development_id=development_id,
+        development_number=development_number,
+        module=module,
+        problem=problem,
+    )
     docs.sort(key=lambda d: d.get("created_at", ""), reverse=True)
     return DocumentListOut(documents=docs)
 

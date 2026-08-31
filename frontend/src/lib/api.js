@@ -78,9 +78,19 @@ export function listTags() {
   return request("/tags").then((data) => data.tags ?? []);
 }
 
-export function listDocuments(uploader) {
-  const qs = uploader ? `?uploader=${encodeURIComponent(uploader)}` : "";
-  return request(`/documents${qs}`).then((data) => data.documents ?? []);
+export function listDocuments(params = {}) {
+  const qs = new URLSearchParams();
+  if (params.uploader) qs.set("uploader", params.uploader);
+  if (params.status) qs.set("status", params.status);
+  if (params.hasDuplicates !== undefined && params.hasDuplicates !== null) {
+    qs.set("has_duplicates", String(params.hasDuplicates));
+  }
+  if (params.developmentId) qs.set("development_id", String(params.developmentId));
+  if (params.developmentNumber) qs.set("development_number", params.developmentNumber);
+  if (params.module) qs.set("module", params.module);
+  if (params.problem) qs.set("problem", "true");
+  const s = qs.toString();
+  return request(`/documents${s ? `?${s}` : ""}`).then((data) => data.documents ?? []);
 }
 
 export function listUploaders() {

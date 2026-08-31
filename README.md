@@ -236,6 +236,20 @@ python scripts/migrate_payload.py --fix-slugs # + привести slug к stem 
   python scripts/backfill_dedup.py --doc-id <id>  # один документ
   ```
 
+### Диагностика зависших документов
+
+Read-only проверка: документы, «зависшие» в активном статусе
+(`processing`/`splitting`/`indexing`) дольше порога. Такое случается при рантайм-
+залипании (например, зависший LLM-вызов) — UI покажет вечный BUSY-статус, а
+штатный сброс зависших работает только при рестарте сервера. Exit code 1, если
+найдены (готово для будущего cron), без уведомлений/алертов.
+
+  ```bash
+  python scripts/check_stuck_documents.py            # статусы processing/splitting/indexing старше 1 часа
+  python scripts/check_stuck_documents.py --hours 2
+  python scripts/check_stuck_documents.py --statuses processing,splitting
+  ```
+
 ## Конфигурация (переменные `.env`)
 
 | Переменная | По умолчанию | Описание |

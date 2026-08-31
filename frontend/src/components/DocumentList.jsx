@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { deleteDocument, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment } from "@/lib/api";
+import { deleteDocument, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment } from "@/lib/api";
 import { filterDocuments, sortDocuments, SORT_OPTIONS } from "@/lib/docFilter.mjs";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
 import BulkActionsBar from "./BulkActionsBar";
 import PreviewModal from "./PreviewModal";
+import DevelopmentFilter from "./DevelopmentFilter";
 import DevelopmentPicker from "./DevelopmentPicker";
 import DuplicateModal from "./DuplicateModal";
 
@@ -52,6 +53,10 @@ export default function DocumentList({ refreshKey = 0 }) {
   const [uploaders, setUploaders] = useState([]);
   const [sortKey, setSortKey] = useState("date_desc");
   const [developments, setDevelopments] = useState([]);
+  const [modules, setModules] = useState([]);
+  const [problemOnly, setProblemOnly] = useState(false);
+  const [moduleFilter, setModuleFilter] = useState("");
+  const [devFilter, setDevFilter] = useState(null);
   const [dupDoc, setDupDoc] = useState(null);
   const mounted = useRef(true);
   const timer = useRef(null);
@@ -74,20 +79,33 @@ export default function DocumentList({ refreshKey = 0 }) {
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
-    const list = await listDocuments(resolvedUploader);
+    const list = await listDocuments({
+      uploader: resolvedUploader || undefined,
+      problem: problemOnly ? true : undefined,
+      module: moduleFilter || undefined,
+      developmentId: devFilter ? Number(devFilter) : undefined,
+    });
     if (seq !== loadSeq.current || !mounted.current) return;
     setDocs(list);
     const busy = list.some((d) => BUSY_STATUSES.includes(d.status));
     if (busy && mounted.current) {
       timer.current = setTimeout(load, 1500);
     }
-  }, [resolvedUploader]);
+  }, [resolvedUploader, problemOnly, moduleFilter, devFilter]);
 
   const loadUploaders = useCallback(async () => {
     try {
       setUploaders(await listUploaders());
     } catch {
       // не критично — дропдаун просто останется без реальных username
+    }
+  }, []);
+
+  const loadModules = useCallback(async () => {
+    try {
+      setModules((await listAttributeValues("module")).map((v) => v.value));
+    } catch {
+      setModules([]);
     }
   }, []);
 
@@ -104,12 +122,13 @@ export default function DocumentList({ refreshKey = 0 }) {
     mounted.current = true;
     load();
     loadUploaders();
+    loadModules();
     loadDevelopments();
     return () => {
       mounted.current = false;
       clearTimeout(timer.current);
     };
-  }, [loading, refreshKey, load, loadUploaders, loadDevelopments]);
+  }, [loading, refreshKey, load, loadUploaders, loadModules, loadDevelopments]);
 
   const openOkf = (doc) => {
     router.push(`/documents/${doc.id}/okf`);
@@ -250,6 +269,33 @@ export default function DocumentList({ refreshKey = 0 }) {
             ))}
           </optgroup>
         </select>
+        <label className="doc-filter-problem">
+          <input
+            type="checkbox"
+            checked={problemOnly}
+            onChange={(e) => setProblemOnly(e.target.checked)}
+            aria-label="Только проблемные документы"
+          />
+          Проблемные
+        </label>
+        <select
+          className="doc-filter-select"
+          value={moduleFilter}
+          onChange={(e) => setModuleFilter(e.target.value)}
+          aria-label="Фильтр по модулю"
+        >
+          <option value="">Все модули</option>
+          {modules.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <DevelopmentFilter
+          developments={developments}
+          value={devFilter}
+          onChange={setDevFilter}
+        />
         <select
           className="doc-filter-select"
           value={sortKey}
@@ -385,9 +431,14 @@ export default function DocumentList({ refreshKey = 0 }) {
             </div>
           </li>
         ))}
-        {docs.length > 0 && filteredDocs.length === 0 && (
-          <li className="document-empty">Ничего не найдено</li>
-        )}
+        {filteredDocs.length === 0 &&
+          (docs.length > 0 ||
+            filenameMask.trim() ||
+            problemOnly ||
+            moduleFilter ||
+            devFilter) && (
+            <li className="document-empty">Ничего не найдено</li>
+          )}
       </ul>
     </>
   );

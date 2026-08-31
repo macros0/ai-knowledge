@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const baseItems = [
   { href: "/", label: "Документы", exact: true },
-  { href: "/chat", label: "Чат", exact: false },
+  { href: "/chat", label: "Вопросы к документам", exact: false },
 ];
 
 const roleItems = [

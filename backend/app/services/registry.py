@@ -10,10 +10,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
+    Development,
     Document,
     DocumentLshBucket,
     DocumentStaging,
@@ -26,6 +27,10 @@ from app.db.session import session_scope
 # Статусы, которые на старте считаются «зависшими» (сервер перезапустили посреди
 # обработки) и сбрасываются в paused для ручного возобновления.
 STALE_STATUSES = {"splitting", "processing", "indexing", "uploaded"}
+
+# Статусы «остановившихся» документов — попали в объединённый фильтр «Проблемные».
+# paused — генерация OKF остановлена (кнопка «Возобновить»), failed/error — ошибка.
+PROBLEM_STATUSES = {"paused", "failed", "error"}
 
 
 def _to_dict(doc: Document) -> dict:
@@ -83,13 +88,58 @@ class DocumentRegistry:
             doc = s.get(Document, doc_id)
             return _to_dict(doc) if doc else None
 
-    def list(self, uploaded_by: str | None = None) -> list[dict]:
+    def list(
+        self,
+        uploaded_by: str | None = None,
+        statuses: list[str] | None = None,
+        has_duplicates: bool | None = None,
+        development_id: int | None = None,
+        development_number: str | None = None,
+        module: str | None = None,
+        problem: bool | None = None,
+    ) -> list[dict]:
+        """Список документов с фильтрами.
+
+        Все фильтры — простые WHERE-pushdown по хранимым колонкам/связям (без
+        вычислений по времени и без LSH-поиска на лету):
+          - uploaded_by — точное совпадение username;
+          - statuses — status IN (...);
+          - has_duplicates — булев флаг (персистентный, см. pipeline);
+          - development_id / development_number — по индексированному FK либо по
+            уникальному developments.number через связь;
+          - module — через development.module (JOIN по development_id);
+          - problem — объединённое «Проблемные»: status IN (PROBLEM_STATUSES)
+            OR has_duplicates = true. Набор условий — в одном месте, новые
+            «проблемные» флаги добавляются туда же.
+        """
         with session_scope() as s:
             stmt = select(Document).options(
                 selectinload(Document.tags_rel), selectinload(Document.development)
             )
+            conditions: list = []
             if uploaded_by is not None:
-                stmt = stmt.where(Document.uploaded_by == uploaded_by)
+                conditions.append(Document.uploaded_by == uploaded_by)
+            if statuses:
+                conditions.append(Document.status.in_(statuses))
+            if has_duplicates is not None:
+                conditions.append(Document.has_duplicates.is_(has_duplicates))
+            if development_id is not None:
+                conditions.append(Document.development_id == development_id)
+            if development_number is not None:
+                conditions.append(
+                    Document.development.has(Development.number == development_number)
+                )
+            if module is not None:
+                conditions.append(Document.development.has(Development.module == module))
+            if problem:
+                conditions.append(
+                    or_(
+                        Document.status.in_(PROBLEM_STATUSES),
+                        Document.has_duplicates.is_(True),
+                    )
+                )
+            if conditions:
+                stmt = stmt.where(*conditions)
             docs = s.execute(stmt).scalars().all()
             return [_to_dict(d) for d in docs]
 

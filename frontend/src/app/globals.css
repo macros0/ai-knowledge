@@ -53,6 +53,14 @@ body {
 .brand {
   text-decoration: none;
   color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-logo {
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .brand h1:hover {
@@ -429,6 +437,57 @@ main {
 
 .doc-filter-input::placeholder {
   color: var(--muted);
+}
+
+.doc-filter-problem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.doc-filter-problem input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.dev-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dev-filter-trigger {
+  cursor: pointer;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dev-filter-clear {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dev-filter-clear:hover {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 .document-empty {
