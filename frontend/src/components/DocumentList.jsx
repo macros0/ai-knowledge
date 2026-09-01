@@ -179,27 +179,34 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
-    const result = await listDocuments({
-      uploader: resolvedUploader || undefined,
-      problem: problemOnly ? true : undefined,
-      module: moduleFilter || undefined,
-      developmentId: devFilter ? Number(devFilter) : undefined,
-      tag: tagFilter || undefined,
-      status: statusFilter || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-      search: search || undefined,
-      sort: sortKey,
-      // В grouped-режиме пагинация отключена — нужен весь набор для секций.
-      limit: groupBy ? undefined : PAGE_SIZE,
-      offset: groupBy ? 0 : page * PAGE_SIZE,
-    });
-    if (seq !== loadSeq.current || !mounted.current) return;
-    setDocs(result.documents);
-    setTotal(result.total);
-    const busy = result.documents.some((d) => BUSY_STATUSES.includes(d.status));
-    if (busy && mounted.current) {
-      timer.current = setTimeout(load, 1500);
+    try {
+      const result = await listDocuments({
+        uploader: resolvedUploader || undefined,
+        problem: problemOnly ? true : undefined,
+        module: moduleFilter || undefined,
+        developmentId: devFilter ? Number(devFilter) : undefined,
+        tag: tagFilter || undefined,
+        status: statusFilter || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        search: search || undefined,
+        sort: sortKey,
+        // В grouped-режиме пагинация отключена — нужен весь набор для секций.
+        limit: groupBy ? undefined : PAGE_SIZE,
+        offset: groupBy ? 0 : page * PAGE_SIZE,
+      });
+      if (seq !== loadSeq.current || !mounted.current) return;
+      setDocs(result.documents);
+      setTotal(result.total);
+      const busy = result.documents.some((d) => BUSY_STATUSES.includes(d.status));
+      if (busy && mounted.current) {
+        timer.current = setTimeout(load, 1500);
+      }
+    } catch (err) {
+      // Бэкенд недоступен/ошибка сети: не оставляем список «молча пустым» —
+      // показываем ошибку и не ломаем поллинг (следующий эффект перезапустит load).
+      if (seq !== loadSeq.current || !mounted.current) return;
+      showToast(`Не удалось загрузить список документов: ${err.message}`, { type: "error" });
     }
   }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, search, sortKey, page, groupBy]);
 
@@ -403,9 +410,19 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const selectPage = () => {
     setSelected((s) => {
       const next = { ...s };
-      pageDocIds.forEach((id) => {
+      // Кап MAX_SELECT: в grouped-режиме docs — весь отфильтрованный набор
+      // (limit=None), «страница» фактически равна ему; выделяем не больше
+      // лимита массовой операции, иначе bulk-tags молча упадёт на 400.
+      for (const id of pageDocIds) {
+        if (Object.keys(next).length >= MAX_SELECT) {
+          showToast(
+            `Выделение ограничено ${MAX_SELECT} документами (лимит массовой операции)`,
+            { type: "warning" }
+          );
+          break;
+        }
         next[id] = true;
-      });
+      }
       return next;
     });
   };
@@ -849,6 +866,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               <ul className="document-list">{g.docs.map((doc) => renderDoc(doc))}</ul>
             </section>
           ))}
+          {groups.length === 0 && <li className="document-empty">Ничего не найдено</li>}
         </div>
       ) : (
         <ul className="document-list">

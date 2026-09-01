@@ -3,8 +3,12 @@
 import { useState } from "react";
 import { bulkUpdateTags } from "@/lib/api";
 import { bumpTagVersion } from "@/lib/tagDictionary";
+import { useToast } from "./Toast";
 import { TrashIcon } from "./icons";
 import TagCombobox from "./TagCombobox";
+
+// Должен совпадать с backend BULK_TAGS_MAX_DOCS (config.bulk_tags_max_docs).
+const MAX_BULK_DOCS = 50;
 
 /**
  * Панель выделения документов (для Editor/Admin), свёрнута под спойлер.
@@ -37,6 +41,7 @@ export default function SelectionBar({
   const [addTag, setAddTag] = useState("");
   const [removeTag, setRemoveTag] = useState("");
   const [busy, setBusy] = useState(false);
+  const { showToast } = useToast();
 
   const hasSelection = selectedIds.length > 0;
   const danger = canDelete && hasSelection;
@@ -44,6 +49,13 @@ export default function SelectionBar({
   const applyTags = async (op) => {
     const value = op === "add" ? addTag.trim() : removeTag.trim();
     if (!value || !hasSelection || busy) return;
+    if (selectedIds.length > MAX_BULK_DOCS) {
+      showToast(
+        `Превышен лимит ${MAX_BULK_DOCS} документов на массовую правку (выбрано ${selectedIds.length})`,
+        { type: "warning", duration: 8000 }
+      );
+      return;
+    }
     setBusy(true);
     try {
       const result = await bulkUpdateTags(selectedIds, {
@@ -54,6 +66,8 @@ export default function SelectionBar({
       onDone?.(result);
       if (op === "add") setAddTag("");
       else setRemoveTag("");
+    } catch (err) {
+      showToast(`Массовая правка тегов не удалась: ${err.message}`, { type: "error" });
     } finally {
       setBusy(false);
     }

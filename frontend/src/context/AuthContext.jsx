@@ -17,19 +17,28 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [mode, setMode] = useState("disabled");
+  // null = ответ /auth/me ещё не получен (или запрос упал). Fail-closed: до
+  // подтверждения режима сервером все проверки `mode === "disabled"` дают false
+  // — UI рендерится с правами guest, а не «всё открыто» (раньше упавший /auth/me
+  // молча оставлял mode="disabled" → полный editor/admin UI анониму).
+  const [mode, setMode] = useState(null);
   const [simUsers, setSimUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
 
   const apply = useCallback((data) => {
     setUser(data?.user ?? null);
     setMode(data?.mode ?? "disabled");
     setSimUsers(data?.sim_users ?? []);
+    setAuthError(null);
   }, []);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       apply(await getMe());
+    } catch {
+      setAuthError("Не удалось связаться с сервером. Проверьте, что бэкенд запущен.");
     } finally {
       setLoading(false);
     }
@@ -72,6 +81,29 @@ export function AuthProvider({ children }) {
     () => ({ user, mode, simUsers, loading, login, logout, refresh, role, hasRole }),
     [user, mode, simUsers, loading, login, logout, refresh, role, hasRole]
   );
+
+  // Fail-closed гейт: /auth/me упал и пользователя нет — не рендерим приложение
+  // «наугад» (полный UI с рольями из дефолтного mode), а предлагаем повторить.
+  if (authError && !user) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "16px",
+          fontFamily: "inherit",
+        }}
+      >
+        <p>{authError}</p>
+        <button type="button" className="btn" onClick={refresh}>
+          Повторить
+        </button>
+      </div>
+    );
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

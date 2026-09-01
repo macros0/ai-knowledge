@@ -10,8 +10,11 @@ const ROLE_LABELS = {
 };
 
 export default function AuthBar() {
-  const { user, mode, simUsers, login, logout } = useAuth();
+  const { user, mode, simUsers, login, logout, loading } = useAuth();
 
+  // Пока /auth/me не ответил (mode=null), ничего не рендерим — иначе селектор
+  // демо-юзеров мигает на каждой загрузке страницы.
+  if (loading) return null;
   // В disabled-режиме авторизация выключена — панель не нужна.
   if (mode === "disabled") return null;
   if (mode === "sso" && user && user.user_id !== "anonymous") {
