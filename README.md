@@ -281,6 +281,7 @@ Read-only проверка: документы, «зависшие» в акти
 | `EMBEDDING_API_KEY` | пусто | Ключ API эмбеддингов |
 | `EMBEDDING_BATCH_SIZE` | `64` | Размер батча запросов к провайдеру (защита от 400 при >~330 inputs у Ollama) |
 | `LLM_MODEL` | `ollama/qwen2.5:14b` | Модель LLM (через LiteLLM: `openai/...`, `ollama/...`, `openrouter/...`) |
+| `LLM_CHAT_MODEL` | `""` | Модель интерактивного RAG-чата (пусто → `LLM_MODEL`); OKF-генерация всегда на `LLM_MODEL` |
 | `LLM_BASE_URL` | `http://localhost:11434` | Endpoint LLM |
 | `LLM_API_KEY` | `ollama` | Ключ API LLM |
 | `LLM_TEMPERATURE` | `0.2` | Температура генерации |
@@ -309,7 +310,7 @@ Read-only проверка: документы, «зависшие» в акти
 | `SEARCH_GRAPH_EXPANSION_ENABLED` | `true` | Graph expansion по relations концептов |
 | `SEARCH_RRF_K` | `60` | Константа RRF (стандарт TREC) |
 | `SEARCH_RRF_DENSE_WEIGHT` | `1.0` | Вес dense-ветки в RRF |
-| `SEARCH_RRF_BM25_WEIGHT` | `1.0` | Вес bm25-ветки |
+| `SEARCH_RRF_BM25_WEIGHT` | `1.5` | Вес bm25-ветки (выше dense: по коротким/аббревиатурным запросам dense даёт плоский шум, bm25 разделяет точно) |
 | `SEARCH_RRF_GRAPH_EXPANSION_WEIGHT` | `0.5` | Вес graph expansion (соседи обогащают, но не вытесняют) |
 | `CHAT_MAX_CONTEXT_CHARS` | `32000` | Лимит суммарного объёма контекста для LLM |
 | `CHAT_CONCEPT_MAX_CHARS` | `4000` | Обрезка концепта в контексте |

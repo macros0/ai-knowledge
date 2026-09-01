@@ -93,6 +93,13 @@ class LLMClient:
     def __init__(self, interactive: bool = False):
         self.settings = get_settings()
         self.interactive = interactive
+        # Интерактивному чату — своя модель (LLM_CHAT_MODEL), если задана;
+        # bulk-пайплайн OKF-генерации всегда на llm_model.
+        self.model = (
+            self.settings.llm_chat_model
+            if interactive and self.settings.llm_chat_model
+            else self.settings.llm_model
+        )
 
     def chat(self, system: str, user: str, max_tokens: int | None = None) -> str:
         attempts = self.settings.llm_interactive_retry_attempts
@@ -165,7 +172,7 @@ class LLMClient:
         def run() -> None:
             try:
                 stream = litellm.completion(
-                    model=self.settings.llm_model,
+                    model=self.model,
                     api_base=self.settings.llm_base_url or None,
                     api_key=self.settings.llm_api_key or None,
                     messages=[

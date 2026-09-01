@@ -32,7 +32,9 @@ UI: http://localhost:3000
 - **npx/npm shims на этой машине сломаны** (`node_modules\npm\bin\npx-cli.js` отсутствует), а
   `cmd /c "npm run dev"` ломает кавычки в хелпере. Фронтенд запускать ТОЛЬКО через
   `node node_modules/next/dist/bin/next dev` (из `frontend/`).
-- LLM: `openrouter/mistralai/mistral-nemo` (OpenRouter, из `.env`). Эмбеддинги: `ollama/bge-m3` —
+- LLM: `openrouter/mistralai/mistral-nemo` (OpenRouter, из `.env`). Интерактивному RAG-чату
+  можно задать модель посильнее через `LLM_CHAT_MODEL` (пусто → `LLM_MODEL`); OKF-генерация
+  и batch-задачи всегда на `LLM_MODEL`. Эмбеддинги: `ollama/bge-m3` —
   модель должна быть загружена в Ollama (`ollama pull bge-m3`).
 - Qdrant — локальный бинарь (не Docker): `%TEMP%\opencode\qdrant\v1.19.0\qdrant.exe`, данные в
   `%TEMP%\opencode\qdrant\storage` (сохраняются между запусками).
@@ -65,6 +67,33 @@ UI: http://localhost:3000
   (services/fusion.py), merge/collapse после fusion (services/context_builder.py).
   Tags — жёсткий pre-filter для dense/bm25. Переключатели `SEARCH_*_ENABLED` —
   query-time, реиндекс не требуется.
+  Веса веток RRF — `SEARCH_RRF_*_WEIGHT` в config.py (bm25=1.5 > dense=1.0:
+  по коротким/аббревиатурным запросам dense даёт плоский шум, bm25 разделяет
+  точно). Контекст чата: каждый `context_block` получает в metadata
+  `Matched terms: [...]` — содержательные термины запроса (токенайзер BM25 +
+  фильтр служебных слов «какие/есть/…»), буквально встречающиеся в блоке
+  (`context_builder.matched_terms`); подсказка LLM, какие блоки релевантны
+  вопросу, плюс анти-мета/анти-атрибуционные правила в `prompts/chat_system.md`.
+  **top_k — это БЛОКИ после merge, не точки Qdrant** (chat.py/search.py берут
+  в `search_composite` широкий набор `per_branch_top_k` и режут `merged[:top_k]`):
+  срез по точкам до группировки ронял концепты-сиблинги группы (группа
+  (doc_id, chunk_index) может содержать до ~18 концептов — поля таблицы);
+  сильные bm25-попадания вроде «Перечень: Наименование поля» не доживали до
+  merge. `merge_and_format` эмитит сиблинг-концепты отдельными блоками
+  (kind=concept, свой контент) после первичного блока группы, а итоговый порядок
+  блоков — глобальная сортировка по fused score (иначе сиблинги одной группы
+  вытесняли более релевантные блоки других групп за границу top_k).
+  Анти-шум: `drop_unmatched_blocks` (context_builder, вызывается из chat.py
+  после среза top_k) убирает из контекста и sources блоки с пустым Matched terms,
+  если есть блоки с совпадениями; при полном отсутствии лексических совпадений
+  (парафразный запрос) фильтр отключается. Мотив: модели (включая gpt-4o-mini)
+  стабильно вписывали семантически-смежный блок с пустым маркером в ответ не
+  по теме — промпт-правила против этого вероятностны.
+  Цитаты: LLM обязана ссылаться строго `[N]`, но иногда пишет «блок с ID N» —
+  фронтенд рендерит ссылки только по `[N]`; `services/citation.py` (
+  `normalize_citations`, вызывается из chat.py) детерминированно приводит такие
+  формулировки к `[N]` (числа вне 1..числа блоков не трогает — «блоке 3002» это
+  номер отсутствия, не ссылка).
   Реиндекс нужен только при смене `embedding_dimensions` или sparse-токенайзера.
   **Sparse-текст** (BM25) строится ТОЛЬКО по единой формуле `vector_store._sparse_text`
   (title + content) — свежая индексация и backfill сходятся в ней. До 01.09.2026

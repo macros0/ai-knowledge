@@ -149,6 +149,12 @@ class Settings(BaseSettings):
     embedding_retry_backoff_seconds: float = 2.0
 
     llm_model: str = "ollama/qwen2.5:14b"
+    # Модель интерактивного RAG-чата. Пусто → llm_model (единая модель, не
+    # ломает существующие установки). Чат отвечает пользователю напрямую —
+    # здесь важнее следование инструкциям промпта и синтез нескольких
+    # фрагментов, чем себестоимость; OKF-генерация и пакетные задачи остаются
+    # на дешёвой llm_model.
+    llm_chat_model: str = ""
     llm_base_url: str = "http://localhost:11434"
     llm_api_key: str = "ollama"
     llm_temperature: float = 0.2
@@ -255,8 +261,12 @@ class Settings(BaseSettings):
     # Веса веток: влияют на относительный вклад каждой ветки в fused score.
     # Graph expansion намеренно ниже, чтобы не вытеснять прямые
     # семантические/лексические попадания.
+    # bm25 выше dense: по коротким/аббревиатурным запросам («ЛК», «ЭЛН», коды
+    # полей) dense-ветка даёт плоский шум (все скоры в узкой полосе), а bm25
+    # разделяет точно; перевес не даёт шуму вытеснять лексические попадания.
+    # Полностью query-time: реиндекс не требуется, откат — env SEARCH_RRF_*_WEIGHT.
     search_rrf_dense_weight: float = 1.0
-    search_rrf_bm25_weight: float = 1.0
+    search_rrf_bm25_weight: float = 1.5
     search_rrf_graph_expansion_weight: float = 0.5
 
     # --- Контекст LLM (форматирование после merge/collapse) ---

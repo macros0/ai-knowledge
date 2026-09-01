@@ -42,6 +42,12 @@ def merge_and_format(
     Возвращает список dict с ключами:
       title, content, tags, filepath, doc_id, score, source_filename,
       point_type, chunk_index
+
+    Итоговый порядок — по fused score (убывание): сиблинг-концепты группы
+    эмитятся после первичного блока, но при сортировке занимают место по
+    своему собственному score. Без глобальной сортировки 7 сиблингов одной
+    посредственной группы вытесняли более релевантные блоки других групп
+    за границу top_k.
     """
     if settings is None:
         settings = get_settings()
@@ -130,19 +136,109 @@ def merge_and_format(
             }
         )
 
+        # Сиблинг-концепты группы. Группа (doc_id, chunk_index) может содержать
+        # много концептов (например, 18 полей служебной таблицы для ЛК); раньше
+        # collapse выбрасывал их контент целиком — сильные bm25-попадания
+        # вроде таблицы «Перечень: Наименование поля» не доезжали ни до LLM,
+        # ни до sources. Эмитим каждый доп. концепт-хит отдельным блоком.
+        siblings = concepts_in_group[1:] if concepts_in_group else []
+        for concept in siblings:
+            if total_chars >= settings.chat_max_context_chars:
+                break
+            sibling_content = concept.payload.get("content", "")[: settings.chat_concept_max_chars]
+            if not sibling_content:
+                continue
+            total_chars += len(sibling_content)
+            merged.append(
+                {
+                    "title": concept.payload.get("title", "Без названия"),
+                    "content": sibling_content,
+                    "tags": sorted(concept.payload.get("tags", [])),
+                    "filepath": concept.payload.get("filepath", ""),
+                    "doc_id": doc_id,
+                    "score": concept.score,
+                    "source_filename": source_filename,
+                    "point_type": CONCEPT_TYPE,
+                    "kind": "concept",
+                    "chunk_index": chunk_idx,
+                }
+            )
+
+    # Глобальный порядок по fused score: сиблинг с низким score не должен
+    # стоять выше первичного блока другой группы с более сильным попаданием.
+    # Stable sort сохраняет очерёдность равных (группа остаётся компактной).
+    merged.sort(key=lambda b: b["score"], reverse=True)
     return merged
 
 
-def format_context(merged: list[dict]) -> str:
-    """Форматирует merged-блоки в XML-подобный контекст для LLM."""
+# Служебные слова вопроса, бесполезные как маркер выбора блока. В отличие от
+# стоп-слов BM25 (services/sparse.py) в поиск не вмешиваются — фильтр работает
+# только на этапе подсветки совпадений для LLM. «какие»/«есть» встречаются в
+# почти каждом блоке и без фильтра размывают сигнал Matched terms.
+_MARKER_STOPWORDS = {
+    "какие", "какой", "какая", "каких", "каким", "кто", "где", "когда",
+    "почему", "зачем", "сколько", "есть", "нет", "да", "можно", "нужно",
+    "должен", "должна", "может", "могут", "будет", "быть", "также", "только",
+}
+
+
+def matched_terms(item: dict, query: str | None) -> list[str]:
+    """Значимые термины запроса, буквально встречающиеся в заголовке/тексте блока.
+
+    Тот же токенайзер, что и в BM25 (services/sparse.py), плюс фильтр служебных
+    слов вопроса: совпадение по содержательному термину означает, что блок
+    нашёлся и лексически, не только семантически. Пустой список — блок не
+    содержит терминов вопроса (для LLM это сигнал слабой релевантности,
+    выводится в metadata как Matched terms: []).
+    """
+    if not query:
+        return []
+    from app.services.sparse import tokenize
+
+    haystack = f"{item.get('title', '')}\n{item.get('content', '')}".lower()
+    return [
+        t
+        for t in tokenize(query)
+        if t not in _MARKER_STOPWORDS and t in haystack
+    ]
+
+
+def drop_unmatched_blocks(merged: list[dict], query: str | None) -> list[dict]:
+    """Анти-шумовой pre-filter для чата: убирает блоки без лексического совпадения.
+
+    Модели (даже сильные) стабильно затаскивают в ответ семантически-смежный
+    блок с пустым Matched terms, приписывая ему тему вопроса — промпт-правила
+    этому только вероятностная защита. Детерминированное решение: если хотя
+    бы у одного блока есть совпадение терминов запроса, блоки без совпадений
+    в контекст не попадают вовсе.
+
+    Если совпадений нет ни у одного блока (парафразный запрос — лексики
+    запроса нет в корпусе), фильтр не срабатывает: все блоки остаются,
+    ответ строится по смысловым совпадениям.
+    """
+    if not query or not merged:
+        return merged
+    matched = [bool(matched_terms(m, query)) for m in merged]
+    if not any(matched):
+        return merged
+    return [m for m, has in zip(merged, matched) if has]
+
+
+def format_context(merged: list[dict], query: str | None = None) -> str:
+    """Форматирует merged-блоки в XML-подобный контекст для LLM.
+
+    При заданном query в metadata каждого блока добавляется Matched terms —
+    термины вопроса, найденные в блоке (помощь LLM в выборе релевантных блоков).
+    """
     parts = []
     for i, item in enumerate(merged, start=1):
         tags_str = ", ".join(item.get("tags", []))
         source = item.get("source_filename", "")
         kind = item.get("kind", item.get("point_type", "concept"))
+        terms = matched_terms(item, query)
         parts.append(
             f'<context_block id="{i}">\n'
-            f'  <metadata>Title: {item["title"]} | Type: {kind} | Tags: [{tags_str}] | Source: {source}</metadata>\n'
+            f'  <metadata>Title: {item["title"]} | Type: {kind} | Tags: [{tags_str}] | Source: {source} | Matched terms: [{", ".join(terms)}]</metadata>\n'
             f'  <content>\n{item["content"]}\n  </content>\n'
             f'</context_block>'
         )

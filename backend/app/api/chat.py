@@ -13,8 +13,14 @@ from app.config import get_settings
 from app.models.schemas import ChatRequest, ChatResponse, ChatSource
 from app.prompts.store import get_store
 from app.services import chat_history
+from app.services.citation import normalize_citations
 from app.services.concept_store import enrich_concept_hits
-from app.services.context_builder import format_context, merge_and_format, resolve_branches
+from app.services.context_builder import (
+    drop_unmatched_blocks,
+    format_context,
+    merge_and_format,
+    resolve_branches,
+)
 from app.services.embedder import Embedder
 from app.services.errors import LLMError
 from app.services.llm_client import LLMClient
@@ -56,7 +62,12 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         sparse_vec=sparse_vec,
         tags=req.tags or None,
         branches=branches,
-        top_k=req.top_k,
+        # Берём широкий набор точек (per_branch_top_k): итог режем по БЛОКАМ после
+        # merge (группы (doc_id, chunk_index) + сиблинг-концепты). Срез по точкам
+        # до группировки ронял концепты-сиблинги с более низким fused-рангом
+        # (таблица «Перечень: Наименование поля» при bm25-ранге #5) — они не
+        # доживали до merge и не попадали ни в контекст LLM, ни в sources.
+        top_k=settings.search_per_branch_top_k,
     )
     # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
     # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
@@ -74,7 +85,14 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
 
         filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
         merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)
-        context = format_context(merged)
+        # top_k — число БЛОКОВ в контексте/источниках (группы с сиблингами), не точек.
+        merged = merged[: req.top_k]
+        # Анти-шум: блоки без лексического совпадения с запросом не доходят до
+        # LLM и sources — модели периодически вписывают их в ответ не по теме
+        # (пустой Matched terms игнорируется даже сильными моделями). При
+        # полном отсутствии совпадений (парафразный запрос) фильтр пропускает всё.
+        merged = drop_unmatched_blocks(merged, req.query)
+        context = format_context(merged, query=req.query)
         max_score = max((m["score"] for m in merged), default=0.0)
         sources = []
         for m in merged:
@@ -103,6 +121,9 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             answer = _llm.chat(system, prompt_user)
         except Exception as exc:
             raise LLMError(cause=exc) from exc
+        # LLM иногда пишет «блок с ID 2» вместо [2] — фронтенд рендерит ссылки
+        # только по формату [N]. Нормализуем до отдачи клиенту и записи в историю.
+        answer = normalize_citations(answer, max_index=len(merged))
 
     # Персистентная история (Этап 6): запись не блокирует ответ — сбой БД не
     # роняет чат. session_id привязан к текущему пользователю на стороне сервиса.

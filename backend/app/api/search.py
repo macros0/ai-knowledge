@@ -31,7 +31,10 @@ def search(req: SearchRequest):
         sparse_vec=sparse_vec,
         tags=req.tags or None,
         branches=branches,
-        top_k=req.top_k,
+        # Как в chat.py: берём широкий набор точек, режем по БЛОКАМ после merge —
+        # иначе концепты-сиблинги группы с более низким fused-рангом не доживают
+        # до группировки.
+        top_k=settings.search_per_branch_top_k,
     )
 
     # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
@@ -44,6 +47,8 @@ def search(req: SearchRequest):
 
     filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
     merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)
+    # top_k — число БЛОКОВ (merge-групп с сиблингами), не точек.
+    merged = merged[: req.top_k]
     max_score = max((m["score"] for m in merged), default=0.0)
     result = []
     for m in merged:

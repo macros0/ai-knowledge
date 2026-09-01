@@ -59,11 +59,13 @@ def client(monkeypatch):
     return LLMClient()
 
 
-def _settings():
+def _settings(**overrides):
     from app.config import Settings
 
-    return Settings(
+    kwargs = dict(
         llm_model="openai/test",
+        # Явно нейтрализуем LLM_CHAT_MODEL из .env — тесты герметичны к окружению.
+        llm_chat_model="",
         llm_base_url="http://localhost",
         llm_api_key="key",
         llm_max_concurrency=1,
@@ -78,6 +80,8 @@ def _settings():
         llm_interactive_retry_attempts=3,
         llm_interactive_stream_idle_timeout_seconds=60,
     )
+    kwargs.update(overrides)
+    return Settings(**kwargs)
 
 
 class TestRetries:
@@ -506,3 +510,18 @@ class TestChatJsonTruncationRetry:
         )
         result = client.chat_json("s", "u", doc_id="d", chunk_idx=1)
         assert result[0]["content"] == "строка 1\nстрока 2"
+
+class TestChatModelResolution:
+    """LLM_CHAT_MODEL: интерактивный чат на отдельной модели, bulk — на llm_model."""
+
+    def test_interactive_uses_chat_model(self, monkeypatch):
+        monkeypatch.setattr(llm_module, "get_settings", lambda: _settings(llm_chat_model="openai/strong"))
+        assert LLMClient(interactive=True).model == "openai/strong"
+
+    def test_interactive_falls_back_to_llm_model_when_empty(self, monkeypatch):
+        monkeypatch.setattr(llm_module, "get_settings", lambda: _settings())
+        assert LLMClient(interactive=True).model == "openai/test"
+
+    def test_bulk_ignores_chat_model(self, monkeypatch):
+        monkeypatch.setattr(llm_module, "get_settings", lambda: _settings(llm_chat_model="openai/strong"))
+        assert LLMClient().model == "openai/test"
