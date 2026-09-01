@@ -128,10 +128,12 @@ class Pipeline:
 
         Возвращает финальную запись документа (или текущую по истечении timeout).
         """
+        # Дедлайн считаем ДО join: join сам съедает бюджет ожидания, иначе
+        # wait_for мог ждать до 2×timeout (join полностью + цикл заново).
+        deadline = time.monotonic() + timeout
         thread = self._threads.get(doc_id)
         if thread and thread.is_alive():
-            thread.join(timeout=timeout)
-        deadline = time.monotonic() + timeout
+            thread.join(timeout=max(0.0, deadline - time.monotonic()))
         terminal = {"done", "error", "failed", "paused"}
         while True:
             doc = self.registry.get(doc_id)

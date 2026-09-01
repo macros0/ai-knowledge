@@ -85,6 +85,13 @@ def upload_document(
     max_upload_mb (проверка по факту дочитывания + по объявленному content-length).
     """
     settings = get_settings()
+    # Валидация development_id ДО каких-либо побочных эффектов (файл, хеш,
+    # строка БД, пул тегов): раньше 422 при невалидном id возникал после
+    # сохранения файла и _registry.create — документ-«призрак» навсегда
+    # оставался в статусе uploaded и блокировал повторную загрузку файла
+    # (зарегистрированный file_hash → 409 duplicate).
+    if development_id is not None and get_development_registry().get(development_id) is None:
+        raise HTTPException(status_code=422, detail="Разработка не найдена")
     max_bytes = settings.max_upload_mb * 1024 * 1024
     declared = file.size or 0
     if declared > max_bytes:

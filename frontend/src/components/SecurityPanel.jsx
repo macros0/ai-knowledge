@@ -39,6 +39,14 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleString();
 }
 
+// Защита от CSV-инъекции: значения, начинающиеся с = + - @, Excel трактует как
+// формулы (username/reason — пользовательский ввод). Префикс "'" нейтрализует.
+function csvCell(v) {
+  let s = String(v ?? "");
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
 function exportCsv(entries) {
   const header = ["time", "user_id", "username", "action_type", "target_type", "target_id", "ip_address"];
   const rows = [header.join(",")];
@@ -53,7 +61,7 @@ function exportCsv(entries) {
         e.target_id ?? "",
         e.ip_address ?? "",
       ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .map(csvCell)
         .join(",")
     );
   }
