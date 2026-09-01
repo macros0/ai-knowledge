@@ -1,12 +1,13 @@
 ﻿"""Тесты эндпоинта раздачи вложений/картинок бандла (/okf/attachments/{filename})."""
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
 
-PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+PNG_MAGIC = b"\x89PNG\r\x1a\n"
 
 
 class FakeVectorStore:
@@ -15,6 +16,15 @@ class FakeVectorStore:
 
     def backfill_sparse(self) -> int:
         return 0
+
+
+def make_client(tmp_path: Path, monkeypatch) -> TestClient:
+    settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
+    monkeypatch.setattr("app.api.documents.get_settings", lambda: settings)
+    monkeypatch.setattr("app.config.get_settings", lambda: settings)
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    monkeypatch.setattr("app.main.VectorStore", FakeVectorStore)
+    return TestClient(create_app())
 
 
 class TestOkfAttachmentsEndpoint:
@@ -66,3 +76,60 @@ class TestOkfAttachmentsEndpoint:
             resp = client.get("/api/documents/a1b2c3d4e5f60718/okf/attachments/..%2F..%2Fsecret.txt")
 
         assert resp.status_code == 404
+
+
+class TestDocIdTraversalBlocked:
+    """Все /{doc_id}-роуты обязаны валидировать формат id (16 hex).
+
+    `okf_dir / doc_id` без валидации допускает `..` и абсолютный путь
+    (Windows) — листинг чужого каталога + запись туда `_files.json`
+    (list_okf_files), чтение чужих чанков (list_chunks/fulltext).
+    """
+
+    BAD_IDS = [
+        "..%2f..%2fsecret",      # .. + encoded /
+        "..",                    # голые dot-segments
+        "c%3a%2ftemp%2fx",      # абсолютный путь Windows (C:/temp/x)
+        "aaaaaaaaaaaaaaaaa",    # 17 символов — не hex-16
+        "zzzzzzzzzzzzzzzz",     # не hex
+    ]
+    ENDPOINTS = ["", "/download", "/okf", "/chunks", "/fulltext"]
+
+    @pytest.mark.parametrize("doc_id", BAD_IDS)
+    @pytest.mark.parametrize("suffix", ENDPOINTS)
+    def test_invalid_doc_id_404(self, doc_id, suffix, tmp_path, monkeypatch):
+        (tmp_path / "secret.md").write_text("secret", encoding="utf-8")
+        client = make_client(tmp_path, monkeypatch)
+
+        with client:
+            resp = client.get(f"/api/documents/{doc_id}{suffix}")
+
+        assert resp.status_code == 404, doc_id
+
+    def test_traversal_does_not_write_outside_bundles(self, tmp_path, monkeypatch):
+        """list_okf_files c `..` не должен создавать _files.json в чужом каталоге."""
+        secret_dir = tmp_path / "secret_dir"
+        secret_dir.mkdir()
+        (secret_dir / "leak.md").write_text("---\ntitle: leak\n---\nbody", encoding="utf-8")
+        client = make_client(tmp_path, monkeypatch)
+
+        with client:
+            resp = client.get("/api/documents/..%2fsecret_dir/okf")
+
+        assert resp.status_code == 404
+        assert not (secret_dir / "_files.json").exists()
+
+    def test_valid_doc_id_still_lists_okf(self, tmp_path, monkeypatch):
+        """Регресс: легитимный hex-id проходит валидацию без обращения к БД."""
+        settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
+        bundle = settings.okf_dir / "a1b2c3d4e5f60718"
+        bundle.mkdir(parents=True)
+        (bundle / "concept.md").write_text("---\ntitle: Concept\n---\nbody", encoding="utf-8")
+        client = make_client(tmp_path, monkeypatch)
+
+        with client:
+            resp = client.get("/api/documents/a1b2c3d4e5f60718/okf")
+
+        assert resp.status_code == 200
+        files = resp.json()
+        assert [f["filename"] for f in files] == ["concept.md"]

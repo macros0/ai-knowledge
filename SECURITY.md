@@ -263,6 +263,19 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
 
 ## 7. Журнал security-изменений
 
+### 2026-09-01 — Path traversal в /{doc_id}-роутах раздачи контента
+Изменение: все `GET /documents/{doc_id}`-роуты с доступом к файловой системе
+(`list_okf_files`, `list_chunks`, `get_document_fulltext`) и, для единообразия,
+`get_document`/`download_document` валидируют формат id через `_valid_doc_id`
+(16 hex) до любого обращения к диску. Причина: три эндпоинта были FS-first —
+строили путь `okf_dir / doc_id` до registry-гейта, поэтому id вида `..` или
+абсолютный Windows-путь давали аутентифицированному пользователю листинг
+произвольного каталога `.md`-файлов, чтение чужих чанков и запись
+`_files.json` в произвольный каталог. Registry-first роуты были безопасны, но
+валидация формата — единая дисциплина для всех `{doc_id}`-роутов.
+
+
+
 ### 2026-09-01 — Гонка restore-vs-purge корзины и orphan-хиты поиска
 Изменение: физическая очистка корзины (`pipeline.remove_if_deleted`) начинается
 с атомарного claim'а — удаления строки БД с precondition `deleted_at IS NOT NULL`

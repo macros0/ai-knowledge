@@ -271,6 +271,8 @@ def list_trash(
 
 @router.get("/{doc_id}", response_model=DocumentOut)
 def get_document(doc_id: str):
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
     doc = _registry.get(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
@@ -623,6 +625,8 @@ def bulk_tags(
 
 @router.get("/{doc_id}/download")
 def download_document(doc_id: str):
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
     doc = _registry.get(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
@@ -638,6 +642,11 @@ def download_document(doc_id: str):
 
 @router.get("/{doc_id}/okf", response_model=list[OkfFileOut])
 def list_okf_files(doc_id: str):
+    # FS-first эндпоинт (до registry-гейта) — валидация формата обязательна:
+    # иначе `okf_dir / doc_id` допускает `..`/абсолютный путь (листинг чужого
+    # каталога + запись туда `_files.json`).
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
     bundle_dir = get_settings().okf_dir / doc_id
     manifest_path = bundle_dir / "_files.json"
     if manifest_path.is_file():
@@ -739,6 +748,9 @@ def get_okf_attachment(doc_id: str, filename: str):
 
 @router.get("/{doc_id}/chunks", response_model=list[ChunkOut])
 def list_chunks(doc_id: str):
+    # FS-first: ensure_chunks читает manifest по okf_dir/doc_id до registry-гейта.
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
     try:
         meta = _pipeline.ensure_chunks(doc_id)
     except ValueError as exc:
@@ -767,6 +779,9 @@ def get_chunk(doc_id: str, chunk_index: int):
 
 @router.get("/{doc_id}/fulltext")
 def get_document_fulltext(doc_id: str):
+    # FS-first: как list_chunks — валидация до любого доступа к файловой системе.
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
     try:
         _pipeline.ensure_chunks(doc_id)
     except ValueError as exc:
