@@ -631,7 +631,7 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 
 | Метод | Путь | Описание |
 | :-- | :-- | :-- |
-| POST | `/api/documents` | Загрузка документа (multipart; опц. form-поле `development_id` — пред-привязка разработки, Этап 4a.1, 422 «Разработка не найдена» при несуществующем) |
+| POST | `/api/documents` | Загрузка документа (multipart; опц. form-поле `development_id` — пред-привязка разработки, Этап 4a.1, 422 «Разработка не найдена» при несуществующем). Level-1 дедуп: 409 `code=duplicate` при АКТИВНОМ близнеце; близнец в корзине не блокирует — в ответе информационное `duplicate_in_trash` (осознанное решение, см. SECURITY.md §5) |
 | GET | `/api/documents` | Список документов и статусов (фильтры: `uploader`, `module`, `development_id`/`development_number`, `tag` — exact-match, `problem`, `status`, `date_from`/`date_to`, `search`, `sort`, `limit`/`offset`) |
 | GET | `/api/documents/stats` | Прогресс разметки по активной базе: `{total, with_development}` (Этап 4.1/5) |
 | GET | `/api/documents/{doc_id}` | Статус обработки документа |
@@ -640,7 +640,7 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | DELETE | `/api/documents/{doc_id}` | Мягкое удаление в корзину (роли `editor`/`admin`; документ скрывается, точки Qdrant и файлы помечаются `deleted`, не удаляются — Этап 4a.2) |
 | GET | `/api/documents/trash` | Список корзины: удалённые документы с индикацией срока до автоочистки (`days_left`/`purge_at`/`retention_days`) |
 | POST | `/api/documents/{doc_id}/restore` | Восстановить из корзины без пере-эмбеддинга (роли `editor`/`admin`; `?force=true` пропускает конфликт дедупликации → 409 `code=duplicate`) |
-| POST | `/api/documents/bulk-restore` | Массовое восстановление из корзины (роли `editor`/`admin`, лимит `bulk_tags_max_docs`) |
+| POST | `/api/documents/bulk-restore` | Массовое восстановление из корзины (роли `editor`/`admin`, лимит `bulk_tags_max_docs`; с дедуп-проверкой как у одиночного restore — конфликтующие документы в `conflicts`, восстанавливаются одиночным restore c `?force=true`) |
 | POST | `/api/documents/bulk-preview` | Предпросмотр масштаба массовой операции (роль `admin`) |
 | POST | `/api/documents/bulk-delete` | Массовое удаление в корзину (очередь + four-eyes, роль `admin`) |
 | POST | `/api/documents/bulk-regenerate` | Массовая перегенерация (очередь + rate limit, роль `admin`) |

@@ -34,7 +34,13 @@ from app.models.schemas import (
     UploaderListOut,
 )
 from app.services import audit
-from app.services.deduplication import file_hash_exists, find_duplicates_for_document, set_file_hash, sha256_file
+from app.services.deduplication import (
+    file_hash_exists,
+    file_hash_in_trash,
+    find_duplicates_for_document,
+    set_file_hash,
+    sha256_file,
+)
 from app.services.dev_detector import attach_development, detect
 from app.services.dev_sync import reindex_document_dev_tags, schedule_document_dev_tags_sync
 from app.services.development_registry import get_development_registry
@@ -100,6 +106,7 @@ def upload_document(
     # Дедупликация, уровень 1: точное совпадение байтов (SHA-256 файла).
     settings = get_settings()
     file_hash = None
+    trash_twin: dict | None = None
     if settings.dedup_enabled:
         file_hash = sha256_file(_dest)
         existing = file_hash_exists(file_hash)
@@ -113,6 +120,9 @@ def upload_document(
                     "duplicate": existing,
                 },
             )
+        # Близнец в корзине НЕ блокирует загрузку (осознанное решение,
+        # см. deduplication.file_hash_exists) — информационно для тоста.
+        trash_twin = file_hash_in_trash(file_hash)
 
     user_tags = normalize_tags(tags)
     _tag_registry.add(user_tags)
@@ -153,6 +163,11 @@ def upload_document(
     audit_value = {"filename": doc.get("filename"), "size": size}
     if bound_development_id is not None:
         audit_value["development_id"] = bound_development_id
+    if trash_twin is not None:
+        audit_value["duplicate_in_trash"] = {
+            "id": trash_twin.get("id"),
+            "filename": trash_twin.get("filename"),
+        }
     audit.record(
         user,
         audit.DOCUMENT_UPLOAD,
@@ -161,6 +176,9 @@ def upload_document(
         new_value=audit_value,
         ip_address=_client_ip(request),
     )
+    if trash_twin is not None:
+        doc = dict(doc)
+        doc["duplicate_in_trash"] = trash_twin
     return doc
 
 

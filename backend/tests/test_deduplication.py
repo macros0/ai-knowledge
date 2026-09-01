@@ -3,6 +3,8 @@ from app.services.deduplication import (
     banding_schemes,
     bucket_hash,
     content_hash,
+    file_hash_exists,
+    file_hash_in_trash,
     find_duplicates_for_document,
     index_document,
     jaccard,
@@ -106,3 +108,46 @@ class TestDuplicateSummarySerialization:
         assert existing is not None
         json.dumps(existing)  # не должен бросать TypeError (Object of type datetime)
         assert isinstance(existing["created_at"], str)
+
+
+class TestTrashTwinPolicy:
+    """Осознанное решение 2026-09-01 (SECURITY.md §5): близнец в корзине
+    не блокирует загрузку (file_hash_exists — только активные), а кандидаты
+    дедупликации не загрязняются документами из корзины."""
+
+    def _twin_docs(self):
+        reg = get_registry()
+        reg.create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10)
+        reg.create("bbbbbbbbbbbbbbbb", "b.docx", "x", 10)
+        get_registry().update("bbbbbbbbbbbbbbbb", file_hash="hash-1")
+        return "hash-1"
+
+    def test_file_hash_exists_ignores_trash(self):
+        file_hash = self._twin_docs()
+        get_registry().soft_delete("bbbbbbbbbbbbbbbb", "u1")
+        assert file_hash_exists(file_hash) is None
+        assert file_hash_in_trash(file_hash)["id"] == "bbbbbbbbbbbbbbbb"
+
+        # Вернули из корзины — снова блокирует.
+        get_registry().restore("bbbbbbbbbbbbbbbb")
+        assert file_hash_exists(file_hash)["id"] == "bbbbbbbbbbbbbbbb"
+
+    def test_file_hash_in_trash_none_for_active(self):
+        self._twin_docs()
+        assert file_hash_in_trash("hash-1") is None
+        assert file_hash_exists("hash-1")["id"] == "bbbbbbbbbbbbbbbb"
+
+    def test_find_duplicates_excludes_trash(self):
+        reg = get_registry()
+        reg.create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10)
+        reg.create("bbbbbbbbbbbbbbbb", "b.docx", "x", 10)
+        reg.create("cccccccccccccccc", "c.docx", "x", 10)
+        index_document("aaaaaaaaaaaaaaaa", TEXT_A)
+        index_document("bbbbbbbbbbbbbbbb", TEXT_A)
+        index_document("cccccccccccccccc", TEXT_A)
+        reg.soft_delete("cccccccccccccccc", "u1")
+
+        result = find_duplicates_for_document("aaaaaaaaaaaaaaaa")
+        ids = [it["doc"]["id"] for it in result["level2"]]
+        assert "bbbbbbbbbbbbbbbb" in ids
+        assert "cccccccccccccccc" not in ids

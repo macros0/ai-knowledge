@@ -268,3 +268,93 @@ class TestRegistry:
         reg.create("2222222222222222", "b.pdf", "application/pdf", 1, uploaded_by="u2")
         reg.soft_delete("2222222222222222", "u2")
         assert reg.distinct_uploaders() == ["u1"]
+
+
+class TestBulkRestoreDedup:
+    """bulk_restore не должен обходить дедуп-проверку одиночного restore (Этап 4a.2)."""
+
+    def test_bulk_restore_conflict_skips_doc(self, client, monkeypatch):
+        from app.services import trash as trash_mod
+
+        login(client)
+        no_qdrant(monkeypatch)
+        reg = DocumentRegistry()
+        for did in ("1111111111111111", "2222222222222222"):
+            reg.create(did, f"{did}.pdf", "application/pdf", 1)
+            reg.soft_delete(did, "demo.admin")
+        monkeypatch.setattr(
+            trash_mod,
+            "find_active_duplicates_for_document",
+            lambda did: (
+                {"level2": [{"doc": {"id": "x", "filename": "twin.pdf"}}], "level3": []}
+                if did == "1111111111111111"
+                else {"level2": [], "level3": []}
+            ),
+        )
+
+        resp = client.post(
+            "/api/documents/bulk-restore",
+            json={"doc_ids": ["1111111111111111", "2222222222222222"]},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["restored"] == ["2222222222222222"]
+        assert data["conflicts"][0]["doc_id"] == "1111111111111111"
+        assert data["conflicts"][0]["duplicates"]["level2"]
+        # Конфликтный документ остался в корзине.
+        assert reg.get("1111111111111111")["deleted_at"] is not None
+        assert reg.get("2222222222222222")["deleted_at"] is None
+
+
+class TestUploadWithDedup:
+    """Level-1 дедуп на API-пути: активный близнец блокирует (409), близнец в
+    корзине — нет (осознанное решение 2026-09-01) + информационное поле."""
+
+    def _upload(self, tmp_path, monkeypatch, *, twin_in_trash):
+        from app.api import documents as docs
+        from app.services.deduplication import sha256_bytes
+
+        client = make_client(tmp_path, monkeypatch, dedup_enabled=True)
+        login(client)
+        reg = DocumentRegistry()
+        reg.create("1111111111111111", "old.pdf", "application/pdf", 10)
+        reg.update("1111111111111111", file_hash=sha256_bytes(b"%PDF-1.4"))
+        if twin_in_trash:
+            reg.soft_delete("1111111111111111", "demo.admin")
+
+        dest = tmp_path / "0123456789abcdef.pdf"
+        dest.write_bytes(b"%PDF-1.4")
+        monkeypatch.setattr(
+            docs, "save_upload_stream", lambda *a, **k: ("0123456789abcdef", dest, 8)
+        )
+        monkeypatch.setattr(docs._pipeline, "ingest", lambda *a, **k: None)
+        return client, dest
+
+    def test_upload_active_twin_409_and_cleanup(self, tmp_path, monkeypatch):
+        client, dest = self._upload(tmp_path, monkeypatch, twin_in_trash=False)
+
+        resp = client.post(
+            "/api/documents", files={"file": ("new.pdf", b"%PDF-1.4", "application/pdf")}
+        )
+        assert resp.status_code == 409, resp.text
+        data = resp.json()
+        assert data["code"] == "duplicate"
+        assert data["duplicate"]["id"] == "1111111111111111"
+        # Файл-заготовка удалена (не остаётся мусора).
+        assert not dest.exists()
+
+    def test_upload_trash_twin_allowed_with_info(self, tmp_path, monkeypatch):
+        client, dest = self._upload(tmp_path, monkeypatch, twin_in_trash=True)
+
+        resp = client.post(
+            "/api/documents", files={"file": ("new.pdf", b"%PDF-1.4", "application/pdf")}
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["id"] == "0123456789abcdef"
+        assert data["duplicate_in_trash"]["id"] == "1111111111111111"
+        assert data["duplicate_in_trash"]["filename"] == "old.pdf"
+
+        # Информация о близнеце — и в audit-записи document_upload.
+        entries = AuditService().query(action_type=audit.DOCUMENT_UPLOAD)
+        assert entries[0]["new_value"]["duplicate_in_trash"]["id"] == "1111111111111111"

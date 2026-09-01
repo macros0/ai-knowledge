@@ -44,10 +44,17 @@ export default function UploadZone({ tags = [], developmentId = null, onUploaded
     setBusy(true);
     const failed = [];
     let duplicateInfo = null;
+    let uploadedCount = 0;
+    const trashTwins = [];
     try {
       for (const file of supported) {
         try {
-          await uploadDocument(file, tags, { developmentId });
+          const doc = await uploadDocument(file, tags, { developmentId });
+          uploadedCount += 1;
+          // Близнец файла в корзине не блокирует загрузку — информационный тост.
+          if (doc?.duplicate_in_trash) {
+            trashTwins.push({ file: file.name, twin: doc.duplicate_in_trash });
+          }
         } catch (err) {
           if (err.code === "duplicate") {
             duplicateInfo = { file: file.name, existing: err.data?.duplicate };
@@ -62,13 +69,22 @@ export default function UploadZone({ tags = [], developmentId = null, onUploaded
 
     if (duplicateInfo) {
       setDuplicate(duplicateInfo);
+      if (uploadedCount > 0) {
+        showToast(`Загружено до повтора-дубликата: ${uploadedCount}`, { type: "success" });
+        onUploaded?.();
+      }
       return;
     }
 
-    const uploadedCount = supported.length - failed.length;
     if (uploadedCount > 0) {
       showToast(`Загружено файлов: ${uploadedCount}`, { type: "success" });
       onUploaded?.();
+    }
+    for (const { file, twin } of trashTwins) {
+      showToast(
+        `У «${file}» есть похожий документ в корзине: «${twin.filename}» (не мешает загрузке)`,
+        { type: "warning", duration: 8000 }
+      );
     }
     if (skipped.length > 0) {
       showToast(`Пропущено (неподдерживаемый формат): ${skipped.join(", ")}`, {

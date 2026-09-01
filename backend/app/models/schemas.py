@@ -33,6 +33,9 @@ class DocumentOut(BaseModel):
     dev_tags_sync_pending: bool = False
     # Есть почти-дубликаты (уровень 2/3 дедупликации).
     has_duplicates: bool = False
+    # Не None — у загруженного файла есть близнец (SHA-256) в корзине: загрузка
+    # разрешена (близнец не блокирует), информация — для тоста пользователю.
+    duplicate_in_trash: dict[str, Any] | None = None
     # Корзина (Этап 4a.2): не None — документ удалён и находится в корзине.
     deleted_at: datetime | None = None
     deleted_by: str | None = None

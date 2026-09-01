@@ -80,9 +80,17 @@ export default function TrashPanel() {
     try {
       const res = await bulkRestoreDocuments(selectedIds);
       const n = res?.restored?.length ?? 0;
+      const conflicts = res?.conflicts ?? [];
       showToast(n > 0 ? `Восстановлено документов: ${n}` : "Нет документов для восстановления", {
         type: n > 0 ? "success" : "warning",
       });
+      if (conflicts.length > 0) {
+        showToast(
+          `Конфликт дедупликации: ${conflicts.length} — уже есть похожий активный документ. ` +
+            "Восстановите его по одному и подтвердите с пропуском проверки.",
+          { type: "warning", duration: 10000 }
+        );
+      }
       setSelected({});
       load();
     } catch (err) {

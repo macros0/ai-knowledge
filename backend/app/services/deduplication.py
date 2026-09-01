@@ -112,10 +112,30 @@ def _summarize(doc: Document) -> dict:
 
 
 def file_hash_exists(file_hash: str) -> dict | None:
-    """Level 1: документ с тем же SHA-256 байтов файла уже существует."""
+    """Level 1: АКТИВНЫЙ документ с тем же SHA-256 байтов файла уже существует.
+
+    Близнец в корзине НЕ блокирует загрузку (осознанное решение 2026-09-01,
+    см. SECURITY.md §5): пользователь не должен зависеть от невидимого ему
+    состояния чужой корзины; конфликт версий решится при восстановлении
+    (restore с дедуп-проверкой). Информационно близнец в корзине доступен
+    отдельно — file_hash_in_trash.
+    """
     with session_scope() as s:
         doc = s.execute(
-            select(Document).where(Document.file_hash == file_hash)
+            select(Document).where(
+                Document.file_hash == file_hash, Document.deleted_at.is_(None)
+            )
+        ).scalars().first()
+        return _summarize(doc) if doc else None
+
+
+def file_hash_in_trash(file_hash: str) -> dict | None:
+    """Близнец по SHA-256, лежащий в корзине (информационно, не блокирует)."""
+    with session_scope() as s:
+        doc = s.execute(
+            select(Document).where(
+                Document.file_hash == file_hash, Document.deleted_at.isnot(None)
+            )
         ).scalars().first()
         return _summarize(doc) if doc else None
 
@@ -198,8 +218,15 @@ def find_duplicates_for_document(doc_id: str) -> dict:
     votes: dict[str, dict[str, int]] = {}
     seen: set[str] = set()
     with session_scope() as s:
+        # Документы в корзине не загрязняют список дубликатов и флаг
+        # has_duplicates: их близнец в корзине — невидимое для пользователя
+        # состояние (осознанное решение, см. file_hash_exists).
         exact_docs = s.execute(
-            select(Document).where(Document.content_hash == ch, Document.id != doc_id)
+            select(Document).where(
+                Document.content_hash == ch,
+                Document.id != doc_id,
+                Document.deleted_at.is_(None),
+            )
         ).scalars().all()
         for d in exact_docs:
             result["level2"].append({"doc": _summarize(d), "jaccard": 1.0})
@@ -230,8 +257,8 @@ def find_duplicates_for_document(doc_id: str) -> dict:
             continue
         jac = jaccard(sig, other_sig)
         summary = _get_summary(other_id)
-        if summary is None:
-            continue
+        if summary is None or summary.get("deleted_at"):
+            continue  # отсутствует в БД (гонка purge) или в корзине
         if jac >= settings.dedup_jaccard_strict_threshold:
             result["level2"].append({"doc": summary, "jaccard": round(jac, 4)})
         elif jac >= settings.dedup_jaccard_loose_threshold:

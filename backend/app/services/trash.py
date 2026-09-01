@@ -78,18 +78,27 @@ def restore_document(doc_id: str, user, ip_address: str | None = None, *, force:
 def bulk_restore(doc_ids: list[str], user, ip_address: str | None = None) -> dict:
     """Массовое восстановление из корзины (симметрично массовому удалению).
 
-    Без проверки дедупликации (массовый сценарий). Пропускает отсутствующие и
-    не-удалённые документы. Каждый восстановленный — отдельная запись в audit.
+    С дедуп-проверкой против АКТИВНЫХ документов — как одиночный restore
+    (раньше bulk-путь обходил 409-конфликт дедупликации; регресс-защита Этапа
+    4a.2). Конфликтующие документы НЕ восстанавливаются — попадают в
+    `conflicts` с кандидатами; восстановить такой можно одиночным restore
+    c `?force=true`. Пропускает отсутствующие и не-удалённые. Каждый
+    восстановленный — отдельная запись в audit.
     """
     from app.services.pipeline import Pipeline
 
     pipeline = Pipeline()
     restored: list[str] = []
     skipped: list[str] = []
+    conflicts: list[dict] = []
     for doc_id in doc_ids:
         doc = _registry.get(doc_id)
         if doc is None or doc.get("deleted_at") is None:
             skipped.append(doc_id)
+            continue
+        dup = find_active_duplicates_for_document(doc_id)
+        if dup["level2"] or dup["level3"]:
+            conflicts.append({"doc_id": doc_id, "duplicates": dup})
             continue
         pipeline.restore(doc_id)
         audit.record(
@@ -100,7 +109,7 @@ def bulk_restore(doc_ids: list[str], user, ip_address: str | None = None) -> dic
             ip_address=ip_address,
         )
         restored.append(doc_id)
-    return {"restored": restored, "skipped": skipped}
+    return {"restored": restored, "skipped": skipped, "conflicts": conflicts}
 
 
 def purge_expired_documents() -> int:
