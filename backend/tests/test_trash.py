@@ -167,8 +167,9 @@ class TestPurge:
         removed = []
 
         class _FakePipeline:
-            def remove(self, doc_id):
+            def remove_if_deleted(self, doc_id):
                 removed.append(doc_id)
+                return True
 
         monkeypatch.setattr("app.services.pipeline.Pipeline", _FakePipeline)
 
@@ -190,13 +191,58 @@ class TestPurge:
         removed = []
 
         class _FakePipeline:
-            def remove(self, doc_id):
+            def remove_if_deleted(self, doc_id):
                 removed.append(doc_id)
+                return True
 
         monkeypatch.setattr("app.services.pipeline.Pipeline", _FakePipeline)
 
         assert trash.purge_expired_documents() == 0
         assert removed == []
+
+    def test_purge_skips_doc_restored_during_purge(self, client, monkeypatch):
+        """Гонка restore-vs-purge (реальный Pipeline): документ, восстановленный
+        между purge_expired() и claim'ом, переживает очистку — файлы/БД/audit целы."""
+        login(client)
+        reg = DocumentRegistry()
+        reg.create("1111111111111111", "x.pdf", "application/pdf", 1)
+        reg.soft_delete("1111111111111111", "demo.admin")
+        with session_scope() as s:
+            doc = s.get(Document, "1111111111111111")
+            doc.deleted_at = datetime.now(timezone.utc) - timedelta(days=30)
+
+        monkeypatch.setattr(
+            "app.services.vector_store.VectorStore.delete_document",
+            lambda self, doc_id: None,
+        )
+        # Симулируем TOCTOU-окно: purge_expired уже вернул id, но документ восстановили.
+        monkeypatch.setattr(
+            DocumentRegistry, "purge_expired", lambda self, cutoff: ["1111111111111111"]
+        )
+        reg.restore("1111111111111111")
+
+        assert trash.purge_expired_documents() == 0
+        # Документ жив: строка БД на месте.
+        assert reg.get("1111111111111111") is not None
+        # Автоудаление не залогировано.
+        assert AuditService().query(action_type=audit.DOCUMENT_AUTO_DELETE) == []
+
+    def test_registry_delete_if_deleted_guard(self, client, monkeypatch):
+        login(client)
+        reg = DocumentRegistry()
+        reg.create("1111111111111111", "x.pdf", "application/pdf", 1)
+
+        # Активный документ не удаляется (гонка restore).
+        assert reg.delete_if_deleted("1111111111111111") is False
+        assert reg.get("1111111111111111") is not None
+
+        # Несуществующий — тоже False.
+        assert reg.delete_if_deleted("deadbeefdeadbeef") is False
+
+        # В корзине — удаляется вместе с дочерними строками.
+        reg.soft_delete("1111111111111111", "demo.admin")
+        assert reg.delete_if_deleted("1111111111111111") is True
+        assert reg.get("1111111111111111") is None
 
 
 class TestRegistry:

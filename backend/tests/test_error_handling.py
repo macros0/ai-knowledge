@@ -77,6 +77,10 @@ def test_llm_error_returns_503_with_llm_service(client, monkeypatch):
     """LLM RuntimeError оборачивается в LLMError в chat.py → 503 dependency_unavailable."""
     from app.api import chat as chat_module
     from app.services.fusion import Hit
+    from app.services.registry import DocumentRegistry
+
+    # Хит ссылается на документ — DB-side фильтр видимости отсекает orphan-хиты.
+    DocumentRegistry().create("0123456789abcdef", "a.pdf", "application/pdf", 1)
 
     def raise_runtime(system, user, **kw):
         raise RuntimeError("OpenRouter 502")
@@ -110,6 +114,10 @@ def test_generic_exception_returns_500_with_russian_message(client, monkeypatch)
     """Необработанная ошибка (не DependencyUnavailableError) → 500 с code=internal_error."""
     from app.api import chat as chat_module
     from app.services.fusion import Hit
+    from app.services.registry import DocumentRegistry
+
+    # Хит ссылается на документ — DB-side фильтр видимости отсекает orphan-хиты.
+    DocumentRegistry().create("0123456789abcdef", "a.pdf", "application/pdf", 1)
 
     chunk_hit = Hit(
         point_id="chunk-1",

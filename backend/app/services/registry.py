@@ -374,6 +374,27 @@ class DocumentRegistry:
             s.delete(doc)
             return True
 
+    def delete_if_deleted(self, doc_id: str) -> bool:
+        """Физически удаляет документ из БД ТОЛЬКО если он в корзине.
+
+        Атомарная защита restore-vs-purge (Этап 4a.2): строка лочится
+        (FOR UPDATE на Postgres) и проверяется внутри той же транзакции,
+        поэтому восстановление, случившееся между `purge_expired()` и этим
+        вызовом, детектится здесь — документ переживает очистку (возврат
+        False). На SQLite FOR UPDATE нет, но пишет она сериализованно.
+        """
+        with session_scope() as s:
+            stmt = select(Document).where(Document.id == doc_id)
+            if s.bind.dialect.name == "postgresql":
+                stmt = stmt.with_for_update()
+            doc = s.execute(stmt).scalar_one_or_none()
+            if doc is None or doc.deleted_at is None:
+                return False
+            for model in (OkfConcept, OkfAttachment, DocumentStaging, DocumentTag, DocumentLshBucket):
+                s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
+            s.delete(doc)
+            return True
+
     def soft_delete(self, doc_id: str, deleted_by: str | None = None) -> bool:
         """Помечает документ удалённым (корзина, Этап 4a.2), не удаляя данные."""
         with session_scope() as s:

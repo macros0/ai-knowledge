@@ -18,7 +18,7 @@ from app.services.context_builder import format_context, merge_and_format, resol
 from app.services.embedder import Embedder
 from app.services.errors import LLMError
 from app.services.llm_client import LLMClient
-from app.services.registry import get_registry
+from app.services.search_filter import build_doc_lookup, drop_invisible_hits
 from app.services.sparse import to_sparse_vector
 from app.services.vector_store import VectorStore
 
@@ -58,15 +58,11 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         branches=branches,
         top_k=req.top_k,
     )
-    # Defense-in-depth к Qdrant-фильтру `must_not deleted`: отсекает хиты, чей
-    # документ удалён в БД, но payload ещё не синхронизирован (гонка софт-делита).
-    reg = get_registry()
-    doc_lookup = {
-        did: reg.get(did)
-        for did in {h.payload.get("doc_id", "") for h in hits}
-        if did
-    }
-    hits = [h for h in hits if not (doc_lookup.get(h.payload.get("doc_id", "")) or {}).get("deleted_at")]
+    # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
+    # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
+    # и orphan-точки (документа нет в БД — восстановлен во время purge или сбой).
+    doc_lookup = build_doc_lookup(hits)
+    hits = drop_invisible_hits(hits, doc_lookup)
     # Короткое замыкание (Этап 4a.1): при нуле хитов не зовём LLM — ответ
     # без источников формируется здесь, фронтенд по пустому `sources` покажет
     # переход «загрузить документ» при активном фильтре модуля/разработки.

@@ -9,7 +9,7 @@ from app.models.schemas import SearchHit, SearchRequest, SearchResponse
 from app.services.concept_store import enrich_concept_hits
 from app.services.context_builder import merge_and_format, resolve_branches
 from app.services.embedder import Embedder
-from app.services.registry import get_registry
+from app.services.search_filter import build_doc_lookup, drop_invisible_hits
 from app.services.sparse import to_sparse_vector
 from app.services.vector_store import VectorStore
 
@@ -34,15 +34,11 @@ def search(req: SearchRequest):
         top_k=req.top_k,
     )
 
-    reg = get_registry()
-    doc_lookup = {
-        did: reg.get(did)
-        for did in {h.payload.get("doc_id", "") for h in hits}
-        if did
-    }
-    # Defense-in-depth к Qdrant-фильтру `must_not deleted`: отсекает хиты, чей
-    # документ удалён в БД, но payload ещё не синхронизирован (гонка софт-делита).
-    hits = [h for h in hits if not (doc_lookup.get(h.payload.get("doc_id", "")) or {}).get("deleted_at")]
+    # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
+    # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
+    # и orphan-точки (документа нет в БД — восстановлен во время purge или сбой).
+    doc_lookup = build_doc_lookup(hits)
+    hits = drop_invisible_hits(hits, doc_lookup)
 
     enrich_concept_hits(hits)
 

@@ -451,13 +451,8 @@ class Pipeline:
             )
         self.registry.restore(doc_id)
 
-    def remove(self, doc_id: str) -> None:
-        event = self._abort_events.get(doc_id)
-        if event:
-            event.set()
-        thread = self._threads.get(doc_id)
-        if thread and thread.is_alive():
-            thread.join(timeout=2.0)
+    def _physical_cleanup(self, doc_id: str) -> None:
+        """Удаляет точки Qdrant, файлы и staging (без строки БД)."""
         try:
             self.vector_store.delete_document(doc_id)
         except Exception as exc:
@@ -472,7 +467,36 @@ class Pipeline:
         StagingStore(doc_id).remove()
         for f in self.settings.uploads_dir.glob(f"{doc_id}.*"):
             f.unlink(missing_ok=True)
+
+    def remove(self, doc_id: str) -> None:
+        event = self._abort_events.get(doc_id)
+        if event:
+            event.set()
+        thread = self._threads.get(doc_id)
+        if thread and thread.is_alive():
+            thread.join(timeout=2.0)
+        self._physical_cleanup(doc_id)
         self.registry.delete(doc_id)
+
+    def remove_if_deleted(self, doc_id: str) -> bool:
+        """Физическое удаление с precondition «документ в корзине» (для purge).
+
+        Сначала атомарно удаляет строку БД (registry.delete_if_deleted): если
+        документ успели восстановить после purge_expired() — возвращает False,
+        не трогая точки/файлы. Удаление строки БД первым — осознанное: поиск
+        отсекает хиты с doc_id, отсутствующим в БД (services/search_filter.py),
+        поэтому между удалением строки и физической чисткой утекать нечему.
+        """
+        event = self._abort_events.get(doc_id)
+        if event:
+            event.set()
+        thread = self._threads.get(doc_id)
+        if thread and thread.is_alive():
+            thread.join(timeout=2.0)
+        if not self.registry.delete_if_deleted(doc_id):
+            return False
+        self._physical_cleanup(doc_id)
+        return True
 
     def ensure_chunks(self, doc_id: str) -> list[dict]:
         """Возвращает мету чанков документа, при необходимости строя их из исходника.

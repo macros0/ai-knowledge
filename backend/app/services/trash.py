@@ -122,7 +122,15 @@ def purge_expired_documents() -> int:
     for doc_id in doc_ids:
         doc = _registry.get(doc_id)
         try:
-            pipeline.remove(doc_id)
+            # Claim-first (pipeline.remove_if_deleted): строка БД удаляется
+            # атомарно с precondition deleted_at IS NOT NULL. Если документ
+            # успели восстановить после purge_expired() — он переживает очистку.
+            if not pipeline.remove_if_deleted(doc_id):
+                logger.info(
+                    "Автоочистка корзины: документ %s восстановлен во время очистки — пропущен",
+                    doc_id,
+                )
+                continue
             removed += 1
         except Exception:
             logger.warning("Автоочистка корзины: не удалось удалить %s", doc_id, exc_info=True)
