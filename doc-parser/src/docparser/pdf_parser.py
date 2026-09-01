@@ -24,9 +24,17 @@ _FORMAT_EXT = {
 # Параметры рендера страниц-сканов (фолбэк PyMuPDF для JBIG2 и т.п.).
 _RENDER_DPI = 150
 _RENDER_JPEG_QUALITY = 80
+# Анти-DoS (2026-09-01): скан на тысячи пустых страниц не рендерим целиком —
+# каждое изображение это ~1-2 МБ JPEG на диск. Текст извлекается со всех страниц.
+_RENDER_PAGE_LIMIT = 200
 
 
-def parse_pdf(path: str | Path, attachments_dir: str | Path | None = None) -> list[Block]:
+def parse_pdf(
+    path: str | Path,
+    attachments_dir: str | Path | None = None,
+    depth: int = 0,
+    budget=None,
+) -> list[Block]:
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
@@ -34,6 +42,8 @@ def parse_pdf(path: str | Path, attachments_dir: str | Path | None = None) -> li
     image_count = 0
     total_pages = len(reader.pages)
     render_doc = None
+    rendered_pages = 0
+    render_limit_warned = False
     try:
         for i, page in enumerate(reader.pages, start=1):
             text = page.extract_text() or ""
@@ -66,8 +76,17 @@ def parse_pdf(path: str | Path, attachments_dir: str | Path | None = None) -> li
             if not page_images and not text.strip():
                 if attachments_dir is None:
                     continue
+                if rendered_pages >= _RENDER_PAGE_LIMIT:
+                    if not render_limit_warned:
+                        render_limit_warned = True
+                        logger.warning(
+                            "PDF %s: рендер сканов ограничен %d страницами (всего %d) — остальные пропущены",
+                            path, _RENDER_PAGE_LIMIT, total_pages,
+                        )
+                    continue
                 if render_doc is None:
                     render_doc = _open_render_doc(path)
+                rendered_pages += 1
                 saved = _render_page_image(render_doc, i - 1, attachments_dir, image_count)
                 image_count += 1
                 if i == 1 or i % 50 == 0 or i == total_pages:
@@ -90,7 +109,9 @@ def parse_pdf(path: str | Path, attachments_dir: str | Path | None = None) -> li
                 pass
 
     for idx, (name, data) in enumerate(_attachments(reader)):
-        blocks.extend(process_embedded(data, name, "", "", attachments_dir, idx))
+        blocks.extend(
+            process_embedded(data, name, "", "", attachments_dir, idx, depth=depth + 1, budget=budget)
+        )
 
     return blocks
 

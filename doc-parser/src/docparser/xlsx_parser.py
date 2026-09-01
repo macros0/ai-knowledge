@@ -8,7 +8,12 @@ from docparser.blocks import Block
 from docparser.embedded import process_embedded
 
 
-def parse_xlsx(path: str | Path, attachments_dir: str | Path | None = None) -> list[Block]:
+def parse_xlsx(
+    path: str | Path,
+    attachments_dir: str | Path | None = None,
+    depth: int = 0,
+    budget=None,
+) -> list[Block]:
     wb = load_workbook(str(path), read_only=True, data_only=True)
     blocks: list[Block] = []
     try:
@@ -21,7 +26,7 @@ def parse_xlsx(path: str | Path, attachments_dir: str | Path | None = None) -> l
         wb.close()
 
     for idx, (name, data) in enumerate(_embedded_files(path)):
-        blocks.extend(process_embedded(data, name, "", "", attachments_dir, idx))
+        blocks.extend(process_embedded(data, name, "", "", attachments_dir, idx, depth=depth + 1, budget=budget))
 
     return blocks
 

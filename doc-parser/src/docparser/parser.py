@@ -19,13 +19,22 @@ def parse_document(
     path: str | Path,
     filename: str | None = None,
     attachments_dir: str | Path | None = None,
+    depth: int = 0,
+    budget=None,
 ) -> list[Block]:
+    """depth — уровень вложенности (0 = документ верхнего уровня), budget —
+    кумулятивный лимит распакованных вложений (docparser.embedded.AttachmentBudget);
+    оба создаются здесь, если не заданы, и пробрасываются в рекурсию."""
     filename = filename or Path(path).name
     ext = Path(filename).suffix.lower()
+    if budget is None:
+        from docparser.embedded import AttachmentBudget
+
+        budget = AttachmentBudget()
     if ext == ".docx":
-        return parse_docx(path, attachments_dir=attachments_dir)
+        return parse_docx(path, attachments_dir=attachments_dir, depth=depth, budget=budget)
     if ext == ".xlsx":
-        return parse_xlsx(path, attachments_dir=attachments_dir)
+        return parse_xlsx(path, attachments_dir=attachments_dir, depth=depth, budget=budget)
     if ext == ".pdf":
-        return parse_pdf(path, attachments_dir=attachments_dir)
+        return parse_pdf(path, attachments_dir=attachments_dir, depth=depth, budget=budget)
     raise ParseError(f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}")

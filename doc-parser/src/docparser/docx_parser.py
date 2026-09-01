@@ -37,7 +37,12 @@ MONO_FONTS = {
 }
 
 
-def parse_docx(path: str | Path, attachments_dir: str | Path | None = None) -> list[Block]:
+def parse_docx(
+    path: str | Path,
+    attachments_dir: str | Path | None = None,
+    depth: int = 0,
+    budget=None,
+) -> list[Block]:
     from docx import Document
     from docx.oxml.ns import qn
     from docx.table import Table
@@ -92,7 +97,12 @@ def parse_docx(path: str | Path, attachments_dir: str | Path | None = None) -> l
             for idx, ole in enumerate(_find_ole_objects(child)):
                 att = _resolve_ole_attachment(doc, ole)
                 if att is not None:
-                    blocks.extend(process_embedded(att.data, att.name, att.prog_id, att.caption, attachments_dir, idx))
+                    blocks.extend(
+                        process_embedded(
+                            att.data, att.name, att.prog_id, att.caption,
+                            attachments_dir, idx, depth=depth + 1, budget=budget,
+                        )
+                    )
 
             image_count = _emit_inline_images(blocks, doc, child, attachments_dir, image_count)
 
