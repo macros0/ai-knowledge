@@ -39,15 +39,12 @@ class ChatOwnershipError(Exception):
     """Попытка обратиться к чужому треду (session_id принадлежит другому user_id)."""
 
 
-class _SystemUser:
-    """Прокси-«пользователь» для аудита автоочистки истории (системное действие)."""
-
-    user_id = "system"
-    username = "system"
+class ChatSessionDeletedError(Exception):
+    """Передан session_id уже удалённого (в корзине) треда — повторное использование запрещено."""
 
 
 def is_valid_session_id(value: str) -> bool:
-    """Проверяет, что строка — канонический UUID (клиентский session_id)."""
+    """Проверяет, что строка — канонический UUID (session_id, порождаемый бэкендом)."""
     if not value:
         return False
     try:
@@ -74,6 +71,25 @@ def _session_to_dict(s: ChatSession, message_count: int | None = None) -> dict:
     }
 
 
+def check_session_state(session_id: str, user_id: str | None) -> None:
+    """Ранняя проверка состояния треда перед тяжёлой работой (Этап 6, 1.1).
+
+    Бросает ChatOwnershipError (чужая сессия) / ChatSessionDeletedError (в корзине),
+    чтобы не тратить дорогой LLM-вызов на запрос, чей результат всё равно не
+    сохранится. Несуществующий session_id — не ошибка (store_turn создаст сессию).
+    """
+    with session_scope() as s:
+        sess = s.get(ChatSession, session_id)
+        if sess is None:
+            return
+        owner = sess.user_id
+        deleted_at = sess.deleted_at
+    if user_id is not None and owner != user_id:
+        raise ChatOwnershipError("Сессия принадлежит другому пользователю")
+    if deleted_at is not None:
+        raise ChatSessionDeletedError("Сессия удалена")
+
+
 def store_turn(
     session_id: str | None,
     user,
@@ -97,6 +113,8 @@ def store_turn(
             if sess is not None:
                 if sess.user_id != user_id:
                     raise ChatOwnershipError("Сессия принадлежит другому пользователю")
+                if sess.deleted_at is not None:
+                    raise ChatSessionDeletedError("Сессия удалена")
                 if not sess.title:
                     sess.title = query[:1024]
                 sess.updated_at = _now()
@@ -133,17 +151,23 @@ def store_turn(
 def list_sessions(user_id: str, limit: int | None = None, offset: int = 0) -> tuple[list[dict], int]:
     """Активные (не удалённые) треды пользователя, по updated_at desc."""
     with session_scope() as s:
-        base = select(ChatSession).where(
-            ChatSession.user_id == user_id,
-            ChatSession.deleted_at.is_(None),
-        )
         total = s.execute(
-            select(func.count()).select_from(base.subquery())
+            select(func.count())
+            .select_from(ChatSession)
+            .where(
+                ChatSession.user_id == user_id,
+                ChatSession.deleted_at.is_(None),
+            )
         ).scalar_one()
 
         rows = (
             s.execute(
-                base.order_by(ChatSession.updated_at.desc())
+                select(ChatSession)
+                .where(
+                    ChatSession.user_id == user_id,
+                    ChatSession.deleted_at.is_(None),
+                )
+                .order_by(ChatSession.updated_at.desc())
                 .limit(limit)
                 .offset(offset)
             )
@@ -239,7 +263,10 @@ def _message_counts(s, session_ids: list[str]) -> dict[str, int]:
 def purge_expired_sessions() -> int:
     """Физически удаляет треды с истёкшим окном корзины. Возвращает число удалённых.
 
-    Каскад сносит сообщения. Пишет CHAT_HISTORY_AUTO_DELETE в audit_log (system).
+    Порядок (1.1/2.2): сначала физическое удаление + commit, затем — аудит. Это
+    гарантирует, что audit-запись не может «врать» об удалении, которого не было.
+    Аудит пишется отдельным циклом по каждой сессии с try/except, чтобы сбой одной
+    записи не блокировал аудит для остальных уже удалённых сессий батча.
     """
     settings = get_settings()
     cutoff = _now() - timedelta(days=settings.chat_history_retention_days)
@@ -256,22 +283,36 @@ def purge_expired_sessions() -> int:
         )
         if not rows:
             return 0
-        removed = 0
+        metas = [
+            {
+                "id": sess.id,
+                "user_id": sess.user_id,
+                "title": sess.title,
+                "deleted_at": sess.deleted_at,
+            }
+            for sess in rows
+        ]
         for sess in rows:
+            s.delete(sess)
+    # commit выполнен (выход из session_scope). Только теперь — аудит.
+    for m in metas:
+        try:
             audit.record(
-                _SystemUser(),
+                audit.SystemUser(),
                 audit.CHAT_HISTORY_AUTO_DELETE,
                 audit.TARGET_CHAT,
-                target_id=sess.id,
+                target_id=m["id"],
                 old_value={
-                    "user_id": sess.user_id,
-                    "title": sess.title,
-                    "deleted_at": _iso(sess.deleted_at),
+                    "user_id": m["user_id"],
+                    "title": m["title"],
+                    "deleted_at": audit.iso_or_str(m["deleted_at"]),
                 },
             )
-            s.delete(sess)
-            removed += 1
-        return removed
+        except Exception:
+            logger.warning(
+                "Аудит автоочистки истории не записан для %s", m["id"], exc_info=True
+            )
+    return len(metas)
 
 
 def start_chat_purge_loop() -> threading.Thread | None:
@@ -286,22 +327,14 @@ def start_chat_purge_loop() -> threading.Thread | None:
     def _loop() -> None:
         interval = max(60.0, settings.chat_history_purge_interval_seconds)
         while True:
-            time.sleep(interval)
             try:
                 n = purge_expired_sessions()
                 if n:
                     logger.info("Автоочистка истории чата: удалено %d тред(ов)", n)
             except Exception:
                 logger.exception("Автоочистка истории чата не удалась")
+            time.sleep(interval)
 
     thread = threading.Thread(target=_loop, name="chat-history-purge", daemon=True)
     thread.start()
     return thread
-
-
-def _iso(value) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return str(value)

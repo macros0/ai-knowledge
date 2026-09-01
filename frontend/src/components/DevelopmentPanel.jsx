@@ -12,7 +12,9 @@ import {
   updateDevelopment,
 } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { TYPED_CONFIRM_THRESHOLD } from "@/lib/constants";
 import { useToast } from "./Toast";
+import ConfirmModal from "./ConfirmModal";
 
 const EMPTY_FORM = { number: "", name: "", module: "" };
 const PAGE_SIZE = 50;
@@ -37,6 +39,7 @@ export default function DevelopmentPanel() {
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [modulesOpen, setModulesOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   // Серверные фильтр/сортировка/пагинация.
   const [searchInput, setSearchInput] = useState("");
@@ -47,7 +50,7 @@ export default function DevelopmentPanel() {
   const [page, setPage] = useState(0);
 
   const canEdit = mode === "disabled" || hasRole("editor", "admin");
-  const canDelete = mode === "disabled" || hasRole("admin");
+  const canDelete = mode === "disabled" || hasRole("editor", "admin");
 
   const load = useCallback(async () => {
     try {
@@ -147,38 +150,82 @@ export default function DevelopmentPanel() {
 
   const startEdit = (dev) => {
     setEditing(dev.id);
-    setEditForm({ number: dev.number, name: dev.name, module: dev.module || "" });
+    setEditForm({
+      number: dev.number,
+      name: dev.name,
+      module: dev.module || "",
+      version: dev.version,
+      originalNumber: dev.number,
+      documentsCount: dev.documents_count || 0,
+    });
   };
 
   const submitEdit = async (devId) => {
     const number = editForm.number.trim();
     const name = editForm.name.trim();
     if (!number || !name) return;
+    // Контроль целостности при смене номера: если у разработки есть привязанные
+    // документы — предупредить, что их проекция в поиске будет обновлена.
+    const numberChanged =
+      editForm.originalNumber != null && number !== editForm.originalNumber;
+    if (numberChanged && (editForm.documentsCount || 0) > 0) {
+      if (
+        !window.confirm(
+          `Смена номера обновит привязку ${editForm.documentsCount} документов в поиске. Продолжить?`
+        )
+      ) {
+        return;
+      }
+    }
     setBusy(true);
     try {
       const module = await ensureModule(editForm.module);
-      await updateDevelopment(devId, { number, name, module });
+      await updateDevelopment(devId, { number, name, module, version: editForm.version });
       setEditing(null);
       setEditForm(EMPTY_FORM);
       showToast("Изменения сохранены", { type: "success" });
       await load();
     } catch (err) {
-      showToast(`Не удалось сохранить: ${err.message}`, { type: "error" });
+      if (err.code === "version_conflict" && err.data?.current) {
+        setEditForm((f) => ({ ...f, version: err.data.current.version }));
+        showToast("Запись изменена другим пользователем — нажмите «Сохранить» ещё раз", { type: "error" });
+      } else {
+        showToast(`Не удалось сохранить: ${err.message}`, { type: "error" });
+      }
     } finally {
       setBusy(false);
     }
   };
 
-  const remove = async (dev) => {
-    if (!window.confirm(`Удалить разработку «${dev.number} — ${dev.name}»? Документы будут отвязаны.`)) {
-      return;
-    }
+  const doDelete = async (dev) => {
+    setBusy(true);
     try {
-      await deleteDevelopment(dev.id);
+      await deleteDevelopment(dev.id, dev.version);
       showToast("Разработка удалена", { type: "success" });
+      setPendingDelete(null);
       await load();
     } catch (err) {
-      showToast(`Не удалось удалить: ${err.message}`, { type: "error" });
+      if (err.code === "version_conflict") {
+        showToast("Разработка изменена другим пользователем — список обновлён", { type: "error" });
+        setPendingDelete(null);
+        await load();
+      } else {
+        showToast(`Не удалось удалить: ${err.message}`, { type: "error" });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = (dev) => {
+    const count = dev.documents_count || 0;
+    if (count > TYPED_CONFIRM_THRESHOLD) {
+      setPendingDelete(dev);
+      return;
+    }
+    const hint = count > 0 ? ` Будет отвязано документов: ${count}.` : "";
+    if (window.confirm(`Удалить разработку «${dev.number} — ${dev.name}»?${hint}`)) {
+      doDelete(dev);
     }
   };
 
@@ -320,11 +367,12 @@ export default function DevelopmentPanel() {
         </select>
       </div>
 
-      <table className="dev-table">
-        <thead>
-          <tr>
-            {COLUMNS.map((c) => (
-              <th key={c.key}>
+      <div className="dev-table-scroll">
+        <table className="dev-table">
+          <thead>
+            <tr>
+              {COLUMNS.map((c) => (
+                <th key={c.key}>
                 <button
                   type="button"
                   className="dev-sort"
@@ -408,7 +456,8 @@ export default function DevelopmentPanel() {
             </tr>
           )}
         </tbody>
-      </table>
+        </table>
+      </div>
 
       {total > 0 && (
         <div className="dev-pagination">
@@ -423,6 +472,31 @@ export default function DevelopmentPanel() {
             След. →
           </button>
         </div>
+      )}
+
+      {pendingDelete && (
+        <ConfirmModal
+          count={pendingDelete.documents_count || 0}
+          matchValue={pendingDelete.number}
+          title="Подтвердите удаление разработки"
+          description={
+            <>
+              Разработка{" "}
+              <strong>«{pendingDelete.number} — {pendingDelete.name}»</strong> будет
+              удалена, а {pendingDelete.documents_count || 0} связанных документов —
+              отвязаны.
+            </>
+          }
+          hint={
+            <>
+              Для подтверждения введите номер разработки{" "}
+              <code>{pendingDelete.number}</code>:
+            </>
+          }
+          actionLabel="Удалить"
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => doDelete(pendingDelete)}
+        />
       )}
     </section>
   );

@@ -3,72 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { deleteChatSession, getChatThread, listChatSessions } from "@/lib/api";
-import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
-import MarkdownViewer from "./MarkdownViewer";
+import { fmtDate, HistoryMessage } from "./ChatHistoryShared";
 import { useToast } from "./Toast";
 import Modal from "./Modal";
-
-const fmtDate = (iso) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("ru-RU");
-};
-
-function SourceBadges({ sources }) {
-  if (!sources || sources.length === 0) return null;
-  return (
-    <div className="history-sources">
-      {sources.map((s, i) => {
-        const href = sourceHref(s);
-        const label = (
-          <>
-            {s.title || s.filename}
-            {s.development_number && (
-              <span className="source-dev-badge" title={s.development_name || "Разработка"}>
-                {s.development_number}
-              </span>
-            )}
-            {s.development_module && (
-              <span className="source-dev-badge source-module-badge">{s.development_module}</span>
-            )}
-          </>
-        );
-        return href ? (
-          <Link key={i} className="history-source history-source-link" href={href}>
-            {label}
-          </Link>
-        ) : (
-          <span key={i} className="history-source">
-            {label}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-function HistoryMessage({ m }) {
-  const content =
-    m.role === "assistant" ? (
-      <MarkdownViewer
-        className="okf-markdown chat-markdown"
-        text={m.content}
-        remarkPlugins={[remarkCiteLinks]}
-        components={{
-          a: (props) => <CiteLink sources={m.sources || []} {...props} />,
-        }}
-      />
-    ) : (
-      m.content
-    );
-  return (
-    <div className={`msg ${m.role}`}>
-      <div className="role">{m.role === "user" ? "Вы" : "Ассистент"}</div>
-      <div className="bubble history-bubble">{content}</div>
-      <SourceBadges sources={m.sources} />
-    </div>
-  );
-}
 
 export default function ChatHistoryPanel() {
   const { showToast } = useToast();

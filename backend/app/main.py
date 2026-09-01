@@ -53,9 +53,13 @@ async def lifespan(app: FastAPI):
     # Создание отсутствующих таблиц БД (идемпотентно). Мягкий старт: если БД
     # недоступна — не валить процесс, репозитории будут пытаться при запросах.
     try:
-        from app.db.session import init_db
+        # create_all — удобство локального запуска. В production схема версионируется
+        # Alembic (alembic upgrade head), поэтому init_db() здесь не вызываем — иначе
+        # при дрейфе моделей таблицы создавались бы в обход миграций.
+        if get_settings().environment != "production":
+            from app.db.session import init_db
 
-        init_db()
+            init_db()
         from app.services.registry import reset_stale_statuses
 
         reset_stale_statuses()

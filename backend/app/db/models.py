@@ -59,6 +59,12 @@ class Development(Base):
     number: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     module: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Оптимистическая блокировка совместного редактирования справочника:
+    # клиент шлёт version при PATCH/DELETE, бэкенд сверяет и отдаёт 409 при
+    # расхождении (version_conflict). Инкрементируется при каждой правке.
+    version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
@@ -339,8 +345,9 @@ class UserBlock(Base):
 class ChatSession(Base):
     """Тред чата (история, Этап 6).
 
-    `id` — клиентский UUID (фронтенд генерирует при «Новом чате» и передаёт в
-    каждом запросе); бэкенд валидирует формат и привязывает сессию к текущему
+    `id` — UUID, генерируемый бэкендом при создании треда (первая реплика без
+    `session_id`) и возвращаемый клиенту; фронт хранит его и передаёт в следующих
+    запросах. Бэкенд валидирует формат и привязывает сессию к текущему
     аутентифицированному `user_id` — а не к тому, что клиент мог подставить.
     Soft delete через `deleted_at`/`deleted_by` (окно хранения — аналог корзины
     документов, 4a.2); физическая очистка — services/chat_history.py.

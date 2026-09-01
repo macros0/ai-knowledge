@@ -95,3 +95,18 @@ def schedule_dev_sync(dev_id: int) -> None:
         target=reindex_development_documents, args=(dev_id,), daemon=True
     )
     thread.start()
+
+
+def schedule_dev_tags_sync_many(doc_ids: list[str]) -> None:
+    """Фоновый реиндекс dev_tags для списка документов (одним потоком).
+
+    Используется при удалении разработки: документы уже отвязаны в БД
+    (development_id = NULL), но их dev_tags в Qdrant нужно очистить. Каждый
+    документ читает актуальное состояние из БД (см.
+    reindex_document_dev_tags_from_db) и пишет пустую проекцию.
+    """
+    def _run() -> None:
+        for doc_id in doc_ids:
+            reindex_document_dev_tags_from_db(doc_id)
+
+    threading.Thread(target=_run, daemon=True).start()

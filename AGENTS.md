@@ -51,6 +51,12 @@ UI: http://localhost:3000
   бинарники и `.md`-бандлы — в FS. Таблицы создаются на старте (`init_db`/`create_all`), Alembic
   (`backend/alembic/`) — для версионированных миграций. Одноразовый перенос JSON→БД:
   `backend/scripts/migrate_json_to_db.py`; slim-payload Qdrant: `backend/scripts/migrate_payload.py`.
+  **Квирк dev-Postgres:** `create_all` создаёт только отсутствующие ТАБЛИЦЫ и **не добавляет
+  колонки** к уже существующим. После добавления поля в модель и рестарта бэкенда dev-Postgres
+  падает с 500 (`column <t>.<col> does not exist`). Alembic на dev-БД не работает: `alembic_version`
+  отстаёт от `create_all` (таблицы вроде `chat_sessions` уже созданы → `DuplicateTable`). Лечить
+  вручную: `ALTER TABLE <t> ADD COLUMN IF NOT EXISTS <col> <type> [NOT NULL] DEFAULT <d>;`
+  (через `app.db.session.get_engine()`). Пример (2026-09-01): `developments.version INTEGER NOT NULL DEFAULT 1`.
   Полный текст концепта — в `okf_concepts` (payload Qdrant больше не хранит `content`), поиск
   достаёт его по `(doc_id, slug)` через `services/concept_store.py`.
 - **Dual-index**: Qdrant хранит два типа точек — `point_type="concept"` (LLM-выжимки) и
@@ -145,11 +151,14 @@ UI: http://localhost:3000
   - Модели `chat_sessions` + `chat_messages` (`db/models.py`), Alembic-миграция
     `d1e2f3a4b5c6` (после `c9d4e5f6a7b8`). Сообщение хранит `sources` (JSON-снапшот
     источников на момент ответа, не протухает).
-  - `session_id` — **клиентский UUID** (фронт генерит при «Новом чате», передаёт в
-    каждом `/chat`); бэкенд валидирует формат (`chat_history.is_valid_session_id`) и
+  - `session_id` — UUID, генерируемый **бэкендом** (`store_turn` при пустом
+    `session_id`) и возвращаемый клиенту; фронт хранит его и передаёт в каждом
+    следующем `/chat`. Бэкенд валидирует формат (`chat_history.is_valid_session_id`),
     **привязывает сессию к текущему `user_id`** — `store_turn`/`get_thread` бросают
-    `ChatOwnershipError` при подмене чужого треда (не «присваивают» его). Запись в
-    `/chat` — после ответа, не блокирует и не роняет чат (try/except → warning).
+    `ChatOwnershipError` при подмене чужого треда (не «присваивают» его). Ранний чек
+    `check_session_state` до embed/search/LLM отсекает чужой/удалённый тред (403/409)
+    без траты LLM-вызова. Запись в `/chat` — после ответа, не блокирует и не роняет
+    чат (try/except → warning).
   - Сервис `services/chat_history.py` (по образцу `trash.py`): `list_sessions`,
     `get_thread`, `soft_delete_session`, `list_distinct_users`, `purge_expired_sessions`,
     `start_chat_purge_loop`. Роуты — `api/chat_history.py` (prefix `/chat`):

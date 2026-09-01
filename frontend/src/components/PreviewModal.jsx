@@ -2,12 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { bulkDelete, bulkPreview, bulkRegenerate } from "@/lib/api";
+import { TYPED_CONFIRM_THRESHOLD } from "@/lib/constants";
 import { useToast } from "./Toast";
 import Modal from "./Modal";
 import ConfirmModal from "./ConfirmModal";
-
-// Порог typed confirmation (ровно 5 документов, Этап 2а).
-export const TYPED_CONFIRM_THRESHOLD = 5;
 
 /**
  * Предпросмотр масштаба массовой операции (bulk-preview) + запуск.

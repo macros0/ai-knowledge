@@ -11,6 +11,7 @@ import MarkdownViewer from "./MarkdownViewer";
 import { CheckIcon, CopyIcon } from "./icons";
 import { useChat } from "@/context/ChatContext";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "./Toast";
 
 function getPresetLabel(preset, settings) {
   if (preset === settings.top_k_default) return "Стандартно";
@@ -24,6 +25,7 @@ function getPresetLabel(preset, settings) {
 export default function ChatPanel() {
   const { messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [query, setQuery] = useState("");
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
   const [showCustom, setShowCustom] = useState(false);
@@ -151,11 +153,19 @@ export default function ChatPanel() {
         return copy;
       });
     } catch (err) {
-      setMessages((m) => {
-        const copy = [...m];
-        copy[copy.length - 1] = { role: "assistant", text: `Ошибка: ${err.message}`, sources: [] };
-        return copy;
-      });
+      if (err.status === 409) {
+        // Сессия была удалена (в корзине): сбрасываем тред и поле ввода без
+        // авто-повтора — пользователь сам решает, повторять ли вопрос в новом чате.
+        startNewChat();
+        setQuery("");
+        showToast("Эта сессия была удалена — начните новый чат.", { type: "error" });
+      } else {
+        setMessages((m) => {
+          const copy = [...m];
+          copy[copy.length - 1] = { role: "assistant", text: `Ошибка: ${err.message}`, sources: [] };
+          return copy;
+        });
+      }
     } finally {
       setPending(false);
     }

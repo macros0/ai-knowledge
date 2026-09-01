@@ -667,8 +667,8 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | GET | `/api/developments` | Список разработок с числом документов |
 | POST | `/api/developments` | Создать разработку (роли `editor`/`admin`) |
 | GET | `/api/developments/{dev_id}` | Карточка разработки |
-| PATCH | `/api/developments/{dev_id}` | Переименовать/изменить разработку (запускает реиндекс `dev_tags`) |
-| DELETE | `/api/developments/{dev_id}` | Удалить разработку (роль `admin`; документы отвязываются) |
+| PATCH | `/api/developments/{dev_id}` | Переименовать/изменить разработку (запускает реиндекс `dev_tags`; буквальный тег старого номера не переименовывается — каноническая проекция `dev_tags`) |
+| DELETE | `/api/developments/{dev_id}` | Удалить разработку (роли `editor`/`admin`; документы отвязываются, их `dev_tags` очищаются) |
 | GET | `/api/developments/{dev_id}/documents` | Документы разработки |
 | GET | `/api/attributes/{key}` | Значения generic-атрибута (напр. `module`) |
 | POST | `/api/attributes/{key}` | Добавить значение атрибута (роли `editor`/`admin`) |

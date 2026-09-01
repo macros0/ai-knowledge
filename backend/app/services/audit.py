@@ -84,6 +84,22 @@ TARGET_TAG = "tag"
 TARGET_CHAT = "chat_session"
 
 
+class SystemUser:
+    """Прокси-«пользователь» для аудита автоочистки (системное действие)."""
+
+    user_id = "system"
+    username = "system"
+
+
+def iso_or_str(value) -> str | None:
+    """Серийализует datetime в ISO-строку (для JSON-колонок audit_log)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
 def _to_dict(entry: AuditLog) -> dict:
     return {
         "id": entry.id,

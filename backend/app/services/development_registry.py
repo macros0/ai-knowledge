@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import Development, Document
@@ -34,12 +34,26 @@ class DevelopmentModuleError(ValueError):
     """module не найден в справочнике attribute_values('module')."""
 
 
+class DevelopmentConflictError(ValueError):
+    """Запись изменена другим пользователем (оптимистическая блокировка по version).
+
+    `current` — актуальное состояние записи (DevelopmentOut-совместимый dict),
+    чтобы API мог вернуть его клиенту в теле 409 (version_conflict) и фронт
+    обновил версию для повторной отправки без перепечатывания ввода.
+    """
+
+    def __init__(self, current: dict):
+        self.current = current
+        super().__init__("Разработка изменена другим пользователем")
+
+
 def _to_dict(dev: Development, documents_count: int = 0) -> dict:
     return {
         "id": dev.id,
         "number": dev.number,
         "name": dev.name,
         "module": dev.module,
+        "version": dev.version,
         "created_at": dev.created_at,
         "created_by": dev.created_by,
         "documents_count": documents_count,
@@ -74,7 +88,7 @@ class DevelopmentRegistry:
             raise ValueError("Название разработки не может быть пустым")
         module = self._validate_module(module)
         with session_scope() as s:
-            dev = Development(number=number, name=name, module=module, created_by=created_by)
+            dev = Development(number=number, name=name, module=module, created_by=created_by, version=1)
             s.add(dev)
             try:
                 s.flush()
@@ -178,47 +192,120 @@ class DevelopmentRegistry:
             rows = s.execute(stmt).all()
             return [_to_dict(dev, count) for dev, count in rows], total
 
-    def update(self, dev_id: int, number: str | None = None, name: str | None = None, module: str | None = None) -> dict:
-        changed = False
+    def update(self, dev_id: int, version: int, number: str | None = None, name: str | None = None, module: str | None = None) -> dict:
         with session_scope() as s:
             dev = s.get(Development, dev_id)
             if dev is None:
                 raise ValueError("Разработка не найдена")
+            if dev.version != version:
+                raise DevelopmentConflictError(_to_dict(dev, self._count(s, dev_id)))
+
+            # Считаем, какие поля реально меняются (для no-op и dev_sync).
+            updates: dict = {}
+            new_number = dev.number
+            new_name = dev.name
+            new_module = dev.module
+
             if number is not None and number.strip() and number.strip() != dev.number:
-                dev.number = number.strip()
-                changed = True
+                new_number = number.strip()
+                updates["number"] = new_number
             if name is not None and name.strip() and name.strip() != dev.name:
-                dev.name = name.strip()
-                changed = True
+                new_name = name.strip()
+                updates["name"] = new_name
             if module is not None:
                 module = self._validate_module(module)
                 if module != dev.module:
-                    dev.module = module
-                    changed = True
-            try:
-                s.flush()
-            except IntegrityError as exc:
-                raise DevelopmentNumberExistsError(
-                    f"Разработка с номером '{number}' уже существует"
-                ) from exc
-            result = _to_dict(dev, self._count(s, dev_id))
+                    new_module = module
+                    updates["module"] = new_module
+
+            if not updates:
+                result = _to_dict(dev, self._count(s, dev_id))
+                changed = False
+            else:
+                # Атомарный conditional-update: version сверяется в самом SQL
+                # (WHERE id = :id AND version = :version), а не read-then-write в
+                # Python — гонка двух одновременных коммитов детектится rowcount.
+                updates["version"] = Development.version + 1
+                try:
+                    outcome = s.execute(
+                        update(Development)
+                        .where(Development.id == dev_id, Development.version == version)
+                        .values(**updates)
+                        .execution_options(synchronize_session=False)
+                    )
+                except IntegrityError as exc:
+                    raise DevelopmentNumberExistsError(
+                        f"Разработка с номером '{number}' уже существует"
+                    ) from exc
+                if outcome.rowcount == 0:
+                    # Между чтением и UPDATE кто-то успел изменить версию.
+                    cur = s.get(Development, dev_id, populate_existing=True)
+                    if cur is None:
+                        raise ValueError("Разработка не найдена")
+                    raise DevelopmentConflictError(_to_dict(cur, self._count(s, dev_id)))
+                result = {
+                    "id": dev_id,
+                    "number": new_number,
+                    "name": new_name,
+                    "module": new_module,
+                    "version": version + 1,
+                    "created_at": dev.created_at,
+                    "created_by": dev.created_by,
+                    "documents_count": self._count(s, dev_id),
+                }
+                changed = True
         if changed:
             self._schedule_sync(dev_id)
         return result
 
-    def delete(self, dev_id: int) -> bool:
-        """Удаляет разработку, отвязывая её документы (SET NULL) и запуская реиндекс dev_tags."""
+    def delete(self, dev_id: int, version: int) -> bool:
+        """Удаляет разработку, отвязывая её документы (SET NULL) и очищая их dev_tags.
+
+        Версия сверяется атомарно: условный UPDATE по `version` резервирует строку
+        (rowcount == 0 — гонка/не найдено), и только затем выполняется отвязка
+        документов и удаление. FK к `documents.development_id` требует отвязки
+        документов ДО удаления строки, поэтому версия сначала «заявляется»
+        инкрементом, а не проверяется на самом DELETE.
+
+        Целостность: id документов захватываются ДО отвязки, чтобы после удаления
+        очистить их проекцию dev_tags в Qdrant (иначе _schedule_sync(dev_id) после
+        удаления не найдёт ни записи, ни привязанных документов — dev_tags останутся
+        протухшими). Поля отвязки — полный набор (как в ручной отвязке документа).
+        """
         with session_scope() as s:
-            dev = s.get(Development, dev_id)
-            if dev is None:
-                return False
+            claimed = s.execute(
+                update(Development)
+                .where(Development.id == dev_id, Development.version == version)
+                .values(version=Development.version + 1)
+                .execution_options(synchronize_session=False)
+            )
+            if claimed.rowcount == 0:
+                cur = s.get(Development, dev_id)
+                if cur is None:
+                    return False
+                raise DevelopmentConflictError(_to_dict(cur, self._count(s, dev_id)))
+            # Захватить документы ДО отвязки — их dev_tags нужно очистить в Qdrant.
+            doc_ids = list(
+                s.execute(
+                    select(Document.id).where(Document.development_id == dev_id)
+                ).scalars().all()
+            )
             # Отвязать документы, чтобы FK не завис.
             s.query(Document).filter(Document.development_id == dev_id).update(
-                {"development_id": None, "development_confidence": None},
+                {
+                    "development_id": None,
+                    "development_confidence": None,
+                    "development_confirmed_by": None,
+                    "development_suggestion": None,
+                },
                 synchronize_session=False,
             )
-            s.delete(dev)
-        self._schedule_sync(dev_id)
+            s.execute(
+                delete(Development)
+                .where(Development.id == dev_id)
+                .execution_options(synchronize_session=False)
+            )
+        self._schedule_sync_many(doc_ids)
         return True
 
     def documents_for(self, dev_id: int) -> list[dict]:
@@ -269,6 +356,21 @@ class DevelopmentRegistry:
             logger.warning(
                 "Не удалось запустить фоновую реиндексацию разработки %d",
                 dev_id,
+                exc_info=True,
+            )
+
+    def _schedule_sync_many(self, doc_ids: list[str]) -> None:
+        """Фоновая очистка dev_tags списка документов (после удаления разработки)."""
+        if not doc_ids:
+            return
+        try:
+            from app.services.dev_sync import schedule_dev_tags_sync_many
+
+            schedule_dev_tags_sync_many(doc_ids)
+        except Exception:
+            logger.warning(
+                "Не удалось запустить очистку dev_tags для %d документов",
+                len(doc_ids),
                 exc_info=True,
             )
 

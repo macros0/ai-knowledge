@@ -42,8 +42,13 @@ export default function HealthBanner() {
 
   if (!health || health.status === "ok") return null;
 
+  // Показываем только реальный outage ("down"). Статус "rate_limited" (429 от
+  // провайдера) намеренно НЕ отображается вообще — это не ошибка, а мягкий
+  // троттлинг. Если когда-нибудь понадобится мягкое инфо-сообщение «ответы могут
+  // идти медленнее» (без алерта), добавить отдельную ветку по
+  // `v.status === "rate_limited"` и новый вариант баннера (не "degraded").
   const downDeps = Object.entries(health.dependencies || {})
-    .filter(([, v]) => v.status !== "ok")
+    .filter(([, v]) => v.status === "down")
     .map(([k]) => DEP_LABELS[k] || k);
 
   const message = `${STATUS_TEXT[health.status] || ""}${downDeps.length ? ": " + downDeps.join(", ") : ""}`;

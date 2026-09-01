@@ -2421,6 +2421,20 @@ main {
   outline: none;
 }
 
+.dev-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+/* Инпуты редактирования в таблице заполняют свою колонку, а не раздувают её
+   (min-width 140px нужен только форме создания .dev-form). */
+.dev-table .dev-input {
+  min-width: 0;
+  width: 100%;
+}
+
 .dev-table {
   width: 100%;
   border-collapse: collapse;
@@ -2439,6 +2453,11 @@ main {
   color: var(--muted);
   font-weight: 600;
   font-size: 12px;
+  /* Липкая шапка при прокрутке длинного справочника. */
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
 }
 
 .dev-link {
@@ -3114,6 +3133,9 @@ main {
   gap: 2px;
   padding: 0;
   font-family: inherit;
+  /* Кнопка по умолчанию красит текст в buttontext (чёрный) — на тёмной теме
+     это невидимо. Наследуем цвет, как у остальных кнопок приложения. */
+  color: inherit;
 }
 
 .history-open:hover .history-item-title {
@@ -3125,6 +3147,15 @@ main {
   font-size: 14px;
   font-weight: 600;
   word-break: break-word;
+}
+
+/* Общий muted-текст для метаданных (даты/счётчики) в истории чата.
+   Раньше .meta был только под .document-item, поэтому в истории span.meta
+   наследовал цвет кнопки-предка и был невидим. */
+.history-list .meta,
+.history-thread-title .meta {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .history-empty {

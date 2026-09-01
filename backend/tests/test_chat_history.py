@@ -89,6 +89,26 @@ class TestStoreTurn:
         with pytest.raises(ch.ChatOwnershipError):
             ch.store_turn(sid, _U("sim-admin", "demo.admin"), "чужой", "нет")
 
+    def test_store_on_deleted_session_raises(self, client):
+        sid = create_session("sim-user")
+        ch.soft_delete_session(sid, _U("sim-user", "demo.user"))
+        with pytest.raises(ch.ChatSessionDeletedError):
+            ch.store_turn(sid, _U("sim-user", "demo.user"), "ещё", "нет")
+
+    def test_check_session_state(self, client):
+        sid = create_session("sim-user")
+        # активная собственная сессия — не ошибка
+        ch.check_session_state(sid, "sim-user")
+        # чужая — ChatOwnershipError
+        with pytest.raises(ch.ChatOwnershipError):
+            ch.check_session_state(sid, "sim-admin")
+        # удалённая — ChatSessionDeletedError
+        ch.soft_delete_session(sid, _U("sim-user", "demo.user"))
+        with pytest.raises(ch.ChatSessionDeletedError):
+            ch.check_session_state(sid, "sim-user")
+        # несуществующая — не ошибка (store_turn создаст)
+        ch.check_session_state("00000000-0000-0000-0000-000000000000", "sim-user")
+
     def test_session_id_validation(self):
         assert ch.is_valid_session_id("123e4567-e89b-12d3-a456-426614174000")
         assert not ch.is_valid_session_id("not-a-uuid")
@@ -228,6 +248,37 @@ class TestPurge:
         assert ch.purge_expired_sessions() == 1
         assert ch.get_thread(sid, "sim-user") is None
 
+    def test_purge_audit_failure_does_not_break_batch(self, client, monkeypatch):
+        monkeypatch.setattr(
+            ch, "get_settings",
+            lambda: Settings(_env_file=None, chat_history_retention_days=90),
+        )
+        sid1 = create_session("sim-user", query="первый")
+        sid2 = create_session("sim-user", query="второй")
+        for sid in (sid1, sid2):
+            ch.soft_delete_session(sid, _U("sim-user", "demo.user"))
+            self._backdate(sid, 100)
+
+        real_record = ch.audit.record
+
+        def flaky(user, action_type, target_type, **kw):
+            if kw.get("target_id") == sid1:
+                raise RuntimeError("audit down")
+            real_record(user, action_type, target_type, **kw)
+
+        monkeypatch.setattr(ch.audit, "record", flaky)
+
+        # удаление не должно зависеть от сбоя аудита для одной сессии
+        assert ch.purge_expired_sessions() == 2
+        assert ch.get_thread(sid1, "sim-user") is None
+        assert ch.get_thread(sid2, "sim-user") is None
+
+        entries = AuditService().query(action_type=audit.CHAT_HISTORY_AUTO_DELETE)
+        ids = {e["target_id"] for e in entries}
+        # sid1 не получил запись (аудит упал), sid2 — получил (цикл продолжился)
+        assert sid1 not in ids
+        assert sid2 in ids
+
 
 class TestChatEndpointPersists:
     def test_chat_short_circuit_records_turn(self, client, monkeypatch):
@@ -246,3 +297,15 @@ class TestChatEndpointPersists:
         thread = client.get(f"/api/chat/history/{resp.json()['session_id']}").json()
         assert [m["role"] for m in thread["messages"]] == ["user", "assistant"]
         assert thread["messages"][0]["content"] == "тест"
+
+    def test_chat_deleted_session_409(self, client):
+        login(client, "demo.user")
+        sid = create_session("sim-user")
+        ch.soft_delete_session(sid, _U("sim-user", "demo.user"))
+
+        resp = client.post("/api/chat", json={"query": "тест", "session_id": sid})
+        assert resp.status_code == 409, resp.text
+
+        # ранний отказ — новый тред не создаётся, в удалённую сессию ничего не пишется
+        sessions = client.get("/api/chat/history").json()
+        assert sessions["total"] == 0

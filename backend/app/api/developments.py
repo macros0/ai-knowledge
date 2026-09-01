@@ -5,6 +5,8 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 
 from app.auth.models import User
 from app.auth.service import require_role, require_user
@@ -16,6 +18,7 @@ from app.models.schemas import (
 )
 from app.services import audit
 from app.services.development_registry import (
+    DevelopmentConflictError,
     DevelopmentModuleError,
     DevelopmentNumberExistsError,
     get_development_registry,
@@ -71,7 +74,10 @@ def create_development(
     except DevelopmentModuleError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except DevelopmentNumberExistsError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return JSONResponse(
+            status_code=409,
+            content={"detail": str(exc), "code": "duplicate_number"},
+        )
     audit.record(
         user,
         audit.DEVELOPMENT_CREATE,
@@ -99,11 +105,25 @@ def update_development(
     user: User = Depends(require_role("editor", "admin")),
 ):
     try:
-        dev = _registry.update(dev_id, number=body.number, name=body.name, module=body.module)
+        dev = _registry.update(
+            dev_id, body.version, number=body.number, name=body.name, module=body.module
+        )
     except DevelopmentModuleError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except DevelopmentNumberExistsError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return JSONResponse(
+            status_code=409,
+            content={"detail": str(exc), "code": "duplicate_number"},
+        )
+    except DevelopmentConflictError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "code": "version_conflict",
+                "current": jsonable_encoder(exc.current),
+            },
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     audit.record(
@@ -121,9 +141,21 @@ def update_development(
 def delete_development(
     dev_id: int,
     request: Request,
-    user: User = Depends(require_role("admin")),
+    version: int = Query(...),
+    user: User = Depends(require_role("editor", "admin")),
 ):
-    if not _registry.delete(dev_id):
+    try:
+        deleted = _registry.delete(dev_id, version)
+    except DevelopmentConflictError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "code": "version_conflict",
+                "current": jsonable_encoder(exc.current),
+            },
+        )
+    if not deleted:
         raise HTTPException(status_code=404, detail="Разработка не найдена")
     audit.record(
         user,

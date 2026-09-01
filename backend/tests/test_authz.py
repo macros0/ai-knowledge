@@ -73,6 +73,25 @@ class TestSingleDeleteRoleGate:
         assert resp.status_code == expected
 
 
+class TestDevelopmentDeleteRoleGate:
+    @pytest.mark.parametrize(
+        "username,expected",
+        [
+            ("demo.user", 403),      # viewer — read-only
+            ("demo.editor", 200),    # editor — удаление разработки разрешено
+            ("demo.admin", 200),
+            ("demo.security", 403),  # security — не editor/admin
+        ],
+    )
+    def test_delete_development_gate(self, client, username, expected):
+        from app.services.development_registry import get_development_registry
+
+        dev = get_development_registry().create("99999", "Тест", module=None)
+        login(client, username)
+        resp = client.delete(f"/api/developments/{dev['id']}?version={dev['version']}")
+        assert resp.status_code == expected
+
+
 class TestUploadRoleGate:
     @pytest.mark.parametrize(
         "username,expected",

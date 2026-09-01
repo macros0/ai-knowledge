@@ -187,3 +187,20 @@ def test_health_reports_degraded_when_ollama_down(client, monkeypatch):
     data = resp.json()
     assert data["status"] == "degraded"
     assert data["dependencies"]["ollama"]["status"] == "down"
+
+
+def test_health_rate_limited_llm_is_not_degraded(client, monkeypatch):
+    """429 LLM (rate_limited) не должен переводить общий статус в degraded."""
+    from app.services import health as health_module
+
+    health_module._cache = {}
+    health_module._cache_ts = 0.0
+
+    monkeypatch.setattr(health_module, "_check_llm", lambda: {"status": "rate_limited", "error": "HTTP 429"})
+    monkeypatch.setattr(health_module, "_check_embeddings", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_module, "_check_qdrant", lambda: {"status": "ok"})
+
+    resp = client.get("/health")
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["dependencies"]["llm"]["status"] == "rate_limited"

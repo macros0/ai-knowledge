@@ -39,13 +39,6 @@ class RestoreConflictError(Exception):
         super().__init__("В системе уже есть документ, похожий на восстанавливаемый")
 
 
-class _SystemUser:
-    """Прокси-«пользователь» для аудита автоочистки корзины (системное действие)."""
-
-    user_id = "system"
-    username = "system"
-
-
 def restore_document(doc_id: str, user, ip_address: str | None = None, *, force: bool = False) -> dict:
     """Восстановление документа из корзины.
 
@@ -75,7 +68,7 @@ def restore_document(doc_id: str, user, ip_address: str | None = None, *, force:
         audit.DOCUMENT_RESTORE,
         audit.TARGET_DOCUMENT,
         target_id=doc_id,
-        old_value={"deleted_at": _iso(doc.get("deleted_at"))},
+        old_value={"deleted_at": audit.iso_or_str(doc.get("deleted_at"))},
         new_value={"deleted_at": None},
         ip_address=ip_address,
     )
@@ -135,25 +128,16 @@ def purge_expired_documents() -> int:
             logger.warning("Автоочистка корзины: не удалось удалить %s", doc_id, exc_info=True)
             continue
         audit.record(
-            _SystemUser(),
+            audit.SystemUser(),
             audit.DOCUMENT_AUTO_DELETE,
             audit.TARGET_DOCUMENT,
             target_id=doc_id,
             old_value={
                 "filename": (doc or {}).get("filename"),
-                "deleted_at": _iso((doc or {}).get("deleted_at")),
+                "deleted_at": audit.iso_or_str((doc or {}).get("deleted_at")),
             },
         )
     return removed
-
-
-def _iso(value) -> str | None:
-    """Серийиализует datetime в ISO-строку (JSON-колонка audit_log)."""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return str(value)
 
 
 def start_purge_loop() -> threading.Thread | None:
@@ -168,13 +152,13 @@ def start_purge_loop() -> threading.Thread | None:
     def _loop() -> None:
         interval = max(60.0, settings.trash_purge_interval_seconds)
         while True:
-            time.sleep(interval)
             try:
                 n = purge_expired_documents()
                 if n:
                     logger.info("Автоочистка корзины: удалено %d документ(ов)", n)
             except Exception:
                 logger.exception("Автоочистка корзины не удалась")
+            time.sleep(interval)
 
     thread = threading.Thread(target=_loop, name="trash-purge", daemon=True)
     thread.start()

@@ -380,16 +380,18 @@ export function createDevelopment({ number, name, module }) {
   });
 }
 
-export function updateDevelopment(devId, { number, name, module }) {
+export function updateDevelopment(devId, { number, name, module, version }) {
   return request(`/developments/${devId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ number, name, module }),
+    body: JSON.stringify({ number, name, module, version }),
   });
 }
 
-export function deleteDevelopment(devId) {
-  return request(`/developments/${devId}`, { method: "DELETE" });
+export function deleteDevelopment(devId, version) {
+  return request(`/developments/${devId}?version=${encodeURIComponent(version)}`, {
+    method: "DELETE",
+  });
 }
 
 export function listDevelopmentDocuments(devId, params = {}) {

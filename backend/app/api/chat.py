@@ -37,6 +37,15 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
     settings = get_settings()
     if req.session_id and not chat_history.is_valid_session_id(req.session_id):
         raise HTTPException(status_code=422, detail="session_id должен быть UUID")
+    # Ранняя проверка состояния треда ДО тяжёлой работы (embed → search → LLM):
+    # не тратим LLM-вызов на запрос, чей результат всё равно не сохранится.
+    try:
+        if req.session_id:
+            chat_history.check_session_state(req.session_id, current_user.user_id)
+    except chat_history.ChatOwnershipError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except chat_history.ChatSessionDeletedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
     vector = _embedder.embed(req.query) if "dense" in branches else None
@@ -112,6 +121,8 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         )
     except chat_history.ChatOwnershipError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except chat_history.ChatSessionDeletedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         logger.warning("Не удалось сохранить историю чата", exc_info=True)
 

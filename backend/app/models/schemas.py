@@ -112,7 +112,7 @@ class SearchResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    query: str
+    query: str = Field(min_length=1)
     tags: list[str] = Field(default_factory=list)
     top_k: int = Field(default=5, ge=1, le=50)
     mode: SearchMode | None = None
@@ -269,6 +269,7 @@ class DevelopmentOut(BaseModel):
     number: str
     name: str
     module: str | None = None
+    version: int
     created_at: datetime
     created_by: str | None = None
     documents_count: int = 0
@@ -291,6 +292,7 @@ class DevelopmentUpdate(BaseModel):
     number: str | None = None
     name: str | None = None
     module: str | None = None
+    version: int
 
 
 class DocumentDevelopmentSet(BaseModel):
