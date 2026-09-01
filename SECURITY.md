@@ -263,6 +263,20 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
 
 ## 7. Журнал security-изменений
 
+### 2026-09-01 — Закрыты пробелы журнала ИБ (audit)
+Изменение (3 шт): (1) `POST /documents/{id}/detect-development` — мутация
+`development_id`/`suggestion` автоопределением теперь пишет `document_development_set`
+(meta `source: "auto"`, old/new development_id); раньше путь был вовсе без записи.
+(2) `users/{id}/block|unblock` и `jobs/{id}/approve|cancel` пишут `ip_address`
+(SECURITY.md §5 обещает его для всех записей); unblock-запись переносится после
+проверки `n > 0` — фантомное действие по несуществующей блокировке больше не
+логируется. (3) Правка тегов, меняющая привязку разработки (тег = номер),
+фиксирует `development_id` в old/new_value — раньше смена разработки была
+невидима в записи `document_tags_update`. Причина: журнал ИБ обязан покрывать
+ВСЕ мутации и с полным контекстом — перечисленные пути нарушали §5.
+
+
+
 ### 2026-09-01 — Stored XSS: вложения бандла больше не рендерятся inline
 Изменение: `GET /documents/{doc_id}/okf/attachments/{filename}` отдаёт вложения
 с `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`

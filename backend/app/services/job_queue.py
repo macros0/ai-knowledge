@@ -176,7 +176,7 @@ class JobQueue:
                 s.query(Job).filter(Job.status.in_(PENDING_STATUSES)).count()
             )
 
-    def approve(self, job_id: int, approver) -> dict:
+    def approve(self, job_id: int, approver, *, ip_address: str | None = None) -> dict:
         """Одобрение (four-eyes) задачи в awaiting_approval вторым администратором."""
         with session_scope() as s:
             job = s.get(Job, job_id)
@@ -198,11 +198,12 @@ class JobQueue:
             audit_mod.JOB_APPROVE,
             audit_mod.TARGET_JOB,
             target_id=str(job_id),
+            ip_address=ip_address,
         )
         self._queue.put(job_id)
         return self._get_or_raise(job_id)
 
-    def cancel(self, job_id: int, canceller) -> dict:
+    def cancel(self, job_id: int, canceller, *, ip_address: str | None = None) -> dict:
         """Отмена задачи в queued/awaiting_approval (running — не отменяется)."""
         with session_scope() as s:
             job = s.get(Job, job_id)
@@ -218,6 +219,7 @@ class JobQueue:
             audit_mod.JOB_CANCEL,
             audit_mod.TARGET_JOB,
             target_id=str(job_id),
+            ip_address=ip_address,
         )
         return self._get_or_raise(job_id)
 

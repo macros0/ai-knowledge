@@ -158,6 +158,27 @@ class TestUpdateDocumentTags:
         assert doc["development_confirmed_by"] == "demo.editor"
         assert result["dev_tags_sync_pending"] is False
 
+    def test_dev_change_visible_in_audit_values(self, settings, qdrant_ok):
+        """Смена development_id через тег видна в audit old/new_value (не только tags)."""
+        AttributeRegistry().add("module", "PY")
+        dev = get_development_registry().create("12010", "СЭДО", module="PY")
+        reg = get_registry()
+        reg.create(DOC_ID, "a.docx", "x", 10, tags=["proxmox"])
+
+        dts.update_document_tags(DOC_ID, ["12010"], _User())
+
+        entries = AuditService().query(action_type=DOCUMENT_TAGS_UPDATE)
+        assert len(entries) == 1
+        assert entries[0]["old_value"]["development_id"] is None
+        assert entries[0]["new_value"]["development_id"] == dev["id"]
+
+        # Отвязка (удаление тега-номера) — тоже видна (query — свежие первыми).
+        dts.update_document_tags(DOC_ID, ["proxmox"], _User())
+        entries = AuditService().query(action_type=DOCUMENT_TAGS_UPDATE)
+        assert len(entries) == 2
+        unlink_entry = next(e for e in entries if e["new_value"]["development_id"] is None)
+        assert unlink_entry["old_value"]["development_id"] == dev["id"]
+
     def test_removing_dev_number_tag_unlinks(self, settings, qdrant_ok):
         AttributeRegistry().add("module", "PY")
         dev = get_development_registry().create("12010", "СЭДО", module="PY")

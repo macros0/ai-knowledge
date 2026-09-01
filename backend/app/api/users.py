@@ -1,5 +1,5 @@
 """Роуты блокировки пользователей (единственное активное действие роли Security)."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth.models import User
 from app.auth.service import require_role
@@ -12,6 +12,10 @@ router = APIRouter(prefix="/users", tags=["users"])
 _blocklist = get_blocklist()
 
 
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
 @router.get("/blocks")
 def list_blocks(user: User = Depends(require_role("security"))):
     """Список активных блокировок (read-only для роли Security)."""
@@ -22,6 +26,7 @@ def list_blocks(user: User = Depends(require_role("security"))):
 def block_user(
     external_id: str,
     body: BlockUserRequest,
+    request: Request,
     user: User = Depends(require_role("security")),
 ):
     """Блокировка пользователя/сессий (требует роли Security)."""
@@ -37,6 +42,7 @@ def block_user(
         audit.TARGET_USER,
         target_id=external_id,
         new_value={"reason": body.reason},
+        ip_address=_client_ip(request),
     )
     return block
 
@@ -44,15 +50,19 @@ def block_user(
 @router.post("/{external_id}/unblock")
 def unblock_user(
     external_id: str,
+    request: Request,
     user: User = Depends(require_role("security")),
 ):
     n = _blocklist.unblock(external_id)
+    if n == 0:
+        raise HTTPException(status_code=404, detail="Активных блокировок не найдено")
+    # Audit — только фактическая разблокировка: запись ПОСЛЕ проверки n > 0,
+    # иначе журнал ИБ фиксирует фантомное действие по несуществующей блокировке.
     audit.record(
         user,
         audit.USER_UNBLOCK,
         audit.TARGET_USER,
         target_id=external_id,
+        ip_address=_client_ip(request),
     )
-    if n == 0:
-        raise HTTPException(status_code=404, detail="Активных блокировок не найдено")
     return {"status": "unblocked", "count": n}

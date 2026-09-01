@@ -223,3 +223,59 @@ class TestAuditMetaEndpoints:
         login(client, "demo.admin")
         assert client.get("/api/audit/action-types").status_code == 403
         assert client.get("/api/audit/users").status_code == 403
+
+
+# ---------- Дополнение 2026-09-01: закрывалки audit-пробелов ----------
+
+
+class TestAuditGapFixes:
+    """detect-development без audit, ip_address в users/jobs, фантомный unblock."""
+
+    def test_detect_development_records_audit(self, client, monkeypatch):
+        from app.api import documents as docs
+        from app.services.audit import DOCUMENT_DEVELOPMENT_SET
+        from app.services.dev_detector import Detection
+        from app.services.development_registry import get_development_registry
+
+        dev = get_development_registry().create("12010", "СЭДО")
+        login(client)
+        DocumentRegistry().create("0123456789abcdef", "a.pdf", "application/pdf", 123)
+        monkeypatch.setattr(docs, "_document_head", lambda *a, **k: "текст")
+        monkeypatch.setattr(
+            docs,
+            "detect",
+            lambda *a, **k: Detection(
+                number="12010", development_id=dev["id"], confidence=0.8, matched=True
+            ),
+        )
+
+        resp = client.post("/api/documents/0123456789abcdef/detect-development")
+        assert resp.status_code == 200, resp.text
+
+        entries = AuditService().query(action_type=DOCUMENT_DEVELOPMENT_SET)
+        assert len(entries) == 1
+        assert entries[0]["target_id"] == "0123456789abcdef"
+        assert entries[0]["old_value"]["development_id"] is None
+        assert entries[0]["new_value"]["development_id"] == dev["id"]
+        assert entries[0]["meta"] == {"source": "auto"}
+        assert entries[0]["ip_address"] is not None
+
+    def test_unblock_without_active_blocks_no_phantom_audit(self, tmp_path, monkeypatch):
+        client = make_client(tmp_path, monkeypatch, auth_sim_users=SECURITY_USERS)
+        login(client, "demo.security")
+
+        resp = client.post("/api/users/nobody/unblock")
+        assert resp.status_code == 404
+        assert AuditService().query(action_type="user_unblock") == []
+
+    def test_block_unblock_records_ip(self, tmp_path, monkeypatch):
+        client = make_client(tmp_path, monkeypatch, auth_sim_users=SECURITY_USERS)
+        login(client, "demo.security")
+
+        assert client.post("/api/users/sim-editor/block", json={"reason": "x"}).status_code == 200
+        assert client.post("/api/users/sim-editor/unblock").status_code == 200
+
+        for action in ("user_block", "user_unblock"):
+            entries = AuditService().query(action_type=action)
+            assert len(entries) == 1
+            assert entries[0]["ip_address"] is not None

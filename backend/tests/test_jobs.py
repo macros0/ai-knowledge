@@ -100,6 +100,22 @@ class TestApproveCancel:
         cancelled = q.cancel(job["id"], _User())
         assert cancelled["status"] == STATUS_CANCELLED
 
+    def test_approve_cancel_audit_records_ip(self, q, make_docs):
+        """ip_address из запроса доезжает до audit-записей job_approve/job_cancel."""
+        from app.services.audit import AuditService
+
+        creator = _User("u-admin", "demo.admin")
+        awaiting = q.submit(BULK_DELETE, make_docs(50), creator)
+        q.approve(awaiting["id"], _User("u-admin2", "demo.admin2"), ip_address="10.0.0.9")
+
+        queued = q.submit(BULK_DELETE, make_docs(3), creator)
+        q.cancel(queued["id"], creator, ip_address="10.0.0.10")
+
+        approve_entry = AuditService().query(action_type="job_approve")[-1]
+        cancel_entry = AuditService().query(action_type="job_cancel")[-1]
+        assert approve_entry["ip_address"] == "10.0.0.9"
+        assert cancel_entry["ip_address"] == "10.0.0.10"
+
     def test_cancel_rejects_running_or_finished(self, q, make_docs):
         job = q.submit(BULK_DELETE, make_docs(3), _User())
         q.cancel(job["id"], _User())

@@ -363,16 +363,30 @@ def update_document_tags_endpoint(
 @router.post("/{doc_id}/detect-development", response_model=DetectDevelopmentOut)
 def detect_document_development(
     doc_id: str,
+    request: Request,
     user: User = Depends(require_role("editor", "admin")),
 ):
     """On-demand автоопределение номера разработки (regex + LLM) и возврат кандидата."""
     doc = _registry.get(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
+    old_dev_id = doc.get("development_id")
     markdown = _document_head(doc_id, doc)
     detection = detect(markdown, doc["filename"], doc_id)
     if detection.confidence is not None:
         attach_development(doc_id, detection)
+        # Мутация development_id/suggestion автоопределением — та же запись
+        # ИБ, что и ручная привязка (раньше путь был вовсе без audit).
+        audit.record(
+            user,
+            audit.DOCUMENT_DEVELOPMENT_SET,
+            audit.TARGET_DOCUMENT,
+            target_id=doc_id,
+            old_value={"development_id": old_dev_id},
+            new_value={"development_id": detection.development_id},
+            ip_address=_client_ip(request),
+            meta={"source": "auto"},
+        )
     return DetectDevelopmentOut(
         development_id=detection.development_id,
         number=detection.number,

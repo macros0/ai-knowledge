@@ -288,13 +288,21 @@ def update_document_tags(
     meta = None
     if bulk:
         meta = {"bulk": True, **(bulk_context or {})}
+    # Смена development_id через тег (номер разработки) фиксируется в той же
+    # записи ИБ — раньше правка, отвязывающая/привязывающая разработку, была
+    # невидима в журнале (old/new_value содержали только tags).
+    audit_old: dict = {"tags": old_tags}
+    audit_new: dict = {"tags": new_tags}
+    if "development_id" in dev_fields:
+        audit_old["development_id"] = doc.get("development_id")
+        audit_new["development_id"] = dev_fields.get("development_id")
     audit.record(
         user,
         audit.DOCUMENT_BULK_TAGS_UPDATE if bulk else audit.DOCUMENT_TAGS_UPDATE,
         audit.TARGET_DOCUMENT,
         target_id=doc_id,
-        old_value={"tags": old_tags},
-        new_value={"tags": new_tags},
+        old_value=audit_old,
+        new_value=audit_new,
         ip_address=ip_address,
         meta=meta,
     )
