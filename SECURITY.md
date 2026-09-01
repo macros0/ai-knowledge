@@ -66,6 +66,12 @@
 | `admin` | + массовые/деструктивные операции и задачи: bulk-delete, bulk-regenerate, approve/cancel job (`require_role("admin")`) |
 | `security` | блокировка/разблокировка пользователей (`users.py`) и read-only журнал ИБ (`audit.py`, `require_role("security")`) |
 
+Four-eyes для массовых операций (`app/services/job_queue.py`): задача сверх порога
+(`approval_threshold_docs_<type>`) переходит в `awaiting_approval` и требует одобрения
+**другим** администратором — создатель задачи не может одобрить её сам
+(`SelfApprovalError` → `403`). Без этого единственный админ проводил бы деструктивную
+операцию любого размера в одиночку, обесценивая смысл порога.
+
 Массовое редактирование тегов (`POST /documents/bulk-tags`, Этап 4a) — синхронная
 недеструктивная операция, поэтому доступна `Editor`/`Admin`, в отличие от
 bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MAX_DOCS` (50),
@@ -244,6 +250,14 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
   компрометация `APP_SECRET_KEY` = компрометация всех сессий.
 
 ## 7. Журнал security-изменений
+
+### 2026-09-01 — Four-eyes: запрет самоподтверждения задач
+Изменение: `JobQueue.approve` (`app/services/job_queue.py`) отклоняет одобрение задачи
+её создателем (`SelfApprovalError` → `403` в `app/api/jobs.py`); статус задачи при
+отказе не меняется, одобрение доступно другому администратору. Причина: порог
+`approval_threshold_docs_<type>` обещал «одобрение вторым администратором», но без
+проверки `approver != created_by` единственный админ мог подать bulk-delete любого
+размера и тут же одобрить его сам — four-eyes существовал только на бумаге.
 
 ### 2026-09-01 — Удаление разработки разрешено editor + целостность при удалении
 Изменение: `DELETE /developments/{id}` доступен роли `editor` (было только `admin`);

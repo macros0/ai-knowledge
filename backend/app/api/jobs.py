@@ -3,7 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth.models import User
 from app.auth.service import require_role
-from app.services.job_queue import JobNotFoundError, get_job_queue
+from app.services.job_queue import (
+    JobNotFoundError,
+    SelfApprovalError,
+    get_job_queue,
+)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -34,6 +38,8 @@ def approve_job(job_id: int, user: User = Depends(require_role("admin"))):
         return _job_queue.approve(job_id, user)
     except JobNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SelfApprovalError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

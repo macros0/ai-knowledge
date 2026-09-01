@@ -11,6 +11,7 @@ from app.services.job_queue import (
     STATUS_QUEUED,
     JobQueue,
     QueueOverloadedError,
+    SelfApprovalError,
 )
 from app.services.registry import DocumentRegistry
 
@@ -73,6 +74,18 @@ class TestApproveCancel:
     def test_approve_moves_awaiting_to_queued(self, q, make_docs):
         ids = make_docs(50)
         job = q.submit(BULK_DELETE, ids, _User())
+        approved = q.approve(job["id"], _User("u-admin2", "demo.admin2"))
+        assert approved["status"] == STATUS_QUEUED
+        assert approved["approved_by"] == "demo.admin2"
+
+    def test_approve_rejects_self_approval(self, q, make_docs):
+        """Four-eyes: создатель задачи не может одобрить её сам."""
+        creator = _User("u-admin", "demo.admin")
+        job = q.submit(BULK_DELETE, make_docs(50), creator)
+        with pytest.raises(SelfApprovalError):
+            q.approve(job["id"], creator)
+        # Статус не изменился — другой админ всё ещё может одобрить.
+        assert q.get(job["id"])["status"] == STATUS_AWAITING_APPROVAL
         approved = q.approve(job["id"], _User("u-admin2", "demo.admin2"))
         assert approved["status"] == STATUS_QUEUED
         assert approved["approved_by"] == "demo.admin2"

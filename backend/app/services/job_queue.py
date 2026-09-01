@@ -54,6 +54,10 @@ class JobNotFoundError(Exception):
     pass
 
 
+class SelfApprovalError(Exception):
+    """Создатель задачи пытается одобрить её сам (нарушение four-eyes)."""
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -180,6 +184,11 @@ class JobQueue:
                 raise JobNotFoundError(f"Задача {job_id} не найдена")
             if job.status != STATUS_AWAITING_APPROVAL:
                 raise ValueError("Задача не ожидает одобрения")
+            approver_id = getattr(approver, "user_id", None)
+            if job.created_by_id is not None and job.created_by_id == approver_id:
+                raise SelfApprovalError(
+                    "Four-eyes: создатель задачи не может одобрить её сам"
+                )
             job.status = STATUS_QUEUED
             job.approved_by = getattr(approver, "username", None) or getattr(approver, "user_id", None)
             job.approved_at = _utcnow()
