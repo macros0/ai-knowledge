@@ -424,3 +424,45 @@ class TestBulkTagsApi:
             json={"doc_ids": [DOC_ID], "add": ["vlan"], "remove": []},
         )
         assert resp.status_code == 404
+
+class TestTagsSyncWorkerResilience:
+    """Фоновый воркер синка тегов: исключение не убивает поток молча,
+    dirty-флаг во время синка запускает повтор, лок освобождается."""
+
+    def test_worker_survives_sync_exception(self, monkeypatch):
+        calls = {"n": 0}
+
+        def boom(doc_id):
+            calls["n"] += 1
+            raise RuntimeError("qdrant down")
+
+        monkeypatch.setattr(dts, "_sync_qdrant_tags", boom)
+        dts._tags_pending.add("doc-resilient")
+        lock = dts._tags_lock("doc-resilient")
+        assert lock.acquire(blocking=False)
+
+        # Не падает (исключение поймано и залогировано), лок освобождён.
+        dts._tags_worker("doc-resilient")
+        assert calls["n"] == 1
+        assert not lock.locked()
+        assert "doc-resilient" not in dts._tags_pending
+
+    def test_worker_loops_on_dirty_flag_set_during_sync(self, monkeypatch):
+        calls = {"n": 0}
+
+        def sync(doc_id):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                # Правка пришла во время синка — dirty-флаг до финальной проверки.
+                with dts._tags_locks_guard:
+                    dts._tags_pending.add(doc_id)
+
+        monkeypatch.setattr(dts, "_sync_qdrant_tags", sync)
+        dts._tags_pending.add("doc-loop")
+        lock = dts._tags_lock("doc-loop")
+        assert lock.acquire(blocking=False)
+
+        dts._tags_worker("doc-loop")
+        assert calls["n"] == 2  # первый синк + повтор по dirty-флагу
+        assert not lock.locked()
+        assert "doc-loop" not in dts._tags_pending

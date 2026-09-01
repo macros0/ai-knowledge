@@ -207,16 +207,32 @@ def _tags_lock(doc_id: str) -> threading.Lock:
 
 
 def _tags_worker(doc_id: str) -> None:
+    lock = _tags_lock(doc_id)
     try:
         while True:
             with _tags_locks_guard:
                 _tags_pending.discard(doc_id)
-            _sync_qdrant_tags(doc_id)
+            try:
+                _sync_qdrant_tags(doc_id)
+            except Exception:
+                # Воркер не должен умирать молча со стек-трейсом в stderr:
+                # логируем, расхождение лечится следующим триггером.
+                logger.warning(
+                    "Фоновый синк тегов документа %s в Qdrant не удался", doc_id, exc_info=True
+                )
             with _tags_locks_guard:
                 if doc_id not in _tags_pending:
                     return
     finally:
-        _tags_lock(doc_id).release()
+        lock.release()
+        # Гонка «проверка pending → release»: schedule_document_tags_sync успел
+        # добавить dirty-флаг после нашей проверки, но его acquire(blocking=False)
+        # неудался (лок ещё держали мы) — воркер не запущен. Само-возрождаемся,
+        # иначе правка зависла бы в pending до следующего триггера.
+        with _tags_locks_guard:
+            respawn = doc_id in _tags_pending
+        if respawn:
+            schedule_document_tags_sync(doc_id)
 
 
 def schedule_document_tags_sync(doc_id: str) -> None:
