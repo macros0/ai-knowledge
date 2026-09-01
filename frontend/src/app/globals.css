@@ -250,8 +250,7 @@ main {
   padding: 12px 16px;
   margin-bottom: 10px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
 }
 
@@ -275,6 +274,10 @@ main {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  /* Прижимаем колонку действий к правому краю. Без auto-margin названия
+     карточек разной ширины «плавали» по горизонтали (justify-content:
+     space-between распределял свободное место между [чекбокс][контент][действия]). */
+  margin-left: auto;
 }
 
 .status {
