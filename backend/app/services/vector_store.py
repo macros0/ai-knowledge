@@ -23,6 +23,7 @@ from qdrant_client.http import models as qm
 
 from app.config import get_settings
 from app.models.schemas import OkfDocument
+from app.services.bundle import parse_okf_file
 from app.services.errors import VectorStoreError
 from app.services.fusion import Hit
 from app.services.sparse import to_sparse_vector
@@ -63,9 +64,19 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
 }
 
 
+def _sparse_text(title: str, content: str) -> str:
+    """Единая формула sparse-текста (BM25) для свежей индексации и backfill.
+
+    Title содержит коды/номера разделов (например, "12410"), которые иначе
+    не попадали в индекс и концепт не находился по поиску по коду. Обе точки
+    построения (index_concepts и backfill_sparse) обязаны сходиться в этой
+    формуле — иначе рестарт перезаписывает sparse из другого текста.
+    """
+    return f"{title}\n{content}" if title else content
+
+
 def _not_deleted() -> qm.Filter:
     """Фильтр-обёртка, исключающий мягко удалённые точки (Этап 4a.2 корзина).
-
     Единственная точка применения дисциплины `deleted`: все пути поиска обязаны
     добавлять этот must_not. Точки с `deleted=true` (документ в корзине) не
     участвуют в RAG-поиске, автодополнении и graph-expansion.
@@ -181,10 +192,9 @@ class VectorStore:
             point_ids.add(str(point_id))
             title = meta.get("title", "")
             capped_content = okf_doc.content[:cap]
-            # Sparse-вектор строится из title + content: title содержит коды/номера
-            # разделов (например, "12410"), которые иначе не попадали в индекс и
-            # концепт не находился по поиску по коду.
-            sparse_text = f"{title}\n{capped_content}" if title else capped_content
+            # Sparse-вектор строится из title + content (единая формула
+            # _sparse_text — см. backfill_sparse).
+            sparse_text = _sparse_text(title, capped_content)
             points.append(
                 qm.PointStruct(
                     id=str(point_id),
@@ -246,7 +256,7 @@ class VectorStore:
             )
             point_ids.add(str(point_id))
             capped = text[:cap]
-            sparse_text = f"{section_title}\n{capped}" if section_title else capped
+            sparse_text = _sparse_text(section_title, capped)
             points.append(
                 qm.PointStruct(
                     id=str(point_id),
@@ -587,43 +597,57 @@ class VectorStore:
             return qm.Filter(must_not=must_not)
         return qm.Filter(must=[_tag_match_filter(tags)], must_not=must_not)
 
-    def backfill_sparse(self, batch_size: int = 100) -> int:
+    def _scroll_points(self, *, with_payload: bool, with_vectors: bool):
+        """Итерирует все точки коллекции батчами (scroll с пагинацией)."""
+        next_offset = None
+        while True:
+            batch, next_offset = self.client.scroll(
+                collection_name=self.collection,
+                limit=1000,
+                with_payload=with_payload,
+                with_vectors=with_vectors,
+                offset=next_offset,
+            )
+            yield from batch
+            if next_offset is None:
+                break
+
+    def backfill_sparse(self, batch_size: int = 100, *, force: bool = False) -> int:
         """Добивает sparse-векторы для старых точек из OKF-бандлов.
 
-        id точки детерминирован (uuid5 от filepath бандла), поэтому sparse
-        пересчитывается из полного текста и обновляется через update_vectors —
-        dense-вектор и payload существующей точки не затрагиваются.
+        id точки детерминирован (uuid5 от filepath бандла); sparse строится
+        из ТОГО ЖЕ текста, что при свежей индексации (parse_okf_file → title +
+        content по формуле _sparse_text) — frontmatter-поля (теги,
+        source_document, имена файлов) в BM25 не попадают. Dense-вектор и
+        payload существующей точки не затрагиваются.
 
-        Пропускает точки, которые есть в бандлах на диске, но уже удалены
-        из Qdrant (scroll собирает только существующие ID).
+        Идемпотентно: точки, у которых sparse-вектор уже есть, пропускаются
+        (scroll проверяет наличие named-вектора) — раньше каждый рестарт
+        пересчитывал весь корпус из полного текста .md, молча заменяя
+        правильные sparse-векторы испорченными (frontmatter в BM25).
+        force=True пересчитывает все точки бандлов — одноразовая миграция
+        после смены формулы текста (scripts/rebuild_sparse.py).
         """
         if not self.settings.okf_dir.is_dir():
             return 0
 
-        existing_ids: set[str] = set()
-        next_offset = None
-        while True:
-            batch = self.client.scroll(
-                collection_name=self.collection,
-                limit=1000,
-                with_vectors=False,
-                offset=next_offset,
-            )
-            records, next_offset = batch
-            for rec in records:
-                existing_ids.add(str(rec.id))
-            if next_offset is None:
-                break
+        existing: dict[str, bool] = {}
+        for rec in self._scroll_points(with_payload=False, with_vectors=True):
+            existing[str(rec.id)] = SPARSE_VECTOR_NAME in (rec.vector or {})
 
+        cap = self.settings.okf_max_concept_chars
         points: list[qm.PointVectors] = []
         for bundle_dir in sorted(self.settings.okf_dir.iterdir()):
             if not bundle_dir.is_dir():
                 continue
             for md in sorted(bundle_dir.glob("*.md")):
                 point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(md)))
-                if point_id not in existing_ids:
+                if point_id not in existing:
                     continue
-                sparse_vec = to_sparse_vector(md.read_text(encoding="utf-8"))
+                if existing[point_id] and not force:
+                    continue  # sparse уже построен — не портим при рестарте
+                meta, body = parse_okf_file(md)
+                sparse_vec = to_sparse_vector(_sparse_text(meta.get("title", ""), body[:cap]))
                 if not sparse_vec.indices:
                     continue
                 points.append(
@@ -670,28 +694,32 @@ class VectorStore:
         """Индексирует чанки из существующих OKF-бандлов (data/okf_bundles/*/chunks/).
 
         Для каждого бандла читает chunk_XX.md, вычисляет dense+sparse-векторы,
-        upsert как point_type="chunk". Идемпотентно: точки уже существуют
-        (детерминированный point_id) — upsert перезаписывает без дублирования.
+        upsert как point_type="chunk". Идемпотентно: сущестующие точки
+        (детерминированный point_id) скипаются ЦЕЛИКОМ по бандлу — ДО вызова
+        эмбеддинга, поэтому рестарт не пере-эмбеддит весь корпус.
+
+        Совместимость с purge-порядком «строка БД удаляется первой»
+        (pipeline.remove_if_deleted) и корзиной (Этап 4a.2): бандлы, чей
+        документ отсутствует в БД (физически удалён / гонка с purge) или лежит
+        в корзине (deleted_at), пропускаются — orphan-точки с активным
+        payload не плодим. dev_tags — из БД (как у свежей индексации),
+        иначе pre-filter по разработке не матчит backfilled-чанки.
         """
         if not self.settings.okf_dir.is_dir():
             return 0
         if not self.settings.search_index_chunks_enabled:
             return 0
 
+        from app.services.development_registry import get_development_registry
+        from app.services.pipeline import _extract_section_title
+        from app.services.registry import get_registry
+
+        reg = get_registry()
+        dev_reg = get_development_registry()
+
         existing_ids: set[str] = set()
-        next_offset = None
-        while True:
-            batch, next_offset = self.client.scroll(
-                collection_name=self.collection,
-                limit=1000,
-                with_payload=True,
-                with_vectors=False,
-                offset=next_offset,
-            )
-            for rec in batch:
-                existing_ids.add(str(rec.id))
-            if next_offset is None:
-                break
+        for rec in self._scroll_points(with_payload=False, with_vectors=False):
+            existing_ids.add(str(rec.id))
 
         chunk_points: list[qm.PointStruct] = []
         for bundle_dir in sorted(self.settings.okf_dir.iterdir()):
@@ -701,6 +729,12 @@ class VectorStore:
             chunks_dir = bundle_dir / "chunks"
             if not chunks_dir.is_dir():
                 continue
+
+            doc = reg.get(doc_id)
+            if doc is None or doc.get("deleted_at"):
+                continue  # purge в процессе / корзина — orphan-точки не создаём
+            dev_id = doc.get("development_id")
+            dev_tags = dev_reg.dev_tags(dev_id) if dev_id else []
 
             chunk_texts: list[str] = []
             chunk_indices: list[int] = []
@@ -712,13 +746,20 @@ class VectorStore:
             if not chunk_texts:
                 continue
 
-            # Извлекаем section_title и global_tags
-            from app.services.pipeline import _extract_section_title
+            # Существующие точки скипаем ДО эмбеддинга (по детерминированным id).
+            point_ids = [
+                str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{idx:02d}.md"))
+                for idx in chunk_indices
+            ]
+            if all(pid in existing_ids for pid in point_ids):
+                continue  # весь бандл уже проиндексирован — эмбеддинг не нужен
+            embed_positions = [i for i, pid in enumerate(point_ids) if pid not in existing_ids]
 
             section_titles = [_extract_section_title(t) for t in chunk_texts]
             cap = self.settings.okf_max_chunk_index_chars
             embed_inputs = []
-            for st, t in zip(section_titles, chunk_texts):
+            for i in embed_positions:
+                st, t = section_titles[i], chunk_texts[i]
                 embed_inputs.append(f"{st}\n{t[:cap]}" if st else t[:cap])
             vectors = embedder.embed_texts(embed_inputs)
 
@@ -732,16 +773,15 @@ class VectorStore:
                     global_tags = gt
                     break
 
-            for i, (text, vec, st) in enumerate(zip(chunk_texts, vectors, section_titles)):
-                idx = chunk_indices[i]
-                point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{idx:02d}.md"))
-                if point_id in existing_ids:
-                    continue  # точка уже проиндексирована — не пере-эмбеддим при рестарте
+            for pos, vec in zip(embed_positions, vectors):
+                text = chunk_texts[pos]
+                st = section_titles[pos]
+                idx = chunk_indices[pos]
                 capped = text[:cap]
-                sparse_text = f"{st}\n{capped}" if st else capped
+                sparse_text = _sparse_text(st, capped)
                 chunk_points.append(
                     qm.PointStruct(
-                        id=point_id,
+                        id=point_ids[pos],
                         vector={
                             "": vec,
                             SPARSE_VECTOR_NAME: to_sparse_vector(sparse_text),
@@ -751,6 +791,7 @@ class VectorStore:
                             "doc_id": doc_id,
                             "chunk_index": idx,
                             "tags": global_tags,
+                            "dev_tags": dev_tags,
                             "section_title": st,
                             "content": capped,
                         },

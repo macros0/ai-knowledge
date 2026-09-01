@@ -358,6 +358,7 @@ class TestPipelineRegenerate:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.index_concepts = lambda *a, **k: set()
         pipeline.vector_store.index_chunks = lambda *a, **k: set()
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
 
         pipeline.regenerate(doc_id)
 
@@ -381,6 +382,7 @@ class TestPipelineRegenerate:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.index_concepts = lambda *a, **k: set()
         pipeline.vector_store.index_chunks = lambda *a, **k: set()
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
 
         pipeline.regenerate(doc_id)
         result = pipeline.wait_for(doc_id, timeout=30)
