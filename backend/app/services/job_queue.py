@@ -88,10 +88,46 @@ class JobQueue:
             self._start_worker()
 
     def _start_worker(self) -> None:
+        self._recover_after_restart()
         self._worker = threading.Thread(
             target=self._run, name="job-queue-worker", daemon=True
         )
         self._worker.start()
+
+    def _recover_after_restart(self) -> None:
+        """Восстанавливает задачи, потерянные при рестарте процесса.
+
+        Внутренняя queue — in-memory, поэтому раньше задачи из БД со статусом
+        queued после рестарта висели вечно (и занимали circuit breaker), а
+        running оставались «исполняющимися» без исполнителя. Теперь queued
+        возвращаются в очередь, running помечаются failed.
+        """
+        with session_scope() as s:
+            queued = list(
+                s.execute(select(Job.id).where(Job.status == STATUS_QUEUED)).scalars().all()
+            )
+            stale_running = s.execute(
+                select(Job.id).where(Job.status == STATUS_RUNNING)
+            ).scalars().all()
+            for job_id in stale_running:
+                job = s.get(Job, job_id)
+                if job is None:
+                    continue
+                job.status = STATUS_FAILED
+                job.finished_at = _utcnow()
+                job.result = {
+                    "processed": 0,
+                    "errors": [],
+                    "error": "Процесс сервера перезапущен во время выполнения",
+                }
+        for job_id in queued:
+            self._queue.put(job_id)
+        if queued or stale_running:
+            logger.info(
+                "Восстановление задач после рестарта: %d возвращено в очередь, %d провалено",
+                len(queued),
+                len(stale_running),
+            )
 
     # --- Публичный API ---
 

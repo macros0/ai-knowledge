@@ -8,7 +8,9 @@ from app.services.job_queue import (
     BULK_REGENERATE,
     STATUS_AWAITING_APPROVAL,
     STATUS_CANCELLED,
+    STATUS_FAILED,
     STATUS_QUEUED,
+    STATUS_RUNNING,
     JobQueue,
     QueueOverloadedError,
     SelfApprovalError,
@@ -152,3 +154,39 @@ class TestPendingCount:
         q.submit(BULK_DELETE, make_docs(3), _User())
         q.submit(BULK_DELETE, make_docs(50), _User())
         assert q.pending_count() == 2
+
+
+class TestRestartRecovery:
+    """Восстановление задач после рестарта: queued → обратно в очередь,
+    running (worker умер вместе с процессом) → failed."""
+
+    def _insert_job(self, status, doc_id="doc0099"):
+        from app.db.models import Job
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            job = Job(
+                job_type=BULK_DELETE,
+                status=status,
+                created_by_id="u-admin",
+                created_by="demo.admin",
+                params={"doc_ids": [doc_id]},
+            )
+            s.add(job)
+            s.flush()
+            return job.id
+
+    def test_queued_requeued_and_running_failed(self):
+        q = JobQueue(start_worker=False)
+        queued_id = self._insert_job(STATUS_QUEUED)
+        running_id = self._insert_job(STATUS_RUNNING)
+
+        q._recover_after_restart()
+
+        # queued вернулся во внутреннюю очередь.
+        assert q._queue.qsize() == 1
+        assert q._queue.get() == queued_id
+        # running помечен failed с пояснением.
+        job = q.get(running_id)
+        assert job["status"] == STATUS_FAILED
+        assert "перезапущен" in (job["result"] or {}).get("error", "")
