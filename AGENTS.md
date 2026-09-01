@@ -66,6 +66,14 @@ UI: http://localhost:3000
   Tags — жёсткий pre-filter для dense/bm25. Переключатели `SEARCH_*_ENABLED` —
   query-time, реиндекс не требуется.
   Реиндекс нужен только при смене `embedding_dimensions` или sparse-токенайзера.
+  **Sparse-текст** (BM25) строится ТОЛЬКО по единой формуле `vector_store._sparse_text`
+  (title + content) — свежая индексация и backfill сходятся в ней. До 01.09.2026
+  `backfill_sparse` при каждом рестарте перезаписывал sparse из полного текста .md
+  (frontmatter/теги в BM25) — теперь точки с готовым sparse скипаются; одноразовая
+  миграция старых испорченных векторов: `backend/scripts/rebuild_sparse.py`
+  (force=True, идемпотентен). `backfill_chunks` скипает бандлы целиком ДО
+  эмбеддинга, пропускает корзину/доки без строки в БД (совместим с purge-порядком
+  «строка БД удаляется первой») и кладёт `dev_tags` в payload чанков.
 - **Справочник разработок + дедупликация (Этап 4, 30.08.2026)**:
   - Каноническая связь — `documents.development_id` (FK → `developments`). Проекция для
     поиска — payload Qdrant `dev_tags=[number,name,module]` на ВСЕХ точках (отдельное поле,
