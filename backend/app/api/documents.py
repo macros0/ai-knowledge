@@ -743,7 +743,19 @@ def get_okf_attachment(doc_id: str, filename: str):
     if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
         raise HTTPException(status_code=404, detail="Файл не найден")
     media_type = mimetypes.guess_type(filepath.name)[0] or "application/octet-stream"
-    return FileResponse(filepath, media_type=media_type)
+    return FileResponse(
+        filepath,
+        media_type=media_type,
+        headers={
+            # Вложения бандла (в т.ч. .svg/.html с расширением из имени
+            # вложенного объекта) никогда не рендерятся inline при прямой
+            # навигации — только скачиваются: защита от stored XSS с сессией
+            # пользователя. Рендер во фронтенде идёт как <img>-subresource,
+            # для которого Content-Disposition не влияет на загрузку.
+            "Content-Disposition": "attachment",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/{doc_id}/chunks", response_model=list[ChunkOut])

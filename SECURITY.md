@@ -263,6 +263,18 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
 
 ## 7. Журнал security-изменений
 
+### 2026-09-01 — Stored XSS: вложения бандла больше не рендерятся inline
+Изменение: `GET /documents/{doc_id}/okf/attachments/{filename}` отдаёт вложения
+с `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`
+(раньше — inline с угаданным media_type). Причина: расширение вложения
+определяется именем вложенного объекта из загруженного DOCX/XLSX/PDF (т.е.
+контролируется загрузчиком), поэтому `.svg`-вложение с embedded-скриптом
+отдавалось same-origin как `image/svg+xml` и исполнялось в сессии пользователя
+при прямой навигации. Рендер картинок во фронтенде идёт как `<img>`-subresource —
+для него Content-Disposition не влияет на загрузку, UI не изменился.
+
+
+
 ### 2026-09-01 — Path traversal в /{doc_id}-роутах раздачи контента
 Изменение: все `GET /documents/{doc_id}`-роуты с доступом к файловой системе
 (`list_okf_files`, `list_chunks`, `get_document_fulltext`) и, для единообразия,

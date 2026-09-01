@@ -54,7 +54,30 @@ class TestOkfAttachmentsEndpoint:
 
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("image/png")
+        # Stored-XSS-защита: вложения никогда не рендерятся inline при прямой
+        # навигации; тип контента не переинтерпретируется браузером.
+        assert resp.headers["content-disposition"] == "attachment"
+        assert resp.headers["x-content-type-options"] == "nosniff"
         assert resp.content == PNG_MAGIC + b"fake-image"
+
+    def test_svg_attachment_served_as_download(self, tmp_path: Path, monkeypatch):
+        """SVG-вложение (вектор stored XSS) не отдаётся inline даже с image/svg+xml."""
+        settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
+        attach_dir = settings.okf_dir / "a1b2c3d4e5f60718" / "attachments"
+        attach_dir.mkdir(parents=True, exist_ok=True)
+        (attach_dir / "schema.svg").write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            encoding="utf-8",
+        )
+        client = make_client(tmp_path, monkeypatch)
+
+        with client:
+            resp = client.get("/api/documents/a1b2c3d4e5f60718/okf/attachments/schema.svg")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("image/svg+xml")
+        assert resp.headers["content-disposition"] == "attachment"
+        assert resp.headers["x-content-type-options"] == "nosniff"
 
     def test_missing_attachment_returns_404(self, tmp_path: Path, monkeypatch):
         settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
