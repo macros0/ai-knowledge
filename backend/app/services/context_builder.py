@@ -3,6 +3,8 @@
 Merge/collapse: группировка по (doc_id, chunk_index), слияние концепт+чанк.
 XML-формат контекста для LLM.
 """
+import re
+
 from app.config import Settings, get_settings
 from app.services.fusion import Hit
 
@@ -16,6 +18,13 @@ CHUNK_TYPE = "chunk"
 # обгонял по fused score широкий основной концепт и перехватывал заголовок/
 # цитату [1] группы — ответ цитировал замечание вместо основного источника.
 REVIEW_TAG = "review"
+
+# kind сиблинг-блока концепта-замечания. Первичный блок группы получает
+# UNION-теги всех хитов (включая review от замечаний группы), поэтому
+# иммунитет анти-шумового фильтра определяется по kind, а не по тегу —
+# иначе primary основной группы без чанка (kind="concept", union-теги с
+# review) случайно унаследовал бы иммунитет и перестал фильтроваться как шум.
+REVIEW_KIND = "review"
 
 
 def _is_review_hit(hit: Hit) -> bool:
@@ -187,7 +196,8 @@ def merge_and_format(
         # таблицы для ЛК); раньше collapse выбрасывал их контент целиком —
         # сильные bm25-попадания вроде таблицы «Перечень: Наименование поля»
         # не доезжали ни до LLM, ни до sources. Эмитим каждый доп. концепт-хит
-        # отдельным блоком.
+        # отдельным блоком. Замечания получают kind="review" (иммунитет
+        # анти-шумового фильтра — см. drop_unmatched_blocks).
         for concept in sibling_concepts:
             if total_chars >= settings.chat_max_context_chars:
                 break
@@ -205,7 +215,7 @@ def merge_and_format(
                     "score": concept.score,
                     "source_filename": source_filename,
                     "point_type": CONCEPT_TYPE,
-                    "kind": "concept",
+                    "kind": REVIEW_KIND if _is_review_hit(concept) else "concept",
                     "chunk_index": chunk_idx,
                 }
             )
@@ -227,6 +237,56 @@ _MARKER_STOPWORDS = {
     "должен", "должна", "может", "могут", "будет", "быть", "также", "только",
 }
 
+# Наивный срез русских падежно-числовых окончаний для МАРКЕРА совпадений
+# (не для поиска!): «табельного» ↔ «табельных», «номера» ↔ «номеров».
+# Консервативная таблица (только флективные окончания, длинные первыми);
+# guard минимальной основы (>= 5) не трогает короткие слова («дата» → «дат»);
+# латиница/аббревиатуры не стеммятся. Токенайзер BM25 (services/sparse.py)
+# НЕ трогаем — там стемминг сломал бы sparse-индекс (реиндекс всей коллекции).
+_RU_ENDINGS = tuple(sorted(
+    (
+        "ого", "его", "ыми", "ими", "ами", "ями", "иях", "ых", "их", "ах", "ях",
+        "ой", "ей", "ов", "ев", "ий", "ый", "ая", "яя", "ое", "ее", "ые", "ие",
+        "ом", "ем", "ым", "им", "ую", "юю", "ья", "ье", "ью", "ть", "ся", "сь",
+        "а", "я", "о", "е", "и", "ы", "у", "ю", "ь",
+    ),
+    key=len,
+    reverse=True,
+))
+_RU_WORD_RE = re.compile(r"[а-яё]+$")
+
+# Минимальная длина основы после среза окончания: короче — срез опасен
+# (случайные совпадения коротких доменных терминов).
+_STEM_MIN_STEM_LEN = 5
+
+
+def _stem_ru(token: str) -> str:
+    """Срезает русское падежное окончание токена (для маркерных функций).
+
+    «табельного» → «табельн», «номеров» → «номер», «отпуска» → «отпуск».
+    Токены без окончания (нулевая форма), латиница и слова, где основа после
+    среза короче _STEM_MIN_STEM_LEN, возвращаются без изменений.
+    """
+    if len(token) <= _STEM_MIN_STEM_LEN or not _RU_WORD_RE.fullmatch(token):
+        return token
+    for ending in _RU_ENDINGS:
+        stem = token[: -len(ending)] if token.endswith(ending) else None
+        if stem is not None and len(stem) >= _STEM_MIN_STEM_LEN:
+            return stem
+    return token
+
+
+def _token_in_text(token: str, text: str) -> bool:
+    """Токен запроса встречается в тексте: точная подстрока или по стемму.
+
+    Точное совпадение — первично; стемминг — фолбэк для словоформ
+    (запрос в родительном падеже, текст в предложном и т.п.).
+    """
+    if token in text:
+        return True
+    stem = _stem_ru(token)
+    return stem != token and stem in text
+
 
 def matched_terms(item: dict, query: str | None) -> list[str]:
     """Значимые термины запроса, буквально встречающиеся в заголовке/тексте блока.
@@ -234,8 +294,9 @@ def matched_terms(item: dict, query: str | None) -> list[str]:
     Тот же токенайзер, что и в BM25 (services/sparse.py), плюс фильтр служебных
     слов вопроса: совпадение по содержательному термину означает, что блок
     нашёлся и лексически, не только семантически. Пустой список — блок не
-    содержит терминов вопроса (для LLM это сигнал слабой релевантности,
-    выводится в metadata как Matched terms: []).
+    содержит терминов запроса (для LLM это сигнал слабой релевантности,
+    выводится в metadata как Matched terms: []). Словоформы матчатся по
+    стемму-фолбэку (_token_in_text): «табельного» ↔ «табельных».
     """
     if not query:
         return []
@@ -245,7 +306,7 @@ def matched_terms(item: dict, query: str | None) -> list[str]:
     return [
         t
         for t in tokenize(query)
-        if t not in _MARKER_STOPWORDS and t in haystack
+        if t not in _MARKER_STOPWORDS and _token_in_text(t, haystack)
     ]
 
 
@@ -263,7 +324,7 @@ def title_matched_terms(item: dict, query: str | None) -> list[str]:
     from app.services.sparse import tokenize
 
     title = item.get("title", "").lower()
-    return [t for t in tokenize(query) if t not in _MARKER_STOPWORDS and t in title]
+    return [t for t in tokenize(query) if t not in _MARKER_STOPWORDS and _token_in_text(t, title)]
 
 
 def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[dict]:
@@ -280,10 +341,11 @@ def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[di
       внутри чанка «Доработка расширения для ZPRP_DISABILITY_CHLD»), концепт-
       выжимка — только про сам объект.
 
-    Для естественных запросов фильтр практически не срабатывает: совпадение
-    ВСЕХ токенов в заголовке требует дословного имени (словоформы не стеммятся).
-    Требование >= 2 токенов отсекает слишком общие однословные запросы.
-    Если ни один заголовок не покрывает запрос целиком — блоки не меняются.
+    Для естественных запросов фильтр срабатывает редко: совпадение ВСЕХ
+    токенов в заголовке требует поименованной темы; словоформы матчатся
+    по стемму-фолбэку (_token_in_text). Требование >= 2 токенов отсекает
+    слишком общие однословные запросы. Если ни один заголовок не покрывает
+    запрос целиком — блоки не меняются.
     """
     if not query or not merged:
         return merged
@@ -295,7 +357,7 @@ def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[di
     full = [
         m
         for m in merged
-        if all(t in m.get("title", "").lower() for t in tokens)
+        if all(_token_in_text(t, m.get("title", "").lower()) for t in tokens)
     ]
     if not full:
         return merged
@@ -317,13 +379,24 @@ def drop_unmatched_blocks(merged: list[dict], query: str | None) -> list[dict]:
     бы у одного блока есть совпадение терминов запроса, блоки без совпадений
     в контекст не попадают вовсе.
 
+    Иммунитет у сиблинг-замечаний рецензентов (kind="review", проставляется в
+    merge_and_format): их узкий текст (дословный диалог вопроса-ответ) часто
+    не содержит словоформ запроса буквально, но блок законно вошёл в top_k
+    после ранжирования — вырезался как шум (регрессия 02.09.2026: замечания
+    пропадали из источников целиком). Иммунитет строго по kind, а не по тегу:
+    primary-блок группы несёт union-теги (включая review от замечаний-хитов)
+    и должен подчиняться обычной логике фильтра.
+
     Если совпадений нет ни у одного блока (парафразный запрос — лексики
     запроса нет в корпусе), фильтр не срабатывает: все блоки остаются,
     ответ строится по смысловым совпадениям.
     """
     if not query or not merged:
         return merged
-    matched = [bool(matched_terms(m, query)) for m in merged]
+    matched = [
+        bool(matched_terms(m, query)) or m.get("kind") == REVIEW_KIND
+        for m in merged
+    ]
     if not any(matched):
         return merged
     return [m for m, has in zip(merged, matched) if has]

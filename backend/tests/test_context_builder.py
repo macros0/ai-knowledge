@@ -3,6 +3,7 @@ import pytest
 
 from app.config import Settings, SEARCH_MODE_PRESETS
 from app.services.context_builder import (
+    _stem_ru,
     drop_partial_title_matches,
     drop_unmatched_blocks,
     format_context,
@@ -234,7 +235,7 @@ class TestMergeReviewConcepts:
         assert primary["concept_content"] == "выжимка основного концепта"
         assert primary["score"] == 0.95  # best_score группы
         assert sibling["title"] == "Замечание рецензента: Аналогично вопросу выше"
-        assert sibling["kind"] == "concept"
+        assert sibling["kind"] == "review"  # иммунитет анти-шумового фильтра
         assert sibling["score"] == 0.95
 
     def test_chunk_with_only_reviews_chunk_is_primary(self, settings):
@@ -251,7 +252,7 @@ class TestMergeReviewConcepts:
         assert primary["filepath"] == "d1/chunks/chunk_01.md"
         assert primary["concept_content"] is None
         assert sibling["title"] == "Замечание рецензента: Вопрос к таблице"
-        assert sibling["kind"] == "concept"
+        assert sibling["kind"] == "review"
 
     def test_review_only_group_unchanged(self, settings):
         """Группа из одних замечаний без чанка (поиск с фильтром tags=[review])
@@ -283,6 +284,171 @@ class TestMergeReviewConcepts:
         merged = merge_and_format([main, chunk], settings)
         assert merged[0]["title"] == "Секция X"
         assert merged[0]["kind"] == "concept+chunk"
+
+
+class TestStemRu:
+    """Стемминг словоформ для маркерных функций: «табельного» ↔ «табельных».
+
+    Guard: основа после среза >= 5 символов, только кириллица, консервативная
+    таблица окончаний. sparse-токенайзер (services/sparse.py) не трогается.
+    """
+
+    def test_tabelny_word_forms_same_stem(self):
+        assert _stem_ru("табельного") == _stem_ru("табельных") == "табельн"
+
+    def test_number_forms_same_stem(self):
+        assert _stem_ru("номера") == _stem_ru("номеров") == _stem_ru("номеру") == "номер"
+
+    def test_domain_term_otpusk(self):
+        """Доменный SAP HCM термин 6 букв: «отпуск» (нулевое окончание) и
+        «отпуска» дают один стем — ложных срезов коротких основ нет."""
+        assert _stem_ru("отпуск") == "отпуск"
+        assert _stem_ru("отпуска") == "отпуск"
+        assert _stem_ru("отпуском") == "отпуск"
+
+    def test_short_stem_guard(self):
+        """«дата» → основа «дат» < 5: срез не выполняется (ложные совпадения
+        коротких доменных терминов недопустимы)."""
+        assert _stem_ru("дата") == "дата"
+        assert _stem_ru("кода") == "кода"
+
+    def test_latin_untouched(self):
+        assert _stem_ru("zprp") == "zprp"
+        assert _stem_ru("expanded") == "expanded"
+
+    def test_posobie_forms(self):
+        """«пособий» → «пособ»; подстроковый матч поймает «пособие» («пособ»
+        входит в «пособие») — словоформы пособия матчатся."""
+        assert _stem_ru("пособий") == "пособ"
+        assert "пособ" in "пособие"
+
+
+class TestMatchedTermsStemming:
+    def _item(self, title: str, content: str) -> dict:
+        return {"title": title, "content": content, "tags": [], "source_filename": "f",
+                "point_type": "concept", "kind": "concept", "chunk_index": None}
+
+    def test_word_form_matched_via_stem(self):
+        """Запрос «табельного» (род.п.), текст «табельных» — маркер непуст
+        («выбор» матчится точно через title, «номера» — подстрокой «номерам»)."""
+        item = self._item("Выбор ТН", "сортируем по статусу занятости и табельных номерам")
+        assert matched_terms(item, "выбор табельного номера") == ["выбор", "табельного", "номера"]
+
+    def test_domain_term_matched_via_stem(self):
+        """«отпуска» (запрос) ↔ «отпуск» (текст) — частый SAP HCM термин."""
+        item = self._item("Отпуск", "порядок предоставления отпуска сотруднику")
+        assert "отпуска" in matched_terms(item, "как оформить отпуска")
+
+    def test_short_words_not_stem_matched(self):
+        """Guard: «даты» ↔ «дата» — основа < 5, стемминг не срабатывает."""
+        item = self._item("Период", "дата начала и дата окончания")
+        assert matched_terms(item, "какие даты увольнения") == []
+
+    def test_exact_match_still_primary(self):
+        item = self._item("ЭЛН", "текст")
+        assert matched_terms(item, "ЭЛН") == ["элн"]
+
+
+class TestDropUnmatchedReviewImmunity:
+    """Иммунитет сиблинг-замечаний (kind="review") в анти-шумовом фильтре —
+    строго по kind, не по тегу: primary-блок группы несёт union-теги (включая
+    review от замечаний-хитов) и должен фильтроваться как обычный блок."""
+
+    def _item(self, title: str, content: str, kind: str = "concept", tags=None) -> dict:
+        return {"title": title, "content": content, "tags": tags or [],
+                "source_filename": "f", "point_type": "concept",
+                "kind": kind, "chunk_index": None}
+
+    def test_review_sibling_survives_empty_marker(self):
+        """Позитив: review-сиблинг без лексических совпадений выживает при
+        матчевых соседях (регрессия 02.09.2026: замечания пропадали из
+        источников — их текст в другой словоформе, чем запрос)."""
+        matched = self._item("Проверка персональных данных", "сортировка табельных номеров")
+        review = self._item("Замечание рецензента: Имеется ввиду самый свежий ТН?",
+                            "Что бы не усложнять алгоритм, наибольший табельный",
+                            kind="review", tags=["review", "comment", "Волкова"])
+        noise = self._item("Перечень: Название столбца", "таблица полей")
+        kept = drop_unmatched_blocks([matched, review, noise], "Выбор табельного номера")
+        assert [m["title"] for m in kept] == [matched["title"], review["title"]]
+
+    def test_mixed_primary_with_review_tags_is_cut(self):
+        """Негатив: mixed-primary (kind=concept+chunk) c review в union-тегах
+        и пустым маркером РЕЖЕТСЯ — иммунитет не наследуется через теги."""
+        mixed_primary = self._item(
+            "Группа с замечаниями", "контент без лексики запроса",
+            kind="concept+chunk", tags=["business", "review", "comment"],
+        )
+        matched = self._item("Матчевый блок", "табельного номера выбор")
+        kept = drop_unmatched_blocks([matched, mixed_primary], "Выбор табельного номера")
+        assert [m["title"] for m in kept] == [matched["title"]]
+
+    def test_primary_main_concept_with_review_union_tags_is_cut(self):
+        """Негатив (тонкий случай): primary основной группы БЕЗ чанка получает
+        union-теги группы (review от замечаний-хитов) при kind="concept" —
+        иммунитет по kind="review" его не защищает, пустой маркер режется."""
+        primary = self._item("Основной концепт группы", "текст без совпадений",
+                             kind="concept", tags=["business", "review"])
+        matched = self._item("Матчевый блок", "выбор табельного номера")
+        kept = drop_unmatched_blocks([matched, primary], "Выбор табельного номера")
+        assert [m["title"] for m in kept] == [matched["title"]]
+
+    def test_plain_concept_without_match_is_cut(self):
+        noise = self._item("Шумовой концепт", "чужая таблица полей")
+        matched = self._item("Матчевый блок", "выбор табельного номера")
+        kept = drop_unmatched_blocks([matched, noise], "Выбор табельного номера")
+        assert [m["title"] for m in kept] == [matched["title"]]
+
+    def test_review_only_list_all_survive(self):
+        """Выдача только из замечаний без совпадений — фильтр отключён
+        (нет ни одного матчевого блока), прежнее поведение."""
+        reviews = [self._item("Замечание рецензента: Первое", "текст", kind="review"),
+                   self._item("Замечание рецензента: Второе", "текст", kind="review")]
+        assert drop_unmatched_blocks(reviews, "парафразный вопрос") == reviews
+
+    def test_merge_marks_review_siblings_with_review_kind(self, settings):
+        """merge_and_format проставляет сиблингам-замечаниям kind="review"
+        (основные сиблинги — kind="concept")."""
+        review = Hit("rev1", 0.95, {"point_type": "concept", "doc_id": "d1", "chunk_index": 1,
+                                     "title": "Замечание рецензента: Вопрос", "tags": ["review", "comment"],
+                                     "content": "текст замечания", "filepath": "d1/rev1.md",
+                                     "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 0)
+        main = Hit("main1", 0.80, {"point_type": "concept", "doc_id": "d1", "chunk_index": 1,
+                                   "title": "Основной концепт", "tags": ["business"],
+                                   "content": "выжимка", "filepath": "d1/main1.md",
+                                   "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 1)
+        chunk = Hit("ch1", 0.90, {"point_type": "chunk", "doc_id": "d1", "chunk_index": 1, "tags": [],
+                                  "content": "сырой чанк", "section_title": "Секция"}, 2)
+        main_sibling = Hit("main2", 0.70, {"point_type": "concept", "doc_id": "d1", "chunk_index": 1,
+                                           "title": "Второй основной", "tags": ["business"],
+                                           "content": "выжимка2", "filepath": "d1/main2.md",
+                                           "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 3)
+        merged = merge_and_format([review, main, chunk, main_sibling], settings)
+        kinds = {m["title"]: m["kind"] for m in merged}
+        assert kinds["Основной концепт"] == "concept+chunk"  # primary: union-теги, но kind не review
+        assert kinds["Замечание рецензента: Вопрос"] == "review"
+        assert kinds["Второй основной"] == "concept"
+
+    def test_regression_scenario_seven_blocks(self):
+        """Регрессионный сценарий по пробы 02.09.2026: 5 матчевых блоков +
+        2 review-сиблинга (пустой маркер — словоформы) + 3 шума → 7 блоков
+        в контексте и источниках (было 5: замечания терялись)."""
+        blocks = [
+            self._item("Проверка персональных данных", "выбор табельного номера"),
+            self._item("Регистрация своих МЧД", "выбор номера"),
+            self._item("Заполнение полей", "выбор табельного номера"),
+            self._item("Доработка расширения", "выбор"),
+            self._item("CERTIFIED_COPIES", "табельного номера"),
+            self._item("Замечание рецензента: Имеется ввиду самый свежий ТН?",
+                       "наибольший табельный самый свежий", kind="review", tags=["review"]),
+            self._item("Замечание рецензента (Если не найден ни один табельный…)",
+                       "речь о наибольшем табельном номере", kind="review", tags=["review"]),
+            self._item("Перечень: Название столбца", "таблица"),
+            self._item("TYPEX", "поле"),
+            self._item("ZT3409_BEN_MES", "поле"),
+        ]
+        kept = drop_unmatched_blocks(blocks, "Выбор табельного номера")
+        assert len(kept) == 7
+        assert sum(1 for m in kept if m["kind"] == "review") == 2
 
 
 class TestFormatContext:
@@ -481,13 +647,15 @@ class TestDropPartialTitleMatches:
         kept = drop_partial_title_matches([a, b], "отпуск")
         assert kept == [a, b]
 
-    def test_word_form_mismatch_keeps_all(self):
-        """«интеграции» != «Интеграция» в заголовке (токенайзер не стеммит) —
-        фильтр не срабатывает, блоки сохраняются."""
+    def test_word_form_now_matches(self):
+        """С лёгким стеммингом словоформа в заголовке считается совпадением:
+        «интеграции» (запрос) ↔ «Интеграция» (заголовок) — фильтр срабатывает
+        и ограничивает контекст блоками «про объект». До 02.09.2026 словоформы
+        не матчились и фильтр пропускал смежный шум."""
         a = self._item("Интеграция SAP HCM с СФР СЭДО")
         b = self._item("Журнал", "интеграции описаны в тексте")
         kept = drop_partial_title_matches([a, b], "интеграции сэдо")
-        assert kept == [a, b]
+        assert kept == [a]
 
     def test_case_insensitive_and_underscore(self):
         about = self._item("lk_stat - статус согласования")

@@ -50,3 +50,6 @@ Thumbs.db
 
 # OpenChamber local config (machine-specific, like .opencode/)
 .openchamber/
+
+# Probe acceptance baseline (local corpus state artifact, regen via --baseline)
+backend/scripts/probe-baseline.json
