@@ -3,11 +3,13 @@ import pytest
 
 from app.config import Settings, SEARCH_MODE_PRESETS
 from app.services.context_builder import (
+    drop_partial_title_matches,
     drop_unmatched_blocks,
     format_context,
     matched_terms,
     merge_and_format,
     resolve_branches,
+    title_matched_terms,
 )
 from app.services.fusion import Hit
 
@@ -108,6 +110,19 @@ class TestMergeAndFormat:
         assert len(merged) == 1
         assert merged[0]["title"] == "Настройка сервера"
 
+    def test_concept_content_kept_for_concept_plus_chunk(self, settings):
+        """Merge сохраняет собственный контент репрезентативного концепта
+        (concept_content) — точный фильтр подменяет им сырой чанк."""
+        c1 = Hit("c1", 0.9, {"point_type": "concept", "doc_id": "d1", "chunk_index": 0,
+                            "title": "Настройка", "tags": ["a"], "content": "выжимка про настройку",
+                            "filepath": "d1/setup.md", "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 0)
+        ch = Hit("ch0", 0.8, {"point_type": "chunk", "doc_id": "d1", "chunk_index": 0,
+                              "tags": ["a"], "content": "полный текст чанка", "section_title": ""}, 2)
+        merged = merge_and_format([c1, ch], settings)
+        assert len(merged) == 1
+        assert merged[0]["content"] == "полный текст чанка"
+        assert merged[0]["concept_content"] == "выжимка про настройку"
+
     def test_many_to_one_two_concepts_one_chunk(self, settings):
         """2 концепта из одного чанка + сам чанк → первичный concept+chunk блок
         (title/content по первому по score) + сиблинг-концепт отдельным блоком."""
@@ -179,6 +194,95 @@ class TestMergeAndFormat:
         merged = merge_and_format([chunk], settings, filename_lookup=lookup)
         assert merged[0]["source_filename"] == "doc.docx"
         assert merged[0]["filepath"] == "d1/chunks/chunk_00.md"
+
+
+class TestMergeReviewConcepts:
+    """Замечания рецензентов (тег review) не представляют смешанную группу:
+    primary — первый основной концепт, замечания — сиблинги (регрессия
+    02.09.2026: узкое замечание обгоняло широкий основной концепт по fused
+    score и перехватывало заголовок/цитату [1] группы)."""
+
+    def _review(self, pid: str, score: float, title: str) -> Hit:
+        return Hit(pid, score, {"point_type": "concept", "doc_id": "d1", "chunk_index": 1,
+                                "title": title, "tags": ["review", "comment", "Рецензентов"],
+                                "content": "текст замечания", "filepath": f"d1/{pid}.md",
+                                "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 0)
+
+    def _main(self, pid: str, score: float, title: str) -> Hit:
+        return Hit(pid, score, {"point_type": "concept", "doc_id": "d1", "chunk_index": 1,
+                                "title": title, "tags": ["business"], "content": "выжимка основного концепта",
+                                "filepath": f"d1/{pid}.md",
+                                "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 1)
+
+    def _chunk(self, pid: str, score: float, section_title: str = "Алгоритм выбора") -> Hit:
+        return Hit(pid, score, {"point_type": "chunk", "doc_id": "d1", "chunk_index": 1, "tags": [],
+                                "content": "полный сырой текст чанка", "section_title": section_title}, 2)
+
+    def test_mixed_group_primary_is_main_concept(self, settings):
+        """Чанк + замечание (score выше) + основной концепт: primary — основной
+        концепт, замечание — сиблинг; content по-прежнему из чанка."""
+        review = self._review("rev1", 0.95, "Замечание рецензента: Аналогично вопросу выше")
+        main = self._main("main1", 0.80, "Проверка персональных данных сотрудника")
+        chunk = self._chunk("ch1", 0.90)
+        merged = merge_and_format([review, main, chunk], settings)
+        assert len(merged) == 2
+        primary, sibling = merged[0], merged[1]
+        assert primary["title"] == "Проверка персональных данных сотрудника"
+        assert primary["kind"] == "concept+chunk"
+        assert primary["content"] == "полный сырой текст чанка"
+        assert primary["filepath"] == "d1/main1.md"
+        assert primary["concept_content"] == "выжимка основного концепта"
+        assert primary["score"] == 0.95  # best_score группы
+        assert sibling["title"] == "Замечание рецензента: Аналогично вопросу выше"
+        assert sibling["kind"] == "concept"
+        assert sibling["score"] == 0.95
+
+    def test_chunk_with_only_reviews_chunk_is_primary(self, settings):
+        """Чанк + только замечания: primary — сам чанк (kind=chunk, section
+        title), замечания — сиблинги, замечание не представляет группу."""
+        review = self._review("rev1", 0.95, "Замечание рецензента: Вопрос к таблице")
+        chunk = self._chunk("ch1", 0.90, section_title="Таблица полей сообщения")
+        merged = merge_and_format([review, chunk], settings)
+        assert len(merged) == 2
+        primary, sibling = merged[0], merged[1]
+        assert primary["title"] == "Таблица полей сообщения"
+        assert primary["kind"] == "chunk"
+        assert primary["point_type"] == "chunk"
+        assert primary["filepath"] == "d1/chunks/chunk_01.md"
+        assert primary["concept_content"] is None
+        assert sibling["title"] == "Замечание рецензента: Вопрос к таблице"
+        assert sibling["kind"] == "concept"
+
+    def test_review_only_group_unchanged(self, settings):
+        """Группа из одних замечаний без чанка (поиск с фильтром tags=[review])
+        — прежнее поведение: первый замечание как primary."""
+        r1 = self._review("rev1", 0.95, "Замечание рецензента: Первое")
+        r2 = self._review("rev2", 0.90, "Замечание рецензента: Второе")
+        merged = merge_and_format([r1, r2], settings)
+        assert len(merged) == 2
+        assert merged[0]["title"] == "Замечание рецензента: Первое"
+        assert merged[0]["kind"] == "concept"
+        assert merged[0]["filepath"] == "d1/rev1.md"
+
+    def test_main_and_review_without_chunk(self, settings):
+        """Основной концепт + замечание без чанка: primary — основной."""
+        review = self._review("rev1", 0.95, "Замечание рецензента: Вопрос")
+        main = self._main("main1", 0.80, "Основной концепт")
+        merged = merge_and_format([review, main], settings)
+        assert len(merged) == 2
+        assert merged[0]["title"] == "Основной концепт"
+        assert merged[1]["title"] == "Замечание рецензента: Вопрос"
+
+    def test_main_concept_without_title_falls_to_section(self, settings):
+        """Основной концепт с пустым title → секционный заголовок чанка."""
+        main = Hit("main1", 0.80, {"point_type": "concept", "doc_id": "d1", "chunk_index": 1,
+                                   "title": "", "tags": ["business"], "content": "выжимка",
+                                   "filepath": "d1/main1.md",
+                                   "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 1)
+        chunk = self._chunk("ch1", 0.90, section_title="Секция X")
+        merged = merge_and_format([main, chunk], settings)
+        assert merged[0]["title"] == "Секция X"
+        assert merged[0]["kind"] == "concept+chunk"
 
 
 class TestFormatContext:
@@ -269,6 +373,30 @@ class TestMatchedTerms:
         ctx = format_context(merged)
         assert "Matched terms: []" in ctx
 
+    def test_title_match_terms_in_title(self):
+        item = self._item("Доработка расширения для ZPRP_DISABILITY_CHLD", "тело без имени")
+        assert title_matched_terms(item, "ZPRP_DISABILITY_CHLD") == ["zprp", "disability", "chld"]
+
+    def test_title_match_only_in_body_is_empty(self):
+        item = self._item("Отчет «Контроль ЭЛН в проактиве»", "упоминает ZPRP_JOURNAL в тексте")
+        assert title_matched_terms(item, "ZPRP_DISABILITY_CHLD") == []
+
+    def test_title_match_without_query(self):
+        item = self._item("ZPRP_DISABILITY_CHLD", "тело")
+        assert title_matched_terms(item, None) == []
+
+    def test_title_match_service_words_filtered(self):
+        item = self._item("какие ZPRP поля", "тело")
+        # «какие» — служебное слово, отфильтровано; «поля» и «zprp» легитимно в титле.
+        assert title_matched_terms(item, "какие поля ZPRP") == ["поля", "zprp"]
+
+    def test_format_context_title_match_metadata(self):
+        about = self._item("Расширения для тр. ZPRP_DISABILITY_CHLD", "тело")
+        mentions = self._item("Отчет «Контроль ЭЛН»", "ZPRP_JOURNAL упомянут")
+        ctx = format_context([about, mentions], query="ZPRP_DISABILITY_CHLD")
+        assert "Title match: [zprp, disability, chld]" in ctx
+        assert "Title match: []" in ctx
+
 
 class TestDropUnmatchedBlocks:
     def _item(self, title: str, content: str) -> dict:
@@ -305,3 +433,69 @@ class TestDropUnmatchedBlocks:
         b = self._item("Другое", "нет")
         kept = drop_unmatched_blocks([a, b], "интеграции ЛК")
         assert kept == [a]
+
+
+class TestDropPartialTitleMatches:
+    def _item(self, title: str, content: str = "тело") -> dict:
+        return {"title": title, "content": content, "tags": [], "source_filename": "f",
+                "point_type": "concept", "kind": "concept", "chunk_index": None}
+
+    def test_exact_name_query_keeps_only_full_title_blocks(self):
+        """«ZPRP_DISABILITY_CHLD»: заголовок [2] покрывает все токены — остаётся
+        только он, смежный ЭЛН-отчёт (упоминание в теле) выбрасывается."""
+        about = self._item("Расширения для тр. ZPRP_DISABILITY_CHLD - Журнал")
+        adjacent = self._item("Отчет «Контроль ЭЛН в проактиве»", "ZPRP_JOURNAL в тексте")
+        kept = drop_partial_title_matches([about, adjacent], "ZPRP_DISABILITY_CHLD")
+        assert kept == [about]
+
+    def test_exact_name_swaps_chunk_content_for_concept_content(self):
+        """Точный запрос: у concept+chunk-блока контент заменяется на выжимку
+        концепта — сырой чанк содержит чужие подразделы раздела."""
+        about = {
+            "title": "Доработка расширения для ZPRP_DISABILITY_CHLD",
+            "content": "сырой чанк с таблицей ЭЛН-журнала и чужими подразделами",
+            "concept_content": "Алгоритм ZCL_3409_BADI_PRP-ADD_DIS_CHLD_FROM_IT, отчет HRULAPL4.",
+            "tags": [], "source_filename": "f", "point_type": "concept",
+            "kind": "concept+chunk", "chunk_index": 4,
+        }
+        kept = drop_partial_title_matches([about], "ZPRP_DISABILITY_CHLD")
+        assert kept[0]["content"] == "Алгоритм ZCL_3409_BADI_PRP-ADD_DIS_CHLD_FROM_IT, отчет HRULAPL4."
+        # Исходный блок не мутирован (контент чанка сохранён в копии).
+        assert "сырой чанк" in about["content"]
+
+    def test_exact_name_without_concept_content_keeps_chunk(self):
+        about = self._item("ZPRP DISABILITY CHLD журнал")
+        kept = drop_partial_title_matches([about], "ZPRP DISABILITY_CHLD")
+        assert kept[0]["content"] == "тело"
+
+    def test_no_full_title_match_keeps_all(self):
+        """Естественный запрос: ни один заголовок не покрывает все токены."""
+        a = self._item("Создание записи для ЛК")
+        b = self._item("Перечень: Наименование поля", "поля заполняются из ЛК")
+        kept = drop_partial_title_matches([a, b], "Какие интеграции с ЛК есть?")
+        assert kept == [a, b]
+
+    def test_single_token_query_keeps_all(self):
+        a = self._item("Отпуск")
+        b = self._item("Журнал отсутствий", "отпуск упоминается")
+        kept = drop_partial_title_matches([a, b], "отпуск")
+        assert kept == [a, b]
+
+    def test_word_form_mismatch_keeps_all(self):
+        """«интеграции» != «Интеграция» в заголовке (токенайзер не стеммит) —
+        фильтр не срабатывает, блоки сохраняются."""
+        a = self._item("Интеграция SAP HCM с СФР СЭДО")
+        b = self._item("Журнал", "интеграции описаны в тексте")
+        kept = drop_partial_title_matches([a, b], "интеграции сэдо")
+        assert kept == [a, b]
+
+    def test_case_insensitive_and_underscore(self):
+        about = self._item("lk_stat - статус согласования")
+        other = self._item("Другое", "LK_STAT в тексте")
+        kept = drop_partial_title_matches([about, other], "LK_STAT")
+        assert kept == [about]
+
+    def test_empty_inputs(self):
+        assert drop_partial_title_matches([], "ЛК журнал") == []
+        item = self._item("ЛК")
+        assert drop_partial_title_matches([item], None) == [item]

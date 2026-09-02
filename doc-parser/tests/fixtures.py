@@ -12,6 +12,8 @@ from pathlib import Path
 from lxml import etree
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
+W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 O = "urn:schemas-microsoft-com:office:office"
 R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PKG = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -95,32 +97,59 @@ def make_docx_with_image(path: Path, image_bytes: bytes | None = None) -> Path:
 
 
 def inject_comment(path: Path, author: str = "Иван Иванов", text: str = "Включите Trunk для VLAN 10-20") -> Path:
+    return inject_comments(path, [{"id": "0", "author": author, "text": text}])
+
+
+def inject_comments(path: Path, comments: list[dict], anchors: dict[str, int | str] | None = None) -> Path:
+    """Инъекция нескольких комментариев (+ опционально commentsExtended.xml).
+
+    comments — список описаний вида:
+        {"id": "137", "author": "...", "text": "...", "date": "2026-08-12T10:00:00Z",
+         "para_id": "552F5CF1", "parent_para_id": None, "done": "1"}
+    При заданных para_id/parent_para_id/done создаётся word/commentsExtended.xml
+    (нити обсуждений «вопрос → ответы» + признак закрытия).
+
+    anchors: id → индекс текстового абзаца (int) или "cell" (первый абзац
+    ячейки таблицы с текстом). По умолчанию — первый текстовый абзац.
+    """
     entries = _read_zip(path)
     docxml = _xml(entries["word/document.xml"])
     body = docxml.find(f"{{{W}}}body")
 
-    target = None
-    for p in body.iter(f"{{{W}}}p"):
-        if p.findall(f".//{{{W}}}t"):
-            target = p
-            break
-    assert target is not None, "нет абзаца с текстом для комментария"
+    text_paras = [p for p in body.iter(f"{{{W}}}p") if p.findall(f".//{{{W}}}t")]
+    assert text_paras, "нет абзацев с текстом для комментария"
+    cell_paras: list = []
+    for tc in body.iter(f"{{{W}}}tc"):
+        for p in tc.findall(f"./{{{W}}}p"):
+            if p.findall(f".//{{{W}}}t"):
+                cell_paras.append(p)
 
-    cstart = etree.SubElement(target, f"{{{W}}}commentRangeStart")
-    cstart.set(f"{{{W}}}id", "0")
-    run = etree.SubElement(target, f"{{{W}}}r")
-    cref = etree.SubElement(run, f"{{{W}}}commentReference")
-    cref.set(f"{{{W}}}id", "0")
-    cend = etree.SubElement(target, f"{{{W}}}commentRangeEnd")
-    cend.set(f"{{{W}}}id", "0")
-    # порядок: cstart в начале, cend+ref в конце
-    target.remove(cstart)
-    target.insert(0, cstart)
-    target.remove(cend)
-    target.append(cend)
+    for spec in comments:
+        cid = spec["id"]
+        anchor = (anchors or {}).get(cid, 0)
+        if anchor == "cell":
+            assert cell_paras, "нет ячеек таблицы с текстом"
+            target = cell_paras[0]
+        else:
+            idx = int(anchor)
+            assert 0 <= idx < len(text_paras), f"нет абзаца {idx} для комментария {cid}"
+            target = text_paras[idx]
+
+        cstart = etree.SubElement(target, f"{{{W}}}commentRangeStart")
+        cstart.set(f"{{{W}}}id", cid)
+        run = etree.SubElement(target, f"{{{W}}}r")
+        cref = etree.SubElement(run, f"{{{W}}}commentReference")
+        cref.set(f"{{{W}}}id", cid)
+        cend = etree.SubElement(target, f"{{{W}}}commentRangeEnd")
+        cend.set(f"{{{W}}}id", cid)
+        # порядок: cstart в начале, cend+ref в конце
+        target.remove(cstart)
+        target.insert(0, cstart)
+        target.remove(cend)
+        target.append(cend)
 
     entries["word/document.xml"] = _dump(docxml)
-    entries["word/comments.xml"] = _comments_xml(author, text)
+    entries["word/comments.xml"] = _comments_xml(comments)
     _add_relationship(
         entries,
         "word/_rels/document.xml.rels",
@@ -133,21 +162,52 @@ def inject_comment(path: Path, author: str = "Иван Иванов", text: str 
         "/word/comments.xml",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml",
     )
+    if any(spec.get("para_id") for spec in comments):
+        entries["word/commentsExtended.xml"] = _comments_extended_xml(comments)
+        _add_relationship(
+            entries,
+            "word/_rels/document.xml.rels",
+            "rIdCommentsExt99",
+            "http://schemas.microsoft.com/office/2011/relationships/commentsExtended",
+            "commentsExtended.xml",
+        )
+        _add_content_type(
+            entries,
+            "/word/commentsExtended.xml",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml",
+        )
     _write_zip(path, entries)
     return path
 
 
-def _comments_xml(author: str, text: str) -> bytes:
+def _comments_xml(comments: list[dict]) -> bytes:
     root = etree.Element(f"{{{W}}}comments")
-    comment = etree.SubElement(root, f"{{{W}}}comment")
-    comment.set(f"{{{W}}}id", "0")
-    comment.set(f"{{{W}}}author", author)
-    comment.set(f"{{{W}}}initials", "ИИ")
-    comment.set(f"{{{W}}}date", "2026-08-12T10:00:00Z")
-    p = etree.SubElement(comment, f"{{{W}}}p")
-    r = etree.SubElement(p, f"{{{W}}}r")
-    t = etree.SubElement(r, f"{{{W}}}t")
-    t.text = text
+    for spec in comments:
+        comment = etree.SubElement(root, f"{{{W}}}comment")
+        comment.set(f"{{{W}}}id", spec["id"])
+        comment.set(f"{{{W}}}author", spec.get("author", "Рецензент"))
+        comment.set(f"{{{W}}}initials", "ИИ")
+        comment.set(f"{{{W}}}date", spec.get("date", "2026-08-12T10:00:00Z"))
+        p = etree.SubElement(comment, f"{{{W}}}p")
+        if spec.get("para_id"):
+            p.set(f"{{{W14}}}paraId", spec["para_id"])
+        r = etree.SubElement(p, f"{{{W}}}r")
+        t = etree.SubElement(r, f"{{{W}}}t")
+        t.text = spec["text"]
+    return _dump(root)
+
+
+def _comments_extended_xml(comments: list[dict]) -> bytes:
+    root = etree.Element(f"{{{W15}}}commentsEx")
+    for spec in comments:
+        if not spec.get("para_id"):
+            continue
+        ce = etree.SubElement(root, f"{{{W15}}}commentEx")
+        ce.set(f"{{{W15}}}paraId", spec["para_id"])
+        if spec.get("parent_para_id"):
+            ce.set(f"{{{W15}}}paraIdParent", spec["parent_para_id"])
+        if spec.get("done") is not None:
+            ce.set(f"{{{W15}}}done", spec.get("done", "0"))
     return _dump(root)
 
 

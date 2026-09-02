@@ -1,5 +1,9 @@
 """Юнит-тесты RRF (Reciprocal Rank Fusion) с весами."""
+import pytest
+
+from app.config import Settings
 from app.services.fusion import Hit, reciprocal_rank_fusion
+from app.services.vector_store import VectorStore, _demote_review_concepts
 
 
 class TestRRFBasic:
@@ -79,3 +83,108 @@ class TestRRFKConstant:
         spread_small = small_k[0].score - small_k[1].score
         spread_large = large_k[0].score - large_k[1].score
         assert spread_small > spread_large
+
+
+class TestReviewDemotion:
+    """Демоция концептов-замечаний (тег review) до fusion: эффективный ранг
+    += penalty в каждой ветке — узкое замечание (дословный контекст якоря)
+    не должно вытеснять основной контент из топа RRF."""
+
+    @staticmethod
+    def _hit(pid: str, rank: int, point_type: str = "concept", tags: list | None = None) -> Hit:
+        return Hit(pid, 1.0 - rank * 0.01, {
+            "point_type": point_type, "doc_id": "d1", "chunk_index": 1,
+            "title": pid, "tags": tags or [], "content": "x",
+        }, rank)
+
+    def test_demote_adds_penalty_to_review_concepts_only(self):
+        review = self._hit("rev", 0, tags=["review", "comment"])
+        main = self._hit("main", 1, tags=["business"])
+        chunk = self._hit("ch", 2, point_type="chunk", tags=["review"])  # тег на чанке
+        _demote_review_concepts([review, main, chunk], penalty=10)
+        assert review.rank == 10
+        assert main.rank == 1
+        assert chunk.rank == 2  # не концепт — не трогаем
+
+    def test_demote_noop_when_disabled(self):
+        review = self._hit("rev", 0, tags=["review"])
+        _demote_review_concepts([review], penalty=0)
+        _demote_review_concepts([review], penalty=-1)
+        assert review.rank == 0
+
+    def _vs(self, tmp_path, monkeypatch, *, penalty: int, per_branch: int) -> tuple[VectorStore, list]:
+        """VectorStore с заглушенными ветками (dense/bm25) и выключенным graph
+        expansion; возвращает (vs, dense_calls) для проверок per_branch."""
+        settings = Settings(
+            _env_file=None, data_dir=tmp_path, embedding_dimensions=8,
+            search_graph_expansion_enabled=False,
+            search_review_concept_rank_penalty=penalty,
+            search_per_branch_top_k=per_branch,
+        )
+        print("DBG settings: dense_enabled=", settings.search_dense_enabled) if False else None
+        monkeypatch.setattr("app.services.vector_store.get_settings", lambda: settings)
+        vs = VectorStore()
+        vs.settings = settings
+        calls: list[int] = []
+
+        def fake_dense(vector, query_filter, top_k):
+            calls.append(top_k)
+            # Реальная группа (диагноз 02.09.2026, dense-ветка): замечание #1,
+            # основной концепт #10, между ними шум других документов.
+            hits = [self._hit("rev", 0, tags=["review", "comment"])]
+            hits += [self._hit(f"noise{i}", i + 1, tags=["x"]) for i in range(8)]
+            hits += [self._hit("main", 9, tags=["business"])]
+            return hits
+
+        def fake_bm25(sparse_vec, query_filter, top_k):
+            return [self._hit("ch", 0, point_type="chunk")]
+
+        monkeypatch.setattr(vs, "search_dense", fake_dense)
+        monkeypatch.setattr(vs, "search_bm25", fake_bm25)
+        return vs, calls
+
+    def test_penalty_swaps_review_and_main_in_fusion(self, tmp_path, monkeypatch):
+        """ИНТЕРАКЦИЯ penalty × per_branch_top_k на реальной группе: замечание
+        на dense #1, основной концепт на dense #10. С penalty=10 и запасом
+        кандидатов (per_branch=40, оба в пуле) основной концепт обгоняет
+        замечание в fusion — а не выталкивается им за границу выборки."""
+        vs, calls = self._vs(tmp_path, monkeypatch, penalty=10, per_branch=40)
+        fused = vs.search_composite(
+            dense_vec=[0.1] * 8, sparse_vec=None, tags=None,
+            branches={"dense"}, top_k=40,
+        )
+        assert calls == [40]  # запас кандидатов реально проброшен в ветку
+        order = [h.point_id for h in fused]
+        assert order.index("main") < order.index("rev")
+        # Замечание не выброшено — просто ниже основного
+        assert "rev" in order
+
+    def test_penalty_zero_keeps_review_on_top(self, tmp_path, monkeypatch):
+        """penalty=0 (выкл): прежнее поведение — замечание (dense #1) выше
+        основного концепта (dense #10)."""
+        vs, _ = self._vs(tmp_path, monkeypatch, penalty=0, per_branch=40)
+        fused = vs.search_composite(
+            dense_vec=[0.1] * 8, sparse_vec=None, tags=None,
+            branches={"dense"}, top_k=40,
+        )
+        order = [h.point_id for h in fused]
+        assert order.index("rev") < order.index("main")
+
+    def test_review_only_hits_still_found(self, tmp_path, monkeypatch):
+        """Запрос именно про замечания: review-хит — единственный релевантный,
+        демоция не мешает его выдаче (опускает, но не удаляет)."""
+        settings = Settings(
+            _env_file=None, data_dir=tmp_path, embedding_dimensions=8,
+            search_graph_expansion_enabled=False,
+            search_review_concept_rank_penalty=10,
+        )
+        monkeypatch.setattr("app.services.vector_store.get_settings", lambda: settings)
+        vs = VectorStore()
+        vs.settings = settings
+        monkeypatch.setattr(vs, "search_dense", lambda v, f, k: [self._hit("rev", 0, tags=["review"])])
+        monkeypatch.setattr(vs, "search_bm25", lambda s, f, k: [])
+        fused = vs.search_composite(
+            dense_vec=[0.1] * 8, sparse_vec=None, tags=None,
+            branches={"dense"}, top_k=10,
+        )
+        assert [h.point_id for h in fused] == ["rev"]

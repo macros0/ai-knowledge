@@ -14,7 +14,7 @@ content, global_tags, source_document, attachments — удаляются одн
 
 Запуск (требует доступный Qdrant; сервис может быть запущен):
     python scripts/migrate_payload.py
-    python scripts/migrate_payload.py --qdrant-url http://localhost:6333
+    python scripts/migrate_payload.py --qdrant-url http://localhost:16333
     python scripts/migrate_payload.py --fix-slugs    # полное согласование slug
 
 Идемпотентно: повторный запуск не меняет уже slim-точки.

@@ -12,7 +12,7 @@ payload не затрагиваются. Повторный запуск без�
 
 Запуск (требует доступный Qdrant; сервис может быть запущен):
     python scripts/rebuild_sparse.py
-    python scripts/rebuild_sparse.py --qdrant-url http://localhost:6333
+    python scripts/rebuild_sparse.py --qdrant-url http://localhost:16333
 """
 from __future__ import annotations
 

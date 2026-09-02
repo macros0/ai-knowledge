@@ -10,6 +10,7 @@ import yaml
 from app.config import get_settings
 from app.models.schemas import Concept, OkfDocument
 from app.prompts.store import get_store
+from app.services.comment_concepts import extract_comment_concepts
 from app.services.field_table import extract_table_concepts
 from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMClient, LLMTruncationError
@@ -58,6 +59,13 @@ class OKFGenerator:
         получает остаток чанка (без таблицы) — не тонет в ней и обрабатывает
         семантику (XML-примеры, описания).
 
+        Комментарии рецензентов (треды «вопрос → ответы») извлекаются
+        программно ДО таблиц (comment_concepts.extract_comment_concepts):
+        LLM обрабатывала их нестабильно (теряла решения), а порядок «до таблиц»
+        обязателен — незакрытая строка markdown-таблицы «заглатывает»
+        последующие строки, блок-цитата комментария после такой строки
+        уходила бы в ячейку таблицы. На сыром чанке блок-цитаты контигуальны.
+
         Каскад отказоустойчивости при обрезании ответа LLM по лимиту токенов:
           1. chat_json сам повторяет запрос с увеличенным max_tokens (до cap);
           2. если всё ещё LLMTruncationError — чанк режется пополам и половинки
@@ -66,6 +74,11 @@ class OKFGenerator:
              (okf_salvage_truncated): частичный результат сохраняется с WARNING,
              документ не застревает.
         """
+        # Комментарии — ДО таблиц: экстракция на сыром чанке, где блок-цитаты
+        # гарантированно целы (см. docstring выше).
+        comment_concepts: list[Concept] = []
+        if self.settings.okf_comment_concepts_enabled:
+            comment_concepts, chunk = extract_comment_concepts(chunk, chunk_index=index)
         table_concepts, remainder = extract_table_concepts(
             chunk,
             chunk_index=index,
@@ -74,7 +87,7 @@ class OKFGenerator:
             doc_id=doc_id,
         )
         llm_concepts = self._generate_chunk_recursive(remainder, filename, index, total, doc_id, depth=0)
-        return table_concepts + llm_concepts
+        return comment_concepts + table_concepts + llm_concepts
 
     def _generate_chunk_recursive(
         self, chunk: str, filename: str, index: int, total: int, doc_id: str, depth: int

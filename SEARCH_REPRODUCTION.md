@@ -10,10 +10,13 @@
 
 ## Предусловия
 
-1. Стек поднят: `.\scripts\start-all.ps1` (Qdrant `:6333`, backend `:8000`).
+1. Стек поднят: `.\scripts\start-all.ps1` (Qdrant `:16333`, backend `:8000`).
 2. Есть готовый документ (`status: "done"`) с проиндексированными чанками.
    Проверить по `data/documents.json` (поле `total_chunks > 0`).
 3. В `.env`: `SEARCH_INDEX_CHUNKS_ENABLED=true`.
+
+> Локальный бинарь Qdrant слушает `:16333` (не дефолтные `6333/6334` — порт 6333
+> попадает в исключённый диапазон Windows Hyper-V/WSL, см. AGENTS.md).
 
 Для примеров ниже используется документ **`aba437ae0475408e`** —
 «Спецификация типа сообщения СЭДО № 12010» (v3.3.0, 14 чанков).
@@ -25,11 +28,11 @@
 
 ```bash
 # Всего точек
-curl -X POST http://localhost:6333/collections/okf_knowledge_base/points/count \
+curl -X POST http://localhost:16333/collections/okf_knowledge_base/points/count \
   -H "Content-Type: application/json" -d '{"exact": true}'
 
 # Чанки конкретного документа
-curl -X POST http://localhost:6333/collections/okf_knowledge_base/points/scroll \
+curl -X POST http://localhost:16333/collections/okf_knowledge_base/points/scroll \
   -H "Content-Type: application/json" -d '{
     "filter": {"must": [
       {"key": "doc_id", "match": {"value": "aba437ae0475408e"}},
@@ -195,5 +198,5 @@ curl -X POST http://localhost:8000/api/search \
 не 11434!) отдаёт эмбеддинги. Sparse строится локально, но dense-эмбеддинг
 запроса требует живой модели.
 
-**Qdrant не отвечает** — `GET /collections` на `:6333`. Пуск:
+**Qdrant не отвечает** — `GET /collections` на `:16333`. Пуск:
 `.\scripts\start-all.ps1`, логи в `%TEMP%\opencode\`.

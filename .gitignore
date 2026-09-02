@@ -47,3 +47,6 @@ Thumbs.db
 # Local tooling
 .cocoindex_code/
 .opencode/
+
+# OpenChamber local config (machine-specific, like .opencode/)
+.openchamber/

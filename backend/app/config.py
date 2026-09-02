@@ -201,6 +201,11 @@ class Settings(BaseSettings):
     # указывает ключевую колонку. При ошибке/выключении — fallback на XML-
     # эвристику (okf_field_table_min_rows). Кэш на диск: data/cache/table_classify/.
     okf_table_llm_classify: bool = False
+    # Программная экстракция концептов из комментариев рецензентов (треды
+    # «вопрос → ответы» с контекстом якоря и статусом закрытия) — детерминированный
+    # regex вместо нестабильного встраивания LLM; LLM получает заглушку
+    # (см. services/comment_concepts.py и docparser markdown-формат треда).
+    okf_comment_concepts_enabled: bool = True
 
     chat_top_k_min: int = Field(default=1, ge=1)
     chat_top_k_max: int = Field(default=30, ge=1)
@@ -268,6 +273,12 @@ class Settings(BaseSettings):
     search_rrf_dense_weight: float = 1.0
     search_rrf_bm25_weight: float = 1.5
     search_rrf_graph_expansion_weight: float = 0.5
+    # Демоция концептов-замечаний рецензентов (point_type=concept, тег review)
+    # ДО fusion: эффективный ранг += penalty в каждой ветке. Замечания
+    # дублируют контекст якоря (узкий текст релевантнее запросу, чем широкий
+    # основной концепт) и вытесняли основной контент из топа RRF. 0 — выкл.
+    # Query-time, реиндекс не требуется; откат — env SEARCH_REVIEW_CONCEPT_RANK_PENALTY=0.
+    search_review_concept_rank_penalty: int = 10
 
     # --- Контекст LLM (форматирование после merge/collapse) ---
     # Жёсткий лимит на суммарный объём контекста, передаваемого в LLM.

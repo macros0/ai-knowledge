@@ -31,6 +31,54 @@ class TestBlocksToMarkdown:
         md = blocks_to_markdown([Block("comment", "Замечание")])
         assert "**Комментарий рецензента:**" in md
 
+    def test_comment_thread_rendered(self):
+        """Тред: контекст → вопрос (автор, дата) → ответы → статус; каждая
+        строка — внутри блок-цитаты (формат распознаёт backend-экстрактор)."""
+        block = Block(
+            "comment",
+            "Какой ТН считать свежим?",
+            meta={
+                "author": "Волкова",
+                "thread": [
+                    {"author": "Волкова", "date": "2026-08-12T10:00:00Z", "text": "Какой ТН считать свежим?"},
+                    {"author": "Сагитов", "date": "2026-08-13T10:00:00Z", "text": "Наибольший табельный."},
+                ],
+                "context": "Алгоритм выбора табельного",
+                "resolved": True,
+            },
+        )
+        md = blocks_to_markdown([block])
+        lines = [line for line in md.split("\n") if line.startswith(">")]
+        assert lines == [
+            "> **Контекст:** Алгоритм выбора табельного",
+            "> **Комментарий рецензента (Волкова, 2026-08-12):** Какой ТН считать свежим?",
+            "> **Ответ (Сагитов):** Наибольший табельный.",
+            "> **Статус:** замечание закрыто",
+        ]
+
+    def test_comment_thread_without_context_and_status(self):
+        block = Block(
+            "comment",
+            "Вопрос?",
+            meta={
+                "author": "Рецензент",
+                "thread": [{"author": "Рецензент", "date": "", "text": "Вопрос?"}],
+            },
+        )
+        md = blocks_to_markdown([block])
+        assert md == "> **Комментарий рецензента (Рецензент):** Вопрос?"
+
+    def test_comment_thread_multiline_text_quoted(self):
+        """Многострочный текст записи не разрывает блок-цитату."""
+        block = Block(
+            "comment",
+            "Строка 1\nСтрока 2",
+            meta={"author": "Рецензент", "thread": [{"author": "Рецензент", "date": "", "text": "Строка 1\nСтрока 2"}]},
+        )
+        md = blocks_to_markdown([block])
+        assert "> **Комментарий рецензента (Рецензент):** Строка 1" in md
+        assert "> Строка 2" in md
+
     def test_attachment_marker(self):
         blocks = [Block("attachment", "Вложение: a.xlsx (zip)", meta={"saved_path": "out/a.xlsx"})]
         md = blocks_to_markdown(blocks)

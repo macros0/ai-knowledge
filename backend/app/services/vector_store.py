@@ -38,9 +38,16 @@ def _qdrant_call(func, *args, **kwargs):
     except VectorStoreError:
         raise
     except Exception as exc:
+        url = None
+        try:
+            from app.config import get_settings
+            url = get_settings().qdrant_url
+        except Exception:
+            pass
+        port_hint = f" по адресу {url}" if url else ""
         raise VectorStoreError(
             "База знаний (Qdrant) недоступна. "
-            "Проверьте, что Qdrant запущен на порту 6333.",
+            f"Проверьте, что Qdrant запущен{port_hint}.",
             cause=exc,
         ) from exc
 
@@ -74,9 +81,9 @@ def _sparse_text(title: str, content: str) -> str:
     """
     return f"{title}\n{content}" if title else content
 
-
 def _not_deleted() -> qm.Filter:
     """Фильтр-обёртка, исключающий мягко удалённые точки (Этап 4a.2 корзина).
+
     Единственная точка применения дисциплины `deleted`: все пути поиска обязаны
     добавлять этот must_not. Точки с `deleted=true` (документ в корзине) не
     участвуют в RAG-поиске, автодополнении и graph-expansion.
@@ -84,6 +91,32 @@ def _not_deleted() -> qm.Filter:
     return qm.Filter(
         must_not=[qm.FieldCondition(key="deleted", match=qm.MatchValue(value=True))]
     )
+
+
+def _demote_review_concepts(hits: list, penalty: int) -> None:
+    """Понижает эффективный ранг концептов-замечаний (тег review) в ветке.
+
+    Замечания рецензентов дублируют контекст абзаца-якоря: их узкий текст
+    стабильно релевантнее запросу, чем широкий основной концепт, и они
+    вытесняли основной контент из топа RRF (замечание на dense #1 при
+    основном концепте на #10). Смещение ранга на penalty позиций опускает
+    замечание ниже равнозначных основных хитов, не убирая из выдачи: по
+    запросам именно про замечания («какие замечания от Тамойкиной») они
+    остаются единственными релевантными. Вызывается до RRF из
+    search_composite; penalty <= 0 — no-op.
+
+    Внимание: после смещения порядок списка может не соответствовать rank
+    (замечание с rank 0+10 встаёт ниже хита с rank 5) — RRF использует
+    только hit.rank, порядок списка не важен.
+    """
+    if penalty <= 0:
+        return
+    for hit in hits:
+        if (
+            hit.payload.get("point_type") == CONCEPT_POINT_TYPE
+            and "review" in (hit.payload.get("tags") or [])
+        ):
+            hit.rank += penalty
 
 
 def _tag_match_filter(tags: list[str]) -> qm.Filter:
@@ -565,13 +598,13 @@ class VectorStore:
         ranked_lists: list[tuple[list[Hit], float]] = []
 
         if "dense" in branches and dense_vec is not None and self.settings.search_dense_enabled:
-            ranked_lists.append(
-                (self.search_dense(dense_vec, search_filter, per_branch), self.settings.search_rrf_dense_weight)
-            )
+            hits = self.search_dense(dense_vec, search_filter, per_branch)
+            _demote_review_concepts(hits, self.settings.search_review_concept_rank_penalty)
+            ranked_lists.append((hits, self.settings.search_rrf_dense_weight))
         if "bm25" in branches and sparse_vec is not None and self.settings.search_bm25_enabled:
-            ranked_lists.append(
-                (self.search_bm25(sparse_vec, search_filter, per_branch), self.settings.search_rrf_bm25_weight)
-            )
+            hits = self.search_bm25(sparse_vec, search_filter, per_branch)
+            _demote_review_concepts(hits, self.settings.search_review_concept_rank_penalty)
+            ranked_lists.append((hits, self.settings.search_rrf_bm25_weight))
 
         if self.settings.search_graph_expansion_enabled:
             graph_hits = self._graph_expansion(ranked_lists)

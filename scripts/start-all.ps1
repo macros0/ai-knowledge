@@ -4,7 +4,10 @@
 
 .DESCRIPTION
     Brings up every dependency with one command:
-      1. Qdrant    -> :6333  (reuses scripts/start-qdrant.ps1)
+      1. Qdrant    -> :16333 (REST; gRPC :16334). Local binary listens on
+                              16333/16334, NOT the Qdrant default 6333/6334 —
+                              those fall into the Windows Hyper-V/WSL excluded
+                              port range on this machine. Reuses scripts/start-qdrant.ps1.
       2. Ollama    -> :12400 (OLLAMA_HOST=127.0.0.1:12400; 11434 is inside the
                               Windows Hyper-V excluded port range on this machine)
       3. PostgreSQL -> :5432 (reuses scripts/start-postgres.ps1, portable binary)
@@ -87,7 +90,7 @@ function Start-Service {
 
 $results = [ordered]@{}
 
-$results['Qdrant'] = Start-Service -Name 'Qdrant' -Url 'http://localhost:6333/collections' -Launch {
+$results['Qdrant'] = Start-Service -Name 'Qdrant' -Url 'http://localhost:16333/collections' -Launch {
     & (Join-Path $PSScriptRoot 'start-qdrant.ps1')
 }
 

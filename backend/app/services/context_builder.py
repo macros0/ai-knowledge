@@ -9,6 +9,18 @@ from app.services.fusion import Hit
 CONCEPT_TYPE = "concept"
 CHUNK_TYPE = "chunk"
 
+# Тег-маркер концепта-замечания рецензента (services/comment_concepts.py).
+# Замечания — вспомогательный слой знания: в смешанной группе (chunk +
+# концепты) первичным блоком выбирается основной концепт, замечания идут
+# сиблингами. Узкий контент замечания (дословный контекст якоря) регулярно
+# обгонял по fused score широкий основной концепт и перехватывал заголовок/
+# цитату [1] группы — ответ цитировал замечание вместо основного источника.
+REVIEW_TAG = "review"
+
+
+def _is_review_hit(hit: Hit) -> bool:
+    return REVIEW_TAG in (hit.payload.get("tags") or [])
+
 
 def resolve_branches(
     mode: str | None,
@@ -48,6 +60,11 @@ def merge_and_format(
     своему собственному score. Без глобальной сортировки 7 сиблингов одной
     посредственной группы вытесняли более релевантные блоки других групп
     за границу top_k.
+
+    Первичный блок группы — первый ОСНОВНОЙ концепт по fused score:
+    замечания рецензентов (tags: review, см. _is_review_hit) не представляют
+    группу — их узкий контент (дословный контекст якоря) регулярно обгонял
+    широкий основной концепт и перехватывал заголовок/цитату [1].
     """
     if settings is None:
         settings = get_settings()
@@ -78,21 +95,41 @@ def merge_and_format(
         if not source_filename and filename_lookup:
             source_filename = filename_lookup.get(doc_id, "")
 
-        # filepath: из payload (концепты/старые чанки) или конструируется
-        filepath = (concepts_in_group or chunks_in_group)[0].payload.get("filepath", "")
+        # Замечания рецензентов — вспомогательный слой (см. _is_review_hit):
+        # primary-приоритет у основного концепта, замечания — сиблинги.
+        main_concepts = [h for h in concepts_in_group if not _is_review_hit(h)]
+        review_concepts = [h for h in concepts_in_group if _is_review_hit(h)]
+
+        # Репрезентативный концепт группы — первый ОСНОВНОЙ по fused score.
+        # Несколько концептов могут делить один chunk_index (например,
+        # «Перечень: Элемент/Атрибут» и «reason1» из одной таблицы). Склейка
+        # заголовков через " / " давала misleading-заголовок и ссылку не на
+        # тот концепт — берём один репрезентативный (он же для filepath ниже).
+        # Группа из одних замечаний без чанка (поиск с фильтром tags=[review]) —
+        # прежнее поведение: первый концепт как primary.
+        primary_concept: Hit | None = None
+        sibling_concepts: list[Hit] = []
+        if main_concepts:
+            primary_concept = main_concepts[0]
+            sibling_concepts = main_concepts[1:] + review_concepts
+        elif concepts_in_group and not chunks_in_group:
+            primary_concept = concepts_in_group[0]
+            sibling_concepts = concepts_in_group[1:]
+        elif concepts_in_group:
+            # чанк + только замечания: primary — сам чанк (kind=chunk ниже),
+            # замечания не представляют группу в цитатах [N]
+            sibling_concepts = review_concepts
+
+        # filepath: из payload primary-концепта или конструируется
+        filepath = primary_concept.payload.get("filepath", "") if primary_concept else ""
         if not filepath and chunk_idx is not None:
             filepath = f"{doc_id}/chunks/chunk_{chunk_idx:02d}.md"
 
         best_score = max(h.score for h in group_hits)
 
-        if chunks_in_group and concepts_in_group:
+        if chunks_in_group and primary_concept is not None:
             chunk = chunks_in_group[0]
-            # Несколько концептов могут делить один chunk_index (например,
-            # «Перечень: Элемент/Атрибут» и «reason1» из одной таблицы). Склейка
-            # заголовков через " / " давала misleading-заголовок и ссылку не на
-            # тот концепт — берём один репрезентативный концепт (первый по fused
-            # score, он же используется для filepath ниже).
-            primary = concepts_in_group[0]
+            primary = primary_concept
             merged_title = primary.payload.get("title", "")
             content = chunk.payload.get("content", "")[: settings.chat_chunk_max_chars]
             if not merged_title:
@@ -103,8 +140,8 @@ def merge_and_format(
                     merged_title = f"{source_filename} (Раздел {chunk_idx + 1})" if chunk_idx is not None else source_filename
             point_type = CONCEPT_TYPE
             kind = "concept+chunk"
-        elif concepts_in_group:
-            concept = concepts_in_group[0]
+        elif primary_concept is not None:
+            concept = primary_concept
             merged_title = concept.payload.get("title", "Без названия")
             content = concept.payload.get("content", "")[: settings.chat_concept_max_chars]
             point_type = CONCEPT_TYPE
@@ -125,6 +162,14 @@ def merge_and_format(
             {
                 "title": merged_title,
                 "content": content,
+                # Собственный контент репрезентативного концепта: сырой чанк
+                # содержит чужие подразделы раздела, выжимка — только про объект.
+                # Используется точным фильтром (drop_partial_title_matches).
+                "concept_content": (
+                    primary_concept.payload.get("content", "")[: settings.chat_concept_max_chars]
+                    if chunks_in_group and primary_concept is not None
+                    else None
+                ),
                 "tags": sorted(tags),
                 "filepath": filepath,
                 "doc_id": doc_id,
@@ -136,13 +181,14 @@ def merge_and_format(
             }
         )
 
-        # Сиблинг-концепты группы. Группа (doc_id, chunk_index) может содержать
-        # много концептов (например, 18 полей служебной таблицы для ЛК); раньше
-        # collapse выбрасывал их контент целиком — сильные bm25-попадания
-        # вроде таблицы «Перечень: Наименование поля» не доезжали ни до LLM,
-        # ни до sources. Эмитим каждый доп. концепт-хит отдельным блоком.
-        siblings = concepts_in_group[1:] if concepts_in_group else []
-        for concept in siblings:
+        # Сиблинг-концепты группы (все концепты кроме primary: основные
+        # «проигравшие» primary + замечания). Группа (doc_id, chunk_index)
+        # может содержать много концептов (например, 18 полей служебной
+        # таблицы для ЛК); раньше collapse выбрасывал их контент целиком —
+        # сильные bm25-попадания вроде таблицы «Перечень: Наименование поля»
+        # не доезжали ни до LLM, ни до sources. Эмитим каждый доп. концепт-хит
+        # отдельным блоком.
+        for concept in sibling_concepts:
             if total_chars >= settings.chat_max_context_chars:
                 break
             sibling_content = concept.payload.get("content", "")[: settings.chat_concept_max_chars]
@@ -203,6 +249,65 @@ def matched_terms(item: dict, query: str | None) -> list[str]:
     ]
 
 
+def title_matched_terms(item: dict, query: str | None) -> list[str]:
+    """Термины запроса, найденные в ЗАГОЛОВКЕ блока.
+
+    Отличает блок, ПРО который спросили (имя объекта в Title), от блока,
+    где объект лишь упоминается в теле. Для вопросов про конкретный
+    поименованный объект (транзакция/поле/отчёт) — основа ответа блоки
+    с непустым Title match; поля/алгоритмы блоков без title-совпадения
+    относятся к их собственным заголовкам, а не к объекту вопроса.
+    """
+    if not query:
+        return []
+    from app.services.sparse import tokenize
+
+    title = item.get("title", "").lower()
+    return [t for t in tokenize(query) if t not in _MARKER_STOPWORDS and t in title]
+
+
+def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[dict]:
+    """Фильтр запросов про точный объект: только блоки «про объект», контент — концепта.
+
+    Если заголовок хотя бы одного блока содержит ВСЕ термины запроса
+    (например, «ZPRP_DISABILITY_CHLD» в «Расширения для тр. ZPRP_DISABILITY_CHLD»),
+    запрос трактуется как точное имя объекта:
+    - контекст ограничивается блоками, где имя стоит в заголовке; смежные блоки,
+      где объект лишь упоминается в теле, убираются — модели сливают их
+      содержимое в описание объекта;
+    - у concept+chunk-блоков контент заменяется на собственный контент концепта:
+      сырой чанк содержит чужие подразделы раздела (таблица колонок ЭЛН-журнала
+      внутри чанка «Доработка расширения для ZPRP_DISABILITY_CHLD»), концепт-
+      выжимка — только про сам объект.
+
+    Для естественных запросов фильтр практически не срабатывает: совпадение
+    ВСЕХ токенов в заголовке требует дословного имени (словоформы не стеммятся).
+    Требование >= 2 токенов отсекает слишком общие однословные запросы.
+    Если ни один заголовок не покрывает запрос целиком — блоки не меняются.
+    """
+    if not query or not merged:
+        return merged
+    from app.services.sparse import tokenize
+
+    tokens = [t for t in tokenize(query) if t not in _MARKER_STOPWORDS]
+    if len(tokens) < 2:
+        return merged
+    full = [
+        m
+        for m in merged
+        if all(t in m.get("title", "").lower() for t in tokens)
+    ]
+    if not full:
+        return merged
+    out: list[dict] = []
+    for m in full:
+        concept_content = m.get("concept_content")
+        if concept_content:
+            m = {**m, "content": concept_content}
+        out.append(m)
+    return out
+
+
 def drop_unmatched_blocks(merged: list[dict], query: str | None) -> list[dict]:
     """Анти-шумовой pre-filter для чата: убирает блоки без лексического совпадения.
 
@@ -236,9 +341,10 @@ def format_context(merged: list[dict], query: str | None = None) -> str:
         source = item.get("source_filename", "")
         kind = item.get("kind", item.get("point_type", "concept"))
         terms = matched_terms(item, query)
+        title_terms = title_matched_terms(item, query)
         parts.append(
             f'<context_block id="{i}">\n'
-            f'  <metadata>Title: {item["title"]} | Type: {kind} | Tags: [{tags_str}] | Source: {source} | Matched terms: [{", ".join(terms)}]</metadata>\n'
+            f'  <metadata>Title: {item["title"]} | Type: {kind} | Tags: [{tags_str}] | Source: {source} | Title match: [{", ".join(title_terms)}] | Matched terms: [{", ".join(terms)}]</metadata>\n'
             f'  <content>\n{item["content"]}\n  </content>\n'
             f'</context_block>'
         )

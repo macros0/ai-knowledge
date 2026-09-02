@@ -23,7 +23,7 @@ Upload (docx/xlsx/pdf)
                                                                      ▼
 ┌─────────────────┐    ┌─────────────────────────────────────────────────┐
 │  Chat Web UI    │◄───│  RAG: Qdrant (vectors + payload=YAML meta)      │
-│  (Next.js + JS) │    │  3 search modes: dense/bm25/hybrid │
+│  (Next.js + JS) │    │  3 search modes: dense/bm25/hybrid              │
 └─────────────────┘    └─────────────────────────────────────────────────┘
 ```
 
@@ -149,17 +149,19 @@ Qdrant гарантирует совместимость **storage-формат�
 2. **Снять снапшот коллекции** (сервер сам гасит записи и сбрасывает WAL):
 
    ```bash
-   curl -X POST http://localhost:6333/collections/okf_knowledge_base/snapshots
+   curl -X POST http://localhost:16333/collections/okf_knowledge_base/snapshots
    ```
 
    Снапшот появится в каталоге snapshots сервера — скопируйте его в бэкап
-   **вне** storage-каталога.
+   **вне** storage-каталога. (Порт `16333` — у локального бинаря на Windows; дефолт
+   Qdrant `6333` на этой машине занят исключённым диапазоном Hyper-V/WSL. У
+   compose-варианта — порт внутри сети, снапшот снимается с адреса контейнера.)
 3. **Остановить старый сервер**, обновить бинарь/образ, **удалить/затереть**
    storage (старый формат не читается новым сервером).
 4. **Запустить новый сервер**, восстановить коллекцию из снапшота:
 
    ```bash
-   curl -X PUT http://localhost:6333/collections/okf_knowledge_base/snapshots/recover \
+   curl -X PUT http://localhost:16333/collections/okf_knowledge_base/snapshots/recover \
      -H "Content-Type: application/json" \
      -d '{"location": "file:///path/to/snapshot.snapshot", "priority": "snapshot"}'
    ```
@@ -168,7 +170,7 @@ Qdrant гарантирует совместимость **storage-формат�
 5. **Проверить**: количество точек и выборочный payload:
 
    ```bash
-   curl -X POST http://localhost:6333/collections/okf_knowledge_base/points/count \
+   curl -X POST http://localhost:16333/collections/okf_knowledge_base/points/count \
      -H "Content-Type: application/json" -d '{"exact": true}'
    ```
 
@@ -271,7 +273,7 @@ Read-only проверка: документы, «зависшие» в акти
 | `DATA_DIR` | `./data` | Корень runtime-данных (uploads, okf_bundles, staging) |
 | `DATABASE_URL` | `postgresql+psycopg://postgres:…@127.0.0.1:5432/okf_knowledge` | Строка подключения к PostgreSQL (метаданные: документы, теги, OKF-концепты). Локальный compose — хост `postgres:5432` (профиль `local-postgres`); корпоративный — внешний хост. См. `MIGRATION_PLAN.md` |
 | `DATABASE_URL_DEV` | `sqlite:///./data/app.db` | Dev-фолбэк на SQLite (zero-config, без внешнего сервера; активируется, когда `DATABASE_URL` пуст) |
-| `QDRANT_URL` | `http://localhost:6333` | Адрес Qdrant (локальный compose: `http://qdrant:6333`; корпоративный: `https://…:6333`) |
+| `QDRANT_URL` | `http://localhost:16333` | Адрес Qdrant (локальный бинарь на Windows — `16333`, т.к. порт `6333` попадает в исключённый диапазон Windows Hyper-V/WSL; локальный compose: `http://qdrant:6333`; корпоративный: `https://…:6333`) |
 | `QDRANT_API_KEY` | пусто | Опциональный API-ключ Qdrant (корпоративный Qdrant с авторизацией) |
 | `QDRANT_COLLECTION` | `okf_knowledge_base` | Коллекция Qdrant |
 | `EMBEDDING_DIMENSIONS` | `1024` | Размерность вектора (bge-m3=1024, text-embedding-3-small=1536) |

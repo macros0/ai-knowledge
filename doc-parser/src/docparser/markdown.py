@@ -13,9 +13,7 @@ def blocks_to_markdown(blocks: list[Block]) -> str:
         elif b.type == "table":
             lines.append(b.text)
         elif b.type == "comment":
-            author = b.meta.get("author", "")
-            prefix = f"**Комментарий рецензента ({author}):**" if author else "**Комментарий рецензента:**"
-            lines.append(f"> {prefix} {b.text}")
+            lines.append(_comment_to_markdown(b))
         elif b.type == "code":
             lines.append("```")
             lines.append(b.text)
@@ -30,6 +28,44 @@ def blocks_to_markdown(blocks: list[Block]) -> str:
             lines.append(b.text)
         lines.append("")
     return "\n".join(lines).strip()
+
+
+def _comment_to_markdown(b: Block) -> str:
+    """Блок-цитата комментария. Тред (вопрос + ответы) — единая цитата с
+    контекстом якоря и статусом; формат строк стабилен и распознаётся
+    программным экстрактором концептов (backend comment_concepts):
+        > **Контекст:** <текст абзаца-якоря>
+        > **Комментарий рецензента (автор, дата):** <вопрос>
+        > **Ответ (автор):** <ответ>
+        > **Статус:** замечание закрыто
+    """
+    thread = b.meta.get("thread")
+    if thread:
+        out: list[str] = []
+        context = (b.meta.get("context") or "").strip()
+        if context:
+            out.append(f"**Контекст:** {context}")
+        for i, entry in enumerate(thread):
+            role = "Комментарий рецензента" if i == 0 else "Ответ"
+            author = entry.get("author", "")
+            date = (entry.get("date") or "")[:10]
+            who = author
+            if i == 0 and author and date:
+                who = f"{author}, {date}"
+            label = f"**{role} ({who}):**" if who else f"**{role}:**"
+            out.append(f"{label} {entry.get('text', '')}")
+        if b.meta.get("resolved"):
+            out.append("**Статус:** замечание закрыто")
+        return "\n".join(_quote_line(line) for line in out)
+    author = b.meta.get("author", "")
+    prefix = f"**Комментарий рецензента ({author}):**" if author else "**Комментарий рецензента:**"
+    return _quote_line(f"{prefix} {b.text}")
+
+
+def _quote_line(text: str) -> str:
+    """Префиксует каждую строку текста `>` — многострочные записи остаются
+    внутри одной блок-цитаты (важно для программного экстрактора)."""
+    return "\n".join(f"> {line}" if line else ">" for line in text.split("\n"))
 
 
 def _image_to_markdown(b: Block) -> str:

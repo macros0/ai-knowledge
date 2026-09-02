@@ -16,6 +16,7 @@ from app.services import chat_history
 from app.services.citation import normalize_citations
 from app.services.concept_store import enrich_concept_hits
 from app.services.context_builder import (
+    drop_partial_title_matches,
     drop_unmatched_blocks,
     format_context,
     merge_and_format,
@@ -92,6 +93,10 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         # (пустой Matched terms игнорируется даже сильными моделями). При
         # полном отсутствии совпадений (парафразный запрос) фильтр пропускает всё.
         merged = drop_unmatched_blocks(merged, req.query)
+        # Запрос-точное-имя: если какой-то заголовок покрывает ВСЕ термины запроса,
+        # контекст ограничивается блоками «про объект» — смежные блоки, где объект
+        # лишь упомянут в теле, модели сливают в описание объекта.
+        merged = drop_partial_title_matches(merged, req.query)
         context = format_context(merged, query=req.query)
         max_score = max((m["score"] for m in merged), default=0.0)
         sources = []
