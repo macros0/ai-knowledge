@@ -9,6 +9,7 @@ staging-каталог (data/staging/{doc_id}/) с manifest.json. При сбо�
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -22,15 +23,24 @@ from app.services.dev_detector import attach_development, detect
 from app.services.development_registry import get_development_registry
 from app.services.embedder import Embedder
 from app.services.errors import DependencyUnavailableError
+from app.services import gen_quality
 from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMTruncationError, is_fatal_error
 from app.services.okf_generator import OKFGenerator
+from app.services import problem_codes
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
 from app.services.vector_store import VectorStore
 from docparser import SUPPORTED_EXTENSIONS, blocks_to_markdown, parse_document
 
 logger = logging.getLogger(__name__)
+
+# Порог детектора no_text_layer: суммарный текст чанков (без markdown-ссылок
+# на картинки) короче — считаем документ без текстового слоя (скан без OCR).
+MIN_TEXT_LAYER_CHARS = 200
+
+# Markdown-картинки/вложения: ![alt](path) — не текст.
+_IMAGE_LINK_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 
 
 class Pipeline:
@@ -110,7 +120,7 @@ class Pipeline:
         table_cache = self.settings.cache_dir / "table_classify"
         if table_cache.is_dir():
             shutil.rmtree(table_cache, ignore_errors=True)
-        self.registry.update(doc_id, status="processing", error=None)
+        self.registry.update(doc_id, status="processing", error=None, problem=None)
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False)
 
     def wait_for(self, doc_id: str, timeout: float = 3600) -> dict:
@@ -165,7 +175,7 @@ class Pipeline:
             self._threads.pop(doc_id, None)
 
     def _process(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
-        self.registry.update(doc_id, status="processing", error=None)
+        self.registry.update(doc_id, status="processing", error=None, problem=None)
         attachments_dir = self.settings.okf_dir / doc_id / "attachments"
         blocks = parse_document(filepath, filename, attachments_dir=attachments_dir)
         markdown = blocks_to_markdown(blocks)
@@ -200,6 +210,9 @@ class Pipeline:
         chunks = self.okf_generator.chunk_text(markdown)
         total = len(chunks)
         staging = StagingStore(doc_id)
+        # Сброс residue телеметрии: события от dev-детекции и пр. не должны
+        # приписываться первому чанку.
+        gen_quality.drain()
         if resume and staging.exists():
             manifest = staging.load()
             done = len(manifest.get("processed_chunks", [])) if manifest else 0
@@ -230,10 +243,14 @@ class Pipeline:
                     return
 
                 concepts = None
+                degradation: list[dict] = []
                 for chunk_attempt in range(1, max_chunk_retries + 1):
                     try:
                         self.registry.update(doc_id, current_chunk=i + 1)
                         concepts = self.okf_generator.generate_chunk(chunk, filename, i + 1, total, doc_id=doc_id)
+                        # Телеметрия деградации этого чанка (salvage JSON,
+                        # fallback классификатора) — до любых других вызовов.
+                        degradation = gen_quality.drain()
                         if self._abort_events.get(doc_id, threading.Event()).is_set():
                             logger.info("Генерация %s прервана после чанка %d", doc_id, i + 1)
                             return
@@ -261,7 +278,7 @@ class Pipeline:
                     for concept in concepts:
                         concept.tags = _merge_tags(concept.tags, user_tags)
                 if concepts is not None:
-                    staging.append_chunk(i, concepts)
+                    staging.append_chunk(i, concepts, degradation=degradation)
                 self.registry.update(doc_id, processed_chunks=len(staging.processed_chunks), current_chunk=None)
         except Exception as exc:
             logger.warning("Генерация OKF прервана на документе %s: %s", doc_id, exc)
@@ -363,27 +380,52 @@ class Pipeline:
         # okf_max_concept_chars). При нуле концептов очищает устаревшие записи.
         replace_concepts(doc_id, okf_docs)
 
+        # Problem-коды (инцидент 03.09.2026: done ≠ «документ полон»).
+        # Приоритет: no_text_layer/no_concepts (0 концептов) >
+        # llm_partial_result (salvage при генерации) > index_partial_failure
+        # (чанк-индексация пропущена) — первична причина, из-за которой
+        # документ может быть неполон или неищем.
+        problem: str | None = None
         if not okf_docs:
-            logger.warning("[%s] Документ %s не содержит концептов, индексация пропущена", doc_id, filename)
-            staging.remove()
-            self.registry.update(doc_id, status="done", okf_concept_count=0, error=None)
-            return
+            problem = (
+                problem_codes.NO_TEXT_LAYER
+                if self._chunks_lack_text(doc_id)
+                else problem_codes.NO_CONCEPTS
+            )
+            logger.warning(
+                "[%s] Документ %s не содержит концептов (problem=%s); чанки индексируются",
+                doc_id, filename, problem,
+            )
+        elif any((info or {}).get("degradation") for info in chunks_data.values()):
+            problem = problem_codes.LLM_PARTIAL_RESULT
+            degraded = [
+                idx for idx, info in chunks_data.items() if (info or {}).get("degradation")
+            ]
+            logger.warning(
+                "[%s] Документ %s: чанки с деградацией генерации %s (problem=%s)",
+                doc_id, filename, degraded, problem,
+            )
 
-        cap = self.settings.okf_max_concept_chars
-        # Dense-эмбеддинг строится из title + content: title содержит коды/номера
-        # разделов (например, "12410"), которые иначе не попадали в вектор и
-        # концепт не находился по поиску по коду.
-        vectors = self.embedder.embed_texts(
-            [f"{doc.metadata.get('title', '')}\n{doc.content[:cap]}" for doc in okf_docs]
-        )
         self.vector_store.ensure_collection()
-        # Upsert-before-delete: сначала записываем новые точки, потом удаляем
-        # осиротевшие старые. point_id детерминирован (uuid5 от filepath),
-        # поэтому upsert идемпотентно перезаписывает совпадающие точки.
-        # Если Qdrant отвалится между upsert и cleanup, новые точки уже на месте.
-        concept_point_ids = self.vector_store.index_concepts(doc_id, okf_docs, vectors, dev_tags=dev_tags)
-        keep_point_ids = set(concept_point_ids)
+        keep_point_ids: set[str] = set()
+        if okf_docs:
+            cap = self.settings.okf_max_concept_chars
+            # Dense-эмбеддинг строится из title + content: title содержит коды/номера
+            # разделов (например, "12410"), которые иначе не попадали в вектор и
+            # концепт не находился по поиску по коду.
+            vectors = self.embedder.embed_texts(
+                [f"{doc.metadata.get('title', '')}\n{doc.content[:cap]}" for doc in okf_docs]
+            )
+            # Upsert-before-delete: сначала записываем новые точки, потом удаляем
+            # осиротевшие старые. point_id детерминирован (uuid5 от filepath),
+            # поэтому upsert идемпотентно перезаписывает совпадающие точки.
+            # Если Qdrant отвалится между upsert и cleanup, новые точки уже на месте.
+            concept_point_ids = self.vector_store.index_concepts(doc_id, okf_docs, vectors, dev_tags=dev_tags)
+            keep_point_ids = set(concept_point_ids)
 
+        # Чанки индексируются ВСЕГДА, включая документы без концептов: dual-index
+        # даёт документу поисковую представленность через chunk-ветку (BM25/dense
+        # по сырому тексту), даже когда LLM не создала ни одного концепта.
         if self.settings.search_index_chunks_enabled:
             chunks_dir = target / "chunks"
             chunk_count = len(chunks_meta)
@@ -396,6 +438,8 @@ class Pipeline:
                     logger.warning("[%s] Чанк %d не найден в бандле, пропускаем индексацию чанков", doc_id, i)
                     chunk_texts = []
                     break
+            if not chunk_texts and chunk_count:
+                problem = problem or problem_codes.INDEX_PARTIAL_FAILURE
             if chunk_texts:
                 chunk_section_titles = [_extract_section_title(t) for t in chunk_texts]
                 cap = self.settings.okf_max_chunk_index_chars
@@ -412,12 +456,43 @@ class Pipeline:
 
         # Очистка осиротевших старых точек (после успешного upsert новых).
         # Удаляются только точки doc_id, чьи point_id не вошли в новый набор.
+        # Для документа без концептов и чанков удаляет ВСЕ старые точки —
+        # регенерация в пустоту не оставляет устаревших векторов в поиске.
         self.vector_store.delete_orphaned_points(doc_id, keep_point_ids)
 
         total_chunks = manifest.get("total_chunks", 0) if manifest else 0
         staging.remove()
-        self.registry.update(doc_id, status="done", okf_concept_count=len(okf_docs), error=None)
-        logger.info("Документ %s обработан: %d OKF-концептов, %d чанков", filename, len(okf_docs), total_chunks)
+        self.registry.update(
+            doc_id,
+            status="done",
+            okf_concept_count=len(okf_docs),
+            error=None,
+            problem=problem,
+        )
+        logger.info(
+            "Документ %s обработан: %d OKF-концептов, %d чанков%s",
+            filename, len(okf_docs), total_chunks,
+            f" (problem={problem})" if problem else "",
+        )
+
+    @staticmethod
+    def _chunks_lack_text(doc_id: str) -> bool:
+        """Детектор no_text_layer: чанки документа практически без текста.
+
+        Скан-PDF без OCR даёт чанки из одних markdown-ссылок на картинки
+        (инцидент 03.09.2026: «Тренировочная зона», 286 страниц-сканов →
+        done с 0 концептов и 0 точек при зелёном статусе). Считаем
+        суммарный текст чанков за вычетом ссылок-вложений: короче порога —
+        текстового слоя нет.
+        """
+        chunks_dir = get_settings().okf_dir / doc_id / "chunks"
+        if not chunks_dir.is_dir():
+            return True
+        total = 0
+        for md in sorted(chunks_dir.glob("chunk_*.md")):
+            text = _IMAGE_LINK_RE.sub("", md.read_text(encoding="utf-8"))
+            total += len(text.strip())
+        return total < MIN_TEXT_LAYER_CHARS
 
     def soft_delete(self, doc_id: str, deleted_by: str | None = None) -> None:
         """Мягкое удаление в корзину (Этап 4a.2): помечает, но не удаляет данные.

@@ -381,6 +381,60 @@ class TestParseJson:
         parsed = _parse_json(garbage)
         assert parsed[0]["id"] == "a"
 
+    def test_closed_array_with_json_tail_raises_truncation(self):
+        """Дыра закрытой структуры (инцидент 03.09.2026, «ФС 3509»: 4-5
+        концептов вместо 11 при зелёном done): закрытый массив + второй
+        массив — старый парсер молча брал первый префикс, теряя хвост."""
+        from app.services.llm_client import _parse_json
+        from app.services import gen_quality
+
+        gen_quality.drain()
+        raw = (
+            '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"текст","relations":[]}] '
+            '[{"id":"b","title":"Два","type":"concept","tags":[],"content":"текст","relations":[]}]'
+        )
+        with pytest.raises(LLMTruncationError, match="после закрытой JSON-структуры"):
+            _parse_json(raw)
+        assert gen_quality.drain() == []
+
+    def test_closed_array_with_open_json_tail_raises_truncation(self):
+        """Закрытый массив + ОТКРЫТЫЙ второй (глубина не сходится) — тоже отказ."""
+        from app.services.llm_client import _parse_json
+
+        raw = (
+            '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"текст","relations":[]}] '
+            '[{"id":"b","title":"Два"'
+        )
+        with pytest.raises(LLMTruncationError):
+            _parse_json(raw)
+
+    def test_salvage_closed_array_json_tail_returns_prefix_and_records(self):
+        """Salvage-режим: возвращается первый префикс + событие llm_salvage."""
+        from app.services.llm_client import _parse_json
+        from app.services import gen_quality
+
+        gen_quality.drain()
+        raw = (
+            '[{"id":"a","title":"Один","type":"concept","tags":[],"content":"текст","relations":[]}] '
+            '[{"id":"b","title":"Два","type":"concept","tags":[],"content":"текст","relations":[]}]'
+        )
+        parsed = _parse_json(raw, salvage_truncated=True)
+        assert [c["id"] for c in parsed] == ["a"]
+        events = gen_quality.drain()
+        assert any(e["event"] == gen_quality.LLM_SALVAGE for e in events), events
+
+    def test_benign_tail_records_nothing(self):
+        """Хвост без JSON-структуры (мусор модели) — потерь нет, телеметрия чиста."""
+        from app.services.llm_client import _parse_json
+        from app.services import gen_quality
+
+        gen_quality.drain()
+        garbage = '[{"id":"a","title":"One","type":"concept","tags":[],"content":"test","relations":[]}] Вот концепты:'
+        parsed = _parse_json(garbage)
+        assert parsed[0]["id"] == "a"
+        assert gen_quality.drain() == []
+
+
     def test_raw_newlines_inside_string_are_sanitized(self):
         from app.services.llm_client import _parse_json
 

@@ -20,6 +20,7 @@ from pathlib import Path
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qm
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from app.config import get_settings
 from app.models.schemas import OkfDocument
@@ -32,11 +33,29 @@ logger = logging.getLogger(__name__)
 
 
 def _qdrant_call(func, *args, **kwargs):
-    """Обёртка для Qdrant-вызовов: перехватывает сетевые ошибки → VectorStoreError."""
+    """Обёртка для Qdrant-вызовов: перехватывает сбои → VectorStoreError.
+
+    Различает два класса отказов (инцидент 03.09.2026: 400/422 от живого
+    Qdrant маскировались под «Qdrant недоступен» и сбивали диагностику):
+      - UnexpectedResponse (4xx/5xx) — живой Qdrant отклонил ЗАПРОС: дефект
+        клиентских данных, в сообщении сохраняются HTTP-код и текст ответа;
+      - прочее (сеть/таймауты/разрыв соединения) — сервис действительно
+        недоступен.
+    """
     try:
         return func(*args, **kwargs)
     except VectorStoreError:
         raise
+    except UnexpectedResponse as exc:
+        detail = ""
+        try:
+            detail = exc.content.decode("utf-8", errors="replace")[:500]
+        except Exception:
+            detail = str(exc)
+        raise VectorStoreError(
+            f"Qdrant отклонил запрос (HTTP {exc.status_code}): {detail}",
+            cause=exc,
+        ) from exc
     except Exception as exc:
         url = None
         try:
@@ -53,6 +72,11 @@ def _qdrant_call(func, *args, **kwargs):
 
 SPARSE_VECTOR_NAME = "sparse"
 SEARCH_MODES = ("dense", "bm25", "hybrid")
+
+# Батч upsert: 256 точек × (1024-мерный dense + sparse + payload) ≈ 6-8 МБ —
+# с запасом под серверный лимит Qdrant max_request_size_mb=32 (инцидент
+# 03.09.2026: монолитный upsert 5667 концептов → 400 от actix по Content-Length).
+UPSERT_BATCH_SIZE = 256
 
 CONCEPT_POINT_TYPE = "concept"
 CHUNK_POINT_TYPE = "chunk"
@@ -207,6 +231,78 @@ class VectorStore:
             except Exception:
                 pass
 
+    def _upsert_batches(
+        self,
+        points: list,
+        *,
+        doc_id: str,
+        mode: str,
+        retry_attempts: int = 3,
+    ) -> dict[str, int]:
+        """Upsert точек батчами фиксированного размера (инцидент 03.09.2026).
+
+        Один upsert на 5667 концептов давал ~120 МБ JSON против серверного
+        лимита Qdrant max_request_size_mb=32 → мгновенный 400. Батч 256 точек
+        с 1024-мерным dense-вектором + sparse + payload ≈ 6-8 МБ — с запасом.
+
+        Пер-батчевые ретраи (только сетевые/5xx/429): один сбойный батч не
+        убивает остальные — максимум точек уходит до отказа. Счётчики
+        возвращаются вызывающему для статусной модели (paused + resume
+        доотправит остаток: point_id детерминированы, upsert идемпотентен).
+
+        В лог — номер батча, размер, doc_id и режим (concept/chunk); payload
+        в лог не пишется (данные документов).
+        """
+        total = len(points)
+        stats = {
+            "attempted_batches": 0,
+            "successful_batches": 0,
+            "failed_batches": 0,
+            "attempted_points": 0,
+            "indexed_points": 0,
+        }
+        if not points:
+            return stats
+        batch_size = self.settings.qdrant_upsert_batch_size or UPSERT_BATCH_SIZE
+        n_batches = (total + batch_size - 1) // batch_size
+        for start in range(0, total, batch_size):
+            batch = points[start : start + batch_size]
+            batch_no = start // batch_size + 1
+            stats["attempted_batches"] += 1
+            stats["attempted_points"] += len(batch)
+            for attempt in range(1, retry_attempts + 1):
+                try:
+                    _qdrant_call(
+                        self.client.upsert,
+                        collection_name=self.collection,
+                        points=batch,
+                    )
+                    stats["successful_batches"] += 1
+                    stats["indexed_points"] += len(batch)
+                    if n_batches > 1:
+                        logger.info(
+                            "[%s] Upsert %s: батч %d/%d (%d точек) — ок",
+                            doc_id, mode, batch_no, n_batches, len(batch),
+                        )
+                    break
+                except VectorStoreError as exc:
+                    last_exc = exc
+                    cause = exc.__cause__
+                    status = getattr(cause, "status_code", None) if isinstance(cause, UnexpectedResponse) else None
+                    # 4xx-валидация (400/422 — дефект данных) не ретраится;
+                    # сеть и 5xx/429 (в т.ч. 503 «storage not ready» во время
+                    # оптимизации Qdrant) — ретраится с бэкоффом.
+                    retryable = status is None or status >= 500 or status == 429
+                    if not retryable or attempt == retry_attempts:
+                        logger.error(
+                            "[%s] Upsert %s: батч %d/%d (%d точек) не прошёл: %s",
+                            doc_id, mode, batch_no, n_batches, len(batch), exc.user_message,
+                        )
+                        stats["failed_batches"] += 1
+                        break
+                    time.sleep(min(2.0, 0.5 * attempt))
+        return stats
+
     def index_concepts(
         self,
         doc_id: str,
@@ -250,7 +346,15 @@ class VectorStore:
                 )
             )
         if points:
-            _qdrant_call(self.client.upsert, collection_name=self.collection, points=points)
+            stats = self._upsert_batches(points, doc_id=doc_id, mode="concept")
+            if stats["failed_batches"]:
+                raise VectorStoreError(
+                    f"Qdrant: проиндексировано {stats['indexed_points']} из "
+                    f"{stats['attempted_points']} концептов "
+                    f"({stats['failed_batches']} батчей упали). "
+                    "Документ переведён в paused — повторный resume доотправит "
+                    "остаток (upsert идемпотентен)."
+                )
         return point_ids
 
     def index_chunks(
@@ -309,7 +413,15 @@ class VectorStore:
                 )
             )
         if points:
-            _qdrant_call(self.client.upsert, collection_name=self.collection, points=points)
+            stats = self._upsert_batches(points, doc_id=doc_id, mode="chunk")
+            if stats["failed_batches"]:
+                raise VectorStoreError(
+                    f"Qdrant: проиндексировано {stats['indexed_points']} из "
+                    f"{stats['attempted_points']} чанков "
+                    f"({stats['failed_batches']} батчей упали). "
+                    "Документ переведён в paused — повторный resume доотправит "
+                    "остаток (upsert идемпотентен)."
+                )
         return point_ids
 
     def delete_document(self, doc_id: str) -> None:
@@ -831,11 +943,47 @@ class VectorStore:
                     )
                 )
 
+        # Пер-батчевая устойчивость (инцидент 03.09.2026): один битый батч
+        # (422 на коллизии sparse-индексов) убивал весь backfill корпуса.
+        # Сбойный батч логируется и пропускается, остальные уходят; итог —
+        # сводка со счётчиками. Возврат — число реально проиндексированных.
         total = len(chunk_points)
+        attempted_batches = successful_batches = failed_batches = 0
+        attempted_points = indexed_points = 0
+        failed_doc_ids: set[str] = set()
         for start in range(0, total, batch_size):
             batch = chunk_points[start : start + batch_size]
-            self.client.upsert(collection_name=self.collection, points=batch)
-        return total
+            attempted_batches += 1
+            attempted_points += len(batch)
+            try:
+                self.client.upsert(collection_name=self.collection, points=batch)
+                successful_batches += 1
+                indexed_points += len(batch)
+            except Exception as exc:
+                failed_batches += 1
+                failed_doc_ids.update(
+                    str(p.payload.get("doc_id")) for p in batch if p.payload
+                )
+                logger.error(
+                    "Backfill чанков: батч %d упал (%d точек): %s",
+                    attempted_batches, len(batch), exc,
+                )
+        if failed_batches:
+            logger.error(
+                "Backfill чанков завершён ЧАСТИЧНО: батчи ок %d/%d, проиндексировано "
+                "%d из %d точек; неиндексированные документы: %s",
+                successful_batches,
+                attempted_batches,
+                indexed_points,
+                attempted_points,
+                ", ".join(sorted(failed_doc_ids)),
+            )
+        elif indexed_points:
+            logger.info(
+                "Backfill чанков: %d/%d батчей, %d точек",
+                successful_batches, attempted_batches, indexed_points,
+            )
+        return indexed_points
 
     def backfill_relations(self, batch_size: int = 500) -> int:
         """Нормализует relations в payload концептов из OKF-бандлов на диске.

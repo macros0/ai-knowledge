@@ -1,4 +1,8 @@
 """Юнит-тесты sparse-векторов (BM25): токенизация, структура вектора, детерминизм."""
+import math
+
+import pytest
+
 from app.services.sparse import SPARSE_INDEX_DIM, _term_index, to_sparse_vector, tokenize
 
 
@@ -85,6 +89,32 @@ class TestToSparseVector:
         v2 = to_sparse_vector("API сервис")
         shared = set(v1.indices) & set(v2.indices)
         assert len(shared) == 2
+
+    def test_indices_always_unique_and_sorted(self):
+        # Инвариант Qdrant: sparse-вектор с повторяющимися индексами отвергается
+        # 422 «indices: must be unique» (инцидент 03.09.2026).
+        for text in (
+            "обязателен для тестирования при обязательном тестировании",
+            "завершения кроме завершения кроме",
+            "ru ильиных ильиных ru",
+            "смешанный текст 12410 zinfoprovayderalnomer",
+        ):
+            v = to_sparse_vector(text)
+            assert len(v.indices) == len(set(v.indices)), f"дубли индексов: {text!r}"
+            assert list(v.indices) == sorted(v.indices), f"индексы не отсортированы: {text!r}"
+
+    def test_colliding_terms_aggregate_tf_before_log(self):
+        # Реальная коллизия md5-хэша из инцидента 03.09.2026: «обязат» и
+        # «тестировании» дают одинаковый индекс — до фикса такой вектор
+        # валил upsert 422 «must be unique».
+        t1, t2 = "обязат", "тестировании"
+        assert _term_index(t1) == _term_index(t2), "ожидается реальная коллизия хэшей"
+        v = to_sparse_vector(f"{t1} {t2} {t1}")
+        assert len(v.indices) == len(set(v.indices))
+        values = dict(zip(v.indices, v.values))
+        # tf складываются ДО логарифма: tf(t1)=2 + tf(t2)=1 → log1p(3)
+        assert values[_term_index(t1)] == pytest.approx(math.log1p(3))
+
 
 
 class TestSearchModeValidation:

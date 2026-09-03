@@ -117,6 +117,7 @@ def _to_dict(doc: Document) -> dict:
         "size": doc.size,
         "status": doc.status,
         "error": doc.error,
+        "problem": doc.problem,
         "okf_concept_count": doc.okf_concept_count,
         "total_chunks": doc.total_chunks,
         "processed_chunks": doc.processed_chunks,
@@ -242,6 +243,9 @@ class DocumentRegistry:
                 or_(
                     Document.status.in_(PROBLEM_STATUSES),
                     Document.has_duplicates.is_(True),
+                    # Диагностический problem-код при зелёном done (инцидент
+                    # 03.09.2026): неполнота без исключения — тоже «Проблемные».
+                    Document.problem.isnot(None),
                     # Готовый документ без привязанной разработки — «черновик,
                     # требует разметки» (без suggestion) либо «требует уточнения»
                     # (с development_suggestion). Оба — «не размечен», в «Проблемные».

@@ -2999,6 +2999,23 @@ main {
   font-size: 12px;
 }
 
+/* Диагностический бейдж неполноты при зелёном done (documents.problem):
+   янтарный, с полным объяснением в тултипе. */
+.doc-problem-badge {
+  display: inline-block;
+  color: #b8860b;
+  background: rgba(224, 168, 60, 0.12);
+  border: 1px solid rgba(224, 168, 60, 0.4);
+  border-radius: 8px;
+  padding: 1px 8px;
+  font-size: 12px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
 .doc-filter-date {
   display: inline-flex;
   align-items: center;

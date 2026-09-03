@@ -21,6 +21,7 @@ import litellm
 from json_repair import repair_json
 
 from app.config import get_settings
+from app.services import gen_quality
 
 logger = logging.getLogger(__name__)
 
@@ -357,6 +358,10 @@ def _parse_json(
             doc_id,
             chunk_idx,
         )
+        gen_quality.record(
+            gen_quality.LLM_SALVAGE,
+            f"chunk {chunk_idx}: ответ обрезан по лимиту токенов (finish_reason=length)",
+        )
 
     parsed = _try_load(cleaned)
     if parsed is not None:
@@ -380,8 +385,52 @@ def _parse_json(
             chunk_idx,
         )
 
+    # Дыра закрытой структуры (инцидент 03.09.2026): модель выдала ЗАКРЫТЫЙ
+    # JSON, а после него — ещё данные. Проверки выше (finish_reason/глубина)
+    # такое не ловят: скобки сошлись, хвост молча отбрасывался при salvage.
+    # Теперь хвост анализируется: JSON-структура в нём = потеря данных.
+    closed = _top_level_close_pos(fragment)
+    if closed != -1:
+        prefix = fragment[: closed + 1].strip()
+        recovered = _try_load(prefix)
+        if recovered is not None and recovered:
+            tail = fragment[closed + 1 :].strip()
+            if _tail_has_json_structure(tail):
+                if not salvage_truncated:
+                    raise LLMTruncationError(
+                        f"Ответ LLM содержит данные после закрытой JSON-структуры (чанк {chunk_idx}). "
+                        "Запрос будет повторён с увеличенным max_tokens."
+                    )
+                logger.warning(
+                    "[%s] Чанк %s: после закрытой структуры есть ещё JSON, спасаю первый префикс (данные неполные)",
+                    doc_id,
+                    chunk_idx,
+                )
+                gen_quality.record(
+                    gen_quality.LLM_SALVAGE,
+                    f"chunk {chunk_idx}: данные после закрытой структуры отброшены",
+                )
+                return recovered
+            if tail:
+                logger.info(
+                    "[%s] Чанк %s: хвост без JSON-структуры отброшен (мусор модели)",
+                    doc_id,
+                    chunk_idx,
+                )
+            logger.info(
+                "[%s] Чанк %s: JSON восстановлен через _recover_truncated (хвост обрезан)",
+                doc_id,
+                chunk_idx,
+            )
+            return recovered
+
     recovered = _recover_truncated(fragment)
     if recovered is not None:
+        if salvage_truncated and _is_truncated(fragment):
+            gen_quality.record(
+                gen_quality.LLM_SALVAGE,
+                f"chunk {chunk_idx}: обрезанный JSON спасён частично",
+            )
         logger.info(
             "[%s] Чанк %s: JSON восстановлен через _recover_truncated (хвост обрезан)",
             doc_id,
@@ -392,6 +441,11 @@ def _parse_json(
     try:
         repaired = repair_json(fragment, return_objects=True)
         if isinstance(repaired, (list, dict)) and repaired:
+            if salvage_truncated and _is_truncated(fragment):
+                gen_quality.record(
+                    gen_quality.LLM_SALVAGE,
+                    f"chunk {chunk_idx}: обрезанный JSON восстановлен json_repair (возможна потеря хвоста)",
+                )
             logger.info(
                 "[%s] Чанк %s: JSON успешно восстановлен через json_repair",
                 doc_id,
@@ -496,6 +550,51 @@ def _is_truncated(fragment: str) -> bool:
             if depth == 0:
                 return False
     return True
+
+
+def _top_level_close_pos(fragment: str) -> int:
+    """Индекс закрывающей скобки первого ПОЛНОГО значения верхнего уровня, или -1.
+
+    Считает глубину как _is_truncated, но возвращает позицию первого возврата
+    к 0 — там заканчивается первый законченный JSON (массив/объект). Всё, что
+    после — «хвост», который старый _recover_truncated отбрасывал молча.
+    """
+    frag = fragment.lstrip()
+    if not frag or frag[0] not in "[{":
+        return -1
+    depth = 0
+    in_string = False
+    escaped = False
+    for i, ch in enumerate(frag):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "[{":
+            depth += 1
+        elif ch in "]}":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _tail_has_json_structure(tail: str) -> bool:
+    """True, если отброшенный хвост содержит JSON-структуру ([ или {).
+
+    Хвост с квадратными скобками после закрытого JSON — вероятная потеря
+    данных (модель выдала второй массив/объект). Хвост без скобок — мусор
+    модели («Вот концепты:»), его отбрасывание потерь не несёт. Ложное
+    срабатывание (текст со скобками) дешевле ложного пропуска (потеря
+    концептов): максимум лишний ретрай через каскад.
+    """
+    return "[" in tail or "{" in tail
 
 
 def _recover_truncated(fragment: str) -> list | dict | None:

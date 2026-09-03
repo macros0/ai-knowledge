@@ -121,8 +121,18 @@ class StagingStore:
         self.dir.mkdir(parents=True, exist_ok=True)
         (self.dir / f"chunk_{index:02d}.md").write_text(text, encoding="utf-8")
 
-    def append_chunk(self, index: int, concepts: list[Concept]) -> list[str]:
-        """Сохраняет концепты чанка и обновляет manifest. Возвращает занятые слаги."""
+    def append_chunk(
+        self,
+        index: int,
+        concepts: list[Concept],
+        degradation: list[dict] | None = None,
+    ) -> list[str]:
+        """Сохраняет концепты чанка и обновляет manifest. Возвращает занятые слаги.
+
+        degradation — события деградации генерации этого чанка (телеметрия
+        gen_quality: salvage JSON, fallback классификатора таблиц). Хранятся
+        в chunks_data, при финализации агрегируются в documents.problem.
+        """
         with self._lock:
             manifest = self.load() or self.create(index + 1, global_tags=[])
             processed = list(manifest.get("processed_chunks", []))
@@ -135,7 +145,10 @@ class StagingStore:
             chunk_file = f"chunk_{index:02d}.json"
             write_json_atomic(self.dir / chunk_file, [c.model_dump() for c in concepts])
             chunks_data = dict(manifest.get("chunks_data", {}))
-            chunks_data[str(index)] = {"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs}
+            info = {"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs}
+            if degradation:
+                info["degradation"] = degradation
+            chunks_data[str(index)] = info
             manifest.update(
                 {
                     "processed_chunks": processed,

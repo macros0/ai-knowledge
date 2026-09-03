@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     # требующий авторизации по инфраструктурной политике, — задать здесь.
     qdrant_api_key: str | None = None
     qdrant_collection: str = "okf_knowledge_base"
+    # Размер батча upsert в Qdrant (точек за один HTTP-запрос). 256 точек с
+    # 1024-мерным dense-вектором + sparse + payload ≈ 6-8 МБ — с запасом под
+    # серверный лимит max_request_size_mb=32. 0 → дефолт UPSERT_BATCH_SIZE.
+    qdrant_upsert_batch_size: int = 0
     embedding_dimensions: int = 1024
 
     embedding_provider: str = "http"  # http | fake

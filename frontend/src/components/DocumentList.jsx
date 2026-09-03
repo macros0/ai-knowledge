@@ -572,6 +572,17 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                 </span>
               </>
             )}
+            {doc.problem && (
+              <>
+                <br />
+                <span
+                  className="doc-problem-badge"
+                  title={doc.problem_message || doc.problem}
+                >
+                  ⚠ {doc.problem_message || doc.problem}
+                </span>
+              </>
+            )}
             {needsMarkup && (
               <>
                 <br />

@@ -9,6 +9,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
+import httpx
 import pytest
 
 from app.config import Settings
@@ -209,3 +210,90 @@ class TestBackfillChunks:
         assert vs.backfill_chunks(embedder) == 2
         for point in fake.upserted:
             assert point.payload["dev_tags"] == ["123", "Разработка"]
+
+
+class TestBackfillBatchResilience:
+    """Пер-батчевая устойчивость (инцидент 03.09.2026): один битый батч
+    (422 на коллизии sparse-индексов) не должен убивать весь backfill корпуса."""
+
+    def _chunk_point_id(self, doc_id: str, idx: int) -> str:
+        return str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{idx:02d}.md")
+        )
+
+    def test_failed_batch_skipped_rest_indexed(self, tmp_path, monkeypatch, caplog):
+        from app.services.registry import DocumentRegistry
+
+        settings = Settings(_env_file=None, data_dir=tmp_path)
+        doc_id = "1111111111111111"
+        DocumentRegistry().create(doc_id, "a.pdf", "application/pdf", 1)
+        chunks_dir = settings.okf_dir / doc_id / "chunks"
+        chunks_dir.mkdir(parents=True)
+        # 66 чанков → 2 батча по 64 (64+2)
+        for i in range(66):
+            (chunks_dir / f"chunk_{i:02d}.md").write_text(f"Текст чанка {i}.\n", encoding="utf-8")
+
+        vs, _ = _vs(tmp_path, monkeypatch, records=[])
+
+        # Батч 2 (чанки 64..65) падает всегда: 422-валидация не ретраится.
+        monkeypatch.setattr(vs, "client", _BatchFailingQdrant(fail_from=64, fail_to=65))
+        embedder = FakeEmbedder()
+
+        import logging
+
+        with caplog.at_level(logging.ERROR):
+            indexed = vs.backfill_chunks(embedder, batch_size=64)
+
+        # 66 точек собраны, 64 проиндексированы (батч 1), возврат —
+        # число реально ушедших точек, не собранных.
+        assert indexed == 64
+        assert any("ЧАСТИЧНО" in r.message for r in caplog.records), (
+            "итоговая сводка с счётчиками обязательна"
+        )
+
+    def test_all_batches_ok_returns_total(self, tmp_path, monkeypatch):
+        from app.services.registry import DocumentRegistry
+
+        settings = Settings(_env_file=None, data_dir=tmp_path)
+        doc_id = "1111111111111111"
+        DocumentRegistry().create(doc_id, "a.pdf", "application/pdf", 1)
+        chunks_dir = settings.okf_dir / doc_id / "chunks"
+        chunks_dir.mkdir(parents=True)
+        for i in range(70):
+            (chunks_dir / f"chunk_{i:02d}.md").write_text(f"Текст чанка {i}.\n", encoding="utf-8")
+
+        vs, fake = _vs(tmp_path, monkeypatch, records=[])
+        embedder = FakeEmbedder()
+
+        assert vs.backfill_chunks(embedder, batch_size=64) == 70
+        assert len(fake.upserted) == 70
+
+
+def _raise_422():
+    from qdrant_client.http.exceptions import UnexpectedResponse
+
+    raise UnexpectedResponse(
+        status_code=422,
+        reason_phrase="Unprocessable Entity",
+        content=b'{"status":{"error":"indices: must be unique"}}',
+        headers=httpx.Headers(),
+    )
+
+
+class _BatchFailingQdrant:
+    """Qdrant-фейк: upsert батчей, содержащих chunk_index из [fail_from, fail_to],
+    всегда падает 422 (валидация не ретраится backfill'ом), остальные проходят."""
+
+    def __init__(self, fail_from: int, fail_to: int):
+        self.fail_from = fail_from
+        self.fail_to = fail_to
+        self.upserts: list[list] = []
+
+    def scroll(self, *, collection_name, limit, with_payload, with_vectors, offset=None):
+        return [], None
+
+    def upsert(self, *, collection_name, points):
+        self.upserts.append(list(points))
+        first_idx = points[0].payload["chunk_index"]
+        if self.fail_from <= first_idx <= self.fail_to:
+            _raise_422()

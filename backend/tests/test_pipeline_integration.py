@@ -188,30 +188,119 @@ class TestPipelineFinalizeRetry:
 
 
 class TestPipelineNoConcepts:
-    def test_zero_concepts_skips_indexing_and_marks_done(self, isolated_env, monkeypatch):
+    """Контракт «done без концептов» (инцидент 03.09.2026): чанки индексируются
+    всегда (dual-index), молчаливой пустоты больше нет — ставится problem-код."""
+
+    def _run(self, reg, src, doc_id, markdown):
+        """Прогон _process с подменённым markdown и 0 концептов от LLM.
+
+        Возвращает (pipeline, calls) — calls["chunks"] это тексты, переданные
+        в index_chunks (None — если не вызывался).
+        """
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: []
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+
+        calls = {"chunks": None}
+
+        def cap_chunks(*args, **kwargs):
+            calls["chunks"] = list(args[2]) if len(args) > 2 else list(kwargs.get("chunk_texts", []))
+            return set()
+
+        pipeline.vector_store.index_chunks = cap_chunks
+        pipeline.vector_store.index_concepts = lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("index_concepts не должен вызываться при нуле концептов")
+        )
+
+        import app.services.pipeline as pm
+
+        original_btm = pm.blocks_to_markdown
+        pm.blocks_to_markdown = lambda b: markdown
+        try:
+            pipeline._process(doc_id, src, "test.doc", [], resume=False)
+        finally:
+            pm.blocks_to_markdown = original_btm
+        return pipeline, calls
+
+    def test_zero_concepts_indexes_chunks_and_sets_problem(self, isolated_env, monkeypatch):
+        """0 концептов при живом тексте: done + problem=no_concepts + чанки в индексе."""
         reg, src = isolated_env
         doc_id = "no-concepts"
         reg.create(doc_id, "test.doc", "doc", 100)
 
-        indexed = {"called": False}
+        long_text = "Подробное описание функциональности. " * 10  # >200 символов
+        pipeline, calls = self._run(reg, src, doc_id, long_text)
 
-        def fail_if_indexed(*args, **kwargs):
-            indexed["called"] = True
-            raise AssertionError("Индексация не должна вызываться при нуле концептов")
+        doc = reg.get(doc_id)
+        assert doc["status"] == "done", f"status={doc['status']} error={doc.get('error')}"
+        assert doc["okf_concept_count"] == 0
+        assert doc["problem"] == "no_concepts", f"problem={doc.get('problem')}"
+        assert calls["chunks"], "чанки обязаны индексироваться даже без концептов"
+
+    def test_scan_only_document_sets_no_text_layer(self, isolated_env, monkeypatch):
+        """Скан-PDF без OCR (чанки из одних markdown-картинок): no_text_layer."""
+        reg, src = isolated_env
+        doc_id = "scan-only"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        scan_md = "\n\n".join(
+            f"![Страница {i} — изображение страницы (скан)](attachments/image-{i}.jpg)"
+            for i in range(5)
+        )
+        pipeline, calls = self._run(reg, src, doc_id, scan_md)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "done"
+        assert doc["problem"] == "no_text_layer", f"problem={doc.get('problem')}"
+
+    def test_degradation_events_aggregate_to_problem(self, isolated_env, monkeypatch):
+        """Salvage при генерации чанка → problem=llm_partial_result при done."""
+        from app.services import gen_quality
+
+        reg, src = isolated_env
+        doc_id = "degraded"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        def generate_with_salvage(*args, **kwargs):
+            gen_quality.record(gen_quality.LLM_SALVAGE, "chunk 1: тестовый salvage")
+            return [_concept()]
 
         pipeline = Pipeline()
-        pipeline.okf_generator.generate_chunk = lambda *a, **k: []
-        pipeline.vector_store.ensure_collection = fail_if_indexed
-        pipeline.vector_store.index_concepts = fail_if_indexed
-        pipeline.embedder.embed_texts = fail_if_indexed
+        pipeline.okf_generator.generate_chunk = generate_with_salvage
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        gen_quality.drain()  # чистый буфер потока перед прогоном
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "done", f"status={doc['status']} error={doc.get('error')}"
+        assert doc["problem"] == "llm_partial_result", f"problem={doc.get('problem')}"
+        assert gen_quality.drain() == [], "события должны дренироваться пайплайном"
+
+    def test_clean_run_has_no_problem(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "clean-run"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
         doc = reg.get(doc_id)
         assert doc["status"] == "done"
-        assert doc["okf_concept_count"] == 0
-        assert doc["error"] is None
-        assert indexed["called"] is False
+        assert doc["problem"] is None
 
     def test_okf_concept_count_is_concept_count_not_chunk_count(self, isolated_env, monkeypatch):
         reg, src = isolated_env

@@ -140,6 +140,11 @@ class Document(Base):
     size: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(32), default="uploaded")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Диагностический код неполноты при зелёном done (services/problem_codes.py):
+    # no_concepts / no_text_layer / llm_partial_result / index_partial_failure.
+    # None — терминальных проблем не зафиксировано. «done + problem» — документ
+    # завершён без исключения, но может быть неполным/неищемым (UI: бейдж).
+    problem: Mapped[str | None] = mapped_column(String(64), nullable=True)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0)
     processed_chunks: Mapped[int] = mapped_column(Integer, default=0)
     current_chunk: Mapped[int | None] = mapped_column(Integer, nullable=True)

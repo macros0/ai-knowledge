@@ -12,7 +12,6 @@ BM25-скоринг в Qdrant.
 import hashlib
 import math
 import re
-from collections import Counter
 
 from qdrant_client.http import models as qm
 
@@ -79,12 +78,24 @@ def _term_index(term: str) -> int:
 
 
 def to_sparse_vector(text: str) -> qm.SparseVector:
-    """TF-based sparse-вектор: indices — хэш термина, values — log1p(tf)."""
-    counts = Counter(tokenize(text))
-    if not counts:
+    """TF-based sparse-вектор: indices — хэш термина, values — log1p(tf).
+
+    Коллизии хэшей (разные термины → одинаковый индекс) агрегируются:
+    частоты складываются ДО логарифмирования — вес индекса log1p(sum_tf).
+    Qdrant отвергает sparse-вектор с повторяющимися индексами (422
+    «indices: must be unique»), поэтому дедуп — обязательный инвариант
+    (инцидент 03.09.2026: «обязат»≡«тестировании» валила индексацию).
+    indices отсортированы — стабильный порядок для тестов/дампов/сравнения.
+    """
+    tokens = tokenize(text)
+    if not tokens:
         return qm.SparseVector(indices=[], values=[])
-    terms = sorted(counts)
+    term_counts: dict[int, int] = {}
+    for token in tokens:
+        idx = _term_index(token)
+        term_counts[idx] = term_counts.get(idx, 0) + 1
+    indices = sorted(term_counts)
     return qm.SparseVector(
-        indices=[_term_index(t) for t in terms],
-        values=[math.log1p(counts[t]) for t in terms],
+        indices=indices,
+        values=[math.log1p(term_counts[idx]) for idx in indices],
     )

@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.services.problem_codes import problem_message
 
 SearchMode = Literal["dense", "bm25", "hybrid"]
 
@@ -13,6 +15,10 @@ class DocumentOut(BaseModel):
     size: int
     status: str
     error: str | None = None
+    # Диагностический код неполноты при зелёном done (services/problem_codes.py).
+    problem: str | None = None
+    # Человекочитаемое объяснение problem-кода — вычисляется из кода.
+    problem_message: str | None = None
     okf_concept_count: int = 0
     total_chunks: int = 0
     processed_chunks: int = 0
@@ -39,6 +45,13 @@ class DocumentOut(BaseModel):
     # Корзина (Этап 4a.2): не None — документ удалён и находится в корзине.
     deleted_at: datetime | None = None
     deleted_by: str | None = None
+
+    @model_validator(mode="after")
+    def _fill_problem_message(self) -> "DocumentOut":
+        """problem_message вычисляется из problem-кода (один источник текста)."""
+        if self.problem and not self.problem_message:
+            self.problem_message = problem_message(self.problem)
+        return self
 
 
 class TrashItemOut(DocumentOut):

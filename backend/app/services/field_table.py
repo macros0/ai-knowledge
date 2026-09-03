@@ -778,6 +778,12 @@ def _extract_with_llm_classify(
             # если concept_per_row=False — таблица остаётся LLM (не извлекаем)
         except Exception as e:
             logger.warning("LLM-классификатор ошибся (%s), fallback на XML-эвристику для таблицы чанка %s", e, chunk_index)
+            from app.services import gen_quality
+
+            gen_quality.record(
+                gen_quality.CLASSIFIER_FALLBACK,
+                f"chunk {chunk_index}: LLM-классификатор таблиц упал ({e})",
+            )
             # fallback: проверить как таблицу полей XML
             if _is_field_table(b.header, b.raw_rows):
                 rows = [_parse_field_row(_parse_row_cells(r), b.header) for r in b.raw_rows]
