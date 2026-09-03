@@ -2810,6 +2810,9 @@ main {
 }
 
 .dup-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 12px;
@@ -2819,6 +2822,27 @@ main {
 .dup-item.current {
   border-color: var(--accent);
   background: rgba(79, 140, 255, 0.08);
+}
+
+.dup-item.selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.dup-checkbox {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.dup-checkbox:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dup-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .dup-title {
@@ -2853,6 +2877,29 @@ main {
   color: var(--muted);
   font-size: 12px;
   margin-top: 4px;
+}
+
+.dup-confirm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dup-confirm-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.dup-confirm-list li + li {
+  border-top: 1px solid var(--border);
 }
 
 /* --- Корзина (Этап 4a.2) --- */
