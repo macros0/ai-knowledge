@@ -384,6 +384,92 @@ class FakeClassifierLLM:
         return self._responses.pop(0)
 
 
+# Перечень с ПОВТОРЯЮЩИМИСЯ значениями в title-колонке (инцидент 03.09.2026:
+# справочник «Номер ДП» — Группа «ПРЕДПРИЯТИЕ»/«ФГ» у многих строк).
+DUPLICATE_TITLE_TABLE = """# Справочник ДП
+
+| Номер ДП | Группа | Наименование |
+|---|---|---|
+| 31 | ПРЕДПРИЯТИЕ | СИБУР Холдинг |
+| 32 | ПРЕДПРИЯТИЕ | Томскнефтехим |
+| 33 | ПРЕДПРИЯТИЕ | Воронежсинтезкаучук |
+| 54 | ФГ | Офис управления проектом |
+| 55 | ФГ | Внедрение SM |
+"""
+
+
+class TestDedupByKeyNotTitle:
+    """Дедуп table-концептов — по (title, content), не по голому title.
+
+    Голый title схлопывал разные строки перечня при неуникальной
+    title-колонке (1148 строк → 46 концептов)."""
+
+    def _extract(self, tmp_path, monkeypatch, table, title_col):
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        llm = FakeClassifierLLM([{
+            "concept_per_row": True, "title_col": title_col,
+            "description_cols": [], "concept_type": "reference",
+            "extraction_mode": "per_row",
+        }])
+        return extract_table_concepts(table, chunk_index=1, llm=llm, use_llm_classify=True)
+
+    def test_duplicate_titles_different_rows_all_kept(self, tmp_path, monkeypatch):
+        """Разные строки с одинаковым title (Группа) — НЕ дубликаты: все 5 строк + обзорный."""
+        concepts, remainder = self._extract(tmp_path, monkeypatch, DUPLICATE_TITLE_TABLE, title_col=1)
+        rows = [c for c in concepts if "table-row" in (c.tags or [])]
+        assert len(rows) == 5, f"ожидалось 5 строк перечня, получено {len(rows)}: {[c.title for c in rows]}"
+        # у каждого концепта в content свой Номер ДП — строки различимы в поиске
+        joined = "\n".join(c.content for c in rows)
+        for dp in ("31", "32", "33", "54", "55"):
+            assert f"| Номер ДП | {dp} |" in joined, f"ДП {dp} потерян"
+        assert "Таблица-перечень извлечена программно: 5 строк" in remainder
+
+    def test_identical_full_duplicates_collapsed(self, tmp_path, monkeypatch):
+        """Идентичные строки (title+content) — настоящий дубль, схлопывается."""
+        table = """# Справочник ДП
+
+| Номер ДП | Группа | Наименование |
+|---|---|---|
+| 31 | ПРЕДПРИЯТИЕ | СИБУР Холдинг |
+| 31 | ПРЕДПРИЯТИЕ | СИБУР Холдинг |
+| 32 | ПРЕДПРИЯТИЕ | Томскнефтехим |
+| 33 | ПРЕДПРИЯТИЕ | Воронежсинтезкаучук |
+| 54 | ФГ | Офис управления проектом |
+| 55 | ФГ | Внедрение SM |
+"""
+        concepts, _ = self._extract(tmp_path, monkeypatch, table, title_col=1)
+        rows = [c for c in concepts if "table-row" in (c.tags or [])]
+        # 6 строк данных, из них одна точная копия другой → 5 концептов
+        assert len(rows) == 5, f"дубликат не схлопнулся: {len(rows)}"
+
+
+class TestClassifierNoneTolerance:
+    """Ответ классификатора с null-полями не должен ронять классификацию
+    (инцидент 03.09.2026: "title_col": null → int(None) → TypeError →
+    ненужный fallback на XML-эвристику)."""
+
+    def test_null_title_col_and_description_cols_use_defaults(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        llm = FakeClassifierLLM([{
+            "concept_per_row": True, "title_col": None,
+            "description_cols": None, "concept_type": None,
+            "extraction_mode": None,
+        }])
+        concepts, _ = extract_table_concepts(
+            DUPLICATE_TITLE_TABLE, chunk_index=1, llm=llm, use_llm_classify=True
+        )
+        # title_col=None → дефолт 0 (первая колонка: Номер ДП) — без исключения
+        rows = [c for c in concepts if "table-row" in (c.tags or [])]
+        assert len(rows) == 5
+        assert {c.title for c in rows} == {"31", "32", "33", "54", "55"}
+
+
 class TestLLMClassifier:
     def test_llm_classifies_field_table_as_concept_per_row(self, tmp_path, monkeypatch):
         monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())

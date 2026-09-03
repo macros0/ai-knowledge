@@ -607,14 +607,22 @@ def _llm_classify_table(
     user = f"Заголовок таблицы: {header}\n\nПервые строки:\n\n{table_preview}\n\nКлассифицируй таблицу."
     raw = llm.chat_json(system, user, doc_id=doc_id, chunk_idx=chunk_idx)
     if isinstance(raw, dict):
-        mode = str(raw.get("extraction_mode", "per_row"))
+        mode = str(raw.get("extraction_mode") or "per_row")
         if mode not in ("per_row", "whole"):
             mode = "per_row"
+        # None-толерантность: модель шлёт "title_col": null / "description_cols":
+        # null (инцидент 03.09.2026: int(None) → TypeError → ненужный fallback
+        # на XML-эвристику). None → дефолты.
+        raw_title_col = raw.get("title_col")
         cls = TableClassification(
             concept_per_row=bool(raw.get("concept_per_row", False)),
-            title_col=int(raw.get("title_col", 0)),
-            description_cols=[int(x) for x in raw.get("description_cols", []) if isinstance(x, (int, str))],
-            concept_type=str(raw.get("concept_type", "reference")),
+            title_col=int(raw_title_col) if raw_title_col is not None else 0,
+            description_cols=[
+                int(x)
+                for x in (raw.get("description_cols") or [])
+                if isinstance(x, (int, str)) and str(x).strip() != ""
+            ],
+            concept_type=str(raw.get("concept_type") or "reference"),
             extraction_mode=mode,
         )
     else:
@@ -748,6 +756,18 @@ def extract_table_concepts(
     return concepts, remainder
 
 
+def _dedup_key(c) -> tuple[str, str]:
+    """Ключ дедупликации table-концептов: (title, content).
+
+    Голый title схлопывал РАЗНЫЕ строки перечня, когда классификатор выбрал
+    неуникальную title-колонку (инцидент 03.09.2026: справочник «Номер ДП»,
+    1148 строк с повторяющимися группами в BU_SORT2 → уцелело 46). Идентичные
+    (title, content) — настоящий дубль (таблица, размазанная по чанкам) —
+    по-прежнему схлопывается.
+    """
+    return (c.title.strip().lower(), c.content)
+
+
 def _extract_with_llm_classify(
     chunk: str, chunk_index: int | None, llm: _ClassifierLLM, doc_id: str
 ) -> tuple[list[Concept], str]:
@@ -758,7 +778,7 @@ def _extract_with_llm_classify(
     concepts: list[Concept] = []
     lines = chunk.split("\n")
     codes = [_find_message_code(lines, b.start) for b in blocks]
-    seen_titles: set[str] = set()  # дедуп по title (дубли из разных чанков)
+    seen_keys: set[tuple[str, str]] = set()  # дедуп по (title, content)
     extracted_blocks: list[tuple[RawTableBlock, str]] = []
     for bi, b in enumerate(blocks):
         code = codes[bi]
@@ -766,13 +786,14 @@ def _extract_with_llm_classify(
             cls = _llm_classify_table(b.header, b.raw_rows, llm, doc_id, chunk_index or 0)
             if cls.concept_per_row:
                 row_concepts = build_row_concepts(b, cls, code, lines=lines)
-                # дедуп по title: пропустить концепты с уже существующим title
+                # дедуп по (title, content): разные строки перечня с одинаковым
+                # title (неуникальная title-колонка) не являются дублями
                 for c in row_concepts:
-                    key = c.title.strip().lower()
-                    if key in seen_titles:
+                    key = _dedup_key(c)
+                    if key in seen_keys:
                         logger.debug("Дедуп: пропущен дубликат title=%r", c.title)
                         continue
-                    seen_titles.add(key)
+                    seen_keys.add(key)
                     concepts.append(c)
                 extracted_blocks.append((b, f"[Таблица-перечень извлечена программно: {len(b.raw_rows)} строк]"))
             # если concept_per_row=False — таблица остаётся LLM (не извлекаем)
@@ -790,9 +811,9 @@ def _extract_with_llm_classify(
                 rows = [r for r in rows if r and r.name]
                 if len(rows) >= _min_rows():
                     for c in build_field_concepts(rows, code):
-                        key = c.title.strip().lower()
-                        if key not in seen_titles:
-                            seen_titles.add(key)
+                        key = _dedup_key(c)
+                        if key not in seen_keys:
+                            seen_keys.add(key)
                             concepts.append(c)
                     ov = build_overview_concept(rows, code)
                     if ov:
