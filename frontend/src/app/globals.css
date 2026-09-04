@@ -1,4 +1,9 @@
+/* Темы: тёмная — дефолт (no-JS fallback); светлая включается атрибутом
+   data-theme="light" на <html> (выставляется bootScript-скриптом до отрисовки).
+   Палитры подобраны под WCAG AA (текст >= 4.5:1, белый на заливке >= 4.5:1),
+   проверка — frontend/scripts/contrast-check.mjs. */
 :root {
+  color-scheme: dark;
   --bg: #0f1115;
   --panel: #171a21;
   --border: #2a2f3a;
@@ -9,6 +14,34 @@
   --danger: #ff5c5c;
   --ok: #3fbf7f;
   --code-bg: #0a0c10;
+  --color-amber: #e0a83c;
+  --color-green: #4caf50;
+  --color-orange: #e8a838;
+  --color-type-ref: #d0a64a;
+  --color-type-example: #c07fbf;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f2f5fa;
+  --panel: #ffffff;
+  --border: #d5dbe6;
+  --text: #1b2432;
+  --muted: #4a5468;
+  --accent: #2759c2;
+  --accent-dim: #dbe7ff;
+  --danger: #c12c2c;
+  --ok: #157a4b;
+  --code-bg: #eef1f6;
+  --color-amber: #8a5a05;
+  --color-green: #237a2e;
+  --color-orange: #8f6200;
+  --color-type-ref: #8a5e00;
+  --color-type-example: #8a3f86;
+}
+
+:root[data-theme="light"] .doc-problem-badge {
+  color: #7a5000;
 }
 
 * {
@@ -99,6 +132,14 @@ nav {
   align-items: center;
   gap: 10px;
   font-size: 13px;
+}
+
+/* Переключатель темы (Авто/Тёмная/Светлая) — циклическая иконка в шапке.
+   Отдельно от AuthBar, чтобы был виден во всех режимах авторизации (в т.ч.
+   disabled). Активное состояние — цвет текста (не muted): .icon-btn по умолчанию
+   muted, для переключателя это основной control, а не декоративная иконка. */
+.theme-toggle-btn {
+  color: var(--text);
 }
 
 .authbar .auth-username {
@@ -1493,8 +1534,8 @@ main {
 
 .okf-type-concept { color: var(--accent); }
 .okf-type-procedure { color: var(--ok); }
-.okf-type-reference { color: #d0a64a; }
-.okf-type-example { color: #c07fbf; }
+.okf-type-reference { color: var(--color-type-ref); }
+.okf-type-example { color: var(--color-type-example); }
 .okf-type-note { color: var(--muted); }
 
 .okf-empty {
@@ -1622,7 +1663,7 @@ main {
 
 .health-banner.degraded {
   background: rgba(232, 168, 56, 0.15);
-  color: #e8a838;
+  color: var(--color-orange);
 }
 
 .health-banner.down {
@@ -1649,6 +1690,7 @@ main {
 
 .chat-retry-btn:hover {
   background: var(--accent-dim);
+  color: var(--text);
 }
 
 .chat-error-msg {
@@ -1891,6 +1933,7 @@ main {
 
 .bulk-preview-btn:hover {
   background: var(--accent-dim);
+  color: var(--text);
 }
 
 .bulk-preview-btn:disabled {
@@ -2217,7 +2260,7 @@ main {
 
 .job-status.queued { color: var(--accent); border-color: var(--accent); }
 .job-status.running { color: var(--accent); border-color: var(--accent); background: rgba(79, 140, 255, 0.1); }
-.job-status.awaiting_approval { color: #e8a838; border-color: #e8a838; }
+.job-status.awaiting_approval { color: var(--color-orange); border-color: var(--color-orange); }
 .job-status.completed { color: var(--ok); border-color: var(--ok); }
 .job-status.failed { color: var(--danger); border-color: var(--danger); }
 .job-status.cancelled { color: var(--muted); }
@@ -2518,7 +2561,7 @@ main {
 }
 
 .dev-suggestion {
-  color: #e0a83c;
+  color: var(--color-amber);
   font-size: 12px;
 }
 
@@ -2785,8 +2828,8 @@ main {
 .dup-badge {
   display: inline-block;
   background: rgba(224, 168, 60, 0.15);
-  color: #e0a83c;
-  border: 1px solid #e0a83c;
+  color: var(--color-amber);
+  border: 1px solid var(--color-amber);
   border-radius: 6px;
   padding: 1px 8px;
   font-size: 12px;
@@ -2859,8 +2902,8 @@ main {
 
 .dup-newest {
   font-size: 11px;
-  color: #4caf50;
-  border: 1px solid #4caf50;
+  color: var(--color-green);
+  border: 1px solid var(--color-green);
   border-radius: 4px;
   padding: 0 5px;
 }
@@ -2953,7 +2996,7 @@ main {
 }
 
 .trash-days {
-  color: var(--warning, #e6a23c);
+  color: var(--color-orange);
   font-size: 12px;
 }
 
@@ -3042,7 +3085,7 @@ main {
 }
 
 .dev-draft-badge {
-  color: #e0a83c;
+  color: var(--color-amber);
   font-size: 12px;
 }
 
