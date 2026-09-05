@@ -9,9 +9,11 @@ import TrashPanel from "./TrashPanel";
 import DevelopmentPicker from "./DevelopmentPicker";
 import { listDevelopments } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/i18n/LocaleContext";
 
 export default function DocumentsPanel() {
   const { mode, hasRole } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [uploadTags, setUploadTags] = useState([]);
@@ -61,14 +63,14 @@ export default function DocumentsPanel() {
           className={`view-btn${view === "docs" ? " active" : ""}`}
           onClick={() => setView("docs")}
         >
-          Документы
+          {t("docs.view.documents")}
         </button>
         <button
           type="button"
           className={`view-btn${view === "trash" ? " active" : ""}`}
           onClick={() => setView("trash")}
         >
-          Корзина
+          {t("docs.view.trash")}
         </button>
       </div>
       {view === "trash" ? (
@@ -82,28 +84,28 @@ export default function DocumentsPanel() {
                 className="spoiler-toggle"
                 onClick={() => setUploadOpen((v) => !v)}
                 aria-expanded={uploadOpen}
-                aria-label="Загрузка документов"
+                aria-label={t("docs.uploadAria")}
               >
-                <span>Загрузка документов</span>
+                <span>{t("docs.uploadTitle")}</span>
                 <span className="spoiler-chevron">{uploadOpen ? "▾" : "▸"}</span>
               </button>
               {uploadOpen && (
                 <div className="upload-spoiler-body">
                   {uploadModule && uploadDevId == null && (
                     <div className="upload-module-hint">
-                      Предзаполнено из чата: модуль <strong>{uploadModule}</strong> — привяжите разработку (необязательно).
+                      {t("docs.uploadModuleHint", { module: uploadModule })}
                     </div>
                   )}
                   <TagPicker
-                    label="Теги для документа (глобальные):"
-                    placeholder="Введите тег и нажмите Enter..."
+                    label={t("docs.uploadTagsLabel")}
+                    placeholder={t("docs.uploadTagsPlaceholder")}
                     selected={uploadTags}
                     onChange={setUploadTags}
                     refreshKey={refreshKey}
                   />
                   {developments.length > 0 && (
                     <div className="upload-dev-row">
-                      <span className="tag-picker-label">Разработка для загрузки:</span>
+                      <span className="tag-picker-label">{t("docs.uploadDevLabel")}</span>
                       <DevelopmentPicker
                         developments={developments}
                         value={uploadDevId}

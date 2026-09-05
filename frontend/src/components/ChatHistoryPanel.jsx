@@ -5,10 +5,12 @@ import Link from "next/link";
 import { deleteChatSession, getChatThread, listChatSessions } from "@/lib/api";
 import { fmtDate, HistoryMessage } from "./ChatHistoryShared";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import Modal from "./Modal";
 
 export default function ChatHistoryPanel() {
   const { showToast } = useToast();
+  const { t, tc } = useI18n();
   const [sessions, setSessions] = useState([]);
   const [active, setActive] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -20,15 +22,15 @@ export default function ChatHistoryPanel() {
   }, []);
 
   useEffect(() => {
-    load().catch((err) => showToast(`Не удалось загрузить историю: ${err.message}`, { type: "error" }));
-  }, [load, showToast]);
+    load().catch((err) => showToast(t("chat.historyLoadError", { message: err.message }), { type: "error" }));
+  }, [load, showToast, t]);
 
   const openThread = async (sid) => {
     setBusy(true);
     try {
       setActive(await getChatThread(sid));
     } catch (err) {
-      showToast(`Не удалось открыть тред: ${err.message}`, { type: "error" });
+      showToast(t("chat.openThreadError", { message: err.message }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -39,27 +41,27 @@ export default function ChatHistoryPanel() {
     if (!sid) return;
     try {
       await deleteChatSession(sid);
-      showToast("Тред удалён", { type: "success" });
+      showToast(t("chat.threadDeleted"), { type: "success" });
       setPendingDelete(null);
       if (active?.session_id === sid) setActive(null);
       load();
     } catch (err) {
-      showToast(`Не удалось удалить: ${err.message}`, { type: "error" });
+      showToast(t("chat.deleteError", { message: err.message }), { type: "error" });
     }
   };
 
   return (
     <section className="panel">
-      <h2 className="panel-title">История чата</h2>
+      <h2 className="panel-title">{t("chat.historyTitle")}</h2>
 
       {active ? (
         <div className="history-thread">
           <div className="history-thread-head">
             <button className="btn ghost" onClick={() => setActive(null)}>
-              ← К списку
+              {t("chat.backToList")}
             </button>
             <div className="history-thread-title">
-              <strong>{active.title || "Без названия"}</strong>
+              <strong>{active.title || t("chat.untitled")}</strong>
               <span className="meta">{fmtDate(active.created_at)}</span>
             </div>
           </div>
@@ -71,9 +73,9 @@ export default function ChatHistoryPanel() {
         </div>
       ) : sessions.length === 0 ? (
         <p className="history-empty">
-          История пуста.{" "}
+          {t("chat.historyEmpty")}{" "}
           <Link href="/chat" className="history-link">
-            Задайте первый вопрос
+            {t("chat.askFirst")}
           </Link>
         </p>
       ) : (
@@ -85,17 +87,17 @@ export default function ChatHistoryPanel() {
                 onClick={() => openThread(s.session_id)}
                 disabled={busy}
               >
-                <span className="history-item-title">{s.title || "Без названия"}</span>
+                <span className="history-item-title">{s.title || t("chat.untitled")}</span>
                 <span className="meta">
-                  {s.message_count} сообщ. · {fmtDate(s.updated_at)}
+                  {tc("chat.messagesCount", s.message_count)} · {fmtDate(s.updated_at)}
                 </span>
               </button>
               <button
                 className="btn ghost"
                 onClick={() => setPendingDelete(s)}
-                title="Удалить тред"
+                title={t("chat.deleteThreadTitle")}
               >
-                Удалить
+                {t("chat.deleteThread")}
               </button>
             </li>
           ))}
@@ -104,21 +106,21 @@ export default function ChatHistoryPanel() {
 
       {pendingDelete && (
         <Modal
-          title="Удалить тред?"
+          title={t("chat.deleteThreadConfirmTitle")}
           onClose={() => setPendingDelete(null)}
           footer={
             <>
               <button className="modal-btn" onClick={() => setPendingDelete(null)}>
-                Отмена
+                {t("common.cancel")}
               </button>
               <button className="modal-btn danger" onClick={confirmDelete}>
-                Удалить
+                {t("chat.deleteThread")}
               </button>
             </>
           }
         >
           <p className="confirm-text">
-            Тред «{pendingDelete.title || "Без названия"}» будет удалён. Эта операция необратима.
+            {t("chat.deleteThreadConfirmText", { title: pendingDelete.title || t("chat.untitled") })}
           </p>
         </Modal>
       )}

@@ -3,16 +3,12 @@
 import { useEffect, useState } from "react";
 import { deleteDocument, listDocumentDuplicates } from "@/lib/api";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import Modal from "./Modal";
-
-const fmtDate = (iso) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("ru-RU");
-};
 
 export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
   const { showToast } = useToast();
+  const { t, fmtDateTime } = useI18n();
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState({});
@@ -22,10 +18,10 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
     listDocumentDuplicates(doc.id)
       .then(setData)
       .catch((err) => {
-        showToast(`Не удалось загрузить дубликаты: ${err.message}`, { type: "error" });
+        showToast(t("dup.loadError", { message: err.message }), { type: "error" });
         onClose();
       });
-  }, [doc.id, showToast, onClose]);
+  }, [doc.id, showToast, onClose, t]);
 
   const candidates = [
     ...(data?.level2 ?? []).map((c) => ({ ...c, level: 2 })),
@@ -95,26 +91,26 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
     if (ok > 0) {
       showToast(
         failed.length > 0
-          ? `Удалено документов: ${ok}. Ошибки: ${failed.join("; ")}`
-          : `Удалено документов: ${ok}`,
+          ? t("dup.deletedWithErrors", { count: ok, errors: failed.join("; ") })
+          : t("dup.deletedCount", { count: ok }),
         { type: failed.length > 0 ? "warning" : "success", duration: 6000 }
       );
       onDeleted?.();
       onClose();
     } else {
-      showToast(`Не удалось удалить: ${failed[0] ?? "неизвестная ошибка"}`, { type: "error" });
+      showToast(t("dup.deleteError", { message: failed[0] ?? "unknown" }), { type: "error" });
     }
   };
 
   return (
     <>
       <Modal
-        title="Возможные дубликаты"
+        title={t("dup.title")}
         onClose={onClose}
         footer={
           <>
             <button className="modal-btn" onClick={onClose}>
-              Закрыть
+              {t("common.close")}
             </button>
             {canDelete && (
               <button
@@ -122,17 +118,17 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
                 onClick={() => setConfirmOpen(true)}
                 disabled={busy || selectedCount === 0}
               >
-                Удалить выбранные{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                {selectedCount > 0
+                  ? t("dup.deleteSelectedCount", { count: selectedCount })
+                  : t("dup.deleteSelected")}
               </button>
             )}
           </>
         }
       >
         <p className="dup-hint">
-          Документ похож на уже загруженные. Сверьте даты загрузки, чтобы не удалить
-          актуальную ревизию.
-          {canDelete &&
-            " Отметьте документы для удаления — один документ из группы всегда должен остаться в системе."}
+          {t("dup.hint")}
+          {canDelete && t("dup.hintDelete")}
         </p>
         <ul className="dup-list">
           {rows.map((r) => (
@@ -146,13 +142,11 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
                 <input
                   type="checkbox"
                   className="doc-checkbox dup-checkbox"
-                  aria-label={`Отметить для удаления: ${r.filename}`}
+                  aria-label={t("dup.markAria", { name: r.filename })}
                   checked={!!selected[r.key]}
                   disabled={r.key === lastKeptKey}
                   title={
-                    r.key === lastKeptKey
-                      ? "Хотя бы один документ из группы должен остаться"
-                      : undefined
+                    r.key === lastKeptKey ? t("dup.mustKeep") : undefined
                   }
                   onChange={() => toggleSelect(r.key)}
                 />
@@ -160,13 +154,13 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
               <div className="dup-body">
                 <div className="dup-title">
                   <span className="dup-filename">{r.filename}</span>
-                  {r.key === newestKey && <span className="dup-newest">новее</span>}
-                  {r.current && <span className="dup-current-label">текущий</span>}
+                  {r.key === newestKey && <span className="dup-newest">{t("dup.newest")}</span>}
+                  {r.current && <span className="dup-current-label">{t("dup.current")}</span>}
                 </div>
                 <div className="dup-meta">
-                  Загружен: {fmtDate(r.created_at)}
+                  {t("dup.uploaded", { date: fmtDateTime(r.created_at) })}
                   {r.uploaded_by ? ` · ${r.uploaded_by}` : ""}
-                  {r.jaccard != null && <> · Совпадение: {(r.jaccard * 100).toFixed(1)}%</>}
+                  {r.jaccard != null && <> · {t("dup.similarity", { pct: (r.jaccard * 100).toFixed(1) })}</>}
                 </div>
               </div>
             </li>
@@ -175,30 +169,29 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
       </Modal>
       {confirmOpen && (
         <Modal
-          title="Удалить выбранные документы?"
+          title={t("dup.confirmTitle")}
           onClose={() => {
             if (!busy) setConfirmOpen(false);
           }}
           footer={
             <>
               <button className="modal-btn" onClick={() => setConfirmOpen(false)} disabled={busy}>
-                Отмена
+                {t("common.cancel")}
               </button>
               <button className="modal-btn danger" onClick={doDelete} disabled={busy}>
-                {busy ? "Удаление…" : `Удалить (${selectedCount})`}
+                {busy ? t("dup.deleting") : t("dup.deleteSelectedCount", { count: selectedCount })}
               </button>
             </>
           }
         >
           <p className="confirm-text">
-            Выбранные документы будут перемещены в <strong>корзину</strong> и со временем
-            удалены окончательно. До этого их можно восстановить в разделе «Корзина».
+            {t("dup.confirmTextPre")} <strong>{t("dup.trashWord")}</strong> {t("dup.confirmTextPost")}
           </p>
           <ul className="dup-confirm-list">
             {selectedRows.map((r) => (
               <li key={r.key}>
                 {r.filename}
-                {r.current && <span className="dup-current-label">текущий</span>}
+                {r.current && <span className="dup-current-label">{t("dup.current")}</span>}
               </li>
             ))}
           </ul>

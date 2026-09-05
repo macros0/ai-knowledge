@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Modal from "./Modal";
+import { useI18n } from "@/i18n/LocaleContext";
 
 /**
  * Typed confirmation для деструктивных операций.
@@ -18,37 +19,40 @@ export default function ConfirmModal({
   onConfirm,
   onCancel,
   matchValue,
-  title = "Подтвердите массовое удаление",
+  title,
   description,
   hint,
 }) {
+  const { t, tc } = useI18n();
   const [value, setValue] = useState("");
 
+  const effectiveTitle = title ?? t("confirm.bulkDeleteTitle");
   const target = matchValue ?? String(count);
   const match = value.trim() === target;
 
   const desc =
     description ?? (
       <>
-        Вы собираетесь <strong>безвозвратно удалить {count} документов</strong> и все
-        связанные с ними концепты, чанки и векторы.
+        {t("confirm.bulkDeleteDescPre")}{" "}
+        <strong>{tc("confirm.bulkDeleteDocs", count)}</strong>{" "}
+        {t("confirm.bulkDeleteDescPost")}
       </>
     );
 
   const hintText = hint ?? (
     <>
-      Для подтверждения введите число <code>{target}</code>:
+      {t("confirm.bulkDeleteHintPre")} <code>{target}</code>:
     </>
   );
 
   return (
     <Modal
-      title={title}
+      title={effectiveTitle}
       onClose={onCancel}
       footer={
         <>
           <button className="modal-btn" onClick={onCancel}>
-            Отмена
+            {t("common.cancel")}
           </button>
           <button className="modal-btn danger" disabled={!match} onClick={onConfirm}>
             {actionLabel}

@@ -4,6 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { positionPopup } from "@/lib/popupPosition";
+import { useI18n } from "@/i18n/LocaleContext";
 
 const MAX_OPTIONS = 20;
 
@@ -15,6 +16,7 @@ export default function TagPicker({
   refreshKey = 0,
   className = "",
 }) {
+  const { t, tc } = useI18n();
   const dictionary = useTagDictionary();
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
@@ -152,7 +154,7 @@ export default function TagPicker({
             >
               {filtered.length === 0 && (
                 <li className="tag-combobox-empty">
-                  {input.trim() ? `Добавить «${input.trim()}»` : "Нет тегов в справочнике"}
+                  {input.trim() ? t("tags.picker.addQuote", { name: input.trim() }) : t("tags.picker.noTags")}
                 </li>
               )}
               {filtered.map((t, i) => (
@@ -169,7 +171,7 @@ export default function TagPicker({
                   onMouseEnter={() => setActive(i)}
                 >
                   <span className="tag-combobox-name">{t.name}</span>
-                  <span className="tag-combobox-count" title={`Используется в ${t.count} документ(ах)`}>
+                  <span className="tag-combobox-count" title={tc("tags.picker.usedIn", t.count)}>
                     {t.count}
                   </span>
                 </li>

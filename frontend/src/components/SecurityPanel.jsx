@@ -3,36 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { blockUser, listAudit, listAuditActionTypes, listAuditUsers, listBlocks, unblockUser } from "@/lib/api";
 import { useToast } from "./Toast";
-
-const ACTION_LABELS = {
-  document_upload: "Загрузка документа",
-  document_delete: "Удаление документа",
-  document_bulk_delete: "Массовое удаление",
-  document_regenerate: "Перегенерация документа",
-  document_bulk_regenerate: "Массовая перегенерация",
-  document_resume: "Возобновление документа",
-  document_development_set: "Привязка разработки",
-  document_tags_update: "Правка тегов документа",
-  document_bulk_tags_update: "Массовая правка тегов",
-  job_approve: "Одобрение задачи",
-  job_cancel: "Отмена задачи",
-  user_block: "Блокировка пользователя",
-  user_unblock: "Разблокировка пользователя",
-  development_create: "Создание разработки",
-  development_update: "Обновление разработки",
-  development_delete: "Удаление разработки",
-  attribute_create: "Создание значения атрибута",
-  attribute_delete: "Удаление значения атрибута",
-  tag_delete: "Удаление тега из справочника",
-  tag_cleanup: "Очистка неиспользуемых тегов",
-  document_restore: "Восстановление документа",
-  document_bulk_restore: "Массовое восстановление",
-  document_auto_delete: "Автоудаление документа (система)",
-  chat_history_view: "Просмотр чужой истории чата",
-  chat_history_auto_delete: "Автоочистка истории чата (система)",
-};
-
-const ACTION_OPTIONS = Object.keys(ACTION_LABELS);
+import { useI18n } from "@/i18n/LocaleContext";
 
 function fmtTime(iso) {
   if (!iso) return "—";
@@ -74,19 +45,9 @@ function exportCsv(entries) {
   URL.revokeObjectURL(url);
 }
 
-function aggregate(entries) {
-  const map = {};
-  for (const e of entries) {
-    const key = `${e.username ?? "?"} · ${ACTION_LABELS[e.action_type] ?? e.action_type}`;
-    map[key] = (map[key] || 0) + 1;
-  }
-  return Object.entries(map)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 15);
-}
-
 export default function SecurityPanel() {
   const { showToast } = useToast();
+  const { t, fmtDateTime } = useI18n();
   const [entries, setEntries] = useState([]);
   const [blocks, setBlocks] = useState([]);
   const [actionTypes, setActionTypes] = useState([]);
@@ -96,6 +57,22 @@ export default function SecurityPanel() {
   const [blockForm, setBlockForm] = useState({ external_id: "", reason: "", expires_at: "" });
   const [busy, setBusy] = useState(false);
   const mounted = useRef(true);
+
+  const KNOWN_ACTIONS = [
+    "document_upload", "document_delete", "document_bulk_delete", "document_regenerate",
+    "document_bulk_regenerate", "document_resume", "document_development_set",
+    "document_tags_update", "document_bulk_tags_update", "job_approve", "job_cancel",
+    "user_block", "user_unblock", "development_create", "development_update",
+    "development_delete", "attribute_create", "attribute_delete", "tag_delete", "tag_cleanup",
+    "document_restore", "document_bulk_restore", "document_auto_delete",
+    "chat_history_view", "chat_history_auto_delete",
+  ];
+
+  const actionLabels = (type) => {
+    const key = `security.action.${type}`;
+    const translated = t(key);
+    return translated === key ? type : translated;
+  };
 
   const load = useCallback(async () => {
     try {
@@ -144,7 +121,7 @@ export default function SecurityPanel() {
         reason: blockForm.reason || null,
         expires_at: blockForm.expires_at || null,
       });
-      showToast("Пользователь заблокирован", { type: "success" });
+      showToast(t("security.userBlocked"), { type: "success" });
       setBlockForm({ external_id: "", reason: "", expires_at: "" });
       await load();
     } catch (err) {
@@ -157,34 +134,46 @@ export default function SecurityPanel() {
   const submitUnblock = async (externalId) => {
     try {
       await unblockUser(externalId);
-      showToast("Пользователь разблокирован", { type: "success" });
+      showToast(t("security.userUnblocked"), { type: "success" });
       await load();
     } catch (err) {
       showToast(err.message, { type: "error" });
     }
   };
 
-  const anomalies = aggregate(entries);
+  // Агрегация аномалий по окну.
+  const anomalies = useCallback(() => {
+    const map = {};
+    for (const e of entries) {
+      const key = `${e.username ?? "?"} · ${actionLabels(e.action_type)}`;
+      map[key] = (map[key] || 0) + 1;
+    }
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15);
+  }, [entries, t]);
+
+  const agg = anomalies();
 
   return (
     <section className="panel security-panel">
       <div className="panel-head">
-        <h2>Аудит и безопасность</h2>
+        <h2>{t("security.title")}</h2>
         <button className="modal-btn" onClick={() => exportCsv(entries)} disabled={entries.length === 0}>
-          Экспорт CSV
+          {t("security.exportCsv")}
         </button>
       </div>
 
       <div className="sec-grid">
         <div className="sec-col">
-          <h3>Журнал ИБ</h3>
+          <h3>{t("security.log")}</h3>
           <form className="audit-filters" onSubmit={applyFilters}>
             <select
               className="filter-input"
               value={draft.user_id}
               onChange={(e) => setDraft((d) => ({ ...d, user_id: e.target.value }))}
             >
-              <option value="">Все пользователи</option>
+              <option value="">{t("security.allUsers")}</option>
               {users.map((u) => (
                 <option key={u.user_id} value={u.user_id}>
                   {u.username ?? u.user_id}
@@ -196,10 +185,10 @@ export default function SecurityPanel() {
               value={draft.action_type}
               onChange={(e) => setDraft((d) => ({ ...d, action_type: e.target.value }))}
             >
-              <option value="">Все действия</option>
-              {(actionTypes.length > 0 ? actionTypes : ACTION_OPTIONS).map((a) => (
+              <option value="">{t("security.allActions")}</option>
+              {(actionTypes.length > 0 ? actionTypes : KNOWN_ACTIONS).map((a) => (
                 <option key={a} value={a}>
-                  {ACTION_LABELS[a] ?? a}
+                  {actionLabels(a)}
                 </option>
               ))}
             </select>
@@ -216,30 +205,30 @@ export default function SecurityPanel() {
               onChange={(e) => setDraft((d) => ({ ...d, until: e.target.value }))}
             />
             <button className="modal-btn" type="submit">
-              Применить
+              {t("security.apply")}
             </button>
           </form>
 
           {entries.length === 0 ? (
-            <p className="muted">Записей не найдено.</p>
+            <p className="muted">{t("security.noRecords")}</p>
           ) : (
             <div className="audit-table-wrap">
               <table className="audit-table">
                 <thead>
                   <tr>
-                    <th>Время</th>
-                    <th>Пользователь</th>
-                    <th>Действие</th>
-                    <th>Объект</th>
-                    <th>IP</th>
+                    <th>{t("security.colTime")}</th>
+                    <th>{t("security.colUser")}</th>
+                    <th>{t("security.colAction")}</th>
+                    <th>{t("security.colTarget")}</th>
+                    <th>{t("security.colIp")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map((e) => (
                     <tr key={e.id}>
-                      <td className="nowrap">{fmtTime(e.created_at)}</td>
+                      <td className="nowrap">{fmtDateTime(e.created_at)}</td>
                       <td>{e.username ?? e.user_id ?? "—"}</td>
-                      <td>{ACTION_LABELS[e.action_type] ?? e.action_type}</td>
+                      <td>{actionLabels(e.action_type)}</td>
                       <td>
                         {e.target_type ? `${e.target_type}:` : ""}
                         {e.target_id ?? ""}
@@ -254,12 +243,12 @@ export default function SecurityPanel() {
         </div>
 
         <div className="sec-col">
-          <h3>Аномалии (по окну)</h3>
-          {anomalies.length === 0 ? (
-            <p className="muted">Нет данных для агрегации.</p>
+          <h3>{t("security.anomalies")}</h3>
+          {agg.length === 0 ? (
+            <p className="muted">{t("security.noAnomalies")}</p>
           ) : (
             <ul className="anomaly-list">
-              {anomalies.map(([label, count]) => (
+              {agg.map(([label, count]) => (
                 <li key={label} className="anomaly-item">
                   <span>{label}</span>
                   <span className="anomaly-count">{count}</span>
@@ -268,17 +257,17 @@ export default function SecurityPanel() {
             </ul>
           )}
 
-          <h3>Блокировки</h3>
+          <h3>{t("security.blocks")}</h3>
           <form className="block-form" onSubmit={submitBlock}>
             <input
               className="filter-input"
-              placeholder="Внешний id пользователя"
+              placeholder={t("security.blockExternalId")}
               value={blockForm.external_id}
               onChange={(e) => setBlockForm((b) => ({ ...b, external_id: e.target.value }))}
             />
             <input
               className="filter-input"
-              placeholder="Причина"
+              placeholder={t("security.blockReason")}
               value={blockForm.reason}
               onChange={(e) => setBlockForm((b) => ({ ...b, reason: e.target.value }))}
             />
@@ -289,27 +278,27 @@ export default function SecurityPanel() {
               onChange={(e) => setBlockForm((b) => ({ ...b, expires_at: e.target.value }))}
             />
             <button className="modal-btn danger" type="submit" disabled={busy}>
-              Заблокировать
+              {t("security.blockBtn")}
             </button>
           </form>
 
           {blocks.length === 0 ? (
-            <p className="muted">Активных блокировок нет.</p>
+            <p className="muted">{t("security.noBlocks")}</p>
           ) : (
             <ul className="block-list">
               {blocks.map((b) => (
                 <li key={b.id} className="block-item">
                   <div>
                     <strong>{b.username ?? b.external_id}</strong>
-                    {!b.active && <span className="block-expired"> (истекла)</span>}
+                    {!b.active && <span className="block-expired">{t("security.blockExpired")}</span>}
                     <div className="muted">
-                      {b.reason ? `Причина: ${b.reason} · ` : ""}
-                      {b.blocked_by ? `кем: ${b.blocked_by} · ` : ""}
-                      до {b.expires_at ? fmtTime(b.expires_at) : "бессрочно"}
+                      {b.reason ? t("security.reason", { reason: b.reason }) : ""}
+                      {b.blocked_by ? t("security.by", { name: b.blocked_by }) : ""}
+                      {t("security.until", { time: b.expires_at ? fmtDateTime(b.expires_at) : t("security.untilForever") })}
                     </div>
                   </div>
                   <button className="modal-btn" onClick={() => submitUnblock(b.external_id)}>
-                    Разблокировать
+                    {t("security.unblock")}
                   </button>
                 </li>
               ))}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { cleanupTags, deleteTag, listTags } from "@/lib/api";
 import { bumpTagVersion } from "@/lib/tagDictionary";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import { TrashIcon } from "./icons";
 
 /**
@@ -13,6 +14,7 @@ import { TrashIcon } from "./icons";
  */
 export default function TagManagerModal({ onClose }) {
   const { showToast } = useToast();
+  const { t, tc } = useI18n();
   const [tags, setTags] = useState([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,10 +50,10 @@ export default function TagManagerModal({ onClose }) {
     setBusy(true);
     try {
       await deleteTag(name);
-      showToast(`Тег «${name}» удалён`, { type: "success" });
+      showToast(t("tags.manager.deleted", { name }), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(`Не удалось удалить тег: ${err.message}`, { type: "error" });
+      showToast(t("tags.manager.deleteError", { message: err.message }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -61,10 +63,10 @@ export default function TagManagerModal({ onClose }) {
     setBusy(true);
     try {
       const res = await cleanupTags();
-      showToast(`Удалено неиспользуемых тегов: ${res?.total ?? 0}`, { type: "success" });
+      showToast(t("tags.manager.cleaned", { count: res?.total ?? 0 }), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(`Не удалось очистить теги: ${err.message}`, { type: "error" });
+      showToast(t("tags.manager.cleanupError", { message: err.message }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -74,8 +76,8 @@ export default function TagManagerModal({ onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card tag-manager" onClick={(e) => e.stopPropagation()}>
         <header className="tag-manager-header">
-          <h3 className="modal-title">Справочник тегов</h3>
-          <button className="tag-manager-close" onClick={onClose} aria-label="Закрыть">
+          <h3 className="modal-title">{t("tags.manager.title")}</h3>
+          <button className="tag-manager-close" onClick={onClose} aria-label={t("tags.manager.closeAria")}>
             ×
           </button>
         </header>
@@ -83,20 +85,19 @@ export default function TagManagerModal({ onClose }) {
           className="tag-manager-search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Поиск по тегам..."
-          aria-label="Поиск по тегам"
+          placeholder={t("tags.manager.searchPlaceholder")}
+          aria-label={t("tags.manager.searchAria")}
         />
         <div className="tag-manager-summary">
           <span>
-            Всего: <strong>{tags.length}</strong> · Неиспользуемых:{" "}
-            <strong>{unused.length}</strong>
+            {t("tags.manager.total", { total: tags.length, unused: unused.length })}
           </span>
           <button
             className="bulk-tag-btn"
             onClick={removeAllUnused}
             disabled={busy || unused.length === 0}
           >
-            Удалить все неиспользуемые ({unused.length})
+            {t("tags.manager.deleteUnused", { count: unused.length })}
           </button>
         </div>
         <ul className="tag-manager-list">
@@ -110,7 +111,7 @@ export default function TagManagerModal({ onClose }) {
               </span>
               <span
                 className="tag-manager-count"
-                title={`Используется в ${t.count} документ(ах)`}
+                title={tc("tags.picker.usedIn", t.count)}
               >
                 {t.count}
               </span>
@@ -119,7 +120,7 @@ export default function TagManagerModal({ onClose }) {
                   className="tag-manager-delete"
                   onClick={() => removeOne(t.name)}
                   disabled={busy}
-                  aria-label={`Удалить тег ${t.name}`}
+                  aria-label={t("tags.manager.deleteAria", { name: t.name })}
                 >
                   <TrashIcon size={14} />
                 </button>
@@ -127,7 +128,7 @@ export default function TagManagerModal({ onClose }) {
             </li>
           ))}
           {filtered.length === 0 && (
-            <li className="tag-manager-empty">Нет совпадений</li>
+            <li className="tag-manager-empty">{t("tags.manager.noMatch")}</li>
           )}
         </ul>
       </div>

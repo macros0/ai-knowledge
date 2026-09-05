@@ -3,6 +3,7 @@ import Link from "next/link";
 import ContentViewer from "@/components/ContentViewer";
 import { DownloadIcon } from "@/components/icons";
 import { backendFetch } from "@/lib/backendFetch";
+import { serverTranslator } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function OkfFilePage({ params }) {
+  const { t } = await serverTranslator();
   const { docId, filename } = await params;
   const decodedPath = filename.map(decodeSegment);
   const filePath = decodedPath.map(encodeURIComponent).join("/");
@@ -42,21 +44,21 @@ export default async function OkfFilePage({ params }) {
   return (
     <div className="okf-viewer">
       <Link className="back-link" href={`/documents/${docId}/okf`}>
-        ← К списку концептов и чанков
+        {t("okf.page.backToList")}
       </Link>
       <div className="okf-doc-bar">
         <span className="okf-doc-name">{doc.filename}</span>
         <div className="okf-doc-actions">
           <Link className="okf-doc-open" href={`/documents/${docId}/fulltext`}>
-            Открыть весь документ →
+            {t("okf.page.openFulltext")} →
           </Link>
           <a
             className="download-btn"
             href={`/api/documents/${docId}/download`}
             download
-            title="Скачать исходный файл"
+            title={t("okf.page.download")}
           >
-            <DownloadIcon /> Скачать
+            <DownloadIcon /> {t("okf.page.download")}
           </a>
         </div>
       </div>
@@ -66,7 +68,7 @@ export default async function OkfFilePage({ params }) {
           className="okf-chunk-link"
           href={`/documents/${docId}/chunks/${chunkIndex}`}
         >
-          Связанный чанк: {chunkIndex + 1}
+          {t("okf.page.linkedChunk", { index: chunkIndex + 1 })}
         </Link>
       )}
       <ContentViewer text={text} docId={docId} stripFrontmatter />

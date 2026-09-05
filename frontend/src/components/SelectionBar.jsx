@@ -4,6 +4,7 @@ import { useState } from "react";
 import { bulkUpdateTags } from "@/lib/api";
 import { bumpTagVersion } from "@/lib/tagDictionary";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import { TrashIcon } from "./icons";
 import TagCombobox from "./TagCombobox";
 
@@ -42,6 +43,7 @@ export default function SelectionBar({
   const [removeTag, setRemoveTag] = useState("");
   const [busy, setBusy] = useState(false);
   const { showToast } = useToast();
+  const { t } = useI18n();
 
   const hasSelection = selectedIds.length > 0;
   const danger = canDelete && hasSelection;
@@ -51,7 +53,7 @@ export default function SelectionBar({
     if (!value || !hasSelection || busy) return;
     if (selectedIds.length > MAX_BULK_DOCS) {
       showToast(
-        `Превышен лимит ${MAX_BULK_DOCS} документов на массовую правку (выбрано ${selectedIds.length})`,
+        t("selection.limitToast", { max: MAX_BULK_DOCS, selected: selectedIds.length }),
         { type: "warning", duration: 8000 }
       );
       return;
@@ -67,7 +69,7 @@ export default function SelectionBar({
       if (op === "add") setAddTag("");
       else setRemoveTag("");
     } catch (err) {
-      showToast(`Массовая правка тегов не удалась: ${err.message}`, { type: "error" });
+      showToast(t("selection.bulkError", { message: err.message }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -80,11 +82,11 @@ export default function SelectionBar({
         className="selection-toggle"
         onClick={onToggle}
         aria-expanded={open}
-        aria-label="Массовые действия"
+        aria-label={t("selection.bulkActions")}
       >
-        <span>Массовые действия</span>
+        <span>{t("selection.bulkActions")}</span>
         <span className="selection-count">
-          Выбрано: <strong>{selectedIds.length}</strong> из {total}
+          {t("selection.selected", { selected: selectedIds.length, total })}
         </span>
         <span className="selection-chevron">{open ? "▾" : "▸"}</span>
       </button>
@@ -95,27 +97,27 @@ export default function SelectionBar({
             className={`all-by-filter-btn${allByFilterOn ? " active" : ""}${allByFilterPartial ? " partial" : ""}`}
             onClick={onToggleAllByFilter}
             disabled={busy || total === 0}
-            title="Выделить все документы по текущему фильтру (до 50) / снять выделение"
+            title={t("selection.selectAllTitle")}
           >
-            {allByFilterOn ? "✓ " : allByFilterPartial ? "◐ " : ""}Выделить все
+            {allByFilterOn ? "✓ " : allByFilterPartial ? "◐ " : ""}{t("selection.selectAll")}
           </button>
           <button
             type="button"
             className="bulk-tag-btn"
             onClick={onSelectPage}
             disabled={busy || total === 0}
-            title="Добавить к выделению документы текущей страницы"
+            title={t("selection.selectPageTitle")}
           >
-            Выделить на странице
+            {t("selection.selectPage")}
           </button>
           <span className="bulk-count">
-            Выбрано: <strong>{selectedIds.length}</strong> из {total}
+            {t("selection.selected", { selected: selectedIds.length, total })}
           </span>
           <TagCombobox
             value={addTag}
             onChange={setAddTag}
-            placeholder="Добавить тег"
-            ariaLabel="Добавить тег выбранным документам"
+            placeholder={t("selection.addPlaceholder")}
+            ariaLabel={t("selection.addAria")}
             className="bulk-tag-input"
             disabled={!hasSelection}
           />
@@ -125,13 +127,13 @@ export default function SelectionBar({
             onClick={() => applyTags("add")}
             disabled={busy || !hasSelection}
           >
-            Добавить
+            {t("selection.add")}
           </button>
           <TagCombobox
             value={removeTag}
             onChange={setRemoveTag}
-            placeholder="Убрать тег"
-            ariaLabel="Убрать тег у выбранных документов"
+            placeholder={t("selection.removePlaceholder")}
+            ariaLabel={t("selection.removeAria")}
             allowNew={false}
             className="bulk-tag-input"
             disabled={!hasSelection}
@@ -142,7 +144,7 @@ export default function SelectionBar({
             onClick={() => applyTags("remove")}
             disabled={busy || !hasSelection}
           >
-            Убрать
+            {t("selection.remove")}
           </button>
           {canDelete && (
             <button
@@ -151,7 +153,7 @@ export default function SelectionBar({
               onClick={onOpenPreview}
               disabled={busy || !hasSelection}
             >
-              <TrashIcon size={14} /> Показать, что будет затронуто
+              <TrashIcon size={14} /> {t("selection.previewImpact")}
             </button>
           )}
         </div>

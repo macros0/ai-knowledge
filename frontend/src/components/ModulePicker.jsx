@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { positionPopup } from "@/lib/popupPosition";
+import { useI18n } from "@/i18n/LocaleContext";
 import {
   readRecentModules,
   recordRecentModule,
@@ -22,6 +23,7 @@ const MAX_MATCHES = 20;
  * оба пути выбора идут через один колбэк.
  */
 export default function ModulePicker({ modules, value, username, onChange }) {
+  const { t } = useI18n();
   const [recents, setRecents] = useState([]);
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
@@ -136,7 +138,7 @@ export default function ModulePicker({ modules, value, username, onChange }) {
 
   return (
     <div className="module-picker">
-      <div className="chat-module-chips" role="group" aria-label="Быстрый фильтр по модулю">
+      <div className="chat-module-chips" role="group" aria-label={t("chat.moduleQuickFilterAria")}>
         {recents.map((m) => (
           <button
             key={m}
@@ -163,7 +165,7 @@ export default function ModulePicker({ modules, value, username, onChange }) {
           onBlur={() => {
             if (!input.trim()) setOpen(false);
           }}
-          placeholder="Найти модуль…"
+          placeholder={t("chat.moduleSearchPlaceholder")}
           autoComplete="off"
           role="combobox"
           aria-expanded={open}
@@ -175,7 +177,7 @@ export default function ModulePicker({ modules, value, username, onChange }) {
           createPortal(
             <ul className="tag-combobox-list" role="listbox" id={listId} ref={popupRef}>
               {matches.length === 0 && (
-                <li className="tag-combobox-empty">Модуль не найден</li>
+                <li className="tag-combobox-empty">{t("chat.moduleNotFound")}</li>
               )}
               {matches.map((m, i) => (
                 <li

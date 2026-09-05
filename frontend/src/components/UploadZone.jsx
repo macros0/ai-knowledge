@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { uploadDocument } from "@/lib/api";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import Modal from "./Modal";
 
 const SUPPORTED_EXTENSIONS = [".docx", ".xlsx", ".pdf"];
@@ -13,6 +14,7 @@ const extOf = (name) => {
 };
 
 export default function UploadZone({ tags = [], developmentId = null, onUploaded }) {
+  const { t } = useI18n();
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [dragover, setDragover] = useState(false);
@@ -34,10 +36,9 @@ export default function UploadZone({ tags = [], developmentId = null, onUploaded
     }
 
     if (supported.length === 0) {
-      showToast(
-        `Нет поддерживаемых файлов. Допустимы: ${SUPPORTED_EXTENSIONS.join(", ")}`,
-        { type: "warning" }
-      );
+      showToast(t("upload.noSupported", { exts: SUPPORTED_EXTENSIONS.join(", ") }), {
+        type: "warning",
+      });
       return;
     }
 
@@ -70,30 +71,30 @@ export default function UploadZone({ tags = [], developmentId = null, onUploaded
     if (duplicateInfo) {
       setDuplicate(duplicateInfo);
       if (uploadedCount > 0) {
-        showToast(`Загружено до повтора-дубликата: ${uploadedCount}`, { type: "success" });
+        showToast(t("upload.uploadedUpToDuplicate", { count: uploadedCount }), { type: "success" });
         onUploaded?.();
       }
       return;
     }
 
     if (uploadedCount > 0) {
-      showToast(`Загружено файлов: ${uploadedCount}`, { type: "success" });
+      showToast(t("upload.uploadedCount", { count: uploadedCount }), { type: "success" });
       onUploaded?.();
     }
     for (const { file, twin } of trashTwins) {
-      showToast(
-        `У «${file}» есть похожий документ в корзине: «${twin.filename}» (не мешает загрузке)`,
-        { type: "warning", duration: 8000 }
-      );
+      showToast(t("upload.trashTwin", { file, name: twin.filename }), {
+        type: "warning",
+        duration: 8000,
+      });
     }
     if (skipped.length > 0) {
-      showToast(`Пропущено (неподдерживаемый формат): ${skipped.join(", ")}`, {
+      showToast(t("upload.skipped", { names: skipped.join(", ") }), {
         type: "warning",
         duration: 8000,
       });
     }
     if (failed.length > 0) {
-      showToast(`Ошибка загрузки: ${failed.join(", ")}`, { type: "error" });
+      showToast(t("upload.failed", { names: failed.join(", ") }), { type: "error" });
     }
   };
 
@@ -123,27 +124,26 @@ export default function UploadZone({ tags = [], developmentId = null, onUploaded
           e.target.value = "";
         }}
       />
-      <p>{busy ? "Загрузка..." : "Перетащите файлы (.docx, .xlsx, .pdf) или нажмите для выбора"}</p>
+      <p>{busy ? t("upload.busy") : t("upload.dropHint")}</p>
 
       {duplicate && (
         <Modal
-          title="Файл уже загружен"
+          title={t("upload.dupTitle")}
           onClose={() => setDuplicate(null)}
           footer={
             <button className="modal-btn" onClick={() => setDuplicate(null)}>
-              Отменить загрузку
+              {t("upload.dupCancel")}
             </button>
           }
         >
           <p className="confirm-text">
-            Файл <strong>{duplicate.file}</strong> идентичен уже загруженному документу
-            «{duplicate.existing?.filename}».
+            {t("upload.dupText", { file: duplicate.file, name: duplicate.existing?.filename })}
           </p>
           <p className="confirm-text muted">
             {duplicate.existing?.uploaded_by
-              ? `Загружен: ${duplicate.existing.uploaded_by}. `
+              ? t("upload.dupUploadedBy", { name: duplicate.existing.uploaded_by })
               : ""}
-            Повторная загрузка отклонена.
+            {t("upload.dupRejected")}
           </p>
         </Modal>
       )}

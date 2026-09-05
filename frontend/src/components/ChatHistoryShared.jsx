@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
+import { useI18n } from "@/i18n/LocaleContext";
 import MarkdownViewer from "./MarkdownViewer";
 
 export function fmtDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("ru-RU");
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
 export function SourceBadges({ sources }) {
+  const { t } = useI18n();
   if (!sources || sources.length === 0) return null;
   return (
     <div className="history-sources">
@@ -20,7 +22,7 @@ export function SourceBadges({ sources }) {
           <>
             {s.title || s.filename}
             {s.development_number && (
-              <span className="source-dev-badge" title={s.development_name || "Разработка"}>
+              <span className="source-dev-badge" title={s.development_name || t("chat.developmentTitle")}>
                 {s.development_number}
               </span>
             )}
@@ -43,7 +45,9 @@ export function SourceBadges({ sources }) {
   );
 }
 
-export function HistoryMessage({ m, userLabel = "Вы" }) {
+export function HistoryMessage({ m, userLabel }) {
+  const { t } = useI18n();
+  const youLabel = userLabel ?? t("chat.you");
   const content =
     m.role === "assistant" ? (
       <MarkdownViewer
@@ -59,7 +63,7 @@ export function HistoryMessage({ m, userLabel = "Вы" }) {
     );
   return (
     <div className={`msg ${m.role}`}>
-      <div className="role">{m.role === "user" ? userLabel : "Ассистент"}</div>
+      <div className="role">{m.role === "user" ? youLabel : t("chat.assistant")}</div>
       <div className="bubble history-bubble">{content}</div>
       <SourceBadges sources={m.sources} />
     </div>

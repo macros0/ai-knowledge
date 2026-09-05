@@ -432,6 +432,44 @@ $c = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)
 - `data/` — runtime: `uploads/`, `okf_bundles/`, `staging/`, `documents.json`
 - `scripts/` — старт/стоп всего стека
 
+## i18n (RU/EN) — свой лёгкий механизм (05.09.2026)
+
+Локализация клиентского UI (RU + EN), переключатель `LocaleToggle` в топбаре сразу
+после `ThemeToggle` (циклический RU → EN). Переводы — **отдельные JSON/JS-словари** в
+`frontend/src/i18n/locales/` (`ru.js` — фолбэк, `en.js` — ключи ⊆ ru, `index.js` —
+манифест). **Новый язык = копия словаря + одна запись в `index.js`.**
+
+Ключевые файлы (по образцу рукописной темы, без новых зависимостей):
+- `src/i18n/core.js` — чистая, node-тестируемая логика: `normalizeLocale`,
+  `detectLocale` (браузер), `resolveServerLocale` (cookie + Accept-Language для SSR),
+  `getMessages` (deep-merge ru+locale), `translate` (интерполяция `{param}`),
+  `translatePlural` (CLDR-формы one/few/many/other), `formatDate/DateTime/Number` (Intl).
+- `src/i18n/LocaleContext.jsx` — провайдер + `useI18n()` → `{ locale, t, tc, setLocale,
+  fmtDate, fmtDateTime, fmtNumber }`. `setLocale` пишет localStorage **и cookie** `okf.locale`
+  (cookie нужен только для SSR force-dynamic страниц), ставит `documentElement.lang` и
+  обновляет `document.title`.
+- `src/i18n/boot.js` — no-JS/edge фолбэк для `<html lang>`.
+- `src/i18n/server.js` — `serverTranslator()` (cookie + Accept-Language) для RSC
+  force-dynamic страниц (okf/fulltext/chunks) и `generateMetadata`.
+- `src/i18n/titles.js` — карта pathname → ключ заголовка (клиентский `document.title`
+  + `makeTitle`); node-тестируемая.
+
+**Логика выбора языка:** `resolveServerLocale(cookie, Accept-Language)` — сохранённый
+выбор (cookie/localStorage) побеждает, иначе авто по браузеру, фолбэк ru. В layout.js
+`RootLayout` — **async**, читает `cookies()`/`headers()` и вычисляет `ssrLocale` → `<html
+lang>` + `<LocaleProvider initialLocale={ssrLocale}>`. Это **переводит все маршруты в
+dynamic-rendering (ƒ)** — осознанное решение: без SSR-локального рендера разметка (Nav,
+заголовки) расходилась бы с языком клиента и давала hydration-mismatch. Для внутреннего
+инструмента за авторизацией это приемлемо.
+
+**Границы (не переводятся):** содержимое документов и LLM-ответы чата; backend-ошибки
+(`err.message` в Toast остаются русскими); пользовательские данные (теги, номера/названия
+разработок, модули, загрузчики). Русские код-комментарии не переводятся.
+
+Тесты: `frontend/test/i18n.test.mjs` (`node --test`) — нормализация/детект/резолв SSR,
+интерполяция, плюралы, fallback-merge, консистентность словарей (каждый en-ключ есть в
+ru), полнота plural-форм.
+
 ## Тесты
 
 ```powershell

@@ -14,22 +14,17 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { TYPED_CONFIRM_THRESHOLD } from "@/lib/constants";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import ConfirmModal from "./ConfirmModal";
 
 const EMPTY_FORM = { number: "", name: "", module: "" };
 const PAGE_SIZE = 50;
 const MODULE_NONE = "__none__";
 
-const COLUMNS = [
-  { key: "number", label: "Номер" },
-  { key: "name", label: "Название" },
-  { key: "module", label: "Модуль" },
-  { key: "documents_count", label: "Документов" },
-];
-
 export default function DevelopmentPanel() {
   const { mode, hasRole } = useAuth();
   const { showToast } = useToast();
+  const { t } = useI18n();
   const [developments, setDevelopments] = useState([]);
   const [total, setTotal] = useState(0);
   const [modules, setModules] = useState([]);
@@ -52,6 +47,13 @@ export default function DevelopmentPanel() {
   const canEdit = mode === "disabled" || hasRole("editor", "admin");
   const canDelete = mode === "disabled" || hasRole("editor", "admin");
 
+  const COLUMNS = [
+    { key: "number", label: t("devpanel.colNumber") },
+    { key: "name", label: t("devpanel.colName") },
+    { key: "module", label: t("devpanel.colModule") },
+    { key: "documents_count", label: t("devpanel.colDocs") },
+  ];
+
   const load = useCallback(async () => {
     try {
       const res = await listDevelopmentsPage({
@@ -65,9 +67,9 @@ export default function DevelopmentPanel() {
       setDevelopments(res.developments);
       setTotal(res.total);
     } catch (err) {
-      showToast(`Не удалось загрузить справочник: ${err.message}`, { type: "error" });
+      showToast(t("devpanel.loadError", { message: err.message }), { type: "error" });
     }
-  }, [search, moduleFilter, sortBy, sortOrder, page, showToast]);
+  }, [search, moduleFilter, sortBy, sortOrder, page, showToast, t]);
 
   const loadModules = useCallback(async () => {
     try {
@@ -88,11 +90,11 @@ export default function DevelopmentPanel() {
 
   // Debounce поиска (не долбим бэкенд на каждый символ).
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       setSearch(searchInput.trim());
       setPage(0);
     }, 300);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [searchInput]);
 
   const changeModuleFilter = (value) => {
@@ -119,14 +121,14 @@ export default function DevelopmentPanel() {
       if (!v || modules.includes(v)) return v || null;
       try {
         await addAttributeValue("module", v);
-        setModules((prev) => (prev.includes(v) ? prev : [...prev, v]));
+        setModules((prev) => [...prev, v].sort());
       } catch (err) {
-        showToast(`Не удалось добавить модуль: ${err.message}`, { type: "error" });
+        showToast(t("devpanel.addModuleError", { message: err.message }), { type: "error" });
         throw err;
       }
       return v;
     },
-    [modules, showToast]
+    [modules, showToast, t]
   );
 
   const submitCreate = async (e) => {
@@ -139,10 +141,10 @@ export default function DevelopmentPanel() {
       const module = await ensureModule(form.module);
       await createDevelopment({ number, name, module });
       setForm(EMPTY_FORM);
-      showToast(`Разработка «${number}» добавлена`, { type: "success" });
+      showToast(t("devpanel.created", { name }), { type: "success" });
       await load();
     } catch (err) {
-      showToast(`Не удалось добавить: ${err.message}`, { type: "error" });
+      showToast(t("devpanel.createError", { message: err.message }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -154,9 +156,8 @@ export default function DevelopmentPanel() {
       number: dev.number,
       name: dev.name,
       module: dev.module || "",
-      version: dev.version,
       originalNumber: dev.number,
-      documentsCount: dev.documents_count || 0,
+      documentsCount: dev.documents_count,
     });
   };
 
@@ -169,28 +170,24 @@ export default function DevelopmentPanel() {
     const numberChanged =
       editForm.originalNumber != null && number !== editForm.originalNumber;
     if (numberChanged && (editForm.documentsCount || 0) > 0) {
-      if (
-        !window.confirm(
-          `Смена номера обновит привязку ${editForm.documentsCount} документов в поиске. Продолжить?`
-        )
-      ) {
+      if (!window.confirm(t("devpanel.numberChangedConfirm", { count: editForm.documentsCount }))) {
         return;
       }
     }
     setBusy(true);
     try {
       const module = await ensureModule(editForm.module);
-      await updateDevelopment(devId, { number, name, module, version: editForm.version });
+      await updateDevelopment(devId, { number, name, module });
       setEditing(null);
       setEditForm(EMPTY_FORM);
-      showToast("Изменения сохранены", { type: "success" });
+      showToast(t("devpanel.saved"), { type: "success" });
       await load();
     } catch (err) {
-      if (err.code === "version_conflict" && err.data?.current) {
-        setEditForm((f) => ({ ...f, version: err.data.current.version }));
-        showToast("Запись изменена другим пользователем — нажмите «Сохранить» ещё раз", { type: "error" });
+      if (err.code === "version_conflict") {
+        setEditForm((f) => ({ ...f, version: err.data?.current?.version }));
+        showToast(t("devpanel.versionConflict"), { type: "error" });
       } else {
-        showToast(`Не удалось сохранить: ${err.message}`, { type: "error" });
+        showToast(t("devpanel.saveError", { message: err.message }), { type: "error" });
       }
     } finally {
       setBusy(false);
@@ -201,16 +198,16 @@ export default function DevelopmentPanel() {
     setBusy(true);
     try {
       await deleteDevelopment(dev.id, dev.version);
-      showToast("Разработка удалена", { type: "success" });
+      showToast(t("devpanel.deleted"), { type: "success" });
       setPendingDelete(null);
       await load();
     } catch (err) {
       if (err.code === "version_conflict") {
-        showToast("Разработка изменена другим пользователем — список обновлён", { type: "error" });
+        showToast(t("devpanel.deleteVersionConflict"), { type: "error" });
         setPendingDelete(null);
         await load();
       } else {
-        showToast(`Не удалось удалить: ${err.message}`, { type: "error" });
+        showToast(t("devpanel.deleteError", { message: err.message }), { type: "error" });
       }
     } finally {
       setBusy(false);
@@ -223,8 +220,8 @@ export default function DevelopmentPanel() {
       setPendingDelete(dev);
       return;
     }
-    const hint = count > 0 ? ` Будет отвязано документов: ${count}.` : "";
-    if (window.confirm(`Удалить разработку «${dev.number} — ${dev.name}»?${hint}`)) {
+    const hint = count > 0 ? t("devpanel.deleteHint", { count }) : "";
+    if (window.confirm(t("devpanel.deleteConfirm", { number: dev.number, name: dev.name, hint }))) {
       doDelete(dev);
     }
   };
@@ -241,20 +238,20 @@ export default function DevelopmentPanel() {
       await addAttributeValue("module", value);
       setModules((prev) => [...prev, value].sort());
       setNewModule("");
-      showToast(`Модуль «${value}» добавлен`, { type: "success" });
+      showToast(t("devpanel.moduleAdded", { name: value }), { type: "success" });
     } catch (err) {
-      showToast(`Не удалось добавить модуль: ${err.message}`, { type: "error" });
+      showToast(t("devpanel.addModuleError", { message: err.message }), { type: "error" });
     }
   };
 
   const removeModule = async (value) => {
-    if (!window.confirm(`Удалить модуль «${value}» из справочника?`)) return;
+    if (!window.confirm(t("devpanel.removeModuleConfirm", { name: value }))) return;
     try {
       await deleteAttributeValue("module", value);
       setModules((prev) => prev.filter((m) => m !== value));
-      showToast(`Модуль «${value}» удалён`, { type: "success" });
+      showToast(t("devpanel.moduleRemoved", { name: value }), { type: "success" });
     } catch (err) {
-      showToast(`Не удалось удалить модуль: ${err.message}`, { type: "error" });
+      showToast(t("devpanel.removeModuleError", { message: err.message }), { type: "error" });
     }
   };
 
@@ -264,7 +261,7 @@ export default function DevelopmentPanel() {
 
   return (
     <section className="panel">
-      <h2>Справочник разработок</h2>
+      <h2>{t("devpanel.title")}</h2>
 
       {canEdit && (
         <div className="dev-modules-block">
@@ -275,7 +272,7 @@ export default function DevelopmentPanel() {
             aria-expanded={modulesOpen}
           >
             <span className="dev-spoiler-arrow">{modulesOpen ? "▾" : "▸"}</span>
-            Модули
+            {t("devpanel.modules")}
           </button>
           {modulesOpen && (
             <>
@@ -285,25 +282,25 @@ export default function DevelopmentPanel() {
                     {m}
                     <button
                       className="dev-module-remove"
-                      title={`Удалить модуль «${m}»`}
-                      aria-label={`Удалить модуль ${m}`}
+                      title={t("devpanel.removeModuleTitle", { name: m })}
+                      aria-label={t("devpanel.removeModuleAria", { name: m })}
                       onClick={() => removeModule(m)}
                     >
                       ×
                     </button>
                   </span>
                 ))}
-                {modules.length === 0 && <span className="muted">Модули не заданы.</span>}
+                {modules.length === 0 && <span className="muted">{t("devpanel.noModules")}</span>}
               </div>
               <form className="dev-module-add" onSubmit={addModule}>
                 <input
                   className="dev-input"
-                  placeholder="Новый модуль (напр. ЛК)"
+                  placeholder={t("devpanel.addModulePlaceholder")}
                   value={newModule}
                   onChange={(e) => setNewModule(e.target.value)}
                 />
                 <button className="btn" type="submit">
-                  Добавить модуль
+                  {t("devpanel.addModuleBtn")}
                 </button>
               </form>
             </>
@@ -315,19 +312,19 @@ export default function DevelopmentPanel() {
         <form className="dev-form" onSubmit={submitCreate}>
           <input
             className="dev-input"
-            placeholder="Номер (напр. 12010)"
+            placeholder={t("devpanel.numberPlaceholder")}
             value={form.number}
             onChange={(e) => setForm((f) => ({ ...f, number: e.target.value }))}
           />
           <input
             className="dev-input"
-            placeholder="Название"
+            placeholder={t("devpanel.namePlaceholder")}
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           />
           <input
             className="dev-input"
-            placeholder="Модуль (напр. PY)"
+            placeholder={t("devpanel.modulePlaceholder")}
             list="dev-module-datalist"
             value={form.module}
             onChange={(e) => setForm((f) => ({ ...f, module: e.target.value }))}
@@ -338,7 +335,7 @@ export default function DevelopmentPanel() {
             ))}
           </datalist>
           <button className="btn" type="submit" disabled={busy}>
-            Добавить
+            {t("devpanel.addBtn")}
           </button>
         </form>
       )}
@@ -346,19 +343,19 @@ export default function DevelopmentPanel() {
       <div className="dev-filter-bar">
         <input
           className="dev-input"
-          placeholder="Поиск по номеру или названию…"
+          placeholder={t("devpanel.searchPlaceholder")}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          aria-label="Поиск по справочнику"
+          aria-label={t("devpanel.searchAria")}
         />
         <select
           className="doc-filter-select"
           value={moduleFilter}
           onChange={(e) => changeModuleFilter(e.target.value)}
-          aria-label="Фильтр по модулю"
+          aria-label={t("devpanel.moduleFilterAria")}
         >
-          <option value="">Все модули</option>
-          <option value={MODULE_NONE}>Без модуля</option>
+          <option value="">{t("devpanel.allModules")}</option>
+          <option value={MODULE_NONE}>{t("devpanel.noModule")}</option>
           {modules.map((m) => (
             <option key={m} value={m}>
               {m}
@@ -373,103 +370,105 @@ export default function DevelopmentPanel() {
             <tr>
               {COLUMNS.map((c) => (
                 <th key={c.key}>
-                <button
-                  type="button"
-                  className="dev-sort"
-                  onClick={() => onSort(c.key)}
-                  aria-label={`Сортировать по ${c.label}`}
-                >
-                  {c.label}
-                  {sortIndicator(c.key)}
-                </button>
-              </th>
-            ))}
-            {canEdit && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {developments.map((dev) =>
-            editing === dev.id ? (
-              <tr key={dev.id}>
-                <td>
-                  <input
-                    className="dev-input"
-                    value={editForm.number}
-                    onChange={(e) => setEditForm((f) => ({ ...f, number: e.target.value }))}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="dev-input"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="dev-input"
-                    value={editForm.module}
-                    list="dev-module-datalist"
-                    onChange={(e) => setEditForm((f) => ({ ...f, module: e.target.value }))}
-                  />
-                </td>
-                <td>{dev.documents_count}</td>
-                <td className="dev-actions">
-                  <button className="btn" onClick={() => submitEdit(dev.id)} disabled={busy}>
-                    Сохранить
+                  <button
+                    type="button"
+                    className="dev-sort"
+                    onClick={() => onSort(c.key)}
+                    aria-label={t("devpanel.sortAria", { label: c.label })}
+                  >
+                    {c.label}
+                    {sortIndicator(c.key)}
                   </button>
-                  <button className="btn ghost" onClick={() => setEditing(null)}>
-                    Отмена
-                  </button>
-                </td>
-              </tr>
-            ) : (
-              <tr key={dev.id}>
-                <td>
-                  <Link className="dev-link" href={`/developments/${dev.id}`}>
-                    {dev.number}
-                  </Link>
-                </td>
-                <td>{dev.name}</td>
-                <td>{dev.module || "—"}</td>
-                <td>{dev.documents_count}</td>
-                {canEdit && (
-                  <td className="dev-actions">
-                    <button className="btn ghost" onClick={() => startEdit(dev)}>
-                      Изменить
-                    </button>
-                    {canDelete && (
-                      <button className="btn danger" onClick={() => remove(dev)}>
-                        Удалить
-                      </button>
-                    )}
-                  </td>
-                )}
-              </tr>
-            )
-          )}
-          {developments.length === 0 && (
-            <tr>
-              <td colSpan={5} className="dev-empty">
-                {total === 0 && (search || moduleFilter) ? "Ничего не найдено" : "Справочник пуст. Добавьте первую разработку."}
-              </td>
+                </th>
+              ))}
+              {canEdit && <th />}
             </tr>
-          )}
-        </tbody>
+          </thead>
+          <tbody>
+            {developments.map((dev) =>
+              editing === dev.id ? (
+                <tr key={dev.id}>
+                  <td>
+                    <input
+                      className="dev-input"
+                      value={editForm.number}
+                      onChange={(e) => setEditForm((f) => ({ ...f, number: e.target.value }))}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="dev-input"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="dev-input"
+                      value={editForm.module}
+                      list="dev-module-datalist"
+                      onChange={(e) => setEditForm((f) => ({ ...f, module: e.target.value }))}
+                    />
+                  </td>
+                  <td>{dev.documents_count}</td>
+                  <td className="dev-actions">
+                    <button className="btn" onClick={() => submitEdit(dev.id)} disabled={busy}>
+                      {t("devpanel.saveBtn")}
+                    </button>
+                    <button className="btn ghost" onClick={() => setEditing(null)}>
+                      {t("devpanel.cancelBtn")}
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={dev.id}>
+                  <td>
+                    <Link className="dev-link" href={`/developments/${dev.id}`}>
+                      {dev.number}
+                    </Link>
+                  </td>
+                  <td>{dev.name}</td>
+                  <td>{dev.module || "—"}</td>
+                  <td>{dev.documents_count}</td>
+                  {canEdit && (
+                    <td className="dev-actions">
+                      <button className="btn ghost" onClick={() => startEdit(dev)}>
+                        {t("devpanel.editBtn")}
+                      </button>
+                      {canDelete && (
+                        <button className="btn danger" onClick={() => remove(dev)}>
+                          {t("devpanel.deleteBtn")}
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              )
+            )}
+            {developments.length === 0 && (
+              <tr>
+                <td colSpan={5} className="dev-empty">
+                  {total === 0 && (search || moduleFilter)
+                    ? t("devpanel.emptyNotFound")
+                    : t("devpanel.emptyEmpty")}
+                </td>
+              </tr>
+            )}
+          </tbody>
         </table>
       </div>
 
       {total > 0 && (
         <div className="dev-pagination">
-          <span className="muted">Всего: {total}</span>
+          <span className="muted">{t("devpanel.total", { count: total })}</span>
           <button className="btn ghost" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={!canPrev}>
-            ← Пред.
+            {t("devpanel.prev")}
           </button>
           <span className="dev-page-indicator">
-            Стр. {page + 1} из {totalPages}
+            {t("devpanel.page", { page: page + 1, total: totalPages })}
           </span>
           <button className="btn ghost" onClick={() => setPage((p) => p + 1)} disabled={!canNext}>
-            След. →
+            {t("devpanel.next")}
           </button>
         </div>
       )}
@@ -478,22 +477,16 @@ export default function DevelopmentPanel() {
         <ConfirmModal
           count={pendingDelete.documents_count || 0}
           matchValue={pendingDelete.number}
-          title="Подтвердите удаление разработки"
+          title={t("devpanel.confirmDeleteTitle")}
           description={
-            <>
-              Разработка{" "}
-              <strong>«{pendingDelete.number} — {pendingDelete.name}»</strong> будет
-              удалена, а {pendingDelete.documents_count || 0} связанных документов —
-              отвязаны.
-            </>
+            t("devpanel.confirmDeleteDesc", {
+              number: pendingDelete.number,
+              name: pendingDelete.name,
+              count: pendingDelete.documents_count || 0,
+            })
           }
-          hint={
-            <>
-              Для подтверждения введите номер разработки{" "}
-              <code>{pendingDelete.number}</code>:
-            </>
-          }
-          actionLabel="Удалить"
+          hint={t("devpanel.confirmDeleteHint", { number: pendingDelete.number })}
+          actionLabel={t("devpanel.deleteBtn")}
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => doDelete(pendingDelete)}
         />

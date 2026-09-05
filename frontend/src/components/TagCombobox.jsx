@@ -7,6 +7,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useTagDictionary } from "@/lib/tagDictionary";
+import { useI18n } from "@/i18n/LocaleContext";
 
 const MAX_OPTIONS = 20;
 
@@ -19,6 +20,7 @@ export default function TagCombobox({
   className = "",
   disabled = false,
 }) {
+  const { t, tc } = useI18n();
   const dictionary = useTagDictionary();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -97,8 +99,8 @@ export default function TagCombobox({
           {filtered.length === 0 && (
             <li className="tag-combobox-empty">
               {allowNew && value.trim()
-                ? `Добавить «${value.trim()}»`
-                : "Нет совпадений"}
+                ? t("tags.picker.addQuote", { name: value.trim() })
+                : t("tags.combobox.noMatch")}
             </li>
           )}
           {filtered.map((t, i) => (
@@ -115,7 +117,7 @@ export default function TagCombobox({
               onMouseEnter={() => setActive(i)}
             >
               <span className="tag-combobox-name">{t.name}</span>
-              <span className="tag-combobox-count" title={`Используется в ${t.count} документ(ах)`}>
+              <span className="tag-combobox-count" title={tc("tags.picker.usedIn", t.count)}>
                 {t.count}
               </span>
             </li>

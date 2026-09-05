@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { positionPopup } from "@/lib/popupPosition";
+import { useI18n } from "@/i18n/LocaleContext";
 
 /**
  * Поисковый фильтр по разработке для панели фильтров списка документов.
@@ -15,6 +16,7 @@ import { positionPopup } from "@/lib/popupPosition";
  * onChange: id разработки (number) или null — «все разработки».
  */
 export default function DevelopmentFilter({ developments, value, onChange }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef(null);
@@ -69,20 +71,20 @@ export default function DevelopmentFilter({ developments, value, onChange }) {
         type="button"
         className="doc-filter-select dev-filter-trigger"
         onClick={openPopup}
-        title="Фильтр по разработке (поиск по номеру)"
-        aria-label="Фильтр по разработке"
+        title={t("dev.filterTitle")}
+        aria-label={t("dev.filterAria")}
       >
         {current
           ? `${current.number}${current.name ? ` · ${current.name}` : ""}`
-          : "Все разработки"}
+          : t("dev.all")}
       </button>
       {current && (
         <button
           type="button"
           className="dev-filter-clear"
           onClick={() => pick(null)}
-          title="Сбросить фильтр по разработке"
-          aria-label="Сбросить фильтр по разработке"
+          title={t("dev.clearTitle")}
+          aria-label={t("dev.clearAria")}
         >
           ×
         </button>
@@ -97,7 +99,7 @@ export default function DevelopmentFilter({ developments, value, onChange }) {
             <input
               ref={inputRef}
               className="dev-picker-input"
-              placeholder="Поиск по номеру…"
+              placeholder={t("dev.searchPlaceholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -107,7 +109,7 @@ export default function DevelopmentFilter({ developments, value, onChange }) {
             <ul className="dev-picker-list">
               <li>
                 <button type="button" className="dev-picker-option" onClick={() => pick(null)}>
-                  Все разработки
+                  {t("dev.all")}
                 </button>
               </li>
               {filtered.map((d) => (
@@ -118,7 +120,7 @@ export default function DevelopmentFilter({ developments, value, onChange }) {
                   </button>
                 </li>
               ))}
-              {filtered.length === 0 && <li className="dev-picker-empty">Ничего не найдено</li>}
+              {filtered.length === 0 && <li className="dev-picker-empty">{t("dev.notFound")}</li>}
             </ul>
           </div>,
           document.body

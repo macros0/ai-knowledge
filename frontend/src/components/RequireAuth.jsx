@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/i18n/LocaleContext";
 
 const ROLE_LABELS = {
   viewer: "Viewer",
@@ -15,6 +16,7 @@ const ROLE_LABELS = {
  */
 export default function RequireAuth({ children }) {
   const { user, mode, simUsers, login, loading } = useAuth();
+  const { t } = useI18n();
 
   if (loading) return null;
   if (mode === "disabled") return children;
@@ -24,15 +26,13 @@ export default function RequireAuth({ children }) {
   return (
     <section className="panel auth-gate">
       <div className="auth-gate-card">
-        <h2>Вход в систему</h2>
+        <h2>{t("auth.gateTitle")}</h2>
         <p className="muted">
-          {mode === "sso"
-            ? "Для работы с базой знаний войдите через корпоративный вход."
-            : "Выберите тестового пользователя для работы с базой знаний."}
+          {mode === "sso" ? t("auth.gateSsoHint") : t("auth.gateSimHint")}
         </p>
         {mode === "sso" ? (
           <a href="/api/auth/login" className="tab auth-gate-login">
-            Войти через корпоративный вход
+            {t("auth.corporateLogin")}
           </a>
         ) : (
           <select
@@ -41,7 +41,7 @@ export default function RequireAuth({ children }) {
             onChange={(e) => e.target.value && login(e.target.value)}
           >
             <option value="" disabled>
-              Войти как…
+              {t("auth.loginAs")}
             </option>
             {(simUsers ?? []).map((u) => (
               <option key={u.username} value={u.username}>

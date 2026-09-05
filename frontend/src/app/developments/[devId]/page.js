@@ -5,17 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDevelopment, listDevelopmentDocuments } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-
-const STATUS_LABELS = {
-  uploaded: "Загружен",
-  processing: "Парсинг...",
-  splitting: "Генерация OKF...",
-  indexing: "Индексация...",
-  done: "Готов",
-  paused: "Приостановлен",
-  failed: "Ошибка",
-  error: "Ошибка",
-};
+import { useI18n } from "@/i18n/LocaleContext";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -23,6 +13,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 export default function DevelopmentCardPage() {
   const { devId } = useParams();
   const { showToast } = useToast();
+  const { t, locale, fmtDate } = useI18n();
   const [dev, setDev] = useState(null);
   const [docs, setDocs] = useState([]);
   const [total, setTotal] = useState(0);
@@ -31,6 +22,17 @@ export default function DevelopmentCardPage() {
   const [sortKey, setSortKey] = useState("date_desc");
   const [page, setPage] = useState(0);
   const loadSeq = useRef(0);
+
+  const STATUS_LABELS = {
+    uploaded: t("status.uploaded"),
+    processing: t("status.processing"),
+    splitting: t("status.splitting"),
+    indexing: t("status.indexing"),
+    done: t("status.done"),
+    paused: t("status.paused"),
+    failed: t("status.failed"),
+    error: t("status.error"),
+  };
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -47,9 +49,9 @@ export default function DevelopmentCardPage() {
       setDocs(result.documents);
       setTotal(result.total);
     } catch (err) {
-      showToast(`Не удалось загрузить разработку: ${err.message}`, { type: "error" });
+      showToast(t("dev.card.loadError", { message: err.message }), { type: "error" });
     }
-  }, [devId, search, sortKey, page, showToast]);
+  }, [devId, search, sortKey, page, showToast, t]);
 
   // Debounce серверного поиска.
   useEffect(() => {
@@ -71,48 +73,48 @@ export default function DevelopmentCardPage() {
   return (
     <section className="panel">
       <p className="breadcrumbs">
-        <Link href="/developments">← Справочник разработок</Link>
+        <Link href="/developments">{t("dev.card.back")}</Link>
       </p>
       <h2>
         {dev?.number} — {dev?.name}
       </h2>
       <p className="meta">
-        Модуль: <strong>{dev?.module || "—"}</strong> · Документов: {dev?.documents_count}
+        {t("dev.card.module", { module: dev?.module || "—" })} · {t("dev.card.docsCount", { count: dev?.documents_count })}
       </p>
 
-      <h3>Документы разработки</h3>
+      <h3>{t("dev.card.docsTitle")}</h3>
       <div className="doc-filter-bar">
         <input
           type="text"
           className="doc-filter-input"
-          placeholder="Поиск: название, тег, загрузчик"
+          placeholder={t("docs.searchPlaceholder")}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          aria-label="Поиск по документам разработки"
+          aria-label={t("dev.card.searchAria")}
         />
         <select
           className="doc-filter-select"
           value={sortKey}
           onChange={(e) => setSortKey(e.target.value)}
-          aria-label="Сортировка"
+          aria-label={t("sort.label")}
         >
-          <optgroup label="Дата">
-            <option value="date_desc">Новые сначала</option>
-            <option value="date_asc">Старые сначала</option>
+          <optgroup label={t("sort.groupDate")}>
+            <option value="date_desc">{t("sort.newFirst")}</option>
+            <option value="date_asc">{t("sort.oldFirst")}</option>
           </optgroup>
-          <optgroup label="Название">
-            <option value="name_asc">А–Я</option>
-            <option value="name_desc">Я–А</option>
+          <optgroup label={t("sort.groupName")}>
+            <option value="name_asc">{t("sort.alphaAsc")}</option>
+            <option value="name_desc">{t("sort.alphaDesc")}</option>
           </optgroup>
-          <optgroup label="Загрузчик">
-            <option value="uploader_asc">А–Я</option>
-            <option value="uploader_desc">Я–А</option>
+          <optgroup label={t("sort.groupUploader")}>
+            <option value="uploader_asc">{t("sort.alphaAsc")}</option>
+            <option value="uploader_desc">{t("sort.alphaDesc")}</option>
           </optgroup>
         </select>
       </div>
       {docs.length === 0 ? (
         <p className="muted">
-          {search ? "Ничего не найдено" : "Нет привязанных документов."}
+          {search ? t("docs.empty") : t("dev.card.noDocs")}
         </p>
       ) : (
         <ul className="document-list">
@@ -121,11 +123,11 @@ export default function DevelopmentCardPage() {
               <div>
                 <strong>{doc.filename}</strong>
                 <div className="meta">
-                  {doc.error ? `Ошибка: ${doc.error}` : `${(doc.size / 1024).toFixed(1)} КБ · Концептов: ${doc.okf_concept_count}`}
+                  {doc.error ? t("docs.errorText", { message: doc.error }) : t("docs.metaFile", { size: (doc.size / 1024).toFixed(1), count: doc.okf_concept_count })}
                   {doc.uploaded_by && (
                     <>
                       <br />
-                      <span className="doc-uploader">Загрузил: {doc.uploaded_by}</span>
+                      <span className="doc-uploader">{t("docs.uploadedBy", { name: doc.uploaded_by })}</span>
                     </>
                   )}
                 </div>
@@ -134,7 +136,7 @@ export default function DevelopmentCardPage() {
                 <span className={`status ${doc.status}`}>
                   {STATUS_LABELS[doc.status] ?? doc.status}
                 </span>
-                <Link className="icon-btn" href={`/documents/${doc.id}/okf`} title="Концепты и чанки">
+                <Link className="icon-btn" href={`/documents/${doc.id}/okf`} title={t("dev.card.openTitle")}>
                   →
                 </Link>
               </div>
@@ -149,17 +151,17 @@ export default function DevelopmentCardPage() {
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
           >
-            ← Назад
+            {t("pagination.back")}
           </button>
           <span className="page-indicator">
-            {page + 1} из {totalPages}
+            {t("pagination.page", { page: page + 1, total: totalPages })}
           </span>
           <button
             className="page-btn"
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
           >
-            Вперёд →
+            {t("pagination.forward")}
           </button>
         </div>
       )}

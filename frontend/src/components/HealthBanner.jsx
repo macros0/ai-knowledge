@@ -2,21 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { getHealth } from "@/lib/api";
-
-const STATUS_TEXT = {
-  ok: "Все сервисы работают нормально",
-  degraded: "Один из сервисов недоступен — возможны ограничения",
-  down: "База знаний недоступна — поиск не работает",
-};
-
-const DEP_LABELS = {
-  llm: "LLM (OpenRouter)",
-  ollama: "Ollama (эмбеддинги)",
-  qdrant: "Qdrant (база знаний)",
-};
+import { useI18n } from "@/i18n/LocaleContext";
 
 export default function HealthBanner() {
+  const { t } = useI18n();
   const [health, setHealth] = useState(null);
+
+  const DEP_LABELS = {
+    llm: t("health.dep.llm"),
+    ollama: t("health.dep.ollama"),
+    qdrant: t("health.dep.qdrant"),
+  };
+  const STATUS_TEXT = {
+    ok: t("health.ok"),
+    degraded: t("health.degraded"),
+    down: t("health.down"),
+  };
 
   useEffect(() => {
     let cancelled = false;

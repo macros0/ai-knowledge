@@ -12,13 +12,14 @@ import { CheckIcon, CopyIcon } from "./icons";
 import { useChat } from "@/context/ChatContext";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 
-function getPresetLabel(preset, settings) {
-  if (preset === settings.top_k_default) return "Стандартно";
+function getPresetLabel(preset, settings, t) {
+  if (preset === settings.top_k_default) return t("chat.topkStandard");
   const minPreset = Math.min(...settings.top_k_presets);
   const maxPreset = Math.max(...settings.top_k_presets);
-  if (preset === minPreset) return "Кратко";
-  if (preset === maxPreset) return "Подробно";
+  if (preset === minPreset) return t("chat.topkShort");
+  if (preset === maxPreset) return t("chat.topkDetailed");
   return String(preset);
 }
 
@@ -26,6 +27,7 @@ export default function ChatPanel() {
   const { messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
   const { user } = useAuth();
   const { showToast } = useToast();
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
   const [showCustom, setShowCustom] = useState(false);
@@ -71,14 +73,17 @@ export default function ChatPanel() {
     if (dev) {
       return {
         href: `/?upload_dev=${dev.id}`,
-        label: `Загрузить документ в разработку ${dev.number}${dev.name ? ` · ${dev.name}` : ""}`,
+        label: t("chat.uploadHintDev", {
+          number: dev.number,
+          name: dev.name ? ` · ${dev.name}` : "",
+        }),
       };
     }
     const module = modules.find((m) => set.has(m));
     if (module) {
       return {
         href: `/?upload_module=${encodeURIComponent(module)}`,
-        label: `Загрузить документ в модуль ${module}`,
+        label: t("chat.uploadHintModule", { module }),
       };
     }
     return null;
@@ -143,7 +148,7 @@ export default function ChatPanel() {
     setMessages((m) => [...m, { role: "user", text: q }]);
     setQuery("");
     setPending(true);
-    setMessages((m) => [...m, { role: "assistant", text: "Думаю...", sources: [] }]);
+    setMessages((m) => [...m, { role: "assistant", text: t("chat.thinking"), sources: [] }]);
     try {
       const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId);
       if (resp.session_id) setSessionId(resp.session_id);
@@ -158,11 +163,11 @@ export default function ChatPanel() {
         // авто-повтора — пользователь сам решает, повторять ли вопрос в новом чате.
         startNewChat();
         setQuery("");
-        showToast("Эта сессия была удалена — начните новый чат.", { type: "error" });
+        showToast(t("chat.sessionDeleted"), { type: "error" });
       } else {
         setMessages((m) => {
           const copy = [...m];
-          copy[copy.length - 1] = { role: "assistant", text: `Ошибка: ${err.message}`, sources: [] };
+          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: err.message }), sources: [] };
           return copy;
         });
       }
@@ -175,33 +180,33 @@ export default function ChatPanel() {
     <section className="panel">
       <div className="chat-toolbar">
         <Link href="/chat/history" className="btn ghost">
-          История
+          {t("chat.historyBtn")}
         </Link>
         <button
           type="button"
           className="btn ghost"
           onClick={startNewChat}
           disabled={pending || messages.length === 0}
-          title="Начать новый чат (текущий сохранится в истории)"
+          title={t("chat.newChatTitle")}
         >
-          Новый чат
+          {t("chat.newChat")}
         </button>
       </div>
       <div className="chat-log" ref={logRef}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
             <div className="role-row">
-              <div className="role">{m.role === "user" ? "Вы" : "Ассистент"}</div>
+              <div className="role">{m.role === "user" ? t("chat.you") : t("chat.assistant")}</div>
               {m.role === "assistant" && (
                 <button
                   type="button"
                   className="copy-btn"
                   disabled={pending && i === messages.length - 1}
                   onClick={() => copyAnswer(i, m.text)}
-                  title="Скопировать ответ в Markdown"
+                  title={t("chat.copyAnswer")}
                 >
                   {copiedIndex === i ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-                  {copiedIndex === i ? "Скопировано" : "Копировать"}
+                  {copiedIndex === i ? t("chat.copied") : t("chat.copy")}
                 </button>
               )}
             </div>
@@ -221,7 +226,7 @@ export default function ChatPanel() {
             </div>
             {m.sources && m.sources.length > 0 && (
               <details className="sources">
-                <summary>Источники</summary>
+                <summary>{t("chat.sources")}</summary>
                 <ol>
                   {m.sources.map((s, j) => {
                     const href = sourceHref(s);
@@ -239,11 +244,11 @@ export default function ChatPanel() {
                         ) : (
                           s.title
                         )}
-                        (релевантность {(s.score * 100).toFixed(0)}%)
+                        {t("chat.relevance", { pct: (s.score * 100).toFixed(0) })}
                         {s.development_number && (
                           <span
                             className="source-dev-badge"
-                            title={s.development_name || "Разработка"}
+                            title={s.development_name || t("chat.developmentTitle")}
                           >
                             {s.development_number}
                           </span>
@@ -262,7 +267,7 @@ export default function ChatPanel() {
             )}
             {m.role === "assistant" && m.uploadHint && (!m.sources || m.sources.length === 0) && (
               <div className="chat-upload-hint">
-                Источники не найдены.{" "}
+                {t("chat.noSources")}{" "}
                 <Link className="chat-upload-hint-link" href={m.uploadHint.href}>
                   {m.uploadHint.label}
                 </Link>
@@ -272,8 +277,8 @@ export default function ChatPanel() {
         ))}
       </div>
       <details className="search-settings">
-        <summary>Параметры поиска</summary>
-        <div className="mode-picker" role="radiogroup" aria-label="Режим поиска">
+        <summary>{t("chat.searchSettings")}</summary>
+        <div className="mode-picker" role="radiogroup" aria-label={t("chat.modePickerAria")}>
         {settings.search_modes.map((mode) => (
           <button
             key={mode}
@@ -287,8 +292,8 @@ export default function ChatPanel() {
           </button>
         ))}
       </div>
-      <div className="topk-picker" role="radiogroup" aria-label="Число результатов для ответа">
-        <span className="topk-label">Результатов:</span>
+      <div className="topk-picker" role="radiogroup" aria-label={t("chat.topkLabel")}>
+        <span className="topk-label">{t("chat.resultsLabel")}</span>
         {settings.top_k_presets.map((preset) => (
           <button
             key={preset}
@@ -298,7 +303,7 @@ export default function ChatPanel() {
             className={`topk-btn ${selectedTopK === preset ? "active" : ""}`}
             onClick={() => selectPreset(preset)}
           >
-            {preset} — {getPresetLabel(preset, settings)}
+            {preset} — {getPresetLabel(preset, settings, t)}
           </button>
         ))}
         <button
@@ -307,7 +312,7 @@ export default function ChatPanel() {
           aria-pressed={showCustom}
           onClick={() => setShowCustom((v) => !v)}
         >
-          Другое
+          {t("chat.topkOther")}
         </button>
         {showCustom && (
           <input
@@ -327,13 +332,13 @@ export default function ChatPanel() {
       </div>
       </details>
       <TagPicker
-        label="Фильтр по тегам:"
-        placeholder="Выберите из справочника или напишите новый..."
+        label={t("chat.tagsLabel")}
+        placeholder={t("chat.tagsPlaceholder")}
         selected={tags}
         onChange={setTags}
       />
       <div className="chat-scope-filter">
-        <span className="tag-picker-label">Модуль:</span>
+        <span className="tag-picker-label">{t("chat.moduleLabel")}</span>
         <ModulePicker
           modules={modules}
           value={moduleFilter}
@@ -343,7 +348,7 @@ export default function ChatPanel() {
             if (v) setDevFilter(null);
           }}
         />
-        <span className="tag-picker-label">Разработка:</span>
+        <span className="tag-picker-label">{t("chat.developmentLabel")}</span>
         <DevelopmentFilter
           developments={scopeDevelopments}
           value={devFilter}
@@ -357,11 +362,11 @@ export default function ChatPanel() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Задайте вопрос по базе знаний..."
+          placeholder={t("chat.queryPlaceholder")}
           autoComplete="off"
         />
         <button type="submit" disabled={pending}>
-          Отправить
+          {t("chat.send")}
         </button>
       </form>
     </section>

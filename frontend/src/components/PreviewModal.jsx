@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { bulkDelete, bulkPreview, bulkRegenerate } from "@/lib/api";
 import { TYPED_CONFIRM_THRESHOLD } from "@/lib/constants";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import Modal from "./Modal";
 import ConfirmModal from "./ConfirmModal";
 
@@ -14,6 +15,7 @@ import ConfirmModal from "./ConfirmModal";
  */
 export default function PreviewModal({ docIds, onClose, onDone }) {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
@@ -26,7 +28,7 @@ export default function PreviewModal({ docIds, onClose, onDone }) {
         const data = await bulkPreview(docIds);
         if (!cancelled) setPreview(data);
       } catch (err) {
-        if (!cancelled) showToast(`Не удалось получить предпросмотр: ${err.message}`);
+        if (!cancelled) showToast(t("preview.loadError", { message: err.message }));
         if (!cancelled) onClose();
       } finally {
         if (!cancelled) setLoading(false);
@@ -49,9 +51,9 @@ export default function PreviewModal({ docIds, onClose, onDone }) {
       const job = await fn(docIds);
       const statusText =
         job.status === "awaiting_approval"
-          ? "требует одобрения второго администратора"
-          : `поставлена в очередь (#${job.id})`;
-      showToast(`Массовая операция ${statusText}`, { type: "success" });
+          ? t("preview.awaiting")
+          : t("preview.queue", { id: job.id });
+      showToast(t("preview.opToast", { status: statusText }), { type: "success" });
       onClose();
       onDone?.();
     } catch (err) {
@@ -65,13 +67,13 @@ export default function PreviewModal({ docIds, onClose, onDone }) {
       setConfirming(true);
       return;
     }
-    if (window.confirm(`Удалить ${count} документов?`)) {
+    if (window.confirm(t("preview.confirmDelete", { count }))) {
       run("delete");
     }
   };
 
   const requestRegenerate = () => {
-    if (window.confirm(`Перегенерировать концепты ${count} документов?`)) {
+    if (window.confirm(t("preview.confirmRegenerate", { count }))) {
       run("regenerate");
     }
   };
@@ -80,7 +82,7 @@ export default function PreviewModal({ docIds, onClose, onDone }) {
     return (
       <ConfirmModal
         count={count}
-        actionLabel="Удалить"
+        actionLabel={t("preview.deleteAction")}
         onCancel={() => setConfirming(false)}
         onConfirm={() => run("delete")}
       />
@@ -89,42 +91,42 @@ export default function PreviewModal({ docIds, onClose, onDone }) {
 
   return (
     <Modal
-      title="Предпросмотр массовой операции"
+      title={t("preview.title")}
       onClose={onClose}
       footer={
         <>
           <button className="modal-btn" onClick={onClose}>
-            Отмена
+            {t("common.cancel")}
           </button>
           <button className="modal-btn" disabled={loading || count === 0} onClick={requestDelete}>
-            Удалить {count}
+            {t("preview.deleteBtn", { count })}
           </button>
           <button
             className="modal-btn"
             disabled={loading || count === 0 || busy}
             onClick={requestRegenerate}
           >
-            Перегенерировать {count}
+            {t("preview.regenerateBtn", { count })}
           </button>
         </>
       }
     >
       {loading ? (
-        <p className="muted">Загрузка предпросмотра…</p>
+        <p className="muted">{t("preview.loading")}</p>
       ) : (
         <>
           <p className="confirm-text">
-            Затронуто документов: <strong>{count}</strong>
+            {t("preview.affected", { count })}
             {estimated > 0 && (
               <>
-                {" · "}оценка перегенерации:{" "}
-                <strong>~{Math.max(1, Math.round(estimated))} мин</strong>
+                {" · "}
+                {t("preview.estRegen", { minutes: Math.max(1, Math.round(estimated)) })}
               </>
             )}
           </p>
           {missing.length > 0 && (
             <p className="confirm-text muted">
-              Не найдены ({missing.length}): {missing.slice(0, 10).join(", ")}
+              {t("preview.missing", { count: missing.length, names: missing.slice(0, 10).join(", ") })}
               {missing.length > 10 ? "…" : ""}
             </p>
           )}
@@ -137,7 +139,7 @@ export default function PreviewModal({ docIds, onClose, onDone }) {
                 </li>
               ))}
               {preview.documents.length > 20 && (
-                <li className="muted">…и ещё {preview.documents.length - 20}</li>
+                <li className="muted">{t("preview.more", { count: preview.documents.length - 20 })}</li>
               )}
             </ul>
           )}

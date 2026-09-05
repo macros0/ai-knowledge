@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { LinkIcon, PencilIcon } from "./icons";
 import { positionPopup } from "@/lib/popupPosition";
+import { useI18n } from "@/i18n/LocaleContext";
 
 /**
  * Поисковый комбобокс для присвоения разработки документу.
@@ -17,6 +18,7 @@ import { positionPopup } from "@/lib/popupPosition";
  * onChange вызывается с id разработки (number) или null («без разработки»).
  */
 export default function DevelopmentPicker({ developments, value, onChange }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef(null); // обёртка триггера
@@ -73,7 +75,7 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
           <Link
             className="dev-picker-link"
             href={`/developments/${current.id}`}
-            title={`Разработка: ${current.name || ""}`}
+            title={t("dev.title", { name: current.name || "" })}
           >
             <LinkIcon size={12} />
             {current.number}
@@ -83,8 +85,8 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
             type="button"
             className="dev-picker-edit"
             onClick={openPopup}
-            title="Изменить разработку"
-            aria-label="Изменить разработку"
+            title={t("dev.changeTitle")}
+            aria-label={t("dev.changeAria")}
           >
             <PencilIcon size={12} />
           </button>
@@ -94,9 +96,9 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
           type="button"
           className="dev-picker-trigger"
           onClick={openPopup}
-          title="Присвоить разработку"
+          title={t("dev.assignTitle")}
         >
-          — без разработки —
+          {t("dev.none")}
         </button>
       )}
       {open &&
@@ -109,7 +111,7 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
             <input
               ref={inputRef}
               className="dev-picker-input"
-              placeholder="Поиск по номеру…"
+              placeholder={t("dev.searchPlaceholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -119,7 +121,7 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
             <ul className="dev-picker-list">
               <li>
                 <button type="button" className="dev-picker-option" onClick={() => pick(null)}>
-                  — без разработки —
+                  {t("dev.none")}
                 </button>
               </li>
               {filtered.map((d) => (
@@ -130,7 +132,7 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
                   </button>
                 </li>
               ))}
-              {filtered.length === 0 && <li className="dev-picker-empty">Ничего не найдено</li>}
+              {filtered.length === 0 && <li className="dev-picker-empty">{t("dev.notFound")}</li>}
             </ul>
           </div>,
           document.body

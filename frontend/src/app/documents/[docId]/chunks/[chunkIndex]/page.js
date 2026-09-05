@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import ContentViewer from "@/components/ContentViewer";
 import { backendFetch } from "@/lib/backendFetch";
+import { serverTranslator } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function ChunkPage({ params }) {
+  const { t } = await serverTranslator();
   const { docId, chunkIndex } = await params;
   const index = Number(chunkIndex);
 
@@ -18,9 +20,9 @@ export default async function ChunkPage({ params }) {
   return (
     <div className="okf-viewer">
       <Link className="back-link" href={`/documents/${docId}/okf`}>
-        ← К списку концептов и чанков
+        {t("okf.page.backToList")}
       </Link>
-      <h1>Чанк {index + 1}</h1>
+      <h1>{t("okf.page.chunkH1", { index: index + 1 })}</h1>
       <ContentViewer text={text} docId={docId} />
     </div>
   );

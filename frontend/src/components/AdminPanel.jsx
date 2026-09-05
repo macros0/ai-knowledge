@@ -3,20 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { approveJob, cancelJob, listJobs } from "@/lib/api";
 import { useToast } from "./Toast";
-
-const JOB_STATUS_LABELS = {
-  queued: "В очереди",
-  running: "Выполняется",
-  awaiting_approval: "Требует одобрения",
-  completed: "Завершена",
-  failed: "Ошибка",
-  cancelled: "Отменена",
-};
-
-const JOB_TYPE_LABELS = {
-  bulk_delete: "Массовое удаление",
-  bulk_regenerate: "Массовая перегенерация",
-};
+import { useI18n } from "@/i18n/LocaleContext";
 
 const PENDING_STATUSES = ["queued", "running", "awaiting_approval"];
 
@@ -27,9 +14,24 @@ function fmtTime(iso) {
 
 export default function AdminPanel() {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const [jobs, setJobs] = useState([]);
   const [busy, setBusy] = useState({});
   const mounted = useRef(true);
+
+  const JOB_STATUS_LABELS = {
+    queued: t("admin.jobStatus.queued"),
+    running: t("admin.jobStatus.running"),
+    awaiting_approval: t("admin.jobStatus.awaiting_approval"),
+    completed: t("admin.jobStatus.completed"),
+    failed: t("admin.jobStatus.failed"),
+    cancelled: t("admin.jobStatus.cancelled"),
+  };
+
+  const JOB_TYPE_LABELS = {
+    bulk_delete: t("admin.jobType.bulk_delete"),
+    bulk_regenerate: t("admin.jobType.bulk_regenerate"),
+  };
 
   const load = useCallback(async () => {
     try {
@@ -43,10 +45,10 @@ export default function AdminPanel() {
   useEffect(() => {
     mounted.current = true;
     load();
-    const t = setInterval(load, 3000);
+    const timer = setInterval(load, 3000);
     return () => {
       mounted.current = false;
-      clearInterval(t);
+      clearInterval(timer);
     };
   }, [load]);
 
@@ -67,14 +69,14 @@ export default function AdminPanel() {
   return (
     <section className="panel admin-panel">
       <div className="panel-head">
-        <h2>Системные операции</h2>
+        <h2>{t("admin.title")}</h2>
         <span className={`job-pending${pending > 0 ? " active" : ""}`}>
-          Активных задач: {pending}
+          {t("admin.pending", { count: pending })}
         </span>
       </div>
 
       {jobs.length === 0 ? (
-        <p className="muted">Массовых операций ещё не было.</p>
+        <p className="muted">{t("admin.empty")}</p>
       ) : (
         <ul className="job-list">
           {jobs.map((job) => (
@@ -85,18 +87,19 @@ export default function AdminPanel() {
                 </span>
                 <strong>{JOB_TYPE_LABELS[job.job_type] ?? job.job_type}</strong>
                 <span className="job-docs">
-                  документов: {(job.params?.doc_ids ?? []).length}
+                  {t("admin.jobDocs", { count: (job.params?.doc_ids ?? []).length })}
                 </span>
               </div>
               <div className="job-meta">
                 #{job.id} · {job.created_by ?? "—"} · {fmtTime(job.created_at)}
-                {job.approved_by ? ` · одобрил: ${job.approved_by}` : ""}
+                {job.approved_by ? ` · ${t("admin.approvedBy", { name: job.approved_by })}` : ""}
               </div>
               {job.error && <div className="job-error">{job.error}</div>}
               {job.result?.errors?.length > 0 && (
                 <div className="job-error">
-                  Ошибки по документам:{" "}
-                  {job.result.errors.map((e) => e.doc_id).join(", ")}
+                  {t("admin.errorsByDocs", {
+                    ids: job.result.errors.map((e) => e.doc_id).join(", "),
+                  })}
                 </div>
               )}
               <div className="job-actions">
@@ -106,7 +109,7 @@ export default function AdminPanel() {
                     disabled={busy[job.id]}
                     onClick={() => act(job.id, approveJob)}
                   >
-                    Одобрить
+                    {t("admin.approve")}
                   </button>
                 )}
                 {(job.status === "queued" || job.status === "awaiting_approval") && (
@@ -115,7 +118,7 @@ export default function AdminPanel() {
                     disabled={busy[job.id]}
                     onClick={() => act(job.id, cancelJob)}
                   >
-                    Отменить
+                    {t("admin.cancel")}
                   </button>
                 )}
               </div>

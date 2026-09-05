@@ -8,6 +8,7 @@ import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import SelectionBar from "./SelectionBar";
 import PreviewModal from "./PreviewModal";
 import DevelopmentFilter from "./DevelopmentFilter";
@@ -16,34 +17,12 @@ import DuplicateModal from "./DuplicateModal";
 import TagPicker from "./TagPicker";
 import TagManagerModal from "./TagManagerModal";
 
-const STATUS_LABELS = {
-  uploaded: "Загружен",
-  processing: "Парсинг...",
-  splitting: "Генерация OKF...",
-  indexing: "Индексация...",
-  done: "Готов",
-  paused: "Приостановлен",
-  failed: "Ошибка",
-  error: "Ошибка",
-};
-
 const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
 
 // Фильтр по статусу OKF-генерации (Этап 5): на бэкенд уходит либо пустая строка
 // (без фильтра), либо список статусов через запятую. Детальные пункты
 // (Парсинг.../Генерация OKF.../...) — для диагностики зависшей стадии,
 // агрегаты «В обработке»/«Ошибка» — для оперативного просмотра очереди.
-const STATUS_FILTER_OPTIONS = [
-  { value: "", label: "Все статусы" },
-  { value: "done", label: "Готов" },
-  { value: "processing", label: "Парсинг..." },
-  { value: "splitting", label: "Генерация OKF..." },
-  { value: "indexing", label: "Индексация..." },
-  { value: "uploaded", label: "Загружен" },
-  { value: "paused", label: "Приостановлен" },
-  { value: "uploaded,processing,splitting,indexing,paused", label: "В обработке" },
-  { value: "failed,error", label: "Ошибка" },
-];
 
 const PAGE_SIZE = 50;
 // Кап «Выделить все по фильтру» — совпадает с bulk_tags_max_docs. Бэкенд всё равно
@@ -51,21 +30,18 @@ const PAGE_SIZE = 50;
 const MAX_SELECT = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
-function progressText(doc) {
+function progressText(doc, t) {
   if (doc.status === "splitting" && doc.total_chunks > 0) {
     const active = doc.current_chunk ?? doc.processed_chunks;
-    return `Генерация чанка ${active} из ${doc.total_chunks}`;
+    return t("docs.progressChunk", { active, total: doc.total_chunks });
   }
   if (doc.status === "paused" && doc.total_chunks > 0) {
-    return `Приостановлено: сохранено ${doc.processed_chunks ?? 0} из ${doc.total_chunks} чанков`;
+    return t("docs.progressPaused", {
+      processed: doc.processed_chunks ?? 0,
+      total: doc.total_chunks,
+    });
   }
   return null;
-}
-
-function fmtDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("ru-RU");
 }
 
 function initialParam(searchParams, key, fallback) {
@@ -77,14 +53,14 @@ function initialParam(searchParams, key, fallback) {
 // набора. SQL GROUP BY не подходит: в режиме «по тегам» документ с несколькими
 // тегами входит в несколько групп (multi-membership), что JOIN размножает в
 // дубликаты строк. Отсортировано по названию группы; «Без …» — всегда в конце.
-function buildGroups(docs, groupBy) {
+function buildGroups(docs, groupBy, locale, t) {
   if (groupBy === "development") {
     const map = new Map();
     for (const d of docs) {
       const none = d.development_id == null;
       const key = none ? "__none__" : `dev:${d.development_id}`;
       const label = none
-        ? "Без разработки"
+        ? t("docs.group.noDevelopment")
         : `${d.development_number || d.development_id}${d.development_name ? ` · ${d.development_name}` : ""}`;
       if (!map.has(key)) map.set(key, { key, label, docs: [] });
       map.get(key).docs.push(d);
@@ -92,7 +68,7 @@ function buildGroups(docs, groupBy) {
     return Array.from(map.values()).sort((a, b) => {
       if (a.key === "__none__") return 1;
       if (b.key === "__none__") return -1;
-      return a.label.localeCompare(b.label, "ru");
+      return a.label.localeCompare(b.label, locale);
     });
   }
   const map = new Map();
@@ -101,7 +77,7 @@ function buildGroups(docs, groupBy) {
     for (const t of tags) {
       const none = t === "__none__";
       const key = none ? "__none__" : t;
-      const label = none ? "Без тега" : t;
+      const label = none ? t("docs.group.noTag") : t;
       if (!map.has(key)) map.set(key, { key, label, docs: [] });
       map.get(key).docs.push(d);
     }
@@ -109,7 +85,7 @@ function buildGroups(docs, groupBy) {
   return Array.from(map.values()).sort((a, b) => {
     if (a.key === "__none__") return 1;
     if (b.key === "__none__") return -1;
-    return a.label.localeCompare(b.label, "ru");
+    return a.label.localeCompare(b.label, locale);
   });
 }
 
@@ -118,6 +94,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const searchParams = useSearchParams();
   const { mode, hasRole, loading, user } = useAuth();
   const { showToast } = useToast();
+  const { t, tc, locale, fmtDate } = useI18n();
   const [docs, setDocs] = useState([]);
   const [total, setTotal] = useState(0);
   const [regenerating, setRegenerating] = useState({});
@@ -164,6 +141,29 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const mounted = useRef(true);
   const timer = useRef(null);
   const loadSeq = useRef(0);
+
+  const STATUS_LABELS = {
+    uploaded: t("status.uploaded"),
+    processing: t("status.processing"),
+    splitting: t("status.splitting"),
+    indexing: t("status.indexing"),
+    done: t("status.done"),
+    paused: t("status.paused"),
+    failed: t("status.failed"),
+    error: t("status.error"),
+  };
+
+  const STATUS_FILTER_OPTIONS = [
+    { value: "", label: t("docs.statusFilterAll") },
+    { value: "done", label: t("status.done") },
+    { value: "processing", label: t("status.processing") },
+    { value: "splitting", label: t("status.splitting") },
+    { value: "indexing", label: t("status.indexing") },
+    { value: "uploaded", label: t("status.uploaded") },
+    { value: "paused", label: t("status.paused") },
+    { value: "uploaded,processing,splitting,indexing,paused", label: t("docs.statusFilterProcessing") },
+    { value: "failed,error", label: t("status.failed") },
+  ];
 
   // Словарь тегов для селекта фильтра (общий с пикерами, обновляется по bumpTagVersion).
   const tagDictionary = useTagDictionary();
@@ -213,9 +213,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       // Бэкенд недоступен/ошибка сети: не оставляем список «молча пустым» —
       // показываем ошибку и не ломаем поллинг (следующий эффект перезапустит load).
       if (seq !== loadSeq.current || !mounted.current) return;
-      showToast(`Не удалось загрузить список документов: ${err.message}`, { type: "error" });
+      showToast(t("docs.loadError", { message: err.message }), { type: "error" });
     }
-  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, search, sortKey, page, groupBy]);
+  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, search, sortKey, page, groupBy, t]);
 
   const loadUploaders = useCallback(async () => {
     try {
@@ -303,13 +303,13 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
 
   const remove = async (doc) => {
     const isActive = doc.status === "splitting" || doc.status === "processing" || doc.status === "indexing";
-    if (isActive && !window.confirm(`Документ "${doc.filename}" в процессе обработки. Удалить?`)) {
+    if (isActive && !window.confirm(t("docs.confirmRemoveActive", { name: doc.filename }))) {
       return;
     }
     try {
       await deleteDocument(doc.id);
     } catch (err) {
-      showToast(`Не удалось удалить: ${err.message}`, { type: "error" });
+      showToast(t("docs.deleteError", { message: err.message }), { type: "error" });
       load();
       return;
     }
@@ -318,9 +318,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       delete next[doc.id];
       return next;
     });
-    showToast(`Документ «${doc.filename}» перемещён в корзину`, {
+    showToast(t("docs.removedToTrash", { name: doc.filename }), {
       type: "success",
-      action: onOpenTrash ? { label: "Открыть корзину", onClick: onOpenTrash } : null,
+      action: onOpenTrash ? { label: t("docs.openTrash"), onClick: onOpenTrash } : null,
     });
     load();
   };
@@ -329,7 +329,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     try {
       await resumeDocument(doc.id);
     } catch (err) {
-      showToast(`Не удалось возобновить: ${err.message}`, { type: "error" });
+      showToast(t("docs.resumeError", { message: err.message }), { type: "error" });
       load();
       return;
     }
@@ -340,7 +340,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     if (regenerating[doc.id]) return;
     if (
       !window.confirm(
-        `Перегенерировать концепты документа "${doc.filename}"?\nТекущие концепты и индекс будут удалены и созданы заново.`
+        t("docs.confirmRegenerate", { name: doc.filename })
       )
     ) {
       return;
@@ -350,7 +350,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       await regenerateDocument(doc.id);
       load();
     } catch (err) {
-      showToast(`Не удалось перегенерировать: ${err.message}`, { type: "error" });
+      showToast(t("docs.regenerateError", { message: err.message }), { type: "error" });
     } finally {
       setRegenerating((s) => ({ ...s, [doc.id]: false }));
     }
@@ -361,12 +361,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     try {
       const res = await setDocumentDevelopment(doc.id, devId, devId !== null);
       if (res?.dev_tags_sync_pending) {
-        showToast("Документ привязан, индексация обновится в фоне", { type: "warning" });
+        showToast(t("docs.devSyncPending"), { type: "warning" });
       }
       load();
       loadStats();
     } catch (err) {
-      showToast(`Не удалось изменить разработку: ${err.message}`, { type: "error" });
+      showToast(t("docs.changeDevError", { message: err.message }), { type: "error" });
     }
   };
 
@@ -374,12 +374,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     try {
       const res = await updateDocumentTags(doc.id, tags);
       if (res?.dev_tags_sync_pending) {
-        showToast("Теги сохранены, индексация разработки обновится в фоне", { type: "warning" });
+        showToast(t("docs.tagsSyncPending"), { type: "warning" });
       }
       bumpTagVersion();
       load();
     } catch (err) {
-      showToast(`Не удалось изменить теги: ${err.message}`, { type: "error" });
+      showToast(t("docs.changeTagsError", { message: err.message }), { type: "error" });
       load();
     }
   };
@@ -423,7 +423,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       for (const id of pageDocIds) {
         if (Object.keys(next).length >= MAX_SELECT) {
           showToast(
-            `Выделение ограничено ${MAX_SELECT} документами (лимит массовой операции)`,
+            t("docs.selectionCapToast", { max: MAX_SELECT }),
             { type: "warning" }
           );
           break;
@@ -459,12 +459,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       setFilterSelectedIds(ids);
       if (result.total > ids.length) {
         showToast(
-          `Выделено ${ids.length} из ${result.total} (лимит массовой операции). Уточните фильтр, чтобы обработать остальные`,
+          t("docs.selectedLimitToast", { selected: ids.length, total: result.total }),
           { type: "warning" }
         );
       }
     } catch (err) {
-      showToast(`Не удалось выделить документы: ${err.message}`, { type: "error" });
+      showToast(t("docs.selectError", { message: err.message }), { type: "error" });
     }
   };
 
@@ -479,7 +479,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const groups = groupBy ? buildGroups(docs, groupBy) : [];
+  const groups = groupBy ? buildGroups(docs, groupBy, locale, t) : [];
   const markupPct =
     stats && stats.total > 0
       ? Math.round((stats.with_development / stats.total) * 100)
@@ -496,7 +496,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           <input
             type="checkbox"
             className="doc-checkbox"
-            aria-label={`Выбрать ${doc.filename}`}
+            aria-label={t("docs.selectAria", { name: doc.filename })}
             checked={!!selected[doc.id]}
             onChange={() => toggleSelect(doc.id)}
           />
@@ -505,8 +505,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           <strong>{doc.filename}</strong>
           <div className="meta">
             {doc.error
-              ? `Ошибка: ${doc.error}`
-              : (progressText(doc) ?? `${(doc.size / 1024).toFixed(1)} КБ · Концептов: ${doc.okf_concept_count}`)}
+              ? t("docs.errorText", { message: doc.error })
+              : (progressText(doc, t) ?? t("docs.metaFile", { size: (doc.size / 1024).toFixed(1), count: doc.okf_concept_count }))}
             {canEdit ? (
               <>
                 <br />
@@ -517,12 +517,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                       className="tag-picker-inline"
                       selected={doc.tags || []}
                       onChange={(tags) => changeTags(doc, tags)}
-                      placeholder="Добавить тег..."
+                      placeholder={t("docs.addTagPlaceholder")}
                     />
                     <button
                       className="tag-edit-toggle"
                       onClick={() => toggleEditTags(doc.id)}
-                      aria-label="Свернуть редактирование тегов"
+                      aria-label={t("docs.collapseTagsAria")}
                     >
                       −
                     </button>
@@ -530,18 +530,18 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                 ) : (
                   <div className="doc-tags-row">
                     {doc.tags && doc.tags.length > 0 ? (
-                      doc.tags.map((t) => (
-                        <span key={t} className="tag-chip tag-chip-readonly">
-                          {t}
+                      doc.tags.map((tag) => (
+                        <span key={tag} className="tag-chip tag-chip-readonly">
+                          {tag}
                         </span>
                       ))
                     ) : (
-                      <span className="doc-tags-muted">Теги: —</span>
+                      <span className="doc-tags-muted">{t("docs.tagsNone")}</span>
                     )}
                     <button
                       className="tag-edit-toggle"
                       onClick={() => toggleEditTags(doc.id)}
-                      aria-label="Редактировать теги"
+                      aria-label={t("docs.editTagsAria")}
                     >
                       ✎
                     </button>
@@ -553,7 +553,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               doc.tags.length > 0 && (
                 <>
                   <br />
-                  <span className="doc-tags">Теги: {doc.tags.join(", ")}</span>
+                  <span className="doc-tags">{t("docs.tagsList", { tags: doc.tags.join(", ") })}</span>
                 </>
               )
             )}
@@ -563,7 +563,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                 <Link
                   className="dev-tag-link"
                   href={`/developments/${doc.development_id}`}
-                  title={`Разработка: ${doc.development_name || ""}`}
+                  title={t("docs.developmentTitle", { name: doc.development_name || "" })}
                 >
                   <LinkIcon size={12} />
                   {doc.development_number}
@@ -575,7 +575,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               <>
                 <br />
                 <span className="dev-suggestion">
-                  Требует уточнения: {doc.development_suggestion.number || doc.development_suggestion.name || "—"}
+                  {t("docs.devSuggestion", {
+                    name: doc.development_suggestion.number || doc.development_suggestion.name || "—",
+                  })}
                 </span>
               </>
             )}
@@ -593,7 +595,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             {needsMarkup && (
               <>
                 <br />
-                <span className="dev-draft-badge">Черновик — требует разметки</span>
+                <span className="dev-draft-badge">{t("docs.draftBadge")}</span>
               </>
             )}
             {doc.has_duplicates && (
@@ -603,9 +605,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                   type="button"
                   className="dup-badge"
                   onClick={() => setDupDoc(doc)}
-                  title="Показать дубликаты"
+                  title={t("docs.duplicateTitle")}
                 >
-                  Дубликат
+                  {t("docs.duplicateBadge")}
                 </button>
               </>
             )}
@@ -623,7 +625,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               <>
                 <br />
                 <span className="doc-uploader">
-                  {doc.uploaded_by ? `Загрузил: ${doc.uploaded_by}` : "Загружен"}
+                  {doc.uploaded_by ? t("docs.uploadedBy", { name: doc.uploaded_by }) : t("docs.uploaded")}
                   {doc.uploaded_by && doc.created_at ? " · " : ""}
                   {doc.created_at ? fmtDate(doc.created_at) : ""}
                 </span>
@@ -633,14 +635,14 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         </div>
         <div className="doc-actions">
           <span className={`status ${doc.status}`}>{STATUS_LABELS[doc.status] ?? doc.status}</span>
-          <button className="icon-btn" onClick={() => openOkf(doc)} title="Концепты и чанки">
+          <button className="icon-btn" onClick={() => openOkf(doc)} title={t("docs.viewConceptsTitle")}>
             <EyeIcon />
           </button>
           <a
             className="icon-btn"
             href={`/api/documents/${doc.id}/download`}
             download
-            title="Скачать исходный файл"
+            title={t("docs.downloadTitle")}
           >
             <DownloadIcon />
           </a>
@@ -650,7 +652,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                 <button
                   className="icon-btn"
                   onClick={() => regenerate(doc)}
-                  title="Перегенерировать концепты (LLM)"
+                  title={t("docs.regenerateTitle")}
                   disabled={regenerating[doc.id]}
                 >
                   <RefreshIcon className={regenerating[doc.id] ? "spin" : undefined} />
@@ -658,10 +660,10 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               )}
               {(doc.status === "paused" || doc.status === "failed") && (
                 <button className="delete-btn" onClick={() => resume(doc)}>
-                  Возобновить
+                  {t("docs.resumeBtn")}
                 </button>
               )}
-              <button className="delete-btn" onClick={() => remove(doc)} title="Удалить">
+              <button className="delete-btn" onClick={() => remove(doc)} title={t("docs.deleteTitle")}>
                 <TrashIcon />
               </button>
             </span>
@@ -687,9 +689,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           onOpenPreview={() => setShowPreview(true)}
           onDone={(result) => {
             const n = result?.updated?.length ?? 0;
-            showToast(
-              n > 0 ? `Теги обновлены у ${n} документ(ов)` : "Состав тегов не изменился"
-            );
+            showToast(n > 0 ? tc("docs.tagsUpdated", n) : t("docs.tagsUnchanged"));
             load();
           }}
         />
@@ -717,59 +717,63 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       {stats && stats.total > 0 && (
         <div
           className="markup-progress"
-          title={`${stats.with_development} из ${stats.total} документов размечены разработкой`}
+          title={t("docs.markupProgressTitle", { done: stats.with_development, total: stats.total })}
         >
           <span className="markup-progress-label">
-            Разметка разработкой: {stats.with_development}/{stats.total} ({markupPct}%)
+            {t("docs.markupProgress", {
+              done: stats.with_development,
+              total: stats.total,
+              pct: markupPct,
+            })}
           </span>
           <div className="markup-progress-bar">
             <div className="markup-progress-fill" style={{ width: `${markupPct}%` }} />
           </div>
         </div>
       )}
-      <div className="doc-view-mode" role="radiogroup" aria-label="Режим отображения">
+      <div className="doc-view-mode" role="radiogroup" aria-label={t("docs.viewModeLabel")}>
         <button
           type="button"
           className={`view-btn${groupBy === "" ? " active" : ""}`}
           onClick={() => setGroupBy("")}
         >
-          Список
+          {t("docs.view.list")}
         </button>
         <button
           type="button"
           className={`view-btn${groupBy === "tag" ? " active" : ""}`}
           onClick={() => setGroupBy("tag")}
         >
-          По тегам
+          {t("docs.view.tag")}
         </button>
         <button
           type="button"
           className={`view-btn${groupBy === "development" ? " active" : ""}`}
           onClick={() => setGroupBy("development")}
         >
-          По разработкам
+          {t("docs.view.development")}
         </button>
       </div>
       <div className="doc-filter-bar">
         <input
           type="text"
           className="doc-filter-input"
-          placeholder="Поиск: название, тег, разработка, загрузчик"
+          placeholder={t("docs.searchPlaceholder")}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          aria-label="Поиск по документам"
+          aria-label={t("docs.searchAria")}
         />
         <select
           className="doc-filter-select"
           value={selectedUploader}
           onChange={(e) => chooseUploader(e.target.value)}
-          aria-label="Фильтр по загрузчику"
+          aria-label={t("docs.uploaderFilterAria")}
         >
-          <optgroup label="Быстрый выбор">
-            <option value="__me__">Мои документы</option>
-            <option value="">Все загрузчики</option>
+          <optgroup label={t("docs.quickSelect")}>
+            <option value="__me__">{t("docs.myDocuments")}</option>
+            <option value="">{t("docs.allUploaders")}</option>
           </optgroup>
-          <optgroup label="Загрузчики">
+          <optgroup label={t("docs.uploaders")}>
             {uploaders.map((u) => (
               <option key={u} value={u}>
                 {u}
@@ -782,15 +786,15 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             type="checkbox"
             checked={problemOnly}
             onChange={(e) => setProblemOnly(e.target.checked)}
-            aria-label="Только проблемные документы"
+            aria-label={t("docs.problemOnlyAria")}
           />
-          Проблемные
+          {t("docs.problemOnly")}
         </label>
         <select
           className="doc-filter-select"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label="Фильтр по статусу"
+          aria-label={t("docs.statusFilterAria")}
         >
           {STATUS_FILTER_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -802,9 +806,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           className="doc-filter-select"
           value={moduleFilter}
           onChange={(e) => setModuleFilter(e.target.value)}
-          aria-label="Фильтр по модулю"
+          aria-label={t("docs.moduleFilterAria")}
         >
-          <option value="">Все модули</option>
+          <option value="">{t("docs.allModules")}</option>
           {modules.map((m) => (
             <option key={m} value={m}>
               {m}
@@ -816,12 +820,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             className="doc-filter-select"
             value={tagFilter}
             onChange={(e) => setTagFilter(e.target.value)}
-            aria-label="Фильтр по тегу"
+            aria-label={t("docs.tagFilterAria")}
           >
-            <option value="">Все теги</option>
-            {filterTags.map((t) => (
-              <option key={t.name} value={t.name}>
-                {t.name} ({t.count})
+            <option value="">{t("docs.allTags")}</option>
+            {filterTags.map((tg) => (
+              <option key={tg.name} value={tg.name}>
+                {tg.name} ({tg.count})
               </option>
             ))}
           </select>
@@ -832,45 +836,45 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           onChange={setDevFilter}
         />
         <label className="doc-filter-date">
-          <span>С</span>
+          <span>{t("docs.dateFrom")}</span>
           <input
             type="date"
             className="doc-filter-date-input"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            aria-label="Дата загрузки с"
+            aria-label={t("docs.dateFromAria")}
           />
-          <span>по</span>
+          <span>{t("docs.dateTo")}</span>
           <input
             type="date"
             className="doc-filter-date-input"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            aria-label="Дата загрузки по"
+            aria-label={t("docs.dateToAria")}
           />
         </label>
         {canEdit && (
           <button className="doc-filter-btn" onClick={() => setShowTags(true)}>
-            Справочник тегов
+            {t("docs.tagDictionary")}
           </button>
         )}
         <select
           className="doc-filter-select"
           value={sortKey}
           onChange={(e) => setSortKey(e.target.value)}
-          aria-label="Сортировка"
+          aria-label={t("sort.label")}
         >
-          <optgroup label="Дата">
-            <option value="date_desc">Новые сначала</option>
-            <option value="date_asc">Старые сначала</option>
+          <optgroup label={t("sort.groupDate")}>
+            <option value="date_desc">{t("sort.newFirst")}</option>
+            <option value="date_asc">{t("sort.oldFirst")}</option>
           </optgroup>
-          <optgroup label="Название">
-            <option value="name_asc">А–Я</option>
-            <option value="name_desc">Я–А</option>
+          <optgroup label={t("sort.groupName")}>
+            <option value="name_asc">{t("sort.alphaAsc")}</option>
+            <option value="name_desc">{t("sort.alphaDesc")}</option>
           </optgroup>
-          <optgroup label="Загрузчик">
-            <option value="uploader_asc">А–Я</option>
-            <option value="uploader_desc">Я–А</option>
+          <optgroup label={t("sort.groupUploader")}>
+            <option value="uploader_asc">{t("sort.alphaAsc")}</option>
+            <option value="uploader_desc">{t("sort.alphaDesc")}</option>
           </optgroup>
         </select>
       </div>
@@ -884,7 +888,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               <ul className="document-list">{g.docs.map((doc) => renderDoc(doc))}</ul>
             </section>
           ))}
-          {groups.length === 0 && <li className="document-empty">Ничего не найдено</li>}
+          {groups.length === 0 && <li className="document-empty">{t("docs.empty")}</li>}
         </div>
       ) : (
         <ul className="document-list">
@@ -899,7 +903,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               tagFilter ||
               dateFrom ||
               dateTo) && (
-              <li className="document-empty">Ничего не найдено</li>
+              <li className="document-empty">{t("docs.empty")}</li>
             )}
         </ul>
       )}
@@ -910,17 +914,17 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
           >
-            ← Назад
+            {t("pagination.back")}
           </button>
           <span className="page-indicator">
-            {page + 1} из {totalPages}
+            {t("pagination.page", { page: page + 1, total: totalPages })}
           </span>
           <button
             className="page-btn"
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
           >
-            Вперёд →
+            {t("pagination.forward")}
           </button>
         </div>
       )}

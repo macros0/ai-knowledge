@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/i18n/LocaleContext";
 
 const ROLE_LABELS = {
   viewer: "Viewer",
@@ -11,6 +12,7 @@ const ROLE_LABELS = {
 
 export default function AuthBar() {
   const { user, mode, simUsers, login, logout, loading } = useAuth();
+  const { t } = useI18n();
 
   // Пока /auth/me не ответил (mode=null), ничего не рендерим — иначе селектор
   // демо-юзеров мигает на каждой загрузке страницы.
@@ -25,7 +27,7 @@ export default function AuthBar() {
         <span className="auth-role">
           {ROLE_LABELS[user.roles?.[0]] ?? user.roles?.[0] ?? "—"}
         </span>
-        <button onClick={logout}>Выйти</button>
+        <button onClick={logout}>{t("common.logout")}</button>
       </div>
     );
   }
@@ -34,7 +36,7 @@ export default function AuthBar() {
       <div className="authbar">
         <span className="auth-mode-label">SSO</span>
         <a href="/api/auth/login" className="tab">
-          Войти через корпоративный вход
+          {t("auth.corporateLogin")}
         </a>
       </div>
     );
@@ -51,7 +53,7 @@ export default function AuthBar() {
           onChange={(e) => e.target.value && login(e.target.value)}
         >
           <option value="" disabled>
-            Войти как…
+            {t("auth.loginAs")}
           </option>
           {(simUsers ?? []).map((u) => (
             <option key={u.username} value={u.username}>
@@ -70,7 +72,7 @@ export default function AuthBar() {
       <span className="auth-role">
         {ROLE_LABELS[user.roles?.[0]] ?? user.roles?.[0] ?? "—"}
       </span>
-      <button onClick={logout}>Выйти</button>
+      <button onClick={logout}>{t("common.logout")}</button>
     </div>
   );
 }

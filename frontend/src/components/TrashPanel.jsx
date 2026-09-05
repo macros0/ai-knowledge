@@ -4,19 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { bulkRestoreDocuments, listTrashDocuments, restoreDocument } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
+import { useI18n } from "@/i18n/LocaleContext";
 import Modal from "./Modal";
 
 const PAGE_SIZE = 50;
 
-const fmtDate = (iso) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("ru-RU");
-};
-
 export default function TrashPanel() {
   const { mode, hasRole } = useAuth();
   const { showToast } = useToast();
+  const { t, fmtDateTime } = useI18n();
   const [docs, setDocs] = useState([]);
   const [total, setTotal] = useState(0);
   const [retentionDays, setRetentionDays] = useState(14);
@@ -39,15 +35,15 @@ export default function TrashPanel() {
   }, [page]);
 
   useEffect(() => {
-    load().catch((err) => showToast(`Не удалось загрузить корзину: ${err.message}`, { type: "error" }));
-  }, [load, showToast]);
+    load().catch((err) => showToast(t("trash.loadError", { message: err.message }), { type: "error" }));
+  }, [load, showToast, t]);
 
   const restoreOne = async (doc, { force = false } = {}) => {
     if (busy[doc.id]) return;
     setBusy((s) => ({ ...s, [doc.id]: true }));
     try {
       await restoreDocument(doc.id, { force });
-      showToast(`Документ «${doc.filename}» восстановлен`, { type: "success" });
+      showToast(t("trash.restored", { name: doc.filename }), { type: "success" });
       setSelected((s) => {
         const next = { ...s };
         delete next[doc.id];
@@ -58,7 +54,7 @@ export default function TrashPanel() {
       if (err.code === "duplicate") {
         setConflict({ doc, duplicates: err.data?.duplicates ?? {} });
       } else {
-        showToast(`Не удалось восстановить: ${err.message}`, { type: "error" });
+        showToast(t("trash.restoreError", { message: err.message }), { type: "error" });
       }
     } finally {
       setBusy((s) => ({ ...s, [doc.id]: false }));
@@ -81,20 +77,19 @@ export default function TrashPanel() {
       const res = await bulkRestoreDocuments(selectedIds);
       const n = res?.restored?.length ?? 0;
       const conflicts = res?.conflicts ?? [];
-      showToast(n > 0 ? `Восстановлено документов: ${n}` : "Нет документов для восстановления", {
+      showToast(n > 0 ? t("trash.restoredCount", { count: n }) : t("trash.noneToRestore"), {
         type: n > 0 ? "success" : "warning",
       });
       if (conflicts.length > 0) {
-        showToast(
-          `Конфликт дедупликации: ${conflicts.length} — уже есть похожий активный документ. ` +
-            "Восстановите его по одному и подтвердите с пропуском проверки.",
-          { type: "warning", duration: 10000 }
-        );
+        showToast(t("trash.conflictBulk", { count: conflicts.length }), {
+          type: "warning",
+          duration: 10000,
+        });
       }
       setSelected({});
       load();
     } catch (err) {
-      showToast(`Не удалось восстановить: ${err.message}`, { type: "error" });
+      showToast(t("trash.restoreError", { message: err.message }), { type: "error" });
     }
   };
 
@@ -104,22 +99,22 @@ export default function TrashPanel() {
     <div className="trash-panel">
       {canEdit && selectedIds.length > 0 && (
         <div className="trash-bar">
-          <span>Выбрано: {selectedIds.length}</span>
+          <span>{t("trash.selected", { count: selectedIds.length })}</span>
           <button className="btn" onClick={bulkRestore}>
-            Восстановить выбранные
+            {t("trash.restoreSelected")}
           </button>
           <button className="btn ghost" onClick={() => setSelected({})}>
-            Снять выделение
+            {t("trash.clearSelection")}
           </button>
         </div>
       )}
       <p className="trash-hint">
-        Документы хранятся в корзине {retentionDays} дн. и затем удаляются окончательно.
+        {t("trash.hint", { days: retentionDays })}
       </p>
       {!loaded ? (
-        <p className="trash-empty">Загрузка корзины…</p>
+        <p className="trash-empty">{t("trash.loading")}</p>
       ) : docs.length === 0 ? (
-        <p className="trash-empty">Корзина пуста</p>
+        <p className="trash-empty">{t("trash.empty")}</p>
       ) : (
         <ul className="document-list">
           {docs.map((doc) => (
@@ -128,7 +123,7 @@ export default function TrashPanel() {
                 <input
                   type="checkbox"
                   className="doc-checkbox"
-                  aria-label={`Выбрать ${doc.filename}`}
+                  aria-label={t("trash.selectAria", { name: doc.filename })}
                   checked={!!selected[doc.id]}
                   onChange={() => toggleSelect(doc.id)}
                 />
@@ -136,11 +131,11 @@ export default function TrashPanel() {
               <div>
                 <strong>{doc.filename}</strong>
                 <div className="meta">
-                  Удалён: {fmtDate(doc.deleted_at)}
+                  {t("trash.deletedAt", { date: fmtDateTime(doc.deleted_at) })}
                   {doc.deleted_by ? ` · ${doc.deleted_by}` : ""}
                   <br />
                   <span className="trash-days">
-                    До окончательного удаления: {doc.days_left} дн.
+                    {t("trash.daysLeft", { days: doc.days_left })}
                   </span>
                 </div>
               </div>
@@ -151,7 +146,7 @@ export default function TrashPanel() {
                     onClick={() => restoreOne(doc)}
                     disabled={busy[doc.id]}
                   >
-                    Восстановить
+                    {t("trash.restore")}
                   </button>
                 )}
               </div>
@@ -162,28 +157,28 @@ export default function TrashPanel() {
       {totalPages > 1 && (
         <div className="doc-pagination">
           <button className="page-btn" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-            ← Назад
+            {t("pagination.back")}
           </button>
           <span className="page-indicator">
-            {page + 1} из {totalPages}
+            {t("pagination.page", { page: page + 1, total: totalPages })}
           </span>
           <button
             className="page-btn"
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
           >
-            Вперёд →
+            {t("pagination.forward")}
           </button>
         </div>
       )}
       {conflict && (
         <Modal
-          title="Конфликт при восстановлении"
+          title={t("trash.conflictTitle")}
           onClose={() => setConflict(null)}
           footer={
             <>
               <button className="modal-btn" onClick={() => setConflict(null)}>
-                Отмена
+                {t("common.cancel")}
               </button>
               <button
                 className="modal-btn"
@@ -193,15 +188,18 @@ export default function TrashPanel() {
                   restoreOne(doc, { force: true });
                 }}
               >
-                Восстановить как отдельный
+                {t("trash.restoreSeparate")}
               </button>
             </>
           }
         >
           <p className="dup-hint">
-            Пока документ был в корзине, в систему загрузили похожий документ
-            «{conflict.duplicates?.level2?.[0]?.doc?.filename ?? conflict.duplicates?.level3?.[0]?.doc?.filename ?? "—"}».
-            Вы можете восстановить документ как отдельный.
+            {t("trash.conflictHint", {
+              name:
+                conflict.duplicates?.level2?.[0]?.doc?.filename ??
+                conflict.duplicates?.level3?.[0]?.doc?.filename ??
+                "—",
+            })}
           </p>
         </Modal>
       )}

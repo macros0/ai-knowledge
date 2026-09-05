@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useI18n } from "@/i18n/LocaleContext";
 
 function resolveAttachment(src, docId) {
   const clean = String(src || "").replace(/^\.?\//, "");
@@ -20,6 +21,7 @@ export default function MarkdownViewer({
   components = {},
   remarkPlugins = [],
 }) {
+  const { t } = useI18n();
   const [lightbox, setLightbox] = useState(null);
   const lastFocusRef = useRef(null);
 
@@ -58,7 +60,7 @@ export default function MarkdownViewer({
   const defaultComponents = {
     img({ src, alt, ...props }) {
       const resolved = resolveAttachment(src, docId);
-      const label = alt || "Изображение";
+      const label = alt || t("markdown.image");
       return (
         <figure className="okf-figure">
           <img
@@ -116,10 +118,10 @@ export default function MarkdownViewer({
           className="okf-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label={lightbox.alt || "Просмотр изображения"}
+          aria-label={lightbox.alt || t("markdown.viewImage")}
           onClick={closeLightbox}
         >
-          <button className="okf-lightbox-close" aria-label="Закрыть" onClick={closeLightbox}>
+          <button className="okf-lightbox-close" aria-label={t("markdown.close")} onClick={closeLightbox}>
             ✕
           </button>
           <div
@@ -129,7 +131,7 @@ export default function MarkdownViewer({
             onClick={(e) => e.stopPropagation()}
           >
             <img src={lightbox.src} alt={lightbox.alt || ""} />
-            <div className="okf-lightbox-caption">{lightbox.alt || "Изображение"}</div>
+            <div className="okf-lightbox-caption">{lightbox.alt || t("markdown.image")}</div>
           </div>
         </div>
       )}

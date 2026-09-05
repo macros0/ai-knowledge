@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { getChatSettings } from "@/lib/api";
+import { useI18n } from "@/i18n/LocaleContext";
 
 const FALLBACK_SETTINGS = {
   top_k_min: 1,
@@ -12,21 +13,25 @@ const FALLBACK_SETTINGS = {
   search_modes: ["dense", "bm25", "hybrid"],
 };
 
-const MODE_LABELS = {
-  dense: "Семантический",
-  bm25: "По ключевым словам (BM25)",
-  hybrid: "Гибрид",
-};
-
 const ChatContext = createContext(null);
 
 export function ChatProvider({ children }) {
+  const { t } = useI18n();
   const [messages, setMessages] = useState([]);
   const [tags, setTags] = useState([]);
   const [pending, setPending] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
+
+  const MODE_LABELS = useMemo(
+    () => ({
+      dense: t("chat.modeDense"),
+      bm25: t("chat.modeBm25"),
+      hybrid: t("chat.modeHybrid"),
+    }),
+    [t]
+  );
 
   // «Новый чат»: сбрасывает ленту и UUID треда — следующее сообщение откроет
   // новую сессию истории (Этап 6).
@@ -54,11 +59,12 @@ export function ChatProvider({ children }) {
     };
   }, []);
 
-  return (
-    <ChatContext.Provider value={{ messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }}>
-      {children}
-    </ChatContext.Provider>
+  const value = useMemo(
+    () => ({ messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }),
+    [messages, tags, pending, settings, selectedMode, sessionId, MODE_LABELS]
   );
+
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }
 
 export function useChat() {

@@ -2,11 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-
-const VIEWS = [
-  { id: "concepts", label: "Концепты" },
-  { id: "chunks", label: "Чанки" },
-];
+import { useI18n } from "@/i18n/LocaleContext";
 
 const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
 
@@ -18,6 +14,7 @@ export default function OkfFileList({
   processedChunks = 0,
   currentChunk = null,
 }) {
+  const { t } = useI18n();
   const [view, setView] = useState("concepts");
   const [fileList, setFileList] = useState(files);
   const [status, setStatus] = useState(docStatus);
@@ -102,13 +99,17 @@ export default function OkfFileList({
 
   const isBusy = BUSY_STATUSES.includes(status);
   const activeChunk = progress.current ?? progress.processed;
+  const VIEWS = [
+    { id: "concepts", label: t("okf.view.concepts") },
+    { id: "chunks", label: t("okf.view.chunks") },
+  ];
 
   return (
     <>
       {isBusy && progress.total > 0 && (
         <div className="okf-live-progress">
           <span className="live-dot" />
-          Генерация чанка {activeChunk} из {progress.total}
+          {t("okf.progress", { active: activeChunk, total: progress.total })}
         </div>
       )}
 
@@ -127,7 +128,7 @@ export default function OkfFileList({
       {view === "concepts" ? (
         fileList.length === 0 ? (
           <p className="okf-empty">
-            {isBusy ? "Концепты ещё не сгенерированы…" : "Концепты не найдены"}
+            {isBusy ? t("okf.conceptsBusy") : t("okf.conceptsNotFound")}
           </p>
         ) : (
           <ul className="okf-list">
@@ -141,18 +142,18 @@ export default function OkfFileList({
                   <span className="okf-meta">
                     <span className={`okf-type okf-type-${f.type}`}>{f.type}</span>
                     {f.tags && f.tags.length > 0 && (
-                      <span className="okf-tags">Теги: {f.tags.join(", ")}</span>
+                      <span className="okf-tags">{t("okf.tags", { tags: f.tags.join(", ") })}</span>
                     )}
-                    <span className="okf-size">{(f.size / 1024).toFixed(1)} КБ</span>
+                    <span className="okf-size">{t("okf.size", { size: (f.size / 1024).toFixed(1) })}</span>
                   </span>
                 </Link>
                 {f.chunk_index != null && (
                   <Link
                     href={`/documents/${docId}/chunks/${f.chunk_index}`}
                     className="okf-chunk-badge"
-                    title={`Чанк ${f.chunk_index + 1}`}
+                    title={t("okf.chunkTitle", { index: f.chunk_index + 1 })}
                   >
-                    Чанк {f.chunk_index + 1}
+                    {t("okf.chunk", { index: f.chunk_index + 1 })}
                   </Link>
                 )}
               </li>
@@ -162,20 +163,20 @@ export default function OkfFileList({
                 href={`/documents/${docId}/fulltext`}
                 className="okf-list-item okf-fulltext-link"
               >
-                <span className="okf-title">Весь документ</span>
+                <span className="okf-title">{t("okf.fulltext")}</span>
                 <span className="okf-meta">
-                  <span className="okf-size">показать полностью, без вырезок</span>
+                  <span className="okf-size">{t("okf.fulltextHint")}</span>
                 </span>
               </Link>
             </li>
           </ul>
         )
       ) : chunkError ? (
-        <p className="okf-empty okf-error">Ошибка загрузки чанков: {chunkError}</p>
+        <p className="okf-empty okf-error">{t("okf.chunksError", { error: chunkError })}</p>
       ) : chunks === null ? (
-        <p className="okf-empty">Загрузка чанков…</p>
+        <p className="okf-empty">{t("okf.loadingChunks")}</p>
       ) : chunks.length === 0 ? (
-        <p className="okf-empty">Чанки не найдены</p>
+        <p className="okf-empty">{t("okf.chunksNotFound")}</p>
       ) : (
         <ul className="okf-list">
           {chunks.map((c) => {
@@ -186,11 +187,11 @@ export default function OkfFileList({
                   href={`/documents/${docId}/chunks/${c.index}`}
                   className="okf-list-item"
                 >
-                  <span className="okf-title">Чанк {c.index + 1}</span>
+                  <span className="okf-title">{t("okf.chunk", { index: c.index + 1 })}</span>
                   <span className="okf-meta">
-                    <span className="okf-size">{(c.size / 1024).toFixed(1)} КБ</span>
+                    <span className="okf-size">{t("okf.size", { size: (c.size / 1024).toFixed(1) })}</span>
                     {c.concepts_count > 0 && (
-                      <span className="okf-chunk-concepts">Концептов: {c.concepts_count}</span>
+                      <span className="okf-chunk-concepts">{t("okf.conceptsCount", { count: c.concepts_count })}</span>
                     )}
                   </span>
                 </Link>
