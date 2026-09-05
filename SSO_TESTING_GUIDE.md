@@ -11,7 +11,7 @@
 |---|---|
 | Backend (FastAPI `:18000`) | `auth_provider=keycloak_oidc`, защита `/api/documents\|search\|chat\|tags\|settings` через `Depends(require_user)`, сессия в signed-cookie |
 | Frontend (Next.js `:3000`) | кнопка «Войти», экран «Вход в систему» для анонима, шапка с логином и ролью |
-| Keycloak (Docker `:8081`) | realm `myrealm`, confidential client `my-app`, группы→роли, group mapper |
+| Keycloak (Docker `:18081`) | realm `myrealm`, confidential client `my-app`, группы→роли, group mapper |
 | Роли (4 из Этапа 1) | `viewer / editor / admin / security` из групп `KB_*` через `AUTH_ROLE_GROUPS` |
 
 Тесты ролей и SSO-потока: `backend/tests/test_auth.py`, `backend/tests/test_auth_sso.py`.
@@ -31,14 +31,17 @@ AUTH_SESSION_TTL_SECONDS=28800
 AUTH_SESSION_HTTPS_ONLY=false
 AUTH_ROLE_GROUPS={"KB_Viewer":"viewer","KB_Editor":"editor","KB_Admin":"admin","KB_Security":"security"}
 AUTH_DEFAULT_ROLE=viewer
-KEYCLOAK_URL=http://localhost:8081
+KEYCLOAK_URL=http://localhost:18081
 KEYCLOAK_REALM=myrealm
 KEYCLOAK_CLIENT_ID=my-app
 KEYCLOAK_CLIENT_SECRET=RypekEVHCWFCEhWlsT0EYNpTtpM8o4hb
 SSO_REDIRECT_URI=http://localhost:3000/api/auth/callback
 ```
 
-> **Порт 8081, а не 8080** — 8080 на этой машине занят `3proxy`. Внутри контейнера Keycloak слушает 8080, наружу проброшен как 8081→8080 (`-p 8081:8080`).
+> **Порт 18081, а не 8080/8081** — 8080 на этой машине занят `3proxy`, а 8081 попадает в
+> исключённый диапазон Windows Hyper-V/WSL (bind падает с `winerror 10013`; диапазоны меняются
+> от загрузки к загрузке, 18081 выше динамического диапазона TCP — HNS его не резервирует).
+> Внутри контейнера Keycloak слушает 8080, наружу проброшен как 18081→8080 (`-p 18081:8080`).
 
 ---
 
@@ -60,7 +63,7 @@ SSO_REDIRECT_URI=http://localhost:3000/api/auth/callback
 
 ```powershell
 Invoke-WebRequest http://localhost:3000                 # UI
-Invoke-WebRequest http://localhost:8081/realms/myrealm/.well-known/openid-configuration
+Invoke-WebRequest http://localhost:18081/realms/myrealm/.well-known/openid-configuration
 ```
 
 ---
@@ -85,7 +88,7 @@ Invoke-WebRequest http://localhost:8081/realms/myrealm/.well-known/openid-config
 1. Откройте `http://localhost:3000` (лучше в инкогнито/без куки).
    ⇒ Шапка: `SSO · Войти через корпоративный вход`, в контенте карточка «Вход в систему».
 2. Нажмите «Войти через корпоративный вход».
-   ⇒ Браузер уходит на `http://localhost:8081/realms/myrealm/protocol/openid-connect/auth?...&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback` — **redirect_uri обязан быть на :3000** (это проверка SSO proxy fix).
+   ⇒ Браузер уходит на `http://localhost:18081/realms/myrealm/protocol/openid-connect/auth?...&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback` — **redirect_uri обязан быть на :3000** (это проверка SSO proxy fix).
 3. Введите `demo.user` / `demo` → Sign In.
 4. ⇒ Вернётесь на `:3000`, в шапке `demo.user · Viewer`, документы загрузились.
 5. Нажмите «Выйти» ⇒ снова карточка входа.
@@ -129,7 +132,7 @@ Remove-Item Env:AUTH_PROVIDER -ErrorAction SilentlyContinue
 
 ```bash
 curl -i "http://localhost:18000/api/auth/login" | grep -i location
-# Location: http://localhost:8081/.../auth?response_type=code&client_id=my-app&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback&...
+# Location: http://localhost:18081/.../auth?response_type=code&client_id=my-app&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback&...
 ```
 
 Полный OIDC (код-обмен) скриптом удобнее всего сделать тестами: `tests/test_auth_sso.py` уже гоняет
@@ -179,7 +182,7 @@ cd backend
 
 ## 11. Как добавить/изменить пользователя в Keycloak (админка)
 
-Консоль: `http://localhost:8081/` , user `admin` / пароль `admin`, realm **myrealm**.
+Консоль: `http://localhost:18081/` , user `admin` / пароль `admin`, realm **myrealm**.
 
 - **Юзер**: Users → Add user (username/email), потом Credentials → Set password (нулевое число «temporary»), затем Groups → группа.
 - **Группы**: Groups → Create group (`KB_Viewer`, `KB_Editor`, …).

@@ -9,7 +9,10 @@
     stale instance by port) and polls the realm discovery endpoint with retries.
 
     Ports: 8080 is often taken on this machine by 3proxy, so Keycloak listens
-    on 8081. Update KEYCLOAK_URL accordingly.
+    on 18081 (also above the Windows Hyper-V/WSL excluded port range — 8081
+    periodically falls into it, bind fails with winerror 10013). The container
+    still listens on 8080 inside; only the host mapping is 18081->8080.
+    Update KEYCLOAK_URL accordingly.
 
 .EXAMPLE
     .\scripts\start-keycloak.ps1
@@ -19,7 +22,10 @@ $ErrorActionPreference = 'Stop'
 
 $LogDir = "$env:TEMP\opencode"
 $PidFile = Join-Path $LogDir 'keycloak.pid'
-$Port = 8081
+# Host-порт Keycloak. 18081, НЕ 8081: 8081 попадает в исключённый диапазон
+# Windows Hyper-V/WSL (netsh interface ipv4 show excludedportrange) → bind падает
+# с winerror 10013. 18081 выше динамического диапазона TCP — HNS его не резервирует.
+$Port = 18081
 $Container = 'okf-keycloak'
 $Image = 'quay.io/keycloak/keycloak:25.0.0'
 
@@ -32,7 +38,7 @@ $ErrorActionPreference = 'Stop'
     -FilePath 'docker' `
     -ArgumentList @(
         'run', '--name', $Container,
-        '-p', "8081:8080",
+        '-p', "$Port`:8080",
         '-v', 'keycloak-data:/opt/keycloak/data',
         '-e', 'KEYCLOAK_ADMIN=admin',
         '-e', 'KEYCLOAK_ADMIN_PASSWORD=admin',
