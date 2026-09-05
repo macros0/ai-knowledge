@@ -74,10 +74,10 @@ function buildGroups(docs, groupBy, locale, t) {
   const map = new Map();
   for (const d of docs) {
     const tags = d.tags && d.tags.length ? d.tags : ["__none__"];
-    for (const t of tags) {
-      const none = t === "__none__";
-      const key = none ? "__none__" : t;
-      const label = none ? t("docs.group.noTag") : t;
+    for (const tag of tags) {
+      const none = tag === "__none__";
+      const key = none ? "__none__" : tag;
+      const label = none ? t("docs.group.noTag") : tag;
       if (!map.has(key)) map.set(key, { key, label, docs: [] });
       map.get(key).docs.push(d);
     }
