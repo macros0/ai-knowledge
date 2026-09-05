@@ -29,11 +29,18 @@ const STATUS_LABELS = {
 
 const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
 
-// Фильтр по статусу OKF-генерации (Этап 5): одно из трёх значений, на бэкенд
-// уходит либо пустая строка (без фильтра), либо список статусов через запятую.
+// Фильтр по статусу OKF-генерации (Этап 5): на бэкенд уходит либо пустая строка
+// (без фильтра), либо список статусов через запятую. Детальные пункты
+// (Парсинг.../Генерация OKF.../...) — для диагностики зависшей стадии,
+// агрегаты «В обработке»/«Ошибка» — для оперативного просмотра очереди.
 const STATUS_FILTER_OPTIONS = [
   { value: "", label: "Все статусы" },
   { value: "done", label: "Готов" },
+  { value: "processing", label: "Парсинг..." },
+  { value: "splitting", label: "Генерация OKF..." },
+  { value: "indexing", label: "Индексация..." },
+  { value: "uploaded", label: "Загружен" },
+  { value: "paused", label: "Приостановлен" },
   { value: "uploaded,processing,splitting,indexing,paused", label: "В обработке" },
   { value: "failed,error", label: "Ошибка" },
 ];
