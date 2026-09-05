@@ -11,7 +11,8 @@
       2. Ollama    -> :12400 (OLLAMA_HOST=127.0.0.1:12400; 11434 is inside the
                               Windows Hyper-V excluded port range on this machine)
       3. PostgreSQL -> :5432 (reuses scripts/start-postgres.ps1, portable binary)
-      4. Backend   -> :8000  (uvicorn app.main:app from backend/)
+      4. Backend   -> :18000 (uvicorn app.main:app from backend/; 8000 is inside the
+                              Windows Hyper-V/WSL excluded port range on this machine)
       5. Frontend  -> :3000  (node node_modules/next/dist/bin/next dev from frontend/)
 
     Each step polls its health endpoint with retries instead of sleeping blind.
@@ -33,6 +34,35 @@ function Get-OllamaExe {
     $known = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
     if (Test-Path $known) { return $known }
     throw 'Ollama не найден. Установите https://ollama.com/download'
+}
+
+# Host-порты фиксированных сервисов стека. Держим выше динамического диапазона
+# Windows (1024-15000): HNS/WSL резервирует диапазоны из него от загрузки к загрузке,
+# и порт внутри исключённого блока не может быть забинден (winerror 10013).
+# Проверка: netsh interface ipv4 show excludedportrange protocol=tcp
+function Assert-PortsAvailable {
+    $ports = 16333, 12400, 5432, 18000, 3000
+    $excluded = @{}
+    try {
+        $out = & netsh interface ipv4 show excludedportrange protocol=tcp 2>$null
+        foreach ($line in $out) {
+            if ($line -match '^\s*(\d{2,5})\s+(\d{2,5})\s*$') {
+                $s = [int]$Matches[1]; $e = [int]$Matches[2]
+                foreach ($p in $ports) {
+                    if ($p -ge $s -and $p -le $e) { $excluded[$p] = "$s-$e" }
+                }
+            }
+        }
+    } catch { }
+    foreach ($p in $ports) {
+        if ($excluded.ContainsKey($p)) {
+            Write-Output "[FAIL] Порт $p зарезервирован Windows/HNS (диапазон $($excluded[$p]))."
+            Write-Output "       Резервации меняются от загрузки к загрузке (WSL/Hyper-V). См. AGENTS.md — квирк про порты."
+            Write-Output "       Проверить: netsh interface ipv4 show excludedportrange protocol=tcp"
+            return $false
+        }
+    }
+    return $true
 }
 
 function Wait-Health {
@@ -90,6 +120,13 @@ function Start-Service {
 
 $results = [ordered]@{}
 
+if (-not (Assert-PortsAvailable)) {
+    Write-Output ""
+    Write-Output "WARNING: часть фиксированных портов зарезервирована Windows/HNS — стек не поднят."
+    Write-Output "         См. AGENTS.md (квирк про порты) и netsh interface ipv4 show excludedportrange."
+    exit 1
+}
+
 $results['Qdrant'] = Start-Service -Name 'Qdrant' -Url 'http://localhost:16333/collections' -Launch {
     & (Join-Path $PSScriptRoot 'start-qdrant.ps1')
 }
@@ -112,10 +149,10 @@ try {
     $results['Postgres'] = $false
 }
 
-$results['Backend'] = Start-Service -Name 'Backend' -Url 'http://localhost:8000/health' -Launch {
-    & $Helper -FilePath (Join-Path $Root 'backend\.venv\Scripts\python.exe') -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000') `
+$results['Backend'] = Start-Service -Name 'Backend' -Url 'http://localhost:18000/health' -Launch {
+    & $Helper -FilePath (Join-Path $Root 'backend\.venv\Scripts\python.exe') -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '18000') `
         -WorkingDirectory (Join-Path $Root 'backend') `
-        -Port 8000 `
+        -Port 18000 `
         -PidFile (Join-Path $LogDir 'backend.pid')
 }
 

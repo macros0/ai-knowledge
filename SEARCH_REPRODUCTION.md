@@ -10,7 +10,7 @@
 
 ## Предусловия
 
-1. Стек поднят: `.\scripts\start-all.ps1` (Qdrant `:16333`, backend `:8000`).
+1. Стек поднят: `.\scripts\start-all.ps1` (Qdrant `:16333`, backend `:18000`).
 2. Есть готовый документ (`status: "done"`) с проиндексированными чанками.
    Проверить по `data/documents.json` (поле `total_chunks > 0`).
 3. В `.env`: `SEARCH_INDEX_CHUNKS_ENABLED=true`.
@@ -48,7 +48,7 @@ curl -X POST http://localhost:16333/collections/okf_knowledge_base/points/scroll
 ## 2. Формат запроса
 
 ```bash
-curl -X POST http://localhost:8000/api/search \
+curl -X POST http://localhost:18000/api/search \
   -H "Content-Type: application/json" -d '{
     "query": "…",
     "top_k": 8,
@@ -85,7 +85,7 @@ curl -X POST http://localhost:8000/api/search \
 
 ```bash
 # Только dense, без bm25
-curl -X POST http://localhost:8000/api/search \
+curl -X POST http://localhost:18000/api/search \
   -H "Content-Type: application/json" -d '{
     "query": "Клинковская", "top_k": 5,
     "mode": "hybrid", "dense": true, "bm25": false
@@ -99,7 +99,7 @@ curl -X POST http://localhost:8000/api/search \
 
 ```bash
 # Только точки с тегом "network"
-curl -X POST http://localhost:8000/api/search \
+curl -X POST http://localhost:18000/api/search \
   -H "Content-Type: application/json" -d '{
     "query": "VLAN маршрутизация", "top_k": 5, "mode": "hybrid",
     "tags": ["network"]
@@ -118,7 +118,7 @@ curl -X POST http://localhost:8000/api/search \
 Query, попадающий в концепт и в его сырой чанк одновременно:
 
 ```bash
-curl -X POST http://localhost:8000/api/search \
+curl -X POST http://localhost:18000/api/search \
   -H "Content-Type: application/json" -d '{
     "query": "DisabilityChildrenRequestType", "top_k": 10, "mode": "hybrid"
   }'
@@ -135,7 +135,7 @@ curl -X POST http://localhost:8000/api/search \
 дублирования в чанке):
 
 ```bash
-curl -X POST http://localhost:8000/api/search \
+curl -X POST http://localhost:18000/api/search \
   -H "Content-Type: application/json" -d '{
     "query": "порядок обработки уведомлений", "top_k": 5, "mode": "dense"
   }'
@@ -149,7 +149,7 @@ curl -X POST http://localhost:8000/api/search \
 Классика: в концептах фамилия утверждающего не попала, а в сыром чанке есть.
 
 ```bash
-curl -X POST http://localhost:8000/api/search \
+curl -X POST http://localhost:18000/api/search \
   -H "Content-Type: application/json" -d '{
     "query": "Клинковская", "top_k": 5, "mode": "hybrid"
   }'

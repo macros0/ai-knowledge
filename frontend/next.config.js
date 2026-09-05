@@ -11,7 +11,7 @@ module.exports = {
     proxyClientMaxBodySize: "100mb",
   },
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:18000";
     return [
       {
         source: "/health",

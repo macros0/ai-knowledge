@@ -16,7 +16,7 @@ import { serializeCookies } from "./serializeCookies.mjs";
  * превращаются в %3D/%2B/%2F, бэкенд не декодирует → 401).
  */
 export async function backendFetch(path, options = {}) {
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:18000";
   const cookieStore = await cookies();
   const cookieString = serializeCookies(cookieStore.getAll());
   const headers = { ...(options.headers || {}) };

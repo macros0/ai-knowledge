@@ -1,4 +1,4 @@
-﻿# Тестирование с включённым SSO (локальный Keycloak)
+# Тестирование с включённым SSO (локальный Keycloak)
 
 Инструкция описывает, как поднять стек с SSO и проверить авторизацию
 сквозным сценарием: экран входа → Keycloak → сессия → доступ к API/UI → роли.
@@ -9,7 +9,7 @@
 
 | Слой | Что работает |
 |---|---|
-| Backend (FastAPI `:8000`) | `auth_provider=keycloak_oidc`, защита `/api/documents\|search\|chat\|tags\|settings` через `Depends(require_user)`, сессия в signed-cookie |
+| Backend (FastAPI `:18000`) | `auth_provider=keycloak_oidc`, защита `/api/documents\|search\|chat\|tags\|settings` через `Depends(require_user)`, сессия в signed-cookie |
 | Frontend (Next.js `:3000`) | кнопка «Войти», экран «Вход в систему» для анонима, шапка с логином и ролью |
 | Keycloak (Docker `:8081`) | realm `myrealm`, confidential client `my-app`, группы→роли, group mapper |
 | Роли (4 из Этапа 1) | `viewer / editor / admin / security` из групп `KB_*` через `AUTH_ROLE_GROUPS` |
@@ -96,19 +96,19 @@ Invoke-WebRequest http://localhost:8081/realms/myrealm/.well-known/openid-config
 
 ## 6. Проверка API вручную (PowerShell / curl)
 
-Бэкенд: `http://localhost:8000`. Frontend-прокси: `http://localhost:3000/api/*`.
+Бэкенд: `http://localhost:18000`. Frontend-прокси: `http://localhost:3000/api/*`.
 
 ### 6.1 Анонимные запросы → 401
 
 ```powershell
-try { Invoke-WebRequest http://localhost:8000/api/documents -UseBasicParsing -TimeoutSec 5 } catch { $_.Exception.Response.StatusCode.value__ }   # 401
-try { Invoke-WebRequest http://localhost:8000/api/search -Method Post -Body '{"query":"x"}' -ContentType 'application/json' -UseBasicParsing } catch { $_.Exception.Response.StatusCode.value__ }   # 401
+try { Invoke-WebRequest http://localhost:18000/api/documents -UseBasicParsing -TimeoutSec 5 } catch { $_.Exception.Response.StatusCode.value__ }   # 401
+try { Invoke-WebRequest http://localhost:18000/api/search -Method Post -Body '{"query":"x"}' -ContentType 'application/json' -UseBasicParsing } catch { $_.Exception.Response.StatusCode.value__ }   # 401
 ```
 
 Здоровье и auth открыты (не защищены):
 
 ```powershell
-Invoke-WebRequest http://localhost:8000/api/auth/me -UseBasicParsing
+Invoke-WebRequest http://localhost:18000/api/auth/me -UseBasicParsing
 # {"mode":"sso","user":{"user_id":"anonymous",...},"sim_users":null}
 ```
 
@@ -128,7 +128,7 @@ Remove-Item Env:AUTH_PROVIDER -ErrorAction SilentlyContinue
 Кратко показать, что `authorize_redirect` отдаёт правильный `redirect_uri`:
 
 ```bash
-curl -i "http://localhost:8000/api/auth/login" | grep -i location
+curl -i "http://localhost:18000/api/auth/login" | grep -i location
 # Location: http://localhost:8081/.../auth?response_type=code&client_id=my-app&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback&...
 ```
 
@@ -170,7 +170,7 @@ cd backend
 |---|---|
 | Бэкенд не стартует (`ModuleNotFoundError: itsdangerous`) | Запускается системный `python` вместо проекта. `start-all.ps1` должен использовать `backend\.venv\Scripts\python.exe` |
 | `/health` на `:3000` → 404 | Next.js проксирует только `/api/*`; `/health` добавлен отдельным rewrite в `next.config.js` |
-| После логина редиректит на `:8000` вместо `:3000` | Не задан `SSO_REDIRECT_URI`; контролируйте, чтобы authorize-URL содержал `redirect_uri=localhost:3000` |
+| После логина редиректит на `:18000` вместо `:3000` | Не задан `SSO_REDIRECT_URI`; контролируйте, чтобы authorize-URL содержал `redirect_uri=localhost:3000` |
 | Keycloak не поднялся за 120с | Образ не скачан и/или стартует холодный `start-dev`; проверьте `docker logs -f okf-keycloak` |
 | Ошибка `invalid_client_credentials` при ручной выдаче токена | Используйте форма `client_id=my-app&client_secret=…&grant_type=password` (form-urlencoded) |
 | Консоль браузера: `ApiError: Требуется авторизация` | Это нормально для анонимного посещения; UI теперь показывает экран входа вместо падения списка |

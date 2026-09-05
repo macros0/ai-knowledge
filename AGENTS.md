@@ -19,7 +19,7 @@
 | Qdrant | http://localhost:16333 | `GET /collections` |
 | Ollama | http://localhost:12400 | `GET /api/tags` |
 | PostgreSQL | 127.0.0.1:5432 | `pg_isready -h 127.0.0.1 -p 5432` |
-| Backend (FastAPI) | http://localhost:8000 | `GET /health` |
+| Backend (FastAPI) | http://localhost:18000 | `GET /health` |
 | Frontend (Next.js) | http://localhost:3000 | `GET /` |
 
 UI: http://localhost:3000
@@ -36,6 +36,14 @@ UI: http://localhost:3000
   можно задать модель посильнее через `LLM_CHAT_MODEL` (пусто → `LLM_MODEL`); OKF-генерация
   и batch-задачи всегда на `LLM_MODEL`. Эмбеддинги: `ollama/bge-m3` —
   модель должна быть загружена в Ollama (`ollama pull bge-m3`).
+- **Backend слушает порт 18000, НЕ 8000.** Порт 8000 (как и ранее Qdrant 6333, Ollama 11434)
+  периодически попадает в исключённый диапазон Windows Hyper-V/WSL (проверить:
+  `netsh interface ipv4 show excludedportrange protocol=tcp`); резервации меняются от загрузки
+  к загрузке. 18000 выше динамического диапазона TCP (1024–15000) — HNS его не резервирует.
+  `BACKEND_URL` в `.env` и фолбэки `frontend/next.config.js` / `frontend/src/lib/backendFetch.js`
+  уже на `http://localhost:18000`. Docker-compose не трогать: внутри сети `backend:8000`.
+  `start-all.ps1` перед запуском проверяет все фиксированные host-порты на резервацию
+  (понятная ошибка вместо `winerror 10013`).
 - **Qdrant — локальный бинарь (не Docker): `%TEMP%\opencode\qdrant\v1.19.0\qdrant.exe`, данные в
   `%TEMP%\opencode\qdrant\storage` (сохраняются между запусками). Слушает порты 16333 (REST) /
   16334 (gRPC), НЕ дефолтные 6333/6334**: порт 6333 попал в исключённый диапазон Windows

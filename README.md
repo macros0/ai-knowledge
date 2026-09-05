@@ -60,7 +60,7 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows
 pip install -e ../doc-parser    # пакет разбора документов (editable)
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 18000
 
 # 3. Frontend (в отдельном терминале)
 cd frontend
@@ -317,7 +317,7 @@ Read-only проверка: документы, «зависшие» в акти
 | `CHAT_MAX_CONTEXT_CHARS` | `32000` | Лимит суммарного объёма контекста для LLM |
 | `CHAT_CONCEPT_MAX_CHARS` | `4000` | Обрезка концепта в контексте |
 | `CHAT_CHUNK_MAX_CHARS` | `6000` | Обрезка чанка в контексте |
-| `BACKEND_URL` | `http://localhost:8000` | Адрес бэкенда для прокси `/api` в Next.js (Docker: `http://backend:8000`) |
+| `BACKEND_URL` | `http://localhost:18000` | Адрес бэкенда для прокси `/api` в Next.js (локальный Windows-host — `18000`, т.к. порт `8000` попадает в исключённый диапазон Windows Hyper-V/WSL; Docker: `http://backend:8000`) |
 | `TRASH_RETENTION_DAYS` | `14` | Окно хранения в корзине (дней), до истечения которого документ можно восстановить; после — фоновая автоочистка (Этап 4a.2) |
 | `TRASH_PURGE_ENABLED` | `true` | Автозапуск фоновой очистки корзины при старте сервера |
 | `TRASH_PURGE_INTERVAL_SECONDS` | `3600` | Интервал прогона фоновой очистки корзины (сек) |
