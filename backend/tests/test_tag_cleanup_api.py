@@ -80,6 +80,34 @@ class TestDeleteTagApi:
         resp = client.delete("/api/tags/keep")
         assert resp.status_code == 409
 
+    def test_trash_only_tag_can_be_deleted(self, client):
+        """Корзинный док не блокирует удаление имени из пула (баг 06.09.2026)."""
+        reg = get_registry()
+        reg.create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10, tags=["keep"])
+        reg.soft_delete("aaaaaaaaaaaaaaaa", "demo.editor")
+        TagRegistry().add(["keep"])
+        login(client, "demo.editor")
+
+        resp = client.delete("/api/tags/keep")
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"deleted": "keep"}
+
+    def test_trash_only_tag_listed_with_count_zero(self, client):
+        """UI/API-контракт: trash-only тег не возвращается как используемый."""
+        reg = get_registry()
+        reg.create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10, tags=["trashy"])
+        reg.soft_delete("aaaaaaaaaaaaaaaa", "demo.editor")
+        TagRegistry().add(["trashy", "active"])
+        reg.create("bbbbbbbbbbbbbbbb", "b.docx", "x", 10, tags=["active"])
+        login(client, "demo.editor")
+
+        data = client.get("/api/tags").json()["tags"]
+        counts = {t["name"]: t["count"] for t in data}
+
+        assert counts["trashy"] == 0  # только корзинный док
+        assert counts["active"] == 1  # активный док считается
+
 
 class TestCleanupApi:
     def test_cleans_all_unused(self, client):
@@ -102,3 +130,18 @@ class TestCleanupApi:
         login(client, "demo.viewer")
         resp = client.post("/api/tags/cleanup")
         assert resp.status_code == 403
+
+    def test_cleanup_removes_trash_only_tag(self, client):
+        """cleanup чистит имена, оставшиеся только на корзинных доках."""
+        reg = get_registry()
+        reg.create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10, tags=["keep"])
+        reg.soft_delete("aaaaaaaaaaaaaaaa", "demo.editor")
+        TagRegistry().add(["keep", "g1"])
+        login(client, "demo.editor")
+
+        resp = client.post("/api/tags/cleanup")
+
+        assert resp.status_code == 200, resp.text
+        assert sorted(resp.json()["deleted"]) == ["g1", "keep"]
+        assert resp.json()["total"] == 2
+        assert {t["name"] for t in TagRegistry().all()} == set()
