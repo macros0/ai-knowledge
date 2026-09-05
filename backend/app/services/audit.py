@@ -44,6 +44,7 @@ DOCUMENT_BULK_RESTORE = "document_bulk_restore"
 DOCUMENT_AUTO_DELETE = "document_auto_delete"
 CHAT_HISTORY_VIEW = "chat_history_view"
 CHAT_HISTORY_AUTO_DELETE = "chat_history_auto_delete"
+DOCUMENT_EXPORT = "document_export"
 
 ACTION_TYPES = frozenset(
     {
@@ -72,6 +73,7 @@ ACTION_TYPES = frozenset(
         DOCUMENT_AUTO_DELETE,
         CHAT_HISTORY_VIEW,
         CHAT_HISTORY_AUTO_DELETE,
+        DOCUMENT_EXPORT,
     }
 )
 

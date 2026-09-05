@@ -187,3 +187,43 @@ payload = {
 - **Тест `test_settings`.** Сегодня требует Qdrant. Добавить тест на БД-слой с SQLite in-memory.
 - **Дрейк тегов.** После миграции теги хранятся в: (1) `document_tags` (canonical), (2) `okf_concepts.tags` (per-concept), (3) Qdrant payload (для фильтра), (4) `.md` frontmatter. Canonical — `document_tags` + `okf_concepts.tags`; payload Qdrant и frontmatter `.md` — проекции, обновляются при правках тегов (Этап 4a roadmap). Синк Qdrant-payload при правке — **асинхронный** (фоновый поток, не fallback): на используемом окружении `set_payload` ≈ 2с/вызов, на документ приходятся десятки concept-точек с разными тегами, синхронно ответ замораживался бы. point_id concept-точек детерминирован (`uuid5(filepath)`), синк читает `okf_concepts.tags` из БД без scroll и идемпотентно приводит Qdrant к состоянию БД. Самовосстановление — только явным `regenerate`/`resume` (без фонового ретрая).
 - **Связь с `audit_log`.** Таблица `audit_log` (Этап 2 roadmap) моделируется отдельно — зависит от ИБ-требований к составу записи и сроку хранения. Схема БД здесь заводится без неё; после фиксации ИБ-требований добавляется миграцией.
+
+## 11. Этап 2b: PostgreSQL — единственный источник истины (завершён 05.09.2026)
+
+Исходный план (§9) останавливался на «БД canonical для концептов + бандлы как
+backup/inspect». Дальнейший аудит вскрыл дыры консистентности: вложения жили только
+в YAML/frontmatter, чанки — только в файлах и payload Qdrant, провенанс отсутствовал.
+Этап 2b доводит модель до конца: **БД — единственный источник истины для
+структурированного знания; FS — байты оригиналов/вложений; Qdrant — пересобираемая
+slim-проекция; YAML/Markdown — экспорт.**
+
+Фазы (все приняты):
+- **Ф0** — схема: `document_chunks`, активация+расширение `okf_attachments`,
+  провенанс `okf_concepts`; Alembic `f0a1b2c3d4e5`.
+- **Ф1** — пайплайн dual-write: одна транзакция финализации
+  (`replace_chunks`+`replace_concepts`+`replace_attachments` через session-passing)
+  ДО Qdrant; вложения → `uploads/<doc_id>/attachments/`; провенанс per-chunk.
+- **Ф2** — backfill корпуса (`backfill_db_store.py`) + сверка (`check_integrity.py`) +
+  baseline `probe_sources`.
+- **Ф3** — чтение только из БД: гидрация чанков по `(doc_id, chunk_index)`, эндпоинты
+  okf/chunks/fulltext/attachments, reindex/backfill'ы — из БД.
+- **Ф4** — Qdrant v2: логические point_id (`okf:concept:{doc_id}:{slug}` /
+  `okf:chunk:{doc_id}:{chunk_index}`), slim payload, rebuild из БД, переключение
+  `QDRANT_COLLECTION=okf_knowledge_base_v2`.
+- **Ф5** — бандлы → экспорт (`okf_write_bundles=false`, `POST /documents/{id}/export-okf`
+  + `scripts/export_okf.py`), удаление транзиентных fallback'ов.
+
+**Ключевые инварианты** (зафиксированы, не пересматривать без явной задачи):
+1. Направление данных только `PostgreSQL → бандлы` (экспорт), никогда обратно —
+   кроме явных backfill/импорт-скриптов.
+2. point_id вычисляются только в `vector_store.concept_point_id`/`chunk_point_id`.
+3. Dense-эмбеддинг — единая формула `title + "\n" + content[:okf_max_concept_chars]`
+   (чанк: `section_title + "\n" + text[:okf_max_chunk_index_chars]`) для пайплайна,
+   reindex и rebuild v2.
+4. Гидрация поиска — natural key `(doc_id, slug)` для концептов, `(doc_id, chunk_index)`
+   для чанков; surrogate id в payload не хранятся.
+5. Старая коллекция `okf_knowledge_base` и legacy-каталог `data/okf_bundles/` удалены
+   после финальной приёмки (rollback-вариант больше не требуется).
+
+**Out of scope (возможный Этап 2c):** дерево `source_files`/`source_attachment_id` с
+трекингом происхождения блоков в парсере (`extracted_chars` пока NULL); MinIO/S3; OCR.

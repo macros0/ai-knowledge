@@ -6,7 +6,7 @@ staging-каталог (data/staging/{doc_id}/) с manifest.json. При сбо�
 пропускает уже готовые чанки. Финальный бандл собирается в okf_bundles через
 атомарный перенос, затем концепты индексируются в Qdrant.
 """
-import json
+import hashlib
 import logging
 import os
 import re
@@ -14,10 +14,14 @@ import shutil
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
 
 from app.config import get_settings
+from app.db.session import session_scope
+from app.services.attachment_store import replace_attachments
+from app.services.chunk_store import replace_chunks
 from app.services.concept_store import replace_concepts
 from app.services.dev_detector import attach_development, detect
 from app.services.development_registry import get_development_registry
@@ -113,8 +117,15 @@ class Pipeline:
                 shutil.rmtree(target, ignore_errors=True)
             else:
                 target.unlink(missing_ok=True)
+        # Вложения (бинарники) парсер пишет в uploads/<doc_id>/attachments/ — при
+        # регенерации чистим их, иначе stale-файлы прежнего парсинга остаются.
+        att_dir = self.settings.uploads_dir / doc_id / "attachments"
+        if att_dir.is_dir():
+            shutil.rmtree(att_dir, ignore_errors=True)
         StagingStore(doc_id).remove()
-        replace_concepts(doc_id, [])
+        with session_scope() as s:
+            replace_chunks(s, doc_id, [])
+            replace_concepts(s, doc_id, [])
         # Сброс кэша классификации таблиц: пользователь явно хочет пересчитать
         # концепты с нуля (возможно, после правки промпта/логики классификатора).
         table_cache = self.settings.cache_dir / "table_classify"
@@ -176,10 +187,14 @@ class Pipeline:
 
     def _process(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         self.registry.update(doc_id, status="processing", error=None, problem=None)
-        attachments_dir = self.settings.okf_dir / doc_id / "attachments"
+        # Вложения (бинарники) пишутся парсером в uploads/<doc_id>/attachments/ —
+        # рядом с оригиналом, а не в будущий бандл (Этап 2b: бандл — производная
+        # проекция, вложения — байты-источники в FS, описанные в okf_attachments).
+        doc_root = self.settings.uploads_dir / doc_id
+        attachments_dir = doc_root / "attachments"
         blocks = parse_document(filepath, filename, attachments_dir=attachments_dir)
         markdown = blocks_to_markdown(blocks)
-        attachments = _collect_attachments(blocks, attachments_dir)
+        attachments = _collect_attachments(blocks, doc_root)
 
         # Автоопределение номера разработки: только на «свежем» проходе и если
         # regex по имени файла (на этапе upload) ничего не нашёл. Non-fatal —
@@ -233,6 +248,10 @@ class Pipeline:
 
         max_chunk_retries = self.settings.llm_chunk_retry_attempts
         chunk_backoff = self.settings.llm_chunk_retry_backoff_seconds
+        # Провенанс генерации (Этап 2b): модель/промпт — константы прохода,
+        # generated_at — момент успешной генерации конкретного чанка (ниже).
+        run_model_id = self.settings.llm_model
+        run_prompt_version = self.okf_generator.prompt_version()
 
         try:
             for i, chunk in enumerate(chunks):
@@ -278,7 +297,12 @@ class Pipeline:
                     for concept in concepts:
                         concept.tags = _merge_tags(concept.tags, user_tags)
                 if concepts is not None:
-                    staging.append_chunk(i, concepts, degradation=degradation)
+                    provenance = {
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                        "model_id": run_model_id,
+                        "prompt_version": run_prompt_version,
+                    }
+                    staging.append_chunk(i, concepts, degradation=degradation, provenance=provenance)
                 self.registry.update(doc_id, processed_chunks=len(staging.processed_chunks), current_chunk=None)
         except Exception as exc:
             logger.warning("Генерация OKF прервана на документе %s: %s", doc_id, exc)
@@ -329,29 +353,30 @@ class Pipeline:
 
         concepts = staging.concepts()
         slugs = staging.slugs()
-        target = self.settings.okf_dir / doc_id
-        tmp_dir = self.settings.okf_dir / f".tmp-{doc_id}"
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-
-        attach_src = self.settings.okf_dir / doc_id / "attachments"
-        if attach_src.is_dir():
-            shutil.copytree(attach_src, tmp_dir / "attachments")
 
         manifest = staging.load() or {}
         chunks_data = manifest.get("chunks_data", {}) or {}
         chunk_of_slug: dict[str, int] = {}
+        provenance_of_chunk: dict[int, dict] = {}
         for idx_str, info in chunks_data.items():
-            for slug in (info or {}).get("slugs", []):
+            info = info or {}
+            for slug in info.get("slugs", []):
                 chunk_of_slug.setdefault(slug, int(idx_str))
+            prov = info.get("provenance")
+            if prov:
+                try:
+                    provenance_of_chunk[int(idx_str)] = prov
+                except (TypeError, ValueError):
+                    pass
 
         chunks_meta: list[dict] = []
-        chunks_dir = tmp_dir / "chunks"
-        chunks_dir.mkdir(parents=True, exist_ok=True)
+        chunk_rows: list[dict] = []
+        chunk_files: list[tuple[Path, int, str]] = []
         for chunk_file in sorted(staging.dir.glob("chunk_*.md")):
             idx = int(chunk_file.stem.split("_")[-1])
-            info = chunks_data.get(str(idx), {})
+            info = chunks_data.get(str(idx)) or {}
+            text = chunk_file.read_text(encoding="utf-8")
+            chunk_files.append((chunk_file, idx, text))
             chunks_meta.append(
                 {
                     "index": idx,
@@ -359,26 +384,85 @@ class Pipeline:
                     "concepts_count": info.get("concepts_count", 0),
                 }
             )
-            shutil.copy2(chunk_file, chunks_dir / chunk_file.name)
-        write_json_atomic(chunks_dir / "manifest.json", chunks_meta)
+            chunk_rows.append(
+                {
+                    "chunk_index": idx,
+                    "section_title": _extract_section_title(text),
+                    "content": text,
+                    "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                    "char_count": len(text),
+                }
+            )
 
-        okf_docs = self.okf_generator.save_bundle(
-            doc_id,
-            filename,
-            concepts,
-            attachments=attachments,
-            global_tags=global_tags,
-            bundle_root=tmp_dir,
-            slugs=slugs,
-            chunk_of_slug=chunk_of_slug,
-        )
-        _atomic_move(tmp_dir, target)
+        # Этап 2b / Фаза 5: бандл — экспорт, не рабочее состояние. По умолчанию
+        # okf_write_bundles=false — okf_docs строятся в памяти (БД — canonical),
+        # файлы .md не пишутся. При true (dual-write) — как раньше: tmp + atomic move.
+        if self.settings.okf_write_bundles:
+            target = self.settings.okf_dir / doc_id
+            tmp_dir = self.settings.okf_dir / f".tmp-{doc_id}"
+            if tmp_dir.exists():
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+
+            attach_src = self.settings.uploads_dir / doc_id / "attachments"
+            if attach_src.is_dir():
+                shutil.copytree(attach_src, tmp_dir / "attachments")
+
+            chunks_dir = tmp_dir / "chunks"
+            chunks_dir.mkdir(parents=True, exist_ok=True)
+            for chunk_file, _idx, _text in chunk_files:
+                shutil.copy2(chunk_file, chunks_dir / chunk_file.name)
+            write_json_atomic(chunks_dir / "manifest.json", chunks_meta)
+
+            okf_docs = self.okf_generator.save_bundle(
+                doc_id,
+                filename,
+                concepts,
+                attachments=attachments,
+                global_tags=global_tags,
+                bundle_root=tmp_dir,
+                slugs=slugs,
+                chunk_of_slug=chunk_of_slug,
+            )
+            _atomic_move(tmp_dir, target)
+            for doc in okf_docs:
+                doc.filepath = str(target / Path(doc.filepath).name)
+        else:
+            okf_docs, _manifest = self.okf_generator.build_okf_docs(
+                doc_id,
+                filename,
+                concepts,
+                attachments=attachments,
+                global_tags=global_tags,
+                slugs=slugs,
+                chunk_of_slug=chunk_of_slug,
+            )
+
+        # Провенанс генерации (Этап 2b): per-chunk generated_at/model_id/prompt
+        # из staging chunks_data — в metadata концептов, откуда replace_concepts
+        # пишет их в okf_concepts. Не путать с created_at (время SQL INSERT).
         for doc in okf_docs:
-            doc.filepath = str(target / Path(doc.filepath).name)
+            ci = doc.metadata.get("chunk_index")
+            prov = provenance_of_chunk.get(ci) if ci is not None else None
+            if prov:
+                doc.metadata["generated_at"] = prov.get("generated_at")
+                doc.metadata["model_id"] = prov.get("model_id")
+                doc.metadata["prompt_version"] = prov.get("prompt_version")
 
-        # Canonical-копия концептов в БД (полный текст, без обрезки до
-        # okf_max_concept_chars). При нуле концептов очищает устаревшие записи.
-        replace_concepts(doc_id, okf_docs)
+        # Единая транзакция финализации БД: чанки + концепты (+prov) + вложения.
+        # Commit — на выходе из session_scope; Qdrant вызывается строго ПОСЛЕ
+        # успешного commit (он пересобираемая проекция БД). Падение Qdrant после
+        # commit оставляет документ paused — resume идемпотентно повторяет
+        # replace_* + upsert векторов.
+        with session_scope() as session:
+            replace_chunks(session, doc_id, chunk_rows)
+            replace_concepts(session, doc_id, okf_docs)
+            replace_attachments(
+                session,
+                doc_id,
+                attachments,
+                storage_root=self.settings.uploads_dir / doc_id,
+            )
 
         # Problem-коды (инцидент 03.09.2026: done ≠ «документ полон»).
         # Приоритет: no_text_layer/no_concepts (0 концептов) >
@@ -426,22 +510,12 @@ class Pipeline:
         # Чанки индексируются ВСЕГДА, включая документы без концептов: dual-index
         # даёт документу поисковую представленность через chunk-ветку (BM25/dense
         # по сырому тексту), даже когда LLM не создала ни одного концепта.
+        # Этап 2b: текст чанков берётся из chunk_rows (в памяти), а не из бандла.
         if self.settings.search_index_chunks_enabled:
-            chunks_dir = target / "chunks"
-            chunk_count = len(chunks_meta)
-            chunk_texts: list[str] = []
-            for i in range(chunk_count):
-                chunk_path = chunks_dir / f"chunk_{i:02d}.md"
-                if chunk_path.is_file():
-                    chunk_texts.append(chunk_path.read_text(encoding="utf-8"))
-                else:
-                    logger.warning("[%s] Чанк %d не найден в бандле, пропускаем индексацию чанков", doc_id, i)
-                    chunk_texts = []
-                    break
-            if not chunk_texts and chunk_count:
-                problem = problem or problem_codes.INDEX_PARTIAL_FAILURE
-            if chunk_texts:
-                chunk_section_titles = [_extract_section_title(t) for t in chunk_texts]
+            chunk_count = len(chunk_rows)
+            if chunk_count:
+                chunk_texts = [r["content"] for r in chunk_rows]
+                chunk_section_titles = [r["section_title"] or "" for r in chunk_rows]
                 cap = self.settings.okf_max_chunk_index_chars
                 embed_inputs = []
                 for st, t in zip(chunk_section_titles, chunk_texts):
@@ -453,6 +527,8 @@ class Pipeline:
                 )
                 keep_point_ids |= chunk_point_ids
                 logger.info("[%s] Проиндексировано %d чанков", doc_id, len(chunk_texts))
+            elif chunks_meta:
+                problem = problem or problem_codes.INDEX_PARTIAL_FAILURE
 
         # Очистка осиротевших старых точек (после успешного upsert новых).
         # Удаляются только точки doc_id, чьи point_id не вошли в новый набор.
@@ -481,16 +557,18 @@ class Pipeline:
 
         Скан-PDF без OCR даёт чанки из одних markdown-ссылок на картинки
         (инцидент 03.09.2026: «Тренировочная зона», 286 страниц-сканов →
-        done с 0 концептов и 0 точек при зелёном статусе). Считаем
-        суммарный текст чанков за вычетом ссылок-вложений: короче порога —
-        текстового слоя нет.
+        done с 0 концептов и 0 точек при зелёном статусе). Считаем суммарный
+        текст чанков за вычетом ссылок-вложений: короче порога — текстового
+        слоя нет. Этап 2b: читает document_chunks (БД), а не бандл.
         """
-        chunks_dir = get_settings().okf_dir / doc_id / "chunks"
-        if not chunks_dir.is_dir():
-            return True
+        from app.db.models import DocumentChunk
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            rows = s.query(DocumentChunk.content).filter(DocumentChunk.doc_id == doc_id).all()
         total = 0
-        for md in sorted(chunks_dir.glob("chunk_*.md")):
-            text = _IMAGE_LINK_RE.sub("", md.read_text(encoding="utf-8"))
+        for (content,) in rows:
+            text = _IMAGE_LINK_RE.sub("", content or "")
             total += len(text.strip())
         return total < MIN_TEXT_LAYER_CHARS
 
@@ -578,17 +656,14 @@ class Pipeline:
     def ensure_chunks(self, doc_id: str) -> list[dict]:
         """Возвращает мету чанков документа, при необходимости строя их из исходника.
 
-        Источники по приоритету:
-          1. okf_bundles/{doc_id}/chunks/manifest.json — финализированный бандл;
+        Источники по приоритету (Этап 2b — PostgreSQL SSOT):
+          1. document_chunks (БД) — канонический источник текста чанков;
           2. staging (документ в процессе генерации) — живые чанки;
-          3. ленивый backfill: пере-парсинг исходника (без LLM), кэш в бандл.
+          3. ленивый backfill: пере-парсинг исходника (без LLM) в document_chunks.
         """
-        bundle_chunks = self.settings.okf_dir / doc_id / "chunks"
-        manifest_path = bundle_chunks / "manifest.json"
-        if manifest_path.is_file():
-            meta = _read_chunks_manifest(manifest_path)
-            if meta:
-                return meta
+        meta = _chunks_meta_from_db(doc_id)
+        if meta:
+            return meta
 
         staging = StagingStore(doc_id)
         if staging.exists():
@@ -596,15 +671,17 @@ class Pipeline:
 
         lock = self._chunk_locks.setdefault(doc_id, threading.Lock())
         with lock:
-            if manifest_path.is_file():
-                meta = _read_chunks_manifest(manifest_path)
-                if meta:
-                    return meta
+            meta = _chunks_meta_from_db(doc_id)
+            if meta:
+                return meta
             self._backfill_chunks(doc_id)
-            return _read_chunks_manifest(manifest_path)
+            return _chunks_meta_from_db(doc_id)
 
     def _backfill_chunks(self, doc_id: str) -> None:
-        """Строит чанки из исходного файла и кэширует их в бандл (без LLM)."""
+        """Строит чанки из исходного файла и пишет их в document_chunks (без LLM).
+
+        Этап 2b: чанки — канонически в БД; FS-бандл больше не кэш для этого пути.
+        """
         doc = self.registry.get(doc_id)
         if not doc:
             raise ValueError("Документ не найден")
@@ -613,34 +690,56 @@ class Pipeline:
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
             raise ValueError("Исходный файл документа не найден")
-        scratch = self.settings.okf_dir / f".tmp-chunks-{doc_id}"
-        if scratch.exists():
-            shutil.rmtree(scratch, ignore_errors=True)
-        scratch.mkdir(parents=True, exist_ok=True)
-        try:
-            blocks = parse_document(filepath, filename, attachments_dir=scratch / "attachments")
-            markdown = blocks_to_markdown(blocks)
-            chunks = self.okf_generator.chunk_text(markdown)
-            chunks_dir = scratch / "chunks"
-            chunks_dir.mkdir(parents=True, exist_ok=True)
-            meta: list[dict] = []
-            for i, chunk in enumerate(chunks):
-                f = chunks_dir / f"chunk_{i:02d}.md"
-                f.write_text(chunk, encoding="utf-8")
-                meta.append({"index": i, "size": f.stat().st_size, "concepts_count": 0})
-            write_json_atomic(chunks_dir / "manifest.json", meta)
-            _atomic_move(chunks_dir, self.settings.okf_dir / doc_id / "chunks")
-            logger.info("Backfill чанков %s: %d", doc_id, len(chunks))
-        finally:
-            if scratch.exists():
-                shutil.rmtree(scratch, ignore_errors=True)
+        blocks = parse_document(
+            filepath, filename,
+            attachments_dir=self.settings.uploads_dir / doc_id / "attachments",
+        )
+        markdown = blocks_to_markdown(blocks)
+        chunks = self.okf_generator.chunk_text(markdown)
+        rows = [
+            {
+                "chunk_index": i,
+                "section_title": _extract_section_title(chunk),
+                "content": chunk,
+                "content_hash": hashlib.sha256(chunk.encode("utf-8")).hexdigest(),
+                "char_count": len(chunk),
+            }
+            for i, chunk in enumerate(chunks)
+        ]
+        with session_scope() as s:
+            replace_chunks(s, doc_id, rows)
+        logger.info("Backfill чанков %s: %d", doc_id, len(chunks))
 
 
-def _read_chunks_manifest(path: Path) -> list[dict]:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+def _chunks_meta_from_db(doc_id: str) -> list[dict]:
+    """Мета чанков из document_chunks (БД): [{index, size, concepts_count}]."""
+    from sqlalchemy import func
+
+    from app.db.models import DocumentChunk, OkfConcept
+
+    with session_scope() as s:
+        chunks = (
+            s.query(DocumentChunk)
+            .filter(DocumentChunk.doc_id == doc_id)
+            .order_by(DocumentChunk.chunk_index)
+            .all()
+        )
+        if not chunks:
+            return []
+        counts = dict(
+            s.query(OkfConcept.chunk_index, func.count())
+            .filter(OkfConcept.doc_id == doc_id, OkfConcept.chunk_index.isnot(None))
+            .group_by(OkfConcept.chunk_index)
+            .all()
+        )
+    return [
+        {
+            "index": c.chunk_index,
+            "size": len((c.content or "").encode("utf-8")),
+            "concepts_count": counts.get(c.chunk_index, 0),
+        }
+        for c in chunks
+    ]
 
 
 def _chunks_meta_from_dir(directory: Path, manifest: dict | None = None) -> list[dict]:
@@ -727,6 +826,12 @@ def _merge_tags(base: list[str], extra: list[str]) -> list[str]:
 
 
 def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
+    """Собирает метаданные вложений (маркер-блоки + изображения).
+
+    base_dir — корень хранилища документа (uploads/<doc_id>/), поэтому saved_path
+    выходит относительным ("attachments/<имя>"). Бинарники остаются в FS; строка
+    БД (okf_attachments) — источник истины об их принадлежности/статусе.
+    """
     base = Path(base_dir).resolve()
     attachments = []
     for b in blocks:
@@ -737,15 +842,29 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
         relative = None
         if saved:
             try:
-                relative = str(Path(saved).resolve().relative_to(base))
+                relative = Path(saved).resolve().relative_to(base).as_posix()
             except ValueError:
-                relative = str(Path(saved))
+                relative = Path(saved).as_posix()
+        parsed = bool(meta.get("parsed"))
+        note = meta.get("note", "")
+        if parsed:
+            status = "parsed"
+        elif note and "глубина" in note:
+            status = "skipped_depth"
+        elif note and "лимит" in note:
+            status = "skipped_size"
+        elif saved:
+            status = "saved"
+        else:
+            status = "unsupported"
         attachments.append(
             {
                 "name": meta.get("name", ""),
                 "kind": meta.get("kind", "other"),
                 "caption": meta.get("caption", ""),
                 "saved_path": relative,
+                "is_processable": parsed,
+                "extraction_status": status,
             }
         )
     return attachments

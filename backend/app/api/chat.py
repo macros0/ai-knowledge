@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.models.schemas import ChatRequest, ChatResponse, ChatSource
 from app.prompts.store import get_store
 from app.services import chat_history
+from app.services.chunk_store import enrich_chunk_hits
 from app.services.citation import normalize_citations
 from app.services.concept_store import enrich_concept_hits
 from app.services.context_builder import (
@@ -83,6 +84,10 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         sources: list[ChatSource] = []
     else:
         enrich_concept_hits(hits)
+        # Этап 2b: полный текст чанков — из document_chunks (natural key), а не
+        # из payload Qdrant. Вызывается до merge_and_format, который читает
+        # payload["content"]/["section_title"] чанк-точек.
+        enrich_chunk_hits(hits)
 
         filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
         merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)

@@ -29,12 +29,10 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
 
 class TestOkfAttachmentsEndpoint:
     def _make_bundle(self, settings: Settings, doc_id: str = "a1b2c3d4e5f60718") -> None:
-        attach_dir = settings.okf_dir / doc_id / "attachments"
+        # Этап 2b: бинарники вложений — в uploads/<doc_id>/attachments/ (не в бандле).
+        attach_dir = settings.uploads_dir / doc_id / "attachments"
         attach_dir.mkdir(parents=True, exist_ok=True)
         (attach_dir / "image-0.png").write_bytes(PNG_MAGIC + b"fake-image")
-        (settings.okf_dir / doc_id / "concept.md").write_text(
-            "---\ntitle: Concept\n---\n\nbody", encoding="utf-8"
-        )
 
     def _client(self, tmp_path: Path, monkeypatch) -> TestClient:
         settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
@@ -63,7 +61,7 @@ class TestOkfAttachmentsEndpoint:
     def test_svg_attachment_served_as_download(self, tmp_path: Path, monkeypatch):
         """SVG-вложение (вектор stored XSS) не отдаётся inline даже с image/svg+xml."""
         settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
-        attach_dir = settings.okf_dir / "a1b2c3d4e5f60718" / "attachments"
+        attach_dir = settings.uploads_dir / "a1b2c3d4e5f60718" / "attachments"
         attach_dir.mkdir(parents=True, exist_ok=True)
         (attach_dir / "schema.svg").write_text(
             "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
@@ -143,11 +141,13 @@ class TestDocIdTraversalBlocked:
         assert not (secret_dir / "_files.json").exists()
 
     def test_valid_doc_id_still_lists_okf(self, tmp_path, monkeypatch):
-        """Регресс: легитимный hex-id проходит валидацию без обращения к БД."""
-        settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
-        bundle = settings.okf_dir / "a1b2c3d4e5f60718"
-        bundle.mkdir(parents=True)
-        (bundle / "concept.md").write_text("---\ntitle: Concept\n---\nbody", encoding="utf-8")
+        """Регресс: легитимный hex-id проходит валидацию; список идёт из БД (okf_concepts)."""
+        from app.db.models import Document, OkfConcept
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            s.add(Document(id="a1b2c3d4e5f60718", filename="c.docx", content_type="doc", size=1))
+            s.add(OkfConcept(doc_id="a1b2c3d4e5f60718", slug="concept", title="Concept", content="body"))
         client = make_client(tmp_path, monkeypatch)
 
         with client:

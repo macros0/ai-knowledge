@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.config import get_settings
 from app.models.schemas import SearchHit, SearchRequest, SearchResponse
+from app.services.chunk_store import enrich_chunk_hits
 from app.services.concept_store import enrich_concept_hits
 from app.services.context_builder import merge_and_format, resolve_branches
 from app.services.embedder import Embedder
@@ -44,6 +45,7 @@ def search(req: SearchRequest):
     hits = drop_invisible_hits(hits, doc_lookup)
 
     enrich_concept_hits(hits)
+    enrich_chunk_hits(hits)
 
     filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
     merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)

@@ -312,8 +312,10 @@ class TestProcessDoc:
         chunk-точки не трогаются."""
         settings, bundle = _setup_doc(tmp_path)
         old_md = bundle / "kommentariy-retsenzenta-llm.md"
-        old_pid = str(uuid.uuid5(uuid.NAMESPACE_URL, str(old_md)))
-        chunk_pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{DOC_ID}/chunks/chunk_00.md"))
+        from app.services.vector_store import chunk_point_id, concept_point_id
+
+        old_pid = concept_point_id(DOC_ID, old_md.stem)
+        chunk_pid = chunk_point_id(DOC_ID, 0)
         embedder, vs, fake_q = _fake_services(
             settings,
             monkeypatch,

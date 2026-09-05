@@ -4,7 +4,6 @@
 """Роуты загрузки и управления документами."""
 import json
 import mimetypes
-import os
 import re
 from datetime import date, datetime, time, timezone
 from pathlib import Path
@@ -16,6 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.auth.models import User
 from app.auth.service import require_role, require_user
 from app.config import get_settings
+from app.db.models import DocumentChunk, OkfAttachment, OkfConcept
+from app.db.session import session_scope
 from app.models.schemas import (
     BulkOperationRequest,
     BulkPreviewOut,
@@ -679,61 +680,65 @@ def download_document(doc_id: str):
     )
 
 
-@router.get("/{doc_id}/okf", response_model=list[OkfFileOut])
-def list_okf_files(doc_id: str):
-    # FS-first эндпоинт (до registry-гейта) — валидация формата обязательна:
-    # иначе `okf_dir / doc_id` допускает `..`/абсолютный путь (листинг чужого
-    # каталога + запись туда `_files.json`).
+@router.post("/{doc_id}/export-okf")
+def export_okf_document(
+    doc_id: str,
+    request: Request,
+    user: User = Depends(require_user),
+):
+    """Экспорт OKF-бандла (YAML/Markdown + _files.json + chunks + attachments) из БД в ZIP.
+
+    Этап 2b / Фаза 5: бандл — производная проекция PostgreSQL, генерируется по
+    явному запросу; в штатной работе файлы не требуются.
+    """
+    import io
+    import tempfile
+    import zipfile
+
+    from app.services.export_okf import export_okf_bundle
+
     if not _valid_doc_id(doc_id):
         raise HTTPException(status_code=404, detail="Документ не найден")
-    bundle_dir = get_settings().okf_dir / doc_id
-    manifest_path = bundle_dir / "_files.json"
-    if manifest_path.is_file():
+    doc = _registry.get(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp) / "bundle"
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            return [
-                OkfFileOut(
-                    filename=entry["filename"],
-                    filepath=str(bundle_dir / entry["filename"]),
-                    title=entry.get("title", entry["filename"]),
-                    type=entry.get("type", "concept"),
-                    tags=entry.get("tags", []),
-                    size=entry.get("size", 0),
-                    chunk_index=entry.get("chunk_index"),
-                )
-                for entry in manifest
-            ]
-        except Exception:
-            pass
-    if bundle_dir.is_dir():
-        files = []
-        manifest = []
-        for f in sorted(bundle_dir.glob("*.md")):
-            meta = _read_frontmatter(f)
-            files.append(
-                OkfFileOut(
-                    filename=f.name,
-                    filepath=str(f),
-                    title=meta.get("title", f.stem),
-                    type=meta.get("type", "concept"),
-                    tags=meta.get("tags", []),
-                    size=f.stat().st_size,
-                    chunk_index=meta.get("chunk_index"),
-                )
-            )
-            manifest.append(
-                {
-                    "filename": f.name,
-                    "title": meta.get("title", f.stem),
-                    "type": meta.get("type", "concept"),
-                    "tags": meta.get("tags", []),
-                    "size": files[-1].size,
-                    "chunk_index": meta.get("chunk_index"),
-                }
-            )
-        if files:
-            _write_okf_manifest(bundle_dir, manifest)
-            return files
+            export_okf_bundle(doc_id, dest)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in sorted(dest.rglob("*")):
+                if f.is_file():
+                    zf.write(f, f.relative_to(dest).as_posix())
+        buf.seek(0)
+        audit.record(
+            user,
+            audit.DOCUMENT_EXPORT,
+            audit.TARGET_DOCUMENT,
+            target_id=doc_id,
+            ip_address=_client_ip(request),
+        )
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="okf_{doc_id}.zip"'},
+        )
+
+
+@router.get("/{doc_id}/okf", response_model=list[OkfFileOut])
+def list_okf_files(doc_id: str):
+    # DB-first (Этап 2b): список концептов — канонически в okf_concepts, файлы
+    # бандла — производная проекция. Валидация формата обязательна до любого
+    # доступа к ФС (staging-fallback использует doc_id как путь).
+    if not _valid_doc_id(doc_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    files = _okf_files_from_db(doc_id)
+    if files:
+        return files
     try:
         staging = StagingStore(doc_id)
         if staging.exists():
@@ -747,11 +752,10 @@ def list_okf_files(doc_id: str):
 def get_okf_file(doc_id: str, filename: str):
     if not _valid_doc_id(doc_id):
         raise HTTPException(status_code=404, detail="Файл не найден")
-    bundle_dir = (get_settings().okf_dir / doc_id).resolve()
-    filepath = (bundle_dir / filename).resolve()
-    if filepath.is_relative_to(bundle_dir) and filepath.is_file():
-        return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
     slug = filename.removesuffix(".md")
+    md = _concept_markdown_from_db(doc_id, slug)
+    if md is not None:
+        return Response(content=md, media_type="text/plain; charset=utf-8")
     try:
         staging = StagingStore(doc_id)
         if staging.exists():
@@ -777,7 +781,9 @@ def get_okf_file(doc_id: str, filename: str):
 def get_okf_attachment(doc_id: str, filename: str):
     if not _valid_doc_id(doc_id):
         raise HTTPException(status_code=404, detail="Файл не найден")
-    attach_dir = (get_settings().okf_dir / doc_id / "attachments").resolve()
+    # Этап 2b: бинарники вложений — в uploads/<doc_id>/attachments/ (байты-источники
+    # в FS, описанные в okf_attachments), а не в производном бандле.
+    attach_dir = (get_settings().uploads_dir / doc_id / "attachments").resolve()
     filepath = (attach_dir / filename).resolve()
     if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
         raise HTTPException(status_code=404, detail="Файл не найден")
@@ -786,11 +792,11 @@ def get_okf_attachment(doc_id: str, filename: str):
         filepath,
         media_type=media_type,
         headers={
-            # Вложения бандла (в т.ч. .svg/.html с расширением из имени
-            # вложенного объекта) никогда не рендерятся inline при прямой
-            # навигации — только скачиваются: защита от stored XSS с сессией
-            # пользователя. Рендер во фронтенде идёт как <img>-subresource,
-            # для которого Content-Disposition не влияет на загрузку.
+            # Вложения (в т.ч. .svg/.html с расширением из имени вложенного
+            # объекта) никогда не рендерятся inline при прямой навигации — только
+            # скачиваются: защита от stored XSS с сессией пользователя. Рендер во
+            # фронтенде идёт как <img>-subresource, для которого
+            # Content-Disposition не влияет на загрузку.
             "Content-Disposition": "attachment",
             "X-Content-Type-Options": "nosniff",
         },
@@ -813,10 +819,9 @@ def list_chunks(doc_id: str):
 def get_chunk(doc_id: str, chunk_index: int):
     if not _valid_doc_id(doc_id):
         raise HTTPException(status_code=404, detail="Чанк не найден")
-    chunks_dir = (get_settings().okf_dir / doc_id / "chunks").resolve()
-    filepath = (chunks_dir / f"chunk_{chunk_index:02d}.md").resolve()
-    if filepath.is_relative_to(chunks_dir) and filepath.is_file():
-        return Response(content=filepath.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+    content = _chunk_content_from_db(doc_id, chunk_index)
+    if content is not None:
+        return Response(content=content, media_type="text/plain; charset=utf-8")
     try:
         staging = StagingStore(doc_id)
         if staging.exists():
@@ -830,19 +835,17 @@ def get_chunk(doc_id: str, chunk_index: int):
 
 @router.get("/{doc_id}/fulltext")
 def get_document_fulltext(doc_id: str):
-    # FS-first: как list_chunks — валидация до любого доступа к файловой системе.
+    # Этап 2b: полный текст — конкатенация document_chunks (БД), а не чтение
+    # chunk_XX.md из бандла.
     if not _valid_doc_id(doc_id):
         raise HTTPException(status_code=404, detail="Документ не найден")
-    try:
-        _pipeline.ensure_chunks(doc_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    chunks_dir = (get_settings().okf_dir / doc_id / "chunks").resolve()
-    if not chunks_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Текст документа не найден")
-    parts = []
-    for f in sorted(chunks_dir.glob("chunk_*.md"), key=lambda p: int(p.stem.split("_")[-1])):
-        parts.append(f.read_text(encoding="utf-8"))
+    parts = _fulltext_from_db(doc_id)
+    if not parts:
+        try:
+            _pipeline.ensure_chunks(doc_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        parts = _fulltext_from_db(doc_id)
     if not parts:
         raise HTTPException(status_code=404, detail="Текст документа не найден")
     return Response(content="\n\n".join(parts), media_type="text/plain; charset=utf-8")
@@ -890,20 +893,103 @@ def _to_trash_item(doc: dict, retention_days: int) -> dict:
 def _document_head(doc_id: str, doc: dict) -> str:
     """Голова текста документа («титульный лист») для автоопределения разработки.
 
-    Читает первый чанк из бандла; если бандла нет — строит чанки из исходника
-    через ensure_chunks (ленивый backfill без LLM). Возвращает до dev_title_page_chars.
+    Этап 2b: читает chunk 0 из document_chunks (БД); если нет — ленивый backfill
+    через ensure_chunks. Возвращает до dev_title_page_chars.
     """
     settings = get_settings()
-    chunks_dir = settings.okf_dir / doc_id / "chunks"
-    chunk0 = chunks_dir / "chunk_00.md"
-    if not chunk0.is_file():
+    content = _chunk_content_from_db(doc_id, 0)
+    if content is None:
         try:
             _pipeline.ensure_chunks(doc_id)
         except Exception:
             pass
-    if chunk0.is_file():
-        return chunk0.read_text(encoding="utf-8")[: settings.dev_title_page_chars]
+        content = _chunk_content_from_db(doc_id, 0)
+    if content:
+        return content[: settings.dev_title_page_chars]
     return ""
+
+
+def _okf_files_from_db(doc_id: str) -> list[OkfFileOut]:
+    """OkfFileOut[] из okf_concepts (БД) — канонический список концептов документа."""
+    okf_dir = get_settings().okf_dir / doc_id
+    with session_scope() as s:
+        rows = (
+            s.query(OkfConcept)
+            .filter(OkfConcept.doc_id == doc_id)
+            .order_by(OkfConcept.slug)
+            .all()
+        )
+    return [
+        OkfFileOut(
+            filename=f"{c.slug}.md",
+            filepath=str(okf_dir / f"{c.slug}.md"),
+            title=c.title,
+            type=c.type,
+            tags=list(c.tags or []),
+            size=len((c.content or "").encode("utf-8")),
+            chunk_index=c.chunk_index,
+        )
+        for c in rows
+    ]
+
+
+def _concept_markdown_from_db(doc_id: str, slug: str) -> str | None:
+    """Рендерит markdown концепта из okf_concepts (БД) — зеркало бандл-файла."""
+    doc = _registry.get(doc_id)
+    if doc is None:
+        return None
+    with session_scope() as s:
+        c = (
+            s.query(OkfConcept)
+            .filter(OkfConcept.doc_id == doc_id, OkfConcept.slug == slug)
+            .first()
+        )
+        if c is None:
+            return None
+        attachments = [
+            {"name": a.name, "kind": a.kind, "caption": a.caption, "saved_path": a.saved_path}
+            for a in s.query(OkfAttachment).filter(OkfAttachment.doc_id == doc_id).all()
+        ]
+        concept = Concept(
+            id="",
+            title=c.title,
+            type=c.type,
+            tags=list(c.tags or []),
+            content=c.content or "",
+            relations=list(c.relations or []),
+        )
+        generated_at = c.generated_at.date().isoformat() if c.generated_at else None
+        chunk_index = c.chunk_index
+    return _build_markdown(
+        concept,
+        doc.get("filename", ""),
+        doc_id,
+        attachments=attachments,
+        global_tags=list(doc.get("tags") or []),
+        chunk_index=chunk_index,
+        generated_at=generated_at,
+    )
+
+
+def _chunk_content_from_db(doc_id: str, chunk_index: int) -> str | None:
+    with session_scope() as s:
+        row = (
+            s.query(DocumentChunk.content)
+            .filter(DocumentChunk.doc_id == doc_id, DocumentChunk.chunk_index == chunk_index)
+            .first()
+        )
+    return row[0] if row else None
+
+
+def _fulltext_from_db(doc_id: str) -> list[str]:
+    with session_scope() as s:
+        rows = (
+            s.query(DocumentChunk.content)
+            .filter(DocumentChunk.doc_id == doc_id)
+            .order_by(DocumentChunk.chunk_index)
+            .all()
+        )
+    return [r[0] for r in rows]
 
 
 def _resolve_doc_ids(doc_ids: list[str], max_docs: int) -> list[str]:
@@ -922,30 +1008,6 @@ def _resolve_doc_ids(doc_ids: list[str], max_docs: int) -> list[str]:
             status_code=404, detail="Документы не найдены: " + ", ".join(missing)
         )
     return unique
-
-
-def _read_frontmatter(path: Path) -> dict:
-    import yaml
-
-    text = path.read_text(encoding="utf-8")
-    if text.startswith("---"):
-        try:
-            _, fm, _ = text.split("---", 2)
-            return yaml.safe_load(fm) or {}
-        except Exception:
-            return {}
-    return {}
-
-
-def _write_okf_manifest(bundle_dir: Path, manifest: list[dict]) -> None:
-    tmp_path = bundle_dir / "._files.json.tmp"
-    try:
-        tmp_path.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        os.replace(tmp_path, bundle_dir / "_files.json")
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
 
 
 def _staging_to_okf_files(staging: StagingStore) -> list[OkfFileOut]:

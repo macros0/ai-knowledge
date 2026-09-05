@@ -432,6 +432,38 @@ $c = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)
 - `data/` — runtime: `uploads/`, `okf_bundles/`, `staging/`, `documents.json`
 - `scripts/` — старт/стоп всего стека
 
+## PostgreSQL — единственный источник истины (Этап 2b, завершён 05.09.2026)
+
+Миграция «БД canonical / FS байты / Qdrant slim-проекция / бандлы экспорт» завершена.
+Штатное чтение концептов, чанков, вложений и reindex идёт из PostgreSQL — `.md`-бандлы
+НЕ участвуют в рабочем чтении.
+
+- **Таблицы**: `document_chunks` (полный текст чанков, `UNIQUE(doc_id, chunk_index)`);
+  `okf_attachments` (оживлена: `saved_path` относительный `attachments/<имя>`,
+  `UNIQUE(doc_id, saved_path)`, `content_type/size/sha256/is_processable/extraction_status`);
+  `okf_concepts` + provenance (`generated_at/model_id/prompt_version`). Alembic head `f0a1b2c3d4e5`.
+- **FS**: только байты-источники — `data/uploads/<doc_id>.<ext>` и бинарные вложения
+  `data/uploads/<doc_id>/attachments/`; `staging/`, `cache/`, `debug/`. Бандлы
+  (`data/okf_bundles/`) удалены — генерация по запросу: `POST /documents/{id}/export-okf`
+  или `python scripts/export_okf.py <doc_id>` (из БД).
+- **Qdrant**: коллекция `okf_knowledge_base_v2` (`.env QDRANT_COLLECTION`), логические
+  point_id `uuid5("okf:concept:{doc_id}:{slug}")` / `uuid5("okf:chunk:{doc_id}:{chunk_index}")`
+  — единственные точки вычисления в `vector_store.concept_point_id/chunk_point_id`.
+  Slim payload (без content/filepath/section_title); полный текст гидрируется из БД:
+  концепты `concept_store.enrich_concept_hits` (по `(doc_id, slug)`), чанки
+  `chunk_store.enrich_chunk_hits` (по `(doc_id, chunk_index)`).
+- **Пайплайн**: финализация пишет чанки+концепты+вложения одной транзакцией
+  (`session_scope` + session-passing `replace_chunks/replace_concepts/replace_attachments`)
+  ДО Qdrant; провенанс per-chunk из `staging.chunks_data[].provenance`.
+- **Скрипты**: `backfill_db_store.py` (одноразовый перенос корпуса в БД),
+  `check_integrity.py` (БД↔FS↔Qdrant сверка), `rebuild_qdrant_v2.py` (пересборка
+  индекса из БД), `export_okf.py`, `reindex.py` (теперь из БД). Диагностика/приёмка
+  поиска — `probe_sources.py` (baseline в `scripts/probe-baseline.json`, gitignored).
+- **Формула dense-эмбеддинга** едина (пайплайн = reindex = rebuild v2):
+  концепт `title + "\n" + content[:okf_max_concept_chars]`, чанк `section_title + "\n" +
+  text[:okf_max_chunk_index_chars]` — иначе rebuild из БД расходился бы со свежей
+  индексацией.
+
 ## i18n (RU/EN) — свой лёгкий механизм (05.09.2026)
 
 Локализация клиентского UI (RU + EN), переключатель `LocaleToggle` в топбаре сразу

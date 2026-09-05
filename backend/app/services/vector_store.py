@@ -24,7 +24,6 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 
 from app.config import get_settings
 from app.models.schemas import OkfDocument
-from app.services.bundle import parse_okf_file
 from app.services.errors import VectorStoreError
 from app.services.fusion import Hit
 from app.services.sparse import to_sparse_vector
@@ -104,6 +103,26 @@ def _sparse_text(title: str, content: str) -> str:
     формуле — иначе рестарт перезаписывает sparse из другого текста.
     """
     return f"{title}\n{content}" if title else content
+
+
+def concept_point_id(doc_id: str, slug: str) -> str:
+    """Детерминированный point_id концепта (uuid5 от логического ключа).
+
+    Фаза 4: логический ключ `okf:concept:{doc_id}:{slug}` без привязки к
+    абсолютному пути data_dir. Единственная точка вычисления id концепта —
+    index_concepts, backfill_sparse/relations, document_tag_service и
+    backfill_comment_concepts обязаны идти через этот хелпер.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"okf:concept:{doc_id}:{slug}"))
+
+
+def chunk_point_id(doc_id: str, chunk_index: int) -> str:
+    """Детерминированный point_id чанка (логический ключ, Фаза 4).
+
+    Единственная точка вычисления id чанка (index_chunks, backfill_chunks,
+    backfill_comment_concepts).
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"okf:chunk:{doc_id}:{chunk_index}"))
 
 def _not_deleted() -> qm.Filter:
     """Фильтр-обёртка, исключающий мягко удалённые точки (Этап 4a.2 корзина).
@@ -317,8 +336,9 @@ class VectorStore:
         point_ids: set[str] = set()
         for okf_doc, vector in zip(okf_docs, vectors):
             meta = okf_doc.metadata
-            point_id = uuid.uuid5(uuid.NAMESPACE_URL, okf_doc.filepath)
-            point_ids.add(str(point_id))
+            slug = Path(okf_doc.filepath).stem
+            point_id = concept_point_id(doc_id, slug)
+            point_ids.add(point_id)
             title = meta.get("title", "")
             capped_content = okf_doc.content[:cap]
             # Sparse-вектор строится из title + content (единая формула
@@ -334,8 +354,7 @@ class VectorStore:
                     payload={
                         "point_type": CONCEPT_POINT_TYPE,
                         "doc_id": doc_id,
-                        "filepath": okf_doc.filepath,
-                        "slug": Path(okf_doc.filepath).stem,
+                        "slug": slug,
                         "title": title,
                         "type": meta.get("type", "concept"),
                         "tags": meta.get("tags", []),
@@ -387,11 +406,8 @@ class VectorStore:
         points = []
         point_ids: set[str] = set()
         for i, (text, vector, section_title) in enumerate(zip(chunk_texts, vectors, section_titles)):
-            point_id = uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                f"chunk:{doc_id}/chunks/chunk_{i:02d}.md",
-            )
-            point_ids.add(str(point_id))
+            point_id = chunk_point_id(doc_id, i)
+            point_ids.add(point_id)
             capped = text[:cap]
             sparse_text = _sparse_text(section_title, capped)
             points.append(
@@ -406,8 +422,6 @@ class VectorStore:
                         "doc_id": doc_id,
                         "chunk_index": i,
                         "tags": global_tags or [],
-                        "section_title": section_title,
-                        "content": capped,
                         "dev_tags": dev_tags,
                     },
                 )
@@ -758,170 +772,131 @@ class VectorStore:
                 break
 
     def backfill_sparse(self, batch_size: int = 100, *, force: bool = False) -> int:
-        """Добивает sparse-векторы для старых точек из OKF-бандлов.
+        """Добивает sparse-векторы для старых точек из PostgreSQL (okf_concepts).
 
-        id точки детерминирован (uuid5 от filepath бандла); sparse строится
-        из ТОГО ЖЕ текста, что при свежей индексации (parse_okf_file → title +
-        content по формуле _sparse_text) — frontmatter-поля (теги,
-        source_document, имена файлов) в BM25 не попадают. Dense-вектор и
-        payload существующей точки не затрагиваются.
+        Этап 2b: источник истины — БД, а не .md-бандлы. sparse строится по ТОЙ ЖЕ
+        формуле _sparse_text (title + content), что при свежей индексации.
+        Dense-вектор и payload существующей точки не затрагиваются.
 
         Идемпотентно: точки, у которых sparse-вектор уже есть, пропускаются
-        (scroll проверяет наличие named-вектора) — раньше каждый рестарт
-        пересчитывал весь корпус из полного текста .md, молча заменяя
-        правильные sparse-векторы испорченными (frontmatter в BM25).
-        force=True пересчитывает все точки бандлов — одноразовая миграция
-        после смены формулы текста (scripts/rebuild_sparse.py).
+        (scroll проверяет наличие named-вектора). force=True пересчитывает все
+        точки — одноразовая миграция после смены формулы текста (rebuild_sparse.py).
         """
-        if not self.settings.okf_dir.is_dir():
-            return 0
+        from sqlalchemy import select
+
+        from app.db.models import Document, OkfConcept
+        from app.db.session import session_scope
 
         existing: dict[str, bool] = {}
         for rec in self._scroll_points(with_payload=False, with_vectors=True):
             existing[str(rec.id)] = SPARSE_VECTOR_NAME in (rec.vector or {})
 
+        with session_scope() as s:
+            rows = s.execute(
+                select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.title, OkfConcept.content)
+                .join(Document, OkfConcept.doc_id == Document.id)
+                .where(Document.deleted_at.is_(None))
+            ).all()
+
         cap = self.settings.okf_max_concept_chars
         points: list[qm.PointVectors] = []
-        for bundle_dir in sorted(self.settings.okf_dir.iterdir()):
-            if not bundle_dir.is_dir():
+        for doc_id, slug, title, content in rows:
+            point_id = concept_point_id(doc_id, slug)
+            if point_id not in existing:
                 continue
-            for md in sorted(bundle_dir.glob("*.md")):
-                point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(md)))
-                if point_id not in existing:
-                    continue
-                if existing[point_id] and not force:
-                    continue  # sparse уже построен — не портим при рестарте
-                meta, body = parse_okf_file(md)
-                sparse_vec = to_sparse_vector(_sparse_text(meta.get("title", ""), body[:cap]))
-                if not sparse_vec.indices:
-                    continue
-                points.append(
-                    qm.PointVectors(id=point_id, vector={SPARSE_VECTOR_NAME: sparse_vec})
-                )
+            if existing[point_id] and not force:
+                continue  # sparse уже построен — не портим при рестарте
+            sparse_vec = to_sparse_vector(_sparse_text(title or "", (content or "")[:cap]))
+            if not sparse_vec.indices:
+                continue
+            points.append(
+                qm.PointVectors(id=point_id, vector={SPARSE_VECTOR_NAME: sparse_vec})
+            )
         total = len(points)
         for start in range(0, total, batch_size):
             batch = points[start : start + batch_size]
             self.client.update_vectors(collection_name=self.collection, points=batch)
         return total
 
-    def backfill_point_type(self, batch_size: int = 500) -> int:
-        """Добавляет point_type="concept" в payload существующих точек без этого поля.
-
-        Идемпотентно: пропускает точки, у которых point_type уже установлен.
-        Батчит set_payload одним списком ID вместо индивидуальных вызовов.
-        """
-        need_update: list[str] = []
-        next_offset = None
-        while True:
-            batch, next_offset = self.client.scroll(
-                collection_name=self.collection,
-                limit=batch_size,
-                with_payload=True,
-                with_vectors=False,
-                offset=next_offset,
-            )
-            for rec in batch:
-                payload = rec.payload or {}
-                if "point_type" not in payload:
-                    need_update.append(str(rec.id))
-            if next_offset is None:
-                break
-        if not need_update:
-            return 0
-        self.client.set_payload(
-            collection_name=self.collection,
-            payload={"point_type": CONCEPT_POINT_TYPE},
-            points=need_update,
-        )
-        return len(need_update)
-
     def backfill_chunks(self, embedder, batch_size: int = 64) -> int:
-        """Индексирует чанки из существующих OKF-бандлов (data/okf_bundles/*/chunks/).
+        """Индексирует чанки из PostgreSQL (document_chunks) — Этап 2b.
 
-        Для каждого бандла читает chunk_XX.md, вычисляет dense+sparse-векторы,
-        upsert как point_type="chunk". Идемпотентно: сущестующие точки
-        (детерминированный point_id) скипаются ЦЕЛИКОМ по бандлу — ДО вызова
-        эмбеддинга, поэтому рестарт не пере-эмбеддит весь корпус.
-
-        Совместимость с purge-порядком «строка БД удаляется первой»
-        (pipeline.remove_if_deleted) и корзиной (Этап 4a.2): бандлы, чей
-        документ отсутствует в БД (физически удалён / гонка с purge) или лежит
-        в корзине (deleted_at), пропускаются — orphan-точки с активным
-        payload не плодим. dev_tags — из БД (как у свежей индексации),
-        иначе pre-filter по разработке не матчит backfilled-чанки.
+        Для каждого done-документа (не в корзине) читает чанки из document_chunks,
+        вычисляет dense+sparse-векторы, upsert как point_type="chunk". Идемпотентно:
+        существующие точки (детерминированный point_id) скипаются ЦЕЛИКОМ по доку
+        ДО вызова эмбеддинга. dev_tags — из БД (development), global_tags — из
+        document_tags. Чанки документов, чей текст ещё не перенесён в БД, остаются
+        в Qdrant нетронутыми (существующие точки не удаляются).
         """
-        if not self.settings.okf_dir.is_dir():
-            return 0
         if not self.settings.search_index_chunks_enabled:
             return 0
 
-        from app.services.development_registry import get_development_registry
-        from app.services.pipeline import _extract_section_title
-        from app.services.registry import get_registry
+        from sqlalchemy import select
 
-        reg = get_registry()
+        from app.db.models import Document, DocumentChunk
+        from app.db.session import session_scope
+        from app.services.development_registry import get_development_registry
+
         dev_reg = get_development_registry()
 
         existing_ids: set[str] = set()
         for rec in self._scroll_points(with_payload=False, with_vectors=False):
             existing_ids.add(str(rec.id))
 
+        # Собрать состояние в память ДО эмбеддинга (не держим сессию БД во время
+        # долгих LLM-эмбеддингов).
+        docs_data: list[dict] = []
+        with session_scope() as s:
+            docs = s.execute(
+                select(Document.id, Document.filename, Document.development_id).where(
+                    # Не в корзине/не удалён. Статус не фильтруем: paused-документ
+                    # (finalize упал ПОСЛЕ записи чанков в БД, но ДО Qdrant) имеет
+                    # document_chunks без точек — backfill обязан их доиндексировать.
+                    Document.deleted_at.is_(None)
+                )
+            ).all()
+            for doc_id, filename, dev_id in docs:
+                chunks = (
+                    s.query(DocumentChunk)
+                    .filter(DocumentChunk.doc_id == doc_id)
+                    .order_by(DocumentChunk.chunk_index)
+                    .all()
+                )
+                if not chunks:
+                    continue
+                doc = s.get(Document, doc_id)
+                global_tags = [t.tag for t in (doc.tags_rel or [])]
+                docs_data.append(
+                    {
+                        "doc_id": doc_id,
+                        "filename": filename,
+                        "dev_id": dev_id,
+                        "global_tags": global_tags,
+                        "chunks": [
+                            (c.chunk_index, c.section_title or "", c.content or "")
+                            for c in chunks
+                        ],
+                    }
+                )
+
         chunk_points: list[qm.PointStruct] = []
-        for bundle_dir in sorted(self.settings.okf_dir.iterdir()):
-            if not bundle_dir.is_dir():
-                continue
-            doc_id = bundle_dir.name
-            chunks_dir = bundle_dir / "chunks"
-            if not chunks_dir.is_dir():
-                continue
-
-            doc = reg.get(doc_id)
-            if doc is None or doc.get("deleted_at"):
-                continue  # purge в процессе / корзина — orphan-точки не создаём
-            dev_id = doc.get("development_id")
-            dev_tags = dev_reg.dev_tags(dev_id) if dev_id else []
-
-            chunk_texts: list[str] = []
-            chunk_indices: list[int] = []
-            for md in sorted(chunks_dir.glob("chunk_*.md")):
-                idx = int(md.stem.split("_")[-1])
-                chunk_texts.append(md.read_text(encoding="utf-8"))
-                chunk_indices.append(idx)
-
-            if not chunk_texts:
-                continue
-
-            # Существующие точки скипаем ДО эмбеддинга (по детерминированным id).
-            point_ids = [
-                str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{idx:02d}.md"))
-                for idx in chunk_indices
-            ]
+        cap = self.settings.okf_max_chunk_index_chars
+        for d in docs_data:
+            doc_id = d["doc_id"]
+            point_ids = [chunk_point_id(doc_id, ci) for ci, _, _ in d["chunks"]]
             if all(pid in existing_ids for pid in point_ids):
-                continue  # весь бандл уже проиндексирован — эмбеддинг не нужен
+                continue  # весь документ уже проиндексирован — эмбеддинг не нужен
             embed_positions = [i for i, pid in enumerate(point_ids) if pid not in existing_ids]
 
-            section_titles = [_extract_section_title(t) for t in chunk_texts]
-            cap = self.settings.okf_max_chunk_index_chars
             embed_inputs = []
             for i in embed_positions:
-                st, t = section_titles[i], chunk_texts[i]
+                st, t = d["chunks"][i][1], d["chunks"][i][2]
                 embed_inputs.append(f"{st}\n{t[:cap]}" if st else t[:cap])
             vectors = embedder.embed_texts(embed_inputs)
 
-            global_tags: list[str] = []
-            for md in sorted(bundle_dir.glob("*.md")):
-                if md.parent.name == "chunks":
-                    continue
-                frontmatter = _read_frontmatter(md)
-                gt = frontmatter.get("global_tags", [])
-                if isinstance(gt, list) and gt:
-                    global_tags = gt
-                    break
-
+            dev_tags = dev_reg.dev_tags(d["dev_id"]) if d["dev_id"] else []
             for pos, vec in zip(embed_positions, vectors):
-                text = chunk_texts[pos]
-                st = section_titles[pos]
-                idx = chunk_indices[pos]
+                ci, st, text = d["chunks"][pos]
                 capped = text[:cap]
                 sparse_text = _sparse_text(st, capped)
                 chunk_points.append(
@@ -934,11 +909,9 @@ class VectorStore:
                         payload={
                             "point_type": CHUNK_POINT_TYPE,
                             "doc_id": doc_id,
-                            "chunk_index": idx,
-                            "tags": global_tags,
+                            "chunk_index": ci,
+                            "tags": d["global_tags"],
                             "dev_tags": dev_tags,
-                            "section_title": st,
-                            "content": capped,
                         },
                     )
                 )
@@ -986,39 +959,34 @@ class VectorStore:
         return indexed_points
 
     def backfill_relations(self, batch_size: int = 500) -> int:
-        """Нормализует relations в payload концептов из OKF-бандлов на диске.
+        """Нормализует relations в payload концептов из PostgreSQL (okf_concepts).
 
-        Перечитывает .md-бандлы, парсит frontmatter, нормализует relations через
-        _parse_relation. Сравнивает с текущим значением в Qdrant — пропускает
-        неизменившиеся точки. Группирует изменившиеся по значению relations и
-        обновляет одним set_payload на группу (вместо per-point вызовов).
-        Идемпотентно.
+        Этап 2b: источник истины — БД (relations уже нормализованы при финализации).
+        Сравнивает с текущим значением в Qdrant — пропускает неизменившиеся точки.
+        Группирует изменившиеся по значению relations и обновляет одним set_payload
+        на группу (вместо per-point вызовов). Идемпотентно.
         """
-        from app.services.okf_generator import _parse_relation
+        from sqlalchemy import select
 
-        if not self.settings.okf_dir.is_dir():
+        from app.db.models import Document, OkfConcept
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            rows = s.execute(
+                select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.relations)
+                .join(Document, OkfConcept.doc_id == Document.id)
+                .where(Document.deleted_at.is_(None))
+            ).all()
+
+        okf_dir = self.settings.okf_dir
+        db_relations: dict[str, list[str]] = {}
+        for doc_id, slug, relations in rows:
+            point_id = concept_point_id(doc_id, slug)
+            db_relations[point_id] = list(relations or [])
+
+        if not db_relations:
             return 0
 
-        # 1. Собираем нормализованные relations из бандлов на диске
-        disk_relations: dict[str, list[str]] = {}
-        for bundle_dir in sorted(self.settings.okf_dir.iterdir()):
-            if not bundle_dir.is_dir():
-                continue
-            for md in sorted(bundle_dir.glob("*.md")):
-                if md.parent.name == "chunks":
-                    continue
-                point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(md)))
-                frontmatter = _read_frontmatter(md)
-                raw_relations = frontmatter.get("relations", [])
-                if not isinstance(raw_relations, list):
-                    continue
-                normalized = [_parse_relation(str(r)) for r in raw_relations if str(r).strip()]
-                disk_relations[point_id] = normalized
-
-        if not disk_relations:
-            return 0
-
-        # 2. Scroll существующих точек, получаем текущие relations
         existing: dict[str, list[str]] = {}
         next_offset = None
         while True:
@@ -1031,15 +999,14 @@ class VectorStore:
             )
             for rec in batch:
                 pid = str(rec.id)
-                if pid in disk_relations:
+                if pid in db_relations:
                     payload = rec.payload or {}
                     existing[pid] = list(payload.get("relations", []))
             if next_offset is None:
                 break
 
-        # 3. Фильтруем: только изменившиеся
         changed: dict[str, list[str]] = {}
-        for pid, normalized in disk_relations.items():
+        for pid, normalized in db_relations.items():
             current = existing.get(pid)
             if current is None:
                 continue  # точка удалена из Qdrant
@@ -1049,7 +1016,6 @@ class VectorStore:
         if not changed:
             return 0
 
-        # 4. Группируем по значению relations → один set_payload на группу
         groups: dict[tuple[str, ...], list[str]] = {}
         for pid, normalized in changed.items():
             key = tuple(normalized)
@@ -1064,21 +1030,3 @@ class VectorStore:
             )
             total += len(point_ids)
         return total
-
-
-def _read_frontmatter(path: Path) -> dict:
-    """Читает YAML frontmatter из .md файла (между --- и ---)."""
-    import yaml
-
-    try:
-        text = path.read_text(encoding="utf-8")
-        if not text.startswith("---"):
-            return {}
-        end = text.find("\n---", 4)
-        if end == -1:
-            return {}
-        frontmatter_text = text[4:end]
-        result = yaml.safe_load(frontmatter_text)
-        return result if isinstance(result, dict) else {}
-    except Exception:
-        return {}

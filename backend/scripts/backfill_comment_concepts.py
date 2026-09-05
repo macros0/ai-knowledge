@@ -49,11 +49,13 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db.models import Document
+from app.db.session import session_scope
 from app.services.comment_concepts import extract_comment_concepts
 from app.services.concept_store import replace_concepts
 from app.services.okf_generator import OKFGenerator, _slugify
 from app.services.pipeline import _atomic_move
 from app.services.registry import get_registry
+from app.services.vector_store import chunk_point_id, concept_point_id
 from app.services.bundle import load_bundle
 from app.models.schemas import Concept
 
@@ -227,7 +229,8 @@ def process_doc(
         d.filepath = str(bundle_dir / Path(d.filepath).name)
 
     # 5. БД (полный список!) + Qdrant (только новые + очистка орфанов)
-    replace_concepts(doc_id, okf_docs)
+    with session_scope() as s:
+        replace_concepts(s, doc_id, okf_docs)
 
     dev_tags: list[str] = []
     if development_id:
@@ -247,9 +250,9 @@ def process_doc(
         vector_store.ensure_collection()
         vector_store.index_concepts(doc_id, new_docs, vectors, dev_tags=dev_tags)
 
-    keep = {str(uuid.uuid5(uuid.NAMESPACE_URL, d.filepath)) for d in okf_docs}
+    keep = {concept_point_id(doc_id, Path(d.filepath).stem) for d in okf_docs}
     for i in range(len(chunk_texts)):  # chunk-точки не трогаем — в keep
-        keep.add(str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{i:02d}.md")))
+        keep.add(chunk_point_id(doc_id, i))
     vector_store.delete_orphaned_points(doc_id, keep)
 
     get_registry().update(doc_id, okf_concept_count=len(okf_docs))

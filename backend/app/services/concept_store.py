@@ -8,6 +8,7 @@ payload Qdrant становится slim (без content) — полный те�
 """
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import select, tuple_
@@ -16,28 +17,44 @@ from app.db.models import OkfConcept
 from app.db.session import session_scope
 
 
-def replace_concepts(doc_id: str, okf_docs: list) -> None:
+def _parse_iso(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def replace_concepts(session, doc_id: str, okf_docs: list) -> None:
     """Заменяет концепты документа целиком (delete + insert), сохраняя полный текст.
 
-    Вызывается при финализации пайплайна. slug берётся из имени файла без .md
-    (stem) — совпадает со staging-слагами и полем slug в payload Qdrant.
+    Работает в ПЕРЕДАННОЙ сессии без commit — финализация пайплайна собирает
+    чанки + концепты + вложения в одну транзакцию (session_scope у вызывающего).
+    slug берётся из имени файла без .md (stem) — совпадает со staging-слагами и
+    полем slug в payload Qdrant. Provenance (generated_at/model_id/prompt_version)
+    читается из metadata, куда финализация кладёт её из staging chunks_data.
     """
-    with session_scope() as s:
-        s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).delete(synchronize_session=False)
-        for d in okf_docs:
-            meta = d.metadata or {}
-            s.add(
-                OkfConcept(
-                    doc_id=doc_id,
-                    slug=Path(d.filepath).stem,
-                    title=meta.get("title", ""),
-                    type=meta.get("type", "concept"),
-                    tags=list(meta.get("tags", []) or []),
-                    content=d.content or "",
-                    relations=list(meta.get("relations", []) or []),
-                    chunk_index=meta.get("chunk_index"),
-                )
+    session.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).delete(synchronize_session=False)
+    for d in okf_docs:
+        meta = d.metadata or {}
+        session.add(
+            OkfConcept(
+                doc_id=doc_id,
+                slug=Path(d.filepath).stem,
+                title=meta.get("title", ""),
+                type=meta.get("type", "concept"),
+                tags=list(meta.get("tags", []) or []),
+                content=d.content or "",
+                relations=list(meta.get("relations", []) or []),
+                chunk_index=meta.get("chunk_index"),
+                generated_at=_parse_iso(meta.get("generated_at")),
+                model_id=meta.get("model_id"),
+                prompt_version=meta.get("prompt_version"),
             )
+        )
 
 
 def fetch_contents(doc_slug_pairs: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
@@ -57,27 +74,40 @@ def fetch_contents(doc_slug_pairs: list[tuple[str, str]]) -> dict[tuple[str, str
     return {(doc_id, slug): content for doc_id, slug, content in rows}
 
 
+def _slug_of(hit) -> str:
+    """slug концепта из payload: новое поле `slug` (Фаза 4) с fallback на
+    stem filepath (legacy-точки старой коллекции)."""
+    slug = hit.payload.get("slug")
+    if slug:
+        return str(slug)
+    return Path(hit.payload.get("filepath", "")).stem
+
+
 def enrich_concept_hits(hits: list) -> list:
     """Подставляет полный content концептов в payload хитов (по doc_id+slug).
 
-    slug берётся из filepath (stem), чтобы не зависеть от формата поля slug в
-    payload (у старых точек мог быть filename с .md). Чанковые точки
-    (point_type="chunk") сохраняют content в payload — их не трогаем.
+    Фаза 4: payload концепта больше не несёт `filepath` — slug берётся из поля
+    `slug` (fallback на stem filepath для legacy-точек), а `filepath`
+    синтезируется для downstream (context_builder/chat/search). Чанковые точки
+    (point_type="chunk") не трогаем — их content гидрирует chunk_store.
     Возвращает тот же список hits (мутация payload на месте).
     """
     pairs: list[tuple[str, str]] = []
     for h in hits:
         if h.payload.get("point_type") == "concept":
             doc_id = h.payload.get("doc_id", "")
-            slug = Path(h.payload.get("filepath", "")).stem
+            slug = _slug_of(h)
             if doc_id and slug:
                 pairs.append((doc_id, slug))
     contents = fetch_contents(pairs)
     for h in hits:
-        if h.payload.get("point_type") == "concept":
-            doc_id = h.payload.get("doc_id", "")
-            slug = Path(h.payload.get("filepath", "")).stem
-            key = (doc_id, slug)
-            if key in contents:
-                h.payload["content"] = contents[key]
+        if h.payload.get("point_type") != "concept":
+            continue
+        doc_id = h.payload.get("doc_id", "")
+        slug = _slug_of(h)
+        key = (doc_id, slug)
+        if key in contents:
+            h.payload["content"] = contents[key]
+        if not h.payload.get("filepath"):
+            h.payload["filepath"] = f"{doc_id}/{slug}.md"
     return hits

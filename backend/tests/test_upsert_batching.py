@@ -18,7 +18,7 @@ import app.services.vector_store as vs_module
 from app.config import Settings
 from app.models.schemas import OkfDocument
 from app.services.errors import VectorStoreError
-from app.services.vector_store import VectorStore
+from app.services.vector_store import VectorStore, concept_point_id
 
 
 class _FakeQdrant:
@@ -90,9 +90,9 @@ class TestUpsertBatching:
         с итогами — документ встанет в paused, resume доотправит."""
         docs = _okf_docs(300)
         vectors = [[0.1] * 8 for _ in docs]
-        import uuid
+        from pathlib import Path
 
-        first_batch_id = str(uuid.uuid5(uuid.NAMESPACE_URL, docs[0].filepath))
+        first_batch_id = concept_point_id("a1b2c3d4e5f60718", Path(docs[0].filepath).stem)
         fake = _FakeQdrant(fail_ids={first_batch_id}, error=httpx.ConnectError("down"))
         monkeypatch.setattr(store, "client", fake)
 
@@ -105,9 +105,9 @@ class TestUpsertBatching:
         """422 живого Qdrant — дефект данных, ретраи бессмысленны."""
         docs = _okf_docs(300)
         vectors = [[0.1] * 8 for _ in docs]
-        import uuid
+        from pathlib import Path
 
-        first_batch_id = str(uuid.uuid5(uuid.NAMESPACE_URL, docs[0].filepath))
+        first_batch_id = concept_point_id("a1b2c3d4e5f60718", Path(docs[0].filepath).stem)
         err = UnexpectedResponse(
             status_code=422,
             reason_phrase="Unprocessable Entity",

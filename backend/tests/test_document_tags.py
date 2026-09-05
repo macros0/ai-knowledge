@@ -16,7 +16,7 @@ from app.services.audit import (
 from app.services.development_registry import get_development_registry
 from app.services.registry import get_registry
 from app.services.tag_registry import TagRegistry
-from app.services.vector_store import VectorStore
+from app.services.vector_store import VectorStore, concept_point_id
 
 DOC_ID = "0123456789abcdef"
 
@@ -104,6 +104,9 @@ class TestUpdateDocumentTags:
 
         from app.db.models import OkfConcept
         from app.db.session import session_scope
+
+        # Фаза 5: frontmatter переписывается только в dual-write (окф_бандлы на флаге).
+        settings.okf_write_bundles = True
 
         reg = get_registry()
         reg.create(DOC_ID, "a.docx", "x", 10, tags=["proxmox", "llm-user"])
@@ -288,7 +291,7 @@ class TestQdrantSync:
         assert captured["global_tags"] == ["proxmox", "vlan"]
         expected = [
             (
-                str(uuid_mod.uuid5(uuid_mod.NAMESPACE_URL, str(settings.okf_dir / DOC_ID / f"{slug}.md"))),
+                concept_point_id(DOC_ID, slug),
                 ["llm", "proxmox"],
             )
             for slug in ("k1", "k2")

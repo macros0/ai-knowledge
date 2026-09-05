@@ -48,6 +48,24 @@ class OKFGenerator:
     def chunk_text(self, markdown_text: str) -> list[str]:
         return _chunk_text(markdown_text, self.settings.okf_max_chunk_chars)
 
+    def prompt_version(self) -> str:
+        """SHA-256-префикс нормализованного набора промптов OKF-генерации.
+
+        Провенанс (Этап 2b): fingerprint фактических шаблонов okf_system/okf_user/
+        okf_chunk — нормализованных (CRLF→LF, срез хвостовых пробелов), чтобы
+        незначимые различия перевода строк не меняли версию. Хранится в
+        okf_concepts.prompt_version и позволяет понять «каким промптом построено».
+        """
+        import hashlib
+
+        digest = hashlib.sha256()
+        for key in ("okf_system", "okf_user", "okf_chunk"):
+            raw = self.prompts.get(key)
+            norm = "\n".join(line.rstrip() for line in raw.replace("\r\n", "\n").split("\n")).strip()
+            digest.update(norm.encode("utf-8"))
+            digest.update(b"\x00")
+        return digest.hexdigest()[:12]
+
     def generate_chunk(self, chunk: str, filename: str, index: int, total: int, doc_id: str = "unknown") -> list[Concept]:
         """Генерация OKF-концептов для одного чанка (индекс — 1-based).
 
@@ -129,7 +147,7 @@ class OKFGenerator:
             return self.prompts.format("okf_user", filename=filename, content=chunk)
         return self.prompts.format("okf_chunk", filename=filename, index=index, total=total, content=chunk)
 
-    def save_bundle(
+    def build_okf_docs(
         self,
         doc_id: str,
         filename: str,
@@ -138,10 +156,15 @@ class OKFGenerator:
         global_tags: list[str] | None = None,
         slugs: list[str] | None = None,
         chunk_of_slug: dict[str, int] | None = None,
-        bundle_root: Path | None = None,
-    ) -> list[OkfDocument]:
-        bundle_dir = bundle_root or self.bundle_root or self.settings.okf_dir / doc_id
-        bundle_dir.mkdir(parents=True, exist_ok=True)
+        bundle_dir: Path | None = None,
+    ) -> tuple[list[OkfDocument], list[dict]]:
+        """Строит OkfDocument[] + manifest БЕЗ записи файлов (Этап 2b).
+
+        Фаза 5: бандл — экспорт/архив, а не рабочее состояние. Финализация
+        пайплайна строит okf_docs в памяти (для replace_concepts/index_concepts),
+        а файлы .md пишутся только в dual-write (save_bundle) или при экспорте.
+        filepath — синтетический путь (slug определяет stem), файл не обязателен.
+        """
         global_tags = global_tags or []
         okf_docs: list[OkfDocument] = []
         seen: set[str] = set()
@@ -156,7 +179,7 @@ class OKFGenerator:
             if slug in seen:
                 slug = f"{slug}-{i}"
             seen.add(slug)
-            filepath = bundle_dir / f"{slug}.md"
+            filepath = bundle_dir / f"{slug}.md" if bundle_dir is not None else Path(f"{slug}.md")
             chunk_index = (chunk_of_slug or {}).get(slug)
             markdown = _build_markdown(
                 concept,
@@ -166,7 +189,6 @@ class OKFGenerator:
                 global_tags=global_tags,
                 chunk_index=chunk_index,
             )
-            filepath.write_text(markdown, encoding="utf-8")
             metadata = {
                 "type": concept.type,
                 "title": concept.title,
@@ -182,7 +204,7 @@ class OKFGenerator:
             )
             manifest.append(
                 {
-                    "filename": filepath.name,
+                    "filename": Path(filepath).name,
                     "title": concept.title,
                     "type": concept.type,
                     "tags": concept.tags,
@@ -190,6 +212,33 @@ class OKFGenerator:
                     "chunk_index": chunk_index,
                 }
             )
+        return okf_docs, manifest
+
+    def save_bundle(
+        self,
+        doc_id: str,
+        filename: str,
+        concepts: list[Concept],
+        attachments: list[dict] | None = None,
+        global_tags: list[str] | None = None,
+        slugs: list[str] | None = None,
+        chunk_of_slug: dict[str, int] | None = None,
+        bundle_root: Path | None = None,
+    ) -> list[OkfDocument]:
+        bundle_dir = bundle_root or self.bundle_root or self.settings.okf_dir / doc_id
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        okf_docs, manifest = self.build_okf_docs(
+            doc_id,
+            filename,
+            concepts,
+            attachments=attachments,
+            global_tags=global_tags,
+            slugs=slugs,
+            chunk_of_slug=chunk_of_slug,
+            bundle_dir=bundle_dir,
+        )
+        for doc in okf_docs:
+            Path(doc.filepath).write_text(doc.markdown, encoding="utf-8")
         write_json_atomic(bundle_dir / "_files.json", manifest)
         return okf_docs
 
@@ -201,6 +250,7 @@ def _build_markdown(
     attachments: list[dict] | None = None,
     global_tags: list[str] | None = None,
     chunk_index: int | None = None,
+    generated_at: str | None = None,
 ) -> str:
     meta = {
         "type": concept.type,
@@ -210,7 +260,7 @@ def _build_markdown(
         "source_document": {"filename": filename, "doc_id": doc_id},
         "relations": concept.relations,
         "attachments": attachments or [],
-        "created_at": date.today().isoformat(),
+        "created_at": generated_at or date.today().isoformat(),
     }
     if chunk_index is not None:
         meta["chunk_index"] = chunk_index

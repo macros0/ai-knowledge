@@ -143,9 +143,14 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
 
 ## 5. Данные и приватность
 
-- **Хранилища**: метаданные — PostgreSQL/SQLite (`app/db/`); бинарники и `.md`-бандлы —
-  `data/uploads`, `data/okf_bundles`, `data/staging`; векторы/мини-payload — Qdrant
-  (полный текст концепта хранится в `okf_concepts`, а не в payload Qdrant).
+- **Хранилища**: метаданные и обработанное знание — PostgreSQL/SQLite (`app/db/`):
+  `documents`, `document_tags`, `document_chunks` (полный текст чанков), `okf_concepts`
+  (полный текст концептов), `okf_attachments` (метаданные вложений). Бинарники
+  (оригиналы, вложения) и временные артефакты — FS: `data/uploads` (включая
+  `uploads/<doc_id>/attachments/`), `data/staging`, `data/cache`, `data/debug`;
+  `.md`-бандлы (`data/okf_bundles`) — производная проекция (экспорт), а не рабочее
+  хранилище. Векторы/мини-payload — Qdrant (slim, без полного текста — `content`
+  гидрируется из БД по natural key `(doc_id, slug)` / `(doc_id, chunk_index)`).
 - **Шифрование at rest**: не используется — полагается на шифрование диска/тома хоста
   и СУБД (см. «принятые риски»).
 - **Шифрование in transit**: только на внешнем reverse-proxy (HTTPS). Внутренняя сеть —
@@ -164,7 +169,8 @@ bulk-delete/bulk-regenerate (только `admin`). Лимит — `BULK_TAGS_MA
   в БД вовсе (восстановлен во время физической очистки, сбой финализации).
   Восстановление из корзины снимает оба флага без
   пере-эмбеддинга. Окончательное физическое удаление (Qdrant `Delete Points` +
-  `DELETE` из БД + файлы) — только фоновой задачей после истечения
+  `DELETE` из БД — включая строки `document_chunks` и `okf_attachments` — + файлы) —
+  только фоновой задачей после истечения
 `trash_retention_days` (14 дней); до этого восстановление доступно в любой
 момент — включая гонку с запущенной очисткой: физическое удаление начинается
 с атомарного claim'а строки БД с precondition `deleted_at IS NOT NULL`
@@ -278,6 +284,37 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
   компрометация `APP_SECRET_KEY` = компрометация всех сессий.
 
 ## 7. Журнал security-изменений
+
+### 2026-09-05 — Qdrant v2 + бандлы как экспорт (Этап 2b, Фазы 4–5)
+Изменение: коллекция Qdrant пересобрана (`okf_knowledge_base_v2`) из PostgreSQL
+с логическими point_id `uuid5("okf:concept:{doc_id}:{slug}")` /
+`uuid5("okf:chunk:{doc_id}:{chunk_index}")` (отвязка от абсолютного пути data_dir)
+и slim payload (без `content`/`filepath`/`section_title` — полный текст гидрируется
+из БД по natural key). `.md`-бандлы перестали быть рабочим состоянием
+(`okf_write_bundles=false` по умолчанию) и формируются только явным экспортом:
+новый эндпоинт `POST /documents/{id}/export-okf` (+ CLI `scripts/export_okf.py`)
+собирает YAML/Markdown-пакет из БД. Журнал ИБ дополнен action
+`document_export` (запись при каждом экспорте, target=document) — перечень
+`ACTION_TYPES`/`EXPECTED_ACTION_TYPES` обновлён. Причина: закрытие последней
+read-зависимости от файлов (поиск/чат/OKF/чанки/вложения/reindex читают БД);
+экспорт — переносимый артефакт, а не второй источник истины. Экспорт доступен
+любому аутентифицированному пользователю (как чтение) — отдельного
+разграничения не требуется, но действие журналируется.
+
+### 2026-09-05 — PostgreSQL становится SSOT: `document_chunks` + активация `okf_attachments` (Этап 2b, Фаза 0)
+Изменение: добавлена таблица `document_chunks` (полный текст чанков, порядок,
+заголовок секции, хэш — канонически в БД, а не только в FS-бандлах/пайлоаде
+Qdrant); `okf_attachments` перестаёт быть «мёртвой» таблицей (заполнялась лишь
+одноразовым миграционным скриптом) и получает рабочие колонки (`content_type`,
+`size`, `sha256`, `is_processable`, `extraction_status`, `processed_at`, `error`)
+с уникальностью `(doc_id, saved_path)` и относительным `saved_path`; `okf_concepts`
+дополнены provenance (`generated_at`, `model_id`, `prompt_version`). Бинарные
+вложения остаются в локальной FS. Причина: закрытие дыр консистентности —
+вложения существовали только в YAML/frontmatter, чанки — только в файлах и
+payload Qdrant; PostgreSQL закрепляется как единственный источник истины для
+структурированного знания. Следствие для retention: физическая очистка корзины
+(`registry.delete`/`delete_if_deleted`) теперь удаляет и строки `document_chunks`;
+soft delete/restore и atomic-claim-семантика purge без изменений.
 
 ### 2026-09-01 — Анти-DoS в doc-parser (цепочки вложений, zip-бомбы, сканы)
 Изменение: рекурсивный разбор вложений ограничен — `MAX_ATTACHMENT_DEPTH=3`

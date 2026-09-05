@@ -158,13 +158,12 @@ def _sync_qdrant_tags(doc_id: str) -> bool:
 
     from app.db.models import OkfConcept
     from app.db.session import session_scope
-    from app.services.vector_store import VectorStore
+    from app.services.vector_store import VectorStore, concept_point_id
 
     doc = _registry.get(doc_id)
     if doc is None:
         return False
     global_tags = list(doc.get("tags") or [])
-    okf_dir = get_settings().okf_dir
     concept_points: list[tuple[str, list[str]]] = []
     with session_scope() as s:
         rows = (
@@ -173,7 +172,7 @@ def _sync_qdrant_tags(doc_id: str) -> bool:
             .all()
         )
         for c in rows:
-            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(okf_dir / doc_id / f"{c.slug}.md")))
+            point_id = concept_point_id(doc_id, c.slug)
             concept_points.append((point_id, list(c.tags or [])))
     try:
         VectorStore().set_document_tags_payload(
@@ -289,7 +288,11 @@ def update_document_tags(
     if removed or added:
         removed_set = set(removed)
         _update_concept_tags_in_db(doc_id, removed_set, added)
-        _rewrite_bundle_frontmatter(doc_id, new_tags, removed_set, added)
+        # Фаза 5: frontmatter .md-бандлов — экспорт, не рабочее состояние. При
+        # okf_write_bundles=false файлов нет/они read-only, перезаписывать нечего;
+        # бандл для экспорта генерируется из БД (export_okf), не из этих файлов.
+        if get_settings().okf_write_bundles:
+            _rewrite_bundle_frontmatter(doc_id, new_tags, removed_set, added)
 
     # Qdrant: tags payload — фоновый best-effort синк; dev_tags — через dev_sync (Этап 4).
     schedule_document_tags_sync(doc_id)

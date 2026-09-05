@@ -320,9 +320,15 @@ class TestPipelineNoConcepts:
         doc = reg.get(doc_id)
         assert doc["status"] == "done"
         assert doc["okf_concept_count"] == 3
-        assert doc["okf_concept_count"] == len(list((pipeline.settings.okf_dir / doc_id).glob("*.md")))
+        # Фаза 5: canonical-число концептов сверяется с БД, а не с числом .md-файлов
+        # (бандлы по умолчанию не пишутся).
+        from app.db.models import OkfConcept
+        from app.db.session import session_scope
 
-    def test_chunks_persisted_in_bundle(self, isolated_env, monkeypatch):
+        with session_scope() as s:
+            assert s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).count() == 3
+
+    def test_chunks_persisted_in_db(self, isolated_env, monkeypatch):
         reg, src = isolated_env
         doc_id = "chunk-persist"
         reg.create(doc_id, "test.doc", "doc", 100)
@@ -337,12 +343,18 @@ class TestPipelineNoConcepts:
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
-        chunks_dir = pipeline.settings.okf_dir / doc_id / "chunks"
-        assert (chunks_dir / "chunk_00.md").is_file(), "текст чанка должен попадать в бандл"
-        assert (chunks_dir / "manifest.json").is_file()
-        meta = json.loads((chunks_dir / "manifest.json").read_text(encoding="utf-8"))
-        assert meta == [{"index": 0, "size": meta[0]["size"], "concepts_count": 1}]
-        assert (chunks_dir / "chunk_00.md").read_text(encoding="utf-8") == "тестовый текст"
+        # Фаза 5: чанки — канонически в document_chunks (БД), а не в бандле.
+        from app.db.models import DocumentChunk
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            rows = (
+                s.query(DocumentChunk)
+                .filter(DocumentChunk.doc_id == doc_id)
+                .order_by(DocumentChunk.chunk_index)
+                .all()
+            )
+        assert [c.content for c in rows] == ["тестовый текст"]
 
     def test_concept_frontmatter_has_chunk_index(self, isolated_env, monkeypatch):
         reg, src = isolated_env
@@ -356,6 +368,9 @@ class TestPipelineNoConcepts:
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
         pipeline.vector_store.index_concepts = lambda *a, **k: set()
         pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        # Dual-write: этот тест проверяет формат .md-бандла, поэтому включаем флаг.
+        pipeline.settings.okf_write_bundles = True
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -381,9 +396,18 @@ class TestEnsureChunks:
         meta = pipeline.ensure_chunks(doc_id)
         assert [m["index"] for m in meta] == [0, 1]
 
-        chunks_dir = pipeline.settings.okf_dir / doc_id / "chunks"
-        assert (chunks_dir / "chunk_00.md").read_text(encoding="utf-8") == "чанк 1"
-        assert (chunks_dir / "manifest.json").is_file()
+        # Этап 2b: ленивый backfill пишет чанки в document_chunks (БД), не в бандл.
+        from app.db.models import DocumentChunk
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            rows = (
+                s.query(DocumentChunk)
+                .filter(DocumentChunk.doc_id == doc_id)
+                .order_by(DocumentChunk.chunk_index)
+                .all()
+            )
+        assert [c.content for c in rows] == ["чанк 1", "чанк 2"]
 
         calls = {"n": 0}
 
@@ -434,6 +458,8 @@ class TestPipelineRegenerate:
         doc_id = "regen-full"
         pipeline = Pipeline()
         bundle = self._setup_done_doc(reg, pipeline, doc_id)
+        # Dual-write: тест проверяет пересоздание бандла — включаем флаг.
+        pipeline.settings.okf_write_bundles = True
 
         llm_calls = {"n": 0}
         delete_calls = {"n": 0}
@@ -570,3 +596,115 @@ class TestHasDuplicatesFlag:
 
         doc = reg.get(doc_id)
         assert doc["has_duplicates"] is False
+
+
+class TestPipelineDbStore:
+    """Этап 2b (PostgreSQL SSOT): финализация пишет чанки + концепты (+prov) +
+    вложения одной транзакцией; regenerate чистит их."""
+
+    def _run_done(self, reg, src, doc_id, monkeypatch, attachments=None) -> Pipeline:
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+        if attachments is not None:
+            monkeypatch.setattr(
+                "app.services.pipeline._collect_attachments", lambda b, d: attachments
+            )
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+        return pipeline
+
+    def test_finalize_writes_chunks_and_provenance(self, isolated_env, monkeypatch):
+        import hashlib
+
+        from app.db.models import DocumentChunk, OkfConcept
+        from app.db.session import session_scope
+
+        reg, src = isolated_env
+        doc_id = "db-store"
+        reg.create(doc_id, "test.doc", "doc", 100)
+        self._run_done(reg, src, doc_id, monkeypatch)
+
+        with session_scope() as s:
+            chunks = s.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).all()
+            assert len(chunks) == 1
+            c = chunks[0]
+            assert c.chunk_index == 0
+            assert c.content == "тестовый текст"
+            assert c.section_title == ""
+            assert c.content_hash == hashlib.sha256("тестовый текст".encode("utf-8")).hexdigest()
+            assert c.char_count == len("тестовый текст")
+
+            concepts = s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).all()
+            assert len(concepts) == 1
+            assert concepts[0].content == "текст концепта"
+            assert concepts[0].chunk_index == 0
+            # Провенанс (не путать с created_at — временем SQL INSERT).
+            assert concepts[0].generated_at is not None
+            assert concepts[0].model_id == "openai/test"
+            assert concepts[0].prompt_version and len(concepts[0].prompt_version) == 12
+
+    def test_finalize_writes_attachments(self, isolated_env, monkeypatch):
+        import hashlib
+
+        from app.config import get_settings
+        from app.db.models import OkfAttachment
+        from app.db.session import session_scope
+
+        reg, src = isolated_env
+        doc_id = "att-doc"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        settings = get_settings()
+        att_dir = settings.uploads_dir / doc_id / "attachments"
+        att_dir.mkdir(parents=True, exist_ok=True)
+        payload = b"\x89PNG\r\n\x1a\nfakepngdata"
+        (att_dir / "diagram.png").write_bytes(payload)
+
+        attachment = {
+            "name": "diagram.png",
+            "kind": "image",
+            "caption": "",
+            "saved_path": "attachments/diagram.png",
+            "is_processable": False,
+            "extraction_status": "saved",
+        }
+        self._run_done(reg, src, doc_id, monkeypatch, attachments=[attachment])
+
+        with session_scope() as s:
+            rows = s.query(OkfAttachment).filter(OkfAttachment.doc_id == doc_id).all()
+            assert len(rows) == 1
+            a = rows[0]
+            assert a.saved_path == "attachments/diagram.png"
+            assert a.kind == "image"
+            assert a.is_processable is False
+            assert a.extraction_status == "saved"
+            assert a.size == len(payload)
+            assert a.sha256 == hashlib.sha256(payload).hexdigest()
+
+    def test_regenerate_wipes_chunks(self, isolated_env, monkeypatch):
+        from app.config import get_settings
+        from app.db.models import DocumentChunk
+        from app.db.session import session_scope
+
+        reg, src = isolated_env
+        doc_id = "regen-wipe"
+        reg.create(doc_id, "test.doc", "doc", 100)
+        pipeline = self._run_done(reg, src, doc_id, monkeypatch)
+
+        with session_scope() as s:
+            assert s.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).count() == 1
+
+        settings = get_settings()
+        settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+        (settings.uploads_dir / f"{doc_id}.doc").write_text("исходник", encoding="utf-8")
+
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline._start = lambda *a, **k: None
+        pipeline.regenerate(doc_id)
+
+        with session_scope() as s:
+            assert s.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).count() == 0

@@ -243,11 +243,25 @@ class OkfConcept(Base):
     relations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     chunk_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # Провенанс генерации (Этап 2b, PostgreSQL SSOT): отличает момент/модель/промпт
+    # создания конкретной версии концепта от времени SQL INSERT (`created_at`).
+    # Не трогаются при правке тегов, смене разработки или синке Qdrant payload.
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (UniqueConstraint("doc_id", "slug", name="uq_okf_concepts_doc_slug"),)
 
 
 class OkfAttachment(Base):
+    """Вложение документа (Этап 2b: активация из «мёртвой» таблицы).
+
+    `saved_path` — относительный путь от корня хранилища документа
+    (`uploads/<doc_id>/`), например `attachments/appendix-001.docx`; байты —
+    в локальной FS, описание/принадлежность/хэш/статус — здесь. `sha256` и
+    `size` считаются потоково при финализации, файл целиком в память не грузится.
+    """
+
     __tablename__ = "okf_attachments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -258,6 +272,51 @@ class OkfAttachment(Base):
     kind: Mapped[str] = mapped_column(String(64), default="other")
     caption: Mapped[str] = mapped_column(Text, default="")
     saved_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Рекурсивно разобранный текстоизвлекаемый вкладыш (docx/xlsx/pdf) против
+    # бинарного (image/opaque) или пропущенного по лимитам.
+    is_processable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # parsed | saved | unsupported | skipped_depth | skipped_size
+    extraction_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Колонка зарезервирована под трекинг происхождения блоков (Этап 2c);
+    # в плоской модели заполняется NULL.
+    extracted_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("doc_id", "saved_path", name="uq_okf_attachments_doc_saved_path"),
+    )
+
+
+class DocumentChunk(Base):
+    """Финальный чанк документа (Этап 2b: PostgreSQL — единственный источник текста).
+
+    Полный текст чанка, заголовок секции, порядок и хэш — канонически в БД; Qdrant
+    хранит только slim-точку и гидрирует `content` отсюда по `(doc_id, chunk_index)`.
+    Сырые `chunk_XX.md` остаются в FS лишь как артефакт бандла/экспорта, а не как
+    рабочее состояние поиска.
+    """
+
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    doc_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    section_title: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    content: Mapped[str] = mapped_column(Text, default="")
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    char_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("doc_id", "chunk_index", name="uq_document_chunks_doc_index"),
+    )
 
 
 class DocumentStaging(Base):

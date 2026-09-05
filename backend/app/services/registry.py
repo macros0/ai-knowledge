@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import (
     Development,
     Document,
+    DocumentChunk,
     DocumentLshBucket,
     DocumentStaging,
     DocumentTag,
@@ -370,7 +371,7 @@ class DocumentRegistry:
 
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
-            for model in (OkfConcept, OkfAttachment, DocumentStaging, DocumentTag, DocumentLshBucket):
+            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentStaging, DocumentTag, DocumentLshBucket):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             doc = s.get(Document, doc_id)
             if doc is None:
@@ -394,7 +395,7 @@ class DocumentRegistry:
             doc = s.execute(stmt).scalar_one_or_none()
             if doc is None or doc.deleted_at is None:
                 return False
-            for model in (OkfConcept, OkfAttachment, DocumentStaging, DocumentTag, DocumentLshBucket):
+            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentStaging, DocumentTag, DocumentLshBucket):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             s.delete(doc)
             return True

@@ -126,12 +126,18 @@ class StagingStore:
         index: int,
         concepts: list[Concept],
         degradation: list[dict] | None = None,
+        provenance: dict | None = None,
     ) -> list[str]:
         """Сохраняет концепты чанка и обновляет manifest. Возвращает занятые слаги.
 
         degradation — события деградации генерации этого чанка (телеметрия
         gen_quality: salvage JSON, fallback классификатора таблиц). Хранятся
         в chunks_data, при финализации агрегируются в documents.problem.
+
+        provenance — провенанс генерации этого чанка (Этап 2b):
+        {generated_at (ISO), model_id, prompt_version}. Переживает resume:
+        при финализации попадает в okf_concepts.generated_at/model_id/
+        prompt_version, не перезаписываясь при смене только тегов/разработки.
         """
         with self._lock:
             manifest = self.load() or self.create(index + 1, global_tags=[])
@@ -148,6 +154,8 @@ class StagingStore:
             info = {"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs}
             if degradation:
                 info["degradation"] = degradation
+            if provenance:
+                info["provenance"] = provenance
             chunks_data[str(index)] = info
             manifest.update(
                 {

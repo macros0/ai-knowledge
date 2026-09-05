@@ -148,7 +148,7 @@ def process_embedded(
         ext = ".pdf" if kind == "pdf" else (detect_ooxml_ext(payload) or PROGID_EXT.get(prog_id, ""))
         if ext in SUPPORTED_EXTENSIONS:
             blocks = _parse_payload(payload, ext, att, attachments_dir, index, depth=depth, budget=budget)
-            return [marker_block(att)] + blocks
+            return [marker_block(att, parsed=True)] + blocks
 
     if attachments_dir is not None:
         if len(data) > MAX_ATTACHMENT_PAYLOAD:
@@ -161,7 +161,7 @@ def process_embedded(
     return [marker_block(att)]
 
 
-def marker_block(att: Attachment, note: str = "") -> Block:
+def marker_block(att: Attachment, note: str = "", parsed: bool = False) -> Block:
     meta: dict = {
         "attachment": True,
         "name": att.name,
@@ -171,6 +171,8 @@ def marker_block(att: Attachment, note: str = "") -> Block:
     }
     if note:
         meta["note"] = note
+    if parsed:
+        meta["parsed"] = True
     if att.saved_path:
         meta["saved_path"] = att.saved_path
     label = att.name or "вложение"

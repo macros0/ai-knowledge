@@ -210,6 +210,11 @@ class Settings(BaseSettings):
     # regex вместо нестабильного встраивания LLM; LLM получает заглушку
     # (см. services/comment_concepts.py и docparser markdown-формат треда).
     okf_comment_concepts_enabled: bool = True
+    # Этап 2b (PostgreSQL SSOT): при True пайплайн дополнительно пишет .md-бандлы
+    # (data/okf_bundles/<doc_id>/) как одностороннюю проекцию БД (экспорт/inspect).
+    # Фаза 5: default False — бандлы создаются только по явному запросу
+    # (export-okf); чтение поиска/OKF/чанков идёт из БД, файлы не требуются.
+    okf_write_bundles: bool = False
 
     chat_top_k_min: int = Field(default=1, ge=1)
     chat_top_k_max: int = Field(default=30, ge=1)

@@ -1,12 +1,11 @@
 """Тесты backfill-функций VectorStore (backfill_sparse / backfill_chunks).
 
 Фейковый Qdrant-клиент: scroll отдаёт подготовленные записи, update_vectors/
-upsert — записывают вызовы. Реальная БД (SQLite per-test из conftest) —
-для проверок registry-гейтов (корзина, dev_tags).
+upsert — записывают вызовы. Реальная БД (SQLite per-test из conftest) — источник
+истины (okf_concepts / document_chunks, Этап 2b): backfill читает БД, а не FS.
 """
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 import httpx
@@ -14,7 +13,7 @@ import pytest
 
 from app.config import Settings
 from app.services.sparse import to_sparse_vector
-from app.services.vector_store import SPARSE_VECTOR_NAME, VectorStore
+from app.services.vector_store import SPARSE_VECTOR_NAME, VectorStore, chunk_point_id, concept_point_id
 
 
 class _Rec:
@@ -58,30 +57,29 @@ def _vs(tmp_path, monkeypatch, records) -> tuple[VectorStore, FakeQdrant]:
     return vs, fake
 
 
-def _write_concept_md(okf_dir: Path, doc_id: str = "a1b2c3d4e5f60718") -> Path:
-    bundle = okf_dir / doc_id
-    bundle.mkdir(parents=True)
-    md = bundle / "concept.md"
-    md.write_text(
-        "---\n"
-        "title: Концепт 12410\n"
-        "tags: [уникальныйтег]\n"
-        "source_document: report.docx\n"
-        "---\n"
-        "\n"
-        "# Концепт 12410\n"
-        "\n"
-        "Тело концепта с деталями.\n",
-        encoding="utf-8",
-    )
-    return md
+def _create_db_concept(
+    doc_id: str = "a1b2c3d4e5f60718",
+    slug: str = "concept",
+    title: str = "Концепт 12410",
+    content: str = "Тело концепта с деталями.",
+) -> None:
+    from app.db.models import Document, OkfConcept
+    from app.db.session import session_scope
+
+    with session_scope() as s:
+        s.add(Document(id=doc_id, filename="report.docx", content_type="doc", size=1))
+        s.add(OkfConcept(doc_id=doc_id, slug=slug, title=title, content=content))
+
+
+def _concept_point_id(settings, doc_id: str, slug: str) -> str:
+    return concept_point_id(doc_id, slug)
 
 
 class TestBackfillSparse:
     def test_skips_points_with_existing_sparse(self, tmp_path, monkeypatch):
         settings = Settings(_env_file=None, data_dir=tmp_path)
-        md = _write_concept_md(settings.okf_dir)
-        point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(md)))
+        _create_db_concept()
+        point_id = _concept_point_id(settings, "a1b2c3d4e5f60718", "concept")
         vs, fake = _vs(
             tmp_path, monkeypatch, records=[_Rec(point_id, vector={"": [0.1] * 8, SPARSE_VECTOR_NAME: None})]
         )
@@ -92,24 +90,20 @@ class TestBackfillSparse:
     def test_backfills_missing_sparse_from_title_and_content_only(self, tmp_path, monkeypatch):
         """Sparse строится по формуле индексации (title + content), без frontmatter."""
         settings = Settings(_env_file=None, data_dir=tmp_path)
-        md = _write_concept_md(settings.okf_dir)
-        point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(md)))
+        _create_db_concept()
+        point_id = _concept_point_id(settings, "a1b2c3d4e5f60718", "concept")
         vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec(point_id, vector={"": [0.1] * 8})])
 
         assert vs.backfill_sparse() == 1
         assert len(fake.updated_vectors) == 1
         got = fake.updated_vectors[0].vector[SPARSE_VECTOR_NAME]
-        # Каноническая формула: "Концепт 12410\nТело концепта с деталями." —
-        # frontmatter (теги, source_document) в BM25 не попадает.
         expected = to_sparse_vector("Концепт 12410\nТело концепта с деталями.")
         assert got.indices == expected.indices
-        polluted = to_sparse_vector(md.read_text(encoding="utf-8"))
-        assert got.indices != polluted.indices
 
     def test_force_recomputes_even_with_sparse(self, tmp_path, monkeypatch):
         settings = Settings(_env_file=None, data_dir=tmp_path)
-        md = _write_concept_md(settings.okf_dir)
-        point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(md)))
+        _create_db_concept()
+        point_id = _concept_point_id(settings, "a1b2c3d4e5f60718", "concept")
         vs, fake = _vs(
             tmp_path,
             monkeypatch,
@@ -119,9 +113,9 @@ class TestBackfillSparse:
         assert vs.backfill_sparse(force=True) == 1
         assert len(fake.updated_vectors) == 1
 
-    def test_skips_points_not_in_bundles(self, tmp_path, monkeypatch):
+    def test_skips_points_not_in_db(self, tmp_path, monkeypatch):
         settings = Settings(_env_file=None, data_dir=tmp_path)
-        _write_concept_md(settings.okf_dir)  # бандл есть, но точки в Qdrant нет
+        _create_db_concept()  # концепт в БД есть, но точки в Qdrant нет
         vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec("orphan-point", vector={})])
 
         assert vs.backfill_sparse() == 0
@@ -129,31 +123,29 @@ class TestBackfillSparse:
 
 
 class TestBackfillChunks:
-    def _write_chunks(self, okf_dir: Path, doc_id: str = "1111111111111111") -> list[Path]:
-        chunks_dir = okf_dir / doc_id / "chunks"
-        chunks_dir.mkdir(parents=True)
-        paths = []
-        for i in range(2):
-            p = chunks_dir / f"chunk_{i:02d}.md"
-            p.write_text(f"Текст чанка {i}.\n", encoding="utf-8")
-            paths.append(p)
-        return paths
+    def _create_chunks(self, doc_id: str, n: int) -> None:
+        from app.db.models import Document, DocumentChunk
+        from app.db.session import session_scope
 
-    def _chunk_point_id(self, doc_id: str, idx: int) -> str:
-        return str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{idx:02d}.md")
-        )
+        with session_scope() as s:
+            if s.get(Document, doc_id) is None:
+                s.add(Document(id=doc_id, filename="a.pdf", content_type="application/pdf", size=1))
+            for i in range(n):
+                s.add(
+                    DocumentChunk(
+                        doc_id=doc_id,
+                        chunk_index=i,
+                        content=f"Текст чанка {i}.\n",
+                        char_count=len(f"Текст чанка {i}.\n"),
+                    )
+                )
 
     def test_no_reembed_when_all_points_exist(self, tmp_path, monkeypatch):
-        from app.services.registry import DocumentRegistry
-
-        settings = Settings(_env_file=None, data_dir=tmp_path)
         doc_id = "1111111111111111"
-        DocumentRegistry().create(doc_id, "a.pdf", "application/pdf", 1)
-        self._write_chunks(settings.okf_dir)
+        self._create_chunks(doc_id, 2)
         records = [
-            _Rec(self._chunk_point_id(doc_id, 0), vector={}),
-            _Rec(self._chunk_point_id(doc_id, 1), vector={}),
+            _Rec(chunk_point_id(doc_id, 0), vector={}),
+            _Rec(chunk_point_id(doc_id, 1), vector={}),
         ]
         vs, fake = _vs(tmp_path, monkeypatch, records)
         embedder = FakeEmbedder()
@@ -163,13 +155,9 @@ class TestBackfillChunks:
         assert fake.upserted == []
 
     def test_embeds_only_missing_chunks(self, tmp_path, monkeypatch):
-        from app.services.registry import DocumentRegistry
-
-        settings = Settings(_env_file=None, data_dir=tmp_path)
         doc_id = "1111111111111111"
-        DocumentRegistry().create(doc_id, "a.pdf", "application/pdf", 1)
-        self._write_chunks(settings.okf_dir)
-        records = [_Rec(self._chunk_point_id(doc_id, 0), vector={})]  # chunk 0 есть
+        self._create_chunks(doc_id, 2)
+        records = [_Rec(chunk_point_id(doc_id, 0), vector={})]  # chunk 0 есть
         vs, fake = _vs(tmp_path, monkeypatch, records)
         embedder = FakeEmbedder()
 
@@ -180,12 +168,10 @@ class TestBackfillChunks:
     def test_skips_trash_and_missing_docs(self, tmp_path, monkeypatch):
         from app.services.registry import DocumentRegistry
 
-        settings = Settings(_env_file=None, data_dir=tmp_path)
         reg = DocumentRegistry()
         reg.create("1111111111111111", "a.pdf", "application/pdf", 1)
         reg.soft_delete("1111111111111111", "u1")
-        self._write_chunks(settings.okf_dir, "1111111111111111")  # корзина
-        self._write_chunks(settings.okf_dir, "2222222222222222")  # нет строки в БД (purge)
+        self._create_chunks("1111111111111111", 2)  # корзина
         vs, fake = _vs(tmp_path, monkeypatch, records=[])
         embedder = FakeEmbedder()
 
@@ -197,13 +183,12 @@ class TestBackfillChunks:
         from app.services.development_registry import DevelopmentRegistry
         from app.services.registry import DocumentRegistry
 
-        settings = Settings(_env_file=None, data_dir=tmp_path)
         doc_id = "1111111111111111"
         dev = DevelopmentRegistry().create("123", "Разработка", created_by="u1")
         reg = DocumentRegistry()
         reg.create(doc_id, "a.pdf", "application/pdf", 1)
         reg.update(doc_id, development_id=dev["id"])
-        self._write_chunks(settings.okf_dir)
+        self._create_chunks(doc_id, 2)
         vs, fake = _vs(tmp_path, monkeypatch, records=[])
         embedder = FakeEmbedder()
 
@@ -216,25 +201,28 @@ class TestBackfillBatchResilience:
     """Пер-батчевая устойчивость (инцидент 03.09.2026): один битый батч
     (422 на коллизии sparse-индексов) не должен убивать весь backfill корпуса."""
 
-    def _chunk_point_id(self, doc_id: str, idx: int) -> str:
-        return str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"chunk:{doc_id}/chunks/chunk_{idx:02d}.md")
-        )
+    def _create_chunks(self, doc_id: str, n: int) -> None:
+        from app.db.models import Document, DocumentChunk
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            if s.get(Document, doc_id) is None:
+                s.add(Document(id=doc_id, filename="a.pdf", content_type="application/pdf", size=1))
+            for i in range(n):
+                s.add(
+                    DocumentChunk(
+                        doc_id=doc_id,
+                        chunk_index=i,
+                        content=f"Текст чанка {i}.\n",
+                        char_count=len(f"Текст чанка {i}.\n"),
+                    )
+                )
 
     def test_failed_batch_skipped_rest_indexed(self, tmp_path, monkeypatch, caplog):
-        from app.services.registry import DocumentRegistry
-
-        settings = Settings(_env_file=None, data_dir=tmp_path)
         doc_id = "1111111111111111"
-        DocumentRegistry().create(doc_id, "a.pdf", "application/pdf", 1)
-        chunks_dir = settings.okf_dir / doc_id / "chunks"
-        chunks_dir.mkdir(parents=True)
-        # 66 чанков → 2 батча по 64 (64+2)
-        for i in range(66):
-            (chunks_dir / f"chunk_{i:02d}.md").write_text(f"Текст чанка {i}.\n", encoding="utf-8")
+        self._create_chunks(doc_id, 66)  # 66 чанков → 2 батча по 64 (64+2)
 
         vs, _ = _vs(tmp_path, monkeypatch, records=[])
-
         # Батч 2 (чанки 64..65) падает всегда: 422-валидация не ретраится.
         monkeypatch.setattr(vs, "client", _BatchFailingQdrant(fail_from=64, fail_to=65))
         embedder = FakeEmbedder()
@@ -244,23 +232,14 @@ class TestBackfillBatchResilience:
         with caplog.at_level(logging.ERROR):
             indexed = vs.backfill_chunks(embedder, batch_size=64)
 
-        # 66 точек собраны, 64 проиндексированы (батч 1), возврат —
-        # число реально ушедших точек, не собранных.
         assert indexed == 64
         assert any("ЧАСТИЧНО" in r.message for r in caplog.records), (
             "итоговая сводка с счётчиками обязательна"
         )
 
     def test_all_batches_ok_returns_total(self, tmp_path, monkeypatch):
-        from app.services.registry import DocumentRegistry
-
-        settings = Settings(_env_file=None, data_dir=tmp_path)
         doc_id = "1111111111111111"
-        DocumentRegistry().create(doc_id, "a.pdf", "application/pdf", 1)
-        chunks_dir = settings.okf_dir / doc_id / "chunks"
-        chunks_dir.mkdir(parents=True)
-        for i in range(70):
-            (chunks_dir / f"chunk_{i:02d}.md").write_text(f"Текст чанка {i}.\n", encoding="utf-8")
+        self._create_chunks(doc_id, 70)
 
         vs, fake = _vs(tmp_path, monkeypatch, records=[])
         embedder = FakeEmbedder()

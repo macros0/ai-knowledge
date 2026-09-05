@@ -90,12 +90,6 @@ async def lifespan(app: FastAPI):
         except Exception:
             logging.exception("Бэкфилл sparse-векторов не удался — поиск BM25/гибрид может быть неполным")
         try:
-            n = vs.backfill_point_type()
-            if n:
-                logging.info("Бэкфилл point_type: %d точек", n)
-        except Exception:
-            logging.exception("Бэкфилл point_type не удался")
-        try:
             n = vs.backfill_relations()
             if n:
                 logging.info("Бэкфилл relations: %d точек", n)

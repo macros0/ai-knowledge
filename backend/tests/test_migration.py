@@ -11,20 +11,23 @@ from app.services.tag_registry import TagRegistry
 
 class TestConceptStore:
     def test_replace_and_fetch(self):
-        replace_concepts("doc1", [
-            OkfDocument(filepath="/x/auth-flow.md", metadata={"title": "Auth Flow", "type": "concept", "tags": ["t1"], "relations": ["other"], "chunk_index": 0}, content="полный текст", markdown="")
-        ])
+        with session_scope() as s:
+            replace_concepts(s, "doc1", [
+                OkfDocument(filepath="/x/auth-flow.md", metadata={"title": "Auth Flow", "type": "concept", "tags": ["t1"], "relations": ["other"], "chunk_index": 0}, content="полный текст", markdown="")
+            ])
         assert fetch_contents([("doc1", "auth-flow")]) == {("doc1", "auth-flow"): "полный текст"}
         assert fetch_contents([("doc1", "missing")]) == {}
 
     def test_replace_clears_previous(self):
-        replace_concepts("doc1", [
-            OkfDocument(filepath="/x/a.md", metadata={}, content="one", markdown=""),
-            OkfDocument(filepath="/x/b.md", metadata={}, content="two", markdown=""),
-        ])
-        replace_concepts("doc1", [
-            OkfDocument(filepath="/x/c.md", metadata={}, content="three", markdown=""),
-        ])
+        with session_scope() as s:
+            replace_concepts(s, "doc1", [
+                OkfDocument(filepath="/x/a.md", metadata={}, content="one", markdown=""),
+                OkfDocument(filepath="/x/b.md", metadata={}, content="two", markdown=""),
+            ])
+        with session_scope() as s:
+            replace_concepts(s, "doc1", [
+                OkfDocument(filepath="/x/c.md", metadata={}, content="three", markdown=""),
+            ])
         with session_scope() as s:
             slugs = {r for (r,) in s.query(OkfConcept.slug).filter(OkfConcept.doc_id == "doc1").all()}
         assert slugs == {"c"}

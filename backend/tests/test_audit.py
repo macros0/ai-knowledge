@@ -44,6 +44,7 @@ EXPECTED_ACTION_TYPES = {
     "document_auto_delete",
     "chat_history_view",
     "chat_history_auto_delete",
+    "document_export",
 }
 
 
