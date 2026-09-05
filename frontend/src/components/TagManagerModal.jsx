@@ -101,26 +101,26 @@ export default function TagManagerModal({ onClose }) {
           </button>
         </div>
         <ul className="tag-manager-list">
-          {filtered.map((t) => (
+          {filtered.map((tag) => (
             <li
-              key={t.name}
-              className={`tag-manager-item ${t.count === 0 ? "unused" : ""}`}
+              key={tag.name}
+              className={`tag-manager-item ${tag.count === 0 ? "unused" : ""}`}
             >
-              <span className="tag-manager-name" title={t.name}>
-                {t.name}
+              <span className="tag-manager-name" title={tag.name}>
+                {tag.name}
               </span>
               <span
                 className="tag-manager-count"
-                title={tc("tags.picker.usedIn", t.count)}
+                title={tc("tags.picker.usedIn", tag.count)}
               >
-                {t.count}
+                {tag.count}
               </span>
-              {t.count === 0 && (
+              {tag.count === 0 && (
                 <button
                   className="tag-manager-delete"
-                  onClick={() => removeOne(t.name)}
+                  onClick={() => removeOne(tag.name)}
                   disabled={busy}
-                  aria-label={t("tags.manager.deleteAria", { name: t.name })}
+                  aria-label={t("tags.manager.deleteAria", { name: tag.name })}
                 >
                   <TrashIcon size={14} />
                 </button>
