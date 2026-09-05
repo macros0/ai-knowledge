@@ -131,7 +131,7 @@ class Settings(BaseSettings):
     # Разделитель, если group-claim пришёл строкой, а не списком.
     keycloak_group_separator: str = ","
 
-    qdrant_url: str = "http://localhost:6333"
+    qdrant_url: str = "http://127.0.0.1:6333"
     # Опциональный API-ключ Qdrant. Локальный compose (профиль local-qdrant) и
     # локальный бинарь без авторизации — не нужен (None). Корпоративный Qdrant,
     # требующий авторизации по инфраструктурной политике, — задать здесь.
@@ -145,7 +145,7 @@ class Settings(BaseSettings):
 
     embedding_provider: str = "http"  # http | fake
     embedding_model: str = "ollama/bge-m3"
-    embedding_api_base: str | None = "http://localhost:11434"
+    embedding_api_base: str | None = "http://127.0.0.1:11434"
     embedding_api_key: str | None = None
     embedding_batch_size: int = 64
     embedding_timeout_seconds: float = 30.0
@@ -159,7 +159,7 @@ class Settings(BaseSettings):
     # фрагментов, чем себестоимость; OKF-генерация и пакетные задачи остаются
     # на дешёвой llm_model.
     llm_chat_model: str = ""
-    llm_base_url: str = "http://localhost:11434"
+    llm_base_url: str = "http://127.0.0.1:11434"
     llm_api_key: str = "ollama"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 4096

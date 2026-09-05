@@ -50,7 +50,19 @@ UI: http://localhost:3000
   Hyper-V/WSL (проверить: `netsh interface ipv4 show excludedportrange protocol=tcp`) — bind
   падает с `os error 10013`. Резервации меняются от загрузки к загрузке, поэтому выбраны порты
   выше динамического диапазона TCP (1024–15000) — HNS их не резервирует. `QDRANT_URL` в `.env`
-  уже `http://localhost:16333`.
+  уже `http://127.0.0.1:16333`.
+- **`localhost` на этой машине = +2с на каждое НОВОЕ TCP-соединение (05.09.2026, диагностика
+  инцидента «Готов, а поиск не находит»):** Qdrant (16333), Ollama (12400) и т.п. слушают только
+  IPv4 (`127.0.0.1`), а хост `localhost` резолвится на `::1` первым — connect к `::1` «виснет»
+  ~2.05с и лишь потом уходит на IPv4. Квирк бил на КАЖДЫЙ вызов `qdrant-client` (не переиспользует
+  соединение: один Qdrant-запрос ≈ 2.2с, батч эмбеддингов ≈ 2.1с) — отсюда и старая пометка
+  «set_payload ~2с», и растянутая до минут финализация большого документа. **Фикс:** во всех URL
+  к локальным сервисам использовать `127.0.0.1`, НЕ `localhost` (`QDRANT_URL`, `EMBEDDING_API_BASE`;
+  дефолты в `config.py` уже `127.0.0.1`). После фикса: `query_points` ~8мс, `get_collections` ~4мс
+  (было ~2050мс). Диагностика-изолятор: сравнить тайминги `http://localhost:<port>` vs
+  `http://127.0.0.1:<port>` (raw-соединение) — сразу видно 2с-провал.
+  Сам write→read race в Qdrant НЕ подтверждён: при `wait=True` (дефолт qdrant-client 1.19) первая
+  же попытка count/retrieve/query после ack видит точки (probe: stale_first_attempts=0).
 - **PostgreSQL 17 — portable-бинарь (не Docker, не служба)**: бинари в `C:\postgresql17\pgsql\bin`,
   данные в `C:\postgresql17\data`, порт 5432. Запуск `postgres.exe -D <data>` через хелпер
   (`scripts/start-postgres.ps1`). Суперюзер `postgres`, пароль dev-only `okf_dev_pg` (см. `DATABASE_URL`
@@ -280,7 +292,8 @@ UI: http://localhost:3000
     `okf_concepts.tags` (БД), frontmatter `.md`-бандлов (`tags`+`global_tags`, тело байт-в-байт),
     payload Qdrant `tags` (concept-точки — из `okf_concepts`, point_id = uuid5 от filepath
     бандла, БЕЗ scroll; chunk-точки — полный набор через filter set_payload). Синк Qdrant —
-    фоновый (каждый set_payload ~2с, синхронно замораживал бы ответ), сериализован по документу
+    фоновый (синхронно на десятки точек замораживал бы ответ; до 05.09.2026 усугублялось
+    задержкой ~2с на каждый вызов из-за `localhost`-квирка), сериализован по документу
     с dirty-флагом; идемпотентен и самовосстанавливается на regenerate/resume.
   - Тег, равный номеру разработки: привязка/отвязка `development_id` + реиндекс `dev_tags`
     через `dev_sync` (без параллельного механизма); флаг `dev_tags_sync_pending` в ответе.
