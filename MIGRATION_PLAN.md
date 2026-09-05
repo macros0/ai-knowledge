@@ -13,13 +13,20 @@
 >    а не нативные Postgres ARRAY (портативность с SQLite-dev).
 > 4. **`documents.uploaded_by`** — строка (username из сессии), без FK; `owner_id`/
 >    `org_id` — nullable FK (наполняются на Этапах 3/при авторизации в БД).
-> 5. **slim payload Qdrant** оставляет `slug` + `relations` + `filepath` (маленькие,
->    нужны для graph expansion и реконструкции ссылки на источник); убираются только
->    `content`/`global_tags`/`source_document`/`attachments`. Join-ключ — `(doc_id, slug)`.
-> 6. **`okf_concepts.content`** — полный текст для новых документов; для
->    существующих `.md`-бандлов восстановим только уже обрезанный текст (полный
->    текст из старых бандлов не восстановить).
+> 5. **slim payload Qdrant** (итог, уточнён Ф4 05.09): концепт
+>    `{point_type, doc_id, slug, title, type, tags, relations, chunk_index, dev_tags}`,
+>    чанк `{point_type, doc_id, chunk_index, tags, dev_tags}` — без `content`/`filepath`/
+>    `section_title`/суррогатных `concept_id`; полный текст гидрируется из БД по natural key
+>    `(doc_id, slug)`/`(doc_id, chunk_index)`. Вариант «оставить `slug`+`relations`+`filepath`»
+>    — промежуточный шаг до Ф4, не итог.
+> 6. **`okf_concepts.content`** — полный текст концепта (после 2b — для всего корпуса, бандлы не требуются).
 > 7. `audit_log` — по-прежнему отложен (зависит от требований ИБ).
+
+> **Этап 2b завершён 05.09.2026 — см. §11.** Разделы 1–10 ниже — исходный план
+> (18.08–28.08) и исторический снимок архитектуры ДО Этапа 2b. Фактические описания
+> payload Qdrant, хранения тегов, источников `reindex`/backfill и путей вложений после
+> Этапа 2b — в §11 и в AGENTS.md («PostgreSQL — единственный источник истины»).
+> При расхождении §1–10 с §11/AGENTS.md верен §11/AGENTS.md.
 >
 > См. реализацию: `backend/app/db/` (модели/сессии), `backend/alembic/`,
 > `backend/scripts/migrate_json_to_db.py`, `backend/scripts/migrate_payload.py`,
@@ -29,19 +36,23 @@
 
 ## 1. Принцип
 
+> *Исторический раздел (до Этапа 2b, 05.09.2026). Актуальное — §11.*
+
 - Минимум изменений в API и `pipeline.py` — замена хранилищ через Repository pattern.
 - Schema БД заводится сразу со всеми таблицами для будущей авторизации и мультитенантности (`users`, `roles`, `user_roles`, `organizations`), но **пустыми** и с nullable `owner_id`/`org_id` у документов. Реализация самой авторизации (Этап 1 roadmap) наполняет уже готовые таблицы — это снимает жёсткую зависимость «сначала auth, потом БД» на уровне миграции данных.
 - Qdrant остаётся специализированным векторным хранилищем; payload точек становится «тонким», с JOIN к реляционной БД для полных данных концепта.
-- Промпты (`backend/prompts/*.md`, `data/prompts/*.md`), загруженные бинарники (`data/uploads/`), бинарные вложения бандлов (`data/okf_bundles/{doc_id}/attachments/`) и аварийные дампы LLM (`data/debug/`) — остаются в FS без изменений.
+- Промпты (`backend/prompts/*.md`, `data/prompts/*.md`), загруженные бинарники (`data/uploads/`), бинарные вложения (`data/uploads/{doc_id}/attachments/` — после 2b) и аварийные дампы LLM (`data/debug/`) — остаются в FS без изменений.
 
 ## 2. Текущее состояние хранилищ (что заменяем)
+
+> *Исторический раздел — снимок на 18.08 (до Этапа 2b). Актуальное — §11.*
 
 | Где | Что | Кто пишет | Проблема |
 |---|---|---|---|
 | `data/documents.json` | реестр документов (`DocumentRegistry`) | полный перезапись файла при каждом `update()` | нет транзакций, нет concurrent writers, весь файл переписывается на каждое обновление статуса чанка; нет `owner_id` для ролей |
 | `data/tags.json` | глобальный справочник тегов с частотой (`TagRegistry`) | полный перезапись | та же проблема; теги дублированы в frontmatter `.md` и в payload Qdrant — три источника правды |
 | `data/staging/{doc_id}/` | `manifest.json` + `chunk_XX.json` (концепты) + `chunk_XX.md` (текст) | чекпойнтинг инкрементальной LLM-генерации | частые per-chunk writes; scope для ролей наследуется через doc_id → owner |
-| `data/okf_bundles/{doc_id}/` | `*.md` (концепт + YAML frontmatter), `chunks/`, `attachments/` | финал пайплайна | первоисточник знаний; Qdrant-индекс пересобирается из них (`reindex.py`) |
+| `data/okf_bundles/{doc_id}/` | `*.md` (концепт + YAML frontmatter), `chunks/`, `attachments/` | финал пайплайна | (до 2b) первоисточник знаний; Qdrant-индекс пересобирался из них (`reindex.py`). После 2b каталог удалён, источник — БД |
 | `data/uploads/{doc_id}.ext` | бинарные оригиналы документов | upload endpoint | бинарник, лучше FS/объектное хранилище |
 | `data/debug/llm_raw_*.txt` | аварийные дампы LLM | pipeline | временные, `.gitignore` |
 | `backend/prompts/*.md` + `data/prompts/*.md` | промпты с mtime-каскадом | вручную | версионные, оставить в FS |
@@ -50,13 +61,17 @@
 
 ## 3. Решения по развилкам (зафиксированы)
 
+> *Исторический раздел (до Этапа 2b). Часть решений пересмотрена — итог см. §11.*
+
 1. **СУБД:** PostgreSQL (prod) + SQLite (dev, через тот же SQLAlchemy, zero-config вход как у Qdrant-бинаря сегодня).
-2. **OKF-бандлы `.md`:** БД canonical + `.md` остаются параллельно как backup/inspect (не удаляем). `reindex.py` продолжает читать `.md`.
+2. **OKF-бандлы `.md`:** исходно «БД canonical + `.md` параллельно как backup/inspect (не удаляем), `reindex.py` читает `.md`». По итогам Этапа 2b (Ф5): бандлы — **экспорт/архив** (`okf_write_bundles=false`), каталог `data/okf_bundles/` удалён; `reindex.py` и backfill'ы читают БД.
 3. **Staging:** в БД переносим только `manifest.json` → JSONB в `document_staging`. Сырые `chunk_XX.md`/`chunk_XX.json` остаются в FS под `data/staging/{doc_id}/` (большие, инспектируемые).
 4. **Мультитенантность:** завести `organizations` + `users` + `roles` + `user_roles` (scope: global|org|document). Документы получают `owner_id` + `org_id` (nullable).
-5. **Qdrant payload:** slim — только `concept_id` + `doc_id` + `title` + `tags` (для фильтра). Полные данные концепта достаются из БД по `concept_id` после поиска.
+5. **Qdrant payload:** slim — исходная идея `{concept_id, doc_id, title, tags}`; фактический итоговый payload (без суррогатного `concept_id`, с `slug`/`type`/`relations`/`chunk_index`/`dev_tags`) — §11 и шапка п.5.
 
 ## 4. Стек и зависимости
+
+> *Исторический раздел. Фактически применён синхронный стек — см. шапку п.1.*
 
 Добавить в `backend/requirements.txt`:
 
@@ -74,6 +89,11 @@
 Сервис Postgres добавить в `scripts/start-all.ps1` через глобальный хелпер `start-background.ps1` (PID-файл `%TEMP%\opencode\postgres.pid`), health-check по `SELECT 1`, опрос с ретраями (не вслепую `Start-Sleep`).
 
 ## 5. Схема БД
+
+> *Исторический раздел: схема на 18.08 (без таблиц/колонок Этапов 2b/4/4a/5/6 —
+> `document_chunks`, провенанс `okf_concepts`, расширения `okf_attachments`,
+> `developments`/`attribute_values`/`chat_sessions`/`audit_log`). Актуальная схема —
+> `backend/app/db/models.py` + Alembic head `f0a1b2c3d4e5`, сводка — §11.*
 
 ```
 organizations        users            roles
@@ -118,13 +138,16 @@ created_at           document_staging       saved_path
 
 - `documents.owner_id` и `org_id` — NULLABLE; миграция существующих документов проставит NULL, массовое назначение — в Этапе 1 roadmap (фактическая авторизация).
 - `okf_concepts.content` — TEXT без обрезки (сегодня в Qdrant хранится `content[:4000]`, что теряет данные; БД хранит полный текст концепта).
-- `okf_concepts.tags` — Postgres-массив; даёт SQL-фильтрацию по тегам в дополнение к Qdrant-фильтру.
-- `document_staging.chunks_data` — JSONB, повтор структуры `manifest.json`. `processed_chunks`/`used_slugs` — массивы Postgres.
-- `tags.count` — денормализованный счётчик; поддерживается триггером на `document_tags` (INSERT/DELETE) либо пересчётом в VIEW/materialized, если нагрузка на чтение тегов невысокая.
+- `okf_concepts.tags` — Postgres-массив; даёт SQL-фильтрацию по тегам в дополнение к Qdrant-фильтру. *(устарело: фактически JSON-колонка — шапка п.3.)*
+- `document_staging.chunks_data` — JSONB, повтор структуры `manifest.json`. `processed_chunks`/`used_slugs` — массивы Postgres. *(устарело: фактически JSON — шапка п.3.)*
+- `tags.count` — денормализованный счётчик; поддерживается триггером на `document_tags` (INSERT/DELETE) либо пересчётом в VIEW/materialized, если нагрузка на чтение тегов невысокая. *(устарело: счётчик не хранится — шапка п.2.)*
 - `documents.deleted_at`/`deleted_by` — корзина / soft delete (реализована, Этап 4a.2 roadmap, 31.08.2026): `deleted_at IS NULL` = активен. Парный флаг — payload Qdrant `deleted=true`; все пути поиска обязаны фильтровать через `vector_store._not_deleted()`. Физическое удаление — фоновая автоочистка по `trash_retention_days`. См. `SECURITY.md` §5.
 - `roles` содержит `security` — заготовка под роль ИБ (`audit_log` в roadmap Этап 2). Сама `audit_log` здесь не моделируется — она описана в roadmap отдельно и зависит от ИБ-требований.
 
 ## 6. Repository pattern (минимум изменений в API)
+
+> *Исторический раздел: фасад `get_registry()`/`TagRegistry()`/`StagingStore()` сохранён,
+> но реализации синхронные (SQLAlchemy 2.0 + psycopg3), не async — см. шапку п.1.*
 
 Замена трёх JSON-store на DB-backed реализации с тем же интерфейсом:
 
@@ -140,22 +163,31 @@ created_at           document_staging       saved_path
 
 ## 7. Qdrant slim payload
 
-В `services/vector_store.py` (`index_concepts`) payload меняется:
+> *Исторический раздел: ниже — исходный эскиз. Итоговый payload после Ф4 (без `filepath`/
+> `section_title`, без суррогатного `concept_id`, гидрация по natural key) — §11 и шапка п.5.*
 
 ```python
 payload = {
-    "concept_id": concept_id,  # FK в okf_concepts
+    "point_type": "concept",
     "doc_id": doc_id,
+    "slug": slug,
     "title": meta.get("title", ""),
+    "type": meta.get("type", "concept"),
     "tags": meta.get("tags", []),
+    "relations": meta.get("relations", []),
+    "chunk_index": meta.get("chunk_index"),
+    "dev_tags": dev_tags,
 }
 ```
 
-`content` и прочее убираются — достаются из БД по `concept_id` после поиска. В `api/chat.py` и `api/search.py` после `vector_store.search()` — пакетный `SELECT * FROM okf_concepts WHERE id IN (...)` для получения `content` и метаданных источников. Один round-trip на top-k хитов.
+`content` и прочее убираются — достаются из БД по natural key `(doc_id, slug)` после поиска. В `api/chat.py` и `api/search.py` после `vector_store.search()` — пакетный `SELECT ... FROM okf_concepts WHERE (doc_id, slug) IN (...)` (чанки — `(doc_id, chunk_index)` из `document_chunks`). Один round-trip на top-k хитов.
 
-Миграция существующих точек — один скрипт `scripts/migrate_payload.py`: scroll по коллекции, для каждой точки вычислить `concept_id` по `doc_id`+slug из `filepath`, `update_set_payload` с slim-набором. Идемпотентно, можно повторять.
+Миграция существующих точек — один скрипт `scripts/migrate_payload.py` (исторический one-shot; после 2b индекс пересобирается из БД через `rebuild_qdrant_v2.py`).
 
 ## 8. Миграция данных (one-shot)
+
+> *Исторический раздел: исполнено. Перенос чанков/вложений/провенанса после Этапа 2b —
+> `scripts/backfill_db_store.py` (Ф2).*
 
 Скрипт `backend/scripts/migrate_json_to_db.py`:
 
@@ -170,6 +202,8 @@ payload = {
 
 ## 9. Этапы внедрения (рекомендуемый порядок)
 
+> *Исторический раздел: исходный порядок. Фактический порядок после Этапа 2b — §11 (Ф0→Ф5).*
+
 1. **Схема + Alembic.** Модели SQLAlchemy, начальная миграция (`alembic revision --autogenerate`). Пустые таблицы auth/organizations (FK nullable).
 2. **Repositories.** `DocumentRepository`, `TagRepository`, `StagingRepository` с тем же интерфейсом. Юнит-тесты на существующий `tests/` (добавить SQLite in-memory fixture; `test_settings` по-прежнему требует Qdrant).
 3. **Миграция данных.** `scripts/migrate_json_to_db.py` + `scripts/migrate_payload.py`. Старые `.json` → `.bak`.
@@ -181,11 +215,13 @@ payload = {
 
 ## 10. Риски и проверки
 
+> *Исторический раздел: пункты о чтении бандлов и `uuid5(filepath)` устарели — см. §11.*
+
 - **Concurrent pipeline writes.** Сегодня `threading.Lock` на весь файл; в БД — row-level lock на `documents` при `UPDATE`, staging-чанк в отдельной транзакции. Проверить сценарий «несколько документов параллельно» (аналог текущего `test_pipeline`).
-- **`reindex.py`.** Продолжает читать `data/okf_bundles/*.md` (т.к. `.md`-бандлы не удаляем — они синхронны с БД через пайплайн). Альтернатива — переключить на чтение из `okf_concepts`; решение за рамкой текущей миграции.
-- **`backfill_sparse` в `vector_store.py`.** Читает `data/okf_bundles/*/` — остаётся рабочим, т.к. `.md` не удаляем.
+- **`reindex.py`.** После Этапа 2b (Ф3) читает PostgreSQL (`okf_concepts` + `document_chunks`), а не `.md`-бандлы; `data/okf_bundles/` удалён.
+- **`backfill_sparse` в `vector_store.py`.** После Ф3 читает `okf_concepts` (БД), а не `data/okf_bundles/*/`.
 - **Тест `test_settings`.** Сегодня требует Qdrant. Добавить тест на БД-слой с SQLite in-memory.
-- **Дрейк тегов.** После миграции теги хранятся в: (1) `document_tags` (canonical), (2) `okf_concepts.tags` (per-concept), (3) Qdrant payload (для фильтра), (4) `.md` frontmatter. Canonical — `document_tags` + `okf_concepts.tags`; payload Qdrant и frontmatter `.md` — проекции, обновляются при правках тегов (Этап 4a roadmap). Синк Qdrant-payload при правке — **асинхронный** (фоновый поток, не fallback): на используемом окружении `set_payload` ≈ 2с/вызов, на документ приходятся десятки concept-точек с разными тегами, синхронно ответ замораживался бы. point_id concept-точек детерминирован (`uuid5(filepath)`), синк читает `okf_concepts.tags` из БД без scroll и идемпотентно приводит Qdrant к состоянию БД. Самовосстановление — только явным `regenerate`/`resume` (без фонового ретрая).
+- **Дрейк тегов.** После Этапа 2b теги хранятся в трёх рабочих слоях: (1) `document_tags` (canonical, документные), (2) `okf_concepts.tags` (per-concept, LLM-теги + документные), (3) Qdrant payload `tags` (фильтр). `.md`-frontmatter — только экспорт/архив (`okf_write_bundles=false`), рабочим слоем не является. Canonical — `document_tags` + `okf_concepts.tags`; payload Qdrant — проекция, обновляется при правках тегов. Синк Qdrant-payload при правке — **асинхронный** (фоновый поток): на используемом окружении `set_payload` обходился в ~2с/вызов из-за `localhost`-квирка (резолв на `::1`), исправленного переходом на `127.0.0.1`; на документ приходятся десятки concept-точек с разными тегами. point_id concept-точек детерминирован логическим ключом `uuid5("okf:concept:{doc_id}:{slug}")` (не filepath), синк читает `okf_concepts.tags` из БД без scroll и идемпотентно приводит Qdrant к состоянию БД. Самовосстановление — только явным `regenerate`/`resume` (без фонового ретрая).
 - **Связь с `audit_log`.** Таблица `audit_log` (Этап 2 roadmap) моделируется отдельно — зависит от ИБ-требований к составу записи и сроку хранения. Схема БД здесь заводится без неё; после фиксации ИБ-требований добавляется миграцией.
 
 ## 11. Этап 2b: PostgreSQL — единственный источник истины (завершён 05.09.2026)
