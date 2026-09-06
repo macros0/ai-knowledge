@@ -24,6 +24,7 @@ Keycloak/IDB — в `SSO_TESTING_GUIDE.md` (разделы 11–12). Здесь 
 | 10 | `alembic upgrade head` + сид модулей (`seed_attribute_values.py`, с учётом модулей клиента) | ✅ |
 | 11 | `backfill_dedup.py` при переносе документов, загруженных до Этапа 4 | при миграции данных |
 | 12 | `rebuild_sparse.py` один раз после первого наполнения инсталляции реальными данными (миграция BM25-векторов, см. §7.5) | при наполнении данными |
+| 13 | (опционально) `backfill_translations.py --locale <код>` — автоперевод справочников для целевого языка (требует `TRANSLATION_PROVIDER=llm`, см. §7.6) | при наличии нескольких языков |
 
 ---
 
@@ -69,6 +70,11 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 | `QDRANT_API_KEY` | API-ключ Qdrant, если корпоративный Qdrant требует авторизации |
 | `LLM_BASE_URL` / `LLM_API_KEY` | прод-провайдер LLM |
 | `EMBEDDING_API_BASE` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | прод-провайдер эмбеддингов |
+| `STOPWORDS_CACHE_TTL_SECONDS` | TTL кэша динамических стоп-слов (сек); по умолчанию `60`. Действуют только на сторону запроса — индексная формула заморожена, реиндекс не нужен |
+| `STOPWORDS_MAX_WORDS` | Максимум слов в одном наборе стоп-слов (защита от случайной гигантской вставки); по умолчанию `10000` |
+| `TRANSLATION_PROVIDER` | Провайдер автоперевода справочников (теги/разработки/модули): `llm` (через LLM-шлюз) или `off` (прод без интернета — только ручной ввод). По умолчанию `llm` |
+| `TRANSLATION_MODEL` | Модель перевода; пусто → `LLM_MODEL` |
+| `TRANSLATION_BATCH_SIZE` | Размер пакета текстов на один LLM-вызов бэкфилла; по умолчанию `50` |
 
 `ENVIRONMENT=production` должен быть выставлен именно в **прод-инфраструктуре**
 (compose/K8s/process env), а не «проверено локально, что без него падает».
@@ -208,7 +214,7 @@ $env:AUTH_PROVIDER="keycloak_oidc"
 
 ---
 
-## 7. Предзаполнение БД (справочники и дедупликация)
+## 7. Предзаполнение БД (справочники, дедупликация, многоязычность)
 
 После `alembic upgrade head` в проде обязательны скрипты предзаполнения. Они
 **не входят в миграции** — значения привязаны к конкретной инсталляции/клиенту,
@@ -224,6 +230,11 @@ alembic upgrade head
 Создаёт таблицы/колонки Этапа 4: `developments`, `attribute_values`,
 `document_lsh_buckets`, колонки `documents.*` (`development_*`, `file_hash`,
 `content_hash`, `minhash`, `has_duplicates`), индекс `documents.development_id`.
+Также таблицы Этапа 7 (многоязычность): `locales`, `stopwords` (стоп-слова),
+`tags` (surrogate `tag_id`), `tag_translations`, `developments` (колонки
+`name`/`module`), `development_translations`, `attribute_values` (колонка
+`label`), `attribute_value_translations`, `ui_dictionaries` (UI-словари),
+`documents` (колонка `source_locale`).
 Приложение на старте тоже выполняет `create_all` (идемпотентно), но
 версионированную схему ведёт Alembic — в проде применяйте миграции явно.
 
@@ -295,3 +306,16 @@ python scripts/rebuild_sparse.py
   from app.services.vector_store import VectorStore
   assert VectorStore().backfill_sparse() == 0  # все точки скипаются — векторы на месте
   ```
+
+### 7.6 Перевод справочников (опционально, при наличии целевого языка)
+
+```bash
+python scripts/backfill_translations.py --locale en
+python scripts/backfill_translations.py --locale en --entities tags,developments
+```
+
+Автоперевод тегов/названий разработок/модулей через LLM-шлюз (`TRANSLATION_PROVIDER=llm`).
+Скрипт идемпотентен: ручные переводы (отмеченные админом как reviewed) не перезаписываются.
+Требует поднятого бэкенда (LLM-шлюз) и `TRANSLATION_PROVIDER`, отличного от `off`.
+Для прод без интернета — только ручной ввод переводов через Admin UI («Поддержка языков»).
+Подробности: `docs/ADD_LANGUAGE.md`.
