@@ -24,7 +24,7 @@ export default function UiDictionaryEditor({ locale }) {
 
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
-  const [preview, setPreview] = useState(null); // {errors}|{total,added,removed,unchanged}
+  const [result, setResult] = useState(null); // ответ import: {errors, applied, preview:{total,added,...}}
   const [history, setHistory] = useState([]);
   const [isNew, setIsNew] = useState(false); // активного override ещё нет
   const [loadError, setLoadError] = useState(null); // текст ошибки загрузки (или null)
@@ -103,7 +103,7 @@ export default function UiDictionaryEditor({ locale }) {
     }
     setBusy(true);
     importUiDictionary(locale, { data, note, confirm: false })
-      .then((res) => setPreview(res))
+      .then((res) => setResult(res))
       .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
       .finally(() => setBusy(false));
   };
@@ -121,12 +121,12 @@ export default function UiDictionaryEditor({ locale }) {
       .then(async (res) => {
         if (res.applied) {
           showToast(t("admin.uictl.applied"), { type: "success" });
-          setPreview(null);
+          setResult(null);
           dirtyRef.current = false; // применено — сервер теперь источник
           await loadActive();
           await loadHistory();
         } else {
-          setPreview(res);
+          setResult(res);
         }
       })
       .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
@@ -147,7 +147,7 @@ export default function UiDictionaryEditor({ locale }) {
       .finally(() => setBusy(false));
   };
 
-  const previewErrors = preview?.errors && preview.errors.length ? preview.errors : null;
+  const previewErrors = result?.errors && result.errors.length ? result.errors : null;
 
   return (
     <div className="uictl-editor">
@@ -201,12 +201,12 @@ export default function UiDictionaryEditor({ locale }) {
           ))}
         </div>
       )}
-      {preview && !previewErrors && (
+      {result?.preview && !previewErrors && (
         <div className="stopwords-preview">
-          <div>{t("admin.uictl.total", { count: preview.total })}</div>
-          <div>{t("admin.uictl.added", { count: preview.added.length })}</div>
-          <div>{t("admin.uictl.removed", { count: preview.removed.length })}</div>
-          <div>{t("admin.uictl.unchanged", { count: preview.unchanged.length })}</div>
+          <div>{t("admin.uictl.total", { count: result.preview.total })}</div>
+          <div>{t("admin.uictl.added", { count: result.preview.added.length })}</div>
+          <div>{t("admin.uictl.removed", { count: result.preview.removed.length })}</div>
+          <div>{t("admin.uictl.unchanged", { count: result.preview.unchanged.length })}</div>
         </div>
       )}
 
