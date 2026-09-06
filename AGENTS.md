@@ -538,6 +538,41 @@ ru), полнота plural-форм.
   утверждением. Заменяется на `source_locale`/`content_language` в фазе D вместе с
   детекцией языка документа; сейчас не трогать.
 
+## Многоязычность — теги и переводы (Этап 7, фаза B)
+
+- **`tags` — суррогатный `id` + `canonical_text` (unique) + `canonical_locale` +
+  `deleted_at`; `document_tags.tag_id` (FK).** `canonical_text` — стабильный wire- и
+  поисковый идентификатор (payload Qdrant и `okf_concepts.tags` остаются текстом —
+  реиндекс не нужен). `tag_translations` (PK tag_id+locale) — локализованные имена
+  для не-канонических локалей. `development_translations` / `attribute_value_translations`
+  — то же для названий разработок и label'ов атрибутов (канонические колонки
+  `developments.name`/`attribute_values.label` не трогаются). Миграция — Alembic
+  `8c3d4e5f6a7b` + companion `backend/scripts/migrate_tags_to_id.py` для dev-Postgres
+  (Alembic-квирк create_all); обе сохраняют ОРФАН-теги (document_tags.tag без записи
+  в пуле — создают строку tags). Миграция dev-PG выполнена 06.09.2026: 6 тегов,
+  24 document_tags (1 утраченная строка — stale-ссылка на удалённый тест-тег «ааа»,
+  отсутствовавший в concepts/Qdrant — безвредно).
+- **Удаление тега = soft-delete (`tags.deleted_at`)**, НЕ физическое: связь
+  document_tags корзинного документа не трогается (restore возвращает тег — баг
+  06.09.2026 «тег ааа не удалялся» сохранён). `TagRegistry.all()` = пул
+  (deleted_at IS NULL) ∪ теги, на которые ссылается АКТИВНЫЙ документ. Повторное
+  использование текста тега возрождает его (`get_or_create_ids` ставит
+  deleted_at=NULL). Единая точка создания тегов — `get_or_create_ids` (её зовут
+  `registry.create/update` и upload); отдельный `TagRegistry.add` не нужен.
+- **Провайдер переводов** `services/translation.py` (`translation_provider=llm|off`,
+  `translation_model`): `translate_texts_batch` через `LLMClient(interactive=False)`
+  (bulk-семафор — чат не блокируется). `backfill_reference_data(locale, entities,
+  translations=None)` — idempotent: ручные переводы (reviewed_by) не перезаписываются.
+  **Отклонение от плана:** backfill синхронный в admin-запросе, НЕ через job queue —
+  очередь документоцентрична (submit(doc_ids)); операция не деструктивна и обратима.
+- **API**: `GET /tags?needs_review=` (display по cookie `okf.locale`), `PATCH
+  /tags/{id}/translations/{locale}`, `POST /tags/bulk-review` (editor/admin),
+  `POST /tags/translations/backfill` (admin). Audit: `tag_translation_update/review`,
+  `translations_backfill`. **НЕ реализовано (следом):** review-UI в TagManagerModal,
+  display-локализация DocumentOut.tags / DevelopmentOut.name / AttributeValue (wire
+  остаётся каноническим текстом — фронт совместим, поля `name`/`count` сохранены в
+  TagOut).
+
 ## Тесты
 
 ```powershell

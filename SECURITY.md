@@ -285,6 +285,26 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
 
 ## 7. Журнал security-изменений
 
+### 2026-09-06 — Surrogate tag_id и переводы справочников (Этап 7, фаза B)
+Изменение: `tags.name` (текстовый PK) → `tags.id` (суррогатный) + `canonical_text`
+(unique) + `canonical_locale` + `deleted_at`; `document_tags.tag` → `document_tags.tag_id`
+(FK); новые таблицы `tag_translations` / `development_translations` /
+`attribute_value_translations` (Alembic `8c3d4e5f6a7b`; для dev-Postgres — companion
+`scripts/migrate_tags_to_id.py` из-за Alembic-квирка create_all). Qdrant payload и
+`okf_concepts.tags` остаются каноническим текстом — реиндекс не нужен. Удаление тега
+из «пула» теперь soft-delete (`tags.deleted_at`), связи document_tags не трогаются
+(корзинный документ сохраняет тег до purge/restore — поведение бага 06.09.2026
+сохранено). Журнал ИБ дополнен действиями `tag_translation_update`,
+`tag_translation_review`, `translations_backfill`; `ACTION_TYPES`/
+`EXPECTED_ACTION_TYPES` обновлены. Новые мутирующие эндпоинты:
+`PATCH /tags/{id}/translations/{locale}`, `POST /tags/bulk-review` (editor/admin),
+`POST /tags/translations/backfill` (admin). Причина: текстовый PK тега — отображаемая
+локализуемая строка, а не стабильный идентификатор; суррогатный id + переводы
+позволяют локализовать имена без смены wire/поискового идентификатора. Отклонение от
+плана: backfill выполняется синхронно в admin-запросе (bulk-семафор LLM), а не через
+job queue — очередь документоцентрична, операция не деструктивна и обратима через
+review; LLM-нагрузка не конкурирует с интерактивным чатом.
+
 ### 2026-09-06 — Поддержка языков и стоп-слова (Этап 7, фаза A)
 Изменение: добавлены таблицы `locales` (code, name, status draft|active|disabled,
 ui_dictionary_version) и `stopwords` (locale, word, kind bm25|marker) + Alembic

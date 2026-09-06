@@ -52,6 +52,9 @@ EXPECTED_ACTION_TYPES = {
     "stopwords_import",
     "stopwords_update",
     "stopwords_rollback",
+    "tag_translation_update",
+    "tag_translation_review",
+    "translations_backfill",
 }
 
 

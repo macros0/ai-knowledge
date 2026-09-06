@@ -39,12 +39,11 @@ from app.services.dev_sync import (
 )
 from app.services.development_registry import get_development_registry
 from app.services.registry import get_registry
-from app.services.tag_registry import TagRegistry, normalize_tags
+from app.services.tag_registry import normalize_tags
 
 logger = logging.getLogger(__name__)
 
 _registry = get_registry()
-_tag_registry = TagRegistry()
 
 
 def _reconcile_development(
@@ -282,8 +281,9 @@ def update_document_tags(
 
     dev_fields = _reconcile_development(doc, removed, added, getattr(user, "username", None) or "anonymous")
 
+    # registry.update резолвит/создаёт теги (tag_id) внутри себя — отдельный
+    # TagRegistry.add больше не нужен (пул и document_tags согласованы по FK).
     _registry.update(doc_id, tags=new_tags, **dev_fields)
-    _tag_registry.add(new_tags)
 
     if removed or added:
         removed_set = set(removed)

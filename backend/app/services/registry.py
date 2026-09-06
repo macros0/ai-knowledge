@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
@@ -22,6 +22,7 @@ from app.db.models import (
     DocumentTag,
     OkfAttachment,
     OkfConcept,
+    Tag,
 )
 from app.db.session import session_scope
 
@@ -96,7 +97,7 @@ def _search_conditions(search: str | None) -> list:
         conditions.append(Document.filename.ilike(f"%{literal}%", escape="\\"))
     conditions.append(Document.uploaded_by.ilike(f"%{literal}%", escape="\\"))
     # EXISTS-подзапросы (не JOIN) — чтобы не размножать строки документа.
-    conditions.append(Document.tags_rel.any(DocumentTag.tag.ilike(f"%{literal}%", escape="\\")))
+    conditions.append(Document.tags_rel.any(DocumentTag.tag_rel.has(Tag.canonical_text.ilike(f"%{literal}%", escape="\\"))))
     conditions.append(
         Document.development.has(
             or_(
@@ -123,7 +124,7 @@ def _to_dict(doc: Document) -> dict:
         "total_chunks": doc.total_chunks,
         "processed_chunks": doc.processed_chunks,
         "current_chunk": doc.current_chunk,
-        "tags": [t.tag for t in doc.tags_rel],
+        "tags": [t.tag_rel.canonical_text for t in doc.tags_rel],
         "uploaded_by": doc.uploaded_by,
         "created_at": doc.created_at,
         "updated_at": doc.updated_at,
@@ -150,13 +151,16 @@ class DocumentRegistry:
         tags: list[str] | None = None,
         uploaded_by: str | None = None,
     ) -> dict:
+        from app.services.tag_registry import TagRegistry
+
+        tag_ids = TagRegistry().get_or_create_ids(tags, created_by=uploaded_by)
         with session_scope() as s:
             doc = Document(
                 id=doc_id,
                 filename=filename,
                 content_type=content_type,
                 size=size,
-                tags_rel=[DocumentTag(tag=t) for t in (tags or [])],
+                tags_rel=[DocumentTag(tag_id=tid) for tid in tag_ids],
                 uploaded_by=uploaded_by,
             )
             s.add(doc)
@@ -234,7 +238,13 @@ class DocumentRegistry:
         if module is not None:
             conditions.append(Document.development.has(Development.module == module))
         if tag is not None:
-            conditions.append(Document.tags_rel.any(DocumentTag.tag == tag))
+            from app.services.tag_registry import TagRegistry
+
+            tag_id = TagRegistry().resolve(tag)
+            if tag_id is None:
+                conditions.append(false())
+            else:
+                conditions.append(Document.tags_rel.any(DocumentTag.tag_id == tag_id))
         if date_from is not None:
             conditions.append(Document.created_at >= date_from)
         if date_to is not None:
@@ -309,7 +319,8 @@ class DocumentRegistry:
             total = s.execute(total_stmt).scalar_one()
 
             stmt = select(Document).options(
-                selectinload(Document.tags_rel), selectinload(Document.development)
+                selectinload(Document.tags_rel).selectinload(DocumentTag.tag_rel),
+                selectinload(Document.development),
             )
             if conditions:
                 stmt = stmt.where(*conditions)
@@ -358,16 +369,21 @@ class DocumentRegistry:
         tags = fields.pop("tags", None)
         if not fields and tags is None:
             return
+        tag_ids = None
+        if tags is not None:
+            from app.services.tag_registry import TagRegistry
+
+            tag_ids = TagRegistry().get_or_create_ids(tags)
         with session_scope() as s:
             doc = s.get(Document, doc_id)
             if doc is None:
                 return
             for key, value in fields.items():
                 setattr(doc, key, value)
-            if tags is not None:
+            if tag_ids is not None:
                 doc.tags_rel.clear()
-                for t in tags:
-                    doc.tags_rel.append(DocumentTag(tag=t))
+                for tid in tag_ids:
+                    doc.tags_rel.append(DocumentTag(tag_id=tid))
 
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
@@ -446,7 +462,8 @@ class DocumentRegistry:
             total = s.execute(total_stmt).scalar_one()
 
             stmt = select(Document).options(
-                selectinload(Document.tags_rel), selectinload(Document.development)
+                selectinload(Document.tags_rel).selectinload(DocumentTag.tag_rel),
+                selectinload(Document.development),
             ).where(*conditions)
             column, direction = SORT_COLUMNS.get(sort, SORT_COLUMNS["date_desc"])
             order_expr = column.asc() if direction == "asc" else column.desc()

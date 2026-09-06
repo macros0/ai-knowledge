@@ -78,6 +78,18 @@ def _reset(session) -> None:
 def _migrate_documents(data_dir: Path) -> int:
     docs = _read_json(data_dir / "documents.json")
     n = 0
+    from app.services.tag_registry import TagRegistry, normalize_tags
+
+    tag_reg = TagRegistry()
+    all_tags = normalize_tags(
+        [
+            t
+            for doc in docs.values()
+            if isinstance(doc, dict)
+            for t in (doc.get("tags") or [])
+        ]
+    )
+    name_to_id = dict(zip(all_tags, tag_reg.get_or_create_ids(all_tags)))
     with session_scope() as s:
         existing = {doc_id for (doc_id,) in s.query(Document.id).all()}
         for doc_id, doc in docs.items():
@@ -85,7 +97,7 @@ def _migrate_documents(data_dir: Path) -> int:
                 continue
             if doc_id in existing:
                 continue
-            tags = [str(t).strip() for t in (doc.get("tags") or []) if str(t).strip()]
+            tags = normalize_tags(doc.get("tags") or [])
             s.add(
                 Document(
                     id=doc_id,
@@ -100,7 +112,7 @@ def _migrate_documents(data_dir: Path) -> int:
                     okf_concept_count=int(doc.get("okf_concept_count", 0) or 0),
                     created_at=_parse_dt(doc.get("created_at")),
                     updated_at=_parse_dt(doc.get("updated_at")),
-                    tags_rel=[DocumentTag(tag=t) for t in tags],
+                    tags_rel=[DocumentTag(tag_id=name_to_id[t]) for t in tags],
                 )
             )
             n += 1
@@ -195,9 +207,9 @@ def _migrate_tags(data_dir: Path) -> int:
     tags = _read_json(data_dir / "tags.json")
     names = {str(k).strip() for k in tags if str(k).strip()}
     with session_scope() as s:
-        existing = {n for (n,) in s.query(Tag.name).all()}
+        existing = {n for (n,) in s.query(Tag.canonical_text).all()}
         for name in names - existing:
-            s.add(Tag(name=name))
+            s.add(Tag(canonical_text=name))
     return len(names - existing)
 
 

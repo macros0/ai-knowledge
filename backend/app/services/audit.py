@@ -52,6 +52,9 @@ LOCALE_DISABLE = "locale_disable"
 STOPWORDS_IMPORT = "stopwords_import"
 STOPWORDS_UPDATE = "stopwords_update"
 STOPWORDS_ROLLBACK = "stopwords_rollback"
+TAG_TRANSLATION_UPDATE = "tag_translation_update"
+TAG_TRANSLATION_REVIEW = "tag_translation_review"
+TRANSLATIONS_BACKFILL = "translations_backfill"
 
 ACTION_TYPES = frozenset(
     {
@@ -88,6 +91,9 @@ ACTION_TYPES = frozenset(
         STOPWORDS_IMPORT,
         STOPWORDS_UPDATE,
         STOPWORDS_ROLLBACK,
+        TAG_TRANSLATION_UPDATE,
+        TAG_TRANSLATION_REVIEW,
+        TRANSLATIONS_BACKFILL,
     }
 )
 

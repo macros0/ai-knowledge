@@ -865,7 +865,7 @@ class VectorStore:
                 if not chunks:
                     continue
                 doc = s.get(Document, doc_id)
-                global_tags = [t.tag for t in (doc.tags_rel or [])]
+                global_tags = [t.tag_rel.canonical_text for t in (doc.tags_rel or [])]
                 docs_data.append(
                     {
                         "doc_id": doc_id,

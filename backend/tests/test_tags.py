@@ -42,7 +42,8 @@ class TestTagRegistry:
     def test_add_registers_name_without_documents(self):
         tr = TagRegistry()
         tr.add(["solo"])
-        assert tr.all() == [{"name": "solo", "count": 0}]
+        items = tr.all()
+        assert [(t["name"], t["count"]) for t in items] == [("solo", 0)]
 
     def test_add_normalizes_and_ignores_empty(self):
         tr = TagRegistry()
@@ -86,12 +87,12 @@ class TestTagRegistryDelete:
         tr = TagRegistry()
         tr.add(["race"])
         # Состояние, которое видела модалка до клика «удалить».
-        assert [t for t in tr.all() if t["name"] == "race"] == [{"name": "race", "count": 0}]
+        assert [(t["name"], t["count"]) for t in tr.all() if t["name"] == "race"] == [("race", 0)]
         # Между чтением и удалением документ начинает использовать тег.
         get_registry().create("d1", "a.docx", "x", 10, tags=["race"])
         with pytest.raises(TagInUseError):
             tr.delete("race")
-        assert [t for t in tr.all() if t["name"] == "race"] == [{"name": "race", "count": 1}]
+        assert [(t["name"], t["count"]) for t in tr.all() if t["name"] == "race"] == [("race", 1)]
 
     def test_delete_unused_respects_usage_changed_after_listing(self):
         """delete_unused считает used из document_tags на момент выполнения, а не

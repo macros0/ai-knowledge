@@ -190,9 +190,12 @@ class DocumentTag(Base):
     doc_id: Mapped[str] = mapped_column(
         ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
     )
-    tag: Mapped[str] = mapped_column(String(255), primary_key=True)
+    tag_id: Mapped[int] = mapped_column(
+        ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
 
     document: Mapped[Document] = relationship(back_populates="tags_rel")
+    tag_rel: Mapped["Tag"] = relationship()
 
 
 class DocumentLshBucket(Base):
@@ -223,9 +226,96 @@ class DocumentLshBucket(Base):
 
 
 class Tag(Base):
+    """Тег (Этап 7 фаза B): суррогатный id + канонический текст + переводы.
+
+    `canonical_text` — стабильный текстовый идентификатор тега (по нему идёт wire
+    и payload Qdrant), `canonical_locale` — язык канонического текста (ru).
+    Локализованные отображаемые имена — `translations` (tag_translations) для
+    не-канонических локалей. Денормализованный `canonical_text` вместо «текст
+    только в translations» — осознанное упрощение: канонический текст читается в
+    ~10 местах (registry._to_dict/_search/_conditions, vector_store, tag_registry),
+    уникальный индекс держит единственный источник; переводы — отдельно.
+    `merged_into_id` — задел объединения дубликатов (merge-операция вне этапа).
+    """
+
     __tablename__ = "tags"
 
-    name: Mapped[str] = mapped_column(String(255), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    canonical_text: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    canonical_locale: Mapped[str] = mapped_column(String(16), default="ru", nullable=False)
+    merged_into_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tags.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # Soft-delete из «пула»: удаление/чистка не трогают document_tags (корзинный
+    # документ сохраняет связь), а лишь помечают тег удалённым из автодополнения.
+    # Возрождается при повторном использовании (get_or_create_ids) или показе
+    # через активные document_tags (all()).
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    translations: Mapped[list["TagTranslation"]] = relationship(
+        back_populates="tag", cascade="all, delete-orphan"
+    )
+
+
+class TagTranslation(Base):
+    """Перевод имени тега для локали (Этап 7 фаза B)."""
+
+    __tablename__ = "tag_translations"
+
+    tag_id: Mapped[int] = mapped_column(
+        ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
+    locale: Mapped[str] = mapped_column(String(16), primary_key=True)
+    text: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_machine_translated: Mapped[bool] = mapped_column(Boolean, default=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    translated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    tag: Mapped[Tag] = relationship(back_populates="translations")
+
+
+class DevelopmentTranslation(Base):
+    """Перевод названия разработки (Этап 7 фаза B).
+
+    `developments.name` остаётся каноническим названием (dev_tags-проекция и
+    отображение без JOIN); переводы — для не-канонических локалей.
+    """
+
+    __tablename__ = "development_translations"
+
+    development_id: Mapped[int] = mapped_column(
+        ForeignKey("developments.id", ondelete="CASCADE"), primary_key=True
+    )
+    locale: Mapped[str] = mapped_column(String(16), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_machine_translated: Mapped[bool] = mapped_column(Boolean, default=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    translated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class AttributeValueTranslation(Base):
+    """Перевод label значения generic-атрибута (module и т.п., Этап 7 фаза B)."""
+
+    __tablename__ = "attribute_value_translations"
+
+    attribute_value_id: Mapped[int] = mapped_column(
+        ForeignKey("attribute_values.id", ondelete="CASCADE"), primary_key=True
+    )
+    locale: Mapped[str] = mapped_column(String(16), primary_key=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_machine_translated: Mapped[bool] = mapped_column(Boolean, default=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    translated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class OkfConcept(Base):

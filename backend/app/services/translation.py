@@ -1,0 +1,254 @@
+"""Автоперевод справочников (теги/разработки/атрибуты) — Этап 7 фаза B.
+
+Провайдеры: `llm` (через существующий llm_client, bulk-семафор LLMClient(
+interactive=False) — интерактивный чат сохраняет приоритет), `off` (без
+LLM — переводы вносятся вручную или пастой из файла, см. translations-параметр
+бэкфилла). Ручной перевод не перезаписывается бэкфиллом (идемпотентность):
+пропускаются переводы с reviewed_by, машинные без review — обновляются.
+
+Отклонение от плана: бэкфилл выполняется СИНХРОННО в admin-запросе, а не через
+job queue — очередь массовых операций (job_queue.py) документоцентрична
+(submit(doc_ids), _execute по doc_id), а переводы — по справочникам (сотни
+строк). Операция не деструктивна и обратима через review; LLM-нагрузка ограничена
+bulk-семафором (не конкурирует с чатом). При необходимости переносится в очередь.
+"""
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy import select
+
+from app.config import get_settings
+from app.db.models import (
+    AttributeValue,
+    AttributeValueTranslation,
+    Development,
+    DevelopmentTranslation,
+    Tag,
+    TagTranslation,
+)
+from app.db.session import session_scope
+from app.services import audit
+
+logger = logging.getLogger(__name__)
+
+_SYSTEM_PROMPT = (
+    "You are a technical translator. Translate each given term/name from Russian "
+    "to {target}. Preserve abbreviations, codes and identifiers verbatim where "
+    "they are proper nouns (e.g. СЭДО, ЭЛН, SAP HCM, LK_STAT). Return a JSON "
+    "array of strings, one per input, in the same order — nothing else."
+)
+
+
+def translate_texts_batch(texts: list[str], target_locale: str) -> list[str]:
+    """Машинный перевод пакета текстов. Возвращает список той же длины/порядка.
+
+    `off`-провайдер → пустые строки (переводы не создаются).
+    """
+    settings = get_settings()
+    if settings.translation_provider == "off":
+        return [""] * len(texts)
+    if not texts:
+        return []
+    from app.services.llm_client import LLMClient
+
+    client = LLMClient(interactive=False)  # bulk-семафор, чат не блокируется
+    system = _SYSTEM_PROMPT.format(target=target_locale)
+    user = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(texts))
+    result = client.chat_json(system, user, doc_id="translation", chunk_idx=0)
+    if not isinstance(result, list):
+        raise ValueError("LLM-переводчик вернул не массив")
+    out = [str(x) for x in result]
+    if len(out) != len(texts):
+        raise ValueError(
+            f"LLM-переводчик вернул {len(out)} переводов на {len(texts)} текстов"
+        )
+    return out
+
+
+def _missing_texts(rows: list[tuple[int, str, str | None]], locale: str) -> list[tuple[int, str]]:
+    """Отдаёт (id, text) для сущностей без ручного перевода в locale.
+
+    `rows` — (id, source_text, existing_reviewed_by) для уже имеющегося перевода
+    (или None). Ручной перевод (reviewed_by) пропускается; машинный — обновляется.
+    """
+    missing: list[tuple[int, str]] = []
+    for entity_id, source, reviewed in rows:
+        if reviewed is None:
+            missing.append((entity_id, source))
+    return missing
+
+
+def backfill_reference_data(
+    locale: str,
+    entities: list[str],
+    *,
+    translations: dict[str, str] | None = None,
+    user,
+    ip_address: str | None = None,
+) -> dict:
+    """Заполняет переводы справочников для `locale`. Возвращает счётчики.
+
+    `translations` — ручной словарь {канонический_текст: перевод} (file/offline
+    режим); если задан, LLM не вызывается. Каждая сущность без ручного перевода
+    получает перевод (LLM-батч или из словаря). Идемпотентно.
+    """
+    settings = get_settings()
+    result: dict = {}
+    username = getattr(user, "username", None) or "anonymous"
+    total_created = 0
+
+    if "tags" in entities:
+        created, failed = _backfill_tags(locale, translations, username)
+        result["tags"] = {"created": created, "failed": failed}
+        total_created += created
+    if "developments" in entities:
+        created, failed = _backfill_developments(locale, translations, username)
+        result["developments"] = {"created": created, "failed": failed}
+        total_created += created
+    if "attributes" in entities:
+        created, failed = _backfill_attributes(locale, translations, username)
+        result["attributes"] = {"created": created, "failed": failed}
+        total_created += created
+
+    if total_created:
+        audit.record(
+            user,
+            audit.TRANSLATIONS_BACKFILL,
+            audit.TARGET_LOCALE,
+            target_id=locale,
+            new_value={"entities": entities, "result": result},
+            ip_address=ip_address,
+        )
+    return result
+
+
+def _resolve_translation(text: str, translations: dict[str, str] | None) -> str | None:
+    if translations is None:
+        return None
+    return translations.get(text)
+
+
+def _backfill_tags(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
+    with session_scope() as s:
+        rows = s.execute(
+            select(Tag.id, Tag.canonical_text, TagTranslation.reviewed_by)
+            .outerjoin(TagTranslation, (TagTranslation.tag_id == Tag.id) & (TagTranslation.locale == locale))
+            .order_by(Tag.id)
+        ).all()
+    targets = [(tid, text) for tid, text, reviewed in rows if reviewed is None]
+    if not targets:
+        return 0, 0
+    created = 0
+    failed = 0
+    for tid, text in targets:
+        tr = _resolve_translation(text, translations) if translations is not None else None
+        is_machine = tr is None
+        if tr is None:
+            try:
+                tr = translate_texts_batch([text], locale)[0]
+            except Exception as exc:
+                logger.warning("Перевод тега %d не удался: %s", tid, exc)
+                failed += 1
+                continue
+        if not tr:
+            failed += 1
+            continue
+        with session_scope() as s:
+            existing = s.execute(
+                select(TagTranslation).where(
+                    TagTranslation.tag_id == tid, TagTranslation.locale == locale
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                s.add(TagTranslation(tag_id=tid, locale=locale, text=tr, is_machine_translated=is_machine))
+            else:
+                existing.text = tr
+                existing.is_machine_translated = is_machine
+        created += 1
+    return created, failed
+
+
+def _backfill_developments(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
+    with session_scope() as s:
+        rows = s.execute(
+            select(Development.id, Development.name, DevelopmentTranslation.reviewed_by)
+            .outerjoin(
+                DevelopmentTranslation,
+                (DevelopmentTranslation.development_id == Development.id)
+                & (DevelopmentTranslation.locale == locale),
+            )
+            .order_by(Development.id)
+        ).all()
+    targets = [(did, name) for did, name, reviewed in rows if reviewed is None]
+    created, failed = 0, 0
+    for did, name in targets:
+        tr = _resolve_translation(name, translations) if translations is not None else None
+        is_machine = tr is None
+        if tr is None:
+            try:
+                tr = translate_texts_batch([name], locale)[0]
+            except Exception as exc:
+                logger.warning("Перевод разработки %d не удался: %s", did, exc)
+                failed += 1
+                continue
+        if not tr:
+            failed += 1
+            continue
+        with session_scope() as s:
+            existing = s.execute(
+                select(DevelopmentTranslation).where(
+                    DevelopmentTranslation.development_id == did,
+                    DevelopmentTranslation.locale == locale,
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                s.add(DevelopmentTranslation(development_id=did, locale=locale, name=tr, is_machine_translated=is_machine))
+            else:
+                existing.name = tr
+                existing.is_machine_translated = is_machine
+        created += 1
+    return created, failed
+
+
+def _backfill_attributes(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
+    with session_scope() as s:
+        rows = s.execute(
+            select(AttributeValue.id, AttributeValue.label, AttributeValueTranslation.reviewed_by)
+            .outerjoin(
+                AttributeValueTranslation,
+                (AttributeValueTranslation.attribute_value_id == AttributeValue.id)
+                & (AttributeValueTranslation.locale == locale),
+            )
+            .where(AttributeValue.label.isnot(None))
+            .order_by(AttributeValue.id)
+        ).all()
+    targets = [(aid, label) for aid, label, reviewed in rows if reviewed is None]
+    created, failed = 0, 0
+    for aid, label in targets:
+        tr = _resolve_translation(label, translations) if translations is not None else None
+        is_machine = tr is None
+        if tr is None:
+            try:
+                tr = translate_texts_batch([label], locale)[0]
+            except Exception as exc:
+                logger.warning("Перевод атрибута %d не удался: %s", aid, exc)
+                failed += 1
+                continue
+        if not tr:
+            failed += 1
+            continue
+        with session_scope() as s:
+            existing = s.execute(
+                select(AttributeValueTranslation).where(
+                    AttributeValueTranslation.attribute_value_id == aid,
+                    AttributeValueTranslation.locale == locale,
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                s.add(AttributeValueTranslation(attribute_value_id=aid, locale=locale, label=tr, is_machine_translated=is_machine))
+            else:
+                existing.label = tr
+                existing.is_machine_translated = is_machine
+        created += 1
+    return created, failed

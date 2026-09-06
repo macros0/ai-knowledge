@@ -354,6 +354,14 @@ class Settings(BaseSettings):
     # вставки; реальные наборы — сотни слов).
     stopwords_max_words: int = 10000
 
+    # --- Переводы справочников (Этап 7 фаза B) ---
+    # Провайдер автоперевода: "llm" (через llm_client, bulk-семафор) | "off"
+    # (только ручной/файловый импорт). model пусто → llm_model.
+    translation_provider: str = "llm"
+    translation_model: str = ""
+    # Размер пакета текстов на один LLM-вызов бэкфилла.
+    translation_batch_size: int = 50
+
     @field_validator("chat_top_k_presets", mode="before")
     @classmethod
     def parse_top_k_presets(cls, v: object) -> Any:

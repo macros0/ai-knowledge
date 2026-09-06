@@ -231,12 +231,29 @@ class OkfDocument(BaseModel):
 
 
 class TagOut(BaseModel):
+    id: int
     name: str
+    display: str
     count: int
+    needs_review: bool = False
 
 
 class TagListOut(BaseModel):
     tags: list[TagOut]
+
+
+class TagTranslationUpdate(BaseModel):
+    locale: str
+    text: str = Field(min_length=1, max_length=255)
+
+
+class TagBulkReviewRequest(BaseModel):
+    tag_ids: list[int]
+
+
+class TagTranslationBackfillRequest(BaseModel):
+    locale: str
+    entities: list[str] = ["tags", "developments", "attributes"]
 
 
 class BulkOperationRequest(BaseModel):

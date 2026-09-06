@@ -70,15 +70,17 @@ class TestMigrationScript:
         assert _migrate_documents(data) == 1
         assert _migrate_concepts(data) == 1
         assert _migrate_staging(data) == 1
-        assert _migrate_tags(data) == 2
+        # «proxmox» уже создан _migrate_documents (через get_or_create_ids) —
+        # _migrate_tags доносит только «extra».
+        assert _migrate_tags(data) == 1
         assert _migrate_attachments(data) == 0
 
         with session_scope() as s:
             assert s.query(Document.id).count() == 1
             assert s.query(OkfConcept.slug).filter(OkfConcept.doc_id == "doc1").scalar() == "concept"
-        assert sorted(TagRegistry().all(), key=lambda t: t["name"]) == [
-            {"name": "extra", "count": 0},
-            {"name": "proxmox", "count": 1},
+        assert [(t["name"], t["count"]) for t in TagRegistry().all()] == [
+            ("extra", 0),
+            ("proxmox", 1),
         ]
 
     def test_migrate_idempotent_skips_existing(self, tmp_path):
