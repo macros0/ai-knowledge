@@ -75,11 +75,11 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
           <Link
             className="dev-picker-link"
             href={`/developments/${current.id}`}
-            title={t("dev.title", { name: current.name || "" })}
+            title={t("dev.title", { name: (current.display_name || current.name) || "" })}
           >
             <LinkIcon size={12} />
             {current.number}
-            {current.name ? ` · ${current.name}` : ""}
+            {current.display_name || current.name ? ` · ${current.display_name || current.name}` : ""}
           </Link>
           <button
             type="button"
@@ -128,7 +128,7 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
                 <li key={d.id}>
                   <button type="button" className="dev-picker-option" onClick={() => pick(d.id)}>
                     <span className="dev-picker-num">{d.number}</span>
-                    <span className="dev-picker-name">{d.name}</span>
+                    <span className="dev-picker-name">{d.display_name || d.name}</span>
                   </button>
                 </li>
               ))}

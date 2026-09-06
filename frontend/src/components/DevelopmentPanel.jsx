@@ -427,7 +427,7 @@ export default function DevelopmentPanel() {
                       {dev.number}
                     </Link>
                   </td>
-                  <td>{dev.name}</td>
+                  <td>{dev.display_name || dev.name}</td>
                   <td>{dev.module || "—"}</td>
                   <td>{dev.documents_count}</td>
                   {canEdit && (

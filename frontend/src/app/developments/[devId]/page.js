@@ -76,7 +76,7 @@ export default function DevelopmentCardPage() {
         <Link href="/developments">{t("dev.card.back")}</Link>
       </p>
       <h2>
-        {dev?.number} — {dev?.name}
+        {dev?.number} — {dev?.display_name || dev?.name}
       </h2>
       <p className="meta">
         {t("dev.card.module", { module: dev?.module || "—" })} · {t("dev.card.docsCount", { count: dev?.documents_count })}

@@ -15,7 +15,7 @@ import logging
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Development, Document
+from app.db.models import Development, DevelopmentTranslation, Document
 from app.db.session import session_scope
 from app.services.attribute_registry import get_attribute_registry
 
@@ -373,6 +373,29 @@ class DevelopmentRegistry:
                 len(doc_ids),
                 exc_info=True,
             )
+
+    def add_display_names(self, items: list[dict], locale: str | None) -> None:
+        """Заполняет `display_name` (перевод названия для locale) на списке dict.
+
+        display_name=None при отсутствии перевода (фронт фолбэчит на `name`).
+        """
+        for it in items:
+            it["display_name"] = None
+        if not items or not locale or locale == "ru":
+            return
+        ids = [it["id"] for it in items]
+        with session_scope() as s:
+            rows = s.execute(
+                select(
+                    DevelopmentTranslation.development_id, DevelopmentTranslation.name
+                ).where(
+                    DevelopmentTranslation.development_id.in_(ids),
+                    DevelopmentTranslation.locale == locale,
+                )
+            ).all()
+        trs = dict(rows)
+        for it in items:
+            it["display_name"] = trs.get(it["id"])
 
 
 _INSTANCE: DevelopmentRegistry | None = None

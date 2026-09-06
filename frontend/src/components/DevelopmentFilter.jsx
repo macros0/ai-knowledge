@@ -75,7 +75,7 @@ export default function DevelopmentFilter({ developments, value, onChange }) {
         aria-label={t("dev.filterAria")}
       >
         {current
-          ? `${current.number}${current.name ? ` · ${current.name}` : ""}`
+          ? `${current.number}${current.display_name || current.name ? ` · ${current.display_name || current.name}` : ""}`
           : t("dev.all")}
       </button>
       {current && (
@@ -116,7 +116,7 @@ export default function DevelopmentFilter({ developments, value, onChange }) {
                 <li key={d.id}>
                   <button type="button" className="dev-picker-option" onClick={() => pick(d.id)}>
                     <span className="dev-picker-num">{d.number}</span>
-                    <span className="dev-picker-name">{d.name}</span>
+                    <span className="dev-picker-name">{d.display_name || d.name}</span>
                   </button>
                 </li>
               ))}

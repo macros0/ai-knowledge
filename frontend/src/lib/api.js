@@ -89,6 +89,22 @@ export function cleanupTags() {
   return request("/tags/cleanup", { method: "POST" });
 }
 
+export function updateTagTranslation(tagId, locale, text) {
+  return request(`/tags/${tagId}/translations/${encodeURIComponent(locale)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ locale, text }),
+  });
+}
+
+export function bulkReviewTags(tagIds) {
+  return request("/tags/bulk-review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag_ids: tagIds }),
+  });
+}
+
 export function updateDocumentTags(docId, tags) {
   return request(`/documents/${docId}/tags`, {
     method: "PATCH",

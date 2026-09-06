@@ -72,16 +72,22 @@ export default function TagPicker({
   let filtered = dictionary;
   if (q) {
     // Быстрый поиск: сначала префикс-совпадения, затем вхождение в середине.
+    // Ищем и по каноническому имени, и по локализованному display.
     const starts = [];
     const contains = [];
     for (const t of dictionary) {
-      const n = t.name.toLowerCase();
-      if (n.startsWith(q)) starts.push(t);
-      else if (n.includes(q)) contains.push(t);
+      const n = (t.name || "").toLowerCase();
+      const d = (t.display || "").toLowerCase();
+      if (n.startsWith(q) || d.startsWith(q)) starts.push(t);
+      else if (n.includes(q) || d.includes(q)) contains.push(t);
     }
     filtered = [...starts, ...contains];
   }
   filtered = filtered.slice(0, MAX_OPTIONS);
+
+  // display-имя по каноническому имени (для чипов уже выбранных тегов).
+  const displayOf = (name) =>
+    dictionary.find((t) => t.name === name)?.display ?? name;
 
   const addTag = (value) => {
     const v = value.trim();
@@ -118,7 +124,7 @@ export default function TagPicker({
       <div className="tag-chips">
         {selected.map((t) => (
           <span key={t} className="tag-chip" onClick={() => removeTag(t)}>
-            {t}
+            {displayOf(t)}
           </span>
         ))}
       </div>
@@ -170,7 +176,7 @@ export default function TagPicker({
                   }}
                   onMouseEnter={() => setActive(i)}
                 >
-                  <span className="tag-combobox-name">{t.name}</span>
+                  <span className="tag-combobox-name">{t.display || t.name}</span>
                   <span className="tag-combobox-count" title={tc("tags.picker.usedIn", t.count)}>
                     {t.count}
                   </span>

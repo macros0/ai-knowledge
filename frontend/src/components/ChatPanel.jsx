@@ -75,7 +75,7 @@ export default function ChatPanel() {
         href: `/?upload_dev=${dev.id}`,
         label: t("chat.uploadHintDev", {
           number: dev.number,
-          name: dev.name ? ` · ${dev.name}` : "",
+          name: (dev.display_name || dev.name) ? ` · ${dev.display_name || dev.name}` : "",
         }),
       };
     }

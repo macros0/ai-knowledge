@@ -23,6 +23,7 @@ from app.services.development_registry import (
     DevelopmentNumberExistsError,
     get_development_registry,
 )
+from app.services.locale_service import request_locale
 
 router = APIRouter(prefix="/developments", tags=["developments"])
 
@@ -37,6 +38,7 @@ def _client_ip(request: Request) -> str | None:
 
 @router.get("", response_model=DevelopmentListOut)
 def list_developments(
+    request: Request,
     search: str | None = Query(default=None),
     module: str | None = Query(default=None),
     sort: str = Query(default="number"),
@@ -55,6 +57,7 @@ def list_developments(
         limit=limit,
         offset=offset,
     )
+    _registry.add_display_names(items, request_locale(request))
     return DevelopmentListOut(
         developments=[DevelopmentOut(**d) for d in items],
         total=total,
@@ -90,10 +93,11 @@ def create_development(
 
 
 @router.get("/{dev_id}", response_model=DevelopmentOut)
-def get_development(dev_id: int, user: User = Depends(require_user)):
+def get_development(dev_id: int, request: Request, user: User = Depends(require_user)):
     dev = _registry.get(dev_id)
     if dev is None:
         raise HTTPException(status_code=404, detail="Разработка не найдена")
+    _registry.add_display_names([dev], request_locale(request))
     return DevelopmentOut(**dev)
 
 

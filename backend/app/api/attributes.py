@@ -9,6 +9,7 @@ from app.auth.service import require_role, require_user
 from app.models.schemas import AttributeCreate, AttributeListOut, AttributeValueOut
 from app.services import audit
 from app.services.attribute_registry import AttributeValueInUseError, get_attribute_registry
+from app.services.locale_service import request_locale
 
 router = APIRouter(prefix="/attributes", tags=["attributes"])
 
@@ -20,8 +21,10 @@ def _client_ip(request: Request) -> str | None:
 
 
 @router.get("/{key}", response_model=AttributeListOut)
-def list_attribute_values(key: str, user: User = Depends(require_user)):
-    return AttributeListOut(values=[AttributeValueOut(**v) for v in _registry.list(key)])
+def list_attribute_values(key: str, request: Request, user: User = Depends(require_user)):
+    values = _registry.list(key)
+    _registry.add_display_labels(values, request_locale(request))
+    return AttributeListOut(values=[AttributeValueOut(**v) for v in values])
 
 
 @router.post("/{key}", response_model=AttributeValueOut)

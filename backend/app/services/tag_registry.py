@@ -160,6 +160,16 @@ class TagRegistry:
                         tr.is_machine_translated and not tr.reviewed_by
                         for tr in t.translations
                     ),
+                    "translations": [
+                        {
+                            "locale": tr.locale,
+                            "text": tr.text,
+                            "is_machine_translated": tr.is_machine_translated,
+                            "reviewed_by": tr.reviewed_by,
+                            "translated_at": tr.translated_at,
+                        }
+                        for tr in t.translations
+                    ],
                 }
             )
         items.sort(key=lambda x: x["name"].lower())

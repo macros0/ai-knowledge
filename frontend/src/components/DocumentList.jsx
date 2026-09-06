@@ -168,6 +168,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   // Словарь тегов для селекта фильтра (общий с пикерами, обновляется по bumpTagVersion).
   const tagDictionary = useTagDictionary();
   const filterTags = tagDictionary.filter((t) => t.count > 0);
+  // Локализованное имя тега по каноническому (fallback — сам канонический текст).
+  const tagDisplay = (name) =>
+    tagDictionary.find((t) => t.name === name)?.display ?? name;
 
   // В disabled-режиме (всё открыто) действия доступны, как и на бэкенде.
   const canEdit = mode === "disabled" || hasRole("editor", "admin");
@@ -532,7 +535,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                     {doc.tags && doc.tags.length > 0 ? (
                       doc.tags.map((tag) => (
                         <span key={tag} className="tag-chip tag-chip-readonly">
-                          {tag}
+                          {tagDisplay(tag)}
                         </span>
                       ))
                     ) : (
@@ -553,7 +556,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               doc.tags.length > 0 && (
                 <>
                   <br />
-                  <span className="doc-tags">{t("docs.tagsList", { tags: doc.tags.join(", ") })}</span>
+                  <span className="doc-tags">{t("docs.tagsList", { tags: doc.tags.map(tagDisplay).join(", ") })}</span>
                 </>
               )
             )}
@@ -825,7 +828,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             <option value="">{t("docs.allTags")}</option>
             {filterTags.map((tg) => (
               <option key={tg.name} value={tg.name}>
-                {tg.name} ({tg.count})
+                {tg.display || tg.name} ({tg.count})
               </option>
             ))}
           </select>

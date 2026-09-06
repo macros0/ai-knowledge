@@ -30,7 +30,13 @@ export default function TagCombobox({
 
   const q = value.trim().toLowerCase();
   const filtered = (
-    q ? dictionary.filter((t) => t.name.toLowerCase().includes(q)) : dictionary
+    q
+      ? dictionary.filter(
+          (t) =>
+            (t.name || "").toLowerCase().includes(q) ||
+            (t.display || "").toLowerCase().includes(q)
+        )
+      : dictionary
   ).slice(0, MAX_OPTIONS);
 
   useEffect(() => {
@@ -116,7 +122,7 @@ export default function TagCombobox({
               }}
               onMouseEnter={() => setActive(i)}
             >
-              <span className="tag-combobox-name">{t.name}</span>
+              <span className="tag-combobox-name">{t.display || t.name}</span>
               <span className="tag-combobox-count" title={tc("tags.picker.usedIn", t.count)}>
                 {t.count}
               </span>

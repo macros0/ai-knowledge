@@ -230,12 +230,21 @@ class OkfDocument(BaseModel):
     markdown: str
 
 
+class TagTranslationOut(BaseModel):
+    locale: str
+    text: str
+    is_machine_translated: bool = False
+    reviewed_by: str | None = None
+    translated_at: datetime | None = None
+
+
 class TagOut(BaseModel):
     id: int
     name: str
     display: str
     count: int
     needs_review: bool = False
+    translations: list[TagTranslationOut] = Field(default_factory=list)
 
 
 class TagListOut(BaseModel):
@@ -306,6 +315,7 @@ class DevelopmentOut(BaseModel):
     created_at: datetime
     created_by: str | None = None
     documents_count: int = 0
+    display_name: str | None = None
 
 
 class DevelopmentListOut(BaseModel):
@@ -350,6 +360,7 @@ class AttributeValueOut(BaseModel):
     sort_order: int = 0
     org_id: int | None = None
     created_by: str | None = None
+    display_label: str | None = None
 
 
 class AttributeListOut(BaseModel):

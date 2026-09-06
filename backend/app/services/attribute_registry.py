@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from app.db.models import AttributeValue, Development
+from app.db.models import AttributeValue, AttributeValueTranslation, Development
 from app.db.session import session_scope
 
 
@@ -123,6 +123,27 @@ class AttributeRegistry:
                 stmt = stmt.filter(AttributeValue.org_id == org_id)
             deleted = stmt.delete(synchronize_session=False)
             return bool(deleted)
+
+    def add_display_labels(self, items: list[dict], locale: str | None) -> None:
+        """Заполняет `display_label` (перевод label для locale). None — без перевода."""
+        for it in items:
+            it["display_label"] = None
+        if not items or not locale or locale == "ru":
+            return
+        ids = [it["id"] for it in items]
+        with session_scope() as s:
+            rows = s.execute(
+                select(
+                    AttributeValueTranslation.attribute_value_id,
+                    AttributeValueTranslation.label,
+                ).where(
+                    AttributeValueTranslation.attribute_value_id.in_(ids),
+                    AttributeValueTranslation.locale == locale,
+                )
+            ).all()
+        trs = dict(rows)
+        for it in items:
+            it["display_label"] = trs.get(it["id"])
 
 
 _INSTANCE: AttributeRegistry | None = None
