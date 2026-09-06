@@ -285,6 +285,18 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
 
 ## 7. Журнал security-изменений
 
+### 2026-09-06 — Локальный frontend перенесён на порт 16300
+Изменение: host-порт 3000 (локальный Next dev server) попал в исключённый диапазон
+Windows Hyper-V/WSL (`netsh interface ipv4 show excludedportrange` — блоки меняются от
+загрузки к загрузке), `next dev` падал с `EACCES: permission denied 0.0.0.0:3000`.
+Локальный запуск (`scripts/start-all.ps1`) теперь стартует `next dev -p 16300` (выше
+динамического диапазона TCP 1024–15000, HNS его не резервирует). **16300 — host-порт
+локального dev server; 3000 остаётся только внутренним портом frontend-контейнера
+docker-compose (`8080:3000`) и не меняется.** SSO redirect/post-logout URIs клиента
+Keycloak (docker-volume `keycloak-data`) перенесены с `localhost:3000` на
+`localhost:16300` — иначе `invalid_redirect_uri`. Профиль безопасности не изменился:
+наружу по-прежнему публикуется только frontend (compose), локальные сервисы — loopback.
+
 ### 2026-09-06 — Runtime-override UI-словарей (Этап 7, фаза C)
 Изменение: таблица `ui_dictionaries` (locale, version, data JSON) + Alembic
 `9d4e5f6a7b8c`; актуальная версия — `locales.ui_dictionary_version`. Админ-импорт

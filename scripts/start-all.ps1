@@ -13,7 +13,10 @@
       3. PostgreSQL -> :5432 (reuses scripts/start-postgres.ps1, portable binary)
       4. Backend   -> :18000 (uvicorn app.main:app from backend/; 8000 is inside the
                               Windows Hyper-V/WSL excluded port range on this machine)
-      5. Frontend  -> :3000  (node node_modules/next/dist/bin/next dev from frontend/)
+      5. Frontend  -> :16300 (node node_modules/next/dist/bin/next dev -p 16300 from
+                              frontend/; 3000 is inside the Windows Hyper-V/WSL
+                              excluded port range on this machine. 3000 remains the
+                              container-internal port in docker-compose — untouched)
 
     Each step polls its health endpoint with retries instead of sleeping blind.
     Idempotent: a previous instance is killed by PID file and/or port first.
@@ -41,7 +44,7 @@ function Get-OllamaExe {
 # и порт внутри исключённого блока не может быть забинден (winerror 10013).
 # Проверка: netsh interface ipv4 show excludedportrange protocol=tcp
 function Assert-PortsAvailable {
-    $ports = 16333, 12400, 5432, 18000, 3000
+    $ports = 16333, 12400, 5432, 18000, 16300
     $excluded = @{}
     try {
         $out = & netsh interface ipv4 show excludedportrange protocol=tcp 2>$null
@@ -156,10 +159,10 @@ $results['Backend'] = Start-Service -Name 'Backend' -Url 'http://localhost:18000
         -PidFile (Join-Path $LogDir 'backend.pid')
 }
 
-$results['Frontend'] = Start-Service -Name 'Frontend' -Url 'http://localhost:3000' -Launch {
-    & $Helper -FilePath 'node' -ArgumentList @('node_modules/next/dist/bin/next', 'dev') `
+$results['Frontend'] = Start-Service -Name 'Frontend' -Url 'http://localhost:16300' -Launch {
+    & $Helper -FilePath 'node' -ArgumentList @('node_modules/next/dist/bin/next', 'dev', '-p', '16300') `
         -WorkingDirectory (Join-Path $Root 'frontend') `
-        -Port 3000 `
+        -Port 16300 `
         -PidFile (Join-Path $LogDir 'next.pid')
 }
 
@@ -174,7 +177,7 @@ foreach ($k in $results.Keys) {
 
 if ($allOk) {
     Write-Output ""
-    Write-Output "Стек готов. UI: http://localhost:3000"
+    Write-Output "Стек готов. UI: http://localhost:16300"
 } else {
     Write-Output ""
     Write-Output "WARNING: часть сервисов не ответила. Логи:"

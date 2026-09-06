@@ -112,14 +112,15 @@ class Settings(BaseSettings):
     keycloak_client_id: str | None = None
     keycloak_client_secret: str | None = None
     # Внешний URL callback. На локальном стенде фронтенд ходит на бэкенд через
-    # Next.js-прокси, поэтому Keycloak должен вернуть браузер на порт фронта
-    # (http://localhost:3000/api/auth/callback), а бэкенд видит :8000.
+    # Next.js-прокси, поэтому Keycloak должен вернуть браузер на порт фронтенда
+    # (http://localhost:16300/api/auth/callback — host-порт локального Next dev),
+    # а бэкенд видит :18000.
     sso_redirect_uri: str | None = None
     # Куда Keycloak вернёт браузер после RP-Initiated Logout (end_session_endpoint).
     # Корень фронтенда (публичная точка входа с login-gate), чтобы не попасть на
     # защищённую страницу. Должен быть зарегистрирован в "Valid post logout
     # redirect URIs" клиента в Keycloak.
-    sso_post_logout_redirect_uri: str = "http://localhost:3000/"
+    sso_post_logout_redirect_uri: str = "http://localhost:16300/"
     # Частичное переопределение claim-имён из userinfo → поля identity.
     # JSON-объект: {"groups": "roles", "username": "name", "external_id": "sub"}.
     # Незаданные поля остаются стандартными OIDC-именами (sub/preferred_username/

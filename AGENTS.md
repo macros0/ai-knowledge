@@ -20,9 +20,9 @@
 | Ollama | http://localhost:12400 | `GET /api/tags` |
 | PostgreSQL | 127.0.0.1:5432 | `pg_isready -h 127.0.0.1 -p 5432` |
 | Backend (FastAPI) | http://localhost:18000 | `GET /health` |
-| Frontend (Next.js) | http://localhost:3000 | `GET /` |
+| Frontend (Next.js) | http://localhost:16300 | `GET /` |
 
-UI: http://localhost:3000
+UI: http://localhost:16300
 
 ## Важные квирки (не исследовать заново)
 
@@ -44,6 +44,15 @@ UI: http://localhost:3000
   уже на `http://localhost:18000`. Docker-compose не трогать: внутри сети `backend:8000`.
   `start-all.ps1` перед запуском проверяет все фиксированные host-порты на резервацию
   (понятная ошибка вместо `winerror 10013`).
+- **Frontend слушает host-порт 16300, НЕ 3000 (06.09.2026).** **16300 — host-порт локального
+  Next dev server; 3000 — только внутренний порт frontend-контейнера в docker-compose
+  (`8080:3000`), его НЕ менять.** Host-порт 3000 (как ранее 8000/6333/8081) периодически попадает
+  в исключённый диапазон Windows Hyper-V/WSL — `next dev` падает с `EACCES: permission denied
+  0.0.0.0:3000`. 16300 выше динамического диапазона TCP (1024–15000) — HNS его не резервирует.
+  `start-all.ps1` запускает `node node_modules/next/dist/bin/next dev -p 16300`. SSO-редиректы
+  (`SSO_REDIRECT_URI`/`SSO_POST_LOGOUT_REDIRECT_URI` в `.env`, дефолт `config.py`) указывают на
+  `http://localhost:16300`; **при смене порта frontend обязательно обновить redirect URIs клиента
+  в Keycloak** (docker-volume `keycloak-data`, вне git).
 - **Qdrant — локальный бинарь (не Docker): `%TEMP%\opencode\qdrant\v1.19.0\qdrant.exe`, данные в
   `%TEMP%\opencode\qdrant\storage` (сохраняются между запусками). Слушает порты 16333 (REST) /
   16334 (gRPC), НЕ дефолтные 6333/6334**: порт 6333 попал в исключённый диапазон Windows

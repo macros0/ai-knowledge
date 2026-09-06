@@ -51,7 +51,7 @@ class KeycloakOidcProvider(AuthProvider):
 
     async def handle_callback(self, request: Request) -> AuthenticatedIdentity:
         # authlib сам формирует redirect_uri для code-обмена из request
-        # (Host: localhost:3000 сохраняется Next.js-прокси) — вручную не передаём.
+        # (Host: localhost:16300 сохраняется Next.js-прокси) — вручную не передаём.
         token = await self._oauth().keycloak.authorize_access_token(request)
         userinfo = token.get("userinfo") or {}
         if not userinfo:

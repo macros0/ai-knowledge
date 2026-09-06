@@ -180,7 +180,7 @@ def test_sso_full_path_end_to_end(tmp_path, monkeypatch):
         keycloak_client_id="my-app",
         keycloak_client_secret="dev-secret",
         keycloak_group_path_mode="full_path",
-        sso_redirect_uri="http://localhost:3000/api/auth/callback",
+        sso_redirect_uri="http://localhost:16300/api/auth/callback",
     )
     monkeypatch.setattr(
         "app.auth.providers.keycloak_oidc.KeycloakOidcProvider._oauth",

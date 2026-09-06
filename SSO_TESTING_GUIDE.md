@@ -10,7 +10,7 @@
 | Слой | Что работает |
 |---|---|
 | Backend (FastAPI `:18000`) | `auth_provider=keycloak_oidc`, защита `/api/documents\|search\|chat\|tags\|settings` через `Depends(require_user)`, сессия в signed-cookie |
-| Frontend (Next.js `:3000`) | кнопка «Войти», экран «Вход в систему» для анонима, шапка с логином и ролью |
+| Frontend (Next.js `:16300`) | кнопка «Войти», экран «Вход в систему» для анонима, шапка с логином и ролью |
 | Keycloak (Docker `:18081`) | realm `myrealm`, confidential client `my-app`, группы→роли, group mapper |
 | Роли (4 из Этапа 1) | `viewer / editor / admin / security` из групп `KB_*` через `AUTH_ROLE_GROUPS` |
 
@@ -35,7 +35,7 @@ KEYCLOAK_URL=http://localhost:18081
 KEYCLOAK_REALM=myrealm
 KEYCLOAK_CLIENT_ID=my-app
 KEYCLOAK_CLIENT_SECRET=RypekEVHCWFCEhWlsT0EYNpTtpM8o4hb
-SSO_REDIRECT_URI=http://localhost:3000/api/auth/callback
+SSO_REDIRECT_URI=http://localhost:16300/api/auth/callback
 ```
 
 > **Порт 18081, а не 8080/8081** — 8080 на этой машине занят `3proxy`, а 8081 попадает в
@@ -62,7 +62,7 @@ SSO_REDIRECT_URI=http://localhost:3000/api/auth/callback
 Готовность стенда:
 
 ```powershell
-Invoke-WebRequest http://localhost:3000                 # UI
+Invoke-WebRequest http://localhost:16300                 # UI
 Invoke-WebRequest http://localhost:18081/realms/myrealm/.well-known/openid-configuration
 ```
 
@@ -85,12 +85,12 @@ Invoke-WebRequest http://localhost:18081/realms/myrealm/.well-known/openid-confi
 
 ## 5. Сквозной сценарий в браузере (главный тест)
 
-1. Откройте `http://localhost:3000` (лучше в инкогнито/без куки).
+1. Откройте `http://localhost:16300` (лучше в инкогнито/без куки).
    ⇒ Шапка: `SSO · Войти через корпоративный вход`, в контенте карточка «Вход в систему».
 2. Нажмите «Войти через корпоративный вход».
-   ⇒ Браузер уходит на `http://localhost:18081/realms/myrealm/protocol/openid-connect/auth?...&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback` — **redirect_uri обязан быть на :3000** (это проверка SSO proxy fix).
+   ⇒ Браузер уходит на `http://localhost:18081/realms/myrealm/protocol/openid-connect/auth?...&redirect_uri=http%3A%2F%2Flocalhost%3A16300%2Fapi%2Fauth%2Fcallback` — **redirect_uri обязан быть на :16300** (это проверка SSO proxy fix).
 3. Введите `demo.user` / `demo` → Sign In.
-4. ⇒ Вернётесь на `:3000`, в шапке `demo.user · Viewer`, документы загрузились.
+4. ⇒ Вернётесь на `:16300`, в шапке `demo.user · Viewer`, документы загрузились.
 5. Нажмите «Выйти» ⇒ снова карточка входа.
 
 Аналогично проверьте всех 4 юзеров — роль в шапке должна меняться.
@@ -99,7 +99,7 @@ Invoke-WebRequest http://localhost:18081/realms/myrealm/.well-known/openid-confi
 
 ## 6. Проверка API вручную (PowerShell / curl)
 
-Бэкенд: `http://localhost:18000`. Frontend-прокси: `http://localhost:3000/api/*`.
+Бэкенд: `http://localhost:18000`. Frontend-прокси: `http://localhost:16300/api/*`.
 
 ### 6.1 Анонимные запросы → 401
 
@@ -132,7 +132,7 @@ Remove-Item Env:AUTH_PROVIDER -ErrorAction SilentlyContinue
 
 ```bash
 curl -i "http://localhost:18000/api/auth/login" | grep -i location
-# Location: http://localhost:18081/.../auth?response_type=code&client_id=my-app&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback&...
+# Location: http://localhost:18081/.../auth?response_type=code&client_id=my-app&redirect_uri=http%3A%2F%2Flocalhost%3A16300%2Fapi%2Fauth%2Fcallback&...
 ```
 
 Полный OIDC (код-обмен) скриптом удобнее всего сделать тестами: `tests/test_auth_sso.py` уже гоняет
@@ -172,8 +172,8 @@ cd backend
 | Симптом | Причина / решение |
 |---|---|
 | Бэкенд не стартует (`ModuleNotFoundError: itsdangerous`) | Запускается системный `python` вместо проекта. `start-all.ps1` должен использовать `backend\.venv\Scripts\python.exe` |
-| `/health` на `:3000` → 404 | Next.js проксирует только `/api/*`; `/health` добавлен отдельным rewrite в `next.config.js` |
-| После логина редиректит на `:18000` вместо `:3000` | Не задан `SSO_REDIRECT_URI`; контролируйте, чтобы authorize-URL содержал `redirect_uri=localhost:3000` |
+| `/health` на `:16300` → 404 | Next.js проксирует только `/api/*`; `/health` добавлен отдельным rewrite в `next.config.js` |
+| После логина редиректит на `:18000` вместо `:16300` | Не задан `SSO_REDIRECT_URI`; контролируйте, чтобы authorize-URL содержал `redirect_uri=localhost:16300` |
 | Keycloak не поднялся за 120с | Образ не скачан и/или стартует холодный `start-dev`; проверьте `docker logs -f okf-keycloak` |
 | Ошибка `invalid_client_credentials` при ручной выдаче токена | Используйте форма `client_id=my-app&client_secret=…&grant_type=password` (form-urlencoded) |
 | Консоль браузера: `ApiError: Требуется авторизация` | Это нормально для анонимного посещения; UI теперь показывает экран входа вместо падения списка |
@@ -186,8 +186,8 @@ cd backend
 
 - **Юзер**: Users → Add user (username/email), потом Credentials → Set password (нулевое число «temporary»), затем Groups → группа.
 - **Группы**: Groups → Create group (`KB_Viewer`, `KB_Editor`, …).
-- **Клиент**: Clients → `my-app` → Settings (redirect URI `http://localhost:3000/api/auth/callback`, Client authentication on), Credentials (client secret), Client scopes → `group` mapper.
-  - **Valid post logout redirect URIs** → `http://localhost:3000/` — обязателен для RP-Initiated Logout («Выйти» в UI завершает и SSO-сессию Keycloak). Без него после logout Keycloak откажет в редиректе (`invalid_redirect_uri`). Настройка живёт в Docker-volume `keycloak-data` (не в git): при пересоздании контейнера с чистым volume её надо внести заново (см. ниже).
+- **Клиент**: Clients → `my-app` → Settings (redirect URI `http://localhost:16300/api/auth/callback`, Client authentication on), Credentials (client secret), Client scopes → `group` mapper.
+  - **Valid post logout redirect URIs** → `http://localhost:16300/` — обязателен для RP-Initiated Logout («Выйти» в UI завершает и SSO-сессию Keycloak). Без него после logout Keycloak откажет в редиректе (`invalid_redirect_uri`). Настройка живёт в Docker-volume `keycloak-data` (не в git): при пересоздании контейнера с чистым volume её надо внести заново (см. ниже).
 - Смена маппинга групп прода → только в `.env`: `AUTH_ROLE_GROUPS={"corp_group_admins":"admin", ...}`.
 
 ### 11.1 Внести post-logout URI через admin API (без консоли)
@@ -196,7 +196,7 @@ cd backend
 # Выйти из приложения (наш logout), затем Keycloak вернёт на post_logout_redirect_uri.
 # Клиенту my-app нужно зарегистрировать этот URI:
 #   admin API: PUT /admin/realms/myrealm/clients/{id}
-#   attributes["post.logout.redirect.uris"] = "http://localhost:3000/"
+#   attributes["post.logout.redirect.uris"] = "http://localhost:16300/"
 # Либо консоль: Clients → my-app → Settings → "Valid post logout redirect URIs".
 ```
 

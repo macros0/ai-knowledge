@@ -65,7 +65,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 18000
 # 3. Frontend (в отдельном терминале)
 cd frontend
 npm install
-npm run dev                     # http://localhost:3000
+npm run dev -- -p 16300         # http://localhost:16300  (3000 в исключённом диапазоне Windows; скрипт start-all.ps1 использует тот же -p 16300)
 ```
 
 ## Быстрый старт (Docker)

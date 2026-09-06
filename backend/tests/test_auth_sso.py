@@ -1,6 +1,6 @@
 """Mock-тесты SSO-потока (keycloak_oidc): redirect_uri через Next.js-прокси.
 
-Ключевой сценарий: фронтенд ходит на бэкенд через прокси (:3000 vs :8000),
+Ключевой сценарий: фронтенд ходит на бэкенд через прокси (:16300 vs :18000),
 поэтому Keycloak должен получить внешний URI (SSO_REDIRECT_URI), и тот же URI
 должен уйти в authorize_access_token для валидации state.
 """
@@ -24,7 +24,7 @@ SSO_SETTINGS = {
     "keycloak_realm": "myrealm",
     "keycloak_client_id": "my-app",
     "keycloak_client_secret": "dev-secret",
-    "sso_redirect_uri": "http://localhost:3000/api/auth/callback",
+    "sso_redirect_uri": "http://localhost:16300/api/auth/callback",
 }
 
 
@@ -127,7 +127,7 @@ def test_sso_login_uses_configured_redirect_uri(tmp_path, monkeypatch):
     c = build_sso_client(tmp_path, monkeypatch)
     resp = c.get("/api/auth/login")
     assert resp.status_code == 200
-    assert FakeClient.last.auth_redirect_uri == "http://localhost:3000/api/auth/callback"
+    assert FakeClient.last.auth_redirect_uri == "http://localhost:16300/api/auth/callback"
 
 
 def test_sso_callback_passes_redirect_uri_and_sets_session(tmp_path, monkeypatch):
@@ -179,7 +179,7 @@ def test_sso_logout_redirects_to_keycloak_with_id_token(tmp_path, monkeypatch):
     assert parsed.netloc == "kc.example"
     assert parsed.path == "/realms/myrealm/protocol/openid-connect/logout"
     q = parse_qs(parsed.query)
-    assert unquote(q["post_logout_redirect_uri"][0]) == "http://localhost:3000/"
+    assert unquote(q["post_logout_redirect_uri"][0]) == "http://localhost:16300/"
     assert q["id_token_hint"][0] == "fake-id-token"
 
 
@@ -190,5 +190,5 @@ def test_sso_logout_without_id_token_still_redirects(tmp_path, monkeypatch):
     parsed = urlparse(resp.headers["location"])
     assert parsed.path == "/realms/myrealm/protocol/openid-connect/logout"
     q = parse_qs(parsed.query)
-    assert unquote(q["post_logout_redirect_uri"][0]) == "http://localhost:3000/"
+    assert unquote(q["post_logout_redirect_uri"][0]) == "http://localhost:16300/"
     assert "id_token_hint" not in q
