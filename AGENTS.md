@@ -568,10 +568,16 @@ ru), полнота plural-форм.
 - **API**: `GET /tags?needs_review=` (display по cookie `okf.locale`), `PATCH
   /tags/{id}/translations/{locale}`, `POST /tags/bulk-review` (editor/admin),
   `POST /tags/translations/backfill` (admin). Audit: `tag_translation_update/review`,
-  `translations_backfill`. **НЕ реализовано (следом):** review-UI в TagManagerModal,
-  display-локализация DocumentOut.tags / DevelopmentOut.name / AttributeValue (wire
-  остаётся каноническим текстом — фронт совместим, поля `name`/`count` сохранены в
-  TagOut).
+  `translations_backfill`.
+- **Review-UI + display-локализация (завершено 06.09.2026):** `TagManagerModal` —
+  фильтр «требует проверки», раскрытие переводов, подтверждение (одиночное/массовое),
+  правка перевода для текущего языка; `TagOut.translations`. Display-локализация:
+  теги рендерятся через `display` (словарь `tagDictionary` уже содержит его; сабмит
+  остаётся каноническим `name`), названия разработок — `DevelopmentOut.display_name`
+  (`add_display_names`), label'ы атрибутов — `AttributeValueOut.display_label`
+  (`add_display_labels`) — всё по cookie `okf.locale` (request_locale). Wire-протокол
+  канонический — теги документов (`DocumentOut.tags`) локализуются на фронте через
+  словарь, а не полем на каждый документ.
 
 ## Тесты
 
