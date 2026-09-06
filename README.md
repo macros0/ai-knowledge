@@ -1,864 +1,160 @@
 # OKF Knowledge Service
 
-Сервис для загрузки документов, преобразования их в **Open Knowledge Format (OKF)**, смысловой разбивки на концепты, индексации в RAG-хранилище (Qdrant) и умного поиска по данным через веб-чат.
+Turn project documentation (DOCX / XLSX / PDF) into a searchable knowledge base: an LLM
+splits documents into semantic **concepts** (Open Knowledge Format), a hybrid vector index
+stores them for retrieval, and an interactive chat answers questions **grounded in your
+documents with clickable source citations**.
 
-## Документация
+Built to solve a real-world pain: a large body of accumulated functional and technical
+specifications where plain full-text search cannot answer questions like *"how was the
+`lnState` field implemented in development 111"* or *"which e-sick-leave statuses do we
+handle"*. Keyword search finds word matches; it does not find meaning. This service does —
+and always points back to the exact place in the source document.
 
-- **Пользователям** — [OKF Knowledge Service: введение для пользователя](OKF_Knowledge_Service_Введение_для_пользователя.md): обзор возможностей, устройство поиска, теги/модули/разработки, корзина, история переписки, роли доступа. Версия для печати/офлайн — [PDF](OKF_Knowledge_Service_Введение_для_пользователя.pdf).
-- **Разработчикам** — [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) (чек-лист прода), [MIGRATION_PLAN.md](MIGRATION_PLAN.md) (схема БД и миграции), [SECURITY.md](SECURITY.md) (модель безопасности).
+## Key features
 
-## Архитектура
+- **Semantic concept extraction (OKF).** An LLM breaks documents into meaningful concepts
+  (a concept per message field, business rule, term definition) with YAML metadata
+  (`type`, `title`, `tags`, `relations`) — not opaque full-text blobs.
+- **Deterministic field-table extraction.** Enumeration and XML-field tables are processed
+  *programmatically* (row-by-row concepts) with an optional LLM classifier — every row
+  (`lnState`, `snils`, …) is guaranteed findable, even in 40+ row tables.
+- **Reviewer comments as structured data.** `.docx` reviewer comments are parsed into
+  question → answer threads, indexed and searchable under a `review` tag.
+- **Hybrid retrieval.** Dual index over LLM concept summaries **and** raw chunk text; dense
+  embeddings + sparse BM25 fused with Reciprocal Rank Fusion, plus graph expansion over
+  concept relations. Tag-based pre-filtering. Three query modes: `dense`, `bm25`, `hybrid`.
+- **Grounded RAG chat.** Answers are synthesized strictly from retrieved fragments and cite
+  sources as `[N]` links, with source snippets shown in the UI.
+- **PostgreSQL as the source of truth.** Documents, tags, concepts, chunks and staging live
+  in PostgreSQL; Qdrant keeps slim vector projections and full text is hydrated on read.
+- **Upload-time deduplication.** File hash (level 1) plus content hash + MinHash/LSH
+  (levels 2–3) warn about duplicate or near-duplicate documents.
+- **Authentication & RBAC.** Pluggable auth providers, Keycloak/OIDC (Authorization Code)
+  SSO, roles `viewer` / `editor` / `admin` / `security`, fail-closed by default.
+- **Security operations.** Append-only audit log (INSERT-only DB account on production),
+  four-eyes approval and rate limits for bulk operations, user blocklist.
+- **Production niceties.** Soft-delete trash with restore and retention-based purge, chat
+  session history, document ↔ development/module registry for filtering and grouping.
+- **Resilient LLM pipeline.** Streaming with idle timeouts, retry cascades, truncation
+  recovery (max-token bump → chunk split → salvage), per-chunk checkpointing with `resume`.
+- **Multilingual UI (RU/EN)** with data-driven stop words, reference-data translations and
+  runtime UI dictionaries.
+
+## Screenshots
+
+| Q&A chat | Document upload & status | Sources under an answer |
+|---|---|---|
+| ![Chat interface](screenshots/screenshot-01.png) | ![Upload and processing status](screenshots/screenshot-02.png) | ![Sources block with citations](screenshots/screenshot-03.png) |
+
+## How it works
 
 ```
-Upload (docx/xlsx/pdf)
+Upload (docx / xlsx / pdf)
         │
         ▼
-┌──────────────────────────┐    ┌──────────────────────┐    ┌─────────────────┐
-│  Document Parser         │───►│  OKF Generator (LLM) │───►│  OKF Storage    │
-│  (doc-parser package,    │    │  semantic chunking   │    │  ./data/okf_    │
-│   рекурсивный разбор     │    │  + YAML frontmatter  │    │  bundles/{id}/  │
-│   вложений)              │    │                      │    │  + attachments/ │
-└──────────────────────────┘    └──────────────────────┘    └────────┬────────┘
-                                                                     │ embed
-                                                                     ▼
-┌─────────────────┐    ┌─────────────────────────────────────────────────┐
-│  Chat Web UI    │◄───│  RAG: Qdrant (vectors + payload=YAML meta)      │
-│  (Next.js + JS) │    │  3 search modes: dense/bm25/hybrid              │
-└─────────────────┘    └─────────────────────────────────────────────────┘
+┌────────────────────────┐   ┌──────────────────────┐   ┌─────────────────────┐
+│ Document parser        │──►│ OKF generator (LLM)  │──►│ PostgreSQL          │
+│ docx/xlsx/pdf, tables, │   │ semantic chunking,   │   │ documents, tags,    │
+│ reviewer comments,     │   │ field-table rows,    │   │ concepts, chunks    │
+│ embedded attachments   │   │ comment threads      │   │ (source of truth)   │
+└────────────────────────┘   └──────────────────────┘   └─────────┬───────────┘
+                                                                  │ embed
+                                                                  ▼
+┌──────────────────┐   ┌───────────────────────────────────────────────────────┐
+│ Chat Web UI      │◄──│ Qdrant: hybrid retrieval                              │
+│ (Next.js)        │   │ concept + chunk dual index,                           │
+└──────────────────┘   │ dense + BM25 + graph, RRF fusion, tag filters        │
+                       └───────────────────────────────────────────────────────┘
 ```
 
-Слои:
+1. **Upload & API** — Python **FastAPI**; `POST /api/documents`, asynchronous processing.
+2. **Parsing** — the standalone **`doc-parser`** package: `python-docx` (text, reviewer
+   comments, embedded OLE objects), `openpyxl` (sheets → Markdown), `pypdf`; recursive
+   attachment extraction.
+3. **OKF generation** — an LLM (local via Ollama/vLLM or cloud via LiteLLM/OpenRouter)
+   splits text into concepts; enumeration and XML-field tables are extracted
+   programmatically, per row.
+4. **Storage** — PostgreSQL is the canonical store for metadata, concepts and chunks;
+   Qdrant holds the vectors (dense + sparse BM25) for two point types: `concept`
+   (LLM summaries) and `chunk` (raw text, so details the LLM might have dropped — URLs,
+   codes, configs — are still findable).
+5. **Search** — query is embedded and run through dense / bm25 / hybrid branches (RRF
+   fusion in Python); hits are merged/collapsed per source fragment and tag-filtered.
+6. **Chat** — the LLM writes an answer from the retrieved context and cites each fact
+   `[N]`; sources (title, snippet, score) are returned separately and rendered as
+   clickable links.
 
-1. **Загрузка и API** — Python **FastAPI**, приём документов через `POST /api/documents`, асинхронная обработка.
-2. **Парсинг** — пакет **`doc-parser`** (editable-установка): `python-docx` (текст + комментарии рецензентов + встроенные объекты), `openpyxl` (таблицы → Markdown), `pypdf`, рекурсивный разбор вложений. Вложения сохраняются в `data/okf_bundles/{doc_id}/attachments/`.
-3. **OKF-генерация** — локальная LLM (через **LiteLLM**, легко переключить на облачную) разбивает текст на смысловые концепты и формирует Markdown-файлы с YAML-фронтматтером (type, title, tags, relations, source).
-4. **RAG-хранилище** — **Qdrant**: dual-index (концепты + чанки). Dense-вектор (безымянный, семантический) + sparse-вектор `"sparse"` (лексический, BM25) + payload (метаданные из YAML). Коллекция хранит два типа точек: `point_type="concept"` (LLM-выжимки с title/tags/relations/content[:4000]) и `point_type="chunk"` (сырой текст чанка content[:8000], chunk_index, section_title). Чанки позволяют находить детали (URL, коды, конфиги), которые LLM могла уронить при генерации концептов. Три ветки поиска с RRF-fusion в Python: dense (семантика), bm25 (ключевые слова), graph expansion (по relations концептов).
-5. **Умный поиск** — эмбеддинг запроса → поиск в Qdrant в выбранном режиме → LLM формирует ответ по найденным концептам, цитируя источники метками `[N]` из контекста (без отдельного списка в конце — он формируется и показывается отдельно). Источники в ответе API `/api/chat` содержат `snippet` (первые 200 симв. content) для предпросмотра без перехода. В UI метки `[N]` в ответе кликабельны и ведут на OKF-файл соответствующего источника, а под каждым источником показывается сниппет. Выбор режима — селектор в панели чата или параметр `mode` в API.
-6. **Веб-интерфейс** — **Next.js (App Router) + JavaScript**: загрузка файлов, статус обработки, чат с блоком "Источники".
+## Tech stack
 
-## Стек
-
-| Слой | Технология |
+| Layer | Technology |
 | :-- | :-- |
-| Backend | Python 3.12, FastAPI, LiteLLM, Qdrant client |
-| Frontend | JavaScript, Next.js (App Router) |
-| Vector DB | Qdrant |
-| Metadata DB | PostgreSQL 17 (portable-бинарь, порт 5432, БД `okf_knowledge`) |
-| OKF Storage | Файловая система `./data/okf_bundles/{doc_id}/` |
-| LLM / Embeddings | Любые, совместимые с OpenAI API (Ollama, vLLM, TEI, OpenAI, YandexGPT...) |
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2.0, LiteLLM |
+| Frontend | Next.js (App Router), JavaScript |
+| Vector database | Qdrant (dense + sparse BM25 in one collection) |
+| Metadata database | PostgreSQL (dev fallback: SQLite) |
+| Parser | Custom `doc-parser` package (python-docx, openpyxl, pypdf) |
+| LLM / embeddings | Any OpenAI-compatible endpoint (Ollama, vLLM, OpenRouter, …) |
 
-## Быстрый старт (локально, без Docker)
+## Quick start
+
+### Docker (fully local stack)
 
 ```bash
-# 1. Настройки
 cp .env.example .env
-#   отредактируйте EMBEDDING_* и LLM_* под ваши модели
+# Point .env at the local compose services and your model endpoint:
+#   DATABASE_URL=postgresql+psycopg://postgres:<your-password>@postgres:5432/okf_knowledge
+#   QDRANT_URL=http://qdrant:6333
+#   LLM_BASE_URL / EMBEDDING_API_BASE = your model endpoint (e.g. http://host.docker.internal:11434)
+#   ENVIRONMENT=development          # compose defaults to production (fail-fast)
+docker compose --profile local-qdrant --profile local-postgres up --build
+```
 
-# 2. Backend
+- UI: http://localhost:8080
+- Profiles: `local-qdrant` / `local-postgres` start the bundled vector/metadata DBs;
+  without them the backend connects to your own Qdrant / PostgreSQL via `.env`.
+
+### Local development (no Docker)
+
+```bash
+# 1. Backend
 cd backend
 python -m venv .venv
-.venv\Scripts\activate          # Windows
-pip install -e ../doc-parser    # пакет разбора документов (editable)
+.venv\Scripts\activate            # Windows
+pip install -e ../doc-parser      # document parsing package (editable)
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 18000
+uvicorn app.main:app --reload --port 18000
 
-# 3. Frontend (в отдельном терминале)
+# 2. Frontend (separate terminal)
 cd frontend
 npm install
-npm run dev -- -p 16300         # http://localhost:16300  (3000 в исключённом диапазоне Windows; скрипт start-all.ps1 использует тот же -p 16300)
+npm run dev
 ```
 
-## Быстрый старт (Docker)
-
-```bash
-cp .env.example .env
-# Полностью локальный стек (qdrant + postgres + backend + frontend, без внешних зависимостей):
-#   DATABASE_URL=postgresql+psycopg://postgres:okf_dev_pg@postgres:5432/okf_knowledge
-#   QDRANT_URL=http://qdrant:6333
-docker compose --profile local-qdrant --profile local-postgres up --build
-# Только локальный Qdrant (БД — внешняя/SQLite): docker compose --profile local-qdrant up --build
-# Только локальный Postgres:                     docker compose --profile local-postgres up --build
-# Без локальных зависимостей (корпоративные Qdrant/Postgres по .env): docker compose up --build
-# UI: http://localhost:8080   API docs: http://localhost:8000/docs
-# BACKEND_URL внутри compose переопределяется на http://backend:8000 (прокси /api в Next.js)
-```
-
-## Развёртывание в production
-
-Перед публикацией в прод пройдите чек-лист из [`PRODUCTION_DEPLOYMENT.md`](PRODUCTION_DEPLOYMENT.md):
-генерация `APP_SECRET_KEY`, `ENVIRONMENT=production`, `AUTH_SESSION_HTTPS_ONLY=true`,
-секреты вне git, HTTPS/reverse-proxy и настройки Keycloak/IDB. Бэкенд при
-`ENVIRONMENT=production` падает на старте (fail-fast), если секрет слабый/дефолтный
-или cookie-флаг не HTTPS — это блокер, а не рекомендация.
-
-## Как это работает
-
-1. Загрузите `.docx` / `.xlsx` / `.pdf` в веб-интерфейсе.
-2. Backend парсит файл (для docx сохраняет комментарии рецензентов), режет на главы и отправляет в LLM.
-3. LLM выделяет смысловые блоки (концепты) и генерирует OKF-файлы вида:
-
-```markdown
----
-type: concept
-title: Настройка сетевых мостов в Proxmox
-tags: [proxmox, networking, bridge]
-source_document: {filename: "setup.docx", doc_id: "abc123"}
-relations: [vlan-configuration.md]
-created_at: 2026-08-12
----
-
-# Настройка сетевых мостов в Proxmox
-...
-```
-
-4. Каждый файл векторизуется (dense + sparse из `title+content`), векторы уходят в Qdrant, а YAML-метаданные — в payload точки. При финализации документа старые точки этого же `doc_id` удаляются перед индексацией (защита от stale-точек при resume после неудачной финализации).
-5. В чате запрос векторизуется, Qdrant возвращает релевантные концепты (с учётом фильтров по тегам), LLM синтезирует ответ и цитирует источники метками `[N]` из контекста. Источники (title, filepath, score, snippet) возвращаются отдельно; в UI метки `[N]` кликабельны и ведут на OKF-файл источника.
-
-## Статусы обработки документа
-
-| Статус | Значение |
-| :-- | :-- |
-| `uploaded` / `processing` / `splitting` / `indexing` | Идёт обработка (парсинг, генерация OKF, индексация) |
-| `done` | Обработан полностью, OKF и векторы готовы |
-| `paused` | Приостановлен из-за ошибки или перезапуска сервера — можно «Возобновить» |
-| `failed` / `error` | Критическая ошибка (например, недоступен Qdrant на финализации) |
-
-Обработка идёт **инкрементально**: результат каждого чанка пишется в staging,
-поэтому при паузе/перезапуске обработанные чанки не генерируются заново —
-`resume` пропускает их. Удалить документ можно из любого статуса — генерация
-будет остановлена, а документ перемещён в корзину (soft delete, Этап 4a.2):
-файлы и точки Qdrant не удаляются до истечения `TRASH_RETENTION_DAYS`, документ
-можно восстановить. При перезапуске сервера зависшие статусы автоматически
-сбрасываются в `paused`.
-
-## Обновление Qdrant
-
-Qdrant гарантирует совместимость **storage-формата только на ±1 минорную версию**.
-Прыжок через несколько миноров (например, 1.12 → 1.19) при наличии данных приведёт
-к отказу сервера стартовать. Поэтому перед любым апгрейдом следуйте процедуре ниже.
-
-Правила совместимости:
-- Версии **клиента** (`qdrant-client`) и **сервера** должны совпадать по major и
-  расходиться не более чем на 1 минор. Обновляйте сначала клиент, потом сервер.
-- У нас один узел — апгрейд требует короткого даунтайма (это нормально).
-
-### Процедура апгрейда с данными (через снапшот)
-
-1. **Обновить клиент** (`backend/requirements.txt`), поставить в venv, проверить
-   подключение к старому серверу.
-2. **Снять снапшот коллекции** (сервер сам гасит записи и сбрасывает WAL):
-
-   ```bash
-   curl -X POST http://localhost:16333/collections/okf_knowledge_base/snapshots
-   ```
-
-   Снапшот появится в каталоге snapshots сервера — скопируйте его в бэкап
-   **вне** storage-каталога. (Порт `16333` — у локального бинаря на Windows; дефолт
-   Qdrant `6333` на этой машине занят исключённым диапазоном Hyper-V/WSL. У
-   compose-варианта — порт внутри сети, снапшот снимается с адреса контейнера.)
-3. **Остановить старый сервер**, обновить бинарь/образ, **удалить/затереть**
-   storage (старый формат не читается новым сервером).
-4. **Запустить новый сервер**, восстановить коллекцию из снапшота:
-
-   ```bash
-   curl -X PUT http://localhost:16333/collections/okf_knowledge_base/snapshots/recover \
-     -H "Content-Type: application/json" \
-     -d '{"location": "file:///path/to/snapshot.snapshot", "priority": "snapshot"}'
-   ```
-
-   Восстановление создаёт коллекцию и сразу строит индексы — пере-эмбеддинг не нужен.
-5. **Проверить**: количество точек и выборочный payload:
-
-   ```bash
-   curl -X POST http://localhost:16333/collections/okf_knowledge_base/points/count \
-     -H "Content-Type: application/json" -d '{"exact": true}'
-   ```
-
-### Страховка: пересборка индекса из источников
-
-Векторный индекс — **производные данные**; первоисточник лежит в
-`data/okf_bundles/{doc_id}/`. Если снапшот не восстановился, коллекцию можно
-полностью пересобрать без потерь (только время на эмбеддинги):
-
-```bash
-cd backend
-.venv\Scripts\activate
-python scripts/reindex.py          # из data/ в текущем каталоге
-python scripts/reindex.py --data-dir /path/to/data
-```
-
-Скрипт удаляет коллекцию, создаёт её заново и индексирует все OKF-файлы.
-Перед запуском нужен работающий Qdrant и embedding-сервер (или `EMBEDDING_PROVIDER=fake`).
-
-### Реляционная БД: схема и миграция
-
-Метаданные (документы, теги, OKF-концепты, staging) хранятся в PostgreSQL
-(прод) / SQLite (dev) через SQLAlchemy — см. `MIGRATION_PLAN.md`. Таблицы
-создаются автоматически на старте приложения (`create_all`, идемпотентно); для
-версионированных миграций есть Alembic:
-
-```bash
-cd backend
-.venv\Scripts\activate
-alembic upgrade head                          # применить миграции схемы
-```
-
-Одноразовый перенос существующих данных из JSON/FS в БД (бэкапит `*.json` в `*.bak`):
-
-```bash
-python scripts/migrate_json_to_db.py --data-dir /path/to/data
-python scripts/migrate_json_to_db.py --data-dir /path/to/data --reset   # очистить и перечитать
-```
-
-Slim-payload Qdrant: полный текст концепта теперь живёт в БД (`okf_concepts`),
-payload точки хранит только `doc_id`/`slug`/`title`/`tags`/`relations`. Миграция
-существующих точек (удаляет тяжёлые поля из payload):
-
-```bash
-python scripts/migrate_payload.py             # удаляет content/global_tags/... из payload
-python scripts/migrate_payload.py --fix-slugs # + привести slug к stem (медленно)
-```
-
-После миграции поиск достаёт полный текст концепта из БД по `(doc_id, slug)`.
-Полную пересборку Qdrant с новой slim-схемой даёт `reindex.py` (см. выше).
-
-### Справочник разработок и дедупликация (Этап 4): предзаполнение
-
-Схема Этапа 4 (`developments`, `attribute_values`, `document_lsh_buckets`, колонки
-`documents.*`) приезжает через `alembic upgrade head`. Значения предзаполняются
-**отдельными скриптами** (в миграции не входят — они привязаны к инсталляции):
-
-- **Модули разработок** (`attribute_values`, ключ `module`). Дефолт заточен под
-  текущего клиента (`--org "SAP HCM"`, модули `PY,PT,OM,PA`). Для другого
-  направления/заказчика передавайте свои `--org` и `--values`:
-
-  ```bash
-  python scripts/seed_attribute_values.py                              # SAP HCM: PY,PT,OM,PA
-  python scripts/seed_attribute_values.py --org "Другое" --values "MD,TR,CA"
-  ```
-
-  Без этих значений создание разработки с `module` вернёт 422 (модуль вне
-  справочника). Скрипт идемпотентен.
-
-- **Отпечатки дедупликации** (`file_hash`/`content_hash`/`minhash`/LSH-бакеты) —
-  бэкфилл для документов, загруженных до появления Этапа 4. Без него повторная
-  загрузка файла, совпадающего со «старым» документом, не даст предупреждения о
-  дубле (у старого документа нет отпечатков). Идемпотентен:
-
-  ```bash
-  python scripts/backfill_dedup.py              # все документы
-  python scripts/backfill_dedup.py --doc-id <id>  # один документ
-  ```
-
-### Диагностика зависших документов
-
-Read-only проверка: документы, «зависшие» в активном статусе
-(`processing`/`splitting`/`indexing`) дольше порога. Такое случается при рантайм-
-залипании (например, зависший LLM-вызов) — UI покажет вечный BUSY-статус, а
-штатный сброс зависших работает только при рестарте сервера. Exit code 1, если
-найдены (готово для будущего cron), без уведомлений/алертов.
-
-  ```bash
-  python scripts/check_stuck_documents.py            # статусы processing/splitting/indexing старше 1 часа
-  python scripts/check_stuck_documents.py --hours 2
-  python scripts/check_stuck_documents.py --statuses processing,splitting
-  ```
-
-## Конфигурация (переменные `.env`)
-
-| Переменная | По умолчанию | Описание |
-| :-- | :-- | :-- |
-| `APP_NAME` | `OKF Knowledge Service` | Название сервиса |
-| `API_PREFIX` | `/api` | Префикс путей API |
-| `DATA_DIR` | `./data` | Корень runtime-данных (uploads, okf_bundles, staging) |
-| `DATABASE_URL` | `postgresql+psycopg://postgres:…@127.0.0.1:5432/okf_knowledge` | Строка подключения к PostgreSQL (метаданные: документы, теги, OKF-концепты). Локальный compose — хост `postgres:5432` (профиль `local-postgres`); корпоративный — внешний хост. См. `MIGRATION_PLAN.md` |
-| `DATABASE_URL_DEV` | `sqlite:///./data/app.db` | Dev-фолбэк на SQLite (zero-config, без внешнего сервера; активируется, когда `DATABASE_URL` пуст) |
-| `QDRANT_URL` | `http://localhost:16333` | Адрес Qdrant (локальный бинарь на Windows — `16333`, т.к. порт `6333` попадает в исключённый диапазон Windows Hyper-V/WSL; локальный compose: `http://qdrant:6333`; корпоративный: `https://…:6333`) |
-| `QDRANT_API_KEY` | пусто | Опциональный API-ключ Qdrant (корпоративный Qdrant с авторизацией) |
-| `QDRANT_COLLECTION` | `okf_knowledge_base` | Коллекция Qdrant |
-| `EMBEDDING_DIMENSIONS` | `1024` | Размерность вектора (bge-m3=1024, text-embedding-3-small=1536) |
-| `EMBEDDING_PROVIDER` | `http` | `http` (шлюз LiteLLM) или `fake` (без сети) |
-| `EMBEDDING_MODEL` | `ollama/bge-m3` | Модель эмбеддингов (через LiteLLM: `ollama/...`, `openai/...`, ...) |
-| `EMBEDDING_API_BASE` | `http://localhost:11434` | Endpoint эмбеддингов (для Ollama — без `/v1`) |
-| `EMBEDDING_API_KEY` | пусто | Ключ API эмбеддингов |
-| `EMBEDDING_BATCH_SIZE` | `64` | Размер батча запросов к провайдеру (защита от 400 при >~330 inputs у Ollama) |
-| `LLM_MODEL` | `ollama/qwen2.5:14b` | Модель LLM (через LiteLLM: `openai/...`, `ollama/...`, `openrouter/...`) |
-| `LLM_CHAT_MODEL` | `""` | Модель интерактивного RAG-чата (пусто → `LLM_MODEL`); OKF-генерация всегда на `LLM_MODEL` |
-| `LLM_BASE_URL` | `http://localhost:11434` | Endpoint LLM |
-| `LLM_API_KEY` | `ollama` | Ключ API LLM |
-| `LLM_TEMPERATURE` | `0.2` | Температура генерации |
-| `LLM_MAX_TOKENS` | `4096` | Максимум выходных токенов |
-| `LLM_MAX_CONCURRENCY` | `1` | Параллельность фоновых вызовов LLM (0 = без ограничений) |
-| `LLM_INTERACTIVE_CONCURRENCY` | `2` | Параллельность чата (не блокируется фоновой генерацией) |
-| `LLM_RETRY_ATTEMPTS` | `5` | Быстрые ретраи при ошибках LLM |
-| `LLM_RETRY_BACKOFF_SECONDS` | `2` | Начальная задержка между ретраями (экспонента: 2→4→8→16→32с) |
-| `LLM_TIMEOUT_SECONDS` | `120` | Устарел — заменён на стриминг с idle-timeout |
-| `LLM_STREAM_IDLE_TIMEOUT_SECONDS` | `60` | Таймаут тишины между токенами стрима (нет данных = сеть/провайдер умер) |
-| `LLM_MAX_TOTAL_TIMEOUT_SECONDS` | `600` | Общий жёсткий предел на весь вызов LLM (даёт медленной генерации закончиться) |
-| `LLM_CHUNK_RETRY_ATTEMPTS` | `3` | Долгий контур восстановления при исчерпании быстрых ретраев |
-| `LLM_CHUNK_RETRY_BACKOFF_SECONDS` | `30` | Начальная задержка контура восстановления (30→60→90с) |
-| `OKF_MAX_CHUNK_CHARS` | `8000` | Макс. размер куска текста для LLM за один вызов |
-| `OKF_MAX_CONCEPT_CHARS` | `4000` | Макс. длина тела концепта (избыток отбрасывается) |
-| `OKF_FIELD_TABLE_MIN_ROWS` | `0` | Порог программной экстракции таблиц-перечней. Мин. число строк-данных, чтобы таблицу обработать программно (без LLM). `0` (или не задано) — экстракция выключена, таблицы обрабатывает LLM. Рекомендуется `5`: обходит слабость 12B-модели на больших таблицах (гарантирует, что все строки — `lnState`, `snils`, ситуации, определения — попадут в базу). |
-| `OKF_TABLE_LLM_CLASSIFY` | `false` | LLM-классификатор таблиц-перечней. При `true` — для каждой markdown-таблицы (≥ порога) LLM решает «требует ли таблица построчного анализа» (каждая строка = отдельное понятие: поле, ситуация, определение, справочник) и указывает ключевую колонку. Обобщает на любые таблицы-перечни (не только XML-поля). Кэш на диск (`data/cache/table_classify/`) переиспользуется между документами и перезапусками. При ошибке LLM — fallback на XML-эвристику. |
-| `CHAT_TOP_K_MIN` | `1` | Мин. число концептов в ответе (нижняя граница степпера «Другое») |
-| `CHAT_TOP_K_MAX` | `30` | Макс. число концептов в ответе (верхняя граница степпера «Другое») |
-| `CHAT_TOP_K_DEFAULT` | `10` | Число концептов по умолчанию (кнопка «Стандартно») |
-| `CHAT_TOP_K_PRESETS` | `[5,10,20]` | Кнопки быстрого выбора числа концептов. В `.env` — JSON-массив (`[5,10,20]`); pydantic-settings парсит complex-поля `list[int]` через `json.loads`, поэтому CSV через запятую вызовет ошибку. В коде — обычный список. |
-| `SEARCH_MODE_DEFAULT` | `hybrid` | Режим поиска по умолчанию: `dense` (семантический), `bm25` (ключевые слова), `hybrid` (dense+bm25) |
-| `SEARCH_INDEX_CHUNKS_ENABLED` | `true` | Индексировать ли чанки как отдельные точки Qdrant (dual-index) |
-| `SEARCH_DENSE_ENABLED` | `true` | Ветка dense (query-time, не влияет на хранимые данные) |
-| `SEARCH_BM25_ENABLED` | `true` | Ветка bm25 |
-| `SEARCH_GRAPH_EXPANSION_ENABLED` | `true` | Graph expansion по relations концептов |
-| `SEARCH_RRF_K` | `60` | Константа RRF (стандарт TREC) |
-| `SEARCH_RRF_DENSE_WEIGHT` | `1.0` | Вес dense-ветки в RRF |
-| `SEARCH_RRF_BM25_WEIGHT` | `1.5` | Вес bm25-ветки (выше dense: по коротким/аббревиатурным запросам dense даёт плоский шум, bm25 разделяет точно) |
-| `SEARCH_RRF_GRAPH_EXPANSION_WEIGHT` | `0.5` | Вес graph expansion (соседи обогащают, но не вытесняют) |
-| `CHAT_MAX_CONTEXT_CHARS` | `32000` | Лимит суммарного объёма контекста для LLM |
-| `CHAT_CONCEPT_MAX_CHARS` | `4000` | Обрезка концепта в контексте |
-| `CHAT_CHUNK_MAX_CHARS` | `6000` | Обрезка чанка в контексте |
-| `BACKEND_URL` | `http://localhost:18000` | Адрес бэкенда для прокси `/api` в Next.js (локальный Windows-host — `18000`, т.к. порт `8000` попадает в исключённый диапазон Windows Hyper-V/WSL; Docker: `http://backend:8000`) |
-| `TRASH_RETENTION_DAYS` | `14` | Окно хранения в корзине (дней), до истечения которого документ можно восстановить; после — фоновая автоочистка (Этап 4a.2) |
-| `TRASH_PURGE_ENABLED` | `true` | Автозапуск фоновой очистки корзины при старте сервера |
-| `TRASH_PURGE_INTERVAL_SECONDS` | `3600` | Интервал прогона фоновой очистки корзины (сек) |
-| `STOPWORDS_CACHE_TTL_SECONDS` | `60` | TTL кэша динамических стоп-слов (сек). Действуют только на сторону запроса; индексная формула заморожена — реиндекс не нужен и не помогает (Этап 7) |
-| `STOPWORDS_MAX_WORDS` | `10000` | Максимум слов в одном наборе стоп-слов (защита от случайной гигантской вставки) |
-| `TRANSLATION_PROVIDER` | `llm` | Провайдер автоперевода справочников (теги/разработки/модули): `llm` (через LLM-шлюз; в dev — внешний OpenRouter, маршрут виден в admin-UI и печатается CLI) или `off` (прод без интернета — только ручной ввод) (Этап 7) |
-| `TRANSLATION_MODEL` | `""` | Модель перевода (пусто → `LLM_MODEL`) |
-| `TRANSLATION_BATCH_SIZE` | `50` | Размер пакета текстов на один LLM-вызов бэкфилла переводов |
-
-### Модель устойчивости к сбоям LLM
-
-Ответы LLM читаются **стримом**, таймаут считается по «тишине» между токенами —
-это отличает медленную, но здоровую генерацию (токены капают, вызов живёт до
-`LLM_MAX_TOTAL_TIMEOUT_SECONDS`) от оборванной сети (нет данных
-`LLM_STREAM_IDLE_TIMEOUT_SECONDS`). Любой пришедший чанк сбрасывает таймер
-активности, даже пустой служебный.
-
-Повторные попытки — два контура:
-
-1. **Быстрые ретраи клиента** (`LLM_RETRY_ATTEMPTS=5`, экспонента
-   `2→4→8→16→32с`) — сглаживают секундные скачки и лимиты (403/429/5xx).
-   Фатальные ошибки (401/402/404) не ретраятся.
-2. **Долгий контур пайплайна** (`LLM_CHUNK_RETRY_ATTEMPTS=3`, задержка
-   `30→60→90с`) — переживает длительные сетевые обрывы; при исчерпании документ
-   переходит в `paused` и его можно «Возобновить» в UI (сохранённые чанки
-   пропускаются).
-
-Каждый вызов выполняется в изолированном daemon-потоке — зависший поток не
-блокирует последующие запросы и не держит слот семафора.
-
-### Парсинг JSON из ответа LLM (каскад + отказоустойчивость при обрезании)
-
-Модель не всегда возвращает строго валидный JSON — особенно для плотных
-спецификаций (таблицы, XML-схемы, кавычки и переносы строк внутри текста).
-`_parse_json` идёт каскадом:
-
-1. **`json.loads`** — быстрый путь для валидного ответа.
-2. **Проверка на обрезание** — `finish_reason == "length"` из стрима либо
-   незакрытая верхняя скобка во фрагменте (счётчик глубины с учётом строк и
-   экранирования, напр. `[{"a":1},{"b":2}` без внешней `]`). Обрезанный ответ
-   **не возвращается «как есть»** — он неполон по определению, а `json_repair`
-   мог бы молча «закрыть» оборванный массив и выкинуть хвост. Бросается
-   `LLMTruncationError`.
-3. **Восстановление хвоста + `json_repair`** — для структурно завершённого
-   ответа (закрывающая скобка есть): неэкранированные управляющие символы,
-   лишние/пропущенные запятые, мусор после `]`/`}` и markdown-обёртка.
-   Это ремонт **без потери данных**, поэтому переотправка не тратится.
-4. **Дамп + понятная ошибка** — если JSON не восстановлен ни одним из способов,
-   сырой ответ сохраняется в `data/debug/llm_raw_{doc_id}_{chunk}_{timestamp}.txt`
-   (каталог в `.gitignore`), а документ переходит в `paused` с ошибкой, содержащей
-   первые 200 символов ответа и путь к дампу.
-
-#### Трёхуровневая защита от обрезания
-
-У некоторых моделей/провайдеров есть жёсткий потолок вывода за один вызов
-(например, Mistral Nemo через OpenRouter ~8k токенов), поэтому увеличение
-`max_tokens` не всегда лечит обрезание. Конвейер обрабатывает это каскадом:
-
-```
-[Чанк] ──> LLM ──> обрезание (finish_reason="length")
-                    │
-   1. Бамп max_tokens (base * multiplier^n, до llm_max_tokens_cap)
-                    │ (если снова обрезано)
-   2. Сплит чанка пополам — рекурсивно, глубина <= okf_split_max_depth (до 4 кусков)
-                    │ (если кусок неделим / исчерпана глубина)
-   3. Salvage последней надежды — спасаем частичный JSON, WARNING, документ не застревает
-                    │
-                    ▼
-          [Запись концептов в staging]
-```
-
-1. **Бамп `max_tokens`** (`chat_json` в `llm_client.py`): при `LLMTruncationError`
-   запрос повторяется с `max_tokens = base * multiplier^n`, не выше
-   `llm_max_tokens_cap` (защита от превышения контекстного окна). Помогает
-   моделям, которые реально отдают больший вывод.
-2. **Сплит чанка** (`OKFGenerator._generate_chunk_recursive` в `okf_generator.py`):
-   если бамп не помог, чанк режется примерно пополам по границе неделимых
-   единиц (`` ` ``-фенс-блоки и таблицы не разрываются), половинки генерируются
-   рекурсивно, концепты склеиваются. Меньший вход → меньше концептов → вывод
-   влезает в потолок модели. Работает с любым лимитом вывода.
-3. **Salvage последней надежды** (`salvage_truncated=True`): если кусок неделим
-   (атомарный блок) или сплит исчерпал глубину, а ответ всё равно обрезан —
-   частичный результат восстанавливается через `_recover_truncated`/`json_repair`
-   и сохраняется с `WARNING`-логом. Документ доходит до конца ценой возможной
-   неполноты последнего куска. Выключается `okf_salvage_truncated=False` (тогда —
-   строгий `paused`, как в старом поведении).
-
-Настройки (`backend/app/config.py`):
-
-- `llm_max_tokens` — базовый лимит (по умолчанию из `.env`, `LLM_MAX_TOKENS`);
-- `llm_max_tokens_cap` — верхняя планка бампа (по умолчанию 16384);
-- `llm_truncation_retry_attempts` — число повторов бампа (2);
-- `llm_truncation_max_tokens_multiplier` — множитель бампа (1.5);
-- `okf_split_on_truncation` — включать сплит чанка (True);
-- `okf_split_max_depth` — максимальная глубина сплита (2 → до 4 кусков);
-- `okf_salvage_truncated` — salvage последней надежды (True).
-
-После resume такой чанк обрабатывается заново: обычно повторный запрос с большим
-`max_tokens` или сплит закрывает обрезание, а если нет — файл дампа в
-`data/debug/` позволяет увидеть точную причину (обрезание, невалидные символы,
-артефакт провайдера).
-
-**Прозрачность в логах:** в журнале (`backend/logs/` или stdout) сразу видно, какой
-уровень сработал — `json.loads` успешен (тихо), бамп max_tokens (WARNING: «JSON
-обрезан, повтор с max_tokens=N»), сплит (WARNING: «сплит чанка пополам»), salvage
-(WARNING: «спасаю частичный результат (данные неполные)»), `_recover_truncated`/
-`json_repair` (INFO: «успешно восстановлен»), дамп (WARNING: путь к файлу). Это
-позволяет отличать стабильно чистые ответы модели от «спасённых» и
-диагностировать проблемные провайдеры/модели.
-
-## Структура проекта
-
-```
-├── backend/            # Python FastAPI
-│   ├── app/
-│   │   ├── api/        # routes: documents, search, chat
-│   │   ├── models/     # Pydantic-схемы
-│   │   ├── prompts/    # промпты OKF-генерации и чата (store + дефолты)
-│   │   ├── services/   # OKF, эмбеддинги, Qdrant, пайплайн
-│   │   ├── config.py   # настройки из .env
-│   │   └── main.py     # точка входа FastAPI
-│   └── prompts/        # канонические файлы промптов (.md, версионируются)
-├── doc-parser/         # standalone-пакет разбора документов (editable)
-│   └── src/docparser/  # парсеры docx/xlsx/pdf, вложения, CLI
-├── frontend/           # Next.js (App Router) + JavaScript (чат, загрузка, источники)
-├── data/               # uploads/, okf_bundles/, staging/, debug/ (runtime, в gitignore)
-├── docker-compose.yml
-└── .env.example
-```
-
-## Промпты (настройка без рестарта)
-
-Промпты хранятся во внешних Markdown-файлах и перечитываются при каждом обращении
-по изменению `mtime` — правка подхватывается следующим запросом без перезапуска
-бэкенда.
-
-**Каскад разрешения** (первый найденный валидный файл имеет приоритет):
-
-1. `<data_dir>/prompts/<key>.md` — runtime-оверрайд (правится на лету, `.gitignore`).
-2. `backend/prompts/<key>.md` — канонический файл (версионируется в git).
-3. Дефолт-константа в `backend/app/prompts/okf.py` — всегда валидный fallback.
-
-**Файлы промптов:**
-
-| Ключ | Файл | Обязательные плейсхолдеры |
-| :-- | :-- | :-- |
-| `chat_system` | `chat_system.md` | — |
-| `chat_user` | `chat_user.md` | `{context}`, `{query}` |
-| `okf_system` | `okf_system.md` | — |
-| `okf_user` | `okf_user.md` | `{filename}`, `{content}` |
-| `okf_chunk` | `okf_chunk.md` | `{filename}`, `{index}`, `{total}`, `{content}` |
-| `okf_table_classifier` | `okf_table_classifier.md` | — |
-| `dev_number_system` | `dev_number_system.md` | — |
-| `dev_number_user` | `dev_number_user.md` | `{filename}`, `{content}` |
-
-**Ключевые правила OKF-генерации (`okf_system.md`):**
-
-- **Правила 22-24** — обзорные концепты для разделов верхнего уровня: если документ имеет именованные разделы («Вид сообщения 111», «Тип документа 10010»), для каждого создаётся обзорный концепт с кодом/номером в title и в первом предложении content. Для спецификаций XML-сообщений в content обзорного концепта перечисляются ВСЕ поля таблицы (имя + описание, тип, кратность) — это гарантирует, что любое поле (в т.ч. пропущенное как отдельный концепт) находится через обзорный.
-- **Правило 25** — таблицы-перечни извлекаются программно: система создаёт концепт на каждую строку без вызова LLM (LLM получает остаток чанка с заглушкой вместо таблицы). Обходит слабость 12B-модели, которая не справляется с экстракцией всех строк большой таблицы (генерирует несколько концептов и останавливается). Управляется параметрами `OKF_FIELD_TABLE_MIN_ROWS` и `OKF_TABLE_LLM_CLASSIFY`.
-
-### Программная экстракция таблиц-перечней
-
-LLM (`mistral-nemo` 12B) не способен экстрагировать все строки большой таблицы (40+ строк) за один вызов: генерирует 4-5 концептов и завершается, игнорируя промпт. Чтобы гарантировать наличие всех строк (включая простые скалярные поля `lnState`, `snils`, ситуации, определения), таблицы-перечни обрабатываются **программно** в `backend/app/services/field_table.py`, без LLM.
-
-**Два режима работы:**
-
-1. **LLM-классификатор** (`OKF_TABLE_LLM_CLASSIFY=true`, рекомендуется): для каждой markdown-таблицы (≥ порога строк) LML решает «требует ли таблица построчного анализа» (каждая строка = отдельное понятие: поле, ситуация, определение, элемент справочника) и указывает ключевую колонку (`title_col`, `description_cols`, `concept_type`, `extraction_mode`). Обобщает на **любые таблицы-перечни** (не только XML-поля — перечни ситуаций, определения терминов, справочники кодов). Режим экстракции `extraction_mode`: `"per_row"` — концепт на каждую строку (поля, ситуации); `"whole"` — один концепт на всю таблицу (справочники кодов целиком). Кэш на диск (`data/cache/table_classify/<sha256>.json`) переиспользуется между документами и перезапусками. При ошибке LLM — fallback на XML-эвристику (режим 2).
-2. **XML-эвристика** (`OKF_FIELD_TABLE_MIN_ROWS>0`, fallback): детектирует только таблицы полей XML-сообщений по заголовку (поле/элемент/атрибут + тип) и XML-именам (латиница/кириллица/PascalCase). Не требует LLM. Используется как fallback при ошибке LLM-классификатора или когда `OKF_TABLE_LLM_CLASSIFY=false`.
-
-**Автоинвалидация кэша классификатора:**
-- Составной cache-key: `version + prompt_hash + model + header + rows[:2]`.
-- Правка `okf_table_classifier.md` → `prompt_hash` меняется → cache miss → LLM отрабатывает заново.
-- Смена `llm_model` в `.env` → cache miss.
-- Изменение `CLASSIFIER_CACHE_VERSION` в `field_table.py` (бамп при правке `TableClassification`) → cache miss.
-- Полная очистка `data/cache/table_classify/` при `regenerate` (пользователь явно хочет пересчитать с нуля).
-
-**Включение:** `OKF_FIELD_TABLE_MIN_ROWS=5` (порог строк — общий для обоих режимов). `OKF_TABLE_LLM_CLASSIFY=true` (включить LLM-классификатор; дефолт `false` — только XML-эвристика).
-
-**Фильтр (что обрабатывается программно):**
-- markdown-таблица с заголовком «поле/элемент/атрибут/имя/тег» + «тип»;
-- колонка имени: XML Name по W3C (латиница **и кириллица** — CommerceML/1С используют `<Товар>`, `<Название>`), PascalCase (`WSResult`, `RowsetWrapper`) тоже поддержан;
-- поддержка **нумерованной первой колонки** (1, 2, 1.1) — тогда имя берётся из второй колонки;
-- минимум `OKF_FIELD_TABLE_MIN_ROWS` строк-данных.
-
-**Что НЕ обрабатывается (остаётся LLM):** таблицы данных (Excel/CSV), мелкие таблицы (<порога), таблицы без колонки «тип» или с некорректными именами (начинаются с цифры/дефиса/точки, содержат пробелы/спецсимволы).
-
-**Что создаётся:** по концепту на каждое поле (`title` «Атрибут lnState — Код статуса» или «Атрибут Товар — Товарная позиция», `content` с типом/длиной/кратностью) + обзорный концепт с перечислением всех полей. Slug концепта транслитерируется (Товар → `tovar.md`, Название → `nazvanie.md`) — ГОСТ-стиль, без внешних зависимостей; длинные title-предложения от LLM обрезаются до 80 симв. на границе слова (защита от превышения Windows MAX_PATH). Многострочные ячейки (`gender` с переносами «0-женщина / 1-мужчина») склеиваются. LLM получает остаток чанка (без таблицы) — не тонет в ней и обрабатывает семантику (XML-примеры, описания).
-
-**Результат:** все поля таблицы гарантированно в базе, детерминированно (при перегенерации тот же результат), поиск находит любое поле по имени.
-
-### Примеры таблиц (что обрабатывается программно / что нет)
-
-**✅ Валидные таблицы полей XML-сообщения (обрабатываются программно):**
-
-1. **Стандартная латиница** (заголовок «поле/элемент/атрибут» + «тип», camelCase-имена, ≥5 строк):
-```markdown
-| Поле/Элемент | Тип | Длина | Кратность | Описание |
-|---|---|---|---|---|
-| snils | p:snils |  | 1..1 | СНИЛС |
-| surname | com:surname | Тип.Длина: 60 | 1..1 | Фамилия застрахованного |
-| lnState | com:lnState | Тип.Длина: 3 | 1..1 | Код статуса ЭЛН |
-| innPerson | p:inn | Тип.Длина: 12 | 0..1 | ИНН застрахованного |
-| employer | com:employer | Тип.Длина: 255 | 0..1 | Наименование работодателя |
-```
-
-2. **PascalCase латиница** (заглавная первая буква — поддерживается):
-```markdown
-| Элемент | Тип | Длина | Кратность | Описание |
-|---|---|---|---|---|
-| WSResult | com:WSResult |  | 1..1 | Корневой элемент ответа |
-| RowsetWrapper | com:RowsetWrapper |  | 0..1 | Обёртка набора строк |
-| Row | com:Row |  | 0..n | Строка данных |
-| PrParseReestrFileType | com:PrParseReestrFileType |  | 0..1 | Тип файла реестра |
-| status | xs:string |  | 1..1 | Статус обработки |
-```
-
-3. **Кириллические имена** (W3C XML разрешает кириллицу в тегах — CommerceML/1С):
-```markdown
-| Элемент | Тип | Длина | Кратность | Описание |
-|---|---|---|---|---|
-| Каталог | com:CatalogType |  | 1..1 | Корневой каталог |
-| Товар | com:ProductType |  | 0..n | Товарная позиция |
-| Название | xs:string | Тип.Длина: 255 | 1..1 | Наименование товара |
-| Цена | com:MoneyType |  | 1..1 | Цена товара |
-| Валюта | xs:string | Тип.Длина: 3 | 1..1 | Код валюты |
-```
-
-4. **Нумерованная первая колонка** (№/1/1.1 — имя во второй колонке):
-```markdown
-| № | Имя | Тип | Длина | Кратность | Описание |
-|---|---|---|---|---|---|
-| 1 | snils | p:snils |  | 1..1 | СНИЛС |
-| 2 | surname | com:surname | Тип.Длина: 60 | 1..1 | Фамилия |
-| 1.1 | lnState | com:lnState | Тип.Длина: 3 | 1..1 | Код статуса ЭЛН |
-| 2.1 | lnCode | com:lnCode |  | 1..1 | Код больничного |
-| 3 | gender | xs:int |  | 1..1 | Пол застрахованного |
-| 4 | innPerson | p:inn | Тип.Длина: 12 | 0..1 | ИНН застрахованного |
-```
-
-5. **Многострочные ячейки** (значение описания переносится — склеивается в одну):
-```markdown
-| Поле | Тип | Длина | Кратность | Описание |
-|---|---|---|---|---|
-| snils | p:snils |  | 1..1 | СНИЛС |
-| gender | xs:int |  | 1..1 | Пол застрахованного лица
-0-женщина
-1-мужчина |
-| mseInvalidGroup | xs:int |  | 0..1 | Группа инвалидности
-1-инвалид 1 группы
-2-инвалид 2 группы
-3-инвалид 3 группы |
-| employer | com:employer | Тип.Длина: 255 | 0..1 | Наименование работодателя |
-| emplFlag | xs:boolean |  | 0..1 | Флаг места работы |
-| innPerson | p:inn | Тип.Длина: 12 | 0..1 | ИНН застрахованного |
-```
-
-**❌ Не обрабатывается программно (остаётся LLM):**
-
-1. **Таблица данных** (Excel/CSV — нет колонки «поле/элемент/атрибут» + «тип»):
-```markdown
-| Дата | Сумма | Регион |
-|---|---|---|
-| 2024-01-01 | 1000 | Юг |
-| 2024-02-01 | 2000 | Север |
-| 2024-03-01 | 1500 | Восток |
-```
-
-2. **Мелкая таблица** (< `OKF_FIELD_TABLE_MIN_ROWS` строк данных, при пороге 5):
-```markdown
-| Поле | Тип | Описание |
-|---|---|---|
-| id | xs:int | Идентификатор |
-| name | xs:string | Имя |
-| status | xs:string | Статус |
-```
-
-3. **Некорректные имена** (начинаются с цифры / дефиса / точки, содержат пробел или спецсимвол):
-```markdown
-| Поле | Тип | Описание |
-|---|---|---|
-| 1bad | xs:string | имя с цифры (пропущено) |
-| -field | xs:string | с дефиса (пропущено) |
-| my field | xs:string | с пробелом (пропущено) |
-| name@id | xs:string | спецсимвол (пропущено) |
-```
-
-**Что создаётся на валидной таблице №1:**
-
-- Концепт-поле для каждой строки: `title` «Атрибут lnState — Код статуса ЭЛН», `content`:
-  ```markdown
-  | Свойство | Значение |
-  |---|---|
-  | Имя (XML) | `lnState` |
-  | Тип | `com:lnState` |
-  | Длина | 3 |
-  | Кратность | 1..1 |
-  | Описание | Код статуса ЭЛН |
-  ```
-- Обзорный концепт «Поля сообщения 111» со списком всех полей (имя + тип + кратность + описание).
-- Slug: `atribut-lnstate.md` (транслитерация для кириллицы: `Товар` → `tovar.md`, `Название` → `nazvanie.md`).
-
-**Цитирование в чате (`chat_system.md`/`chat_user.md`):** LLM цитирует источники метками `[N]` из контекста (нумерация строго из контекста, не перенумеровывается) и НЕ составляет отдельный список источников в конце ответа — он формируется и показывается отдельно в UI. Секция «Логика ограничений и валидации» разрешает дедукцию сверх буквального текста с пометкой «выведено» и обязательной меткой источника.
-
-**Как править:**
-
-- Локально: правьте `backend/prompts/<key>.md` (попадёт в git) или создайте
-  `data/prompts/<key>.md` — он перекроет канонический без коммита.
-- В Docker: том `./data:/data` уже смонтирован, поэтому `data/prompts/<key>.md`
-  правится с хоста без пересборки контейнера.
-
-**Защита от ошибок:** если файл пустой, не в UTF-8 или не читается — возвращается
-предыдущее валидное значение (или следующий уровень каскада). Если в файле
-пропущен обязательный плейсхолдер — в лог пишется `WARNING` и используется дефолт.
-Опечатка в плейсхолдере (например, `{контекст}`) не роняет запрос — токен
-сохраняется дословно. Новые файлы сидируются из дефолтов автоматически при старте
-(`PromptStore.ensure()`).
-
-## API
-
-| Метод | Путь | Описание |
-| :-- | :-- | :-- |
-| POST | `/api/documents` | Загрузка документа (multipart; опц. form-поле `development_id` — пред-привязка разработки, Этап 4a.1, 422 «Разработка не найдена» при несуществующем). Level-1 дедуп: 409 `code=duplicate` при АКТИВНОМ близнеце; близнец в корзине не блокирует — в ответе информационное `duplicate_in_trash` (осознанное решение, см. SECURITY.md §5) |
-| GET | `/api/documents` | Список документов и статусов (фильтры: `uploader`, `module`, `development_id`/`development_number`, `tag` — exact-match, `problem`, `status`, `date_from`/`date_to`, `search`, `sort`, `limit`/`offset`) |
-| GET | `/api/documents/stats` | Прогресс разметки по активной базе: `{total, with_development}` (Этап 4.1/5) |
-| GET | `/api/documents/{doc_id}` | Статус обработки документа |
-| POST | `/api/documents/{doc_id}/resume` | Возобновить приостановленную обработку |
-| POST | `/api/documents/{doc_id}/regenerate` | Перегенерировать концепты документа (роли `editor`/`admin`) |
-| DELETE | `/api/documents/{doc_id}` | Мягкое удаление в корзину (роли `editor`/`admin`; документ скрывается, точки Qdrant и файлы помечаются `deleted`, не удаляются — Этап 4a.2) |
-| GET | `/api/documents/trash` | Список корзины: удалённые документы с индикацией срока до автоочистки (`days_left`/`purge_at`/`retention_days`) |
-| POST | `/api/documents/{doc_id}/restore` | Восстановить из корзины без пере-эмбеддинга (роли `editor`/`admin`; `?force=true` пропускает конфликт дедупликации → 409 `code=duplicate`) |
-| POST | `/api/documents/bulk-restore` | Массовое восстановление из корзины (роли `editor`/`admin`, лимит `bulk_tags_max_docs`; с дедуп-проверкой как у одиночного restore — конфликтующие документы в `conflicts`, восстанавливаются одиночным restore c `?force=true`) |
-| POST | `/api/documents/bulk-preview` | Предпросмотр масштаба массовой операции (роль `admin`) |
-| POST | `/api/documents/bulk-delete` | Массовое удаление в корзину (очередь + four-eyes, роль `admin`) |
-| POST | `/api/documents/bulk-regenerate` | Массовая перегенерация (очередь + rate limit, роль `admin`) |
-| PATCH | `/api/documents/{doc_id}/tags` | Полная замена набора глобальных тегов документа (роли `editor`/`admin`, Этап 4a; синхронизация проекций + реиндекс dev_tags) |
-| POST | `/api/documents/bulk-tags` | Массовое добавление/удаление тега (роли `editor`/`admin`, Этап 4a; audit на каждый документ) |
-| GET | `/api/jobs` | Список системных задач (роль `admin`) |
-| GET | `/api/jobs/{job_id}` | Статус задачи (роль `admin`) |
-| POST | `/api/jobs/{job_id}/approve` | Одобрить задачу (four-eyes, роль `admin`) |
-| POST | `/api/jobs/{job_id}/cancel` | Отменить задачу (роль `admin`) |
-| GET | `/api/audit` | Журнал ИБ (read-only, роль `security`) |
-| GET | `/api/users/blocks` | Список активных блокировок (роль `security`) |
-| POST | `/api/users/{external_id}/block` | Заблокировать пользователя (роль `security`) |
-| POST | `/api/users/{external_id}/unblock` | Разблокировать пользователя (роль `security`) |
-| GET | `/api/documents/{doc_id}/okf` | Список сгенерированных OKF-файлов |
-| GET | `/api/documents/{doc_id}/okf/{filename}` | Содержимое OKF-файла |
-| POST | `/api/search` | Поиск по концептам (top-k + фильтр по тегам + режим `mode`) |
-| POST | `/api/chat` | Вопрос к базе знаний (ответ + источники + режим `mode`; при 0 хитов — короткое замыкание без LLM, Этап 4a.1) |
-| GET | `/api/tags` | Список тегов с частотой использования (плюс `display` по языку пользователя и `needs_review` для машинных переводов) |
-| DELETE | `/api/tags/{tag}` | Удалить неиспользуемый тег из справочника (роли `editor`/`admin`; 409, если тег используется) |
-| POST | `/api/tags/cleanup` | Удалить все неиспользуемые теги из справочника (роли `editor`/`admin`) |
-| PATCH | `/api/tags/{tag_id}/translations/{locale}` | Правка перевода имени тега; правка становится «ручной» и не перезаписывается автопереводом (роли `editor`/`admin`) |
-| POST | `/api/tags/bulk-review` | Подтвердить машинные переводы выбранных тегов (массово; роли `editor`/`admin`) |
-| POST | `/api/tags/translations/backfill` | Автоперевод справочников для локали — теги/разработки/модули (роль `admin`; синхронно, bulk-семафор LLM; идемпотентно: ручные переводы не трогает) |
-| GET | `/api/tags/translations/pending` | Число объектов справочника без ручного перевода (роль `admin`; тот же расчёт, что и у backfill) |
-| GET | `/api/locales` | Активные языки (для переключателя UI; ETag) |
-| GET | `/api/i18n/{locale}` | Актуальный runtime-override UI-словаря локали (ETag; 404, если override нет) |
-| GET/POST | `/api/admin/locales…` | Контур «Поддержка языков» (роль `admin`): CRUD языков, активация/отключение, стоп-слова (импорт preview→confirm, пустой `replace` — гейт `confirm_empty_replace`, история/rollback, probe), UI-словарь (import preview→confirm с валидацией ключей/`{param}`/plural-форм, history, rollback, get). См. [docs/ADD_LANGUAGE.md](docs/ADD_LANGUAGE.md) |
-| POST | `/api/documents/{doc_id}/development` | Привязать/отвязать разработку, подтвердить автоопределение (роли `editor`/`admin`) |
-| POST | `/api/documents/{doc_id}/detect-development` | On-demand автоопределение номера разработки (роли `editor`/`admin`) |
-| GET | `/api/documents/{doc_id}/duplicates` | Кандидаты-дубликаты (Level 2/3: content-hash + MinHash/LSH) |
-| GET | `/api/developments` | Список разработок с числом документов |
-| POST | `/api/developments` | Создать разработку (роли `editor`/`admin`) |
-| GET | `/api/developments/{dev_id}` | Карточка разработки |
-| PATCH | `/api/developments/{dev_id}` | Переименовать/изменить разработку (запускает реиндекс `dev_tags`; буквальный тег старого номера не переименовывается — каноническая проекция `dev_tags`) |
-| DELETE | `/api/developments/{dev_id}` | Удалить разработку (роли `editor`/`admin`; документы отвязываются, их `dev_tags` очищаются) |
-| GET | `/api/developments/{dev_id}/documents` | Документы разработки |
-| GET | `/api/attributes/{key}` | Значения generic-атрибута (напр. `module`) |
-| POST | `/api/attributes/{key}` | Добавить значение атрибута (роли `editor`/`admin`) |
-| DELETE | `/api/attributes/{key}/{value}` | Удалить значение атрибута (роли `editor`/`admin`) |
-| GET | `/api/auth/me` | Текущий режим авторизации + пользователь (+демо-юзеры в simulation) |
-| POST | `/api/auth/simulate` | Войти как демо-пользователь (режим `simulation`) |
-| POST | `/api/auth/logout` | Завершить сессию |
-| GET | `/api/auth/login` | (sso) редирект на Keycloak |
-| GET | `/api/auth/callback` | (sso) OIDC callback → сессия → редирект на `/` |
-
-### Авторизация
-
-Авторизация включается переменной `AUTH_PROVIDER` (см. `.env.example`):
-
-- **`disabled`** (по умолчанию) — все `/api/*` открыты, `/api/auth/me` отдаёт анонима. Для локальной разработки.
-- **`simulation`** — `/api/*` требуют сессию; вход через `/api/auth/simulate` выбором демо-юзера из `AUTH_SIM_USERS` (внешний Keycloak не нужен).
-- **`keycloak_oidc`** — вход через Keycloak/OIDC (Authorization Code Flow): `/api/auth/login` → Keycloak → `/api/auth/callback` → сессия. Требует `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`. Под корпоративную схему **IDP + IDB** приложение направляется на IDB (broker); форма group-claim настраивается через `KEYCLOAK_FIELD_MAPPING` (частичный override) и `KEYCLOAK_GROUP_PATH_MODE` (`leaf`/`full_path`).
-- **`direct_ldap`** / **`custom_client`** — точки расширения (заглушки `NotImplementedError`) для будущих клиентов с прямым LDAP или собственной авторизацией.
-
-Сессия — signed-cookie (`SessionMiddleware`), TTL и HTTPS-флаг настраиваются через `AUTH_SESSION_TTL_SECONDS` / `AUTH_SESSION_HTTPS_ONLY`.
-
-**Обязательно перед продакшеном.** Окружение задаётся `ENVIRONMENT` (`development` | `production`). При `ENVIRONMENT=production` бэкенд на старте **fail-fast** падает с ошибкой конфигурации, если:
-- `APP_SECRET_KEY` не задан, равен дефолту `dev-secret-change-me` или короче 32 символов — ключ подписи сессионной cookie, со слабым/дефолтным значением сессию можно подделать (обход авторизации). Сгенерировать: `python -c "import secrets; print(secrets.token_urlsafe(32))"`;
-- `AUTH_SESSION_HTTPS_ONLY=false` — cookie должна ходить только по HTTPS.
-
-Проверка срабатывает при импорте приложения (до поднятия uvicorn), поэтому «забыть» поменять значения в проде невозможно. В `docker-compose.yml` для бэкенда задан дефолт `ENVIRONMENT=${ENVIRONMENT:-production}` — контейнер не поднимется в незащищённом режиме. Для локального запуска явно ставьте `ENVIRONMENT=development`.
-
-Архитектурно авторизация разделена на слои (см. `backend/app/auth/`):
-
-- **Аутентификация** — `AuthProvider` (интерфейс) + реализации (`providers/`): каждый провайдер отдаёт нормализованную `AuthenticatedIdentity` (`identity.py`). Добавление нового способа входа = новый класс + строка в фабрике `factory.py`, без правки существующего кода.
-- **Авторизация** — `GroupRoleAuthorizer` (`authorizer.py`): изолированный маппинг групп → роли, работает только с `list[str]` групп и ничего не знает о провайдере.
-
-Роли (Этап 1 роадмапа, 4 штуки): **`viewer`**, **`editor`**, **`admin`**, **`security`**. Роль вычисляется из групп пользователя (claim `group`) через маппинг `AUTH_ROLE_GROUPS` с приоритетом `security > admin > editor > viewer`. Если ни одна группа не совпала — берётся `AUTH_DEFAULT_ROLE`; если он пуст (`None`) — вход отклоняется (`403`, **fail-closed по умолчанию**, для контура ИБ). Роль пересчитывается на каждый запрос и не кэшируется в сессии. Роль передаётся на фронтенд (`user.roles` в `/api/auth/me`).
-
-Разграничение прав (RBAC) реализовано через зависимость `require_role(*roles)` (`app/auth/service.py`), см. ниже раздел «Защита от массовых операций и журнал ИБ».
-
-Group-claim любой формы (список / строка / JSON-объект / вложенный dict) нормализуется в `list[str]` (`identity.py::normalize_groups`, dedup с сохранением порядка), а имя claim и форма путей настраиваются через `KEYCLOAK_FIELD_MAPPING` и `KEYCLOAK_GROUP_PATH_MODE` — приложение не зависит от того, как IDB отдаёт группы.
-
-`GET /api/auth/me` возвращает текущего пользователя в формате, выровненном под будущую схему БД (`MIGRATION_PLAN.md`): `user_id` (sub), `username`, `email`, `groups`, `roles`.
-
-### Защита от массовых операций и журнал ИБ (Этап 2а)
-
-Реализован бэкенд-фундамент и UI защиты от случайного/намеренного массового
-удаления и перегрузки очереди LLM-запросов:
-
-- **Ролевая авторизация** — `require_role(*roles)` (`app/auth/service.py`): одиночные
-  `delete`/`regenerate` требуют `editor`/`admin`; массовые операции и управление
-  задачами — `admin`; чтение журнала и блокировка пользователей — `security`.
-  В режиме `disabled` все проверки пропускаются (локальная разработка).
-
-- **Журнал ИБ `audit_log`** (`app/services/audit.py`) — **append-only**: сервис
-  предоставляет только `append()`/`query()`, методов update/delete нет. Фиксируются:
-  `document_delete`, `document_bulk_delete`, `document_regenerate`,
-  `document_bulk_regenerate`, `document_restore`, `document_bulk_restore`,
-  `document_auto_delete` (автоочистка корзины, системное действие),
-  `job_approve`, `job_cancel`, `user_block`, `user_unblock`.
-  Массовая операция пишется **по записи на каждый документ**, а не одной записью на
-  задачу. Состав записи: `created_at`, `user_id`, `username`, `action_type`,
-  `target_type`, `target_id`, `old_value`, `new_value`, `ip_address`, `meta`.
-  Срок хранения — `AUDIT_RETENTION_DAYS` (по умолчанию 365 дней).
-
-  **Хардненинг audit_log (Postgres):** неизменяемость на уровне приложения (append-only
-  в коде) дополняется на проде выделенным сервисным аккаунтом БД с правами **только
-  `INSERT`** на `audit_log` (без `UPDATE`/`DELETE`/`TRUNCATE`) — тогда журнал не может
-  быть изменён даже скомпрометированным приложением. В SQLite-dev это не применимо
-  (однопользовательская БД), поэтому полагаемся на append-only в коде.
-
-- **Очередь массовых задач `jobs`** (`app/services/job_queue.py`) — массовые операции
-  ставятся в очередь и выполняются фоновым worker-потоком (не синхронно в запросе),
-  со статусами `queued`/`running`/`awaiting_approval`/`completed`/`failed`/`cancelled`.
-
-- **Four-eyes (второй администратор)** — операция с числом документов не ниже порога
-  переходит в `awaiting_approval` и требует одобрения вторым администратором
-  (`POST /jobs/{id}/approve`). Пороги по типу операции: `APPROVAL_THRESHOLD_DOCS_DELETE`
-  (50) и `APPROVAL_THRESHOLD_DOCS_REGENERATE` (15) — разведены, чтобы порог перегенерации
-  был достижим в пределах soft-лимита `BULK_REGENERATE_MAX_DOCS` (20).
-
-- **Rate limit (per-user)** — `app/services/rate_limiter.py` (in-memory sliding window):
-  `BULK_REGENERATE_MAX_OPS_PER_HOUR` и `BULK_REGENERATE_MAX_DOCS_PER_HOUR` → `429`.
-  Хранение in-memory достаточно для однопроцессного приложения; для multi-worker
-  прода потребуется внешнее хранилище (Redis/БД).
-
-- **Circuit breaker** — если число ожидающих задач достигает `JOB_QUEUE_MAX_PENDING`,
-  новые массовые операции отклоняются с `503` («Очередь перегружена») **до** создания
-  записи в `jobs`.
-
-- **Блоклист пользователей** — `app/services/blocklist.py` (`user_blocks`): роль
-  `security` может временно заблокировать пользователя/сессии; проверка выполняется в
-  `require_user` (заблокированный пользователь получает `403` даже с валидной сессией).
-
-**UI (по ролям):**
-
-- **Навигация и route-level guard** — пункты «Системные операции» (`/admin`) и «Аудит»
-  (`/security`) видны только соответствующим ролям; страницы дополнительно защищены
-  компонентом `RequireRole` (редирект на `/` при недостатке роли, с ожиданием загрузки
-  профиля — чтобы не выкидывать admin/security при F5).
-- **Документы (admin)** — мультивыбор + danger-zone «Действия с выбранными»: обязательный
-  предпросмотр масштаба (`/documents/bulk-preview`) и typed confirmation при выборе более
-  5 документов (ввод точного числа). `editor` — одиночные delete/regenerate; `viewer` — read-only.
-- **`/admin`** — журнал задач со статусами, кнопки «Одобрить» (four-eyes) / «Отменить»,
-  счётчик активных задач.
-- **`/admin/languages`** — «Поддержка языков» (роль `admin`): CRUD языков
-  (draft/active/disabled), стоп-слова (BM25/маркеры), перевод интерфейса (UI-словарь),
-  перевод справочников (теги/разработки/модули). Подробности: [docs/ADD_LANGUAGE.md](docs/ADD_LANGUAGE.md).
-- **`/security`** — журнал ИБ с фильтрами, агрегация аномалий (клиентская), список
-  блокировок + форма block/unblock, экспорт CSV.
-
-### Режимы поиска
-
-API `/api/search` и `/api/chat` принимают параметр `mode` (`dense` / `bm25` / `hybrid`). По умолчанию — `hybrid`.
-
-- **`dense`** — только семантический поиск по dense-вектору. Находит концепты и чанки по смыслу.
-- **`bm25`** — только лексический поиск по sparse-вектору (ключевые слова IDF/BM25). Точные совпадения терминов, артикулов, аббревиатур.
-- **`hybrid`** (рекомендуемый) — dense + bm25, RRF-fusion. Лучший компромисс: семантика + ключевые слова.
-
-Ветки можно также включать/выключать явно через параметры `dense`/`bm25` (bool) — они переопределяют пресет `mode`. Параметр `tags` (list[str]) — жёсткий pre-filter для dense и bm25 (MatchAny по payload tags).
-
-#### Dual-index: концепты + чанки
-
-Qdrant хранит два типа точек в одной коллекции:
-- `point_type="concept"` — LLM-выжимки (title, tags, relations, content[:4000]);
-- `point_type="chunk"` — сырой текст чанка (content[:8000], chunk_index, section_title). Минимальный payload: только поля, нужные для поиска и merge/collapse. Атрибуты документа (filename, author, date) берутся из DocumentRegistry по doc_id на этапе форматирования ответа.
-
-Поиск идёт по обоим типам одновременно. После RRF-fusion применяется **merge/collapse**: если концепт и его родительский чанк оба в топе, они объединяются в один блок — title/tags из концепта, content из чанка (с полным текстом).
-
-#### Merge/collapse
-
-Группировка по `(doc_id, chunk_index)`:
-- **Случай A** (концепт + чанк): merge — title/tags из концепта, content из чанка;
-- **Случай B** (только концепт): как есть — title + summary + tags;
-- **Случай C** (только чанк): section_title или синтетический title `{filename} (Раздел {N})` + raw text.
-
-Контекст для LLM формируется в XML-подобном формате `<context_block>` с metadata и content.
-
-### Миграция существующей коллекции
-
-При первом старте после обновления автоматически (идемпотентно, без даунтайма):
-1. Создаются payload-индексы для полей фильтрации (`point_type`, `doc_id`, `chunk_index`, `tags`, `type`, `relations`, `slug`).
-2. Существующим точкам-концептам добавляется `point_type="concept"` в payload (`backfill_point_type`).
-3. Relations нормализуются через `_parse_relation` (стрингифицированные dict → чистый id/filepath, `backfill_relations`).
-4. Чанки из `data/okf_bundles/*/chunks/` индексируются как `point_type="chunk"` (`backfill_chunks`).
-5. Sparse-векторы добиваются для старых точек (`backfill_sparse`, как раньше).
-
-Dense-векторы существующих концептов **не пересчитываются**. Переключатели веток (`SEARCH_*_ENABLED`) — query-time, не требуют реиндексации.
-
-## Пакет doc-parser (standalone)
-
-Парсер вынесен в отдельный пакет `doc-parser/` (src-layout) — его можно развивать
-и проверять без LLM, Qdrant и веб-UI. Подробности: [doc-parser/README.md](doc-parser/README.md).
-
-```bash
-cd doc-parser
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e ".[dev]"
-
-doc-parser parse path/to/sample.docx                 # разбор → Markdown
-doc-parser parse path/to/sample.docx --format json   # разбор → блоки JSON
-doc-parser parse path/to/sample.docx --attachments-dir out/attachments
-doc-parser info path/to/sample.docx                  # статистика, комментарии, вложения
-pytest -q
-```
-
-Бэкенд подключает пакет через editable-установку (`pip install -e ../doc-parser`),
-а в Docker — через `COPY doc-parser` + `pip install -e ./doc-parser`.
-
-## Лицензия
-
-Проект лицензирован под [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
-См. файл [LICENSE](LICENSE) для полного текста лицензии.
-
-### Причина выбора AGPL
-
-Зависимость [`pymupdf`](https://github.com/pymupdf/PyMuPDF) (используется для извлечения
-текста из PDF) лицензирована под AGPL-3.0. Согласно условиям этой лицензии, любой проект,
-использующий PyMuPDF, должен быть распространён на тех же условиях. AGPL также требует
-предоставления исходного кода при доступе к сервису через сеть — это обеспечивает
-copyleft-защиту для пользователей облачных развёртываний.
+Configure model endpoints and authentication in `.env` (see `.env.example` — all keys are
+documented there; never commit real secrets). Set `ENVIRONMENT=development` for local runs.
+
+## Documentation
+
+- **[SECURITY.md](SECURITY.md)** — security policy: threat model, trust boundaries,
+  authentication/RBAC, audit log, retention. (English)
+- Production deployment checklist: [PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md) *(Russian)*
+- Architecture & roadmap: [OKF_Knowledge_Service_Roadmap.md](docs/OKF_Knowledge_Service_Roadmap.md) *(Russian)*
+- Database schema & migrations: [MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md) *(Russian)*
+- Search reproduction & quality: [SEARCH_REPRODUCTION.md](docs/SEARCH_REPRODUCTION.md) *(Russian)*
+- End-user guide: [OKF_User_Guide.md](docs/OKF_User_Guide.md) / [PDF](docs/OKF_User_Guide.pdf) *(Russian)*
+- SSO / Keycloak OIDC: [developer guide](docs/SSO_Keycloak_OIDC_Dev_Guide.md) and
+  [testing guide](docs/SSO_TESTING_GUIDE.md) *(Russian)*
+- Adding a language / stop-words admin instructions: [docs/ADD_LANGUAGE.md](docs/ADD_LANGUAGE.md) *(Russian)*
+- [AGENTS.md](AGENTS.md) — engineering notes and operational quirks for AI coding agents
+  (maintained in Russian; the deep engineering docs above are intentionally Russian —
+  detailed developer documentation is kept in the author's working language).
+
+## License
+
+[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+The PDF text-extraction dependency [PyMuPDF](https://github.com/pymupdf/PyMuPDF) is
+AGPL-3.0, so this project is distributed under the same terms. AGPL additionally grants
+copyleft protection to users of network/cloud deployments (source must be offered to
+anyone using the service over a network).
