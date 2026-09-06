@@ -9,11 +9,12 @@ from app.models.schemas import (
     TagOut,
     TagTranslationBackfillRequest,
     TagTranslationUpdate,
+    TranslationPendingOut,
 )
 from app.services import audit
 from app.services.locale_service import request_locale
 from app.services.tag_registry import TagInUseError, TagRegistry
-from app.services.translation import backfill_reference_data
+from app.services.translation import backfill_reference_data, count_pending
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
@@ -140,3 +141,18 @@ def backfill_translations(
         body.locale, body.entities, user=user, ip_address=_client_ip(request)
     )
     return {"locale": body.locale, "result": result}
+
+
+@router.get("/translations/pending", response_model=TranslationPendingOut)
+def pending_translations(
+    locale: str,
+    entities: str = "tags,developments,attributes",
+    user: User = Depends(require_role("admin")),
+):
+    """Число объектов справочника без ручного перевода в locale (для preview).
+
+    Использует тот же _pending_rows, что и бэкфилл: показанное число совпадает
+    с реальным прогоном.
+    """
+    ent = [e for e in entities.split(",") if e in ("tags", "developments", "attributes")]
+    return TranslationPendingOut(locale=locale, pending=count_pending(locale, ent))

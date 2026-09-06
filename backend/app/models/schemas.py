@@ -148,6 +148,10 @@ class ChatSettingsOut(BaseModel):
     search_mode_default: str
     search_modes: list[str]
     search_index_chunks_enabled: bool = True
+    # Провайдер/модель переводов справочников (Этап 7) — для диагностики в UI
+    # бэкфилла (внутренний инструмент, конфиг не секрет).
+    translation_provider: str | None = None
+    translation_model: str | None = None
 
 
 class ChatSource(BaseModel):
@@ -304,6 +308,20 @@ class UiDictionaryActiveOut(BaseModel):
     locale: str
     version: int
     data: dict[str, Any]
+
+
+class UiDictionaryAdminOut(BaseModel):
+    locale: str
+    version: int | None = None
+    data: dict[str, Any] | None = None
+    note: str | None = None
+    uploaded_by: str | None = None
+    created_at: datetime | None = None
+
+
+class TranslationPendingOut(BaseModel):
+    locale: str
+    pending: dict[str, int]
 
 
 class BulkOperationRequest(BaseModel):

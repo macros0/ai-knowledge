@@ -16,6 +16,9 @@ import {
 } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
+import { canActivate, canDisable } from "@/lib/localeActions.mjs";
+import UiDictionaryEditor from "./UiDictionaryEditor";
+import BackfillControl from "./BackfillControl";
 
 const KINDS = ["bm25", "marker"];
 
@@ -301,7 +304,11 @@ export default function LanguagesPanel() {
   const [locales, setLocales] = useState([]);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [openEditor, setOpenEditor] = useState(null);
+  // Активная секция под таблицей: {code, tool: 'stopwords'|'uictl'|'backfill'} | null.
+  const [activeTool, setActiveTool] = useState(null);
+
+  const toggleTool = (loc, tool) =>
+    setActiveTool(activeTool && activeTool.code === loc && activeTool.tool === tool ? null : { code: loc, tool });
 
   const load = useCallback(async () => {
     try {
@@ -400,16 +407,31 @@ export default function LanguagesPanel() {
               <td>
                 <button
                   className="modal-btn"
-                  onClick={() => setOpenEditor(openEditor === loc.code ? null : loc.code)}
+                  onClick={() => toggleTool(loc, "stopwords")}
+                  title={t("admin.languages.editStopwords")}
                 >
                   {t("admin.languages.editStopwords")}
                 </button>
-                {loc.status === "draft" && (
+                <button
+                  className="modal-btn"
+                  onClick={() => toggleTool(loc, "uictl")}
+                  title={t("admin.languages.uictl")}
+                >
+                  {t("admin.languages.uictl")}
+                </button>
+                <button
+                  className="modal-btn"
+                  onClick={() => toggleTool(loc, "backfill")}
+                  title={t("admin.languages.backfill")}
+                >
+                  {t("admin.languages.backfill")}
+                </button>
+                {canActivate(loc.status) && (
                   <button className="modal-btn" onClick={() => onActivate(loc.code)}>
                     {t("admin.languages.activate")}
                   </button>
                 )}
-                {loc.status === "active" && loc.code !== "ru" && (
+                {canDisable(loc.status, loc.code) && (
                   <button className="modal-btn" onClick={() => onDisable(loc.code)}>
                     {t("admin.languages.disable")}
                   </button>
@@ -420,10 +442,26 @@ export default function LanguagesPanel() {
         </tbody>
       </table>
 
-      {openEditor && (
+      {activeTool && (
         <div className="stopwords-editor-wrap">
-          <h3>{t("admin.stopwords.title", { code: openEditor })}</h3>
-          <StopwordsEditor locale={openEditor} />
+          {activeTool.tool === "stopwords" && (
+            <>
+              <h3>{t("admin.stopwords.title", { code: activeTool.code })}</h3>
+              <StopwordsEditor locale={activeTool.code} />
+            </>
+          )}
+          {activeTool.tool === "uictl" && (
+            <>
+              <h3>{t("admin.uictl.title", { code: activeTool.code })}</h3>
+              <UiDictionaryEditor locale={activeTool.code} />
+            </>
+          )}
+          {activeTool.tool === "backfill" && (
+            <>
+              <h3>{t("admin.backfill.title", { code: activeTool.code })}</h3>
+              <BackfillControl locale={activeTool.code} />
+            </>
+          )}
         </div>
       )}
     </section>

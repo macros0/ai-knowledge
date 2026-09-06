@@ -3,6 +3,23 @@
   "admin.approvedBy": [
     "name"
   ],
+  "admin.backfill.entAttrs": [],
+  "admin.backfill.entDevs": [],
+  "admin.backfill.entTags": [],
+  "admin.backfill.locale": [
+    "locale"
+  ],
+  "admin.backfill.model": [],
+  "admin.backfill.nothing": [],
+  "admin.backfill.pendingTotal": [],
+  "admin.backfill.provider": [],
+  "admin.backfill.providerOff": [],
+  "admin.backfill.run": [],
+  "admin.backfill.running": [],
+  "admin.backfill.title": [
+    "code"
+  ],
+  "admin.backfill.warning": [],
   "admin.cancel": [],
   "admin.empty": [],
   "admin.errorsByDocs": [
@@ -24,6 +41,7 @@
   "admin.languages.activate": [],
   "admin.languages.activated": [],
   "admin.languages.addBtn": [],
+  "admin.languages.backfill": [],
   "admin.languages.codePlaceholder": [],
   "admin.languages.colCode": [],
   "admin.languages.colName": [],
@@ -46,6 +64,7 @@
   "admin.languages.status.disabled": [],
   "admin.languages.status.draft": [],
   "admin.languages.title": [],
+  "admin.languages.uictl": [],
   "admin.pending": [],
   "admin.stopwords.add": [],
   "admin.stopwords.addPlaceholder": [],
@@ -91,6 +110,31 @@
   "admin.stopwords.unchanged": [],
   "admin.stopwords.warningFrozen": [],
   "admin.title": [],
+  "admin.uictl.added": [],
+  "admin.uictl.applied": [],
+  "admin.uictl.apply": [],
+  "admin.uictl.editingCurrent": [],
+  "admin.uictl.history": [],
+  "admin.uictl.historyEmpty": [],
+  "admin.uictl.keys": [],
+  "admin.uictl.newOverride": [],
+  "admin.uictl.notePlaceholder": [],
+  "admin.uictl.placeholder": [
+    "param"
+  ],
+  "admin.uictl.preview": [],
+  "admin.uictl.removed": [],
+  "admin.uictl.replaceSemantics": [],
+  "admin.uictl.rollback": [],
+  "admin.uictl.rollbackConfirm": [
+    "version"
+  ],
+  "admin.uictl.rolledBack": [],
+  "admin.uictl.title": [
+    "code"
+  ],
+  "admin.uictl.total": [],
+  "admin.uictl.unchanged": [],
   "app.title": [],
   "auth.corporateLogin": [],
   "auth.gateSimHint": [],

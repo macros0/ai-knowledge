@@ -605,6 +605,15 @@ ru), полнота plural-форм.
   подгружает override текущей локали через `backendFetch` → `initialOverrides` →
   `LocaleProvider`; клиент догружает override при переключении локали
   (`getUiDictionary`). При недоступности бэкенда/404 — fallback на versioned-словарь.
+  Админ-редактор «Перевод интерфейса» в `/admin/languages` (textarea JSON, префилл
+  активного override, preview→confirm, история версий + rollback).
+- **Backfill UI/CLI (завершено 06.09.2026):** секция «Перевод справочников» в
+  `/admin/languages` (чекбоксы сущностей; `count_pending` — тот же `_pending_rows`,
+  что и бэкфилл; provider/model из `GET /api/settings`; кнопка заблокирована при
+  `translation_provider=off`) + CLI `backend/scripts/backfill_translations.py
+  --locale en [--entities tags,developments,attributes]` (печатает маршрут до запуска).
+  Обе поверх единого `backfill_reference_data`. Admin GET
+  `/admin/locales/{code}/ui-dictionary` (200 `{data:null}`, если override нет).
 
 ## Тесты
 

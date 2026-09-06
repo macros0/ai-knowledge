@@ -1,7 +1,7 @@
 """Тесты переводов справочников (Этап 7 фаза B): set_translation, display,
 bulk_review, backfill (off-провайдер с ручным словарём, идемпотентность)."""
 from app.services.tag_registry import TagRegistry
-from app.services.translation import backfill_reference_data
+from app.services.translation import backfill_reference_data, count_pending
 
 
 class _User:
@@ -50,3 +50,23 @@ class TestBackfill:
         assert result["tags"]["created"] == 0
         items = {t["name"]: t for t in reg.all(locale="en")}
         assert items["расчёт"]["display"] == "payroll"
+
+
+class TestCountPending:
+    def test_pending_matches_backfill_targets(self):
+        reg = TagRegistry()
+        reg.add(["расчёт зарплаты", "СЭДО", "отпуск"])
+        # Двум тегам уже есть ручной перевод — они не pending.
+        items = {t["name"]: t for t in reg.all()}
+        reg.set_translation(items["расчёт зарплаты"]["id"], "en", "payroll", is_machine=False, reviewed_by="demo.editor")
+        reg.set_translation(items["СЭДО"]["id"], "en", "SEDO", is_machine=False, reviewed_by="demo.editor")
+        pending = count_pending("en", ["tags"])
+        assert pending["tags"] == 1  # только «отпуск»
+        # Совпадение с реальным прогоном: бэкфилл переводит ровно 1.
+        result = backfill_reference_data(
+            "en", ["tags"], translations={"отпуск": "leave"}, user=_User()
+        )
+        assert result["tags"]["created"] == 1
+
+    def test_unknown_entities_ignored(self):
+        assert count_pending("en", ["bogus"]) == {}

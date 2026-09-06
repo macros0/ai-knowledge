@@ -130,6 +130,52 @@ class TestLocalesCrud:
         assert client.post("/api/admin/locales", json={"code": "de", "name": "D"}).status_code == 403
 
 
+class TestUiDictionaryAdmin:
+    def test_get_active_empty_returns_null_data(self, client):
+        login(client)
+        resp = client.get("/api/admin/locales/en/ui-dictionary")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["locale"] == "en"
+        assert body["version"] is None and body["data"] is None
+
+    def test_get_active_after_import(self, client):
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/en/ui-dictionary/import",
+            json={"data": {"nav.documents": "Papers"}, "confirm": True},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["applied"] is True
+
+        body = client.get("/api/admin/locales/en/ui-dictionary").json()
+        assert body["version"] == 1
+        assert body["data"] == {"nav.documents": "Papers"}
+
+    def test_get_active_unknown_locale_404(self, client):
+        login(client)
+        assert client.get("/api/admin/locales/zz/ui-dictionary").status_code == 404
+
+
+class TestTranslationPending:
+    def test_pending_endpoint(self, client):
+        login(client)
+        resp = client.get("/api/admin/locales/en/stopwords?kind=bm25")
+        assert resp.status_code == 200
+        # count_pending живёт под /tags/translations/pending (admin).
+        pend = client.get(
+            "/api/tags/translations/pending", params={"locale": "en", "entities": "tags"}
+        )
+        assert pend.status_code == 200, pend.text
+        assert "tags" in pend.json()["pending"]
+
+    def test_pending_requires_admin(self, client):
+        login(client, "demo.viewer")
+        assert client.get(
+            "/api/tags/translations/pending", params={"locale": "en"}
+        ).status_code == 403
+
+
 class TestStopwordsImport:
     def test_preview_then_confirm(self, client):
         login(client)

@@ -570,3 +570,45 @@ export function probeStopwords(code, queries) {
     body: JSON.stringify({ queries }),
   }).then((data) => data.results ?? []);
 }
+
+// --- Runtime-override UI-словарей (фаза C) + перевод справочников (фаза B) ---
+
+export function getUiDictionaryAdmin(code) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/ui-dictionary`);
+}
+
+export function importUiDictionary(code, { data, note = "", confirm = false } = {}) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/ui-dictionary/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data, note, confirm }),
+  });
+}
+
+export function uiDictionaryHistory(code) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/ui-dictionary/history`).then(
+    (data) => data.entries ?? []
+  );
+}
+
+export function rollbackUiDictionary(code, entryId) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/ui-dictionary/rollback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entry_id: entryId }),
+  });
+}
+
+export function backfillTranslations(locale, entities) {
+  return request("/tags/translations/backfill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ locale, entities }),
+  });
+}
+
+export function translationPending(locale, entities) {
+  return request(
+    `/tags/translations/pending?locale=${encodeURIComponent(locale)}&entities=${encodeURIComponent(entities.join(","))}`
+  ).then((data) => data.pending ?? {});
+}

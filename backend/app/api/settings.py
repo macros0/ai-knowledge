@@ -19,4 +19,6 @@ def get_chat_settings(settings: Settings = Depends(get_settings)) -> ChatSetting
         search_mode_default=default_mode,
         search_modes=list(SEARCH_MODES),
         search_index_chunks_enabled=settings.search_index_chunks_enabled,
+        translation_provider=settings.translation_provider,
+        translation_model=settings.translation_model or settings.llm_model,
     )

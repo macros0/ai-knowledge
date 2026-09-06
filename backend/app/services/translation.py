@@ -66,17 +66,47 @@ def translate_texts_batch(texts: list[str], target_locale: str) -> list[str]:
     return out
 
 
-def _missing_texts(rows: list[tuple[int, str, str | None]], locale: str) -> list[tuple[int, str]]:
-    """Отдаёт (id, text) для сущностей без ручного перевода в locale.
+def _pending_rows(entity: str, locale: str) -> list[tuple[int, str]]:
+    """[(entity_id, text)] — объекты справочника без РУЧНОГО перевода в locale
+    (reviewed_by IS NULL; машинный без review переводится/обновляется).
 
-    `rows` — (id, source_text, existing_reviewed_by) для уже имеющегося перевода
-    (или None). Ручной перевод (reviewed_by) пропускается; машинный — обновляется.
+    Единственный источник «что обработает бэкфилл»: count_pending и _backfill_*
+    используют его, чтобы число preview совпадало с реальным прогоном.
     """
-    missing: list[tuple[int, str]] = []
-    for entity_id, source, reviewed in rows:
-        if reviewed is None:
-            missing.append((entity_id, source))
-    return missing
+    with session_scope() as s:
+        if entity == "tags":
+            rows = s.execute(
+                select(Tag.id, Tag.canonical_text, TagTranslation.reviewed_by)
+                .outerjoin(
+                    TagTranslation,
+                    (TagTranslation.tag_id == Tag.id) & (TagTranslation.locale == locale),
+                )
+                .order_by(Tag.id)
+            ).all()
+        elif entity == "developments":
+            rows = s.execute(
+                select(Development.id, Development.name, DevelopmentTranslation.reviewed_by)
+                .outerjoin(
+                    DevelopmentTranslation,
+                    (DevelopmentTranslation.development_id == Development.id)
+                    & (DevelopmentTranslation.locale == locale),
+                )
+                .order_by(Development.id)
+            ).all()
+        elif entity == "attributes":
+            rows = s.execute(
+                select(AttributeValue.id, AttributeValue.label, AttributeValueTranslation.reviewed_by)
+                .outerjoin(
+                    AttributeValueTranslation,
+                    (AttributeValueTranslation.attribute_value_id == AttributeValue.id)
+                    & (AttributeValueTranslation.locale == locale),
+                )
+                .where(AttributeValue.label.isnot(None))
+                .order_by(AttributeValue.id)
+            ).all()
+        else:
+            raise ValueError(f"Неизвестная сущность справочника: {entity}")
+    return [(entity_id, text) for entity_id, text, reviewed in rows if reviewed is None]
 
 
 def backfill_reference_data(
@@ -94,6 +124,15 @@ def backfill_reference_data(
     получает перевод (LLM-батч или из словаря). Идемпотентно.
     """
     settings = get_settings()
+    # Диагностика маршрута ДО отправки справочников во внешний LLM (runbook/CLI):
+    # оператор обязан видеть фактический провайдер/модель, а не кодовый фолбэк.
+    logger.info(
+        "Translation backfill: locale=%s entities=%s provider=%s model=%s",
+        locale,
+        entities,
+        settings.translation_provider,
+        settings.translation_model or settings.llm_model,
+    )
     result: dict = {}
     username = getattr(user, "username", None) or "anonymous"
     total_created = 0
@@ -123,6 +162,19 @@ def backfill_reference_data(
     return result
 
 
+def count_pending(locale: str, entities: list[str]) -> dict:
+    """Число объектов справочника без РУЧНОГО перевода в locale — по сущностям.
+
+    Использует тот же `_pending_rows`, что и бэкфилл: preview (сколько будет
+    переведено) гарантированно совпадает с реальным прогоном.
+    """
+    result: dict = {}
+    for ent in entities:
+        if ent in ("tags", "developments", "attributes"):
+            result[ent] = len(_pending_rows(ent, locale))
+    return result
+
+
 def _resolve_translation(text: str, translations: dict[str, str] | None) -> str | None:
     if translations is None:
         return None
@@ -130,13 +182,7 @@ def _resolve_translation(text: str, translations: dict[str, str] | None) -> str 
 
 
 def _backfill_tags(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
-    with session_scope() as s:
-        rows = s.execute(
-            select(Tag.id, Tag.canonical_text, TagTranslation.reviewed_by)
-            .outerjoin(TagTranslation, (TagTranslation.tag_id == Tag.id) & (TagTranslation.locale == locale))
-            .order_by(Tag.id)
-        ).all()
-    targets = [(tid, text) for tid, text, reviewed in rows if reviewed is None]
+    targets = _pending_rows("tags", locale)
     if not targets:
         return 0, 0
     created = 0
@@ -170,18 +216,10 @@ def _backfill_tags(locale: str, translations: dict[str, str] | None, username: s
 
 
 def _backfill_developments(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
-    with session_scope() as s:
-        rows = s.execute(
-            select(Development.id, Development.name, DevelopmentTranslation.reviewed_by)
-            .outerjoin(
-                DevelopmentTranslation,
-                (DevelopmentTranslation.development_id == Development.id)
-                & (DevelopmentTranslation.locale == locale),
-            )
-            .order_by(Development.id)
-        ).all()
-    targets = [(did, name) for did, name, reviewed in rows if reviewed is None]
+    targets = _pending_rows("developments", locale)
     created, failed = 0, 0
+    if not targets:
+        return 0, 0
     for did, name in targets:
         tr = _resolve_translation(name, translations) if translations is not None else None
         is_machine = tr is None
@@ -212,19 +250,10 @@ def _backfill_developments(locale: str, translations: dict[str, str] | None, use
 
 
 def _backfill_attributes(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
-    with session_scope() as s:
-        rows = s.execute(
-            select(AttributeValue.id, AttributeValue.label, AttributeValueTranslation.reviewed_by)
-            .outerjoin(
-                AttributeValueTranslation,
-                (AttributeValueTranslation.attribute_value_id == AttributeValue.id)
-                & (AttributeValueTranslation.locale == locale),
-            )
-            .where(AttributeValue.label.isnot(None))
-            .order_by(AttributeValue.id)
-        ).all()
-    targets = [(aid, label) for aid, label, reviewed in rows if reviewed is None]
+    targets = _pending_rows("attributes", locale)
     created, failed = 0, 0
+    if not targets:
+        return 0, 0
     for aid, label in targets:
         tr = _resolve_translation(label, translations) if translations is not None else None
         is_machine = tr is None

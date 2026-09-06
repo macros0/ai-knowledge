@@ -3634,3 +3634,97 @@ main {
   padding-left: 20px;
   font-size: 13px;
 }
+
+/* --- Перевод интерфейса / справочников (admin.languages) --- */
+
+.uictl-editor,
+.backfill-control {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 720px;
+}
+
+.uictl-textarea {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  resize: vertical;
+}
+
+.uictl-textarea:focus,
+.uictl-note:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.uictl-note {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.uictl-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.uictl-warning {
+  border-left: 3px solid var(--color-orange);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.uictl-errors {
+  background: var(--danger-dim, rgba(239, 68, 68, 0.08));
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.uictl-history h4,
+.backfill-meta {
+  font-size: 13px;
+}
+
+.backfill-meta {
+  color: var(--muted);
+  margin: 0;
+}
+
+.backfill-entities {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.backfill-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.backfill-provider-off {
+  color: var(--color-orange);
+}
+
+.backfill-result {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

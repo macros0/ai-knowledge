@@ -30,6 +30,7 @@ from app.models.schemas import (
     UiDictionaryHistoryOut,
     UiDictionaryImportRequest,
     UiDictionaryImportResult,
+    UiDictionaryAdminOut,
 )
 from app.services import audit, locale_service, ui_dictionary
 from app.services.locale_service import LocaleError, LocaleNotFoundError
@@ -268,6 +269,24 @@ def ui_dictionary_history(code: str, user: User = admin):
     except Exception:
         entries = []
     return UiDictionaryHistoryOut(entries=[UiDictionaryHistoryEntry(**e) for e in entries])
+
+
+@router.get("/{code}/ui-dictionary", response_model=UiDictionaryAdminOut)
+def get_active_ui_dictionary(code: str, user: User = admin):
+    """Активный override-словарь локали (read-only, для редактора).
+
+    При отсутствии — 200 с {version: null, data: null}: редактор получает штатное
+    «ещё нет override» вместо исключительного 404 (публичный GET /api/i18n/{locale}
+    сохраняет 404-семантику для клиента).
+    """
+    try:
+        locale_service.get_locale(code)
+    except LocaleNotFoundError as exc:
+        raise _raise(exc) from exc
+    active = ui_dictionary.get_active(code)
+    if active is None:
+        return UiDictionaryAdminOut(locale=code)
+    return UiDictionaryAdminOut(**active)
 
 
 @router.post("/{code}/ui-dictionary/rollback")
