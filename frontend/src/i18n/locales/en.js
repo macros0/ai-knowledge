@@ -550,6 +550,13 @@ export default {
   "admin.uictl.rolledBack": "Active version rolled back",
   "admin.uictl.retry": "Retry",
   "admin.uictl.invalidJson": "Invalid JSON: {error}",
+  "admin.uictl.samplesTitle": "Translation samples",
+  "admin.uictl.downloadEffective": "Download current language ({locale})",
+  "admin.uictl.downloadRuSource": "Download Russian source",
+  "admin.uictl.downloadOverride": "Download active override only",
+  "admin.uictl.effectiveHint": "The full dictionary of what the user sees (override → bundled {locale} → ru fallback). This is a sample for translation/review, not a file to re-upload wholesale: uploading fully replaces only the runtime override layer — delete keys you don't override; the rest keep coming from the bundled dictionary and ru.",
+  "admin.uictl.ruSourceHint": "The full ru dictionary — a source for translation and terminology review. Do not upload it directly as an override for another language: translate the values and adjust plural forms to the target locale (en — one/other; ru — one/few/many).",
+  "admin.uictl.noOverrideYet": "No active override yet — “override only” download is unavailable.",
 
   "admin.backfill.title": "Reference translation — {code}",
   "admin.backfill.entTags": "Tags",

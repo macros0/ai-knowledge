@@ -550,6 +550,13 @@ export default {
   "admin.uictl.rolledBack": "Активная версия откачена",
   "admin.uictl.retry": "Повторить",
   "admin.uictl.invalidJson": "Некорректный JSON: {error}",
+  "admin.uictl.samplesTitle": "Образцы для перевода",
+  "admin.uictl.downloadEffective": "Скачать текущий язык ({locale})",
+  "admin.uictl.downloadRuSource": "Скачать русский источник",
+  "admin.uictl.downloadOverride": "Скачать только активный override",
+  "admin.uictl.effectiveHint": "Полный словарь того, что видит пользователь (override → встроенный {locale} → fallback ru). Это образец для перевода/ревью, а не файл для обратной заливки целиком: при загрузке система полностью заменяет только слой runtime override — удалите ключи, которые не переопределяете; остальные продолжат браться из встроенного словаря и ru.",
+  "admin.uictl.ruSourceHint": "Полный ru-словарь — исходник для перевода и терминологического review. Не загружайте его напрямую как override другого языка: переведите значения и приведите plural-формы к правилам целевой локали (для en — one/other; для ru — one/few/many).",
+  "admin.uictl.noOverrideYet": "Активного override ещё нет — скачивание «только override» недоступно.",
 
   "admin.backfill.title": "Перевод справочников — {code}",
   "admin.backfill.entTags": "Теги",

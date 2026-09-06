@@ -50,27 +50,84 @@ def _params_of(value) -> list[str]:
     return sorted(found)
 
 
-def validate(data) -> list[str]:
-    """Валидирует словарь: возвращает список ошибок (пусто — ок).
+# Наборы plural-форм по целевой локали (Этап 7, валидация override).
+#   allowed  — какие ключи форм допустимы в объекте;
+#   required — какие обязаны присутствовать (иначе runtime translatePlural вернёт
+#              сам ключ вместо строки: для en отсутствие `other` ломает n≠1,
+#              для ru отсутствие one/few/many ломает склонения).
+# en (и прочие не-ru/uk) — CLDR {one, other}; ru/uk — {one, few, many, other},
+# но `other` не обязателен (pluralForm для ru/uk никогда его не возвращает).
+_LOCALE_FORMS = {
+    "ru": ({"one", "few", "many", "other"}, {"one", "few", "many"}),
+    "uk": ({"one", "few", "many", "other"}, {"one", "few", "many"}),
+}
+_DEFAULT_FORMS = ({"one", "other"}, {"one", "other"})
 
-    Требования: data — dict; ключи ⊆ канонического манифеста; {param}-набор
-    каждого ключа совпадает с ru (иначе перевод «потеряет» параметр при
-    интерполяции).
+
+def _locale_forms(locale: str | None) -> tuple[set[str], set[str]]:
+    return _LOCALE_FORMS.get((locale or "").lower().split("-")[0], _DEFAULT_FORMS)
+
+
+def validate(locale: str, data) -> list[str]:
+    """Валидирует override-словарь для `locale`: список ошибок (пусто — ок).
+
+    Требования:
+      - data — dict; ключи ⊆ канонического манифеста;
+      - {param}-набор (кроме неявного `count`) совпадает с ru для каждой строки/
+        plural-формы;
+      - plural-значение — объект, формы которого соответствуют целевой локали
+        (для en — `one, other`; для ru — `one, few, many`; `other` допустим).
+        Строковое значение допустимо всегда (en.js часто представляет plural-ключ
+        одной строкой с `{count}`).
     """
     if not isinstance(data, dict):
         return ["Словарь должен быть JSON-объектом (ключ → значение)"]
     manifest = canonical_manifest()
+    allowed, required = _locale_forms(locale)
     errors: list[str] = []
     for key, value in data.items():
         if key not in manifest:
             errors.append(f"Неизвестный ключ: {key}")
             continue
-        params = _params_of(value)
         canonical = list(manifest[key])
-        if params != canonical:
-            errors.append(
-                f"Ключ '{key}': параметры {params} не совпадают с ru {canonical}"
-            )
+
+        if isinstance(value, str):
+            params = _params_of(value)
+            if params != canonical:
+                errors.append(
+                    f"Ключ '{key}': параметры {params} не совпадают с ru {canonical}"
+                )
+            continue
+
+        if isinstance(value, dict):
+            forms = set(value.keys())
+            wrong = sorted(f for f in forms if f not in allowed)
+            if wrong:
+                errors.append(
+                    f"Ключ '{key}' содержит plural-формы {', '.join(wrong)}. "
+                    f"Для locale {locale} ожидаются {', '.join(sorted(allowed))}."
+                )
+            missing = sorted(f for f in required if f not in forms)
+            if missing:
+                errors.append(
+                    f"Ключ '{key}' не содержит обязательные для locale {locale} "
+                    f"формы: {', '.join(missing)}."
+                )
+            for form, template in value.items():
+                if not isinstance(template, str):
+                    errors.append(f"Ключ '{key}': форма '{form}' должна быть строкой.")
+                    continue
+                params = _params_of(template)
+                if params != canonical:
+                    errors.append(
+                        f"Ключ '{key}' (форма '{form}'): параметры {params} "
+                        f"не совпадают с ru {canonical}"
+                    )
+            continue
+
+        errors.append(
+            f"Ключ '{key}': значение должно быть строкой или объектом plural-форм."
+        )
     return errors
 
 
@@ -113,7 +170,7 @@ def import_dictionary(
     Возвращает {errors, applied, preview|version}. Семантика — ПОЛНАЯ замена
     override-словаря (загруженный JSON становится актуальным словарём локали).
     """
-    errors = validate(data)
+    errors = validate(locale, data)
     if errors:
         return {"errors": errors, "applied": False}
 

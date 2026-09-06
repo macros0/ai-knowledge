@@ -119,7 +119,15 @@
   "admin.uictl.added": [],
   "admin.uictl.applied": [],
   "admin.uictl.apply": [],
+  "admin.uictl.downloadEffective": [
+    "locale"
+  ],
+  "admin.uictl.downloadOverride": [],
+  "admin.uictl.downloadRuSource": [],
   "admin.uictl.editingCurrent": [],
+  "admin.uictl.effectiveHint": [
+    "locale"
+  ],
   "admin.uictl.history": [],
   "admin.uictl.historyEmpty": [],
   "admin.uictl.invalidJson": [
@@ -127,6 +135,7 @@
   ],
   "admin.uictl.keys": [],
   "admin.uictl.newOverride": [],
+  "admin.uictl.noOverrideYet": [],
   "admin.uictl.notePlaceholder": [],
   "admin.uictl.placeholder": [
     "param"
@@ -140,6 +149,8 @@
     "version"
   ],
   "admin.uictl.rolledBack": [],
+  "admin.uictl.ruSourceHint": [],
+  "admin.uictl.samplesTitle": [],
   "admin.uictl.title": [
     "code"
   ],

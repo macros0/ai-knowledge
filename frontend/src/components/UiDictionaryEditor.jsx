@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
+import { downloadDict, effectiveDictionary, exportFilename, ruSourceDictionary } from "@/lib/uiDictExport.mjs";
 
 export default function UiDictionaryEditor({ locale }) {
   const { t } = useI18n();
@@ -30,6 +31,7 @@ export default function UiDictionaryEditor({ locale }) {
   const [result, setResult] = useState(null); // ответ import: {errors, applied, preview:{total,added,...}}
   const [history, setHistory] = useState([]);
   const [isNew, setIsNew] = useState(false); // активного override ещё нет
+  const [activeData, setActiveData] = useState(null); // данные активного override (для экспорта)
   const [loadError, setLoadError] = useState(null); // текст ошибки загрузки (или null)
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,7 @@ export default function UiDictionaryEditor({ locale }) {
       const active = await getUiDictionaryAdmin(code);
       const hasData = active && active.data != null;
       setIsNew(!hasData);
+      setActiveData(hasData ? active.data : null);
       if (!dirtyRef.current) {
         setText(hasData ? JSON.stringify(active.data, null, 2) : "");
         textRef.current = hasData ? JSON.stringify(active.data, null, 2) : "";
@@ -166,6 +169,34 @@ export default function UiDictionaryEditor({ locale }) {
         <p className="muted">{t("admin.uictl.editingCurrent")}</p>
       )}
       <p className="uictl-warning">{t("admin.uictl.replaceSemantics")}</p>
+
+      <div className="uictl-exports">
+        <h4>{t("admin.uictl.samplesTitle")}</h4>
+        <div className="uictl-exports-btns">
+          <button
+            className="modal-btn"
+            onClick={() => downloadDict(effectiveDictionary(code, activeData), exportFilename(code, "effective"))}
+          >
+            {t("admin.uictl.downloadEffective", { locale: code })}
+          </button>
+          <button
+            className="modal-btn"
+            onClick={() => downloadDict(ruSourceDictionary(), exportFilename(code, "ru-source"))}
+          >
+            {t("admin.uictl.downloadRuSource")}
+          </button>
+          <button
+            className="modal-btn"
+            disabled={!activeData}
+            title={!activeData ? t("admin.uictl.noOverrideYet") : undefined}
+            onClick={() => downloadDict(activeData || {}, exportFilename(code, "override"))}
+          >
+            {t("admin.uictl.downloadOverride")}
+          </button>
+        </div>
+        <p className="muted">{t("admin.uictl.effectiveHint", { locale: code })}</p>
+        <p className="muted">{t("admin.uictl.ruSourceHint")}</p>
+      </div>
 
       {loadError ? (
         <div className="uictl-errors">

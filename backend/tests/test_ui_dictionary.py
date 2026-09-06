@@ -20,19 +20,63 @@ def _seed():
 
 class TestValidate:
     def test_valid_subset(self):
-        assert ud.validate({"nav.documents": "Docs", "admin.approve": "OK"}) == []
+        assert ud.validate("en", {"nav.documents": "Docs", "admin.approve": "OK"}) == []
 
     def test_unknown_key(self):
-        errors = ud.validate({"no.such.key": "x"})
+        errors = ud.validate("en", {"no.such.key": "x"})
         assert any("no.such.key" in e for e in errors)
 
     def test_param_mismatch(self):
         # admin.approvedBy в ru имеет параметр {name} — перевод без него — ошибка.
-        errors = ud.validate({"admin.approvedBy": "approved by"})
+        errors = ud.validate("en", {"admin.approvedBy": "approved by"})
         assert any("admin.approvedBy" in e for e in errors)
 
     def test_non_dict(self):
-        assert ud.validate(["a", "b"]) != []
+        assert ud.validate("en", ["a", "b"]) != []
+
+
+class TestValidatePlural:
+    def test_en_plural_with_ru_forms_rejected(self):
+        errors = ud.validate(
+            "en",
+            {"docs.tagsUpdated": {"one": "x", "few": "x", "many": "x"}},
+        )
+        assert any("few, many" in e and "en" in e and "one, other" in e for e in errors)
+
+    def test_en_plural_one_other_valid(self):
+        assert ud.validate(
+            "en", {"docs.tagsUpdated": {"one": "{count} document", "other": "{count} documents"}}
+        ) == []
+
+    def test_en_missing_other_rejected(self):
+        errors = ud.validate("en", {"docs.tagsUpdated": {"one": "x"}})
+        assert any("other" in e for e in errors)
+
+    def test_string_value_allowed_for_plural_key(self):
+        # en.js часто представляет plural-ключ одной строкой — валидно.
+        assert ud.validate("en", {"docs.tagsUpdated": "Tags updated for {count} doc(s)"}) == []
+
+    def test_ru_plural_one_few_many_valid(self):
+        assert ud.validate(
+            "ru",
+            {"docs.tagsUpdated": {"one": "1", "few": "2", "many": "5"}},
+        ) == []
+
+    def test_per_form_param_mismatch(self):
+        errors = ud.validate(
+            "en",
+            {"docs.tagsUpdated": {"one": "{count} {x}", "other": "{count} documents"}},
+        )
+        assert any("docs.tagsUpdated" in e and "one" in e for e in errors)
+
+    def test_non_string_form_rejected(self):
+        errors = ud.validate("en", {"docs.tagsUpdated": {"one": "x", "other": 5}})
+        assert any("строкой" in e for e in errors)
+
+    def test_unknown_locale_falls_back_to_en_rule(self):
+        # Неизвестная локаль (de) → en-модель one/other: few/many отклоняются.
+        errors = ud.validate("de", {"docs.tagsUpdated": {"one": "x", "few": "x"}})
+        assert any("few" in e for e in errors)
 
 
 class TestImport:

@@ -3677,6 +3677,27 @@ main {
   gap: 10px;
 }
 
+.uictl-exports {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.uictl-exports h4 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.uictl-exports-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .uictl-warning {
   border-left: 3px solid var(--color-orange);
   padding: 4px 10px;
