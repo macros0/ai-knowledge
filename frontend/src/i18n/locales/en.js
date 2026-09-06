@@ -525,6 +525,9 @@ export default {
   "admin.stopwords.probeError": "Probe failed: {message}",
   "admin.stopwords.warningFrozen": "Removing a default ru/BM25 word only removes it from queries, not from the index (the index formula is frozen).",
   "admin.stopwords.error": "Failed to edit stopwords: {message}",
+  "admin.stopwords.emptyReplaceBtn": "Delete all {count} stopwords",
+  "admin.stopwords.emptyReplaceConfirm": "You are about to DELETE ALL {count} stopwords ({kind}) for locale “{locale}”. This irreversibly clears the set. Continue?",
+  "admin.languages.invalidLocale": "Invalid locale (internal error) — reload the page.",
 
   "admin.uictl.title": "UI translation — {code}",
   "admin.uictl.newOverride": "No active override yet: the content below will become a NEW full override dictionary (not a runtime version already saved).",

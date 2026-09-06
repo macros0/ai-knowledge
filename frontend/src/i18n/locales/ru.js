@@ -525,6 +525,9 @@ export default {
   "admin.stopwords.probeError": "Не удалось выполнить probe: {message}",
   "admin.stopwords.warningFrozen": "Удаление дефолтного слова из ru/BM25 вернёт его только в запросы, не в индекс (индексная формула заморожена).",
   "admin.stopwords.error": "Не удалось изменить стоп-слова: {message}",
+  "admin.stopwords.emptyReplaceBtn": "Удалить все {count} стоп-слов",
+  "admin.stopwords.emptyReplaceConfirm": "Вы собираетесь УДАЛИТЬ ВСЕ {count} стоп-слов ({kind}) для языка «{locale}». Это необратимая очистка набора. Продолжить?",
+  "admin.languages.invalidLocale": "Некорректная локаль (внутренняя ошибка) — перезагрузите страницу.",
 
   "admin.uictl.title": "Перевод интерфейса — {code}",
   "admin.uictl.newOverride": "Активного override ещё нет: содержимое ниже станет НОВЫМ полным override-словарём (не версией, уже сохранённой в runtime).",

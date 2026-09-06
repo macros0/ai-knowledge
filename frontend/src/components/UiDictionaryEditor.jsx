@@ -22,6 +22,9 @@ export default function UiDictionaryEditor({ locale }) {
   const { t } = useI18n();
   const { showToast } = useToast();
 
+  // Guard от передачи объекта вместо строки (инцидент «[object Object]», P0).
+  const code = typeof locale === "string" && locale.trim() ? locale.trim() : null;
+
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
   const [result, setResult] = useState(null); // ответ import: {errors, applied, preview:{total,added,...}}
@@ -42,20 +45,22 @@ export default function UiDictionaryEditor({ locale }) {
   };
 
   const loadHistory = useCallback(async () => {
+    if (!code) return;
     try {
-      setHistory(await uiDictionaryHistory(locale));
+      setHistory(await uiDictionaryHistory(code));
     } catch {
       // молча
     }
-  }, [locale]);
+  }, [code]);
 
   // Загрузка активного override. textarea заполняется ТОЛЬКО если пользователь ещё
   // не начал править (dirtyRef=false) — иначе сетевой retry уничтожил бы правки.
   const loadActive = useCallback(async () => {
+    if (!code) return false;
     setLoading(true);
     setLoadError(null);
     try {
-      const active = await getUiDictionaryAdmin(locale);
+      const active = await getUiDictionaryAdmin(code);
       const hasData = active && active.data != null;
       setIsNew(!hasData);
       if (!dirtyRef.current) {
@@ -73,13 +78,13 @@ export default function UiDictionaryEditor({ locale }) {
     } finally {
       setLoading(false);
     }
-  }, [locale]);
+  }, [code]);
 
   useEffect(() => {
     loadActive();
     loadHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale]);
+  }, [code]);
 
   const parseJson = () => {
     try {
@@ -102,7 +107,7 @@ export default function UiDictionaryEditor({ locale }) {
       return;
     }
     setBusy(true);
-    importUiDictionary(locale, { data, note, confirm: false })
+    importUiDictionary(code, { data, note, confirm: false })
       .then((res) => setResult(res))
       .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
       .finally(() => setBusy(false));
@@ -117,7 +122,7 @@ export default function UiDictionaryEditor({ locale }) {
       return;
     }
     setBusy(true);
-    importUiDictionary(locale, { data, note, confirm: true })
+    importUiDictionary(code, { data, note, confirm: true })
       .then(async (res) => {
         if (res.applied) {
           showToast(t("admin.uictl.applied"), { type: "success" });
@@ -136,7 +141,7 @@ export default function UiDictionaryEditor({ locale }) {
   const onRollback = (entry) => {
     if (!window.confirm(t("admin.uictl.rollbackConfirm", { version: entry.version }))) return;
     setBusy(true);
-    rollbackUiDictionary(locale, entry.id)
+    rollbackUiDictionary(code, entry.id)
       .then(async () => {
         showToast(t("admin.uictl.rolledBack"), { type: "success" });
         dirtyRef.current = false;
@@ -148,6 +153,10 @@ export default function UiDictionaryEditor({ locale }) {
   };
 
   const previewErrors = result?.errors && result.errors.length ? result.errors : null;
+
+  if (!code) {
+    return <div className="uictl-errors">{t("admin.languages.invalidLocale")}</div>;
+  }
 
   return (
     <div className="uictl-editor">

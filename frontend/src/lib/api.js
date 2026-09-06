@@ -534,12 +534,12 @@ export function listStopwords(code, kind) {
   );
 }
 
-export function importStopwords(code, { words, kind = "bm25", mode = "merge", confirm = false } = {}) {
+export function importStopwords(code, { words, kind = "bm25", mode = "merge", confirm = false, confirm_empty_replace = false } = {}) {
   const qs = `?kind=${encodeURIComponent(kind)}&mode=${encodeURIComponent(mode)}`;
   return request(`/admin/locales/${encodeURIComponent(code)}/stopwords/import${qs}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ words, confirm }),
+    body: JSON.stringify({ words, confirm, confirm_empty_replace }),
   });
 }
 

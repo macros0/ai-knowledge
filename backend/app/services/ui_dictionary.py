@@ -117,6 +117,13 @@ def import_dictionary(
     if errors:
         return {"errors": errors, "applied": False}
 
+    # Проверка существования локали ДО построения preview: иначе preview для
+    # несуществующего языка вернёт 200 и замаскирует ошибку вызывающей стороны
+    # (инцидент «[object Object]», Этап 7 P0 hardening).
+    with session_scope() as s:
+        if s.get(Locale, locale) is None:
+            raise ValueError(f"Язык '{locale}' не найден")
+
     current = get_active(locale)
     current_keys = set(current["data"].keys()) if current else set()
     new_keys = set(data.keys())

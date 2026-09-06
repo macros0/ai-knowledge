@@ -144,6 +144,7 @@ def import_stopwords(
             kind,
             mode,
             confirm=body.confirm,
+            confirm_empty_replace=body.confirm_empty_replace,
             user=user,
             ip_address=_client_ip(request),
         )
@@ -265,9 +266,10 @@ def import_ui_dictionary(
 @router.get("/{code}/ui-dictionary/history", response_model=UiDictionaryHistoryOut)
 def ui_dictionary_history(code: str, user: User = admin):
     try:
-        entries = ui_dictionary.history(code)
-    except Exception:
-        entries = []
+        locale_service.get_locale(code)
+    except LocaleNotFoundError as exc:
+        raise _raise(exc) from exc
+    entries = ui_dictionary.history(code)
     return UiDictionaryHistoryOut(entries=[UiDictionaryHistoryEntry(**e) for e in entries])
 
 

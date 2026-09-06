@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   activateLocale,
   addStopword,
@@ -13,6 +13,7 @@ import {
   probeStopwords,
   rollbackStopwords,
   stopwordsHistory,
+  friendlyApiError,
 } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -35,6 +36,10 @@ function StopwordsEditor({ locale }) {
   const { t } = useI18n();
   const { showToast } = useToast();
 
+  // Нормализация локали: guard от передачи объекта (инцидент «[object Object]»,
+  // Этап 7 P0) — невалидная локаль даёт явную inline-ошибку, а не загадочный 404.
+  const code = typeof locale === "string" && locale.trim() ? locale.trim() : null;
+
   const [words, setWords] = useState({});
   const [kind, setKind] = useState("bm25");
   const [newWord, setNewWord] = useState("");
@@ -46,29 +51,38 @@ function StopwordsEditor({ locale }) {
   const [probeResults, setProbeResults] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  const currentLocaleRef = useRef(code);
+  useEffect(() => {
+    currentLocaleRef.current = code;
+  }, [code]);
+
   const loadWords = useCallback(async () => {
+    if (!code) return;
+    const requested = code;
     try {
-      const list = await listStopwords(locale, kind);
-      setWords({ ...words, [kind]: list });
+      const list = await listStopwords(code, kind);
+      if (currentLocaleRef.current !== requested) return; // stale-ответ — игнор
+      setWords((prev) => ({ ...prev, [kind]: list }));
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(friendlyApiError(err), { type: "error" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale, kind]);
+  }, [code, kind]);
 
   const loadHistory = useCallback(async () => {
+    if (!code) return;
     try {
-      setHistory(await stopwordsHistory(locale));
+      setHistory(await stopwordsHistory(code));
     } catch {
       // молча
     }
-  }, [locale]);
+  }, [code]);
 
   useEffect(() => {
     loadWords();
     loadHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale, kind]);
+  }, [code, kind]);
 
   const splitLines = (text) =>
     text
@@ -84,24 +98,25 @@ function StopwordsEditor({ locale }) {
       await loadWords();
       await loadHistory();
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(friendlyApiError(err), { type: "error" });
     } finally {
       setBusy(false);
     }
   };
 
   const onAdd = () => {
-    if (!newWord.trim()) return;
+    if (!newWord.trim() || !code) return;
     act(
-      () => addStopword(locale, { word: newWord.trim(), kind }),
+      () => addStopword(code, { word: newWord.trim(), kind }),
       t("admin.stopwords.imported")
     );
     setNewWord("");
   };
 
   const onPreview = async () => {
+    if (!code) return;
     try {
-      const res = await importStopwords(locale, {
+      const res = await importStopwords(code, {
         words: splitLines(importText),
         kind,
         mode: importMode,
@@ -109,41 +124,72 @@ function StopwordsEditor({ locale }) {
       });
       setPreview(res);
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(friendlyApiError(err), { type: "error" });
     }
   };
 
-  const onApply = () =>
+  // Пустой replace (mode=replace + words=[]) — деструктивная очистка набора:
+  // сервер требует confirm_empty_replace; показываем отдельное явное подтверждение.
+  const isEmptyReplace =
+    importMode === "replace" && splitLines(importText).length === 0;
+  const emptyReplaceCount = preview?.removed?.length ?? 0;
+
+  const doApply = (confirmEmpty) =>
     act(
       () =>
-        importStopwords(locale, {
+        importStopwords(code, {
           words: splitLines(importText),
           kind,
           mode: importMode,
           confirm: true,
+          confirm_empty_replace: confirmEmpty,
         }),
       t("admin.stopwords.imported")
     ).then(() => setPreview(null));
 
+  const onApply = () => {
+    if (isEmptyReplace && emptyReplaceCount > 0) {
+      if (
+        !window.confirm(
+          t("admin.stopwords.emptyReplaceConfirm", {
+            count: emptyReplaceCount,
+            kind,
+            locale: code,
+          })
+        )
+      )
+        return;
+      doApply(true);
+      return;
+    }
+    doApply(false);
+  };
+
   const onRollback = (entry) => {
+    if (!code) return;
     if (
       !window.confirm(
         t("admin.stopwords.rollbackConfirm", { time: new Date(entry.created_at).toLocaleString() })
       )
     )
       return;
-    act(() => rollbackStopwords(locale, entry.id), t("admin.stopwords.rolledBack"));
+    act(() => rollbackStopwords(code, entry.id), t("admin.stopwords.rolledBack"));
   };
 
   const onProbe = async () => {
+    if (!code) return;
     try {
-      setProbeResults(await probeStopwords(locale, splitLines(probeText)));
+      setProbeResults(await probeStopwords(code, splitLines(probeText)));
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(friendlyApiError(err), { type: "error" });
     }
   };
 
   const currentWords = words[kind] ?? [];
+
+  if (!code) {
+    return <div className="uictl-errors">{t("admin.languages.invalidLocale")}</div>;
+  }
 
   return (
     <div className="stopwords-editor">
@@ -181,7 +227,7 @@ function StopwordsEditor({ locale }) {
                 disabled={busy}
                 onClick={() =>
                   act(
-                    () => deleteStopword(locale, w.word, kind),
+                    () => deleteStopword(code, w.word, kind),
                     t("admin.stopwords.imported")
                   )
                 }
@@ -212,7 +258,9 @@ function StopwordsEditor({ locale }) {
             {t("admin.stopwords.importPreview")}
           </button>
           <button className="modal-btn" disabled={busy || !preview} onClick={onApply}>
-            {t("admin.stopwords.importApply")}
+            {isEmptyReplace && emptyReplaceCount > 0
+              ? t("admin.stopwords.emptyReplaceBtn", { count: emptyReplaceCount })
+              : t("admin.stopwords.importApply")}
           </button>
         </div>
         {preview && (
@@ -420,21 +468,21 @@ export default function LanguagesPanel() {
               <td>
                 <button
                   className="modal-btn"
-                  onClick={() => toggleTool(loc, "stopwords")}
+                  onClick={() => toggleTool(loc.code, "stopwords")}
                   title={t("admin.languages.editStopwords")}
                 >
                   {t("admin.languages.editStopwords")}
                 </button>
                 <button
                   className="modal-btn"
-                  onClick={() => toggleTool(loc, "uictl")}
+                  onClick={() => toggleTool(loc.code, "uictl")}
                   title={t("admin.languages.uictl")}
                 >
                   {t("admin.languages.uictl")}
                 </button>
                 <button
                   className="modal-btn"
-                  onClick={() => toggleTool(loc, "backfill")}
+                  onClick={() => toggleTool(loc.code, "backfill")}
                   title={t("admin.languages.backfill")}
                 >
                   {t("admin.languages.backfill")}

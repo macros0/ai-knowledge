@@ -27,6 +27,9 @@ export default function BackfillControl({ locale }) {
   const { t } = useI18n();
   const { showToast } = useToast();
 
+  // Guard от передачи объекта вместо строки (инцидент «[object Object]», P0).
+  const code = typeof locale === "string" && locale.trim() ? locale.trim() : null;
+
   const [provider, setProvider] = useState(null); // "llm" | "off"
   const [model, setModel] = useState("");
   const [checked, setChecked] = useState(
@@ -49,17 +52,17 @@ export default function BackfillControl({ locale }) {
   const providerOff = provider === "off";
 
   const loadPending = useCallback(async () => {
-    if (!selectedEntities.length) {
+    if (!code || !selectedEntities.length) {
       setPending({});
       return;
     }
     try {
-      setPending(await translationPending(locale, selectedEntities));
+      setPending(await translationPending(code, selectedEntities));
     } catch {
       // молча — счётчик информативный
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale, checked]);
+  }, [code, checked]);
 
   useEffect(() => {
     loadPending();
@@ -77,7 +80,7 @@ export default function BackfillControl({ locale }) {
   const run = () => {
     setBusy(true);
     setResult(null);
-    backfillTranslations(locale, selectedEntities)
+    backfillTranslations(code, selectedEntities)
       .then((res) => setResult(res.result || {}))
       .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
       .finally(() => setBusy(false));
@@ -87,6 +90,10 @@ export default function BackfillControl({ locale }) {
     (acc, e) => acc + (pending[e] || 0),
     0
   );
+
+  if (!code) {
+    return <div className="uictl-errors">{t("admin.languages.invalidLocale")}</div>;
+  }
 
   return (
     <div className="backfill-control">

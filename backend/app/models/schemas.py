@@ -469,6 +469,9 @@ class LocaleUpdate(BaseModel):
 class StopwordImportRequest(BaseModel):
     words: list[str] = Field(default_factory=list)
     confirm: bool = False
+    # Явное подтверждение ДЕСТРУКТИВНОГО пустого replace (mode=replace + words=[]):
+    # без него сервер не применяет очистку всего набора (Этап 7, P2).
+    confirm_empty_replace: bool = False
 
 
 class StopwordImportResult(BaseModel):
@@ -480,6 +483,7 @@ class StopwordImportResult(BaseModel):
     unchanged: list[str] = Field(default_factory=list)
     total_after: int = 0
     applied: bool = False
+    requires_empty_replace_confirmation: bool = False
 
 
 class StopwordWordOut(BaseModel):

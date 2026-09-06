@@ -156,6 +156,76 @@ class TestUiDictionaryAdmin:
         login(client)
         assert client.get("/api/admin/locales/zz/ui-dictionary").status_code == 404
 
+    def test_import_preview_unknown_locale_404(self, client):
+        # P0 hardening: preview для несуществующей локали — 404 (не 200 с diff),
+        # чтобы ошибки вызывающей стороны не маскировались.
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/zz/ui-dictionary/import",
+            json={"data": {"nav.documents": "X"}, "confirm": False},
+        )
+        assert resp.status_code == 404, resp.text
+
+    def test_history_unknown_locale_404(self, client):
+        login(client)
+        assert client.get("/api/admin/locales/zz/ui-dictionary/history").status_code == 404
+
+    def test_history_existing_empty_200(self, client):
+        login(client)
+        resp = client.get("/api/admin/locales/en/ui-dictionary/history")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["entries"] == []
+
+
+class TestStopwordsEmptyReplace:
+    def test_empty_replace_requires_explicit_confirmation(self, client):
+        login(client)
+        # Сначала есть слова (сид ru/bm25).
+        before = client.get("/api/admin/locales/ru/stopwords?kind=bm25").json()["words"]
+        assert len(before) > 0
+
+        # confirm=true БЕЗ confirm_empty_replace — применение запрещено.
+        resp = client.post(
+            "/api/admin/locales/ru/stopwords/import?mode=replace&kind=bm25",
+            json={"words": [], "confirm": True},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["applied"] is False
+        assert body["requires_empty_replace_confirmation"] is True
+
+        after = client.get("/api/admin/locales/ru/stopwords?kind=bm25").json()["words"]
+        assert len(after) == len(before)  # набор не тронут
+
+    def test_empty_replace_with_confirmation_wipes(self, client):
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/ru/stopwords/import?mode=replace&kind=bm25",
+            json={"words": [], "confirm": True, "confirm_empty_replace": True},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["applied"] is True
+
+        after = client.get("/api/admin/locales/ru/stopwords?kind=bm25").json()["words"]
+        assert after == []
+
+        # Аудит помечает деструктивную очистку.
+        from app.services.audit import AuditService
+
+        entries = AuditService().query(action_type=STOPWORDS_IMPORT)
+        assert entries and entries[0]["meta"].get("empty_replace") is True
+        assert entries[0]["meta"].get("removed_count", 0) > 0
+
+    def test_merge_empty_is_noop(self, client):
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/ru/stopwords/import?mode=merge&kind=bm25",
+            json={"words": [], "confirm": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is True
+        assert resp.json()["requires_empty_replace_confirmation"] is False
+
 
 class TestTranslationPending:
     def test_pending_endpoint(self, client):

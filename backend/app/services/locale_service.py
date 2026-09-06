@@ -236,11 +236,16 @@ def import_stopwords(
     confirm: bool,
     user,
     ip_address: str | None = None,
+    confirm_empty_replace: bool = False,
 ) -> dict:
     """Импорт набора стоп-слов: без confirm — preview diff, с confirm — применение.
 
     Возвращает dict: {locale, kind, mode, added, removed, unchanged, total_after,
-    applied}. Применение — одна транзакция, инвалидация кэша синхронна, audit.
+    applied, requires_empty_replace_confirmation}. Применение — одна транзакция,
+    инвалидация кэша синхронна, audit.
+
+    Пустой `replace` (mode=replace + words=[]) — ДЕСТРУКТИВНАЯ очистка набора:
+    требует явного `confirm_empty_replace=True` (серверный гейт, Этап 7 P2).
     """
     get_locale(code)  # 404, если нет
     if kind not in KINDS:
@@ -257,6 +262,8 @@ def import_stopwords(
     removed = [w for w in current if w not in incoming_set] if mode == "replace" else []
     unchanged = [w for w in incoming if w in current]
 
+    is_empty_replace = mode == "replace" and not incoming and bool(current)
+
     result = {
         "locale": code,
         "kind": kind,
@@ -266,9 +273,13 @@ def import_stopwords(
         "unchanged": sorted(unchanged),
         "total_after": len(incoming_set) if mode == "replace" else len(current | incoming_set),
         "applied": False,
+        "requires_empty_replace_confirmation": is_empty_replace,
     }
     if not confirm:
         return result
+
+    if is_empty_replace and not confirm_empty_replace:
+        return result  # применение запрещено без явного подтверждения
 
     final = incoming if mode == "replace" else sorted(current | incoming_set)
     username = getattr(user, "username", None) or "anonymous"
@@ -287,6 +298,7 @@ def import_stopwords(
             "added": len(added),
             "removed": len(removed),
             "unchanged": len(unchanged),
+            **({"empty_replace": True, "removed_count": len(removed)} if is_empty_replace else {}),
         },
     )
     return result
