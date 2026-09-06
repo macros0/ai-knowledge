@@ -78,4 +78,4 @@ Only if this check passes, apply the splitting rules below.
 
 ## Language
 
-The source document is in Russian. Write `title` and `content` in Russian, exactly as the source material is written — do not translate the document's own language. Preserve domain terms, codes, and field names verbatim (e.g., СЭДО, СНИЛС, табельный номер, lnState, snils). This instruction block itself is in English only to improve rule-following reliability; the output content must remain in the source document's language.
+Write `title` and `content` in the source document's own language, exactly as the source material is written — do not translate the document's own language. Preserve domain terms, codes, and field names verbatim (e.g., СЭДО, СНИЛС, табельный номер, lnState, snils). This instruction block itself is in English only to improve rule-following reliability; the output content must remain in the source document's language.

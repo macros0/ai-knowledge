@@ -158,3 +158,22 @@ class TestEnsure:
         store = _store(dirs)
         store.ensure()
         assert (canonical / "chat_system.md").read_text(encoding="utf-8").strip() == "кастомный"
+
+
+class TestDefaultsSync:
+    """Код-дефолты prompts/okf.py обязаны совпадать с каноническими файлами
+    backend/prompts/*.md (иначе fallback тихо вернёт устаревший промпт —
+    инцидент «красный тест okf_chunk», 06.09.2026)."""
+
+    def test_defaults_match_canonical_files(self):
+        from pathlib import Path
+
+        canonical_dir = Path(__file__).resolve().parents[1] / "prompts"
+        for key, default in PROMPT_DEFAULTS.items():
+            path = canonical_dir / f"{key}.md"
+            assert path.exists(), f"{key}.md отсутствует"
+            file_text = path.read_text(encoding="utf-8").strip()
+            assert file_text == default.strip(), (
+                f"prompt '{key}': дефолт в prompts/okf.py разошёлся с {key}.md — "
+                "перенесите правку файла в код-дефолт"
+            )

@@ -9,4 +9,4 @@ Rules:
 
 ## Language
 
-The source document is in Russian. Extract `dev_number`, `dev_name`, and `module` values exactly as written in the source (do not translate them). This instruction block is in English only to improve rule-following reliability.
+Extract `dev_number`, `dev_name`, and `module` values exactly as written in the source document (do not translate them). This instruction block is in English only to improve rule-following reliability.

@@ -86,7 +86,7 @@ Only if this check passes, apply the splitting rules below.
 
 ## Language
 
-The source document is in Russian. Write `title` and `content` in Russian, exactly as the source material is written — do not translate the document's own language. Preserve domain terms, codes, and field names verbatim (e.g., СЭДО, СНИЛС, табельный номер, lnState, snils). This instruction block itself is in English only to improve rule-following reliability; the output content must remain in the source document's language."""
+Write `title` and `content` in the source document's own language, exactly as the source material is written — do not translate the document's own language. Preserve domain terms, codes, and field names verbatim (e.g., СЭДО, СНИЛС, табельный номер, lnState, snils). This instruction block itself is in English only to improve rule-following reliability; the output content must remain in the source document's language."""
 
 USER_OKF_PROMPT = """Document: {filename}
 
@@ -104,13 +104,13 @@ Fragment {index} of {total}:
 {content}
 ---
 
-Extract the concepts from this fragment. Return a JSON array in the format described above. Keep `title` and `content` in the same language as the source fragment (Russian) — do not translate the source document's content."""
+Extract the concepts from this fragment. Return a JSON array in the format described above. Keep `title` and `content` in the same language as the source fragment — do not translate the source document's content."""
 
 SYSTEM_CHAT_PROMPT = """You are an assistant answering questions based on an Open Knowledge Format knowledge base.
 
 ## General rules
 
-1. Respond in Russian (unless the user explicitly asks otherwise). This rule is absolute and independent of the language of this instruction block.
+1. Detect the language of the user's latest question and answer in that language (Russian questions → Russian, English questions → English). This rule is absolute and independent of the language of this instruction block. Do not translate source content: quotes, codes, and identifiers stay in their original language.
 2. Use ONLY the provided context. If the answer is not in the context and cannot be logically derived per the rules below — say so honestly.
 3. Answer the user's question directly. Meta-style is forbidden: do not describe the context's composition ("The context contains a block...", "According to block [N]..." at the start of the answer) — get straight to the point.
 4. Selecting relevant blocks:
@@ -180,7 +180,7 @@ Rules:
 
 ## Language
 
-The source document is in Russian. Extract `dev_number`, `dev_name`, and `module` values exactly as written in the source (do not translate them). This instruction block is in English only to improve rule-following reliability."""
+Extract `dev_number`, `dev_name`, and `module` values exactly as written in the source document (do not translate them). This instruction block is in English only to improve rule-following reliability."""
 
 USER_DEV_NUMBER_PROMPT = """Document: {filename}
 

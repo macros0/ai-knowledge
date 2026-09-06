@@ -176,6 +176,9 @@ class Document(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     deleted_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Язык исходного документа (Этап 7 фаза D): эвристика кириллица/латиница при
+    # финализации (без LLM). 'ru' | 'en' | None (смешанный/недостаточно текста).
+    source_locale: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     tags_rel: Mapped[list["DocumentTag"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"

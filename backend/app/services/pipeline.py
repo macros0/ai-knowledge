@@ -29,6 +29,7 @@ from app.services.embedder import Embedder
 from app.services.errors import DependencyUnavailableError
 from app.services import gen_quality
 from app.services.json_atomic import write_json_atomic
+from app.services.language import detect_language
 from app.services.llm_client import LLMTruncationError, is_fatal_error
 from app.services.okf_generator import OKFGenerator
 from app.services import problem_codes
@@ -538,12 +539,16 @@ class Pipeline:
 
         total_chunks = manifest.get("total_chunks", 0) if manifest else 0
         staging.remove()
+        source_locale = detect_language(
+            "".join(r["content"] for r in chunk_rows)[:100_000]
+        )
         self.registry.update(
             doc_id,
             status="done",
             okf_concept_count=len(okf_docs),
             error=None,
             problem=problem,
+            source_locale=source_locale,
         )
         logger.info(
             "Документ %s обработан: %d OKF-концептов, %d чанков%s",

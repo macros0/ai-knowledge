@@ -45,6 +45,8 @@ class DocumentOut(BaseModel):
     # Корзина (Этап 4a.2): не None — документ удалён и находится в корзине.
     deleted_at: datetime | None = None
     deleted_by: str | None = None
+    # Язык исходного документа (Этап 7 фаза D, эвристика кириллица/латиница).
+    source_locale: str | None = None
 
     @model_validator(mode="after")
     def _fill_problem_message(self) -> "DocumentOut":

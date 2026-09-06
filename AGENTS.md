@@ -531,12 +531,13 @@ ru), полнота plural-форм.
 - **Админ-контур** `api/admin_locales.py` (роль admin) + `GET /api/locales` (активные
   языки для LocaleToggle, ETag). Новые audit-действия `locale_*` / `stopwords_*`,
   target_type `locale`. Справочники/переводы (tag_id, UI-словари, промпты) — фазы B/C/D.
-- **TODO (фаза D, 7.7):** в промптах (`okf_chunk.md`, `okf_system.md` §Language,
-  `dev_number_system.md` §Language) захардкожено «исходный документ на русском /
-  (Russian)». Это НЕ дрейф между источниками (файлы и код-дефолты `prompts/okf.py`
-  синхронизированы построчно) — но при многоязычном корпусе станет неверным
-  утверждением. Заменяется на `source_locale`/`content_language` в фазе D вместе с
-  детекцией языка документа; сейчас не трогать.
+- **TODO (фаза D, 7.7) — ЗАКРЫТО 06.09.2026:** хардкод «(Russian)» убран из
+  `okf_chunk.md`, `okf_system.md` §Language, `dev_number_system.md` §Language →
+  «в языке исходного документа»; `chat_system.md` правило 1 → «определи язык вопроса
+  и отвечай на нём». Код-дефолты `prompts/okf.py` синхронизированы. `documents.source_locale`
+  (эвристика кириллица/латиница в `services/language.py`, ставится в `pipeline._finalize`).
+  Оставшееся «Russian» в промптах — правило чата (корректно) и примечание примеров
+  `okf_table_classifier.md` (фактическое, про статические примеры) — не хардкод языка источника.
 
 ## Многоязычность — теги и переводы (Этап 7, фаза B)
 

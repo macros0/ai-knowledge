@@ -138,6 +138,7 @@ def _to_dict(doc: Document) -> dict:
         "has_duplicates": bool(doc.has_duplicates),
         "deleted_at": doc.deleted_at,
         "deleted_by": doc.deleted_by,
+        "source_locale": doc.source_locale,
     }
 
 
