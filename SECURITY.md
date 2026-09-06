@@ -285,6 +285,23 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
 
 ## 7. Журнал security-изменений
 
+### 2026-09-06 — Гейт деструктивной очистки стоп-слов + 404-семантика ui-dictionary
+Изменение: (1) пустой `replace`-импорт стоп-слов (`mode=replace` + `words=[]` при
+непустом текущем наборе) — фактически массовая деструктивная очистка набора языка —
+теперь требует явного серверного подтверждения `confirm_empty_replace=true` (без
+него `applied=false` + `requires_empty_replace_confirmation`; UI показывает кнопку
+«Удалить все N стоп-слов» и confirm с locale/kind/count — прямой API-вызов без UI
+также не очистит набор молча); в `audit_log` (действие `stopwords_import`,
+meta) дополнительно пишутся `empty_replace=true` и `removed_count` — быстрая
+выборка очисток для ИБ. Merge пустым списком остаётся no-op (не деструктивен).
+(2) `POST /admin/locales/{code}/ui-dictionary/import` (preview-ветка) и
+`GET .../ui-dictionary/history` для несуществующей локали теперь возвращают 404, а
+не 200 (history) — устранена маскировка ошибок вызывающей стороны, из-за которой
+фронтенд-баг «[object Object]» в URL выглядел как «backend недоступен». Причина:
+класс опасных bulk-операций обязан следовать контракту preview → явное
+подтверждение (как four-eyes для документов), а 404/200-неоднозначность мешала
+диагностике инцидентов. Права не менялись (admin/editor как раньше).
+
 ### 2026-09-06 — Локальный frontend перенесён на порт 16300
 Изменение: host-порт 3000 (локальный Next dev server) попал в исключённый диапазон
 Windows Hyper-V/WSL (`netsh interface ipv4 show excludedportrange` — блоки меняются от

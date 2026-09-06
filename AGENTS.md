@@ -543,7 +543,11 @@ ru), полнота plural-форм.
   набора не имеет поискового эффекта).
 - **Админ-контур** `api/admin_locales.py` (роль admin) + `GET /api/locales` (активные
   языки для LocaleToggle, ETag). Новые audit-действия `locale_*` / `stopwords_*`,
-  target_type `locale`. Справочники/переводы (tag_id, UI-словари, промпты) — фазы B/C/D.
+  target_type `locale`. **Пустой `replace` импорта стоп-слов — деструктивная очистка
+  набора: серверный гейт `confirm_empty_replace`** (без него `applied=false` +
+  `requires_empty_replace_confirmation`; API-вызов без UI тоже не очистит молча),
+  в audit meta пишется `empty_replace/removed_count`; merge пустым списком — no-op.
+  Справочники/переводы (tag_id, UI-словари, промпты) — фазы B/C/D.
 - **TODO (фаза D, 7.7) — ЗАКРЫТО 06.09.2026:** хардкод «(Russian)» убран из
   `okf_chunk.md`, `okf_system.md` §Language, `dev_number_system.md` §Language →
   «в языке исходного документа»; `chat_system.md` правило 1 → «определи язык вопроса
@@ -581,7 +585,9 @@ ru), полнота plural-форм.
   очередь документоцентрична (submit(doc_ids)); операция не деструктивна и обратима.
 - **API**: `GET /tags?needs_review=` (display по cookie `okf.locale`), `PATCH
   /tags/{id}/translations/{locale}`, `POST /tags/bulk-review` (editor/admin),
-  `POST /tags/translations/backfill` (admin). Audit: `tag_translation_update/review`,
+  `POST /tags/translations/backfill` (admin), `GET /tags/translations/pending?locale=&entities=`
+  (admin; preview-счётчик «без ручного перевода» — тот же `_pending_rows`, что и
+  бэкфилл, число совпадает с прогоном). Audit: `tag_translation_update/review`,
   `translations_backfill`.
 - **Review-UI + display-локализация (завершено 06.09.2026):** `TagManagerModal` —
   фильтр «требует проверки», раскрытие переводов, подтверждение (одиночное/массовое),
@@ -597,8 +603,14 @@ ru), полнота plural-форм.
 
 - **`ui_dictionaries`** (locale, version, data JSON; unique locale+version) + указатель
   `locales.ui_dictionary_version`. Импорт admin (двухшаговый preview→confirm) с
-  валидацией: ключи ⊆ канонического манифеста `backend/app/i18n/ui_keys.json` и
-  `{param}`-плейсхолдеры == ru. Манифест генерируется node-скриптом
+  валидацией: ключи ⊆ канонического манифеста `backend/app/i18n/ui_keys.json`;
+  `{param}`-плейсхолдеры == ru в каждой строке/форме (`count` исключён из сверки, но
+  не запрещён); **plural-формы по целевой локали** (объект: en — `one,other` оба
+  обязательны, ru/uk — `one,few,many` (`other` допустим), неизвестная локаль →
+  en-модель; строковое значение допустимо всегда — en.js часто представляет
+  plural-ключ одной строкой). Import-preview и history для несуществующей локали →
+  404 (не 200/[]) — маскировка ошибок вызывающей стороны исключена (инцидент
+  «[object Object]»). Манифест генерируется node-скриптом
   `frontend/scripts/export-ui-keys.mjs` из `ru.js`; **дрейф ловит** i18n-тест
   (`manifest drift`) — после правки ru.js обязательно перегенерировать манифест.
   Семантика импорта — ПОЛНАЯ замена override-словаря локали. `GET /api/i18n/{locale}`
@@ -610,7 +622,14 @@ ru), полнота plural-форм.
   `LocaleProvider`; клиент догружает override при переключении локали
   (`getUiDictionary`). При недоступности бэкенда/404 — fallback на versioned-словарь.
   Админ-редактор «Перевод интерфейса» в `/admin/languages` (textarea JSON, префилл
-  активного override, preview→confirm, история версий + rollback).
+  активного override, preview→confirm, история версий + rollback; retry не
+  перезаписывает textarea при ручных правках — dirtyRef) + **секция «Образцы для
+  перевода»**: экспорт effective-словаря (через `getMessages` — тот же порядок
+  разрешения, что в рантайме), ru-источника и только-override
+  (`lib/uiDictExport.mjs`, node-тестируемый). Admin-панель языков скроллится
+  (`.admin-panel { overflow-y: auto }`), тоггл языка реагирует на активацию без
+  reload (событие `okf:locales-changed`), кнопка активации — для draft И disabled
+  (`lib/localeActions.mjs`, node-тест).
 - **Backfill UI/CLI (завершено 06.09.2026):** секция «Перевод справочников» в
   `/admin/languages` (чекбоксы сущностей; `count_pending` — тот же `_pending_rows`,
   что и бэкфилл; provider/model из `GET /api/settings`; кнопка заблокирована при

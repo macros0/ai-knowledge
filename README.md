@@ -321,6 +321,11 @@ Read-only проверка: документы, «зависшие» в акти
 | `TRASH_RETENTION_DAYS` | `14` | Окно хранения в корзине (дней), до истечения которого документ можно восстановить; после — фоновая автоочистка (Этап 4a.2) |
 | `TRASH_PURGE_ENABLED` | `true` | Автозапуск фоновой очистки корзины при старте сервера |
 | `TRASH_PURGE_INTERVAL_SECONDS` | `3600` | Интервал прогона фоновой очистки корзины (сек) |
+| `STOPWORDS_CACHE_TTL_SECONDS` | `60` | TTL кэша динамических стоп-слов (сек). Действуют только на сторону запроса; индексная формула заморожена — реиндекс не нужен и не помогает (Этап 7) |
+| `STOPWORDS_MAX_WORDS` | `10000` | Максимум слов в одном наборе стоп-слов (защита от случайной гигантской вставки) |
+| `TRANSLATION_PROVIDER` | `llm` | Провайдер автоперевода справочников (теги/разработки/модули): `llm` (через LLM-шлюз; в dev — внешний OpenRouter, маршрут виден в admin-UI и печатается CLI) или `off` (прод без интернета — только ручной ввод) (Этап 7) |
+| `TRANSLATION_MODEL` | `""` | Модель перевода (пусто → `LLM_MODEL`) |
+| `TRANSLATION_BATCH_SIZE` | `50` | Размер пакета текстов на один LLM-вызов бэкфилла переводов |
 
 ### Модель устойчивости к сбоям LLM
 
@@ -661,9 +666,16 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | GET | `/api/documents/{doc_id}/okf/{filename}` | Содержимое OKF-файла |
 | POST | `/api/search` | Поиск по концептам (top-k + фильтр по тегам + режим `mode`) |
 | POST | `/api/chat` | Вопрос к базе знаний (ответ + источники + режим `mode`; при 0 хитов — короткое замыкание без LLM, Этап 4a.1) |
-| GET | `/api/tags` | Список тегов с частотой использования |
+| GET | `/api/tags` | Список тегов с частотой использования (плюс `display` по языку пользователя и `needs_review` для машинных переводов) |
 | DELETE | `/api/tags/{tag}` | Удалить неиспользуемый тег из справочника (роли `editor`/`admin`; 409, если тег используется) |
 | POST | `/api/tags/cleanup` | Удалить все неиспользуемые теги из справочника (роли `editor`/`admin`) |
+| PATCH | `/api/tags/{tag_id}/translations/{locale}` | Правка перевода имени тега; правка становится «ручной» и не перезаписывается автопереводом (роли `editor`/`admin`) |
+| POST | `/api/tags/bulk-review` | Подтвердить машинные переводы выбранных тегов (массово; роли `editor`/`admin`) |
+| POST | `/api/tags/translations/backfill` | Автоперевод справочников для локали — теги/разработки/модули (роль `admin`; синхронно, bulk-семафор LLM; идемпотентно: ручные переводы не трогает) |
+| GET | `/api/tags/translations/pending` | Число объектов справочника без ручного перевода (роль `admin`; тот же расчёт, что и у backfill) |
+| GET | `/api/locales` | Активные языки (для переключателя UI; ETag) |
+| GET | `/api/i18n/{locale}` | Актуальный runtime-override UI-словаря локали (ETag; 404, если override нет) |
+| GET/POST | `/api/admin/locales…` | Контур «Поддержка языков» (роль `admin`): CRUD языков, активация/отключение, стоп-слова (импорт preview→confirm, пустой `replace` — гейт `confirm_empty_replace`, история/rollback, probe), UI-словарь (import preview→confirm с валидацией ключей/`{param}`/plural-форм, history, rollback, get). См. `docs/ADD_LANGUAGE.md` |
 | POST | `/api/documents/{doc_id}/development` | Привязать/отвязать разработку, подтвердить автоопределение (роли `editor`/`admin`) |
 | POST | `/api/documents/{doc_id}/detect-development` | On-demand автоопределение номера разработки (роли `editor`/`admin`) |
 | GET | `/api/documents/{doc_id}/duplicates` | Кандидаты-дубликаты (Level 2/3: content-hash + MinHash/LSH) |
