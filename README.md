@@ -675,7 +675,7 @@ LLM (`mistral-nemo` 12B) не способен экстрагировать вс
 | GET | `/api/tags/translations/pending` | Число объектов справочника без ручного перевода (роль `admin`; тот же расчёт, что и у backfill) |
 | GET | `/api/locales` | Активные языки (для переключателя UI; ETag) |
 | GET | `/api/i18n/{locale}` | Актуальный runtime-override UI-словаря локали (ETag; 404, если override нет) |
-| GET/POST | `/api/admin/locales…` | Контур «Поддержка языков» (роль `admin`): CRUD языков, активация/отключение, стоп-слова (импорт preview→confirm, пустой `replace` — гейт `confirm_empty_replace`, история/rollback, probe), UI-словарь (import preview→confirm с валидацией ключей/`{param}`/plural-форм, history, rollback, get). См. `docs/ADD_LANGUAGE.md` |
+| GET/POST | `/api/admin/locales…` | Контур «Поддержка языков» (роль `admin`): CRUD языков, активация/отключение, стоп-слова (импорт preview→confirm, пустой `replace` — гейт `confirm_empty_replace`, история/rollback, probe), UI-словарь (import preview→confirm с валидацией ключей/`{param}`/plural-форм, history, rollback, get). См. [docs/ADD_LANGUAGE.md](docs/ADD_LANGUAGE.md) |
 | POST | `/api/documents/{doc_id}/development` | Привязать/отвязать разработку, подтвердить автоопределение (роли `editor`/`admin`) |
 | POST | `/api/documents/{doc_id}/detect-development` | On-demand автоопределение номера разработки (роли `editor`/`admin`) |
 | GET | `/api/documents/{doc_id}/duplicates` | Кандидаты-дубликаты (Level 2/3: content-hash + MinHash/LSH) |
@@ -787,7 +787,7 @@ Group-claim любой формы (список / строка / JSON-объек
   счётчик активных задач.
 - **`/admin/languages`** — «Поддержка языков» (роль `admin`): CRUD языков
   (draft/active/disabled), стоп-слова (BM25/маркеры), перевод интерфейса (UI-словарь),
-  перевод справочников (теги/разработки/модули). Подробности: `docs/ADD_LANGUAGE.md`.
+  перевод справочников (теги/разработки/модули). Подробности: [docs/ADD_LANGUAGE.md](docs/ADD_LANGUAGE.md).
 - **`/security`** — журнал ИБ с фильтрами, агрегация аномалий (клиентская), список
   блокировок + форма block/unblock, экспорт CSV.
 
