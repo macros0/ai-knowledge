@@ -301,12 +301,15 @@ def matched_terms(item: dict, query: str | None) -> list[str]:
     if not query:
         return []
     from app.services.sparse import tokenize
+    from app.services.stopwords import KIND_BM25, KIND_MARKER, get_stopwords
 
     haystack = f"{item.get('title', '')}\n{item.get('content', '')}".lower()
+    bm25_sw = get_stopwords(KIND_BM25)
+    marker_sw = get_stopwords(KIND_MARKER)
     return [
         t
-        for t in tokenize(query)
-        if t not in _MARKER_STOPWORDS and _token_in_text(t, haystack)
+        for t in tokenize(query, stopwords=bm25_sw)
+        if t not in marker_sw and _token_in_text(t, haystack)
     ]
 
 
@@ -322,9 +325,12 @@ def title_matched_terms(item: dict, query: str | None) -> list[str]:
     if not query:
         return []
     from app.services.sparse import tokenize
+    from app.services.stopwords import KIND_BM25, KIND_MARKER, get_stopwords
 
     title = item.get("title", "").lower()
-    return [t for t in tokenize(query) if t not in _MARKER_STOPWORDS and _token_in_text(t, title)]
+    bm25_sw = get_stopwords(KIND_BM25)
+    marker_sw = get_stopwords(KIND_MARKER)
+    return [t for t in tokenize(query, stopwords=bm25_sw) if t not in marker_sw and _token_in_text(t, title)]
 
 
 def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[dict]:
@@ -350,8 +356,11 @@ def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[di
     if not query or not merged:
         return merged
     from app.services.sparse import tokenize
+    from app.services.stopwords import KIND_BM25, KIND_MARKER, get_stopwords
 
-    tokens = [t for t in tokenize(query) if t not in _MARKER_STOPWORDS]
+    bm25_sw = get_stopwords(KIND_BM25)
+    marker_sw = get_stopwords(KIND_MARKER)
+    tokens = [t for t in tokenize(query, stopwords=bm25_sw) if t not in marker_sw]
     if len(tokens) < 2:
         return merged
     full = [

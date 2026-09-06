@@ -285,6 +285,24 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
 
 ## 7. Журнал security-изменений
 
+### 2026-09-06 — Поддержка языков и стоп-слова (Этап 7, фаза A)
+Изменение: добавлены таблицы `locales` (code, name, status draft|active|disabled,
+ui_dictionary_version) и `stopwords` (locale, word, kind bm25|marker) + Alembic
+миграция `7a1b2c3d4e5f` (в dev — `create_all` + идемпотентный `ensure_seeded`,
+в prod — только Alembic). Новый админ-контур «Поддержка языков»
+(`/api/admin/locales/*`, роль `admin`): CRUD языков, активация/отключение, импорт/
+правка/rollback стоп-слов (двухшаговый preview→confirm, одна транзакция +
+синхронная инвалидация кэша), read-only probe. Журнал ИБ дополнен действиями
+`locale_create/update/activate/disable`, `stopwords_import/update/rollback` и
+target_type `locale`; перечень `ACTION_TYPES`/`EXPECTED_ACTION_TYPES` обновлён.
+Причина: стоп-слова переводятся из двух рассинхронизированных констант кода
+(`sparse._STOPWORDS`, `context_builder._MARKER_STOPWORDS`) в данные с единым
+сервисом и аудитом изменений; управление языками — изменяющая состояние операция,
+требующая append-only фиксации. Стоп-слова применяются только на стороне запроса
+(индексная формула sparse.py заморожена на константах — реиндекс не нужен),
+поэтому правка стоп-слов не затрагивает хранимые векторы и не требует
+дополнительного разграничения, кроме роли `admin`.
+
 ### 2026-09-05 — Qdrant v2 + бандлы как экспорт (Этап 2b, Фазы 4–5)
 Изменение: коллекция Qdrant пересобрана (`okf_knowledge_base_v2`) из PostgreSQL
 с логическими point_id `uuid5("okf:concept:{doc_id}:{slug}")` /

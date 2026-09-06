@@ -446,3 +446,101 @@ export function detectDocumentDevelopment(docId) {
 export function listDocumentDuplicates(docId) {
   return request(`/documents/${docId}/duplicates`);
 }
+
+// --- Языки и стоп-слова (Этап 7) ---
+
+export function listActiveLocales() {
+  return request("/locales").then((data) => data.locales ?? []);
+}
+
+export function listLocales() {
+  return request("/admin/locales").then((data) => data.locales ?? []);
+}
+
+export function createLocale(code, name) {
+  return request("/admin/locales", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, name }),
+  });
+}
+
+export function updateLocale(code, { name, status } = {}) {
+  return request(`/admin/locales/${encodeURIComponent(code)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, status }),
+  });
+}
+
+export function activateLocale(code) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/activate`, { method: "POST" });
+}
+
+export function disableLocale(code) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/disable`, { method: "POST" });
+}
+
+export function listStopwords(code, kind) {
+  const qs = kind ? `?kind=${encodeURIComponent(kind)}` : "";
+  return request(`/admin/locales/${encodeURIComponent(code)}/stopwords${qs}`).then(
+    (data) => data.words ?? []
+  );
+}
+
+export function importStopwords(code, { words, kind = "bm25", mode = "merge", confirm = false } = {}) {
+  const qs = `?kind=${encodeURIComponent(kind)}&mode=${encodeURIComponent(mode)}`;
+  return request(`/admin/locales/${encodeURIComponent(code)}/stopwords/import${qs}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ words, confirm }),
+  });
+}
+
+export function addStopword(code, { word, kind = "bm25" } = {}) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/stopwords`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ word, kind }),
+  });
+}
+
+export function renameStopword(code, word, newWord, kind = "bm25") {
+  return request(
+    `/admin/locales/${encodeURIComponent(code)}/stopwords/${encodeURIComponent(word)}?kind=${encodeURIComponent(kind)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word: newWord }),
+    }
+  );
+}
+
+export function deleteStopword(code, word, kind = "bm25") {
+  return request(
+    `/admin/locales/${encodeURIComponent(code)}/stopwords/${encodeURIComponent(word)}?kind=${encodeURIComponent(kind)}`,
+    { method: "DELETE" }
+  );
+}
+
+export function stopwordsHistory(code) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/stopwords/history`).then(
+    (data) => data.entries ?? []
+  );
+}
+
+export function rollbackStopwords(code, entryId) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/stopwords/rollback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entry_id: entryId }),
+  });
+}
+
+export function probeStopwords(code, queries) {
+  return request(`/admin/locales/${encodeURIComponent(code)}/stopwords/probe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ queries }),
+  }).then((data) => data.results ?? []);
+}

@@ -15,6 +15,7 @@ export function lookupTitleKey(pathname) {
   if (p.startsWith("/developments/")) return "titles.developmentCard";
   if (p.startsWith("/developments")) return "titles.developments";
   if (p.startsWith("/documents/")) return "titles.document";
+  if (p.startsWith("/admin/languages")) return "titles.adminLanguages";
   if (p.startsWith("/admin")) return "titles.admin";
   if (p.startsWith("/security")) return "titles.security";
   return null;

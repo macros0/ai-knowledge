@@ -456,3 +456,53 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages_rel")
+
+
+class Locale(Base):
+    """Язык UI/поиска (Этап 7 roadmap, «Поддержка языков»).
+
+    `code` — BCP 47 / ISO 639 код (`ru`, `en`, ...). `status` управляет:
+      - draft / active / disabled — активные участвуют в объединении стоп-слов
+        для query-токенизации BM25 и доступны в LocaleToggle;
+      - активация требует наличия UI-словаря (в статическом манифесте фронтенда,
+        фаза A) и хотя бы одного набора stopwords.
+    `ui_dictionary_version` — указатель актуальной runtime-версии UI-словаря
+    (наполняется в фазе C; здесь заводится как задел).
+    """
+
+    __tablename__ = "locales"
+
+    code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="draft")  # draft | active | disabled
+    ui_dictionary_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class Stopword(Base):
+    """Стоп-слово поиска (Этап 7 roadmap).
+
+    Хранятся как данные, а не как константы — два потребителя используют единый
+    сервис services/stopwords.py:
+      - kind='bm25'   — фильтр лексической ветки (BM25 query-токенизация);
+      - kind='marker' — фильтр маркеров Matched terms / Title match (context_builder).
+    Индексная формула sparse.py заморожена на константах и НЕ читает эту таблицу:
+    динамический набор применяется только на стороне запроса (см. AGENTS.md).
+    """
+
+    __tablename__ = "stopwords"
+
+    locale: Mapped[str] = mapped_column(
+        ForeignKey("locales.code", ondelete="CASCADE"), primary_key=True
+    )
+    word: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)  # bm25 | marker
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)

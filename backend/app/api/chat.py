@@ -28,6 +28,7 @@ from app.services.errors import LLMError
 from app.services.llm_client import LLMClient
 from app.services.search_filter import build_doc_lookup, drop_invisible_hits
 from app.services.sparse import to_sparse_vector
+from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,13 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
 
     branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
     vector = _embedder.embed(req.query) if "dense" in branches else None
-    sparse_vec = to_sparse_vector(req.query) if "bm25" in branches else None
+    # Query-путь: динамический набор стоп-слов активных locales (индексная формула
+    # заморожена — реиндекс при правке стоп-слов не требуется).
+    sparse_vec = (
+        to_sparse_vector(req.query, stopwords=get_stopwords(KIND_BM25))
+        if "bm25" in branches
+        else None
+    )
 
     hits = _vector_store.search_composite(
         dense_vec=vector,

@@ -18,7 +18,8 @@ export default function Nav() {
 
   const roleItems = [
     { href: "/developments", label: t("nav.developments"), exact: false, roles: ["editor", "admin"] },
-    { href: "/admin", label: t("nav.admin"), exact: false, roles: ["admin"] },
+    { href: "/admin", label: t("nav.admin"), exact: true, roles: ["admin"] },
+    { href: "/admin/languages", label: t("nav.adminLanguages"), exact: false, roles: ["admin"] },
     { href: "/security", label: t("nav.security"), exact: false, roles: ["security"] },
     { href: "/chat/history/admin", label: t("nav.historyAdmin"), exact: false, roles: ["security", "admin"] },
   ];

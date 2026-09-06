@@ -343,3 +343,109 @@ class AttributeCreate(BaseModel):
     value: str
     label: str | None = None
     sort_order: int = 0
+
+
+class LocaleOut(BaseModel):
+    code: str
+    name: str
+    status: str
+    ui_dictionary_version: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    stopwords_bm25_count: int = 0
+    stopwords_marker_count: int = 0
+
+
+class LocaleListOut(BaseModel):
+    locales: list[LocaleOut]
+
+
+class ActiveLocaleOut(BaseModel):
+    code: str
+    name: str
+
+
+class ActiveLocaleListOut(BaseModel):
+    locales: list[ActiveLocaleOut]
+
+
+class LocaleCreate(BaseModel):
+    code: str = Field(min_length=2, max_length=16)
+    name: str = Field(min_length=1, max_length=255)
+
+
+class LocaleUpdate(BaseModel):
+    name: str | None = None
+    status: str | None = None
+
+
+class StopwordImportRequest(BaseModel):
+    words: list[str] = Field(default_factory=list)
+    confirm: bool = False
+
+
+class StopwordImportResult(BaseModel):
+    locale: str
+    kind: str
+    mode: str
+    added: list[str] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+    unchanged: list[str] = Field(default_factory=list)
+    total_after: int = 0
+    applied: bool = False
+
+
+class StopwordWordOut(BaseModel):
+    word: str
+    kind: str
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class StopwordListOut(BaseModel):
+    locale: str
+    words: list[StopwordWordOut] = Field(default_factory=list)
+
+
+class StopwordAddRequest(BaseModel):
+    word: str = Field(min_length=1, max_length=64)
+    kind: Literal["bm25", "marker"] = "bm25"
+
+
+class StopwordRenameRequest(BaseModel):
+    word: str = Field(min_length=1, max_length=64)
+
+
+class StopwordHistoryEntry(BaseModel):
+    id: int
+    created_at: datetime | None = None
+    username: str | None = None
+    kind: str | None = None
+    meta: dict[str, Any] | None = None
+    words: list[str] = Field(default_factory=list)
+
+
+class StopwordHistoryOut(BaseModel):
+    entries: list[StopwordHistoryEntry] = Field(default_factory=list)
+
+
+class StopwordRollbackRequest(BaseModel):
+    entry_id: int
+
+
+class StopwordProbeRequest(BaseModel):
+    queries: list[str] = Field(default_factory=list)
+
+
+class StopwordProbeHit(BaseModel):
+    title: str
+    score: float
+
+
+class StopwordProbeResult(BaseModel):
+    query: str
+    hits: list[StopwordProbeHit] = Field(default_factory=list)
+
+
+class StopwordProbeResponse(BaseModel):
+    results: list[StopwordProbeResult] = Field(default_factory=list)

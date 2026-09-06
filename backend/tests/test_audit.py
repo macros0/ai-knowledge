@@ -45,6 +45,13 @@ EXPECTED_ACTION_TYPES = {
     "chat_history_view",
     "chat_history_auto_delete",
     "document_export",
+    "locale_create",
+    "locale_update",
+    "locale_activate",
+    "locale_disable",
+    "stopwords_import",
+    "stopwords_update",
+    "stopwords_rollback",
 }
 
 

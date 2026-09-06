@@ -345,6 +345,15 @@ class Settings(BaseSettings):
     # Интервал прогона фоновой очистки (секунды).
     chat_history_purge_interval_seconds: float = 3600.0
 
+    # --- Многоязычность (Этап 7 roadmap) ---
+    # TTL кэша стоп-слов (services/stopwords.py) в секундах. Динамический набор
+    # применяется только к query-токенизации BM25 и маркерам Matched terms;
+    # индексная формула sparse.py заморожена на константах и не читает кэш.
+    stopwords_cache_ttl_seconds: float = 60.0
+    # Максимум слов в одном наборе стоп-слов (защита от случайной гигантской
+    # вставки; реальные наборы — сотни слов).
+    stopwords_max_words: int = 10000
+
     @field_validator("chat_top_k_presets", mode="before")
     @classmethod
     def parse_top_k_presets(cls, v: object) -> Any:

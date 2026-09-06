@@ -3366,3 +3366,179 @@ main {
   font-size: 13px;
   color: var(--text);
 }
+
+/* --- Поддержка языков (Этап 7) --- */
+
+.job-status.draft { color: var(--muted); }
+.job-status.active { color: var(--ok); border-color: var(--ok); }
+.job-status.disabled { color: var(--danger); border-color: var(--danger); }
+
+.language-add-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.language-add-form input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.language-add-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.language-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.language-table th,
+.language-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.language-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.language-table td .modal-btn {
+  margin-right: 6px;
+}
+
+.stopwords-editor-wrap {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.stopwords-editor-wrap h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.stopwords-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stopwords-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.stopwords-toolbar select,
+.stopwords-toolbar input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.stopwords-toolbar input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.stopword-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.stopword-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+}
+
+.stopword-chip .chip-x {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.stopword-chip .chip-x:hover {
+  color: var(--danger);
+}
+
+.stopwords-import textarea,
+.stopwords-probe textarea {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  resize: vertical;
+}
+
+.stopwords-import textarea:focus,
+.stopwords-probe textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.stopwords-import-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.stopwords-preview {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stopwords-history h4,
+.stopwords-probe h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.stopwords-probe-results .probe-item {
+  margin-bottom: 10px;
+}
+
+.probe-item ol {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+}

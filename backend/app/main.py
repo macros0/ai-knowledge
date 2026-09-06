@@ -11,7 +11,20 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api import attributes, audit, chat, chat_history, developments, documents, jobs, search, tags, users
+from app.api import (
+    admin_locales,
+    attributes,
+    audit,
+    chat,
+    chat_history,
+    developments,
+    documents,
+    jobs,
+    locales,
+    search,
+    tags,
+    users,
+)
 from app.api.settings import router as settings_router
 from app.auth.api import router as auth_router
 from app.auth.service import require_user
@@ -60,6 +73,11 @@ async def lifespan(app: FastAPI):
             from app.db.session import init_db
 
             init_db()
+        # Идемпотентный посев locales/stopwords (Этап 7). Для dev (create_all без
+        # Alembic-сида) — обязателен; для prod (сид через миграцию) — no-op.
+        from app.services.stopwords import ensure_seeded
+
+        ensure_seeded()
         from app.services.registry import reset_stale_statuses
 
         reset_stale_statuses()
@@ -164,6 +182,8 @@ def create_app() -> FastAPI:
     protected.include_router(jobs.router)
     protected.include_router(audit.router)
     protected.include_router(users.router)
+    protected.include_router(locales.router)
+    protected.include_router(admin_locales.router)
     app.include_router(protected, prefix=settings.api_prefix)
 
     @app.exception_handler(DependencyUnavailableError)

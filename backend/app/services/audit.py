@@ -45,6 +45,13 @@ DOCUMENT_AUTO_DELETE = "document_auto_delete"
 CHAT_HISTORY_VIEW = "chat_history_view"
 CHAT_HISTORY_AUTO_DELETE = "chat_history_auto_delete"
 DOCUMENT_EXPORT = "document_export"
+LOCALE_CREATE = "locale_create"
+LOCALE_UPDATE = "locale_update"
+LOCALE_ACTIVATE = "locale_activate"
+LOCALE_DISABLE = "locale_disable"
+STOPWORDS_IMPORT = "stopwords_import"
+STOPWORDS_UPDATE = "stopwords_update"
+STOPWORDS_ROLLBACK = "stopwords_rollback"
 
 ACTION_TYPES = frozenset(
     {
@@ -74,6 +81,13 @@ ACTION_TYPES = frozenset(
         CHAT_HISTORY_VIEW,
         CHAT_HISTORY_AUTO_DELETE,
         DOCUMENT_EXPORT,
+        LOCALE_CREATE,
+        LOCALE_UPDATE,
+        LOCALE_ACTIVATE,
+        LOCALE_DISABLE,
+        STOPWORDS_IMPORT,
+        STOPWORDS_UPDATE,
+        STOPWORDS_ROLLBACK,
     }
 )
 
@@ -84,6 +98,7 @@ TARGET_DEVELOPMENT = "development"
 TARGET_ATTRIBUTE = "attribute"
 TARGET_TAG = "tag"
 TARGET_CHAT = "chat_session"
+TARGET_LOCALE = "locale"
 
 
 class SystemUser:

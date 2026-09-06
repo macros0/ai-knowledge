@@ -12,6 +12,7 @@ BM25-скоринг в Qdrant.
 import hashlib
 import math
 import re
+from typing import Collection
 
 from qdrant_client.http import models as qm
 
@@ -62,11 +63,18 @@ _STOPWORDS = {
 }
 
 
-def tokenize(text: str) -> list[str]:
-    """Разбивает текст на термины: lowercase, отсев коротких и стоп-слов."""
+def tokenize(text: str, stopwords: Collection[str] | None = None) -> list[str]:
+    """Разбивает текст на термины: lowercase, отсев коротких и стоп-слов.
+
+    `stopwords` — опциональный набор стоп-слов запроса (динамический, из БД,
+    services/stopwords.py). None → модульный замороженный набор `_STOPWORDS`
+    (индексный путь): формула индекса `_sparse_text`/`to_sparse_vector` не должна
+    зависеть от рантайм-правок — реиндекс при смене стоп-слов не требуется.
+    """
     tokens = []
+    sw = _STOPWORDS if stopwords is None else stopwords
     for token in TOKEN_RE.findall(text.lower()):
-        if len(token) < MIN_TOKEN_LEN or token in _STOPWORDS:
+        if len(token) < MIN_TOKEN_LEN or token in sw:
             continue
         tokens.append(token)
     return tokens
@@ -77,7 +85,9 @@ def _term_index(term: str) -> int:
     return int.from_bytes(digest[:4], "little") % SPARSE_INDEX_DIM
 
 
-def to_sparse_vector(text: str) -> qm.SparseVector:
+def to_sparse_vector(
+    text: str, stopwords: Collection[str] | None = None
+) -> qm.SparseVector:
     """TF-based sparse-вектор: indices — хэш термина, values — log1p(tf).
 
     Коллизии хэшей (разные термины → одинаковый индекс) агрегируются:
@@ -86,8 +96,11 @@ def to_sparse_vector(text: str) -> qm.SparseVector:
     «indices: must be unique»), поэтому дедуп — обязательный инвариант
     (инцидент 03.09.2026: «обязат»≡«тестировании» валила индексацию).
     indices отсортированы — стабильный порядок для тестов/дампов/сравнения.
+
+    `stopwords=None` — индексный путь (замороженный набор). Query-путь передаёт
+    динамический набор (services/stopwords.py).
     """
-    tokens = tokenize(text)
+    tokens = tokenize(text, stopwords=stopwords)
     if not tokens:
         return qm.SparseVector(indices=[], values=[])
     term_counts: dict[int, int] = {}

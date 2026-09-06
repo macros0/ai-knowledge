@@ -40,6 +40,7 @@ from app.services.context_builder import (
 from app.services.embedder import Embedder
 from app.services.search_filter import build_doc_lookup, drop_invisible_hits
 from app.services.sparse import to_sparse_vector
+from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
 
 PROBES = [
@@ -48,6 +49,11 @@ PROBES = [
     {"q": "Коды условий расчёта пособий", "tags": None},
     {"q": "Подписанты в 2-НДФЛ", "tags": None},
     {"q": "Какие интеграции с ЛК есть", "tags": None},
+    # EN-сценарий (инцидент 03.09.2026): the/of/for давали ложные BM25-хиты на
+    # латинские SAP-идентификаторы против RU-корпуса. Динамические EN-стоп-слова
+    # (Этап 7, фаза A) должны убрать их из запросной ветки BM25 и маркеров.
+    {"q": "the certificate of disability", "tags": None},
+    {"q": "for all entries in table", "tags": None},
 ]
 
 
@@ -59,7 +65,9 @@ def run() -> dict:
     for probe in PROBES:
         q = probe["q"]
         vec = emb.embed(q)
-        sv = to_sparse_vector(q)
+        # Динамические стоп-слова активных locales — паритет с query-путём
+        # chat.py/search.py (индексная формула заморожена, реиндекс не нужен).
+        sv = to_sparse_vector(q, stopwords=get_stopwords(KIND_BM25))
         hits = vs.search_composite(
             dense_vec=vec, sparse_vec=sv, tags=probe["tags"],
             branches={"dense", "bm25"}, top_k=settings.search_per_branch_top_k,
