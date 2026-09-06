@@ -1,8 +1,8 @@
-Документ: {filename}
+Document: {filename}
 
-Титульный лист (начало документа):
+Title page (start of the document):
 ---
 {content}
 ---
 
-Извлеки номер разработки, её название и модуль. Верни JSON-объект в описанном формате.
+Extract the development number, its name, and the module. Return a JSON object in the format described above.

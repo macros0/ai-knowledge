@@ -1,16 +1,16 @@
-Контекст из базы знаний (документы OKF):
+Context from the knowledge base (OKF documents):
 
 {context}
 
-Вопрос пользователя: {query}
+User question: {query}
 
-Каждый блок контекста имеет метку `Type:` в metadata:
-- `Type: chunk` — дословный фрагмент исходного документа. Можно цитировать verbatim и полагаться на него как на точный текст источника.
-- `Type: concept` — выжимка/пересказ, сформированная LLM при обработке документа. Детали (точные параметры, числовые значения, продолжения списков и таблиц) могут теряться или усекаться по лимиту символов.
-- `Type: concept+chunk` — заголовок из выжимки + дословное тело фрагмента документа. Текст — точный, но блок может быть обрезан по длине.
+Each context block has a `Type:` label in its metadata:
+- `Type: chunk` — a verbatim fragment of the source document. Can be quoted verbatim and relied upon as the exact source text.
+- `Type: concept` — a digest/paraphrase produced by the LLM while processing the document. Details (exact parameters, numeric values, continuations of lists and tables) may be lost or truncated by the character limit.
+- `Type: concept+chunk` — a digest-derived title + the verbatim body of a document fragment. The text is exact, but the block may be length-truncated.
 
-В metadata каждого блока есть два маркера:
-- `Matched terms: [...]` — значимые термины вопроса, буквально встречающиеся в заголовке или тексте блока. Блоки с пустым `Matched terms` не относятся к вопросу напрямую — не включай их в ответ про конкретный объект вопроса и не приписывай им работу этого объекта.
-- `Title match: [...]` — термины вопроса, найденные в самом ЗАГОЛОВКЕ блока. Непустой `Title match` означает, что блок описывает именно объект вопроса; пустой — объект лишь упоминается в тексте блока, и его содержание относится к собственному заголовку блока, а не к объекту вопроса.
+Each block's metadata has two markers:
+- `Matched terms: [...]` — significant terms from the question that literally appear in the block's title or text. Blocks with an empty `Matched terms` are not directly relevant to the question — do not include them in an answer about a specific object of the question, and do not attribute that object's operation to them.
+- `Title match: [...]` — terms from the question found in the block's TITLE itself. A non-empty `Title match` means the block describes exactly the object of the question; an empty one means the object is merely mentioned in the block's text, and its content belongs to the block's own title, not to the object of the question.
 
-Дай развёрнутый ответ на основе контекста. Цитируй источники строго метками `[N]` из контекста выше (N — номер блока `[N]`, не перенумеровывай). Не составляй отдельный список источников в конце ответа — он формируется и показывается отдельно.
+Give a detailed answer based on the context. Cite sources strictly using `[N]` markers from the context above (N is the block number `[N]`, do not renumber). Do not compose a separate source list at the end of the answer — it is generated and shown separately.
