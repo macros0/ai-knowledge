@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Script from "next/script";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import Nav from "@/components/Nav";
@@ -18,6 +17,7 @@ import { bootScript } from "@/lib/theme";
 import { bootScript as localeBootScript } from "@/i18n/boot";
 import { resolveServerLocale } from "@/i18n/core";
 import { backendFetch } from "@/lib/backendFetch";
+import InlineScript from "@/components/InlineScript";
 
 export const metadata = {
   title: "OKF Knowledge Service",
@@ -61,18 +61,11 @@ export default async function RootLayout({ children }) {
     <html lang={lang} suppressHydrationWarning>
       <body>
         {/* Применяет сохранённую/системную тему до первой отрисовки (без мигания).
-            beforeInteractive = инжектится в <head> до подключения стилей. */}
-        <Script
-          id="theme-boot"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: bootScript() }}
-        />
+            Hydration-safe inline script (text/javascript в SSR, text/plain на клиенте) —
+            иначе React 19 ругается на <script> в дереве компонентов. */}
+        <InlineScript html={bootScript()} />
         {/* No-JS/edge фолбэк для <html lang> (SSR уже выставил его из cookie/заголовка). */}
-        <Script
-          id="locale-boot"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: localeBootScript() }}
-        />
+        <InlineScript html={localeBootScript()} />
         <LocaleProvider initialLocale={ssrLocale} initialOverrides={initialOverrides}>
           <ThemeProvider>
             <AuthProvider>
