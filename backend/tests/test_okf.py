@@ -229,14 +229,14 @@ class TestGenerateChunk:
         gen = self._make_gen(tmp_path, llm)
         concepts = gen.generate_chunk("текст", "doc.docx", 1, 1)
         assert len(concepts) == 1
-        assert "Текст документа" in llm.calls[0]
+        assert "Document text" in llm.calls[0]
 
     def test_multi_chunk_uses_chunk_prompt(self, tmp_path):
         llm = self.FakeLLM()
         gen = self._make_gen(tmp_path, llm)
         concepts = gen.generate_chunk("текст", "doc.docx", 2, 5)
         assert len(concepts) == 1
-        assert "Фрагмент 2 из 5" in llm.calls[0]
+        assert "Fragment 2 of 5" in llm.calls[0]
 
     def test_chunk_text_respects_limit(self, tmp_path):
         from app.config import Settings

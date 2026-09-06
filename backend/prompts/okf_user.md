@@ -1,8 +1,8 @@
-Документ: {filename}
+Document: {filename}
 
-Текст документа:
+Document text:
 ---
 {content}
 ---
 
-Разбей текст на смысловые концепты. Верни JSON-массив в описанном выше формате.
+Split the text into semantic concepts. Return a JSON array in the format described above.
