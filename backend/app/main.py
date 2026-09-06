@@ -19,6 +19,7 @@ from app.api import (
     chat_history,
     developments,
     documents,
+    i18n,
     jobs,
     locales,
     search,
@@ -184,6 +185,7 @@ def create_app() -> FastAPI:
     protected.include_router(users.router)
     protected.include_router(locales.router)
     protected.include_router(admin_locales.router)
+    protected.include_router(i18n.router)
     app.include_router(protected, prefix=settings.api_prefix)
 
     @app.exception_handler(DependencyUnavailableError)

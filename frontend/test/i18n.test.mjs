@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   DEFAULT_LOCALE,
   SUPPORTED_LOCALES,
@@ -175,4 +177,38 @@ test("конкретные русские склонения из словаря
   assert.equal(ru.tc("docs.tagsUpdated", 5), "Теги обновлены у 5 документов");
   const en = createTranslator("en");
   assert.equal(en.tc("docs.tagsUpdated", 3), "Tags updated for 3 document(s)");
+});
+
+test("getMessages: override > versioned > ru (Этап 7 фаза C)", () => {
+  const messages = getMessages("en", { en: { "nav.documents": "Papers" } });
+  assert.equal(messages["nav.documents"], "Papers"); // override перекрывает en
+  assert.equal(messages["nav.chat"], "Ask about documents"); // остальное — из en
+  assert.equal(messages["security.title"], "Audit and security"); // из en
+  // Ключ, которого нет в override и в en — из ru (фолбэк).
+  const ruOnly = getMessages("en", { en: {} });
+  assert.equal(typeof ruOnly["status.uploaded"], "string");
+  // Без override — как раньше.
+  assert.equal(getMessages("en")["nav.documents"], "Documents");
+});
+
+test("manifest drift: ui_keys.json соответствует ru.js", () => {
+  const manifestPath = fileURLToPath(
+    new URL("../../backend/app/i18n/ui_keys.json", import.meta.url)
+  );
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  const ruKeys = Object.keys(ru);
+  const manifestKeys = Object.keys(manifest);
+  assert.deepEqual([...ruKeys].sort(), [...manifestKeys].sort(), "ключи манифеста расходятся с ru.js — перегенерируйте: node scripts/export-ui-keys.mjs");
+  const PARAM_RE = /\{(\w+)\}/g;
+  const paramsOf = (v) => {
+    const s = new Set();
+    const scan = (t) => { for (const m of t.matchAll(PARAM_RE)) s.add(m[1]); };
+    if (typeof v === "string") scan(v);
+    else if (v && typeof v === "object") for (const f of Object.values(v)) if (typeof f === "string") scan(f);
+    s.delete("count");
+    return [...s].sort();
+  };
+  for (const key of ruKeys) {
+    assert.deepEqual(paramsOf(ru[key]), manifest[key], `параметры ключа "${key}" расходятся с манифестом`);
+  }
 });

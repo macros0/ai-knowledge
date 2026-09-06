@@ -26,8 +26,12 @@ from app.models.schemas import (
     StopwordRenameRequest,
     StopwordRollbackRequest,
     StopwordWordOut,
+    UiDictionaryHistoryEntry,
+    UiDictionaryHistoryOut,
+    UiDictionaryImportRequest,
+    UiDictionaryImportResult,
 )
-from app.services import audit, locale_service
+from app.services import audit, locale_service, ui_dictionary
 from app.services.locale_service import LocaleError, LocaleNotFoundError
 
 router = APIRouter(prefix="/admin/locales", tags=["admin-locales"])
@@ -229,3 +233,52 @@ def probe_stopwords(code: str, body: StopwordProbeRequest, user: User = admin):
             for r in results
         ]
     )
+
+
+# --- Runtime-override UI-словарей (фаза C) ---
+
+
+@router.post("/{code}/ui-dictionary/import", response_model=UiDictionaryImportResult)
+def import_ui_dictionary(
+    code: str,
+    body: UiDictionaryImportRequest,
+    request: Request,
+    user: User = admin,
+):
+    """Двухшаговый импорт override-словаря: без confirm — preview/валидация."""
+    try:
+        result = ui_dictionary.import_dictionary(
+            code,
+            body.data,
+            body.note,
+            user.username,
+            confirm=body.confirm,
+            user=user,
+            ip_address=_client_ip(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return UiDictionaryImportResult(**result)
+
+
+@router.get("/{code}/ui-dictionary/history", response_model=UiDictionaryHistoryOut)
+def ui_dictionary_history(code: str, user: User = admin):
+    try:
+        entries = ui_dictionary.history(code)
+    except Exception:
+        entries = []
+    return UiDictionaryHistoryOut(entries=[UiDictionaryHistoryEntry(**e) for e in entries])
+
+
+@router.post("/{code}/ui-dictionary/rollback")
+def rollback_ui_dictionary(
+    code: str, body: StopwordRollbackRequest, request: Request, user: User = admin
+):
+    """Возвращает локали актуальную версию словаря к исторической (entry_id)."""
+    try:
+        result = ui_dictionary.rollback(
+            code, body.entry_id, user=user, ip_address=_client_ip(request)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return result

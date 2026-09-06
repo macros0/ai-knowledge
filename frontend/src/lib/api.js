@@ -469,6 +469,16 @@ export function listActiveLocales() {
   return request("/locales").then((data) => data.locales ?? []);
 }
 
+export async function getUiDictionary(locale) {
+  try {
+    const r = await request(`/i18n/${encodeURIComponent(locale)}`);
+    return r.data ?? null;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
 export function listLocales() {
   return request("/admin/locales").then((data) => data.locales ?? []);
 }

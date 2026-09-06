@@ -596,3 +596,29 @@ class Stopword(Base):
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
     updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class UiDictionary(Base):
+    """Runtime-override UI-словаря (Этап 7 фаза C).
+
+    Каждая версия — полный снапшот overridе-словаря локали (частичное подмножество
+    ключей канонического ru-словаря; валидация ключей/плейсхолдеров — в сервисе).
+    Актуальная версия указывается `locales.ui_dictionary_version`; история версий
+    хранится целиком (для rollback).
+    """
+
+    __tablename__ = "ui_dictionaries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    locale: Mapped[str] = mapped_column(
+        ForeignKey("locales.code", ondelete="CASCADE"), index=True, nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    uploaded_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("locale", "version", name="uq_ui_dictionaries_locale_version"),
+    )

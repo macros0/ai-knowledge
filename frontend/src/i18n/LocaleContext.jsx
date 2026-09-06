@@ -14,6 +14,7 @@ import {
   formatNumber,
 } from "./core";
 import { makeTitle } from "./titles";
+import { getUiDictionary } from "@/lib/api";
 
 const LocaleContext = createContext(null);
 
@@ -28,12 +29,31 @@ function initialLocale(ssrLocale) {
   return normalizeLocale(ssrLocale) || DEFAULT_LOCALE;
 }
 
-export function LocaleProvider({ initialLocale: ssrLocale, children }) {
+export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}, children }) {
   const pathname = usePathname();
   const [locale, setLocaleState] = useState(() => initialLocale(ssrLocale));
+  // Runtime-override UI-словарей: { locale: dict }. Слой поверх versioned-словаря
+  // релиза (Этап 7 фаза C). SSR передаёт override текущей локали; прочие локали
+  // догружаются на клиенте при переключении.
+  const [overrides, setOverrides] = useState(initialOverrides || {});
 
   // Язык всегда валиден (невалидный кламп в дефолт).
   const effective = normalizeLocale(locale);
+
+  useEffect(() => {
+    if (overrides[effective] !== undefined) return;
+    let cancelled = false;
+    getUiDictionary(effective)
+      .then((data) => {
+        if (!cancelled) setOverrides((o) => ({ ...o, [effective]: data }));
+      })
+      .catch(() => {
+        if (!cancelled) setOverrides((o) => ({ ...o, [effective]: null }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effective, overrides]);
 
   const changeLocale = useCallback((next) => {
     const code = normalizeLocale(next);
@@ -41,7 +61,10 @@ export function LocaleProvider({ initialLocale: ssrLocale, children }) {
     setStored(code, window);
   }, []);
 
-  const { t, tc } = useMemo(() => createTranslator(effective), [effective]);
+  const { t, tc } = useMemo(
+    () => createTranslator(effective, overrides),
+    [effective, overrides]
+  );
 
   // lang на <html> держится в синхроне с выбранным языком (до гидратации —
   // bootScript, после — здесь).

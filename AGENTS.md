@@ -579,6 +579,23 @@ ru), полнота plural-форм.
   канонический — теги документов (`DocumentOut.tags`) локализуются на фронте через
   словарь, а не полем на каждый документ.
 
+## Многоязычность — runtime UI-словари (Этап 7, фаза C)
+
+- **`ui_dictionaries`** (locale, version, data JSON; unique locale+version) + указатель
+  `locales.ui_dictionary_version`. Импорт admin (двухшаговый preview→confirm) с
+  валидацией: ключи ⊆ канонического манифеста `backend/app/i18n/ui_keys.json` и
+  `{param}`-плейсхолдеры == ru. Манифест генерируется node-скриптом
+  `frontend/scripts/export-ui-keys.mjs` из `ru.js`; **дрейф ловит** i18n-тест
+  (`manifest drift`) — после правки ru.js обязательно перегенерировать манифест.
+  Семантика импорта — ПОЛНАЯ замена override-словаря локали. `GET /api/i18n/{locale}`
+  (require_user, ETag по версии, 404 без override). История версий + rollback; audit
+  `ui_dictionary_import/rollback`.
+- **Фронтенд merge** — три слоя: `getMessages(locale, overrides)` =
+  **runtime override → versioned-словарь релиза → fallback ru**. SSR (`layout.js`)
+  подгружает override текущей локали через `backendFetch` → `initialOverrides` →
+  `LocaleProvider`; клиент догружает override при переключении локали
+  (`getUiDictionary`). При недоступности бэкенда/404 — fallback на versioned-словарь.
+
 ## Тесты
 
 ```powershell

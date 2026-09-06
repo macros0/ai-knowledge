@@ -71,10 +71,15 @@ export function setStored(locale, win) {
 
 // Словарь локали поверх дефолтного (ru): отсутствующие в языке ключи
 // подставляются из фолбэка, неполный перевод не ломает интерфейс.
-export function getMessages(locale) {
+// `overrides` — runtime-override UI-словарей (Этап 7 фаза C): { locale: dict },
+// самый приоритетный слой поверх versioned-словаря релиза.
+export function getMessages(locale, overrides) {
   const base = locales[DEFAULT_LOCALE].messages;
-  const loc = locales[normalizeLocale(locale)];
-  return loc && loc.messages ? { ...base, ...loc.messages } : base;
+  const code = normalizeLocale(locale);
+  const loc = locales[code];
+  const versioned = loc && loc.messages ? { ...base, ...loc.messages } : base;
+  const override = overrides && overrides[code];
+  return override ? { ...versioned, ...override } : versioned;
 }
 
 function lookup(messages, key) {
@@ -127,9 +132,9 @@ export function translatePlural(messages, locale, key, count, params) {
   return key;
 }
 
-export function createTranslator(locale) {
+export function createTranslator(locale, overrides) {
   const code = normalizeLocale(locale);
-  const messages = getMessages(code);
+  const messages = getMessages(code, overrides);
   return {
     locale: code,
     t: (key, params) => translate(messages, key, params),

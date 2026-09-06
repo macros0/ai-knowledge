@@ -17,6 +17,7 @@ import HealthBanner from "@/components/HealthBanner";
 import { bootScript } from "@/lib/theme";
 import { bootScript as localeBootScript } from "@/i18n/boot";
 import { resolveServerLocale } from "@/i18n/core";
+import { backendFetch } from "@/lib/backendFetch";
 
 export const metadata = {
   title: "OKF Knowledge Service",
@@ -32,6 +33,7 @@ export default async function RootLayout({ children }) {
   // авторизацией это приемлемо.
   let ssrLocale = "ru";
   let lang = "ru";
+  let initialOverrides = {};
   try {
     const cookieStore = await cookies();
     const headerStore = await headers();
@@ -41,6 +43,18 @@ export default async function RootLayout({ children }) {
     lang = ssrLocale;
   } catch {
     // headers/cookies недоступны (пререндер) — фолбэк на дефолтный язык.
+  }
+  // Runtime-override UI-словаря (Этап 7 фаза C): SSR подгружает override текущей
+  // локали, чтобы серверная и клиентская разметка совпадали (без hydration-mismatch).
+  // При недоступности бэкенда/404 — fallback на versioned-словарь релиза.
+  try {
+    const res = await backendFetch(`/api/i18n/${ssrLocale}`);
+    if (res.ok) {
+      const body = await res.json();
+      if (body && body.data) initialOverrides = { [ssrLocale]: body.data };
+    }
+  } catch {
+    // override недоступен — не критично
   }
 
   return (
@@ -59,7 +73,7 @@ export default async function RootLayout({ children }) {
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: localeBootScript() }}
         />
-        <LocaleProvider initialLocale={ssrLocale}>
+        <LocaleProvider initialLocale={ssrLocale} initialOverrides={initialOverrides}>
           <ThemeProvider>
             <AuthProvider>
               <ToastProvider>

@@ -55,6 +55,8 @@ EXPECTED_ACTION_TYPES = {
     "tag_translation_update",
     "tag_translation_review",
     "translations_backfill",
+    "ui_dictionary_import",
+    "ui_dictionary_rollback",
 }
 
 

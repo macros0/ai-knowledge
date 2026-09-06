@@ -265,6 +265,45 @@ class TagTranslationBackfillRequest(BaseModel):
     entities: list[str] = ["tags", "developments", "attributes"]
 
 
+class UiDictionaryImportRequest(BaseModel):
+    data: dict[str, Any]
+    note: str | None = None
+    confirm: bool = False
+
+
+class UiDictionaryPreview(BaseModel):
+    total: int = 0
+    added: list[str] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+    unchanged: list[str] = Field(default_factory=list)
+
+
+class UiDictionaryImportResult(BaseModel):
+    errors: list[str] = Field(default_factory=list)
+    applied: bool = False
+    version: int | None = None
+    preview: UiDictionaryPreview | None = None
+
+
+class UiDictionaryHistoryEntry(BaseModel):
+    id: int
+    version: int
+    note: str | None = None
+    uploaded_by: str | None = None
+    created_at: datetime | None = None
+    key_count: int = 0
+
+
+class UiDictionaryHistoryOut(BaseModel):
+    entries: list[UiDictionaryHistoryEntry] = Field(default_factory=list)
+
+
+class UiDictionaryActiveOut(BaseModel):
+    locale: str
+    version: int
+    data: dict[str, Any]
+
+
 class BulkOperationRequest(BaseModel):
     doc_ids: list[str]
 

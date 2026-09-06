@@ -1,0 +1,808 @@
+{
+  "admin.approve": [],
+  "admin.approvedBy": [
+    "name"
+  ],
+  "admin.cancel": [],
+  "admin.empty": [],
+  "admin.errorsByDocs": [
+    "ids"
+  ],
+  "admin.jobDocs": [],
+  "admin.jobStatus.awaiting_approval": [],
+  "admin.jobStatus.cancelled": [],
+  "admin.jobStatus.completed": [],
+  "admin.jobStatus.failed": [],
+  "admin.jobStatus.queued": [],
+  "admin.jobStatus.running": [],
+  "admin.jobType.bulk_delete": [],
+  "admin.jobType.bulk_regenerate": [],
+  "admin.languages.actError": [
+    "message"
+  ],
+  "admin.languages.actions": [],
+  "admin.languages.activate": [],
+  "admin.languages.activated": [],
+  "admin.languages.addBtn": [],
+  "admin.languages.codePlaceholder": [],
+  "admin.languages.colCode": [],
+  "admin.languages.colName": [],
+  "admin.languages.colStatus": [],
+  "admin.languages.colStopwords": [],
+  "admin.languages.createError": [
+    "message"
+  ],
+  "admin.languages.created": [
+    "code"
+  ],
+  "admin.languages.disable": [],
+  "admin.languages.disabled": [],
+  "admin.languages.editStopwords": [],
+  "admin.languages.loadError": [
+    "message"
+  ],
+  "admin.languages.namePlaceholder": [],
+  "admin.languages.status.active": [],
+  "admin.languages.status.disabled": [],
+  "admin.languages.status.draft": [],
+  "admin.languages.title": [],
+  "admin.pending": [],
+  "admin.stopwords.add": [],
+  "admin.stopwords.addPlaceholder": [],
+  "admin.stopwords.added": [],
+  "admin.stopwords.deleteAria": [
+    "word"
+  ],
+  "admin.stopwords.error": [
+    "message"
+  ],
+  "admin.stopwords.history": [],
+  "admin.stopwords.historyEmpty": [],
+  "admin.stopwords.importApply": [],
+  "admin.stopwords.importError": [
+    "message"
+  ],
+  "admin.stopwords.importPlaceholder": [],
+  "admin.stopwords.importPreview": [],
+  "admin.stopwords.imported": [],
+  "admin.stopwords.kindBm25": [],
+  "admin.stopwords.kindMarker": [],
+  "admin.stopwords.merge": [],
+  "admin.stopwords.mode": [],
+  "admin.stopwords.noWords": [],
+  "admin.stopwords.probe": [],
+  "admin.stopwords.probeEmpty": [],
+  "admin.stopwords.probeError": [
+    "message"
+  ],
+  "admin.stopwords.probePlaceholder": [],
+  "admin.stopwords.probeRun": [],
+  "admin.stopwords.removed": [],
+  "admin.stopwords.replace": [],
+  "admin.stopwords.rollback": [],
+  "admin.stopwords.rollbackConfirm": [
+    "time"
+  ],
+  "admin.stopwords.rolledBack": [],
+  "admin.stopwords.title": [
+    "code"
+  ],
+  "admin.stopwords.totalAfter": [],
+  "admin.stopwords.unchanged": [],
+  "admin.stopwords.warningFrozen": [],
+  "admin.title": [],
+  "app.title": [],
+  "auth.corporateLogin": [],
+  "auth.gateSimHint": [],
+  "auth.gateSsoHint": [],
+  "auth.gateTitle": [],
+  "auth.loginAs": [],
+  "auth.ssoMode": [],
+  "authError.sessionExpired": [],
+  "authError.unavailable": [],
+  "chat.adminHint": [],
+  "chat.askFirst": [],
+  "chat.assistant": [],
+  "chat.backToList": [],
+  "chat.backToSessions": [],
+  "chat.backToUsers": [],
+  "chat.copied": [],
+  "chat.copy": [],
+  "chat.copyAnswer": [],
+  "chat.deleteError": [
+    "message"
+  ],
+  "chat.deleteThread": [],
+  "chat.deleteThreadConfirmText": [
+    "title"
+  ],
+  "chat.deleteThreadConfirmTitle": [],
+  "chat.deleteThreadTitle": [],
+  "chat.developmentLabel": [],
+  "chat.developmentTitle": [],
+  "chat.empty": [],
+  "chat.errorPrefix": [
+    "message"
+  ],
+  "chat.historyAdminTitle": [],
+  "chat.historyBtn": [],
+  "chat.historyEmpty": [],
+  "chat.historyLoadError": [
+    "message"
+  ],
+  "chat.historyTitle": [],
+  "chat.loading": [],
+  "chat.messagesCount": [],
+  "chat.modeBm25": [],
+  "chat.modeDense": [],
+  "chat.modeHybrid": [],
+  "chat.modePickerAria": [],
+  "chat.moduleLabel": [],
+  "chat.moduleNotFound": [],
+  "chat.moduleQuickFilterAria": [],
+  "chat.moduleSearchPlaceholder": [],
+  "chat.newChat": [],
+  "chat.newChatTitle": [],
+  "chat.noHistory": [],
+  "chat.noSources": [],
+  "chat.openThreadError": [
+    "message"
+  ],
+  "chat.queryPlaceholder": [],
+  "chat.relevance": [
+    "pct"
+  ],
+  "chat.resultsLabel": [],
+  "chat.searchSettings": [],
+  "chat.send": [],
+  "chat.sessionDeleted": [],
+  "chat.sessionsLoadError": [
+    "message"
+  ],
+  "chat.sources": [],
+  "chat.tagsLabel": [],
+  "chat.tagsPlaceholder": [],
+  "chat.thinking": [],
+  "chat.threadDeleted": [],
+  "chat.title": [],
+  "chat.topkDetailed": [],
+  "chat.topkLabel": [],
+  "chat.topkOther": [],
+  "chat.topkShort": [],
+  "chat.topkStandard": [],
+  "chat.untitled": [],
+  "chat.uploadHintDev": [
+    "name",
+    "number"
+  ],
+  "chat.uploadHintModule": [
+    "module"
+  ],
+  "chat.userLabel": [],
+  "chat.userSearchPlaceholder": [],
+  "chat.userThreads": [
+    "user"
+  ],
+  "chat.usersLoadError": [
+    "message"
+  ],
+  "chat.viewingUser": [
+    "id",
+    "name"
+  ],
+  "chat.you": [],
+  "common.cancel": [],
+  "common.close": [],
+  "common.delete": [],
+  "common.loginAgain": [],
+  "common.logout": [],
+  "confirm.bulkDeleteDescPost": [],
+  "confirm.bulkDeleteDescPre": [],
+  "confirm.bulkDeleteDocs": [],
+  "confirm.bulkDeleteHintPre": [],
+  "confirm.bulkDeleteTitle": [],
+  "content.imageOnly": [],
+  "content.showRaw": [],
+  "content.showRender": [],
+  "dev.all": [],
+  "dev.assignTitle": [],
+  "dev.card.back": [],
+  "dev.card.docsCount": [],
+  "dev.card.docsTitle": [],
+  "dev.card.loadError": [
+    "message"
+  ],
+  "dev.card.module": [
+    "module"
+  ],
+  "dev.card.noDocs": [],
+  "dev.card.openTitle": [],
+  "dev.card.searchAria": [],
+  "dev.changeAria": [],
+  "dev.changeTitle": [],
+  "dev.clearAria": [],
+  "dev.clearTitle": [],
+  "dev.filterAria": [],
+  "dev.filterTitle": [],
+  "dev.none": [],
+  "dev.notFound": [],
+  "dev.searchPlaceholder": [],
+  "dev.title": [
+    "name"
+  ],
+  "devpanel.addBtn": [],
+  "devpanel.addModuleBtn": [],
+  "devpanel.addModuleError": [
+    "message"
+  ],
+  "devpanel.addModulePlaceholder": [],
+  "devpanel.allModules": [],
+  "devpanel.cancelBtn": [],
+  "devpanel.colDocs": [],
+  "devpanel.colModule": [],
+  "devpanel.colName": [],
+  "devpanel.colNumber": [],
+  "devpanel.confirmDeleteDesc": [
+    "name",
+    "number"
+  ],
+  "devpanel.confirmDeleteHint": [
+    "number"
+  ],
+  "devpanel.confirmDeleteTitle": [],
+  "devpanel.createError": [
+    "message"
+  ],
+  "devpanel.created": [
+    "name"
+  ],
+  "devpanel.deleteBtn": [],
+  "devpanel.deleteConfirm": [
+    "hint",
+    "name",
+    "number"
+  ],
+  "devpanel.deleteError": [
+    "message"
+  ],
+  "devpanel.deleteHint": [],
+  "devpanel.deleteVersionConflict": [],
+  "devpanel.deleted": [],
+  "devpanel.editBtn": [],
+  "devpanel.emptyEmpty": [],
+  "devpanel.emptyNotFound": [],
+  "devpanel.loadError": [
+    "message"
+  ],
+  "devpanel.moduleAdded": [
+    "name"
+  ],
+  "devpanel.moduleFilterAria": [],
+  "devpanel.modulePlaceholder": [],
+  "devpanel.moduleRemoved": [
+    "name"
+  ],
+  "devpanel.modules": [],
+  "devpanel.namePlaceholder": [],
+  "devpanel.next": [],
+  "devpanel.noModule": [],
+  "devpanel.noModules": [],
+  "devpanel.numberChangedConfirm": [],
+  "devpanel.numberPlaceholder": [],
+  "devpanel.page": [
+    "page",
+    "total"
+  ],
+  "devpanel.prev": [],
+  "devpanel.removeModuleAria": [
+    "name"
+  ],
+  "devpanel.removeModuleConfirm": [
+    "name"
+  ],
+  "devpanel.removeModuleError": [
+    "message"
+  ],
+  "devpanel.removeModuleTitle": [
+    "name"
+  ],
+  "devpanel.saveBtn": [],
+  "devpanel.saveError": [
+    "message"
+  ],
+  "devpanel.saved": [],
+  "devpanel.searchAria": [],
+  "devpanel.searchPlaceholder": [],
+  "devpanel.sortAria": [
+    "label"
+  ],
+  "devpanel.title": [],
+  "devpanel.total": [],
+  "devpanel.versionConflict": [],
+  "docs.addTagPlaceholder": [],
+  "docs.allModules": [],
+  "docs.allTags": [],
+  "docs.allUploaders": [],
+  "docs.changeDevError": [
+    "message"
+  ],
+  "docs.changeTagsError": [
+    "message"
+  ],
+  "docs.collapseTagsAria": [],
+  "docs.confirmRegenerate": [
+    "name"
+  ],
+  "docs.confirmRemoveActive": [
+    "name"
+  ],
+  "docs.dateFrom": [],
+  "docs.dateFromAria": [],
+  "docs.dateTo": [],
+  "docs.dateToAria": [],
+  "docs.deleteError": [
+    "message"
+  ],
+  "docs.deleteTitle": [],
+  "docs.devSuggestion": [
+    "name"
+  ],
+  "docs.devSyncPending": [],
+  "docs.developmentTitle": [
+    "name"
+  ],
+  "docs.downloadTitle": [],
+  "docs.draftBadge": [],
+  "docs.duplicateBadge": [],
+  "docs.duplicateTitle": [],
+  "docs.editTagsAria": [],
+  "docs.empty": [],
+  "docs.errorText": [
+    "message"
+  ],
+  "docs.group.noDevelopment": [],
+  "docs.group.noTag": [],
+  "docs.loadError": [
+    "message"
+  ],
+  "docs.markupProgress": [
+    "done",
+    "pct",
+    "total"
+  ],
+  "docs.markupProgressTitle": [
+    "done",
+    "total"
+  ],
+  "docs.metaFile": [
+    "size"
+  ],
+  "docs.moduleFilterAria": [],
+  "docs.myDocuments": [],
+  "docs.openTrash": [],
+  "docs.problemOnly": [],
+  "docs.problemOnlyAria": [],
+  "docs.progressChunk": [
+    "active",
+    "total"
+  ],
+  "docs.progressPaused": [
+    "processed",
+    "total"
+  ],
+  "docs.quickSelect": [],
+  "docs.regenerateError": [
+    "message"
+  ],
+  "docs.regenerateTitle": [],
+  "docs.removedToTrash": [
+    "name"
+  ],
+  "docs.resumeBtn": [],
+  "docs.resumeError": [
+    "message"
+  ],
+  "docs.searchAria": [],
+  "docs.searchDevAria": [],
+  "docs.searchPlaceholder": [],
+  "docs.selectAria": [
+    "name"
+  ],
+  "docs.selectError": [
+    "message"
+  ],
+  "docs.selectedLimitToast": [
+    "selected",
+    "total"
+  ],
+  "docs.selectionCapToast": [
+    "max"
+  ],
+  "docs.statusFilterAll": [],
+  "docs.statusFilterAria": [],
+  "docs.statusFilterProcessing": [],
+  "docs.tagDictionary": [],
+  "docs.tagFilterAria": [],
+  "docs.tagsList": [
+    "tags"
+  ],
+  "docs.tagsNone": [],
+  "docs.tagsSyncPending": [],
+  "docs.tagsUnchanged": [],
+  "docs.tagsUpdated": [],
+  "docs.uploadAria": [],
+  "docs.uploadDevLabel": [],
+  "docs.uploadModuleHint": [
+    "module"
+  ],
+  "docs.uploadTagsLabel": [],
+  "docs.uploadTagsPlaceholder": [],
+  "docs.uploadTitle": [],
+  "docs.uploaded": [],
+  "docs.uploadedBy": [
+    "name"
+  ],
+  "docs.uploaderFilterAria": [],
+  "docs.uploaders": [],
+  "docs.view.development": [],
+  "docs.view.documents": [],
+  "docs.view.list": [],
+  "docs.view.tag": [],
+  "docs.view.trash": [],
+  "docs.viewConceptsTitle": [],
+  "docs.viewModeLabel": [],
+  "dup.confirmText": [],
+  "dup.confirmTextPost": [],
+  "dup.confirmTextPre": [],
+  "dup.confirmTitle": [],
+  "dup.current": [],
+  "dup.deleteError": [
+    "message"
+  ],
+  "dup.deleteSelected": [],
+  "dup.deleteSelectedCount": [],
+  "dup.deletedCount": [],
+  "dup.deletedWithErrors": [
+    "errors"
+  ],
+  "dup.deleting": [],
+  "dup.hint": [],
+  "dup.hintDelete": [],
+  "dup.loadError": [
+    "message"
+  ],
+  "dup.markAria": [
+    "name"
+  ],
+  "dup.mustKeep": [],
+  "dup.newest": [],
+  "dup.similarity": [
+    "pct"
+  ],
+  "dup.title": [],
+  "dup.trashWord": [],
+  "dup.uploaded": [
+    "date"
+  ],
+  "health.degraded": [],
+  "health.dep.llm": [],
+  "health.dep.ollama": [],
+  "health.dep.qdrant": [],
+  "health.down": [],
+  "health.ok": [],
+  "locale.ariaLabel": [
+    "label"
+  ],
+  "locale.en": [],
+  "locale.ru": [],
+  "locale.title": [
+    "label",
+    "nextLabel"
+  ],
+  "markdown.close": [],
+  "markdown.image": [],
+  "markdown.viewImage": [],
+  "nav.admin": [],
+  "nav.adminLanguages": [],
+  "nav.chat": [],
+  "nav.developments": [],
+  "nav.documents": [],
+  "nav.history": [],
+  "nav.historyAdmin": [],
+  "nav.security": [],
+  "okf.chunk": [
+    "index"
+  ],
+  "okf.chunkTitle": [
+    "index"
+  ],
+  "okf.chunksError": [
+    "error"
+  ],
+  "okf.chunksNotFound": [],
+  "okf.conceptsBusy": [],
+  "okf.conceptsCount": [],
+  "okf.conceptsNotFound": [],
+  "okf.fulltext": [],
+  "okf.fulltextHint": [],
+  "okf.loadingChunks": [],
+  "okf.page.backToDocs": [],
+  "okf.page.backToList": [],
+  "okf.page.chunkH1": [
+    "index"
+  ],
+  "okf.page.download": [],
+  "okf.page.fulltextH1": [],
+  "okf.page.h1": [],
+  "okf.page.linkedChunk": [
+    "index"
+  ],
+  "okf.page.openFulltext": [],
+  "okf.progress": [
+    "active",
+    "total"
+  ],
+  "okf.size": [
+    "size"
+  ],
+  "okf.tags": [
+    "tags"
+  ],
+  "okf.view.chunks": [],
+  "okf.view.concepts": [],
+  "pagination.back": [],
+  "pagination.forward": [],
+  "pagination.page": [
+    "page",
+    "total"
+  ],
+  "preview.affected": [],
+  "preview.awaiting": [],
+  "preview.confirmDelete": [],
+  "preview.confirmRegenerate": [],
+  "preview.deleteAction": [],
+  "preview.deleteBtn": [],
+  "preview.estRegen": [
+    "minutes"
+  ],
+  "preview.loadError": [
+    "message"
+  ],
+  "preview.loading": [],
+  "preview.missing": [
+    "names"
+  ],
+  "preview.more": [],
+  "preview.opToast": [
+    "status"
+  ],
+  "preview.queue": [
+    "id"
+  ],
+  "preview.regenerateBtn": [],
+  "preview.title": [],
+  "security.action.attribute_create": [],
+  "security.action.attribute_delete": [],
+  "security.action.chat_history_auto_delete": [],
+  "security.action.chat_history_view": [],
+  "security.action.development_create": [],
+  "security.action.development_delete": [],
+  "security.action.development_update": [],
+  "security.action.document_auto_delete": [],
+  "security.action.document_bulk_delete": [],
+  "security.action.document_bulk_regenerate": [],
+  "security.action.document_bulk_restore": [],
+  "security.action.document_bulk_tags_update": [],
+  "security.action.document_delete": [],
+  "security.action.document_development_set": [],
+  "security.action.document_regenerate": [],
+  "security.action.document_restore": [],
+  "security.action.document_resume": [],
+  "security.action.document_tags_update": [],
+  "security.action.document_upload": [],
+  "security.action.job_approve": [],
+  "security.action.job_cancel": [],
+  "security.action.tag_cleanup": [],
+  "security.action.tag_delete": [],
+  "security.action.user_block": [],
+  "security.action.user_unblock": [],
+  "security.allActions": [],
+  "security.allUsers": [],
+  "security.anomalies": [],
+  "security.apply": [],
+  "security.blockBtn": [],
+  "security.blockExpired": [],
+  "security.blockExternalId": [],
+  "security.blockReason": [],
+  "security.blocks": [],
+  "security.by": [
+    "name"
+  ],
+  "security.colAction": [],
+  "security.colIp": [],
+  "security.colTarget": [],
+  "security.colTime": [],
+  "security.colUser": [],
+  "security.exportCsv": [],
+  "security.log": [],
+  "security.noAnomalies": [],
+  "security.noBlocks": [],
+  "security.noRecords": [],
+  "security.reason": [
+    "reason"
+  ],
+  "security.title": [],
+  "security.unblock": [],
+  "security.until": [
+    "time"
+  ],
+  "security.untilForever": [],
+  "security.userBlocked": [],
+  "security.userUnblocked": [],
+  "selection.add": [],
+  "selection.addAria": [],
+  "selection.addPlaceholder": [],
+  "selection.bulkActions": [],
+  "selection.bulkError": [
+    "message"
+  ],
+  "selection.limitToast": [
+    "max",
+    "selected"
+  ],
+  "selection.previewImpact": [],
+  "selection.remove": [],
+  "selection.removeAria": [],
+  "selection.removePlaceholder": [],
+  "selection.selectAll": [],
+  "selection.selectAllTitle": [],
+  "selection.selectPage": [],
+  "selection.selectPageTitle": [],
+  "selection.selected": [
+    "selected",
+    "total"
+  ],
+  "sort.alphaAsc": [],
+  "sort.alphaDesc": [],
+  "sort.emptyFirst": [],
+  "sort.groupDate": [],
+  "sort.groupName": [],
+  "sort.groupUploader": [],
+  "sort.label": [],
+  "sort.newFirst": [],
+  "sort.oldFirst": [],
+  "status.done": [],
+  "status.error": [],
+  "status.failed": [],
+  "status.indexing": [],
+  "status.paused": [],
+  "status.processing": [],
+  "status.splitting": [],
+  "status.uploaded": [],
+  "tags.combobox.noMatch": [],
+  "tags.manager.approve": [],
+  "tags.manager.cleaned": [],
+  "tags.manager.cleanupError": [
+    "message"
+  ],
+  "tags.manager.closeAria": [],
+  "tags.manager.deleteAria": [
+    "name"
+  ],
+  "tags.manager.deleteError": [
+    "message"
+  ],
+  "tags.manager.deleteUnused": [],
+  "tags.manager.deleted": [
+    "name"
+  ],
+  "tags.manager.editPlaceholder": [
+    "locale"
+  ],
+  "tags.manager.expand": [],
+  "tags.manager.machineBadge": [],
+  "tags.manager.noMatch": [],
+  "tags.manager.noTranslations": [],
+  "tags.manager.reviewAll": [],
+  "tags.manager.reviewOnly": [],
+  "tags.manager.reviewed": [],
+  "tags.manager.save": [],
+  "tags.manager.searchAria": [],
+  "tags.manager.searchPlaceholder": [],
+  "tags.manager.title": [],
+  "tags.manager.total": [
+    "total",
+    "unused"
+  ],
+  "tags.manager.translationError": [
+    "message"
+  ],
+  "tags.manager.translationSaved": [],
+  "tags.picker.addQuote": [
+    "name"
+  ],
+  "tags.picker.noTags": [],
+  "tags.picker.usedIn": [],
+  "theme.ariaLabel": [
+    "label"
+  ],
+  "theme.auto": [],
+  "theme.dark": [],
+  "theme.light": [],
+  "theme.title": [
+    "label",
+    "nextLabel"
+  ],
+  "titles.admin": [],
+  "titles.adminLanguages": [],
+  "titles.chat": [],
+  "titles.developmentCard": [],
+  "titles.developments": [],
+  "titles.document": [],
+  "titles.documents": [],
+  "titles.history": [],
+  "titles.historyAdmin": [],
+  "titles.security": [],
+  "trash.clearSelection": [],
+  "trash.conflictBulk": [],
+  "trash.conflictHint": [
+    "name"
+  ],
+  "trash.conflictTitle": [],
+  "trash.daysLeft": [
+    "days"
+  ],
+  "trash.deletedAt": [
+    "date"
+  ],
+  "trash.empty": [],
+  "trash.hint": [
+    "days"
+  ],
+  "trash.loadError": [
+    "message"
+  ],
+  "trash.loading": [],
+  "trash.noneToRestore": [],
+  "trash.restore": [],
+  "trash.restoreError": [
+    "message"
+  ],
+  "trash.restoreSelected": [],
+  "trash.restoreSeparate": [],
+  "trash.restored": [
+    "name"
+  ],
+  "trash.restoredCount": [],
+  "trash.selectAria": [
+    "name"
+  ],
+  "trash.selected": [],
+  "upload.busy": [],
+  "upload.dropHint": [],
+  "upload.dupCancel": [],
+  "upload.dupRejected": [],
+  "upload.dupText": [
+    "file",
+    "name"
+  ],
+  "upload.dupTitle": [],
+  "upload.dupUploadedBy": [
+    "name"
+  ],
+  "upload.failed": [
+    "names"
+  ],
+  "upload.noSupported": [
+    "exts"
+  ],
+  "upload.skipped": [
+    "names"
+  ],
+  "upload.trashTwin": [
+    "file",
+    "name"
+  ],
+  "upload.uploadedCount": [],
+  "upload.uploadedUpToDuplicate": []
+}

@@ -55,6 +55,8 @@ STOPWORDS_ROLLBACK = "stopwords_rollback"
 TAG_TRANSLATION_UPDATE = "tag_translation_update"
 TAG_TRANSLATION_REVIEW = "tag_translation_review"
 TRANSLATIONS_BACKFILL = "translations_backfill"
+UI_DICTIONARY_IMPORT = "ui_dictionary_import"
+UI_DICTIONARY_ROLLBACK = "ui_dictionary_rollback"
 
 ACTION_TYPES = frozenset(
     {
@@ -94,6 +96,8 @@ ACTION_TYPES = frozenset(
         TAG_TRANSLATION_UPDATE,
         TAG_TRANSLATION_REVIEW,
         TRANSLATIONS_BACKFILL,
+        UI_DICTIONARY_IMPORT,
+        UI_DICTIONARY_ROLLBACK,
     }
 )
 

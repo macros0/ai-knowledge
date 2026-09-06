@@ -285,6 +285,21 @@ Precondition-проверки в `app/api/documents.py` («уже обрабат
 
 ## 7. Журнал security-изменений
 
+### 2026-09-06 — Runtime-override UI-словарей (Этап 7, фаза C)
+Изменение: таблица `ui_dictionaries` (locale, version, data JSON) + Alembic
+`9d4e5f6a7b8c`; актуальная версия — `locales.ui_dictionary_version`. Админ-импорт
+JSON-словаря (двухшаговый preview→confirm) с валидацией: ключи ⊆ канонического
+манифеста (`backend/app/i18n/ui_keys.json`, генерируется node-скриптом
+`frontend/scripts/export-ui-keys.mjs`, дрейф ловит i18n-тест) и {param}-плейсхолдеры
+совпадают с ru. `GET /api/i18n/{locale}` (require_user) отдаёт актуальный override
+с ETag по версии; история версий + rollback. Журнал ИБ дополнен действиями
+`ui_dictionary_import` / `ui_dictionary_rollback` (target_type `locale`);
+`ACTION_TYPES`/`EXPECTED_ACTION_TYPES` обновлены. Причина: правка UI-переводов —
+изменяющая состояние операция уровня admin, требующая валидации ключей (защита от
+опечаток, ломающих интерполяцию) и append-only истории (откат). Runtime-словарь —
+отображаемые строки UI, не содержимое документов; разглашения данных не несёт,
+поэтому `GET /api/i18n` не требует дополнительного разграничения сверх require_user.
+
 ### 2026-09-06 — Surrogate tag_id и переводы справочников (Этап 7, фаза B)
 Изменение: `tags.name` (текстовый PK) → `tags.id` (суррогатный) + `canonical_text`
 (unique) + `canonical_locale` + `deleted_at`; `document_tags.tag` → `document_tags.tag_id`
