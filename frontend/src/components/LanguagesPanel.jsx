@@ -323,6 +323,16 @@ export default function LanguagesPanel() {
     load();
   }, [load]);
 
+  const notifyLocalesChanged = () => {
+    // Тоггл языка в топбаре живёт в layout и не перемонтируется — шлём событие,
+    // чтобы он перечитал активные языки сразу (без полного reload).
+    try {
+      window.dispatchEvent(new Event("okf:locales-changed"));
+    } catch {
+      // SSR/не-window — не критично
+    }
+  };
+
   const onCreate = async () => {
     if (!code.trim() || !name.trim()) return;
     try {
@@ -331,6 +341,7 @@ export default function LanguagesPanel() {
       setCode("");
       setName("");
       await load();
+      notifyLocalesChanged();
     } catch (err) {
       showToast(t("admin.languages.createError", { message: err.message }), {
         type: "error",
@@ -343,6 +354,7 @@ export default function LanguagesPanel() {
       await activateLocale(c);
       showToast(t("admin.languages.activated"));
       await load();
+      notifyLocalesChanged();
     } catch (err) {
       showToast(t("admin.languages.actError", { message: err.message }), { type: "error" });
     }
@@ -353,6 +365,7 @@ export default function LanguagesPanel() {
       await disableLocale(c);
       showToast(t("admin.languages.disabled"));
       await load();
+      notifyLocalesChanged();
     } catch (err) {
       showToast(t("admin.languages.actError", { message: err.message }), { type: "error" });
     }

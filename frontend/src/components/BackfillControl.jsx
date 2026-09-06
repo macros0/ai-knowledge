@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   backfillTranslations,
+  friendlyApiError,
   getChatSettings,
   translationPending,
 } from "@/lib/api";
@@ -78,7 +79,7 @@ export default function BackfillControl({ locale }) {
     setResult(null);
     backfillTranslations(locale, selectedEntities)
       .then((res) => setResult(res.result || {}))
-      .catch((err) => showToast(err.message, { type: "error" }))
+      .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
       .finally(() => setBusy(false));
   };
 

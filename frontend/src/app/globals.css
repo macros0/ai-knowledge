@@ -3691,6 +3691,14 @@ main {
   padding: 8px 12px;
   font-size: 12px;
   color: var(--danger);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.uictl-errors .uictl-retry {
+  margin-left: auto;
 }
 
 .uictl-history h4,

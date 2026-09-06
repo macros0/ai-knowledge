@@ -26,6 +26,26 @@ export class ApiError extends Error {
   }
 }
 
+// Человекочитаемое сообщение об ошибке API (не сырой текст): тосты в админ-UI
+// не должны показывать «Not Found» / «Internal Server Error» без контекста.
+export function friendlyApiError(err) {
+  if (err instanceof ApiError) {
+    if (err.status === 401 || err.status === 403) {
+      return "Сессия истекла или недостаточно прав — обновите страницу и войдите заново.";
+    }
+    if (err.status === 404) {
+      return "Раздел недоступен на backend (возможно, запущена старая версия) — перезапустите backend.";
+    }
+    if (err.status === 0) {
+      return "Backend недоступен. Проверьте, что сервис запущен.";
+    }
+    const svc = err.service ? getServiceMessage(err.service) : null;
+    if (err.isDependencyUnavailable && svc) return svc;
+    return err.message || `Ошибка (HTTP ${err.status})`;
+  }
+  return (err && err.message) || "Неизвестная ошибка";
+}
+
 async function request(path, init, timeoutMs) {
   const controller = new AbortController();
   const timer =

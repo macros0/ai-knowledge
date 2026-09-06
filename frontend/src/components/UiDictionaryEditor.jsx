@@ -1,13 +1,15 @@
 "use client";
 
 // Редактор runtime-override UI-словаря локали (Этап 7 фаза C).
-// Правка = textarea с JSON; при открытии префилдится активным override (редактирование
-// текущего), при отсутствии — пустая textarea (НЕ подставляется versioned-словарь,
-// чтобы не превратить override в огромный снапшот). Применение — ПОЛНАЯ замена
-// override-словаря: ключи вне textarea начнут браться из versioned-словаря/ru.
+// Правка = textarea с JSON; при первом открытии префилдится активным override.
+// ЗАЩИТА ПРАВОК: после первого ручного изменения (isDirty) повторные загрузки
+// с сервера («Повторить») НЕ перезаписывают textarea — обновляется только статус
+// ошибки/метаданные. Сбросить к серверному содержимому можно перезагрузкой раздела.
+// Применение — ПОЛНАЯ замена override-словаря.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  friendlyApiError,
   getUiDictionaryAdmin,
   importUiDictionary,
   rollbackUiDictionary,
@@ -25,7 +27,19 @@ export default function UiDictionaryEditor({ locale }) {
   const [preview, setPreview] = useState(null); // {errors}|{total,added,removed,unchanged}
   const [history, setHistory] = useState([]);
   const [isNew, setIsNew] = useState(false); // активного override ещё нет
+  const [loadError, setLoadError] = useState(null); // текст ошибки загрузки (или null)
+  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Флаг «пользователь уже правил JSON» — реф, чтобы не перезаписывать при retry.
+  const dirtyRef = useRef(false);
+  const textRef = useRef("");
+
+  const onTextChange = (v) => {
+    textRef.current = v;
+    dirtyRef.current = true;
+    setText(v);
+  };
 
   const loadHistory = useCallback(async () => {
     try {
@@ -35,18 +49,31 @@ export default function UiDictionaryEditor({ locale }) {
     }
   }, [locale]);
 
+  // Загрузка активного override. textarea заполняется ТОЛЬКО если пользователь ещё
+  // не начал править (dirtyRef=false) — иначе сетевой retry уничтожил бы правки.
   const loadActive = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const active = await getUiDictionaryAdmin(locale);
       const hasData = active && active.data != null;
       setIsNew(!hasData);
-      if (hasData) setText(JSON.stringify(active.data, null, 2));
-      else setText("");
-      setNote(active?.note || "");
+      if (!dirtyRef.current) {
+        setText(hasData ? JSON.stringify(active.data, null, 2) : "");
+        textRef.current = hasData ? JSON.stringify(active.data, null, 2) : "";
+        setNote(active?.note || "");
+      } else {
+        // Правки пользователя сохранены; метаданные сервера всё равно обновляем.
+        setNote(active?.note || "");
+      }
+      return true;
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      setLoadError(friendlyApiError(err));
+      return false;
+    } finally {
+      setLoading(false);
     }
-  }, [locale]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [locale]);
 
   useEffect(() => {
     loadActive();
@@ -56,7 +83,7 @@ export default function UiDictionaryEditor({ locale }) {
 
   const parseJson = () => {
     try {
-      const parsed = JSON.parse(text || "{}");
+      const parsed = JSON.parse(textRef.current || "{}");
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("JSON должен быть объектом {ключ: значение}");
       }
@@ -71,13 +98,13 @@ export default function UiDictionaryEditor({ locale }) {
     try {
       data = parseJson();
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(t("admin.uictl.invalidJson", { error: err.message }), { type: "error" });
       return;
     }
     setBusy(true);
     importUiDictionary(locale, { data, note, confirm: false })
       .then((res) => setPreview(res))
-      .catch((err) => showToast(err.message, { type: "error" }))
+      .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
       .finally(() => setBusy(false));
   };
 
@@ -86,7 +113,7 @@ export default function UiDictionaryEditor({ locale }) {
     try {
       data = parseJson();
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(t("admin.uictl.invalidJson", { error: err.message }), { type: "error" });
       return;
     }
     setBusy(true);
@@ -95,13 +122,14 @@ export default function UiDictionaryEditor({ locale }) {
         if (res.applied) {
           showToast(t("admin.uictl.applied"), { type: "success" });
           setPreview(null);
+          dirtyRef.current = false; // применено — сервер теперь источник
           await loadActive();
           await loadHistory();
         } else {
           setPreview(res);
         }
       })
-      .catch((err) => showToast(err.message, { type: "error" }))
+      .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
       .finally(() => setBusy(false));
   };
 
@@ -111,10 +139,11 @@ export default function UiDictionaryEditor({ locale }) {
     rollbackUiDictionary(locale, entry.id)
       .then(async () => {
         showToast(t("admin.uictl.rolledBack"), { type: "success" });
+        dirtyRef.current = false;
         await loadActive();
         await loadHistory();
       })
-      .catch((err) => showToast(err.message, { type: "error" }))
+      .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
       .finally(() => setBusy(false));
   };
 
@@ -128,10 +157,24 @@ export default function UiDictionaryEditor({ locale }) {
         <p className="muted">{t("admin.uictl.editingCurrent")}</p>
       )}
       <p className="uictl-warning">{t("admin.uictl.replaceSemantics")}</p>
+
+      {loadError ? (
+        <div className="uictl-errors">
+          <span>{loadError}</span>
+          <button
+            className="modal-btn uictl-retry"
+            disabled={loading}
+            onClick={() => loadActive()}
+          >
+            {t("admin.uictl.retry")}
+          </button>
+        </div>
+      ) : null}
+
       <textarea
         className="uictl-textarea"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => onTextChange(e.target.value)}
         rows={10}
         placeholder={t("admin.uictl.placeholder")}
         spellCheck={false}

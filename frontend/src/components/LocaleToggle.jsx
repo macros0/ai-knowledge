@@ -14,6 +14,25 @@ import { listActiveLocales } from "@/lib/api";
 export default function LocaleToggle() {
   const { locale, setLocale } = useI18n();
   const [active, setActive] = useState(null);
+  const [version, setVersion] = useState(0); // bump для рефетча активных
+
+  useEffect(() => {
+    let mounted = true;
+    const refetch = () => setVersion((v) => v + 1);
+    // Активные языки меняются админом во вкладке «Поддержка языков»: компонент живёт
+    // в layout и не перемонтируется при навигации — без события тоггл «застревал» бы
+    // в скрытом состоянии после активации второго языка.
+    window.addEventListener("okf:locales-changed", refetch);
+    window.addEventListener("focus", refetch);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refetch();
+    });
+    return () => {
+      window.removeEventListener("okf:locales-changed", refetch);
+      window.removeEventListener("focus", refetch);
+      document.removeEventListener("visibilitychange", refetch);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -30,7 +49,7 @@ export default function LocaleToggle() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [version]);
 
   const cycle = active && active.length ? active : SUPPORTED_LOCALES;
   if (cycle.length < 2) return null;

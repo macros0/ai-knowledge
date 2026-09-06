@@ -545,6 +545,8 @@ export default {
   "admin.uictl.rollback": "Roll back",
   "admin.uictl.rollbackConfirm": "Make version v{version} active?",
   "admin.uictl.rolledBack": "Active version rolled back",
+  "admin.uictl.retry": "Retry",
+  "admin.uictl.invalidJson": "Invalid JSON: {error}",
 
   "admin.backfill.title": "Reference translation — {code}",
   "admin.backfill.entTags": "Tags",

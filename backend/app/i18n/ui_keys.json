@@ -116,6 +116,9 @@
   "admin.uictl.editingCurrent": [],
   "admin.uictl.history": [],
   "admin.uictl.historyEmpty": [],
+  "admin.uictl.invalidJson": [
+    "error"
+  ],
   "admin.uictl.keys": [],
   "admin.uictl.newOverride": [],
   "admin.uictl.notePlaceholder": [],
@@ -125,6 +128,7 @@
   "admin.uictl.preview": [],
   "admin.uictl.removed": [],
   "admin.uictl.replaceSemantics": [],
+  "admin.uictl.retry": [],
   "admin.uictl.rollback": [],
   "admin.uictl.rollbackConfirm": [
     "version"

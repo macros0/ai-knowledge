@@ -545,6 +545,8 @@ export default {
   "admin.uictl.rollback": "Откатить",
   "admin.uictl.rollbackConfirm": "Сделать активной версию v{version}?",
   "admin.uictl.rolledBack": "Активная версия откачена",
+  "admin.uictl.retry": "Повторить",
+  "admin.uictl.invalidJson": "Некорректный JSON: {error}",
 
   "admin.backfill.title": "Перевод справочников — {code}",
   "admin.backfill.entTags": "Теги",
