@@ -1028,6 +1028,33 @@ main {
   min-height: 0;
 }
 
+/* ---------- large-table remainder (truncated giant tables) ---------- */
+.table-remainder-block {
+  margin: 12px 0;
+}
+
+.table-remainder-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.table-remainder {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  overflow: auto;
+  max-height: 60vh;
+}
+
 /* ---------- search settings spoiler ---------- */
 .search-settings {
   margin-bottom: 12px;

@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import MarkdownViewer from "./MarkdownViewer";
 import { useI18n } from "@/i18n/LocaleContext";
+import { splitLargeTables } from "@/lib/largeTableSplit";
 
 const IMAGE_PATTERN = /!\[[^\]]*\]\([^)]*\)/g;
 
 export default function ContentViewer({ text, docId, stripFrontmatter = false }) {
   const { t, tc } = useI18n();
   const [mode, setMode] = useState("render");
+  const [expanded, setExpanded] = useState({});
+
+  const parts = useMemo(() => (mode === "render" ? splitLargeTables(text) : []), [mode, text]);
 
   if (!text) return null;
 
@@ -29,7 +33,37 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false })
         </div>
       )}
       {mode === "render" ? (
-        <MarkdownViewer text={text} docId={docId} stripFrontmatter={stripFrontmatter} />
+        parts.map((part, i) => {
+          if (part.type === "tableRemainder") {
+            const open = !!expanded[i];
+            return (
+              <div key={i} className="table-remainder-block">
+                <div className="table-remainder-note">
+                  {tc("content.tableTruncated", part.totalRows, { shown: part.shownRows })}
+                </div>
+                <button
+                  className="view-mode-toggle"
+                  onClick={() =>
+                    setExpanded((prev) => ({ ...prev, [i]: !prev[i] }))
+                  }
+                >
+                  {open
+                    ? t("content.hideRemainingRows")
+                    : tc("content.showRemainingRows", part.remainingRows)}
+                </button>
+                {open && <pre className="table-remainder">{part.rowsText}</pre>}
+              </div>
+            );
+          }
+          return (
+            <MarkdownViewer
+              key={i}
+              text={part.text}
+              docId={docId}
+              stripFrontmatter={stripFrontmatter && i === 0}
+            />
+          );
+        })
       ) : (
         <pre className="raw-markdown">{text}</pre>
       )}

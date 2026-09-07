@@ -266,9 +266,14 @@
   "confirm.bulkDeleteDocs": [],
   "confirm.bulkDeleteHintPre": [],
   "confirm.bulkDeleteTitle": [],
+  "content.hideRemainingRows": [],
   "content.imageOnly": [],
   "content.showRaw": [],
+  "content.showRemainingRows": [],
   "content.showRender": [],
+  "content.tableTruncated": [
+    "shown"
+  ],
   "dev.all": [],
   "dev.assignTitle": [],
   "dev.card.back": [],

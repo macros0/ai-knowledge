@@ -289,6 +289,9 @@ export default {
   "content.showRaw": "Show source",
   "content.showRender": "Show rendered",
   "content.imageOnly": "Content is presented as {count} scanned page image(s). There is no text layer — content is available as images.",
+  "content.tableTruncated": "Table truncated: showing first {shown} of {count} rows",
+  "content.showRemainingRows": "Show remaining {count} rows as text",
+  "content.hideRemainingRows": "Hide",
 
   "upload.dropHint": "Drag & drop files (.docx, .xlsx, .pdf) or click to choose",
   "upload.busy": "Uploading...",
