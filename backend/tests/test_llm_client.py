@@ -237,7 +237,12 @@ class TestStreamIdleTimeout:
     def test_idle_timeout_fires_when_stream_goes_silent(self, client, monkeypatch):
         monkeypatch.setattr(client.settings, "llm_interactive_stream_idle_timeout_seconds", 0.05)
         monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
-        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
+        # Закрываемый стрим — как настоящий httpx-стрим: поток брошенной попытки
+        # завершается и возвращает слот, поэтому ретраи не встают в очередь за
+        # собственными зомби (см. TestChaosFailureInjection про контракт слота).
+        monkeypatch.setattr(
+            litellm, "completion", lambda **kwargs: _ControllableStream(["первый"], silence=5)
+        )
         with pytest.raises(LLMTimeoutError, match="Нет данных от LLM за"):
             client.chat("s", "u")
 
@@ -261,11 +266,19 @@ class TestChaosFailureInjection:
     """Chaos-тесты: зависание LLM при стабильной сети.
 
     Воспроизводят реальный инцидент со zombie-воркерами ThreadPoolExecutor:
-    зависший вызов не должен блокировать последующие и не должен исчерпывать
-    пул ресурсов, а семафор обязан освобождаться даже при LLMTimeoutError.
+    зависший вызов не должен блокировать последующие бесконечно и не должен
+    исчерпывать пул ресурсов.
+
+    Контракт слота изменён: слот параллельности освобождает поток вызова по
+    своему завершению (иначе брошенный вызов занимал бы соединение и квоту
+    провайдера, не занимая слот). Поэтому подвисший вызов слот УДЕРЖИВАЕТ — но
+    ожидание слота ограничено пределом времени одного вызова
+    (llm_max_total_timeout_seconds), после чего следующий вызов получает
+    retryable-таймаут, а не виснет навсегда.
     """
 
     def test_timeout_does_not_block_followup_calls(self, client, monkeypatch):
+        """Зависший вызов не блокирует следующий, если его поток завершается."""
         monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
         monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
         call_count = {"n": 0}
@@ -273,46 +286,69 @@ class TestChaosFailureInjection:
         def hanging(**kwargs):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                return _hang_stream()
+                # Стрим, который МОЖНО закрыть — как настоящий httpx-стрим.
+                return _ControllableStream(["первый"], silence=0.5)
             return _stream_response("привет")
 
         monkeypatch.setattr(litellm, "completion", hanging)
         with pytest.raises(LLMTimeoutError):
             client._complete_once("s", "u")
-        # Следующий вызов должен пройти — zombie-поток не блокирует новые.
+        # Слот освободится, как только брошенный поток среагирует на отмену.
         result, reason = client._complete_once("s", "u")
         assert result == "привет"
         assert reason is None
         assert call_count["n"] == 2
 
-    def test_semaphore_released_on_timeout(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_interactive_stream_idle_timeout_seconds", 0.05)
-        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
+    def test_unkillable_call_does_not_hang_followups_forever(self, client, monkeypatch):
+        """Если поток не удаётся остановить — следующий вызов падает, а не виснет."""
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        # Предел времени вызова = и предел ожидания слота.
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 0.5)
+        monkeypatch.setattr(client.settings, "llm_retry_attempts", 1)
+        # _hang_stream спит в Python и не закрывается — худший случай.
         monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
-        # chat() захватывает семафор в вызывающем потоке — слот обязан
-        # освободиться при LLMTimeoutError из-за контекстного менеджера with.
-        with pytest.raises(LLMTimeoutError):
-            client.chat("s", "u")
-        # Следующий вызов проходит немедленно — слот свободен.
-        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _stream_response("привет"))
-        assert client.chat("s", "u") == "привет"
 
-    def test_semaphore_no_leak_under_concurrent_hangs(self, client, monkeypatch):
-        monkeypatch.setattr(client.settings, "llm_interactive_stream_idle_timeout_seconds", 0.05)
+        with pytest.raises(LLMTimeoutError):
+            client._complete_once("s", "u")
+
+        started = time.monotonic()
+        with pytest.raises(LLMTimeoutError, match="слота параллельности"):
+            client._complete_once("s", "u")
+        # Ждём именно ограниченное время, а не бесконечно.
+        assert time.monotonic() - started < 5
+
+    def test_slot_held_while_abandoned_call_is_alive(self, client, monkeypatch):
+        """Слот занят, пока живёт брошенный поток: реальная параллельность в учёте."""
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
         monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
-        monkeypatch.setattr(client.settings, "llm_interactive_retry_attempts", 1)
         monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
 
         sem = llm_module._get_semaphore(interactive=False)
-        assert sem is not None, "bulk semaphore must exist for lllm_max_concurrency=1"
+        assert sem is not None
         before = sem._value
 
-        for _ in range(3):
-            with pytest.raises(LLMTimeoutError):
-                client.chat("s", "u")
+        with pytest.raises(LLMTimeoutError):
+            client._complete_once("s", "u")
 
-        after = sem._value
-        assert after == before, f"semaphore leaked: {before} -> {after}"
+        assert sem._value == before - 1, (
+            "слот должен оставаться занятым, пока брошенный поток жив"
+        )
+
+    def test_slot_returns_when_abandoned_thread_finishes(self, client, monkeypatch):
+        """Как только поток брошенного вызова завершился — слот возвращается."""
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
+        monkeypatch.setattr(
+            litellm, "completion", lambda **kwargs: _ControllableStream(["первый"], silence=0.5)
+        )
+
+        sem = llm_module._get_semaphore(interactive=False)
+        before = sem._value
+
+        with pytest.raises(LLMTimeoutError):
+            client._complete_once("s", "u")
+
+        assert _wait_until(lambda: sem._value == before), f"слот не вернулся: {sem._value}"
 
 
 class _ControllableStream:
@@ -409,19 +445,19 @@ class TestAbandonedCallCleanup:
             "брошенный поток не завершился — соединение и квота провайдера заняты"
         )
 
-    def test_inflight_over_limit_is_logged(self, client, monkeypatch, caplog):
-        """Превышение лимита параллельности живыми вызовами видно в логах."""
-        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
-        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
-        monkeypatch.setattr(client.settings, "llm_max_concurrency", 1)
-        # Стрим зависает надолго: первый поток остаётся живым ко второму вызову.
-        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
+    def test_inflight_over_limit_is_logged(self, caplog):
+        """Счётчик живых вызовов — страховка: превышение лимита видно в логах.
 
-        with pytest.raises(LLMTimeoutError):
-            client._complete_once("s", "u")
+        После переноса слота на поток превысить лимит штатным путём нельзя
+        (поток стартует только со слотом), поэтому проверяем сам учёт.
+        """
         with caplog.at_level(logging.WARNING, logger="app.services.llm_client"):
-            with pytest.raises(LLMTimeoutError):
-                client._complete_once("s", "u")
+            llm_module._inflight_enter(1)
+            try:
+                llm_module._inflight_enter(1)
+            finally:
+                llm_module._inflight_leave()
+                llm_module._inflight_leave()
 
         assert any("Живых LLM-запросов" in r.getMessage() for r in caplog.records), caplog.text
 

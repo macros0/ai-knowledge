@@ -123,6 +123,53 @@ def _inflight_leave() -> None:
         _inflight -= 1
 
 
+def _acquire_slot(interactive: bool, max_wait: float):
+    """Занимает слот параллельности; возвращает идемпотентную функцию освобождения.
+
+    Слот освобождает ПОТОК вызова по своему завершению, а не вызывающий по
+    выходу из chat() — иначе брошенный по таймауту вызов продолжал бы занимать
+    соединение и квоту провайдера, не занимая слот, и фактическая
+    параллельность превышала бы LLM_MAX_CONCURRENCY.
+
+    Ожидание ограничено max_wait (предел времени одного вызова): дольше слот
+    держать некому — поток вызова гарантированно завершается за это время.
+    Если не дождались, значит слот удерживает поток, который не удалось ни
+    остановить, ни дождаться; лучше вернуть retryable-таймаут, чем повторить
+    исходный инцидент, когда подвисший вызов блокировал все последующие.
+    """
+    semaphore = _get_semaphore(interactive)
+    if semaphore is None:
+        return None
+    if not semaphore.acquire(blocking=False):
+        waited = time.monotonic()
+        got = semaphore.acquire(timeout=max_wait) if max_wait > 0 else semaphore.acquire()
+        elapsed = time.monotonic() - waited
+        if not got:
+            logger.warning(
+                "Слот параллельности LLM не освободился за %.0fs — удерживается "
+                "подвисшим вызовом (живых запросов: %d)",
+                max_wait,
+                _inflight_count(),
+            )
+            raise LLMTimeoutError(
+                f"Не дождались слота параллельности LLM за {max_wait:.0f}s"
+            )
+        if max_wait > 0 and elapsed > max_wait / 2:
+            logger.info("Ожидание слота параллельности LLM: %.0fs", elapsed)
+    lock = threading.Lock()
+    released = False
+
+    def release() -> None:
+        nonlocal released
+        with lock:
+            if released:
+                return
+            released = True
+        semaphore.release()
+
+    return release
+
+
 def _close_stream(stream) -> None:
     """Best-effort закрытие стрима: освобождает HTTP-соединение провайдера.
 
@@ -164,13 +211,12 @@ class LLMClient:
     def chat(self, system: str, user: str, max_tokens: int | None = None) -> str:
         attempts = self.settings.llm_interactive_retry_attempts
         idle = self.settings.llm_interactive_stream_idle_timeout_seconds
-        semaphore = _get_semaphore(self.interactive)
-        if semaphore is None:
-            text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens, attempts=attempts, idle_timeout=idle)
-            return text
-        with semaphore:
-            text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens, attempts=attempts, idle_timeout=idle)
-            return text
+        # Слот параллельности берётся не здесь, а на каждый фактический запрос
+        # (_complete_once) — и освобождается по завершению его потока. Иначе
+        # брошенный по таймауту вызов освобождал бы слот, продолжая занимать
+        # соединение и квоту провайдера.
+        text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens, attempts=attempts, idle_timeout=idle)
+        return text
 
     def _complete_with_retries(self, system: str, user: str, max_tokens: int | None = None, attempts: int | None = None, idle_timeout: float | None = None) -> tuple[str, str | None]:
         attempts = max(1, attempts if attempts is not None else self.settings.llm_retry_attempts)
@@ -213,18 +259,24 @@ class LLMClient:
         Таймаут считается по тишине между чанками (idle) — любой пришедший чанк
         сбрасывает таймер, поэтому медленная, но живая генерация не рвётся.
 
-        Семафор удерживается вызывающим потоком (в `chat`/`chat_json`) и
-        освобождается вместе с LLMTimeoutError — намеренно: зависший вызов не
-        должен блокировать последующие (инцидент со zombie-воркерами, см.
-        докстринг модуля). Плата за это — брошенный поток, который какое-то
-        время ещё жив. Чтобы он не держал соединение и квоту провайдера
-        неограниченно долго:
-          - запросу выставляется СЕТЕВОЙ таймаут (litellm -> httpx), поэтому
-            молчащий провайдер рвёт соединение сам, без участия приложения;
-          - при отказе ждать выставляется флаг отмены и стрим закрывается
-            принудительно — итерация прекращается на ближайшем чанке;
-          - число реально живых вызовов считается отдельно (_inflight) и
-            логируется при превышении лимита параллельности.
+        Слот параллельности берётся здесь, на каждый фактический запрос, и
+        освобождается ПОТОКОМ по его завершению — не вызывающим по выходу из
+        chat(). Иначе брошенный по таймауту вызов освобождал бы слот, продолжая
+        занимать соединение и квоту провайдера, и реальная параллельность
+        превышала бы LLM_MAX_CONCURRENCY (особенно на retry-каскаде).
+
+        Это безопасно только потому, что поток гарантированно завершается:
+          - СЕТЕВОЙ таймаут (litellm -> httpx) рвёт соединение с молчащим
+            провайдером без участия приложения;
+          - отказ ждать выставляет флаг отмены и принудительно закрывает стрим;
+          - жёсткий предел общего времени проверяется в самом цикле чтения —
+            он ловит «капающего» провайдера, которого сетевой таймаут не берёт.
+        Без любого из трёх зависший вызов удерживал бы слот бесконечно и
+        блокировал бы все последующие (инцидент со zombie-воркерами, см.
+        докстринг модуля).
+
+        Число реально живых вызовов считается отдельно (_inflight) и логируется
+        при превышении лимита параллельности.
 
         Возвращает (текст, finish_reason): finish_reason="length" означает,
         что генерация прервана лимитом max_tokens — ответ неполон.
@@ -249,10 +301,15 @@ class LLMClient:
         # httpx трактует скалярный timeout как предел на КАЖДУЮ операцию, в том
         # числе на чтение следующего байта — то есть это тот же idle, но на
         # уровне сокета. Держим его выше прикладного, чтобы порядок срабатывания
-        # был предсказуем.
+        # был предсказуем, и не выше LLM_TIMEOUT_SECONDS — жёсткого потолка на
+        # один сетевой запрос (на него же ссылается докстринг LLMTimeoutError).
+        hard_cap = max(0.0, self.settings.llm_timeout_seconds)
         http_timeout = min(idle + _HTTP_TIMEOUT_GRACE_SECONDS, total) if idle else total
+        if hard_cap:
+            http_timeout = min(http_timeout, hard_cap) if http_timeout else hard_cap
 
         def run() -> None:
+            thread_start = time.monotonic()
             stream = None
             try:
                 stream = litellm.completion(
@@ -273,6 +330,12 @@ class LLMClient:
                     # Вызывающий уже не ждёт ответ — дочитывать стрим незачем.
                     if cancelled.is_set():
                         break
+                    # Жёсткий предел жизни самого потока. Сетевой таймаут спасает
+                    # от молчащего провайдера, но не от «капающего»: тот шлёт по
+                    # байту и держит соединение сколько угодно. Без этого предела
+                    # такой поток удерживал бы слот параллельности бесконечно.
+                    if total and time.monotonic() - thread_start >= total:
+                        break
                     with lock:
                         container["last_activity"] = time.monotonic()
                     reason = _stream_finish_reason(chunk)
@@ -288,14 +351,21 @@ class LLMClient:
             finally:
                 _close_stream(stream)
                 _inflight_leave()
+                # Слот освобождается здесь, а не по выходу из _complete_once:
+                # пока поток жив, запрос к провайдеру реально выполняется.
+                if release_slot is not None:
+                    release_slot()
                 container["done"].set()
 
+        release_slot = _acquire_slot(self.interactive, total)
         thread = threading.Thread(target=run, daemon=True, name="llm-call")
         _inflight_enter(concurrency)
         try:
             thread.start()
         except BaseException:
             _inflight_leave()
+            if release_slot is not None:
+                release_slot()
             raise
         start = time.monotonic()
         try:
@@ -336,11 +406,8 @@ class LLMClient:
         chunk_idx: int = 0,
         salvage_truncated: bool = False,
     ) -> list | dict:
-        semaphore = _get_semaphore(self.interactive)
-        if semaphore is None:
-            return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx, salvage_truncated)
-        with semaphore:
-            return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx, salvage_truncated)
+        # Слот параллельности — на каждый запрос внутри (_complete_once), см. chat().
+        return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx, salvage_truncated)
 
     def _chat_json_with_truncation_retry(
         self, system: str, user: str, doc_id: str, chunk_idx: int, salvage_truncated: bool
