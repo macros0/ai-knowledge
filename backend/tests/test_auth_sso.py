@@ -61,7 +61,7 @@ class FakeClient:
 
 
 class NoIdTokenClient(FakeClient):
-    """Callback без id_token (например, старые сессии) — logout без id_token_hint."""
+    """Callback без id_token (например, старые сессии) — logout локальный, без Keycloak."""
 
     async def authorize_access_token(self, request, **kwargs):
         self.token_redirect_uri = kwargs.get("redirect_uri")
@@ -183,12 +183,13 @@ def test_sso_logout_redirects_to_keycloak_with_id_token(tmp_path, monkeypatch):
     assert q["id_token_hint"][0] == "fake-id-token"
 
 
-def test_sso_logout_without_id_token_still_redirects(tmp_path, monkeypatch):
-    """Сессия без id_token не должна ломать logout — идёт без id_token_hint."""
-    resp = _logout_after_login(tmp_path, monkeypatch, client_cls=NoIdTokenClient)
+def test_sso_logout_without_id_token_is_local_only(tmp_path, monkeypatch):
+    """Сессия без id_token не должна слать браузер в Keycloak (там error-page
+    «Missing parameters: id_token_hint» при истёкшей SSO-сессии) — logout
+    локальный: редирект на "/" и очистка сессии."""
+    c = build_sso_client(tmp_path, monkeypatch, client_cls=NoIdTokenClient)
+    assert c.get("/api/auth/callback").status_code == 303  # вход
+    resp = c.get("/api/auth/logout", follow_redirects=False)
     assert resp.status_code == 303
-    parsed = urlparse(resp.headers["location"])
-    assert parsed.path == "/realms/myrealm/protocol/openid-connect/logout"
-    q = parse_qs(parsed.query)
-    assert unquote(q["post_logout_redirect_uri"][0]) == "http://localhost:16300/"
-    assert "id_token_hint" not in q
+    assert resp.headers["location"] == "/"
+    assert c.get("/api/auth/me").json()["user"]["user_id"] == "anonymous"

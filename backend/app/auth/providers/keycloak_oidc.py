@@ -79,15 +79,27 @@ class KeycloakOidcProvider(AuthProvider):
         """RP-Initiated Logout: завершаем и SSO-сессию Keycloak, а не только нашу.
 
         Возвращает RedirectResponse на end_session_endpoint Keycloak (браузерный
-        flow: приложение → Keycloak logout → post_logout_redirect_uri).
+        flow: приложение → Keycloak logout → post_logout_redirect_uri). Если в
+        сессии нет id_token (сессия создана до сохранения id_token, либо IdP его
+        не выдал) — SSO-logout невозможен: logout без id_token_hint Keycloak
+        принимает только при живой SSO-сессии, иначе отдаёт error-page
+        «Missing parameters: id_token_hint». Возвращаем None → endpoint делает
+        локальный logout и редиректит на "/" (логин-гейт), не отправляя браузер
+        на заведомо ошибочный URL.
         """
         identity_raw = request.session.get("identity") or {}
         attributes = identity_raw.get("attributes") or {}
         id_token = attributes.get("id_token")
         request.session.clear()
+        if not id_token:
+            logger.info(
+                "Logout без id_token в сессии — только локальное завершение "
+                "(RP-Initiated Logout в Keycloak пропущен)"
+            )
+            return None
         return RedirectResponse(url=self._end_session_url(id_token), status_code=303)
 
-    def _end_session_url(self, id_token: str | None) -> str:
+    def _end_session_url(self, id_token: str) -> str:
         base = (
             (self._settings.keycloak_url or "").rstrip("/")
             + "/realms/"
@@ -96,9 +108,8 @@ class KeycloakOidcProvider(AuthProvider):
         )
         params: dict[str, str] = {
             "post_logout_redirect_uri": self._settings.sso_post_logout_redirect_uri,
+            "id_token_hint": id_token,
         }
-        if id_token:
-            params["id_token_hint"] = id_token
         return base + "?" + urlencode(params)
 
     def _normalize_paths(self, groups: list[str]) -> list[str]:
