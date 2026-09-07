@@ -763,8 +763,13 @@ class VectorStore:
             return qm.Filter(must_not=must_not)
         return qm.Filter(must=[_tag_match_filter(tags)], must_not=must_not)
 
-    def _scroll_points(self, *, with_payload: bool, with_vectors: bool):
-        """Итерирует все точки коллекции батчами (scroll с пагинацией)."""
+    def _scroll_points(self, *, with_payload, with_vectors, scroll_filter=None):
+        """Итерирует точки коллекции батчами (scroll с пагинацией).
+
+        with_payload принимает и список ключей — тогда Qdrant отдаёт только их,
+        а не payload целиком. scroll_filter отбирает точки на стороне сервера:
+        дешевле выкачать нужное подмножество, чем всю коллекцию ради проверки.
+        """
         next_offset = None
         while True:
             batch, next_offset = self.client.scroll(
@@ -773,6 +778,7 @@ class VectorStore:
                 with_payload=with_payload,
                 with_vectors=with_vectors,
                 offset=next_offset,
+                scroll_filter=scroll_filter,
             )
             yield from batch
             if next_offset is None:
@@ -785,18 +791,38 @@ class VectorStore:
         формуле _sparse_text (title + content), что при свежей индексации.
         Dense-вектор и payload существующей точки не затрагиваются.
 
-        Идемпотентно: точки, у которых sparse-вектор уже есть, пропускаются
-        (scroll проверяет наличие named-вектора). force=True пересчитывает все
-        точки — одноразовая миграция после смены формулы текста (rebuild_sparse.py).
+        Идемпотентно: точки, у которых sparse-вектор уже есть, пропускаются —
+        их отбирает САМ Qdrant фильтром must_not has_vector. Раньше сюда
+        выкачивалась вся коллекция с with_vectors=True (то есть все dense-векторы
+        по сети и словарь на весь корпус в памяти) только чтобы проверить наличие
+        ключа в словаре векторов — на каждый старт процесса. Теперь на прогретой
+        коллекции scroll возвращает пустой результат за один запрос.
+
+        force=True пересчитывает все точки — одноразовая миграция после смены
+        формулы текста (rebuild_sparse.py); векторы не выкачиваются и в этом
+        режиме, нужны только id.
+
+        Требует Qdrant >= 1.11 (условие has_vector).
         """
         from sqlalchemy import select
 
         from app.db.models import Document, OkfConcept
         from app.db.session import session_scope
 
-        existing: dict[str, bool] = {}
-        for rec in self._scroll_points(with_payload=False, with_vectors=True):
-            existing[str(rec.id)] = SPARSE_VECTOR_NAME in (rec.vector or {})
+        # Без force берём только точки БЕЗ sparse — остальные не нужны вовсе.
+        # point_type не фильтруем намеренно: id из БД всё равно концептные, а
+        # легаси-точки без этого ключа payload должны оставаться чинимыми.
+        scroll_filter = (
+            None
+            if force
+            else qm.Filter(must_not=[qm.HasVectorCondition(has_vector=SPARSE_VECTOR_NAME)])
+        )
+        target_ids = {
+            str(rec.id)
+            for rec in self._scroll_points(
+                with_payload=False, with_vectors=False, scroll_filter=scroll_filter
+            )
+        }
 
         with session_scope() as s:
             rows = s.execute(
@@ -809,10 +835,10 @@ class VectorStore:
         points: list[qm.PointVectors] = []
         for doc_id, slug, title, content in rows:
             point_id = concept_point_id(doc_id, slug)
-            if point_id not in existing:
+            # Точки нет в выборке — либо её нет в Qdrant, либо sparse уже
+            # построен (фильтр отсеял). В обоих случаях трогать нечего.
+            if point_id not in target_ids:
                 continue
-            if existing[point_id] and not force:
-                continue  # sparse уже построен — не портим при рестарте
             sparse_vec = to_sparse_vector(_sparse_text(title or "", (content or "")[:cap]))
             if not sparse_vec.indices:
                 continue
@@ -994,23 +1020,16 @@ class VectorStore:
         if not db_relations:
             return 0
 
+        # with_payload=["relations"] — а не True: payload концепта содержит
+        # content до 4000 символов, и полный scroll на каждый старт тянул бы
+        # текст всего корпуса ради одного ключа.
         existing: dict[str, list[str]] = {}
-        next_offset = None
-        while True:
-            batch, next_offset = self.client.scroll(
-                collection_name=self.collection,
-                limit=batch_size,
-                with_payload=True,
-                with_vectors=False,
-                offset=next_offset,
-            )
-            for rec in batch:
-                pid = str(rec.id)
-                if pid in db_relations:
-                    payload = rec.payload or {}
-                    existing[pid] = list(payload.get("relations", []))
-            if next_offset is None:
-                break
+        for rec in self._scroll_points(
+            with_payload=["relations"], with_vectors=False
+        ):
+            pid = str(rec.id)
+            if pid in db_relations:
+                existing[pid] = list((rec.payload or {}).get("relations", []))
 
         changed: dict[str, list[str]] = {}
         for pid, normalized in db_relations.items():
