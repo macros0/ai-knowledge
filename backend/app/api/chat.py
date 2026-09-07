@@ -3,6 +3,7 @@
 
 """Роут чата: RAG — композитный поиск (dense/BM25 + чанки) + синтез ответа LLM."""
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -35,10 +36,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-_embedder = Embedder()
-_vector_store = VectorStore()
-_llm = LLMClient(interactive=True)
-_prompts = get_store()
+# Ленивые синглтоны вместо конструирования на импорте модуля: конструкторы
+# читают конфигурацию, а VectorStore ещё и открывает клиент к Qdrant (сетевой
+# вызов при создании). `import app.main` обязан проходить на холодном окружении
+# — до готового Qdrant и накатанных миграций; проверка внешних зависимостей
+# живёт в lifespan, где недоступный сервис не валит процесс (мягкий старт).
+# PromptStore — уже ленивый синглтон, поэтому берётся через get_store().
+
+
+@lru_cache(maxsize=1)
+def _get_embedder() -> Embedder:
+    return Embedder()
+
+
+@lru_cache(maxsize=1)
+def _get_vector_store() -> VectorStore:
+    return VectorStore()
+
+
+@lru_cache(maxsize=1)
+def _get_llm() -> LLMClient:
+    return LLMClient(interactive=True)
 
 
 @router.post("", response_model=ChatResponse)
@@ -57,7 +75,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
-    vector = _embedder.embed(req.query) if "dense" in branches else None
+    vector = _get_embedder().embed(req.query) if "dense" in branches else None
     # Query-путь: динамический набор стоп-слов активных locales (индексная формула
     # заморожена — реиндекс при правке стоп-слов не требуется).
     sparse_vec = (
@@ -66,7 +84,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         else None
     )
 
-    hits = _vector_store.search_composite(
+    hits = _get_vector_store().search_composite(
         dense_vec=vector,
         sparse_vec=sparse_vec,
         tags=req.tags or None,
@@ -132,10 +150,10 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
                 )
             )
 
-        system = _prompts.get("chat_system")
-        prompt_user = _prompts.format("chat_user", context=context, query=req.query)
+        system = get_store().get("chat_system")
+        prompt_user = get_store().format("chat_user", context=context, query=req.query)
         try:
-            answer = _llm.chat(system, prompt_user)
+            answer = _get_llm().chat(system, prompt_user)
         except Exception as exc:
             raise LLMError(cause=exc) from exc
         # LLM иногда пишет «блок с ID 2» вместо [2] — фронтенд рендерит ссылки

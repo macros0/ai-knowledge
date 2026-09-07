@@ -181,7 +181,7 @@ class TestRestartRecovery:
         queued_id = self._insert_job(STATUS_QUEUED)
         running_id = self._insert_job(STATUS_RUNNING)
 
-        q._recover_after_restart()
+        q.recover_after_restart()
 
         # queued вернулся во внутреннюю очередь.
         assert q._queue.qsize() == 1

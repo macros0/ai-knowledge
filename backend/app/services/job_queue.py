@@ -88,19 +88,22 @@ class JobQueue:
             self._start_worker()
 
     def _start_worker(self) -> None:
-        self._recover_after_restart()
         self._worker = threading.Thread(
             target=self._run, name="job-queue-worker", daemon=True
         )
         self._worker.start()
 
-    def _recover_after_restart(self) -> None:
+    def recover_after_restart(self) -> None:
         """Восстанавливает задачи, потерянные при рестарте процесса.
 
         Внутренняя queue — in-memory, поэтому раньше задачи из БД со статусом
         queued после рестарта висели вечно (и занимали circuit breaker), а
         running оставались «исполняющимися» без исполнителя. Теперь queued
         возвращаются в очередь, running помечаются failed.
+
+        Ходит в БД, поэтому вызывается не из конструктора, а из lifespan
+        (app.main) — после init_db(). Иначе импорт app.main падал бы на
+        отсутствующих таблицах, ещё до мягкого старта.
         """
         with session_scope() as s:
             queued = list(
@@ -193,9 +196,6 @@ class JobQueue:
         if job is None:
             raise JobNotFoundError(f"Задача {job_id} не найдена")
         return job
-        with session_scope() as s:
-            job = s.get(Job, job_id)
-            return _to_dict(job) if job else None
 
     def list(self, *, limit: int = 100, offset: int = 0) -> list[dict]:
         with session_scope() as s:
@@ -375,10 +375,17 @@ class _JobUser:
 
 
 _INSTANCE: JobQueue | None = None
+_INSTANCE_LOCK = threading.Lock()
 
 
 def get_job_queue() -> JobQueue:
+    """Ленивый синглтон очереди.
+
+    Вызывается из хендлеров (не на импорте модуля), поэтому создание защищено
+    локом — два параллельных запроса не должны поднять два worker-потока.
+    """
     global _INSTANCE
-    if _INSTANCE is None:
-        _INSTANCE = JobQueue()
-    return _INSTANCE
+    with _INSTANCE_LOCK:
+        if _INSTANCE is None:
+            _INSTANCE = JobQueue()
+        return _INSTANCE

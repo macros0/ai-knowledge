@@ -85,6 +85,17 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logging.warning("Не удалось инициализировать БД при старте: %s", exc)
 
+    # Очередь массовых операций: поднимаем worker и возвращаем в очередь задачи,
+    # потерянные при рестарте. Здесь, а не на импорте app.api.jobs — восстановление
+    # ходит в БД и должно идти после init_db()/миграций (в production схему
+    # накатывает Alembic). Мягкий старт: недоступная БД не валит процесс.
+    try:
+        from app.services.job_queue import get_job_queue
+
+        get_job_queue().recover_after_restart()
+    except Exception as exc:
+        logging.warning("Не удалось восстановить очередь массовых операций: %s", exc)
+
     # Мягкий старт: не валить процесс, если Qdrant недоступен.
     # ensure_collection будет повторена при первом запросе или бэкфилле.
     try:

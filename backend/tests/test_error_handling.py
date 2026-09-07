@@ -61,7 +61,7 @@ def test_dependency_error_returns_503_with_code_and_service(client, monkeypatch)
     def raise_qdrant_error(text):
         raise VectorStoreError("Qdrant down", cause=ConnectionRefusedError("refused"))
 
-    chat_module._embedder.embed = raise_qdrant_error
+    chat_module._get_embedder().embed = raise_qdrant_error
     try:
         resp = client.post("/api/chat", json={"query": "test", "mode": "dense"})
         assert resp.status_code == 503
@@ -70,7 +70,7 @@ def test_dependency_error_returns_503_with_code_and_service(client, monkeypatch)
         assert data["service"] == "qdrant"
         assert "Qdrant" in data["detail"] or "недоступ" in data["detail"]
     finally:
-        chat_module._embedder.embed = lambda text: [0.0] * 8
+        chat_module._get_embedder().embed = lambda text: [0.0] * 8
 
 
 def test_llm_error_returns_503_with_llm_service(client, monkeypatch):
@@ -99,9 +99,9 @@ def test_llm_error_returns_503_with_llm_service(client, monkeypatch):
         },
     )
 
-    monkeypatch.setattr(chat_module._llm, "chat", raise_runtime)
-    monkeypatch.setattr(chat_module._embedder, "embed", lambda text: [0.0] * 8)
-    monkeypatch.setattr(chat_module._vector_store, "search_composite", lambda **k: [chunk_hit])
+    monkeypatch.setattr(chat_module._get_llm(), "chat", raise_runtime)
+    monkeypatch.setattr(chat_module._get_embedder(), "embed", lambda text: [0.0] * 8)
+    monkeypatch.setattr(chat_module._get_vector_store(), "search_composite", lambda **k: [chunk_hit])
 
     resp = client.post("/api/chat", json={"query": "test", "mode": "dense"})
     assert resp.status_code == 503
@@ -133,9 +133,9 @@ def test_generic_exception_returns_500_with_russian_message(client, monkeypatch)
         },
     )
 
-    monkeypatch.setattr(chat_module._embedder, "embed", lambda text: [0.0] * 8)
-    monkeypatch.setattr(chat_module._vector_store, "search_composite", lambda **k: [chunk_hit])
-    monkeypatch.setattr(chat_module._prompts, "format", lambda *a, **k: (_ for _ in ()).throw(ValueError("bug in prompts")))
+    monkeypatch.setattr(chat_module._get_embedder(), "embed", lambda text: [0.0] * 8)
+    monkeypatch.setattr(chat_module._get_vector_store(), "search_composite", lambda **k: [chunk_hit])
+    monkeypatch.setattr(chat_module.get_store(), "format", lambda *a, **k: (_ for _ in ()).throw(ValueError("bug in prompts")))
 
     resp = client.post("/api/chat", json={"query": "test", "mode": "dense"})
     assert resp.status_code == 500

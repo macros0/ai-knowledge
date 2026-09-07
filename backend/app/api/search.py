@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """Роут умного поиска: dense / BM25 по концептам и чанкам."""
+from functools import lru_cache
+
 from fastapi import APIRouter
 
 from app.config import get_settings
@@ -17,22 +19,33 @@ from app.services.vector_store import VectorStore
 
 router = APIRouter(prefix="/search", tags=["search"])
 
-_embedder = Embedder()
-_vector_store = VectorStore()
+# Ленивые синглтоны: как в chat.py, конструкторы не должны выполняться на
+# импорте модуля — VectorStore открывает клиент к Qdrant, а `import app.main`
+# обязан проходить на холодном окружении (мягкий старт живёт в lifespan).
+
+
+@lru_cache(maxsize=1)
+def _get_embedder() -> Embedder:
+    return Embedder()
+
+
+@lru_cache(maxsize=1)
+def _get_vector_store() -> VectorStore:
+    return VectorStore()
 
 
 @router.post("", response_model=SearchResponse)
 def search(req: SearchRequest):
     settings = get_settings()
     branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
-    vector = _embedder.embed(req.query) if "dense" in branches else None
+    vector = _get_embedder().embed(req.query) if "dense" in branches else None
     sparse_vec = (
         to_sparse_vector(req.query, stopwords=get_stopwords(KIND_BM25))
         if "bm25" in branches
         else None
     )
 
-    hits = _vector_store.search_composite(
+    hits = _get_vector_store().search_composite(
         dense_vec=vector,
         sparse_vec=sparse_vec,
         tags=req.tags or None,

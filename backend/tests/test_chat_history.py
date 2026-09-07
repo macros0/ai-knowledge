@@ -284,8 +284,8 @@ class TestChatEndpointPersists:
     def test_chat_short_circuit_records_turn(self, client, monkeypatch):
         from app.api import chat as chat_module
 
-        monkeypatch.setattr(chat_module._embedder, "embed", lambda *a, **k: [0.0] * 10)
-        monkeypatch.setattr(chat_module._vector_store, "search_composite", lambda **kw: [])
+        monkeypatch.setattr(chat_module._get_embedder(), "embed", lambda *a, **k: [0.0] * 10)
+        monkeypatch.setattr(chat_module._get_vector_store(), "search_composite", lambda **kw: [])
 
         login(client, "demo.user")
         resp = client.post("/api/chat", json={"query": "тест", "tags": []})
