@@ -268,6 +268,7 @@ export default {
   "okf.loadingChunks": "Loading chunks…",
   "okf.chunksError": "Failed to load chunks: {error}",
   "okf.tags": "Tags: {tags}",
+  "okf.fromAttachment": "From attachment",
   "okf.size": "{size} KB",
   "okf.chunk": "Chunk {index}",
   "okf.chunkTitle": "Chunk {index}",

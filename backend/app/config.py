@@ -211,6 +211,13 @@ class Settings(BaseSettings):
     # regex вместо нестабильного встраивания LLM; LLM получает заглушку
     # (см. services/comment_concepts.py и docparser markdown-формат треда).
     okf_comment_concepts_enabled: bool = True
+    # Программная пометка концептов, порождённых вложениями (UX-обходной путь,
+    # без Этапа 2c provenance): чанку, у которого доля символов из блоков
+    # распарсенных вложений >= порога, ВСЕ концепты получают тег "attachment"
+    # пост-фактум (post-LLM, детерминированно — см. okf_generator.attachment_shares
+    # и pipeline._process). Смешанные чанки ниже порога остаются без тега.
+    okf_attachment_tag_enabled: bool = True
+    okf_attachment_tag_threshold: float = Field(default=0.9, ge=0.0, le=1.0)
     # Этап 2b (PostgreSQL SSOT): при True пайплайн дополнительно пишет .md-бандлы
     # (data/okf_bundles/<doc_id>/) как одностороннюю проекцию БД (экспорт/inspect).
     # Фаза 5: default False — бандлы создаются только по явному запросу

@@ -278,6 +278,34 @@ UI: http://localhost:16300
   перезаписывается ПОЛНЫМ списком — частичная запись стёрла бы остальные
   концепты; апсерт новых точек + orphan-cleanup, chunk-точки не трогаются;
   идемпотентен по итоговому набору).
+- **Программный тег `attachment` у концептов из вложений (07.09.2026)**:
+  UX-обходной путь до Этапа 2c provenance (без `source_attachment_id`, без
+  привязки к конкретному `okf_attachments.id`). Парсер помечает каждый блок,
+  порождённый `process_embedded`, meta-полем `from_attachment=True` (+
+  `attachment_name` — basename, `reserved for Stage 2c, not consumed yet`);
+  `docparser.markdown_attachment_spans(blocks)` возвращает (markdown, слитые
+  char-спаны блоков вложения). Пайплайн (`pipeline._process`) через
+  `OKFGenerator.attachment_shares(markdown, spans)` считает долю символов
+  вложения в каждом чанке (unit-пространство: `_chunk_groups` — та же
+  арифметика, что `_chunk_text`, юниты локализуются последовательным `find()`),
+  и если доля >= `okf_attachment_tag_threshold` (default 0.9, env
+  OKF_ATTACHMENT_TAG_THRESHOLD) — ВСЕ концепты чанка получают тег `attachment`
+  пост-фактум (post-LLM, детерминированно, `_merge_tags` без дублей). Тег
+  живёт ТОЛЬКО в `okf_concepts.tags` (БД — единственный источник), в payload
+  Qdrant попадает через `index_concepts` (свежие документы) или
+  `set_document_tags_payload(..., skip_chunks=True)` (backfill); `attachment`
+  не смешивается с `document_tags` (concept-level тег, как `review`). UI —
+  бейдж «Из вложения» в списке концептов (`OkfFileList.jsx` + `PaperclipIcon`).
+  **Гранулярность — чанк, не концепт**: смешанный чанк ≥ порога тегирует и свои
+  docx-хвостовые концепты (осознанное ограничение спеки). Backfill старых
+  документов: `backend/scripts/backfill_attachment_tags.py` — re-parse uploads
+  во ВРЕМЕННУЮ папку (маркер рендерится `attachments/<basename>` байт-в-байт как
+  в пайплайне), строгое сравнение чанков с `document_chunks` (all-or-nothing;
+  расхождение → `skipped_parser_drift` + подсказка `regenerate`, без fuzzy-
+  матчинга), дописывает тег в БД и синкает Qdrant только concept-точки
+  (`skip_chunks=True`; chunk-точки не создаются/не обновляются — поведенческий
+  тест в `test_document_tags.TestSkipChunksPayload`). Идемпотентен. Никакой
+  LLM-классификации, промпты не менялись, формула dense-эмбеддинга не тронута.
 - **Справочник разработок + дедупликация (Этап 4, 30.08.2026)**:
   - Каноническая связь — `documents.development_id` (FK → `developments`). Проекция для
     поиска — payload Qdrant `dev_tags=[number,name,module]` на ВСЕХ точках (отдельное поле,

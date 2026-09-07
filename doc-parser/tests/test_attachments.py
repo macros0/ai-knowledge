@@ -132,7 +132,55 @@ class TestAttachmentLimits:
         assert not list(tmp_path.iterdir()), "файл сверх лимита не должен попадать на диск"
 
 
-class TestPdfRenderLimit:
+class TestAttachmentOriginMeta:
+    """from_attachment / attachment_name в meta — основа программного тега «attachment»."""
+
+    def test_parsed_blocks_marked_as_from_attachment(self, tmp_path: Path):
+        docx = make_docx_with_embedded_xlsx(tmp_path / "x.docx", xlsx_bytes())
+        blocks = parse_document(docx)
+        marker = next(b for b in blocks if b.type == "attachment")
+        assert marker.meta["from_attachment"] is True
+        assert marker.meta["attachment_name"] == "embedded.xlsx"
+
+        table = next(b for b in blocks if b.type == "table")
+        assert table.meta.get("from_attachment") is True
+        assert table.meta.get("attachment_name") == "embedded.xlsx"
+
+        # блоки самого родителя (до/после вложения) — без признака
+        parent_blocks = [b for b in blocks if not b.meta.get("from_attachment")]
+        assert parent_blocks, "текст родителя не должен помечаться как вложение"
+
+    def test_attachment_name_is_basename_without_absolute_path(self, tmp_path: Path):
+        docx = make_docx_with_embedded_xlsx(tmp_path / "x.docx", xlsx_bytes())
+        blocks = parse_document(docx, attachments_dir=tmp_path / "att")
+        for b in blocks:
+            name = b.meta.get("attachment_name")
+            if name is not None:
+                assert ":" not in name
+                assert "/" not in name
+                assert "\\" not in name
+
+    def test_marker_always_carries_from_attachment(self, tmp_path: Path):
+        from docparser.embedded import process_embedded
+
+        # kind="other" → сохраняется сырым, маркер без рекурсии
+        blocks = process_embedded(b"M" * 16, "raw.bin", attachments_dir=tmp_path)
+        assert len(blocks) == 1
+        assert blocks[0].meta["from_attachment"] is True
+        assert blocks[0].meta["attachment_name"] == "raw.bin"
+
+    def test_nested_attachment_inner_wins(self, tmp_path: Path):
+        """Вложенный docx содержит xlsx: блоки уровня 2 сохраняют имя внутреннего."""
+        inner = make_docx_with_embedded_xlsx(tmp_path / "inner.docx", xlsx_bytes())
+        outer = make_docx_with_embedded_xlsx(tmp_path / "top.docx", inner.read_bytes())
+        blocks = parse_document(outer)
+        tables = [b for b in blocks if b.type == "table"]
+        assert tables, "таблица внутреннего xlsx должна быть распарсена"
+        assert tables[0].meta.get("from_attachment") is True
+        assert tables[0].meta.get("attachment_name") == "embedded.xlsx"
+
+
+
     def test_render_capped_at_limit(self, tmp_path: Path, monkeypatch):
         """PDF из пустых страниц-сканов: рендер ограничен _RENDER_PAGE_LIMIT."""
         from pypdf import PdfWriter

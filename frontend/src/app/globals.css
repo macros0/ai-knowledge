@@ -1572,6 +1572,18 @@ main {
 .okf-type-example { color: var(--color-type-example); }
 .okf-type-note { color: var(--muted); }
 
+.okf-attachment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
 .okf-empty {
   color: var(--muted);
   font-size: 14px;
@@ -1624,9 +1636,16 @@ main {
 }
 
 .okf-chunk-concept {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
   color: var(--accent);
   text-decoration: none;
   font-size: 12px;
+}
+
+.okf-chunk-concept-title {
   word-break: break-word;
 }
 

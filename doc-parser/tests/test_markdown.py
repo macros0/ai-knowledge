@@ -1,7 +1,7 @@
 """Тесты преобразования блоков в Markdown."""
 from pathlib import Path
 
-from docparser import Block, blocks_to_markdown
+from docparser import Block, blocks_to_markdown, markdown_attachment_spans
 
 
 class TestBlocksToMarkdown:
@@ -83,7 +83,21 @@ class TestBlocksToMarkdown:
         blocks = [Block("attachment", "Вложение: a.xlsx (zip)", meta={"saved_path": "out/a.xlsx"})]
         md = blocks_to_markdown(blocks)
         assert "Вложение: a.xlsx (zip)" in md
-        assert "out/a.xlsx" in md
+        assert "attachments/a.xlsx" in md
+        assert "out/a.xlsx" not in md
+
+    def test_attachment_marker_absolute_path_relativized(self):
+        """Абсолютный путь машины не должен попадать в markdown (инцидент 2026-09-07)."""
+        blocks = [
+            Block(
+                "attachment",
+                "Вложение: oleObject2.bin (pdf)",
+                meta={"saved_path": r"C:\Users\alexey\ai-workspace\data\uploads\doc1\attachments\embedded-0.pdf"},
+            )
+        ]
+        md = blocks_to_markdown(blocks)
+        assert "attachments/embedded-0.pdf" in md
+        assert "C:\\Users" not in md
 
     def test_image_link(self):
         blocks = [
@@ -108,3 +122,55 @@ class TestBlocksToMarkdown:
 
     def test_empty(self):
         assert blocks_to_markdown([]) == ""
+
+
+class TestMarkdownAttachmentSpans:
+    def test_no_attachment_blocks(self):
+        blocks = [Block("heading", "Глава", level=1), Block("paragraph", "Текст")]
+        text, spans = markdown_attachment_spans(blocks)
+        assert text == blocks_to_markdown(blocks)
+        assert spans == []
+
+    def test_attachment_span_covers_block_text(self):
+        blocks = [
+            Block("paragraph", "До вложения"),
+            Block("attachment", "Вложение: a.xlsx (zip)", meta={"saved_path": "out/a.xlsx", "from_attachment": True}),
+            Block("paragraph", "После вложения"),
+        ]
+        text, spans = markdown_attachment_spans(blocks)
+        assert len(spans) == 1
+        start, end = spans[0]
+        assert "attachments/a.xlsx" in text[start:end]
+        # блок ДО и ПОСЛЕ не входят в диапазон
+        assert "До вложения" not in text[start:end]
+        assert "После вложения" not in text[start:end]
+
+    def test_adjacent_attachment_blocks_are_disjoint_spans(self):
+        blocks = [
+            Block("attachment", "Вложение: a (zip)", meta={"saved_path": "a", "from_attachment": True}),
+            Block("attachment", "Вложение: b (zip)", meta={"saved_path": "b", "from_attachment": True}),
+        ]
+        text, spans = markdown_attachment_spans(blocks)
+        assert len(spans) == 2  # разделены пустой строкой-сепаратором — не сливаются
+        covered = "".join(text[s:e] for s, e in spans)
+        assert "Вложение: a" in covered
+        assert "Вложение: b" in covered
+
+    def test_leading_blank_block_shifted(self):
+        # Пустой абзац в начале срезается strip(); спаны должны оставаться валидными
+        blocks = [
+            Block("paragraph", ""),
+            Block("paragraph", "До"),
+            Block("attachment", "Вложение: a (zip)", meta={"saved_path": "a", "from_attachment": True}),
+        ]
+        text, spans = markdown_attachment_spans(blocks)
+        assert spans
+        start, end = spans[0]
+        assert text[start:end] == "**Вложение: a (zip)**\n*(файл: attachments/a)*"
+
+    def test_marker_without_saved_path_has_no_file_line(self):
+        blocks = [Block("attachment", "Вложение: a (zip)", meta={"from_attachment": True})]
+        text, spans = markdown_attachment_spans(blocks)
+        assert spans
+        start, end = spans[0]
+        assert text[start:end] == "**Вложение: a (zip)**"

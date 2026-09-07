@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 VALID_TYPES = {"concept", "procedure", "reference", "example", "note"}
 
+# Тег концептов, порождённых блоками распарсованных вложений (UX-обходной путь
+# до Этапа 2c provenance; детерминированно проставляется post-LLM в pipeline).
+ATTACHMENT_TAG = "attachment"
+
 
 class LLMLike(Protocol):
     def chat_json(
@@ -47,6 +51,48 @@ class OKFGenerator:
 
     def chunk_text(self, markdown_text: str) -> list[str]:
         return _chunk_text(markdown_text, self.settings.okf_max_chunk_chars)
+
+    def attachment_shares(self, markdown_text: str, attach_spans: list[tuple[int, int]]) -> list[float]:
+        """Доля символов каждого чанка, порождённая блоками вложений (0.0..1.0).
+
+        Атрибуция происхождения для программного тега «attachment»: чанки режутся
+        из markdown, но ре-джойн юнитов («\\n\\n») означает, что чанк не всегда
+        точная подстрока markdown. Поэтому работаем в unit-пространстве: делим
+        markdown на юниты (та же _split_units), находим каждый юнит в тексте
+        последовательным find() (юниты — точные подстроки), определяем флаг
+        «из вложения» пересечением со спанами, и группируем в чанки ТОЙ ЖЕ
+        арифметикой _chunk_groups, что и _chunk_text — порядок и число чанков
+        совпадают с chunk_text().
+
+        Возвращает [] если вложений нет (спаны пусты) — быстрый выход для
+        пайплайна. Длина результата == len(chunk_text(markdown_text)).
+        """
+        if not attach_spans:
+            return []
+        text = markdown_text.strip()
+        if not text:
+            return []
+        if len(text) <= self.settings.okf_max_chunk_chars:
+            return [_coverage(attach_spans, 0, len(text))]
+
+        units = _split_units(text)
+        unit_flags: list[bool] = []
+        search_from = 0
+        for unit in units:
+            pos = text.find(unit, search_from)
+            if pos < 0:  # защита: не должно случаться (юниты — подстроки текста)
+                unit_flags.append(False)
+                continue
+            search_from = pos + len(unit)
+            unit_flags.append(_overlaps(attach_spans, pos, pos + len(unit)))
+
+        groups = _chunk_groups([len(u) for u in units], self.settings.okf_max_chunk_chars)
+        shares: list[float] = []
+        for group in groups:
+            total = sum(len(units[i]) for i in group) + 2 * (len(group) - 1)
+            attach = sum(len(units[i]) for i in group if unit_flags[i])
+            shares.append(attach / total if total else 0.0)
+        return shares
 
     def prompt_version(self) -> str:
         """SHA-256-префикс нормализованного набора промптов OKF-генерации.
@@ -318,16 +364,44 @@ def _chunk_text(text: str, max_chars: int) -> list[str]:
     text = text.strip()
     if len(text) <= max_chars:
         return [text]
-    chunks: list[str] = []
-    current = ""
-    for unit in _split_units(text):
-        if len(current) + len(unit) + 1 > max_chars and current:
-            chunks.append(current)
-            current = ""
-        current = f"{current}\n\n{unit}" if current else unit
-    if current:
-        chunks.append(current)
+    units = _split_units(text)
+    groups = _chunk_groups([len(u) for u in units], max_chars)
+    chunks = ["\n\n".join(units[i] for i in group) for group in groups]
     return chunks or [text]
+
+
+def _chunk_groups(unit_lens: list[int], max_chars: int) -> list[list[int]]:
+    """Группировка индексов юнитов в чанки — та же арифметика, что в _chunk_text.
+
+    Вынесена отдельно, чтобы attachment_shares строил доли ровно по тем же
+    границам чанков, что и _chunk_text (условие переполнения `+1`, аккумуляция
+    длины `+2` на разделитель «\\n\\n» — байт-в-байт исходная логика).
+    """
+    groups: list[list[int]] = []
+    current: list[int] = []
+    cur_len = 0
+    for i, ulen in enumerate(unit_lens):
+        if current and cur_len + ulen + 1 > max_chars:
+            groups.append(current)
+            current = []
+            cur_len = 0
+        cur_len = (cur_len + 2 + ulen) if current else ulen
+        current.append(i)
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _overlaps(spans: list[tuple[int, int]], start: int, end: int) -> bool:
+    return any(s < end and start < e for s, e in spans)
+
+
+def _coverage(spans: list[tuple[int, int]], start: int, end: int) -> float:
+    """Доля диапазона [start, end), покрытая спанами."""
+    if end <= start:
+        return 0.0
+    covered = sum(max(0, min(e, end) - max(s, start)) for s, e in spans)
+    return covered / (end - start)
 
 
 def _split_in_half(text: str) -> list[str]:

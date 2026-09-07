@@ -526,6 +526,7 @@ class VectorStore:
         added: list[str] | None = None,
         *,
         concept_points: list[tuple[str, list[str]]] | None = None,
+        skip_chunks: bool = False,
     ) -> None:
         """Обновляет payload `tags` всех точек документа после правки тегов (Этап 4a).
 
@@ -540,25 +541,28 @@ class VectorStore:
 
         `concept_points` — список (point_id, tags) для concept-точек. Идемпотентно:
         повторный вызов приводит Qdrant к состоянию БД, порядок правок не важен.
+        `skip_chunks=True` — не трогать chunk-точки вовсе (backfill тега «attachment»
+        программно добавляет его ТОЛЬКО в okf_concepts.tags; chunk-слой не участвует).
         Бросает VectorStoreError при недоступности Qdrant — вызывающий решает.
         """
         del removed, added  # дельта больше не нужна — состояние читается из БД
         global_tags = list(new_tags or [])
-        _qdrant_call(
-            self.client.set_payload,
-            collection_name=self.collection,
-            payload={"tags": global_tags},
-            points=qm.FilterSelector(
-                filter=qm.Filter(
-                    must=[
-                        qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id)),
-                        qm.FieldCondition(
-                            key="point_type", match=qm.MatchValue(value=CHUNK_POINT_TYPE)
-                        ),
-                    ]
-                )
-            ),
-        )
+        if not skip_chunks:
+            _qdrant_call(
+                self.client.set_payload,
+                collection_name=self.collection,
+                payload={"tags": global_tags},
+                points=qm.FilterSelector(
+                    filter=qm.Filter(
+                        must=[
+                            qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id)),
+                            qm.FieldCondition(
+                                key="point_type", match=qm.MatchValue(value=CHUNK_POINT_TYPE)
+                            ),
+                        ]
+                    )
+                ),
+            )
 
         groups: dict[tuple[str, ...], list[str]] = {}
         for point_id, tags in concept_points or []:

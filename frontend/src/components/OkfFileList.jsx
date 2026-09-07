@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/i18n/LocaleContext";
+import { PaperclipIcon } from "./icons";
 
 const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
 
@@ -132,32 +133,42 @@ export default function OkfFileList({
           </p>
         ) : (
           <ul className="okf-list">
-            {fileList.map((f) => (
-              <li key={f.filename} className="okf-item-row">
-                <Link
-                  href={`/documents/${docId}/okf/${encodeURIComponent(f.filename)}`}
-                  className="okf-list-item"
-                >
-                  <span className="okf-title">{f.title || f.filename}</span>
-                  <span className="okf-meta">
-                    <span className={`okf-type okf-type-${f.type}`}>{f.type}</span>
-                    {f.tags && f.tags.length > 0 && (
-                      <span className="okf-tags">{t("okf.tags", { tags: f.tags.join(", ") })}</span>
-                    )}
-                    <span className="okf-size">{t("okf.size", { size: (f.size / 1024).toFixed(1) })}</span>
-                  </span>
-                </Link>
-                {f.chunk_index != null && (
+            {fileList.map((f) => {
+              const tags = (f.tags || []).filter((t) => t !== "attachment");
+              const fromAttachment = (f.tags || []).includes("attachment");
+              return (
+                <li key={f.filename} className="okf-item-row">
                   <Link
-                    href={`/documents/${docId}/chunks/${f.chunk_index}`}
-                    className="okf-chunk-badge"
-                    title={t("okf.chunkTitle", { index: f.chunk_index + 1 })}
+                    href={`/documents/${docId}/okf/${encodeURIComponent(f.filename)}`}
+                    className="okf-list-item"
                   >
-                    {t("okf.chunk", { index: f.chunk_index + 1 })}
+                    <span className="okf-title">{f.title || f.filename}</span>
+                    <span className="okf-meta">
+                      <span className={`okf-type okf-type-${f.type}`}>{f.type}</span>
+                      {fromAttachment && (
+                        <span className="okf-attachment-badge" title={t("okf.fromAttachment")}>
+                          <PaperclipIcon size={12} />
+                          {t("okf.fromAttachment")}
+                        </span>
+                      )}
+                      {tags.length > 0 && (
+                        <span className="okf-tags">{t("okf.tags", { tags: tags.join(", ") })}</span>
+                      )}
+                      <span className="okf-size">{t("okf.size", { size: (f.size / 1024).toFixed(1) })}</span>
+                    </span>
                   </Link>
-                )}
-              </li>
-            ))}
+                  {f.chunk_index != null && (
+                    <Link
+                      href={`/documents/${docId}/chunks/${f.chunk_index}`}
+                      className="okf-chunk-badge"
+                      title={t("okf.chunkTitle", { index: f.chunk_index + 1 })}
+                    >
+                      {t("okf.chunk", { index: f.chunk_index + 1 })}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
             <li>
               <Link
                 href={`/documents/${docId}/fulltext`}
@@ -197,15 +208,24 @@ export default function OkfFileList({
                 </Link>
                 {chunkFiles.length > 0 && (
                   <div className="okf-chunk-concepts-list">
-                    {chunkFiles.map((f) => (
-                      <Link
-                        key={f.filename}
-                        href={`/documents/${docId}/okf/${encodeURIComponent(f.filename)}`}
-                        className="okf-chunk-concept"
-                      >
-                        {f.title || f.filename}
-                      </Link>
-                    ))}
+                    {chunkFiles.map((f) => {
+                      const fromAttachment = (f.tags || []).includes("attachment");
+                      return (
+                        <Link
+                          key={f.filename}
+                          href={`/documents/${docId}/okf/${encodeURIComponent(f.filename)}`}
+                          className="okf-chunk-concept"
+                        >
+                          <span className="okf-chunk-concept-title">{f.title || f.filename}</span>
+                          {fromAttachment && (
+                            <span className="okf-attachment-badge" title={t("okf.fromAttachment")}>
+                              <PaperclipIcon size={11} />
+                              {t("okf.fromAttachment")}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
                   </div>
                 )}
               </li>

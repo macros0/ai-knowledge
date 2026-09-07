@@ -82,6 +82,71 @@ class TestChunkText:
         assert any(c.startswith("| a | b |") and c.rstrip().endswith("| 1 | 2 |") for c in chunks)
 
 
+class TestAttachmentShares:
+    """attachment_shares — доля символов вложения в каждом чанке (программный тег)."""
+
+    def _gen(self, max_chars: int):
+        from app.config import Settings
+        from app.services.okf_generator import OKFGenerator
+
+        g = OKFGenerator()
+        g.settings = Settings(data_dir=Path(tempfile.mkdtemp()), okf_max_chunk_chars=max_chars)
+        return g
+
+    def test_no_spans_returns_empty(self):
+        g = self._gen(500)
+        assert g.attachment_shares("любой текст", []) == []
+
+    def test_single_chunk_exact_coverage(self):
+        g = self._gen(10000)
+        text = "AAA\n\nBBB"  # len 8, спаны покрывают "AAA"
+        assert g.attachment_shares(text, [(0, 3)]) == pytest.approx([3 / 8])
+
+    def test_mixed_and_pure_chunks(self):
+        from docparser import Block, markdown_attachment_spans
+
+        blocks = [
+            Block("paragraph", "Д " * 20),                                        # doc-единица
+            Block("attachment", "В " * 5, meta={"from_attachment": True}),        # малое вложение
+            Block("attachment", "БОЛЬШОЕ_ВЛОЖЕНИЕ " * 20, meta={"from_attachment": True}),
+        ]
+        markdown, spans = markdown_attachment_spans(blocks)
+        g = self._gen(60)
+        chunks = g.chunk_text(markdown)
+        shares = g.attachment_shares(markdown, spans)
+        assert len(shares) == len(chunks) == 2
+        assert shares[0] < 0.5, "смешанный doc-доминирующий чанк ниже порога"
+        assert shares[1] == pytest.approx(1.0), "чанк сплошного вложения"
+
+    def test_majority_attachment_chunk_above_threshold(self):
+        from docparser import Block, markdown_attachment_spans
+
+        blocks = [
+            Block("paragraph", "Д " * 3),
+            Block("attachment", "В " * 20, meta={"from_attachment": True}),
+        ]
+        markdown, spans = markdown_attachment_spans(blocks)
+        g = self._gen(100)
+        shares = g.attachment_shares(markdown, spans)
+        assert len(shares) == 1
+        assert shares[0] > 0.7
+
+    def test_unit_split_by_internal_blank_lines(self):
+        from docparser import Block, markdown_attachment_spans
+
+        blocks = [
+            Block("attachment", "AAAA\n\n\nBBBB", meta={"from_attachment": True}),
+            Block("attachment", "C" * 400, meta={"from_attachment": True}),
+        ]
+        markdown, spans = markdown_attachment_spans(blocks)
+        g = self._gen(200)
+        chunks = g.chunk_text(markdown)
+        shares = g.attachment_shares(markdown, spans)
+        assert len(shares) == len(chunks)
+        assert all(0.0 <= s <= 1.0 for s in shares)
+        assert any(s == pytest.approx(1.0) for s in shares)
+
+
 class TestTruncateContent:
     def test_short_text_unchanged(self):
         from app.services.okf_generator import _truncate_content

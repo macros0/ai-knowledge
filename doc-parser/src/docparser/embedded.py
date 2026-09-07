@@ -175,6 +175,13 @@ def marker_block(att: Attachment, note: str = "", parsed: bool = False) -> Block
         meta["parsed"] = True
     if att.saved_path:
         meta["saved_path"] = att.saved_path
+    # Происхождение из вложения (программный тег «attachment» в бэкенде).
+    # from_attachment — булев признак (используется для атрибуции чанков);
+    # attachment_name — basename сохранённого файла (reserved for Stage 2c
+    # provenance tracking, not consumed yet). ТОЛЬКО basename — без абсолютного
+    # пути (см. фикс утечки saved_path 2026-09-07).
+    meta["from_attachment"] = True
+    meta["attachment_name"] = Path(att.saved_path).name if att.saved_path else Path(att.name or "").name
     label = att.name or "вложение"
     text = f"Вложение: {label} ({att.kind})"
     if note:
@@ -236,9 +243,18 @@ def _parse_payload(
     if attachments_dir is not None:
         att.saved_path = str(path)
     try:
-        return parse_document(
+        blocks = parse_document(
             path, filename=name, attachments_dir=attachments_dir, depth=depth, budget=budget
         )
+        # Происхождение из вложения (программный тег «attachment» в бэкенде).
+        # Помечаем ВСЕ блоки распарсенного payload; «не перезаписывать» —
+        # при вложенности побеждает внутренний (самый вложенный) источник.
+        # attachment_name — сохранённое имя (basename, без абсолютного пути;
+        # reserved for Stage 2c provenance tracking, not consumed yet).
+        for b in blocks:
+            b.meta.setdefault("from_attachment", True)
+            b.meta.setdefault("attachment_name", name)
+        return blocks
     finally:
         if attachments_dir is None:
             path.unlink(missing_ok=True)

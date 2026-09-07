@@ -315,6 +315,49 @@ class TestQdrantSync:
         assert dts._sync_qdrant_tags(DOC_ID) is False
 
 
+class TestSkipChunksPayload:
+    """set_document_tags_payload(skip_chunks=True) не трогает chunk-точки (backfill «attachment»)."""
+
+    @staticmethod
+    def _capture(monkeypatch):
+        import app.services.vector_store as vs
+
+        calls = []
+
+        def fake_qdrant_call(func, *args, **kwargs):
+            calls.append((func, kwargs))
+
+        monkeypatch.setattr(vs, "_qdrant_call", fake_qdrant_call)
+        return calls
+
+    def test_skip_chunks_only_sets_concept_points(self, monkeypatch):
+        import app.services.vector_store as vs
+
+        calls = self._capture(monkeypatch)
+        store = vs.VectorStore()
+        store.set_document_tags_payload(
+            "doc-id", ["global"],
+            concept_points=[("p1", ["a", "attachment"]), ("p2", ["b"])],
+            skip_chunks=True,
+        )
+        assert calls, "concept-точки должны синкаться"
+        for _, kwargs in calls:
+            pts = kwargs.get("points")
+            assert isinstance(pts, list), "chunk-фильтр (FilterSelector) не должен вызываться"
+            assert all(isinstance(p, str) for p in pts)
+        ids = sorted(p for _, k in calls for p in k.get("points", []))
+        assert ids == ["p1", "p2"]
+
+    def test_default_still_touches_chunk_points(self, monkeypatch):
+        import app.services.vector_store as vs
+        from qdrant_client.http import models as qm
+
+        calls = self._capture(monkeypatch)
+        store = vs.VectorStore()
+        store.set_document_tags_payload("doc-id", ["global"], concept_points=[("p1", ["a"])])
+        assert isinstance(calls[0][1]["points"], qm.FilterSelector), "без skip_chunks первый вызов — chunk-точки"
+
+
 # ---------- API ----------
 
 ROLE_GROUPS = {

@@ -283,6 +283,24 @@ does not corrupt data.
 
 ## 7. Security change log
 
+### 2026-09-07 — Attachment marker blocks no longer leak absolute local paths
+Change: `blocks_to_markdown` renders the attachment marker's file reference as a portable
+relative path (`attachments/<name>`, mirroring image blocks) instead of the raw absolute
+`saved_path` that parsers place into block metadata. Already-ingested rows were rewritten
+by the one-shot `backend/scripts/fix_attachment_paths.py` in two textual variants:
+`document_chunks.content` / `okf_concepts.content` marker segments
+`(файл: <absolute path>)` and legacy pre-SSOT markdown hyperlinks
+`[label](file:<absolute path>)` became `(файл: attachments/<name>)` / `](attachments/<name>)`
+(only absolute paths were touched; `content_hash` of edited chunks recomputed). The affected
+chunk points were deleted and re-embedded from the DB via `VectorStore.backfill_chunks`
+(single canonical dense/sparse formula — no third copy of the indexing logic). Concept points
+were not re-embedded: the slim payload does not store concept content (it is hydrated from
+`okf_concepts`), and no chunk/DB residue of the fixed rows remained. Reason: a marker-derived
+concept or chunk surfaced the uploader's machine-specific local path
+(`C:\Users\<user>\...\uploads\<doc_id>\attachments\<name>`) to any authenticated viewer via
+`/documents/{id}` content and into the search index — low-risk disclosure of the local
+processing environment and a machine-specific string meaningless outside the originating host.
+
 ### 2026-09-06 — Destructive stop-words clear gate + ui-dictionary 404 semantics
 Change: (1) an empty `replace`-import of stop words (`mode=replace` + `words=[]` with a
 non-empty current set) — effectively a mass destructive clear of a language's set — now

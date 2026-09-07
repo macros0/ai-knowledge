@@ -268,6 +268,7 @@ export default {
   "okf.loadingChunks": "Загрузка чанков…",
   "okf.chunksError": "Ошибка загрузки чанков: {error}",
   "okf.tags": "Теги: {tags}",
+  "okf.fromAttachment": "Из вложения",
   "okf.size": "{size} КБ",
   "okf.chunk": "Чанк {index}",
   "okf.chunkTitle": "Чанк {index}",

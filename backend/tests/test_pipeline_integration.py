@@ -58,7 +58,7 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setattr("app.services.pipeline.get_registry", lambda: reg)
 
     monkeypatch.setattr("app.services.pipeline.parse_document", lambda *a, **k: [])
-    monkeypatch.setattr("app.services.pipeline.blocks_to_markdown", lambda b: "тестовый текст")
+    monkeypatch.setattr("app.services.pipeline.markdown_attachment_spans", lambda b: ("тестовый текст", []))
     monkeypatch.setattr("app.services.pipeline._collect_attachments", lambda b, d: [])
 
     src = tmp_path / "test.doc"
@@ -216,12 +216,12 @@ class TestPipelineNoConcepts:
 
         import app.services.pipeline as pm
 
-        original_btm = pm.blocks_to_markdown
-        pm.blocks_to_markdown = lambda b: markdown
+        original_btm = pm.markdown_attachment_spans
+        pm.markdown_attachment_spans = lambda b: (markdown, [])
         try:
             pipeline._process(doc_id, src, "test.doc", [], resume=False)
         finally:
-            pm.blocks_to_markdown = original_btm
+            pm.markdown_attachment_spans = original_btm
         return pipeline, calls
 
     def test_zero_concepts_indexes_chunks_and_sets_problem(self, isolated_env, monkeypatch):
@@ -377,6 +377,74 @@ class TestPipelineNoConcepts:
         md_files = list((pipeline.settings.okf_dir / doc_id).glob("*.md"))
         assert md_files, "концепт должен быть записан в бандл"
         assert "chunk_index: 0" in md_files[0].read_text(encoding="utf-8")
+
+
+class TestAttachmentTag:
+    """Программный тег «attachment»: чанк с долей вложения ≥ порога → все концепты с тегом."""
+
+    def _run(self, reg, src, doc_id, monkeypatch, markdown, spans):
+        import app.services.pipeline as pm
+
+        monkeypatch.setattr(pm, "markdown_attachment_spans", lambda b: (markdown, spans))
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept(), _concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+        return pipeline
+
+    @staticmethod
+    def _tags(doc_id):
+        from app.db.models import OkfConcept
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            rows = s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).all()
+        return [list(r.tags or []) for r in rows]
+
+    def test_attachment_majority_chunk_tagged(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "attach-majority"
+        reg.create(doc_id, "test.doc", "doc", 100)
+        markdown = "Вложение: " * 300  # целиком вложение (один чанк, доля 1.0)
+        self._run(reg, src, doc_id, monkeypatch, markdown, [(0, len(markdown))])
+        all_tags = self._tags(doc_id)
+        assert all_tags and all("attachment" in tags for tags in all_tags)
+
+    def test_mixed_chunk_below_threshold_not_tagged(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        doc_id = "attach-mixed"
+        reg.create(doc_id, "test.doc", "doc", 100)
+        doc_part = "Содержимое документа " * 100
+        attach_part = "Вложение " * 10
+        markdown = doc_part + "\n\n" + attach_part
+        spans = [(len(doc_part) + 2, len(markdown))]  # только хвост-вложение (~10%)
+        self._run(reg, src, doc_id, monkeypatch, markdown, spans)
+        all_tags = self._tags(doc_id)
+        assert all_tags and all("attachment" not in tags for tags in all_tags)
+
+    def test_disabled_flag_never_tags(self, isolated_env, monkeypatch):
+        import app.services.pipeline as pm
+
+        reg, src = isolated_env
+        doc_id = "attach-disabled"
+        reg.create(doc_id, "test.doc", "doc", 100)
+        markdown = "Вложение: " * 300
+        monkeypatch.setattr(pm, "markdown_attachment_spans", lambda b: (markdown, [(0, len(markdown))]))
+        pipeline = Pipeline()
+        pipeline.settings.okf_attachment_tag_enabled = False
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+        all_tags = self._tags(doc_id)
+        assert all_tags and all("attachment" not in tags for tags in all_tags)
 
 
 class TestEnsureChunks:

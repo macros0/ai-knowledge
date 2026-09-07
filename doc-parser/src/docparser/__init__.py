@@ -7,12 +7,13 @@
     Block                      — единица смыслового блока
     parse_document(path, filename) -> list[Block]
     blocks_to_markdown(blocks) -> str
+    markdown_attachment_spans(blocks) -> (str, list[(start, end)])
     SUPPORTED_EXTENSIONS       — какие расширения поддерживаются
     ParseError                 — базовое исключение парсера
 """
 
 from .blocks import Block
-from .markdown import blocks_to_markdown
+from .markdown import blocks_to_markdown, markdown_attachment_spans
 from .parser import SUPPORTED_EXTENSIONS, ParseError, parse_document
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "ParseError",
     "SUPPORTED_EXTENSIONS",
     "blocks_to_markdown",
+    "markdown_attachment_spans",
     "parse_document",
 ]
 

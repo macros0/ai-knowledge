@@ -31,12 +31,12 @@ from app.services import gen_quality
 from app.services.json_atomic import write_json_atomic
 from app.services.language import detect_language
 from app.services.llm_client import LLMTruncationError, is_fatal_error
-from app.services.okf_generator import OKFGenerator
+from app.services.okf_generator import ATTACHMENT_TAG, OKFGenerator
 from app.services import problem_codes
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
 from app.services.vector_store import VectorStore
-from docparser import SUPPORTED_EXTENSIONS, blocks_to_markdown, parse_document
+from docparser import SUPPORTED_EXTENSIONS, blocks_to_markdown, markdown_attachment_spans, parse_document
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +194,7 @@ class Pipeline:
         doc_root = self.settings.uploads_dir / doc_id
         attachments_dir = doc_root / "attachments"
         blocks = parse_document(filepath, filename, attachments_dir=attachments_dir)
-        markdown = blocks_to_markdown(blocks)
+        markdown, attach_spans = markdown_attachment_spans(blocks)
         attachments = _collect_attachments(blocks, doc_root)
 
         # Автоопределение номера разработки: только на «свежем» проходе и если
@@ -225,6 +225,11 @@ class Pipeline:
 
         chunks = self.okf_generator.chunk_text(markdown)
         total = len(chunks)
+        # Доля символов вложения в каждом чанке (программный тег «attachment»,
+        # post-LLM; [] когда вложений нет — быстрый путь без накладных расходов).
+        attachment_shares: list[float] = []
+        if self.settings.okf_attachment_tag_enabled and attach_spans:
+            attachment_shares = self.okf_generator.attachment_shares(markdown, attach_spans)
         staging = StagingStore(doc_id)
         # Сброс residue телеметрии: события от dev-детекции и пр. не должны
         # приписываться первому чанку.
@@ -297,6 +302,9 @@ class Pipeline:
                 if user_tags and concepts:
                     for concept in concepts:
                         concept.tags = _merge_tags(concept.tags, user_tags)
+                if attachment_shares and concepts and attachment_shares[i] >= self.settings.okf_attachment_tag_threshold:
+                    for concept in concepts:
+                        concept.tags = _merge_tags(concept.tags, [ATTACHMENT_TAG])
                 if concepts is not None:
                     provenance = {
                         "generated_at": datetime.now(timezone.utc).isoformat(),
