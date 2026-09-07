@@ -1,5 +1,7 @@
 # OKF Knowledge Service
 
+**English** · [Русский](README.ru.md) · [Español](README.es.md) · [Deutsch](README.de.md)
+
 Turn project documentation (DOCX / XLSX / PDF) into a searchable knowledge base: an LLM
 splits documents into semantic **concepts** (Open Knowledge Format), a hybrid vector index
 stores them for retrieval, and an interactive chat answers questions **grounded in your
@@ -53,19 +55,19 @@ and always points back to the exact place in the source document.
 Upload (docx / xlsx / pdf)
         │
         ▼
-┌────────────────────────┐   ┌──────────────────────┐   ┌─────────────────────┐
-│ Document parser        │──►│ OKF generator (LLM)  │──►│ PostgreSQL          │
-│ docx/xlsx/pdf, tables, │   │ semantic chunking,   │   │ documents, tags,    │
-│ reviewer comments,     │   │ field-table rows,    │   │ concepts, chunks    │
-│ embedded attachments   │   │ comment threads      │   │ (source of truth)   │
-└────────────────────────┘   └──────────────────────┘   └─────────┬───────────┘
-                                                                  │ embed
-                                                                  ▼
-┌──────────────────┐   ┌───────────────────────────────────────────────────────┐
-│ Chat Web UI      │◄──│ Qdrant: hybrid retrieval                              │
-│ (Next.js)        │   │ concept + chunk dual index,                           │
-└──────────────────┘   │ dense + BM25 + graph, RRF fusion, tag filters        │
-                       └───────────────────────────────────────────────────────┘
+┌────────────────────────┐   ┌─────────────────────┐   ┌───────────────────┐
+│ Document parser        │──►│ OKF generator (LLM) │──►│ PostgreSQL        │
+│ docx/xlsx/pdf, tables, │   │ semantic chunking,  │   │ documents, tags,  │
+│ reviewer comments,     │   │ field-table rows,   │   │ concepts, chunks  │
+│ embedded attachments   │   │ comment threads     │   │ (source of truth) │
+└────────────────────────┘   └─────────────────────┘   └────┬──────────────┘
+                                                            │ embed
+                                                            ▼
+┌─────────────┐   ┌───────────────────────────────────────────────┐
+│ Chat Web UI │◄──│ Qdrant: hybrid retrieval                      │
+│ (Next.js)   │   │ concept + chunk dual index,                   │
+└─────────────┘   │ dense + BM25 + graph, RRF fusion, tag filters │
+                  └───────────────────────────────────────────────┘
 ```
 
 1. **Upload & API** — Python **FastAPI**; `POST /api/documents`, asynchronous processing.
