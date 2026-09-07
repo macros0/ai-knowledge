@@ -7,6 +7,7 @@
 Всё изолировано: settings и реестр перенаправляются в tmp_path.
 """
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -807,3 +808,105 @@ class TestCollectAttachmentsPortability:
         rows = _collect_attachments(blocks, base)
 
         assert rows[0]["saved_path"] == "attachments/image-0.png"
+
+
+class TestConcurrentStart:
+    """Один doc_id — один пайплайн, даже при одновременных запросах.
+
+    Эндпоинты синхронные, FastAPI исполняет их в тредпуле: дабл-клик или ретрай
+    клиента дают два реально параллельных POST. Два пайплайна на один документ
+    делят staging-каталог и manifest и гоняются на финальном атомарном переносе.
+    """
+
+    def _pipeline(self, monkeypatch, started):
+        from app.services.pipeline import Pipeline
+
+        p = Pipeline.__new__(Pipeline)  # без Embedder/VectorStore — нужен только _start
+        p._abort_events = {}
+        p._threads = {}
+        p._start_lock = threading.Lock()
+        p._chunk_locks = {}
+        p._chunk_locks_guard = threading.Lock()
+
+        def fake_run(doc_id, *a, **kw):
+            started.append(doc_id)
+            time.sleep(0.2)  # поток жив, пока конкуренты пытаются стартовать
+            p._abort_events.pop(doc_id, None)
+            p._threads.pop(doc_id, None)
+
+        monkeypatch.setattr(p, "_run", fake_run)
+        return p
+
+    def test_only_one_of_parallel_starts_wins(self, monkeypatch):
+        started: list[str] = []
+        p = self._pipeline(monkeypatch, started)
+        n = 8
+        barrier = threading.Barrier(n)
+        errors: list[Exception] = []
+
+        def attempt():
+            barrier.wait()
+            try:
+                p._start("doc1", "/tmp/x.docx", "x.docx", [], False)
+            except ValueError as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=attempt) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert len(started) == 1, f"запустилось пайплайнов: {len(started)}"
+        assert len(errors) == n - 1, f"отклонено запросов: {len(errors)} из {n - 1}"
+        assert all("уже обрабатывается" in str(e) for e in errors)
+
+
+class TestChunkLockLifetime:
+    """Словарь чанк-локов не должен расти на каждый обработанный документ."""
+
+    def _pipeline(self):
+        from app.services.pipeline import Pipeline
+
+        p = Pipeline.__new__(Pipeline)
+        p._chunk_locks = {}
+        p._chunk_locks_guard = threading.Lock()
+        return p
+
+    def test_entry_removed_after_use(self):
+        p = self._pipeline()
+        with p._chunk_lock("doc1"):
+            assert "doc1" in p._chunk_locks
+        assert p._chunk_locks == {}, "запись лока осталась после выхода"
+
+    def test_entry_removed_after_exception(self):
+        p = self._pipeline()
+        with pytest.raises(RuntimeError):
+            with p._chunk_lock("doc1"):
+                raise RuntimeError("сбой backfill")
+        assert p._chunk_locks == {}
+
+    def test_concurrent_users_share_one_lock(self):
+        """Пока лок кем-то занят, запись жива — иначе второй поток взял бы другой."""
+        p = self._pipeline()
+        inside = threading.Event()
+        release = threading.Event()
+        seen: list = []
+
+        def hold():
+            with p._chunk_lock("doc1"):
+                seen.append(p._chunk_locks["doc1"][0])
+                inside.set()
+                release.wait(timeout=5)
+
+        t = threading.Thread(target=hold)
+        t.start()
+        assert inside.wait(timeout=5)
+        # Второй участник видит ТУ ЖЕ запись, а не создаёт новую.
+        with p._chunk_locks_guard:
+            entry = p._chunk_locks["doc1"]
+        release.set()
+        t.join(timeout=5)
+
+        assert seen and seen[0] is entry[0]
+        assert p._chunk_locks == {}, "после выхода последнего запись должна исчезнуть"

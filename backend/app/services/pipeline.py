@@ -14,6 +14,7 @@ import shutil
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
@@ -63,7 +64,14 @@ class Pipeline:
         self.okf_generator = OKFGenerator()
         self._abort_events: dict[str, threading.Event] = {}
         self._threads: dict[str, threading.Thread] = {}
-        self._chunk_locks: dict[str, threading.Lock] = {}
+        # Проверка «не запущен» и регистрация потока должны быть одной
+        # атомарной операцией: эндпоинты синхронные, FastAPI исполняет их в
+        # тредпуле, поэтому два параллельных POST реально идут параллельно.
+        self._start_lock = threading.Lock()
+        # doc_id -> [лок, число ожидающих]. Счётчик нужен, чтобы удалять запись
+        # по выходу последнего и не растить словарь на каждый документ.
+        self._chunk_locks: dict[str, list] = {}
+        self._chunk_locks_guard = threading.Lock()
 
     def ingest(
         self,
@@ -172,15 +180,21 @@ class Pipeline:
             time.sleep(2)
 
     def _start(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
-        self._ensure_not_running(doc_id)
-        self._abort_events[doc_id] = threading.Event()
         thread = threading.Thread(
             target=self._run,
             args=(doc_id, filepath, filename, user_tags, resume),
             daemon=True,
         )
-        self._threads[doc_id] = thread
-        thread.start()
+        # Всё под одним локом, включая start(): _ensure_not_running смотрит на
+        # is_alive(), а у зарегистрированного, но не запущенного потока он ещё
+        # False — иначе между регистрацией и стартом осталось бы окно, в которое
+        # проходит второй запрос. Два пайплайна на один doc_id — это общий
+        # staging, общий manifest и гонка на финальном атомарном переносе.
+        with self._start_lock:
+            self._ensure_not_running(doc_id)
+            self._abort_events[doc_id] = threading.Event()
+            self._threads[doc_id] = thread
+            thread.start()
 
     def _run(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         try:
@@ -672,6 +686,34 @@ class Pipeline:
         self._physical_cleanup(doc_id)
         return True
 
+    @contextmanager
+    def _chunk_lock(self, doc_id: str):
+        """Лок на ленивый backfill чанков документа, живущий не дольше нужды.
+
+        Раньше словарь только рос — по объекту на каждый документ, обработанный
+        за всё время жизни процесса. Удалять запись в finally прогона (_run,
+        рядом с _threads/_abort_events) нельзя: этот лок берёт и read-путь
+        (ensure_chunks), не связанный с прогоном. Удаление занятого лока
+        привело бы к тому, что следующий вызов создаст ДРУГОЙ объект и два
+        потока зайдут в backfill одновременно — ровно то, от чего лок и стоит.
+        Поэтому запись удаляет тот, кто вышел последним.
+        """
+        with self._chunk_locks_guard:
+            entry = self._chunk_locks.get(doc_id)
+            if entry is None:
+                entry = [threading.Lock(), 0]
+                self._chunk_locks[doc_id] = entry
+            entry[1] += 1
+            lock = entry[0]
+        try:
+            with lock:
+                yield
+        finally:
+            with self._chunk_locks_guard:
+                entry[1] -= 1
+                if entry[1] <= 0 and self._chunk_locks.get(doc_id) is entry:
+                    del self._chunk_locks[doc_id]
+
     def ensure_chunks(self, doc_id: str) -> list[dict]:
         """Возвращает мету чанков документа, при необходимости строя их из исходника.
 
@@ -688,8 +730,7 @@ class Pipeline:
         if staging.exists():
             return _chunks_meta_from_dir(staging.dir, staging.load())
 
-        lock = self._chunk_locks.setdefault(doc_id, threading.Lock())
-        with lock:
+        with self._chunk_lock(doc_id):
             meta = _chunks_meta_from_db(doc_id)
             if meta:
                 return meta
