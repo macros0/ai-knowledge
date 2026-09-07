@@ -283,6 +283,22 @@ does not corrupt data.
 
 ## 7. Security change log
 
+### 2026-09-07 — Local-only logout when the session has no id_token
+Change: `KeycloakOidcProvider.logout` (`backend/app/auth/providers/keycloak_oidc.py`) no
+longer redirects the browser to the Keycloak `end_session_endpoint` when the app session
+carries no `id_token` (a session created before id_token storage, or an IdP that issued
+none). RP-Initiated Logout without `id_token_hint` is honored by Keycloak only while its
+SSO session cookie is live; otherwise the endpoint renders the error page
+"Missing parameters: id_token_hint" and the user is stranded on a Keycloak error instead
+of returning to the app. Now, without `id_token`, the local session is cleared and the
+endpoint redirects to `/` (login gate) — a local-only logout; the request is logged with a
+fact-only message (no session contents). The normal path is unchanged: sessions created
+after the fix always carry `id_token`, and logout performs full RP-Initiated Logout with
+`id_token_hint`. Security nuance of the fallback: if the user's Keycloak SSO session is
+still alive at that moment, it remains (the next sign-in silently re-authenticates via
+SSO) — app access is still revoked immediately, and the full-SSO-logout semantics apply to
+all current sessions.
+
 ### 2026-09-07 — Attachment marker blocks no longer leak absolute local paths
 Change: `blocks_to_markdown` renders the attachment marker's file reference as a portable
 relative path (`attachments/<name>`, mirroring image blocks) instead of the raw absolute
