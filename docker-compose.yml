@@ -40,10 +40,54 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
+  # Одноразовая миграция схемы. Отдельный сервис, а не шаг в CMD бэкенда:
+  # backend масштабируется/перезапускается, а `alembic upgrade head` должен
+  # выполниться ровно один раз и ДО старта приложения — в production init_db()
+  # намеренно не вызывается (схему ведёт Alembic), поэтому без миграций
+  # контейнер поднимется на пустой БД и будет отдавать ошибки.
+  # Сид справочников (docs/PRODUCTION_DEPLOYMENT.md §7.2) автоматически НЕ
+  # выполняется — он клиент-специфичен (--org). Запускать вручную тем же образом:
+  #   docker compose run --rm migrate python scripts/seed_attribute_values.py
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      # UID/GID непривилегированного пользователя в образе. Должны совпадать с
+      # владельцем ./data на хосте — иначе бинд-маунт /data будет недоступен на
+      # запись: docker compose build --build-arg APP_UID=$(id -u) ... либо
+      # APP_UID/APP_GID в .env.
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+    image: okf-backend:local
+    container_name: okf-migrate
+    env_file:
+      - .env
+    environment:
+      - DATA_DIR=/data
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    volumes:
+      - ./data:/data
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    # Разовая задача: перезапускать после успешного выхода не нужно.
+    restart: "no"
+
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      # UID/GID непривилегированного пользователя в образе. Должны совпадать с
+      # владельцем ./data на хосте — иначе бинд-маунт /data будет недоступен на
+      # запись: docker compose build --build-arg APP_UID=$(id -u) ... либо
+      # APP_UID/APP_GID в .env.
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+    image: okf-backend:local
     container_name: okf-backend
     env_file:
       - .env
@@ -60,6 +104,8 @@ services:
     volumes:
       - ./data:/data
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       qdrant:
         condition: service_started
         required: false

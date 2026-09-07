@@ -222,6 +222,23 @@ $env:AUTH_PROVIDER="keycloak_oidc"
 
 ### 7.1 Миграция схемы
 
+При развёртывании через compose миграция — отдельный одноразовый сервис
+`migrate`; он ждёт готовности Postgres, а `backend` стартует только после его
+успешного завершения (`service_completed_successfully`), поэтому отдельного
+шага не требуется:
+
+```bash
+docker compose up -d
+```
+
+Применить миграции вручную (повторно, либо к внешней БД) — тем же образом:
+
+```bash
+docker compose run --rm migrate
+```
+
+Без compose (Python на хосте):
+
 ```bash
 cd backend
 alembic upgrade head
@@ -239,6 +256,16 @@ alembic upgrade head
 версионированную схему ведёт Alembic — в проде применяйте миграции явно.
 
 ### 7.2 Модули разработок (`attribute_values`, ключ `module`) — клиент-специфично
+
+Автоматически не выполняется (значения зависят от клиента), запускается явно.
+В образе бэкенда есть и `scripts/`, и `alembic/`, поэтому команда одна и та же
+внутри контейнера и на хосте:
+
+```bash
+docker compose run --rm migrate python scripts/seed_attribute_values.py
+```
+
+Без compose (Python на хосте, из `backend/`):
 
 ```bash
 python scripts/seed_attribute_values.py
