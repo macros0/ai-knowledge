@@ -8,8 +8,12 @@
 //
 // Таблицу длиннее `maxRows` строк режем: markdown-часть сохраняет шапку +
 // разделитель + первые `maxRows` строк (валидная GFM-таблица), а хвост
-// выносится в отдельную часть `tableRemainder` (моноширинный текст, рендерится
-// по клику — дёшево). Остальной текст остаётся без вырезок.
+// выносится в отдельную часть `tableRemainder`. Хвост нарезается на чанки по
+// `maxRows` строк — каждый чанк с повторённой шапкой/разделителем образует
+// свою маленькую GFM-таблицу. Парсинг многих маленьких таблиц линеен и дёшев
+// (~1 с на 4300 строк) в отличие от суперлинейного парсинга одной гигантской
+// (~20 с), поэтому рендер остаётся настоящей таблицей без зависания. Остальной
+// текст остаётся без вырезок.
 //
 // Функция чистая и детерминированная (одинаковый вход → одинаковый выход на
 // сервере и клиенте) — никаких платформозависимых API. Разбиение по "\n",
@@ -22,6 +26,16 @@ export const LARGE_TABLE_MAX_ROWS = 300;
 const PIPE_RE = /^\s{0,3}\|/;
 const SEP_RE = /^\s{0,3}\|[\s:|-]+\|?\s*$/;
 const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})/;
+
+// Нарезает строки хвоста таблицы на валидные GFM-таблицы по `chunkSize` строк,
+// повторяя шапку и разделитель перед каждым чанком.
+function chunkRows(header, sep, rows, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    chunks.push([header, sep, ...rows.slice(i, i + chunkSize)].join("\n"));
+  }
+  return chunks;
+}
 
 export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
   const text = markdown == null ? "" : String(markdown);
@@ -58,14 +72,19 @@ export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
       return;
     }
     flush();
-    parts.push({ type: "md", text: block.slice(0, 2 + cap).join("\n") });
+    // `tablePreview: true` помечает превью-таблицу: рендерится с ограниченной
+    // высотой (внутренний скролл), чтобы кнопка «показать остальные» оставалась
+    // рядом, а не уходила за тысячи строк превью.
+    parts.push({ type: "md", text: block.slice(0, 2 + cap).join("\n"), tablePreview: true });
+    const header = block[0];
+    const sep = block[1];
     const remainder = block.slice(2 + cap);
     parts.push({
       type: "tableRemainder",
-      rowsText: remainder.join("\n"),
+      chunks: chunkRows(header, sep, remainder, cap),
       shownRows: cap,
       // remainingRows выводится из фактического хвоста — число в кнопке всегда
-      // совпадает с содержимым <pre> по построению.
+      // совпадает с количеством строк в chunks (минус повторённые шапки).
       remainingRows: remainder.length,
       totalRows: cap + remainder.length,
     });

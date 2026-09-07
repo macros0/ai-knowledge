@@ -1030,7 +1030,7 @@ main {
 
 /* ---------- large-table remainder (truncated giant tables) ---------- */
 .table-remainder-block {
-  margin: 12px 0;
+  margin: 0;
 }
 
 .table-remainder-note {
@@ -1039,20 +1039,30 @@ main {
   margin-bottom: 6px;
 }
 
-.table-remainder {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin: 8px 0 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text);
-  overflow: auto;
-  max-height: 60vh;
+/* Прокручиваемая область render-режима: части документа и раскрытые хвосты
+   таблиц рендерятся как natural-height блоки, а скролл — по вертикали у
+   контейнера (иначе .okf-viewer { overflow: hidden } обрезает контент). */
+.content-viewer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.content-viewer-body .okf-markdown {
+  flex: none;
+}
+
+/* Превью гигантской таблицы — ограниченная высота с внутренним скроллом, чтобы
+   кнопка «показать остальные» не уходила за тысячи строк превью. */
+.okf-table-preview {
+  max-height: 40vh;
+}
+
+.table-remainder-block .okf-markdown {
+  margin-top: 12px;
 }
 
 /* ---------- search settings spoiler ---------- */

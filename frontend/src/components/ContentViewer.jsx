@@ -33,37 +33,43 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false })
         </div>
       )}
       {mode === "render" ? (
-        parts.map((part, i) => {
-          if (part.type === "tableRemainder") {
-            const open = !!expanded[i];
-            return (
-              <div key={i} className="table-remainder-block">
-                <div className="table-remainder-note">
-                  {tc("content.tableTruncated", part.totalRows, { shown: part.shownRows })}
+        <div className="content-viewer-body">
+          {parts.map((part, i) => {
+            if (part.type === "tableRemainder") {
+              const open = !!expanded[i];
+              return (
+                <div key={i} className="table-remainder-block">
+                  <div className="table-remainder-note">
+                    {tc("content.tableTruncated", part.totalRows, { shown: part.shownRows })}
+                  </div>
+                  <button
+                    className="view-mode-toggle"
+                    onClick={() =>
+                      setExpanded((prev) => ({ ...prev, [i]: !prev[i] }))
+                    }
+                  >
+                    {open
+                      ? t("content.hideRemainingRows")
+                      : tc("content.showRemainingRows", part.remainingRows)}
+                  </button>
+                  {open &&
+                    part.chunks.map((chunk, j) => (
+                      <MarkdownViewer key={j} text={chunk} docId={docId} />
+                    ))}
                 </div>
-                <button
-                  className="view-mode-toggle"
-                  onClick={() =>
-                    setExpanded((prev) => ({ ...prev, [i]: !prev[i] }))
-                  }
-                >
-                  {open
-                    ? t("content.hideRemainingRows")
-                    : tc("content.showRemainingRows", part.remainingRows)}
-                </button>
-                {open && <pre className="table-remainder">{part.rowsText}</pre>}
-              </div>
+              );
+            }
+            return (
+              <MarkdownViewer
+                key={i}
+                text={part.text}
+                docId={docId}
+                stripFrontmatter={stripFrontmatter && i === 0}
+                className={part.tablePreview ? "okf-markdown okf-table-preview" : undefined}
+              />
             );
-          }
-          return (
-            <MarkdownViewer
-              key={i}
-              text={part.text}
-              docId={docId}
-              stripFrontmatter={stripFrontmatter && i === 0}
-            />
-          );
-        })
+          })}
+        </div>
       ) : (
         <pre className="raw-markdown">{text}</pre>
       )}

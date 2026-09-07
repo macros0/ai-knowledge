@@ -40,6 +40,7 @@ test("гигантская таблица режется до шапки + cap �
 
   // cap-часть содержит шапку, разделитель и ровно первые 3 строки
   const kept = parts[1].text;
+  assert.equal(parts[1].tablePreview, true);
   assert.match(kept, /C0 \| C1 \| C2/);
   assert.match(kept, /--- \| --- \| ---/);
   assert.match(kept, /v00 \| v01 \| v02/);
@@ -51,10 +52,13 @@ test("гигантская таблица режется до шапки + cap �
   assert.equal(rem.shownRows, 3);
   assert.equal(rem.remainingRows, 2);
   assert.equal(rem.totalRows, 5);
-  assert.match(rem.rowsText, /v30 \| v31 \| v32/);
-  assert.match(rem.rowsText, /v40 \| v41 \| v42/);
-  // инвариант: число строк в кнопке == фактическим строкам <pre>
-  assert.equal(rem.remainingRows, rem.rowsText.split("\n").length);
+  assert.equal(rem.chunks.length, 1);
+  assert.match(rem.chunks[0], /C0 \| C1 \| C2/); // повторённая шапка
+  assert.match(rem.chunks[0], /--- \| --- \| ---/);
+  assert.match(rem.chunks[0], /v30 \| v31 \| v32/);
+  assert.match(rem.chunks[0], /v40 \| v41 \| v42/);
+  // инвариант: число строк в кнопке == фактическим строкам хвоста (минус шапки)
+  assert.equal(rem.remainingRows, rem.chunks.reduce((s, c) => s + c.split("\n").length - 2, 0));
   assert.equal(rem.totalRows, rem.shownRows + rem.remainingRows);
 });
 
@@ -67,6 +71,36 @@ test("две гигантские таблицы — чередование md/r
   );
   assert.equal(parts[2].remainingRows, 3); // 6 - 3
   assert.equal(parts[5].remainingRows, 1); // 4 - 3
+});
+
+test("хвост нарезается на чанки по cap с повторённой шапкой и сохраняет порядок", () => {
+  const md = table(2, 7); // 7 данных строк, cap=3 → показано 3, хвост 4 → 2 чанка
+  const parts = splitLargeTables(md, 3);
+  assert.deepEqual(parts.map((p) => p.type), ["md", "tableRemainder"]);
+
+  const rem = parts[1];
+  assert.equal(rem.shownRows, 3);
+  assert.equal(rem.remainingRows, 4);
+  assert.equal(rem.chunks.length, 2);
+
+  // чанк 0: шапка + разделитель + строки v30..v50
+  const c0 = rem.chunks[0].split("\n");
+  assert.equal(c0.length, 5);
+  assert.match(c0[0], /C0 \| C1/);
+  assert.match(c0[1], /--- \| ---/);
+  assert.match(c0[2], /v30/);
+  assert.match(c0[3], /v40/);
+  assert.match(c0[4], /v50/);
+
+  // чанк 1: шапка + разделитель + строка v60 (повтор шапки)
+  const c1 = rem.chunks[1].split("\n");
+  assert.equal(c1.length, 3);
+  assert.match(c1[0], /C0 \| C1/);
+  assert.match(c1[1], /--- \| ---/);
+  assert.match(c1[2], /v60/);
+
+  // инвариант счётчика строк
+  assert.equal(rem.chunks.reduce((s, c) => s + c.split("\n").length - 2, 0), rem.remainingRows);
 });
 
 test("pipe-строки внутри fenced-кода не режутся", () => {
@@ -112,9 +146,9 @@ test("CRLF: те же точки разреза, \\r сохраняется в �
   assert.equal(parts[2].totalRows, 5);
   // хвостовой \r не потерян (байтовое сохранение контента)
   assert.ok(parts[1].text.includes("\r"));
-  assert.ok(parts[2].rowsText.includes("\r"));
-  // число строк в <pre> не зависит от переносов
-  assert.equal(parts[2].rowsText.split("\n").length, 2);
+  assert.ok(parts[2].chunks[0].includes("\r"));
+  // число строк в хвосте не зависит от переносов
+  assert.equal(parts[2].chunks.reduce((s, c) => s + c.split("\n").length - 2, 0), 2);
 });
 
 test("без завершающего перевода строки последняя строка таблицы учитывается", () => {
@@ -126,7 +160,7 @@ test("без завершающего перевода строки послед
   );
   assert.equal(parts[1].totalRows, 5);
   assert.equal(parts[1].remainingRows, 2);
-  assert.match(parts[1].rowsText, /v40 \| v41 \| v42/);
+  assert.match(parts[1].chunks[0], /v40 \| v41 \| v42/);
 });
 
 test("дефолтный кап — константа модуля", () => {
