@@ -1,5 +1,6 @@
 """Тесты для LLMClient: семафор параллельности, ретраи при 429/5xx/сетевых сбоях,
 а также стриминг с idle-timeout (медленная, но живая генерация не рвётся)."""
+import logging
 import threading
 import time
 
@@ -312,6 +313,123 @@ class TestChaosFailureInjection:
 
         after = sem._value
         assert after == before, f"semaphore leaked: {before} -> {after}"
+
+
+class _ControllableStream:
+    """Стрим с наблюдаемыми close() и числом отданных чанков.
+
+    Отдаёт chunks, затем «замолкает» на silence секунд (вызывающий успевает
+    отвалиться по idle-таймауту) и продолжает отдавать бесконечно — так видно,
+    дочитывает ли брошенный поток стрим или прекращает.
+    """
+
+    def __init__(self, chunks, silence: float):
+        self._head = list(chunks)
+        self._silence = silence
+        self.consumed = 0
+        self.closed = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._head:
+            self.consumed += 1
+            return _stream_chunk(self._head.pop(0))
+        if self._silence:
+            time.sleep(self._silence)
+            self._silence = 0.0
+        self.consumed += 1
+        return _stream_chunk("хвост")
+
+    def close(self):
+        self.closed = True
+
+
+def _wait_until(predicate, timeout: float = 3.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return predicate()
+
+
+class TestAbandonedCallCleanup:
+    """Брошенный по таймауту вызов не должен жить вечно.
+
+    Семафор освобождается вместе с LLMTimeoutError (это осознанно — зависший
+    вызов не блокирует последующие), поэтому реальная параллельность зависит от
+    того, как быстро завершится брошенный поток. См. _complete_once.
+    """
+
+    def test_network_timeout_passed_to_completion(self, client, monkeypatch):
+        """litellm получает сетевой таймаут — молчащий провайдер рвёт соединение сам."""
+        captured = {}
+
+        def fake(**kwargs):
+            captured.update(kwargs)
+            return _stream_response("привет")
+
+        monkeypatch.setattr(client.settings, "llm_interactive_stream_idle_timeout_seconds", 30)
+        monkeypatch.setattr(litellm, "completion", fake)
+        client.chat("s", "u")
+
+        assert captured.get("timeout") is not None
+        # Выше прикладного idle: первым срабатывает прикладной таймаут.
+        assert captured["timeout"] > 30
+
+    def test_stream_closed_when_caller_abandons(self, client, monkeypatch):
+        """Отказ ждать закрывает стрим — соединение провайдера освобождается."""
+        stream = _ControllableStream(["первый"], silence=0.6)
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: stream)
+
+        with pytest.raises(LLMTimeoutError):
+            client._complete_once("s", "u")
+
+        _wait_until(lambda: stream.closed, timeout=2.0)
+        assert stream.closed is True, "стрим брошенного вызова не закрыт"
+        # Бесконечный хвост не вычитывается: после отмены цикл прекращается.
+        assert stream.consumed <= 2, f"поток продолжал читать стрим: {stream.consumed} чанков"
+
+    def test_abandoned_thread_finishes(self, client, monkeypatch):
+        """Поток брошенного вызова завершается, а не остаётся жить."""
+        stream = _ControllableStream(["первый"], silence=0.6)
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: stream)
+
+        before = llm_module._inflight_count()
+        with pytest.raises(LLMTimeoutError):
+            client._complete_once("s", "u")
+
+        assert _wait_until(lambda: llm_module._inflight_count() == before), (
+            "брошенный поток не завершился — соединение и квота провайдера заняты"
+        )
+
+    def test_inflight_over_limit_is_logged(self, client, monkeypatch, caplog):
+        """Превышение лимита параллельности живыми вызовами видно в логах."""
+        monkeypatch.setattr(client.settings, "llm_stream_idle_timeout_seconds", 0.05)
+        monkeypatch.setattr(client.settings, "llm_max_total_timeout_seconds", 600)
+        monkeypatch.setattr(client.settings, "llm_max_concurrency", 1)
+        # Стрим зависает надолго: первый поток остаётся живым ко второму вызову.
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _hang_stream())
+
+        with pytest.raises(LLMTimeoutError):
+            client._complete_once("s", "u")
+        with caplog.at_level(logging.WARNING, logger="app.services.llm_client"):
+            with pytest.raises(LLMTimeoutError):
+                client._complete_once("s", "u")
+
+        assert any("Живых LLM-запросов" in r.getMessage() for r in caplog.records), caplog.text
+
+    def test_inflight_returns_to_zero_after_success(self, client, monkeypatch):
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _stream_response("привет"))
+        before = llm_module._inflight_count()
+        client.chat("s", "u")
+        assert _wait_until(lambda: llm_module._inflight_count() == before)
 
 
 class TestParseJson:

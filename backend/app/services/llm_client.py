@@ -81,6 +81,65 @@ def _get_semaphore(interactive: bool = False) -> threading.BoundedSemaphore | No
     return _bulk_semaphore
 
 
+# Сетевой таймаут ставится на эту величину выше прикладного idle: первым должен
+# срабатывать прикладной (его сообщение информативнее, и на нём построены retry),
+# а сетевой — страховка, гарантирующая завершение брошенного потока.
+_HTTP_TIMEOUT_GRACE_SECONDS = 5.0
+
+_inflight = 0
+_inflight_lock = threading.Lock()
+
+
+def _inflight_count() -> int:
+    """Сколько потоков LLM-вызовов реально живо прямо сейчас."""
+    with _inflight_lock:
+        return _inflight
+
+
+def _inflight_enter(limit: int) -> None:
+    """Учитывает начало реального запроса к провайдеру и логирует превышение лимита.
+
+    Слот семафора освобождается вместе с LLMTimeoutError, а поток брошенного
+    вызова ещё какое-то время жив, поэтому фактическая параллельность может
+    превысить LLM_MAX_CONCURRENCY. Без этого счётчика превышение было бы
+    невидимым: в логах — только таймауты, а не занятые соединения и квота.
+    """
+    global _inflight
+    with _inflight_lock:
+        _inflight += 1
+        current = _inflight
+    if limit > 0 and current > limit:
+        logger.warning(
+            "Живых LLM-запросов: %d при лимите параллельности %d — есть брошенные "
+            "по таймауту вызовы, ещё удерживающие соединение и квоту провайдера",
+            current,
+            limit,
+        )
+
+
+def _inflight_leave() -> None:
+    global _inflight
+    with _inflight_lock:
+        _inflight -= 1
+
+
+def _close_stream(stream) -> None:
+    """Best-effort закрытие стрима: освобождает HTTP-соединение провайдера.
+
+    Вызывается и из самого потока (штатное завершение), и снаружи — когда
+    вызывающий отказался ждать по таймауту. Закрытие может не поддерживаться
+    объектом стрима или упасть (генератор занят в другом потоке) — это не
+    ошибка вызова, поэтому глушим до debug.
+    """
+    close = getattr(stream, "close", None)
+    if not callable(close):
+        return
+    try:
+        close()
+    except Exception:
+        logger.debug("Не удалось закрыть стрим LLM", exc_info=True)
+
+
 def _retry_after(exc: Exception) -> float | None:
     value = getattr(exc, "retry_after", None)
     try:
@@ -153,8 +212,19 @@ class LLMClient:
 
         Таймаут считается по тишине между чанками (idle) — любой пришедший чанк
         сбрасывает таймер, поэтому медленная, но живая генерация не рвётся.
-        Семафор удерживается вызывающим потоком (в `chat`), поэтому при
-        LLMTimeoutError слот семафора освобождается вместе с исключением.
+
+        Семафор удерживается вызывающим потоком (в `chat`/`chat_json`) и
+        освобождается вместе с LLMTimeoutError — намеренно: зависший вызов не
+        должен блокировать последующие (инцидент со zombie-воркерами, см.
+        докстринг модуля). Плата за это — брошенный поток, который какое-то
+        время ещё жив. Чтобы он не держал соединение и квоту провайдера
+        неограниченно долго:
+          - запросу выставляется СЕТЕВОЙ таймаут (litellm -> httpx), поэтому
+            молчащий провайдер рвёт соединение сам, без участия приложения;
+          - при отказе ждать выставляется флаг отмены и стрим закрывается
+            принудительно — итерация прекращается на ближайшем чанке;
+          - число реально живых вызовов считается отдельно (_inflight) и
+            логируется при превышении лимита параллельности.
 
         Возвращает (текст, finish_reason): finish_reason="length" означает,
         что генерация прервана лимитом max_tokens — ответ неполон.
@@ -164,13 +234,26 @@ class LLMClient:
             "done": threading.Event(),
             "last_activity": 0.0,
             "finish_reason": None,
+            "stream": None,
         }
         lock = threading.Lock()
+        cancelled = threading.Event()
         idle = max(0.0, idle_timeout if idle_timeout is not None else self.settings.llm_stream_idle_timeout_seconds)
         total = max(0.0, self.settings.llm_max_total_timeout_seconds)
         limit = max_tokens or self.settings.llm_max_tokens
+        concurrency = (
+            self.settings.llm_interactive_concurrency
+            if self.interactive
+            else self.settings.llm_max_concurrency
+        )
+        # httpx трактует скалярный timeout как предел на КАЖДУЮ операцию, в том
+        # числе на чтение следующего байта — то есть это тот же idle, но на
+        # уровне сокета. Держим его выше прикладного, чтобы порядок срабатывания
+        # был предсказуем.
+        http_timeout = min(idle + _HTTP_TIMEOUT_GRACE_SECONDS, total) if idle else total
 
         def run() -> None:
+            stream = None
             try:
                 stream = litellm.completion(
                     model=self.model,
@@ -183,8 +266,13 @@ class LLMClient:
                     temperature=self.settings.llm_temperature,
                     max_tokens=limit,
                     stream=True,
+                    timeout=http_timeout or None,
                 )
+                container["stream"] = stream
                 for chunk in stream:
+                    # Вызывающий уже не ждёт ответ — дочитывать стрим незачем.
+                    if cancelled.is_set():
+                        break
                     with lock:
                         container["last_activity"] = time.monotonic()
                     reason = _stream_finish_reason(chunk)
@@ -198,20 +286,35 @@ class LLMClient:
             except BaseException as exc:
                 container["error"] = exc
             finally:
+                _close_stream(stream)
+                _inflight_leave()
                 container["done"].set()
 
         thread = threading.Thread(target=run, daemon=True, name="llm-call")
-        thread.start()
+        _inflight_enter(concurrency)
+        try:
+            thread.start()
+        except BaseException:
+            _inflight_leave()
+            raise
         start = time.monotonic()
-        while not container["done"].is_set():
-            with lock:
-                last = container["last_activity"] or start
-            now = time.monotonic()
-            if now - last >= idle:
-                raise LLMTimeoutError(f"Нет данных от LLM за {idle:.0f}s")
-            if now - start >= total:
-                raise LLMTimeoutError(f"LLM вызов превысил {total:.0f}s")
-            container["done"].wait(timeout=0.1)
+        try:
+            while not container["done"].is_set():
+                with lock:
+                    last = container["last_activity"] or start
+                now = time.monotonic()
+                if now - last >= idle:
+                    raise LLMTimeoutError(f"Нет данных от LLM за {idle:.0f}s")
+                if now - start >= total:
+                    raise LLMTimeoutError(f"LLM вызов превысил {total:.0f}s")
+                container["done"].wait(timeout=0.1)
+        except LLMTimeoutError:
+            # Отказываемся ждать — но не бросаем поток «как есть»: помечаем
+            # вызов отменённым и закрываем стрим, чтобы соединение и квота
+            # провайдера освободились, а не удерживались до конца генерации.
+            cancelled.set()
+            _close_stream(container.get("stream"))
+            raise
         if "error" in container:
             raise container["error"]
         return "".join(container["parts"]), container["finish_reason"]
