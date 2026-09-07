@@ -58,7 +58,10 @@ def _qdrant_call(func, *args, **kwargs):
     except Exception as exc:
         url = None
         try:
-            from app.config import get_settings
+            # Именно модульный get_settings (импортирован выше): локальный
+            # re-import создавал бы новое имя в области функции и обходил
+            # подмену настроек в тестах — сообщение зависело бы от .env
+            # окружения, а не от настроек вызова.
             url = get_settings().qdrant_url
         except Exception:
             pass
