@@ -49,6 +49,7 @@ from app.services.attachment_store import replace_attachments
 from app.services.bundle import parse_okf_file
 from app.services.chunk_store import replace_chunks
 from app.services.pipeline import _extract_section_title
+from docparser import portable_name
 
 logger = logging.getLogger("backfill_db_store")
 
@@ -203,8 +204,11 @@ def _normalize_attachment(att: dict, bundle_dir: Path) -> tuple[Path, dict] | No
     name = (att or {}).get("name") or ""
     if not old and not name:
         return None
-    file_name = Path(old).name if old else Path(name).name
-    display_name = Path(name).name if name else file_name
+    # portable_name: легаси-бандлы переносятся в том числе с windows-машин, а
+    # Path().name на Linux вернул бы windows-путь целиком — и он осел бы в БД
+    # (инцидент 2026-09-07).
+    file_name = portable_name(old) if old else portable_name(name)
+    display_name = portable_name(name) if name else file_name
     new_saved_path = f"attachments/{file_name}"
     src = bundle_dir / "attachments" / file_name
     row = {

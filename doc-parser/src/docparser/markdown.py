@@ -1,7 +1,6 @@
 """Преобразование блоков в Markdown (используется сервисом и CLI)."""
-from pathlib import Path
-
 from docparser.blocks import Block
+from docparser.paths import portable_name
 
 
 def blocks_to_markdown(blocks: list[Block]) -> str:
@@ -73,7 +72,7 @@ def _render_lines(blocks: list[Block]) -> tuple[list[str], list[tuple[int, int]]
                 # относительное имя attachments/<файл> (как в _image_to_markdown) —
                 # иначе машинно-зависимый локальный путь утекает в контент бандла/
                 # чанка/концепта и в индекс (инцидент 2026-09-07).
-                lines.append(f"*(файл: attachments/{Path(saved).name})*")
+                lines.append(f"*(файл: attachments/{portable_name(saved)})*")
         elif b.type == "image":
             lines.append(_image_to_markdown(b))
         else:
@@ -147,5 +146,5 @@ def _image_to_markdown(b: Block) -> str:
     saved = b.meta.get("saved_path")
     if not saved:
         return f"*(изображение: {caption})*"
-    link = f"attachments/{Path(saved).name}"
+    link = f"attachments/{portable_name(saved)}"
     return f"![{caption}]({link})"

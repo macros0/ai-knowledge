@@ -17,6 +17,7 @@ import olefile
 
 from docparser.blocks import Block
 from docparser.extensions import SUPPORTED_EXTENSIONS
+from docparser.paths import portable_name
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +182,7 @@ def marker_block(att: Attachment, note: str = "", parsed: bool = False) -> Block
     # provenance tracking, not consumed yet). ТОЛЬКО basename — без абсолютного
     # пути (см. фикс утечки saved_path 2026-09-07).
     meta["from_attachment"] = True
-    meta["attachment_name"] = Path(att.saved_path).name if att.saved_path else Path(att.name or "").name
+    meta["attachment_name"] = portable_name(att.saved_path or att.name or "")
     label = att.name or "вложение"
     text = f"Вложение: {label} ({att.kind})"
     if note:

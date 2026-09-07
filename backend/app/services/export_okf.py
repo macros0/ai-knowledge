@@ -18,6 +18,7 @@ from app.models.schemas import Concept
 from app.services.json_atomic import write_json_atomic
 from app.services.okf_generator import OKFGenerator
 from app.services.registry import get_registry
+from docparser import portable_name
 
 
 def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
@@ -67,7 +68,7 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
             saved = a.saved_path or ""
             src = settings.uploads_dir / doc_id / saved
             if src.is_file():
-                dst = att_dir / Path(saved).name
+                dst = att_dir / portable_name(saved)
                 shutil.copy2(src, dst)
                 files.append(f"attachments/{dst.name}")
             attachments_meta.append(
@@ -75,7 +76,10 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
                     "name": a.name,
                     "kind": a.kind,
                     "caption": a.caption,
-                    "saved_path": Path(saved).name if saved else None,
+                    # portable_name, а не Path().name: в легаси-строках БД
+                    # saved_path может быть windows-путём, и на Linux
+                    # Path().name вернул бы его целиком (инцидент 2026-09-07).
+                    "saved_path": portable_name(saved) if saved else None,
                 }
             )
 

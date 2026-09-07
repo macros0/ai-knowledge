@@ -36,7 +36,13 @@ from app.services import problem_codes
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
 from app.services.vector_store import VectorStore
-from docparser import SUPPORTED_EXTENSIONS, blocks_to_markdown, markdown_attachment_spans, parse_document
+from docparser import (
+    SUPPORTED_EXTENSIONS,
+    blocks_to_markdown,
+    markdown_attachment_spans,
+    parse_document,
+    portable_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -857,7 +863,13 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
             try:
                 relative = Path(saved).resolve().relative_to(base).as_posix()
             except ValueError:
-                relative = Path(saved).as_posix()
+                # Путь не под base_dir: бандл с другой машины/ОС (перенос данных,
+                # старый staging). as_posix() здесь НЕ нормализует windows-
+                # разделители — Path берёт флейвор текущей ОС, и в БД лёг бы
+                # абсолютный путь машины-источника, который дальше течёт в
+                # выгрузку бандла (инцидент 2026-09-07). Приводим к тому же
+                # каноническому виду, что и остальные: attachments/<файл>.
+                relative = f"attachments/{portable_name(saved)}"
         parsed = bool(meta.get("parsed"))
         note = meta.get("note", "")
         if parsed:

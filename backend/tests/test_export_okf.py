@@ -58,6 +58,35 @@ class TestExportOkfBundle:
         assert "title: C1" in text
         assert "body1" in text
 
+    def test_windows_saved_path_not_leaked_into_bundle(self, settings):
+        """Легаси-строка БД с windows-путём не должна утечь в выгруженный бандл.
+
+        saved_path мог быть записан на Windows-машине (перенос данных, старый
+        staging). На Linux/macOS Path().name вернул бы такой путь целиком, и
+        абсолютный путь машины-источника оказался бы в бандле (инцидент
+        2026-09-07). Проверка не зависит от ОС, на которой идут тесты.
+        """
+        from app.services.export_okf import export_okf_bundle
+
+        win = "C:\\Users\\alexey\\ai-workspace\\data\\uploads\\doc1\\attachments\\embedded-0.pdf"
+        get_registry().create(DOC_ID, "a.docx", "doc", 10, tags=["t1"])
+        with session_scope() as s:
+            s.add(OkfConcept(doc_id=DOC_ID, slug="c1", title="C1", type="concept", content="body1", tags=["t1"]))
+            s.add(OkfAttachment(doc_id=DOC_ID, name="oleObject2.bin", saved_path=win, kind="pdf"))
+
+        dest = settings.data_dir / "out"
+        export_okf_bundle(DOC_ID, dest)
+
+        leaked = [
+            f.relative_to(dest).as_posix()
+            for f in dest.rglob("*")
+            if f.is_file() and "C:\\Users" in f.read_text(encoding="utf-8", errors="ignore")
+        ]
+        assert leaked == [], f"абсолютный путь утёк в: {leaked}"
+        # И имя файла в метаданных приведено к переносимому виду.
+        text = (dest / "c1.md").read_text(encoding="utf-8")
+        assert "embedded-0.pdf" in text
+
     def test_export_missing_doc_raises(self, settings):
         from app.services.export_okf import export_okf_bundle
 

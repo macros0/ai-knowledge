@@ -776,3 +776,34 @@ class TestPipelineDbStore:
 
         with session_scope() as s:
             assert s.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).count() == 0
+
+
+class TestCollectAttachmentsPortability:
+    """saved_path в БД должен быть переносимым независимо от ОС обработки."""
+
+    def test_windows_path_outside_base_normalized(self):
+        from app.services.pipeline import _collect_attachments
+
+        from docparser import Block
+
+        win = "C:\\Users\\alexey\\ai-workspace\\data\\uploads\\doc1\\attachments\\embedded-0.pdf"
+        blocks = [Block("attachment", "Вложение", meta={"name": "oleObject2.bin", "kind": "pdf", "saved_path": win})]
+
+        rows = _collect_attachments(blocks, Path("/var/lib/okf/uploads/doc1"))
+
+        assert rows[0]["saved_path"] == "attachments/embedded-0.pdf"
+
+    def test_path_under_base_stays_relative(self, tmp_path):
+        from app.services.pipeline import _collect_attachments
+
+        from docparser import Block
+
+        base = tmp_path / "uploads" / "doc1"
+        (base / "attachments").mkdir(parents=True)
+        saved = base / "attachments" / "image-0.png"
+        saved.write_bytes(b"x")
+        blocks = [Block("image", "", meta={"kind": "image", "saved_path": str(saved)})]
+
+        rows = _collect_attachments(blocks, base)
+
+        assert rows[0]["saved_path"] == "attachments/image-0.png"

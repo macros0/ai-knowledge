@@ -91,6 +91,37 @@ class TestBackfillAttachments:
         assert backfill_attachments(doc_id, settings) == 0
 
 
+    def test_windows_saved_path_normalized(self, tmp_path):
+        """Легаси-бандл с windows-путём: в БД не должен попасть путь целиком.
+
+        Path().name берёт флейвор текущей ОС, поэтому на Linux/macOS такой
+        saved_path не резался вовсе и оседал в БД (инцидент 2026-09-07).
+        """
+        from scripts.backfill_db_store import backfill_attachments
+
+        settings = _settings(tmp_path)
+        doc_id = "attdoc000000002"
+        _make_done_doc(doc_id)
+
+        bundle_dir = settings.okf_dir / doc_id
+        (bundle_dir / "attachments").mkdir(parents=True)
+        (bundle_dir / "attachments" / "embedded-0.pdf").write_bytes(b"%PDF-1.4 fake")
+        win = "C:\\Users\\alexey\\ai-workspace\\data\\uploads\\doc1\\attachments\\embedded-0.pdf"
+        (bundle_dir / "c.md").write_text(
+            "---\ntitle: C\ntype: concept\n"
+            "attachments:\n- name: oleObject2.bin\n  kind: pdf\n  caption: ''\n"
+            f"  saved_path: '{win}'\n---\n\n# C\n\nbody\n",
+            encoding="utf-8",
+        )
+
+        assert backfill_attachments(doc_id, settings) == 1
+
+        with session_scope() as s:
+            a = s.query(OkfAttachment).filter(OkfAttachment.doc_id == doc_id).one()
+        assert a.saved_path == "attachments/embedded-0.pdf"
+        assert "C:" not in a.saved_path
+
+
 class TestBackfillGeneratedAt:
     def test_backfill_generated_at_from_frontmatter(self, tmp_path):
         from scripts.backfill_db_store import backfill_generated_at
