@@ -21,10 +21,11 @@ import locales from "../src/i18n/locales/index.js";
 import ru from "../src/i18n/locales/ru.js";
 import en from "../src/i18n/locales/en.js";
 
-test("SUPPORTED_LOCALES содержит ru, en, de", () => {
+test("SUPPORTED_LOCALES содержит ru, en, de, fr", () => {
   assert.ok(SUPPORTED_LOCALES.includes("ru"));
   assert.ok(SUPPORTED_LOCALES.includes("en"));
   assert.ok(SUPPORTED_LOCALES.includes("de"));
+  assert.ok(SUPPORTED_LOCALES.includes("fr"));
 });
 
 test("normalizeLocale клампит невалидные значения в дефолт", () => {
@@ -34,7 +35,9 @@ test("normalizeLocale клампит невалидные значения в д
   assert.equal(normalizeLocale("en_US"), "en");
   assert.equal(normalizeLocale("ru"), "ru");
   assert.equal(normalizeLocale("de"), "de");
-  assert.equal(normalizeLocale("fr"), DEFAULT_LOCALE); // не в манифесте
+  assert.equal(normalizeLocale("fr"), "fr");
+  assert.equal(normalizeLocale("fr-FR"), "fr");
+  assert.equal(normalizeLocale("es"), DEFAULT_LOCALE); // не в манифесте
   assert.equal(normalizeLocale(null), DEFAULT_LOCALE);
   assert.equal(normalizeLocale(""), DEFAULT_LOCALE);
 });
@@ -45,7 +48,9 @@ test("detectLocale: первый поддержанный ≠ дефолт, ин
   assert.equal(detectLocale(["ru"]), DEFAULT_LOCALE);
   assert.equal(detectLocale(["de"]), "de");
   assert.equal(detectLocale(["de-DE", "ru"]), "de");
-  assert.equal(detectLocale(["fr"]), DEFAULT_LOCALE);
+  assert.equal(detectLocale(["fr"]), "fr");
+  assert.equal(detectLocale(["fr-FR", "ru"]), "fr");
+  assert.equal(detectLocale(["es"]), DEFAULT_LOCALE);
   assert.equal(detectLocale([]), DEFAULT_LOCALE);
 });
 
@@ -109,8 +114,9 @@ test("консистентность словарей: ключи каждой �
 test("манифест: каждый словарь соответствует коду локали", () => {
   assert.equal(locales.ru.messages, ru);
   assert.equal(locales.en.messages, en);
-  // de — ЗАГЛУШКА фазы 2: строки ссылаются на en-объект (без файла de.js).
+  // de/fr — ЗАГЛУШКИ фазы 2: строки ссылаются на en-объект (без файла de.js/fr.js).
   assert.equal(locales.de.messages, en);
+  assert.equal(locales.fr.messages, en);
   assert.equal(SUPPORTED_LOCALES.join(","), Object.keys(locales).join(","));
 });
 
@@ -154,7 +160,8 @@ test("resolveServerLocale: cookie имеет приоритет, иначе Acce
   assert.equal(resolveServerLocale(null, "de-DE,de;q=0.8"), "de");
   assert.equal(resolveServerLocale(null, null), DEFAULT_LOCALE);
   assert.equal(resolveServerLocale("en", null), "en");
-  assert.equal(resolveServerLocale("fr", "en-US"), DEFAULT_LOCALE);
+  assert.equal(resolveServerLocale("fr", "en-US"), "fr");
+  assert.equal(resolveServerLocale("es", "en-US"), DEFAULT_LOCALE);
 });
 
 test("полный словарь: plural-формы по модели локали", () => {
@@ -166,8 +173,8 @@ test("полный словарь: plural-формы по модели лока�
       assert.ok(value.many !== undefined, `${key} не имеет формы many`);
     }
   }
-  // en и de (de.messages === en) — CLDR one/other.
-  for (const code of ["en", "de"]) {
+  // en и de/fr (de.messages === en === fr.messages) — CLDR one/other.
+  for (const code of ["en", "de", "fr"]) {
     for (const [key, value] of Object.entries(locales[code].messages)) {
       if (typeof value === "object" && value !== null) {
         assert.ok(value.one !== undefined, `${key} (${code}) не имеет формы one`);

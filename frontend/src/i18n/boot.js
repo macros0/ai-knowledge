@@ -7,7 +7,7 @@
 // STORAGE_KEY/SUPPORTED_LOCALES из core.js.
 function bootstrap() {
   try {
-    var supported = ["ru", "en", "de"];
+    var supported = ["ru", "en", "de", "fr"];
     var stored = null;
     try {
       stored = window.localStorage.getItem("okf.locale");
