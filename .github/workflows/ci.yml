@@ -53,6 +53,13 @@ jobs:
           cache: pip
           cache-dependency-path: doc-parser/pyproject.toml
 
+      # Тестовые PDF пишутся кириллицей, а встроенная в reportlab Vera её не
+      # содержит: без системного шрифта два теста извлечения текста уходят в
+      # skip (на macOS они проходят за счёт системного Arial — расхождение
+      # видно только на Linux).
+      - name: Шрифт с кириллицей для генерации тестовых PDF
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-dejavu-core
+
       - name: Установка зависимостей
         working-directory: doc-parser
         run: pip install -e ".[dev]"

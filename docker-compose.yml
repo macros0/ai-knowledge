@@ -59,7 +59,10 @@ services:
       args:
         APP_UID: ${APP_UID:-1000}
         APP_GID: ${APP_GID:-1000}
-    image: okf-backend:local
+    # Свой тег, хотя образ тот же, что у backend: две службы с ОДНИМ image
+    # означают две цели сборки с одинаковым выходным тегом, а сборщики с bake
+    # такое отвергают. Контекст и Dockerfile совпадают, поэтому вторая сборка
+    # берётся из кеша слоёв и ничего не стоит.
     container_name: okf-migrate
     env_file:
       - .env
