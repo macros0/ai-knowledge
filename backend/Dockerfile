@@ -31,13 +31,17 @@ COPY backend/alembic ./alembic
 COPY backend/scripts ./scripts
 
 # Непривилегированный пользователь: uvicorn не нуждается в root (порт 8000 > 1024).
-# /data создаётся заранее — при запуске с именованным томом (вместо бинд-маунта)
-# Docker наследует владельца этого каталога.
+# USER здесь НЕ ставится: /data приходит бинд-маунтом, владельца которого задаёт
+# хост, и выровнять его может только root. Это делает entrypoint — и тут же
+# сбрасывает привилегии через setpriv, поэтому приложение всё равно работает
+# под app. Оператор может пропустить этот шаг, задав user: в compose.
+COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN groupadd --gid "${APP_GID}" app && \
     useradd --uid "${APP_UID}" --gid "${APP_GID}" --home-dir /app --shell /usr/sbin/nologin app && \
     mkdir -p /data && \
-    chown -R app:app /app /data
-USER app
+    chown -R app:app /app /data && \
+    chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 EXPOSE 8000
 
