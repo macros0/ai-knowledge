@@ -33,7 +33,9 @@ function walk(dir) {
 test("ни один компонент не показывает сырой err.message вместо перевода по коду", () => {
   const offenders = [];
   for (const file of walk(SRC)) {
-    const rel = file.slice(SRC.length + 1);
+    // Ключи ALLOWED и сравнение с "lib/api.js" написаны с posix-разделителем;
+    // на Windows slice даёт бэкслэши — без нормализации исключения не сработали бы.
+    const rel = file.slice(SRC.length + 1).split("\\").join("/");
     if (rel === "lib/api.js" || ALLOWED.has(rel)) continue;
     const text = readFileSync(file, "utf-8");
     text.split("\n").forEach((line, i) => {
