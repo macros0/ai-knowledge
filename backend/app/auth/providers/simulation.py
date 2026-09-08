@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from app.api import errors
 from app.api.errors import ApiError
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 from app.auth.identity import AuthenticatedIdentity
 from app.auth.providers.base import AuthProvider

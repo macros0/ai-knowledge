@@ -7,7 +7,7 @@ from typing import Annotated
 from app.api import errors
 from app.services.errors import DomainError
 from app.api.errors import ApiError
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
@@ -86,7 +86,7 @@ def create_development(
     except DevelopmentNumberExistsError as exc:
         return JSONResponse(
             status_code=409,
-            content={"detail": str(exc), "code": "duplicate_number"},
+            content={"detail": str(exc), "code": errors.DUPLICATE_NUMBER},
         )
     audit.record(
         user,
@@ -132,14 +132,14 @@ def update_development(
     except DevelopmentNumberExistsError as exc:
         return JSONResponse(
             status_code=409,
-            content={"detail": str(exc), "code": "duplicate_number"},
+            content={"detail": str(exc), "code": errors.DUPLICATE_NUMBER},
         )
     except DevelopmentConflictError as exc:
         return JSONResponse(
             status_code=409,
             content={
                 "detail": str(exc),
-                "code": "version_conflict",
+                "code": errors.VERSION_CONFLICT,
                 "current": jsonable_encoder(exc.current),
             },
         )
@@ -176,7 +176,7 @@ def delete_development(
             status_code=409,
             content={
                 "detail": str(exc),
-                "code": "version_conflict",
+                "code": errors.VERSION_CONFLICT,
                 "current": jsonable_encoder(exc.current),
             },
         )

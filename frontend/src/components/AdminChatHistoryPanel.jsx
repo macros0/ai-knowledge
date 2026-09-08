@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getAdminChatThread, listAdminChatSessions, listAdminChatUsers } from "@/lib/api";
+import { friendlyApiError, getAdminChatThread, listAdminChatSessions, listAdminChatUsers } from "@/lib/api";
 import { fmtDate, HistoryMessage } from "./ChatHistoryShared";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -19,7 +19,7 @@ export default function AdminChatHistoryPanel() {
   useEffect(() => {
     listAdminChatUsers()
       .then(setUsers)
-      .catch((err) => showToast(t("chat.usersLoadError", { message: err.message }), { type: "error" }));
+      .catch((err) => showToast(t("chat.usersLoadError", { message: friendlyApiError(err, t) }), { type: "error" }));
   }, [showToast, t]);
 
   const filtered = useMemo(() => {
@@ -39,7 +39,7 @@ export default function AdminChatHistoryPanel() {
         const result = await listAdminChatSessions(u.user_id);
         setSessions(result.sessions);
       } catch (err) {
-        showToast(t("chat.sessionsLoadError", { message: err.message }), { type: "error" });
+        showToast(t("chat.sessionsLoadError", { message: friendlyApiError(err, t) }), { type: "error" });
       } finally {
         setBusy(false);
       }
@@ -52,7 +52,7 @@ export default function AdminChatHistoryPanel() {
     try {
       setActive(await getAdminChatThread(selectedUser.user_id, sid));
     } catch (err) {
-      showToast(t("chat.openThreadError", { message: err.message }), { type: "error" });
+      showToast(t("chat.openThreadError", { message: friendlyApiError(err, t) }), { type: "error" });
     } finally {
       setBusy(false);
     }

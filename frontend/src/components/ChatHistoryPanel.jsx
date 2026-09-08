@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { deleteChatSession, getChatThread, listChatSessions } from "@/lib/api";
+import { deleteChatSession, friendlyApiError, getChatThread, listChatSessions } from "@/lib/api";
 import { fmtDate, HistoryMessage } from "./ChatHistoryShared";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -22,7 +22,7 @@ export default function ChatHistoryPanel() {
   }, []);
 
   useEffect(() => {
-    load().catch((err) => showToast(t("chat.historyLoadError", { message: err.message }), { type: "error" }));
+    load().catch((err) => showToast(t("chat.historyLoadError", { message: friendlyApiError(err, t) }), { type: "error" }));
   }, [load, showToast, t]);
 
   const openThread = async (sid) => {
@@ -30,7 +30,7 @@ export default function ChatHistoryPanel() {
     try {
       setActive(await getChatThread(sid));
     } catch (err) {
-      showToast(t("chat.openThreadError", { message: err.message }), { type: "error" });
+      showToast(t("chat.openThreadError", { message: friendlyApiError(err, t) }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -46,7 +46,7 @@ export default function ChatHistoryPanel() {
       if (active?.session_id === sid) setActive(null);
       load();
     } catch (err) {
-      showToast(t("chat.deleteError", { message: err.message }), { type: "error" });
+      showToast(t("chat.deleteError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   };
 

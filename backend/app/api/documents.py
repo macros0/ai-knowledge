@@ -12,7 +12,7 @@ from typing import Annotated
 from app.api import errors
 from app.services.errors import DomainError
 from app.api.errors import ApiError
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.auth.models import User
@@ -33,7 +33,6 @@ from app.models.schemas import (
     DocumentStatsOut,
     DocumentTagsUpdate,
     OkfFileOut,
-    TrashItemOut,
     TrashListOut,
     UploaderListOut,
 )
@@ -51,7 +50,7 @@ from app.services.development_registry import get_development_registry
 from app.services.document_tag_service import bulk_update_tags, update_document_tags
 from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, QueueOverloadedError, get_job_queue
 from app.services.okf_generator import _build_markdown
-from app.services.pipeline import Pipeline, save_upload_stream
+from app.services.pipeline import get_pipeline, save_upload_stream
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
@@ -61,7 +60,6 @@ from app.services.trash import RestoreConflictError, bulk_restore, restore_docum
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 _registry = get_registry()
-_pipeline = Pipeline()
 _tag_registry = TagRegistry()
 
 # doc_id генерируется как uuid.uuid4().hex[:16] (16 hex-символов нижнего
@@ -113,14 +111,11 @@ def upload_document(
             file.file, file.filename or "unknown", max_bytes=max_bytes
         )
     except DomainError as exc:
-        raise errors.domain_error(exc, 413) from exc
+        # Статус выбирается по коду, а не по подстроке русского detail: текст —
+        # диагностика и может меняться, код — контракт (services/pipeline.py).
+        status = 413 if exc.code == errors.FILE_TOO_LARGE else 400
+        raise errors.domain_error(exc, status) from exc
     except ValueError as exc:
-        if "максимальный размер" in str(exc):
-            raise ApiError(
-                status_code=413,
-                code=errors.FILE_TOO_LARGE,
-                detail=str(exc),
-            ) from exc
         raise ApiError(
             status_code=400,
             code=errors.INVALID_REQUEST,
@@ -146,7 +141,7 @@ def upload_document(
                 status_code=409,
                 content={
                     "detail": f"Файл уже загружен как «{existing['filename']}»",
-                    "code": "duplicate",
+                    "code": errors.DUPLICATE,
                     "duplicate": existing,
                 },
             )
@@ -193,7 +188,7 @@ def upload_document(
         if detection.confidence is not None:
             attach_development(doc_id, detection)
             doc = _registry.get(doc_id) or doc
-    _pipeline.ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
+    get_pipeline().ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
     audit_value = {"filename": doc.get("filename"), "size": size}
     if bound_development_id is not None:
         audit_value["development_id"] = bound_development_id
@@ -520,7 +515,7 @@ def delete_document(
             code=errors.ALREADY_IN_TRASH,
             detail="Документ уже находится в корзине",
         )
-    _pipeline.soft_delete(doc_id, deleted_by=user.username)
+    get_pipeline().soft_delete(doc_id, deleted_by=user.username)
     audit.record(
         user,
         audit.DOCUMENT_DELETE,
@@ -558,7 +553,7 @@ def restore_document_endpoint(
             status_code=409,
             content={
                 "detail": str(exc),
-                "code": "duplicate",
+                "code": errors.DUPLICATE,
                 "duplicates": exc.duplicates,
             },
         )
@@ -617,11 +612,11 @@ def resume_document(
     if doc.get("status") not in ("paused", "failed"):
         raise ApiError(
             status_code=400,
-            code=errors.INVALID_REQUEST,
+            code=errors.NOT_RESUMABLE,
             detail="Документ не требует возобновления",
         )
     try:
-        _pipeline.resume(doc_id)
+        get_pipeline().resume(doc_id)
     except DomainError as exc:
         raise errors.domain_error(exc, 400) from exc
     except ValueError as exc:
@@ -664,7 +659,7 @@ def regenerate_document(
             detail="Документ уже обрабатывается",
         )
     try:
-        _pipeline.regenerate(doc_id)
+        get_pipeline().regenerate(doc_id)
     except DomainError as exc:
         raise errors.domain_error(exc, 400) from exc
     except ValueError as exc:
@@ -983,7 +978,7 @@ def list_chunks(doc_id: str):
             detail="Документ не найден",
         )
     try:
-        meta = _pipeline.ensure_chunks(doc_id)
+        meta = get_pipeline().ensure_chunks(doc_id)
     except DomainError as exc:
         raise errors.domain_error(exc, 400) from exc
     except ValueError as exc:
@@ -1034,7 +1029,7 @@ def get_document_fulltext(doc_id: str):
     parts = _fulltext_from_db(doc_id)
     if not parts:
         try:
-            _pipeline.ensure_chunks(doc_id)
+            get_pipeline().ensure_chunks(doc_id)
         except DomainError as exc:
             raise errors.domain_error(exc, 400) from exc
         except ValueError as exc:
@@ -1102,7 +1097,7 @@ def _document_head(doc_id: str, doc: dict) -> str:
     content = _chunk_content_from_db(doc_id, 0)
     if content is None:
         try:
-            _pipeline.ensure_chunks(doc_id)
+            get_pipeline().ensure_chunks(doc_id)
         except Exception:
             pass
         content = _chunk_content_from_db(doc_id, 0)

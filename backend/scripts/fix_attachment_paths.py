@@ -38,7 +38,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.config import get_settings
 from app.db.models import DocumentChunk, OkfConcept
 from app.db.session import session_scope
 from qdrant_client.http import models as qm
@@ -133,7 +132,6 @@ def fix_rows(dry_run: bool) -> dict:
 
 def resync_chunks(affected: list[tuple[str, int]]) -> int:
     """Удаляет затронутые chunk-точки и пере-эмбеддит их из БД через backfill_chunks."""
-    settings = get_settings()
     vs = VectorStore()
     vs.ensure_collection()
     ids = [chunk_point_id(doc_id, ci) for doc_id, ci in affected]

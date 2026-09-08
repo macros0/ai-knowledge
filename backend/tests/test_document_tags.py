@@ -266,7 +266,6 @@ class TestBulkUpdateTags:
 
 class TestQdrantSync:
     def test_sync_reads_db_and_derives_concept_points(self, settings, monkeypatch):
-        import uuid as uuid_mod
 
         from app.db.models import OkfConcept
         from app.db.session import session_scope

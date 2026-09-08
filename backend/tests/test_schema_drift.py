@@ -18,9 +18,16 @@ from sqlalchemy import create_engine
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
-# Расхождения, которые ломают production. Различия типов/nullable в выборку не
-# берём: SQLite репортит их и для совпадающих схем (String vs VARCHAR и т.п.).
-STRUCTURAL = ("add_table", "remove_table", "add_column", "remove_column")
+# Расхождения, не зависящие от диалекта. Различия типов не берём: SQLite
+# репортит их и для совпадающих схем (String vs VARCHAR и т.п.), а вот
+# состав таблиц/колонок и nullability он отражает точно.
+STRUCTURAL = (
+    "add_table",
+    "remove_table",
+    "add_column",
+    "remove_column",
+    "modify_nullable",
+)
 
 
 @pytest.fixture
@@ -58,7 +65,9 @@ def test_migrations_match_models(migrated_db_url):
     finally:
         engine.dispose()
 
-    drift = [d for d in diffs if isinstance(d, tuple) and d and d[0] in STRUCTURAL]
+    # modify_* приходят вложенным списком, add/remove_* — голым кортежем.
+    flat = [x for d in diffs for x in (d if isinstance(d, list) else [d])]
+    drift = [d for d in flat if isinstance(d, tuple) and d and d[0] in STRUCTURAL]
     assert not drift, (
         "Модели разъехались с миграциями — в production схему ведёт только "
         f"Alembic, и этих объектов там не будет: {drift}"

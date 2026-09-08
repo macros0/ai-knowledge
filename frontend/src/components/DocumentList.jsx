@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { deleteDocument, getDocumentStats, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, updateDocumentTags } from "@/lib/api";
+import { deleteDocument, friendlyApiError, getDocumentStats, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, updateDocumentTags } from "@/lib/api";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
@@ -216,7 +216,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       // Бэкенд недоступен/ошибка сети: не оставляем список «молча пустым» —
       // показываем ошибку и не ломаем поллинг (следующий эффект перезапустит load).
       if (seq !== loadSeq.current || !mounted.current) return;
-      showToast(t("docs.loadError", { message: err.message }), { type: "error" });
+      showToast(t("docs.loadError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, search, sortKey, page, groupBy, t]);
 
@@ -312,7 +312,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     try {
       await deleteDocument(doc.id);
     } catch (err) {
-      showToast(t("docs.deleteError", { message: err.message }), { type: "error" });
+      showToast(t("docs.deleteError", { message: friendlyApiError(err, t) }), { type: "error" });
       load();
       return;
     }
@@ -332,7 +332,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     try {
       await resumeDocument(doc.id);
     } catch (err) {
-      showToast(t("docs.resumeError", { message: err.message }), { type: "error" });
+      showToast(t("docs.resumeError", { message: friendlyApiError(err, t) }), { type: "error" });
       load();
       return;
     }
@@ -353,7 +353,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       await regenerateDocument(doc.id);
       load();
     } catch (err) {
-      showToast(t("docs.regenerateError", { message: err.message }), { type: "error" });
+      showToast(t("docs.regenerateError", { message: friendlyApiError(err, t) }), { type: "error" });
     } finally {
       setRegenerating((s) => ({ ...s, [doc.id]: false }));
     }
@@ -369,7 +369,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       load();
       loadStats();
     } catch (err) {
-      showToast(t("docs.changeDevError", { message: err.message }), { type: "error" });
+      showToast(t("docs.changeDevError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   };
 
@@ -382,7 +382,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       bumpTagVersion();
       load();
     } catch (err) {
-      showToast(t("docs.changeTagsError", { message: err.message }), { type: "error" });
+      showToast(t("docs.changeTagsError", { message: friendlyApiError(err, t) }), { type: "error" });
       load();
     }
   };
@@ -467,7 +467,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         );
       }
     } catch (err) {
-      showToast(t("docs.selectError", { message: err.message }), { type: "error" });
+      showToast(t("docs.selectError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   };
 

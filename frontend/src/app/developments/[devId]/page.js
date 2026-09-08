@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { getDevelopment, listDevelopmentDocuments } from "@/lib/api";
+import { friendlyApiError, getDevelopment, listDevelopmentDocuments } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 
@@ -49,7 +49,7 @@ export default function DevelopmentCardPage() {
       setDocs(result.documents);
       setTotal(result.total);
     } catch (err) {
-      showToast(t("dev.card.loadError", { message: err.message }), { type: "error" });
+      showToast(t("dev.card.loadError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   }, [devId, search, sortKey, page, showToast, t]);
 

@@ -10,6 +10,7 @@ from app.db.session import session_scope
 from app.main import create_app
 from app.services import audit, trash
 from app.services.audit import AuditService
+from app.services.pipeline import get_pipeline
 from app.services.registry import DocumentRegistry
 
 ROLE_GROUPS = {
@@ -166,12 +167,13 @@ class TestPurge:
 
         removed = []
 
-        class _FakePipeline:
-            def remove_if_deleted(self, doc_id):
-                removed.append(doc_id)
-                return True
+        def _fake_remove_if_deleted(doc_id):
+            removed.append(doc_id)
+            return True
 
-        monkeypatch.setattr("app.services.pipeline.Pipeline", _FakePipeline)
+        # Патчим общий инстанс, а не класс: purge берёт пайплайн через
+        # get_pipeline() (services/pipeline.py), подмена класса до него не дойдёт.
+        monkeypatch.setattr(get_pipeline(), "remove_if_deleted", _fake_remove_if_deleted)
 
         n = trash.purge_expired_documents()
         assert n == 1
@@ -190,12 +192,13 @@ class TestPurge:
 
         removed = []
 
-        class _FakePipeline:
-            def remove_if_deleted(self, doc_id):
-                removed.append(doc_id)
-                return True
+        def _fake_remove_if_deleted(doc_id):
+            removed.append(doc_id)
+            return True
 
-        monkeypatch.setattr("app.services.pipeline.Pipeline", _FakePipeline)
+        # Патчим общий инстанс, а не класс: purge берёт пайплайн через
+        # get_pipeline() (services/pipeline.py), подмена класса до него не дойдёт.
+        monkeypatch.setattr(get_pipeline(), "remove_if_deleted", _fake_remove_if_deleted)
 
         assert trash.purge_expired_documents() == 0
         assert removed == []
@@ -327,7 +330,7 @@ class TestUploadWithDedup:
         monkeypatch.setattr(
             docs, "save_upload_stream", lambda *a, **k: ("0123456789abcdef", dest, 8)
         )
-        monkeypatch.setattr(docs._pipeline, "ingest", lambda *a, **k: None)
+        monkeypatch.setattr(docs.get_pipeline(), "ingest", lambda *a, **k: None)
         return client, dest
 
     def test_upload_active_twin_409_and_cleanup(self, tmp_path, monkeypatch):

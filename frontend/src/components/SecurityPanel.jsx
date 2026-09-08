@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { blockUser, listAudit, listAuditActionTypes, listAuditUsers, listBlocks, unblockUser } from "@/lib/api";
+import { blockUser, friendlyApiError, listAudit, listAuditActionTypes, listAuditUsers, listBlocks, unblockUser } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 
@@ -82,9 +82,11 @@ export default function SecurityPanel() {
         setBlocks(blk);
       }
     } catch (err) {
-      if (mounted.current) showToast(err.message, { type: "error" });
+      if (mounted.current) showToast(friendlyApiError(err, t), { type: "error" });
     }
-  }, [filters, showToast]);
+    // t в зависимостях: текст ошибки берётся по коду из словаря, и после
+    // переключения языка мемоизированный load не должен держать старый t.
+  }, [filters, showToast, t]);
 
   useEffect(() => {
     mounted.current = true;
@@ -125,7 +127,7 @@ export default function SecurityPanel() {
       setBlockForm({ external_id: "", reason: "", expires_at: "" });
       await load();
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(friendlyApiError(err, t), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -137,7 +139,7 @@ export default function SecurityPanel() {
       showToast(t("security.userUnblocked"), { type: "success" });
       await load();
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(friendlyApiError(err, t), { type: "error" });
     }
   };
 

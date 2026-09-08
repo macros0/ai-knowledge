@@ -26,6 +26,7 @@ from app.api import (
     tags,
     users,
 )
+from app import error_codes
 from app.api.errors import ApiError
 from app.api.settings import router as settings_router
 from app.auth.api import router as auth_router
@@ -166,16 +167,28 @@ def create_app() -> FastAPI:
     get_store().ensure()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(CatchAllErrorsMiddleware)
+    # Кросс-доменный режим включается САМИМ наличием CORS-allow-list: пустой
+    # (дефолт) означает same-origin через Next.js rewrites, и тогда cookie
+    # остаётся SameSite=Lax — самый строгий вариант, при котором всё работает.
+    cross_origin = bool(settings.cors_allowed_origins)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.app_secret_key,
         max_age=settings.auth_session_ttl_seconds,
-        same_site="lax",
+        # SameSite=Lax браузер НЕ отправляет на кросс-сайтовый XHR, поэтому при
+        # настроенном allow-list сессия жила бы только на бумаге. None требует
+        # Secure — это гарантирует валидатор cors_allowed_origins в config.py.
+        same_site="none" if cross_origin else "lax",
         https_only=settings.auth_session_https_only,
     )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,
+        # Без allow_credentials браузер отбрасывает Set-Cookie и не шлёт cookie
+        # обратно: allow-list выглядел бы рабочим, а сессия не заводилась бы.
+        # Включаем только для явного списка — с '*' спецификация CORS это
+        # сочетание запрещает (и config.py такой список не пропустит).
+        allow_credentials=cross_origin,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -224,7 +237,7 @@ def create_app() -> FastAPI:
             status_code=503,
             content={
                 "detail": exc.user_message,
-                "code": "dependency_unavailable",
+                "code": error_codes.DEPENDENCY_UNAVAILABLE,
                 "service": exc.service,
             },
         )

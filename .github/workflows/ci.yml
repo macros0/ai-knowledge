@@ -35,11 +35,50 @@ jobs:
           pip install -e ./doc-parser
           pip install -r backend/requirements.txt
 
-      - name: Тесты
+      - name: Линт (ruff)
+        working-directory: backend
+        # Набор правил — в backend/pyproject.toml, а не здесь: локальный
+        # `ruff check` обязан совпадать с гейтом.
+        run: |
+          pip install ruff
+          ruff check .
+
+      - name: Тесты + покрытие
         working-directory: backend
         # Без .env и без внешних сервисов: тесты обязаны быть герметичными
         # (SQLite во временном каталоге, Qdrant/LLM замоканы).
-        run: python -m pytest -q
+        # Порог — чуть ниже текущего значения: гейт ловит крупный непокрытый
+        # кусок, а не колеблется на единицах строк.
+        run: |
+          pip install pytest-cov
+          python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
+
+  audit:
+    name: зависимости (известные уязвимости)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Оба аудита сейчас чисты, поэтому блокирующие. Новая уязвимость должна
+      # приходить как красный CI, а не обнаруживаться на проде.
+      - name: pip-audit (backend)
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt --progress-spinner off
+
+      - name: npm audit (frontend)
+        working-directory: frontend
+        run: npm audit --audit-level=high
 
   doc-parser:
     name: doc-parser (pytest)
@@ -87,6 +126,13 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Линт (eslint)
+        working-directory: frontend
+        # Правила — в frontend/eslint.config.mjs. Три правила react-hooks там
+        # понижены до warning: они срабатывают на коде, написанном до линтера,
+        # и правятся отдельным проходом (см. комментарий в конфиге).
+        run: npm run lint
+
       - name: Тесты
         working-directory: frontend
         run: npm test
@@ -127,6 +173,16 @@ jobs:
           docker compose --profile local-postgres run --rm migrate
           # Повторный прогон обязан быть no-op: миграции идемпотентны.
           docker compose --profile local-postgres run --rm migrate
+
+      # Схема из миграций обязана совпасть с моделями. Именно этой проверки не
+      # хватало, когда documents.problem и шесть NOT NULL-колонок разъехались:
+      # миграции накатывались, но никто не сверял результат с models.py.
+      # Здесь, а не в pytest-джобе: против НАСТОЯЩЕГО Postgres. На SQLite
+      # `alembic check` даёт ложный add_fk (диалект не отражает внешние ключи),
+      # поэтому герметичный тест tests/test_schema_drift.py сверяет только
+      # диалект-независимые расхождения, а полную сверку делаем здесь.
+      - name: Схема миграций совпадает с моделями (alembic check)
+        run: docker compose --profile local-postgres run --rm migrate alembic check
 
       - name: Скрипты предзаполнения доступны в образе
         run: docker compose --profile local-postgres run --rm migrate python scripts/seed_attribute_values.py

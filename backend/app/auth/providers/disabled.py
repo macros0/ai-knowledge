@@ -28,7 +28,6 @@ class DisabledProvider(AuthProvider):
         return True
 
     async def start_login(self, request: "Request"):
-        from fastapi import HTTPException
 
         raise ApiError(
             status_code=400,
@@ -37,7 +36,6 @@ class DisabledProvider(AuthProvider):
         )
 
     async def handle_callback(self, request: "Request") -> "AuthenticatedIdentity":
-        from fastapi import HTTPException
 
         raise ApiError(
             status_code=400,

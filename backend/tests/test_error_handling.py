@@ -4,7 +4,6 @@
   - DependencyUnavailableError -> 503 JSON с code/service
   - /health возвращает статус зависимостей
 """
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient

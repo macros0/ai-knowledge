@@ -6,10 +6,8 @@ upsert — записывают вызовы. Реальная БД (SQLite per-
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 import httpx
-import pytest
 
 from app.config import Settings
 from app.services.sparse import to_sparse_vector
@@ -147,7 +145,6 @@ class TestBackfillSparse:
         assert len(fake.updated_vectors) == 1
 
     def test_skips_points_not_in_db(self, tmp_path, monkeypatch):
-        settings = Settings(_env_file=None, data_dir=tmp_path)
         _create_db_concept()  # концепт в БД есть, но точки в Qdrant нет
         vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec("orphan-point", vector={})])
 

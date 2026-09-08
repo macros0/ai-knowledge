@@ -38,6 +38,7 @@ SELF_APPROVAL = "self_approval"
 ALREADY_PROCESSING = "already_processing"
 ALREADY_IN_TRASH = "already_in_trash"
 DUPLICATE = "duplicate"
+DUPLICATE_NUMBER = "duplicate_number"
 VERSION_CONFLICT = "version_conflict"
 QUEUE_OVERLOADED = "queue_overloaded"
 

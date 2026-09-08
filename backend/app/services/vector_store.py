@@ -16,6 +16,7 @@ Tags — жёсткий pre-filter для dense и bm25 (MatchAny).
 import logging
 import time
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 
 from qdrant_client import QdrantClient
@@ -79,6 +80,11 @@ SEARCH_MODES = ("dense", "bm25", "hybrid")
 # с запасом под серверный лимит Qdrant max_request_size_mb=32 (инцидент
 # 03.09.2026: монолитный upsert 5667 концептов → 400 от actix по Content-Length).
 UPSERT_BATCH_SIZE = 256
+
+# Размер страницы scroll. Единый для всех обходов коллекции: backfill'ы просят
+# либо ключ payload, либо вообще ничего, поэтому страница дешёвая и подбирать
+# её под конкретный обход незачем.
+SCROLL_PAGE_SIZE = 1000
 
 CONCEPT_POINT_TYPE = "concept"
 CHUNK_POINT_TYPE = "chunk"
@@ -308,7 +314,6 @@ class VectorStore:
                         )
                     break
                 except VectorStoreError as exc:
-                    last_exc = exc
                     cause = exc.__cause__
                     status = getattr(cause, "status_code", None) if isinstance(cause, UnexpectedResponse) else None
                     # 4xx-валидация (400/422 — дефект данных) не ретраится;
@@ -763,7 +768,13 @@ class VectorStore:
             return qm.Filter(must_not=must_not)
         return qm.Filter(must=[_tag_match_filter(tags)], must_not=must_not)
 
-    def _scroll_points(self, *, with_payload, with_vectors, scroll_filter=None):
+    def _scroll_points(
+        self,
+        *,
+        with_payload: bool | list[str],
+        with_vectors: bool,
+        scroll_filter: qm.Filter | None = None,
+    ) -> Iterator[qm.Record]:
         """Итерирует точки коллекции батчами (scroll с пагинацией).
 
         with_payload принимает и список ключей — тогда Qdrant отдаёт только их,
@@ -774,7 +785,7 @@ class VectorStore:
         while True:
             batch, next_offset = self.client.scroll(
                 collection_name=self.collection,
-                limit=1000,
+                limit=SCROLL_PAGE_SIZE,
                 with_payload=with_payload,
                 with_vectors=with_vectors,
                 offset=next_offset,
@@ -991,13 +1002,17 @@ class VectorStore:
             )
         return indexed_points
 
-    def backfill_relations(self, batch_size: int = 500) -> int:
+    def backfill_relations(self) -> int:
         """Нормализует relations в payload концептов из PostgreSQL (okf_concepts).
 
         Этап 2b: источник истины — БД (relations уже нормализованы при финализации).
         Сравнивает с текущим значением в Qdrant — пропускает неизменившиеся точки.
         Группирует изменившиеся по значению relations и обновляет одним set_payload
         на группу (вместо per-point вызовов). Идемпотентно.
+
+        Без batch_size: после перехода на _scroll_points читает страницами по
+        SCROLL_PAGE_SIZE, а пишет группами по значению relations — параметр
+        остался от прежней реализации и ни на что не влиял.
         """
         from sqlalchemy import select
 
@@ -1011,7 +1026,6 @@ class VectorStore:
                 .where(Document.deleted_at.is_(None))
             ).all()
 
-        okf_dir = self.settings.okf_dir
         db_relations: dict[str, list[str]] = {}
         for doc_id, slug, relations in rows:
             point_id = concept_point_id(doc_id, slug)

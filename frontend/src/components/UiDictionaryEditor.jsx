@@ -89,16 +89,15 @@ export default function UiDictionaryEditor({ locale }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
+  // Ошибка разбора не заворачивается в русский литерал: вызывающий и так
+  // показывает её через admin.uictl.invalidJson, а двойная обёртка приводила
+  // англоязычного пользователя к «Invalid JSON: Некорректный JSON: …».
   const parseJson = () => {
-    try {
-      const parsed = JSON.parse(textRef.current || "{}");
-      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error("JSON должен быть объектом {ключ: значение}");
-      }
-      return parsed;
-    } catch (err) {
-      throw new Error(`Некорректный JSON: ${err.message}`);
+    const parsed = JSON.parse(textRef.current || "{}");
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(t("admin.uictl.notAnObject"));
     }
+    return parsed;
   };
 
   const onPreview = () => {

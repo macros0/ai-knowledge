@@ -137,7 +137,6 @@ class TestRebuildTags:
         assert counts == {"proxmox": 2, "network": 1, "vlan": 1}
 
     def test_save_bundle_metadata_has_global_tags(self, tmp_path):
-        from app.models.schemas import Concept
         from app.services.okf_generator import OKFGenerator, _normalize
 
         class FakeLLM:

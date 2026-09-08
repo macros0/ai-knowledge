@@ -5,6 +5,7 @@ import {
   bulkReviewTags,
   cleanupTags,
   deleteTag,
+  friendlyApiError,
   listTags,
   updateTagTranslation,
 } from "@/lib/api";
@@ -73,7 +74,7 @@ export default function TagManagerModal({ onClose }) {
       showToast(t("tags.manager.deleted", { name }), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(t("tags.manager.deleteError", { message: err.message }), { type: "error" });
+      showToast(t("tags.manager.deleteError", { message: friendlyApiError(err, t) }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -86,7 +87,7 @@ export default function TagManagerModal({ onClose }) {
       showToast(t("tags.manager.cleaned", { count: res?.total ?? 0 }), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(t("tags.manager.cleanupError", { message: err.message }), { type: "error" });
+      showToast(t("tags.manager.cleanupError", { message: friendlyApiError(err, t) }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -99,7 +100,7 @@ export default function TagManagerModal({ onClose }) {
       showToast(t("tags.manager.reviewed"), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(t("tags.manager.translationError", { message: err.message }), {
+      showToast(t("tags.manager.translationError", { message: friendlyApiError(err, t) }), {
         type: "error",
       });
     } finally {
@@ -117,7 +118,7 @@ export default function TagManagerModal({ onClose }) {
       showToast(t("tags.manager.translationSaved"), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(t("tags.manager.translationError", { message: err.message }), {
+      showToast(t("tags.manager.translationError", { message: friendlyApiError(err, t) }), {
         type: "error",
       });
     } finally {

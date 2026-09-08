@@ -150,7 +150,9 @@ class JobQueue:
         документов. Бросает QueueOverloadedError при перегрузке очереди.
         """
         if job_type not in JOB_TYPES:
-            raise ValueError(f"Неизвестный job_type: {job_type}")
+            raise DomainError(
+                f"Неизвестный job_type: {job_type}", code=codes.UNKNOWN_JOB_TYPE
+            )
         if not doc_ids:
             raise DomainError("Список документов пуст", code=codes.EMPTY_DOCUMENT_LIST)
 
@@ -288,9 +290,11 @@ class JobQueue:
         results: list[dict] = []
         errors: list[dict] = []
 
-        from app.services.pipeline import Pipeline
+        from app.services.pipeline import get_pipeline
 
-        pipeline = Pipeline()
+        # Общий инстанс: bulk-удаление обязано прерывать обработку, идущую в
+        # пайплайне API-процесса, — abort-события живут в его экземпляре.
+        pipeline = get_pipeline()
         for doc_id in doc_ids:
             try:
                 if job["job_type"] == BULK_DELETE:
@@ -325,7 +329,7 @@ class JobQueue:
         settings = get_settings()
         try:
             pipeline.regenerate(doc_id)
-        except ValueError as exc:
+        except ValueError:
             raise
         deadline = time.time() + settings.job_doc_timeout_seconds
         while time.time() < deadline:
@@ -334,7 +338,10 @@ class JobQueue:
                 raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
             if doc.get("status") in _DOC_TERMINAL:
                 if doc.get("status") in ("failed", "error"):
-                    raise ValueError(doc.get("error") or "Перегенерация завершилась ошибкой")
+                    raise DomainError(
+                        doc.get("error") or "Перегенерация завершилась ошибкой",
+                        code=codes.REGENERATE_FAILED,
+                    )
                 return
             time.sleep(1.0)
         raise DomainError(

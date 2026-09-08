@@ -621,7 +621,7 @@ class TestParseJson:
             _parse_json("совершенный мусор без json", doc_id="test123", chunk_idx=42)
 
     def test_debug_file_is_created_on_failure(self, tmp_path, monkeypatch):
-        from app.services.llm_client import _parse_json, _dump_debug_response
+        from app.services.llm_client import _parse_json
 
         debug_dir = tmp_path / "debug"
         monkeypatch.setattr("app.services.llm_client.get_settings", lambda: type("S", (), {"data_dir": tmp_path})())

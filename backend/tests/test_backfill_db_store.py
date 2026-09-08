@@ -1,6 +1,5 @@
 """Тесты backfill_db_store и check_integrity (Этап 2b, Фаза 2)."""
 import hashlib
-from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import Settings

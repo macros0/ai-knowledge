@@ -18,7 +18,7 @@ import httpx
 from authlib.integrations.base_client.errors import OAuthError
 from app.api import errors
 from app.api.errors import ApiError
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from app.auth.factory import build_auth_provider, build_authorizer
@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 def _resolve_to_user(identity: AuthenticatedIdentity):
     """identity → User с пересчитанной ролью; None при fail-closed."""
-    from app.auth.models import User
 
     settings = get_settings()
     role = build_authorizer(settings).resolve_role(identity.groups)

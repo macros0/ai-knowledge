@@ -555,6 +555,7 @@ export default {
   "admin.uictl.rolledBack": "Активная версия откачена",
   "admin.uictl.retry": "Повторить",
   "admin.uictl.invalidJson": "Некорректный JSON: {error}",
+  "admin.uictl.notAnObject": "JSON должен быть объектом {ключ: значение}",
   "admin.uictl.samplesTitle": "Образцы для перевода",
   "admin.uictl.downloadEffective": "Скачать текущий язык ({locale})",
   "admin.uictl.downloadRuSource": "Скачать русский источник",

@@ -14,7 +14,7 @@ from typing import NoReturn
 
 from app.api import errors
 from app.api.errors import ApiError
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 from app import config as config_mod
 from app.auth.factory import build_auth_provider, build_authorizer

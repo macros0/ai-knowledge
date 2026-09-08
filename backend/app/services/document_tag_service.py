@@ -27,7 +27,6 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from pathlib import Path
 
 from app.config import get_settings
 from app.db.models import OkfConcept
@@ -41,7 +40,7 @@ from app.services.development_registry import get_development_registry
 from app.services.registry import get_registry
 from app.services.tag_registry import normalize_tags
 from app import error_codes as codes
-from app.services.errors import ConflictError, DomainError, NotFoundError
+from app.services.errors import NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +153,6 @@ def _sync_qdrant_tags(doc_id: str) -> bool:
     детерминирован (uuid5 от filepath бандла) — scroll Qdrant не нужен.
     Идемпотентно: приводит Qdrant к состоянию БД, порядок правок не важен.
     """
-    import uuid
-    from pathlib import Path
 
     from app.db.models import OkfConcept
     from app.db.session import session_scope

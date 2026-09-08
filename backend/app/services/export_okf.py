@@ -19,7 +19,7 @@ from app.services.json_atomic import write_json_atomic
 from app.services.okf_generator import OKFGenerator
 from app.services.registry import get_registry
 from app import error_codes as codes
-from app.services.errors import ConflictError, DomainError, NotFoundError
+from app.services.errors import NotFoundError
 from docparser import portable_name
 
 

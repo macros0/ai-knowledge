@@ -31,6 +31,7 @@ from app import error_codes as codes
 from app.services.errors import (
     ConflictError,
     DependencyUnavailableError,
+    DomainError,
     NotFoundError,
 )
 from app.services import gen_quality
@@ -163,7 +164,7 @@ class Pipeline:
         зависнет в промежуточном статусе (processing/splitting/...).
 
         Пример:
-            p = Pipeline()
+            p = get_pipeline()
             p.regenerate(doc_id)
             result = p.wait_for(doc_id)  # блокирует до done/error/failed/paused
 
@@ -833,11 +834,18 @@ def save_upload_stream(
     Вызывается из обычного def-эндпоинта — FastAPI сам уводит его в threadpool,
     поэтому event loop не блокируется на больших файлах. Лимит размера проверяется
     по факту дочитывания (max_bytes), при превышении файл удаляется и бросается
-    ValueError. Возвращает (doc_id, dest, записанные байты).
+    DomainError. Возвращает (doc_id, dest, записанные байты).
+
+    Оба отказа несут стабильный код (unsupported_file_type / file_too_large):
+    раньше это были неразличимые ValueError, и роутер выбирал статус по
+    подстроке русского сообщения — управляющий поток на тексте диагностики.
     """
     ext = Path(original_filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
-        raise ValueError(f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}")
+        raise DomainError(
+            f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}",
+            code=codes.UNSUPPORTED_FILE_TYPE,
+        )
     settings = get_settings()
     limit = max_bytes or settings.max_upload_mb * 1024 * 1024
     doc_id = uuid.uuid4().hex[:16]
@@ -852,8 +860,9 @@ def save_upload_stream(
                     break
                 written += len(chunk)
                 if written > limit:
-                    raise ValueError(
-                        f"Файл превышает максимальный размер {limit // (1024 * 1024)} МБ"
+                    raise DomainError(
+                        f"Файл превышает максимальный размер {limit // (1024 * 1024)} МБ",
+                        code=codes.FILE_TOO_LARGE,
                     )
                 out.write(chunk)
     except Exception:
@@ -939,6 +948,50 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
             }
         )
     return attachments
+
+
+_INSTANCE: Pipeline | None = None
+_INSTANCE_LOCK = threading.Lock()
+
+
+def get_pipeline() -> Pipeline:
+    """Общий для процесса пайплайн — один инстанс на всех потребителей.
+
+    Состояние обработки (_threads, _abort_events, _start_lock, _chunk_locks) —
+    поля экземпляра, поэтому у каждого `Pipeline()` они свои и пустые. Пока
+    потребители создавали инстансы сами (bulk-job, корзина, purge), это давало
+    два дефекта:
+
+      - _start_lock защищал от параллельного старта только внутри своего
+        экземпляра — окно, которое закрывал 40c806b, оставалось открытым между
+        экземплярами;
+      - soft_delete/remove/remove_if_deleted прерывают живой прогон через
+        _abort_events[doc_id]; у свежего экземпляра словарь пуст, поэтому
+        массовое удаление и purge не прерывали идущую обработку — пайплайн
+        дописывал статус и векторы уже удалённому документу.
+
+    Оба лечатся одним общим инстансом. Прямой `Pipeline()` остаётся законным
+    для изолированных потребителей (тесты, offline-скрипты), которым разделять
+    состояние не с кем.
+    """
+    global _INSTANCE
+    with _INSTANCE_LOCK:
+        if _INSTANCE is None:
+            _INSTANCE = Pipeline()
+        return _INSTANCE
+
+
+def reset_pipeline() -> None:
+    """Сбрасывает синглтон (для тестов — по образцу db.session.configure_for_tests).
+
+    Pipeline фиксирует get_settings() в __init__, а каждый тест поднимает свои
+    settings поверх временного каталога. Без сброса первый же тест, дошедший до
+    get_pipeline(), закреплял бы свои пути за всем прогоном — вплоть до
+    _physical_cleanup, чистящего каталог чужого теста.
+    """
+    global _INSTANCE
+    with _INSTANCE_LOCK:
+        _INSTANCE = None
 
 
 def _extract_section_title(chunk_text: str) -> str:

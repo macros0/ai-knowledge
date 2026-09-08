@@ -136,6 +136,7 @@
   "admin.uictl.keys": [],
   "admin.uictl.newOverride": [],
   "admin.uictl.noOverrideYet": [],
+  "admin.uictl.notAnObject": [],
   "admin.uictl.notePlaceholder": [],
   "admin.uictl.placeholder": [
     "param"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { approveJob, cancelJob, listJobs } from "@/lib/api";
+import { approveJob, cancelJob, friendlyApiError, listJobs } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 
@@ -60,7 +60,7 @@ export default function AdminPanel() {
       await fn(id);
       await load();
     } catch (err) {
-      showToast(err.message, { type: "error" });
+      showToast(friendlyApiError(err, t), { type: "error" });
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
     }

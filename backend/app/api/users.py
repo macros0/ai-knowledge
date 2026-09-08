@@ -1,7 +1,7 @@
 """Роуты блокировки пользователей (единственное активное действие роли Security)."""
 from app.api import errors
 from app.api.errors import ApiError
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 
 from app.auth.models import User
 from app.auth.service import require_role

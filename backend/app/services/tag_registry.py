@@ -25,7 +25,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import Document, DocumentTag, Tag, TagTranslation
 from app.db.session import session_scope
 from app import error_codes as codes
-from app.services.errors import ConflictError, DomainError, NotFoundError
+from app.services.errors import DomainError
 
 
 def _now() -> datetime:

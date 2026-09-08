@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { deleteDocument, listDocumentDuplicates } from "@/lib/api";
+import { deleteDocument, friendlyApiError, listDocumentDuplicates } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import Modal from "./Modal";
@@ -18,7 +18,7 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
     listDocumentDuplicates(doc.id)
       .then(setData)
       .catch((err) => {
-        showToast(t("dup.loadError", { message: err.message }), { type: "error" });
+        showToast(t("dup.loadError", { message: friendlyApiError(err, t) }), { type: "error" });
         onClose();
       });
   }, [doc.id, showToast, onClose, t]);
@@ -83,7 +83,7 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
         await deleteDocument(r.docId);
         ok++;
       } catch (err) {
-        failed.push(`${r.filename} — ${err.message}`);
+        failed.push(`${r.filename} — ${friendlyApiError(err, t)}`);
       }
     }
     setBusy(false);

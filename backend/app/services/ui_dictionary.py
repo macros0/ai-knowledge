@@ -21,7 +21,7 @@ from app.db.models import Locale, UiDictionary
 from app.db.session import session_scope
 from app.services import audit
 from app import error_codes as codes
-from app.services.errors import ConflictError, DomainError, NotFoundError
+from app.services.errors import NotFoundError
 
 _MANIFEST_PATH = Path(__file__).resolve().parents[1] / "i18n" / "ui_keys.json"
 _PARAM_RE = re.compile(r"\{(\w+)\}")

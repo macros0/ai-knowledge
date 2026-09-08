@@ -555,6 +555,7 @@ export default {
   "admin.uictl.rolledBack": "Active version rolled back",
   "admin.uictl.retry": "Retry",
   "admin.uictl.invalidJson": "Invalid JSON: {error}",
+  "admin.uictl.notAnObject": "JSON must be an object: { key: value }",
   "admin.uictl.samplesTitle": "Translation samples",
   "admin.uictl.downloadEffective": "Download current language ({locale})",
   "admin.uictl.downloadRuSource": "Download Russian source",

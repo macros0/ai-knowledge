@@ -32,8 +32,10 @@ def get_active_locales(request: Request, response: Response):
         if loc["status"] == LOCALE_STATUS_ACTIVE
     ]
     etag = _etag(all_locales)
-    response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "private, max-age=60"
+    # Та же связка, что в api/i18n.py: 304 — отдельный ответ, и валидатор
+    # обязан ехать в НЁМ (RFC 7232 §4.1), а не в инжектированном `response`.
+    cache_headers = {"ETag": etag, "Cache-Control": "private, max-age=60"}
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304)
+        return Response(status_code=304, headers=cache_headers)
+    response.headers.update(cache_headers)
     return {"locales": active}

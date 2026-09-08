@@ -19,7 +19,7 @@ from app.db.models import Development, DevelopmentTranslation, Document
 from app.db.session import session_scope
 from app.services.attribute_registry import get_attribute_registry
 from app import error_codes as codes
-from app.services.errors import ConflictError, DomainError, NotFoundError
+from app.services.errors import DomainError, NotFoundError
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.api import errors
 from app.api.errors import ApiError
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from app.auth.models import User
 from app.auth.service import require_user

@@ -19,7 +19,7 @@ from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 _engine: Engine | None = None
 _session_factory: sessionmaker | None = None
