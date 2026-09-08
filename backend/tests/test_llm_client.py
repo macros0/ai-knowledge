@@ -441,7 +441,12 @@ class TestAbandonedCallCleanup:
         with pytest.raises(LLMTimeoutError):
             client._complete_once("s", "u")
 
-        assert _wait_until(lambda: llm_module._inflight_count() == before), (
+        # <=, а не ==: _inflight — глобальный счётчик процесса, и соседние тесты
+        # намеренно оставляют висеть потоки на _hang_stream (см. пояснение в
+        # test_inflight_returns_to_zero_after_success). Если такой поток
+        # завершится во время ожидания, счётчик проскочит `before` вниз, и
+        # проверка на равенство упадёт по чужой причине.
+        assert _wait_until(lambda: llm_module._inflight_count() <= before), (
             "брошенный поток не завершился — соединение и квота провайдера заняты"
         )
 
@@ -462,10 +467,24 @@ class TestAbandonedCallCleanup:
         assert any("Живых LLM-запросов" in r.getMessage() for r in caplog.records), caplog.text
 
     def test_inflight_returns_to_zero_after_success(self, client, monkeypatch):
+        """Успешный вызов возвращает свой слот учёта.
+
+        «To zero» в имени — про вклад самого вызова, а не про абсолютный ноль:
+        _inflight глобален для процесса, а тесты выше намеренно оставляют жить
+        потоки на _hang_stream (он спит в Python и не закрывается), поэтому к
+        этому моменту счётчик уже ненулевой и таким останется до конца прогона.
+
+        Отсюда `<=`, а не `==`: равенство держалось лишь потому, что чужие
+        потоки на локальной машине не успевали завершиться. На более медленном
+        раннере CI один из них дренировался во время ожидания, счётчик ушёл
+        ниже снимка — и тест падал, хотя проверяемый вызов слот вернул.
+        """
         monkeypatch.setattr(litellm, "completion", lambda **kwargs: _stream_response("привет"))
         before = llm_module._inflight_count()
         client.chat("s", "u")
-        assert _wait_until(lambda: llm_module._inflight_count() == before)
+        assert _wait_until(lambda: llm_module._inflight_count() <= before), (
+            "успешный вызов не освободил слот учёта"
+        )
 
 
 class TestParseJson:
