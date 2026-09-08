@@ -129,6 +129,15 @@ export default function TagManagerModal({ onClose }) {
   const currentText = (tag) =>
     tag.translations.find((tr) => tr.locale === locale)?.text ?? "";
 
+  // Справочная скобка: любой en-перевод (машинный или проверенный — здесь это
+  // только подсказка, авторитет остаётся в name/canonical). reviewed/machine
+  // намеренно не различаем: выбор из двух не нужен (одна запись на локаль),
+  // а откат на русский для непроверенного en делал бы чужую локаль русской чаще.
+  const referenceText = (tag) => {
+    const en = (tag.translations || []).find((tr) => tr.locale === "en");
+    return (en && en.text) || tag.name;
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card tag-manager" onClick={(e) => e.stopPropagation()}>
@@ -188,8 +197,8 @@ export default function TagManagerModal({ onClose }) {
                 </button>
                 <span className="tag-manager-name" title={tag.name}>
                   {tag.display}
-                  {tag.display !== tag.name && (
-                    <span className="tag-manager-canonical"> ({tag.name})</span>
+                  {tag.display !== tag.name && referenceText(tag) !== tag.display && (
+                    <span className="tag-manager-canonical"> ({referenceText(tag)})</span>
                   )}
                 </span>
                 {tag.needs_review && (
