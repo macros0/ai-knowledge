@@ -1,7 +1,7 @@
 """Юнит-тесты context_builder: resolve_branches, merge_and_format, format_context."""
 import pytest
 
-from app.config import Settings, SEARCH_MODE_PRESETS
+from app.config import Settings
 from app.services.context_builder import (
     _stem_ru,
     drop_partial_title_matches,

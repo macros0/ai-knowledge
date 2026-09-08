@@ -21,7 +21,7 @@ from __future__ import annotations
 import difflib
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.config import get_settings
 from app.prompts.store import get_store

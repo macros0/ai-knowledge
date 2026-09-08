@@ -279,20 +279,50 @@ def xlsx_bytes(sheet: str = "Лист1", rows: list[list[object]] | None = None)
 
 
 # ---------------------------------------------------------------- pdf
+# Шрифты, которыми пишется текст в тестовых PDF. Порядок — от «есть на машине
+# разработчика» к «есть на Linux-раннере»; Vera идёт последней, потому что она
+# встроена в reportlab (регистрируется всегда), но КИРИЛЛИЦЫ НЕ СОДЕРЖИТ.
+_PDF_FONT_CANDIDATES = (
+    "arial.ttf",                                            # macOS/Windows
+    "DejaVuSans.ttf",                                       # если в TTFSearchPath
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",      # Debian/Ubuntu
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",               # Fedora/Alpine
+    "/Library/Fonts/Arial.ttf",
+    "Vera.ttf",                                             # встроенный, latin-only
+)
+
+
+def _register_font_for(text: str, pdfmetrics, TTFont) -> str:
+    """Имя шрифта, который РЕАЛЬНО умеет отрисовать text.
+
+    Проверяется покрытие глифами, а не факт регистрации: reportlab всегда
+    находит встроенную Vera.ttf, но кириллицы в ней нет — текст уходил в PDF
+    пустыми глифами, и парсер честно не находил ничего. На машине с системным
+    Arial тесты при этом проходили, поэтому расхождение вылезало только на
+    Linux (CI).
+    """
+    for name in _PDF_FONT_CANDIDATES:
+        try:
+            face = TTFont("DocParserFont", name)
+        except Exception:
+            continue
+        if all(ord(ch) in face.face.charToGlyph for ch in text):
+            pdfmetrics.registerFont(face)
+            return "DocParserFont"
+    if all(ord(ch) < 128 for ch in text):
+        return "Helvetica"  # встроенный latin-only шрифт достаточен
+    import pytest
+
+    pytest.skip(f"нет шрифта с глифами для {text!r} — установите fonts-dejavu-core")
+
+
 def make_pdf(path: Path, text: str = "Пример текста из pdf документа") -> Path:
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.pdfgen import canvas
 
-    font = "Helvetica"
-    for name in ("arial.ttf", "Vera.ttf"):
-        try:
-            pdfmetrics.registerFont(TTFont("DocParserFont", name))
-            font = "DocParserFont"
-            break
-        except Exception:
-            continue
+    font = _register_font_for(text, pdfmetrics, TTFont)
     c = canvas.Canvas(str(path), pagesize=letter)
     c.setFont(font, 12)
     c.drawString(72, 720, text)

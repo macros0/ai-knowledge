@@ -447,6 +447,38 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
+    def validate_cors(self) -> "Settings":
+        """Кросс-доменный доступ настраивается целиком или не настраивается.
+
+        Непустой allow-list включает allow_credentials и SameSite=None
+        (см. main.create_app) — иначе браузер отбрасывает сессионную cookie и
+        настройка только выглядит рабочей. Оба требуют строгостей CORS/cookie,
+        поэтому противоречащие комбинации отсекаем на старте, а не в браузере
+        пользователя.
+        """
+        if not self.cors_allowed_origins:
+            return self
+        if "*" in self.cors_allowed_origins:
+            raise ValueError(
+                "CORS_ALLOWED_ORIGINS='*' недопустим: спецификация CORS запрещает "
+                "'*' вместе с credentials, а сессионная cookie без credentials не "
+                "работает. Перечислите origin'ы явно."
+            )
+        bad = [o for o in self.cors_allowed_origins if not o.startswith(("http://", "https://"))]
+        if bad:
+            raise ValueError(
+                f"CORS_ALLOWED_ORIGINS: origin задаётся со схемой, получено {bad} "
+                "(например https://kb.example.com)"
+            )
+        if not self.auth_session_https_only:
+            raise ValueError(
+                "CORS_ALLOWED_ORIGINS требует AUTH_SESSION_HTTPS_ONLY=true: "
+                "кросс-доменная cookie ставится как SameSite=None, а её браузер "
+                "принимает только с флагом Secure"
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_auth_provider(self) -> "Settings":
         valid = {"disabled", "simulation", "keycloak_oidc", "direct_ldap", "custom_client"}
         if self.auth_provider not in valid:

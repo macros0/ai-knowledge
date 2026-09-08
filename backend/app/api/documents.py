@@ -9,7 +9,10 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response, UploadFile
+from app.api import errors
+from app.services.errors import DomainError
+from app.api.errors import ApiError
+from fastapi import APIRouter, Depends, Form, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.auth.models import User
@@ -30,7 +33,6 @@ from app.models.schemas import (
     DocumentStatsOut,
     DocumentTagsUpdate,
     OkfFileOut,
-    TrashItemOut,
     TrashListOut,
     UploaderListOut,
 )
@@ -48,7 +50,7 @@ from app.services.development_registry import get_development_registry
 from app.services.document_tag_service import bulk_update_tags, update_document_tags
 from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, QueueOverloadedError, get_job_queue
 from app.services.okf_generator import _build_markdown
-from app.services.pipeline import Pipeline, save_upload_stream
+from app.services.pipeline import get_pipeline, save_upload_stream
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
@@ -58,7 +60,6 @@ from app.services.trash import RestoreConflictError, bulk_restore, restore_docum
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 _registry = get_registry()
-_pipeline = Pipeline()
 _tag_registry = TagRegistry()
 
 # doc_id генерируется как uuid.uuid4().hex[:16] (16 hex-символов нижнего
@@ -92,24 +93,40 @@ def upload_document(
     # оставался в статусе uploaded и блокировал повторную загрузку файла
     # (зарегистрированный file_hash → 409 duplicate).
     if development_id is not None and get_development_registry().get(development_id) is None:
-        raise HTTPException(status_code=422, detail="Разработка не найдена")
+        raise ApiError(
+            status_code=422,
+            code=errors.DEVELOPMENT_NOT_FOUND,
+            detail="Разработка не найдена",
+        )
     max_bytes = settings.max_upload_mb * 1024 * 1024
     declared = file.size or 0
     if declared > max_bytes:
-        raise HTTPException(
+        raise ApiError(
             status_code=413,
+            code=errors.FILE_TOO_LARGE,
             detail=f"Файл превышает максимальный размер {settings.max_upload_mb} МБ",
         )
     try:
         doc_id, _dest, size = save_upload_stream(
             file.file, file.filename or "unknown", max_bytes=max_bytes
         )
+    except DomainError as exc:
+        # Статус выбирается по коду, а не по подстроке русского detail: текст —
+        # диагностика и может меняться, код — контракт (services/pipeline.py).
+        status = 413 if exc.code == errors.FILE_TOO_LARGE else 400
+        raise errors.domain_error(exc, status) from exc
     except ValueError as exc:
-        if "максимальный размер" in str(exc):
-            raise HTTPException(status_code=413, detail=str(exc)) from exc
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=400,
+            code=errors.INVALID_REQUEST,
+            detail=str(exc),
+        ) from exc
     if size == 0:
-        raise HTTPException(status_code=400, detail="Файл пустой")
+        raise ApiError(
+            status_code=400,
+            code=errors.EMPTY_FILE,
+            detail="Файл пустой",
+        )
 
     # Дедупликация, уровень 1: точное совпадение байтов (SHA-256 файла).
     settings = get_settings()
@@ -124,7 +141,7 @@ def upload_document(
                 status_code=409,
                 content={
                     "detail": f"Файл уже загружен как «{existing['filename']}»",
-                    "code": "duplicate",
+                    "code": errors.DUPLICATE,
                     "duplicate": existing,
                 },
             )
@@ -150,7 +167,11 @@ def upload_document(
     bound_development_id: int | None = None
     if development_id is not None:
         if get_development_registry().get(development_id) is None:
-            raise HTTPException(status_code=422, detail="Разработка не найдена")
+            raise ApiError(
+            status_code=422,
+            code=errors.DEVELOPMENT_NOT_FOUND,
+            detail="Разработка не найдена",
+        )
         _registry.update(
             doc_id,
             development_id=development_id,
@@ -167,7 +188,7 @@ def upload_document(
         if detection.confidence is not None:
             attach_development(doc_id, detection)
             doc = _registry.get(doc_id) or doc
-    _pipeline.ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
+    get_pipeline().ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
     audit_value = {"filename": doc.get("filename"), "size": size}
     if bound_development_id is not None:
         audit_value["development_id"] = bound_development_id
@@ -298,10 +319,18 @@ def list_trash(
 @router.get("/{doc_id}", response_model=DocumentOut)
 def get_document(doc_id: str):
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     doc = _registry.get(doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     return doc
 
 
@@ -319,10 +348,18 @@ def set_document_development(
     """
     doc = _registry.get(doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     new_dev_id = body.development_id
     if new_dev_id is not None and get_development_registry().get(new_dev_id) is None:
-        raise HTTPException(status_code=422, detail="Разработка не найдена")
+        raise ApiError(
+            status_code=422,
+            code=errors.DEVELOPMENT_NOT_FOUND,
+            detail="Разработка не найдена",
+        )
 
     old_dev_id = doc.get("development_id")
     fields: dict = {
@@ -355,7 +392,11 @@ def set_document_development(
     )
     result = _registry.get(doc_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     result["dev_tags_sync_pending"] = sync_pending
     return result
 
@@ -374,13 +415,23 @@ def update_document_tags_endpoint(
     синхронизируется через dev_sync (Этап 4). Каждое изменение — в audit_log.
     """
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     try:
         result = update_document_tags(
             doc_id, body.tags, user, ip_address=_client_ip(request)
         )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     doc = result["doc"]
     doc["dev_tags_sync_pending"] = result["dev_tags_sync_pending"]
     return doc
@@ -395,7 +446,11 @@ def detect_document_development(
     """On-demand автоопределение номера разработки (regex + LLM) и возврат кандидата."""
     doc = _registry.get(doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     old_dev_id = doc.get("development_id")
     markdown = _document_head(doc_id, doc)
     detection = detect(markdown, doc["filename"], doc_id)
@@ -427,7 +482,11 @@ def detect_document_development(
 def list_document_duplicates(doc_id: str, user: User = Depends(require_user)):
     """Кандидаты-дубликаты документа (Level 2 — почти идентичные, Level 3 — похожие)."""
     if not _registry.get(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     return find_duplicates_for_document(doc_id)
 
 
@@ -445,10 +504,18 @@ def delete_document(
     """
     doc = _registry.get(doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     if doc.get("deleted_at") is not None:
-        raise HTTPException(status_code=409, detail="Документ уже находится в корзине")
-    _pipeline.soft_delete(doc_id, deleted_by=user.username)
+        raise ApiError(
+            status_code=409,
+            code=errors.ALREADY_IN_TRASH,
+            detail="Документ уже находится в корзине",
+        )
+    get_pipeline().soft_delete(doc_id, deleted_by=user.username)
     audit.record(
         user,
         audit.DOCUMENT_DELETE,
@@ -474,7 +541,11 @@ def restore_document_endpoint(
     при загрузке. force=true — восстановить как отдельный без проверки.
     """
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     try:
         return restore_document(doc_id, user, ip_address=_client_ip(request), force=force)
     except RestoreConflictError as exc:
@@ -482,12 +553,18 @@ def restore_document_endpoint(
             status_code=409,
             content={
                 "detail": str(exc),
-                "code": "duplicate",
+                "code": errors.DUPLICATE,
                 "duplicates": exc.duplicates,
             },
         )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post("/bulk-restore")
@@ -503,10 +580,15 @@ def bulk_restore_documents(
     """
     doc_ids = list(dict.fromkeys(body.doc_ids))
     if not doc_ids:
-        raise HTTPException(status_code=400, detail="Список документов пуст")
-    if len(doc_ids) > get_settings().bulk_tags_max_docs:
-        raise HTTPException(
+        raise ApiError(
             status_code=400,
+            code=errors.EMPTY_DOCUMENT_LIST,
+            detail="Список документов пуст",
+        )
+    if len(doc_ids) > get_settings().bulk_tags_max_docs:
+        raise ApiError(
+            status_code=400,
+            code=errors.DOCUMENT_LIMIT_EXCEEDED,
             detail=f"Превышен лимит {get_settings().bulk_tags_max_docs} документов на одну операцию",
         )
     result = bulk_restore(doc_ids, user, ip_address=_client_ip(request))
@@ -522,13 +604,27 @@ def resume_document(
 ):
     doc = _registry.get(doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     if doc.get("status") not in ("paused", "failed"):
-        raise HTTPException(status_code=400, detail="Документ не требует возобновления")
+        raise ApiError(
+            status_code=400,
+            code=errors.NOT_RESUMABLE,
+            detail="Документ не требует возобновления",
+        )
     try:
-        _pipeline.resume(doc_id)
+        get_pipeline().resume(doc_id)
+    except DomainError as exc:
+        raise errors.domain_error(exc, 400) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=400,
+            code=errors.INVALID_REQUEST,
+            detail=str(exc),
+        ) from exc
     audit.record(
         user,
         audit.DOCUMENT_RESUME,
@@ -551,13 +647,27 @@ def regenerate_document(
     """
     doc = _registry.get(doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     if doc.get("status") in ("uploaded", "processing", "splitting", "indexing"):
-        raise HTTPException(status_code=409, detail="Документ уже обрабатывается")
+        raise ApiError(
+            status_code=409,
+            code=errors.ALREADY_PROCESSING,
+            detail="Документ уже обрабатывается",
+        )
     try:
-        _pipeline.regenerate(doc_id)
+        get_pipeline().regenerate(doc_id)
+    except DomainError as exc:
+        raise errors.domain_error(exc, 400) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=400,
+            code=errors.INVALID_REQUEST,
+            detail=str(exc),
+        ) from exc
     audit.record(
         user,
         audit.DOCUMENT_REGENERATE,
@@ -609,7 +719,11 @@ def bulk_delete(
             BULK_DELETE, doc_ids, user, ip_address=_client_ip(request)
         )
     except QueueOverloadedError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=503,
+            code=errors.QUEUE_OVERLOADED,
+            detail=str(exc),
+        ) from exc
     return job
 
 
@@ -630,8 +744,9 @@ def bulk_regenerate(
             max_docs_per_hour=settings.bulk_regenerate_max_docs_per_hour,
         )
     except RateLimitExceeded as exc:
-        raise HTTPException(
+        raise ApiError(
             status_code=429,
+            code=errors.RATE_LIMITED,
             detail=str(exc),
             headers={"Retry-After": str(max(1, int(exc.retry_after)))},
         ) from exc
@@ -640,7 +755,11 @@ def bulk_regenerate(
             BULK_REGENERATE, doc_ids, user, ip_address=_client_ip(request)
         )
     except QueueOverloadedError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=503,
+            code=errors.QUEUE_OVERLOADED,
+            detail=str(exc),
+        ) from exc
     return job
 
 
@@ -666,13 +785,25 @@ def bulk_tags(
 @router.get("/{doc_id}/download")
 def download_document(doc_id: str):
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     doc = _registry.get(doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     matches = sorted(get_settings().uploads_dir.glob(f"{doc_id}.*"))
     if not matches:
-        raise HTTPException(status_code=404, detail="Исходный файл не найден на диске")
+        raise ApiError(
+            status_code=404,
+            code=errors.FILE_NOT_FOUND,
+            detail="Исходный файл не найден на диске",
+        )
     return FileResponse(
         matches[0],
         media_type="application/octet-stream",
@@ -698,17 +829,31 @@ def export_okf_document(
     from app.services.export_okf import export_okf_bundle
 
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     doc = _registry.get(doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp) / "bundle"
         try:
             export_okf_bundle(doc_id, dest)
+        except DomainError as exc:
+            raise errors.domain_error(exc, 404) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise ApiError(
+                status_code=404,
+                code=errors.DOCUMENT_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for f in sorted(dest.rglob("*")):
@@ -735,7 +880,11 @@ def list_okf_files(doc_id: str):
     # бандла — производная проекция. Валидация формата обязательна до любого
     # доступа к ФС (staging-fallback использует doc_id как путь).
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     files = _okf_files_from_db(doc_id)
     if files:
         return files
@@ -751,7 +900,11 @@ def list_okf_files(doc_id: str):
 @router.get("/{doc_id}/okf/{filename}")
 def get_okf_file(doc_id: str, filename: str):
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Файл не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.FILE_NOT_FOUND,
+            detail="Файл не найден",
+        )
     slug = filename.removesuffix(".md")
     md = _concept_markdown_from_db(doc_id, slug)
     if md is not None:
@@ -774,19 +927,31 @@ def get_okf_file(doc_id: str, filename: str):
                 return Response(content=md, media_type="text/plain; charset=utf-8")
     except Exception:
         pass
-    raise HTTPException(status_code=404, detail="Файл не найден")
+    raise ApiError(
+            status_code=404,
+            code=errors.FILE_NOT_FOUND,
+            detail="Файл не найден",
+        )
 
 
 @router.get("/{doc_id}/okf/attachments/{filename}")
 def get_okf_attachment(doc_id: str, filename: str):
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Файл не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.FILE_NOT_FOUND,
+            detail="Файл не найден",
+        )
     # Этап 2b: бинарники вложений — в uploads/<doc_id>/attachments/ (байты-источники
     # в FS, описанные в okf_attachments), а не в производном бандле.
     attach_dir = (get_settings().uploads_dir / doc_id / "attachments").resolve()
     filepath = (attach_dir / filename).resolve()
     if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
-        raise HTTPException(status_code=404, detail="Файл не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.FILE_NOT_FOUND,
+            detail="Файл не найден",
+        )
     media_type = mimetypes.guess_type(filepath.name)[0] or "application/octet-stream"
     return FileResponse(
         filepath,
@@ -807,18 +972,32 @@ def get_okf_attachment(doc_id: str, filename: str):
 def list_chunks(doc_id: str):
     # FS-first: ensure_chunks читает manifest по okf_dir/doc_id до registry-гейта.
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     try:
-        meta = _pipeline.ensure_chunks(doc_id)
+        meta = get_pipeline().ensure_chunks(doc_id)
+    except DomainError as exc:
+        raise errors.domain_error(exc, 400) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=400,
+            code=errors.INVALID_REQUEST,
+            detail=str(exc),
+        ) from exc
     return meta
 
 
 @router.get("/{doc_id}/chunks/{chunk_index}")
 def get_chunk(doc_id: str, chunk_index: int):
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Чанк не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.CHUNK_NOT_FOUND,
+            detail="Чанк не найден",
+        )
     content = _chunk_content_from_db(doc_id, chunk_index)
     if content is not None:
         return Response(content=content, media_type="text/plain; charset=utf-8")
@@ -830,7 +1009,11 @@ def get_chunk(doc_id: str, chunk_index: int):
                 return Response(content=staging_path.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
     except Exception:
         pass
-    raise HTTPException(status_code=404, detail="Чанк не найден")
+    raise ApiError(
+            status_code=404,
+            code=errors.CHUNK_NOT_FOUND,
+            detail="Чанк не найден",
+        )
 
 
 @router.get("/{doc_id}/fulltext")
@@ -838,16 +1021,30 @@ def get_document_fulltext(doc_id: str):
     # Этап 2b: полный текст — конкатенация document_chunks (БД), а не чтение
     # chunk_XX.md из бандла.
     if not _valid_doc_id(doc_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
     parts = _fulltext_from_db(doc_id)
     if not parts:
         try:
-            _pipeline.ensure_chunks(doc_id)
+            get_pipeline().ensure_chunks(doc_id)
+        except DomainError as exc:
+            raise errors.domain_error(exc, 400) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise ApiError(
+                status_code=400,
+                code=errors.INVALID_REQUEST,
+                detail=str(exc),
+            ) from exc
         parts = _fulltext_from_db(doc_id)
     if not parts:
-        raise HTTPException(status_code=404, detail="Текст документа не найден")
+        raise ApiError(
+            status_code=404,
+            code=errors.TEXT_NOT_FOUND,
+            detail="Текст документа не найден",
+        )
     return Response(content="\n\n".join(parts), media_type="text/plain; charset=utf-8")
 
 
@@ -900,7 +1097,7 @@ def _document_head(doc_id: str, doc: dict) -> str:
     content = _chunk_content_from_db(doc_id, 0)
     if content is None:
         try:
-            _pipeline.ensure_chunks(doc_id)
+            get_pipeline().ensure_chunks(doc_id)
         except Exception:
             pass
         content = _chunk_content_from_db(doc_id, 0)
@@ -996,16 +1193,24 @@ def _resolve_doc_ids(doc_ids: list[str], max_docs: int) -> list[str]:
     """Проверяет и дедуплицирует список ID документов для массовой операции."""
     unique = list(dict.fromkeys(doc_ids))
     if not unique:
-        raise HTTPException(status_code=400, detail="Список документов пуст")
-    if len(unique) > max_docs:
-        raise HTTPException(
+        raise ApiError(
             status_code=400,
+            code=errors.EMPTY_DOCUMENT_LIST,
+            detail="Список документов пуст",
+        )
+    if len(unique) > max_docs:
+        raise ApiError(
+            status_code=400,
+            code=errors.DOCUMENT_LIMIT_EXCEEDED,
             detail=f"Превышен лимит {max_docs} документов на одну операцию",
         )
     missing = [d for d in unique if _registry.get(d) is None]
     if missing:
-        raise HTTPException(
-            status_code=404, detail="Документы не найдены: " + ", ".join(missing)
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документы не найдены: " + ", ".join(missing,
+        )
         )
     return unique
 

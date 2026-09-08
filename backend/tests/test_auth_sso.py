@@ -8,7 +8,6 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
-import pytest
 from authlib.integrations.base_client.errors import OAuthError
 from fastapi.testclient import TestClient
 

@@ -49,7 +49,7 @@ def _mock_upload_flow(monkeypatch, dest, doc_id="0123456789abcdef"):
     from app.api import documents as docs
 
     monkeypatch.setattr(docs, "save_upload_stream", lambda *a, **k: (doc_id, dest, 123))
-    monkeypatch.setattr(docs._pipeline, "ingest", lambda *a, **k: None)
+    monkeypatch.setattr(docs.get_pipeline(), "ingest", lambda *a, **k: None)
 
 
 class TestUploadDevelopmentBinding:
@@ -135,7 +135,7 @@ class TestInvalidDevelopmentNoOrphan:
         dest = tmp_path / "0123456789abcdef.pdf"
         dest.write_bytes(b"%PDF-1.4")
         saved = {"n": 0}
-        monkeypatch.setattr(docs._pipeline, "ingest", lambda *a, **k: None)
+        monkeypatch.setattr(docs.get_pipeline(), "ingest", lambda *a, **k: None)
 
         def spy_save(*a, **k):
             saved["n"] += 1

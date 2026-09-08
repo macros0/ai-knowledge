@@ -162,7 +162,7 @@ class TestUploadAuditHook:
         monkeypatch.setattr(
             docs, "save_upload_stream", lambda *a, **k: ("0123456789abcdef", dest, 123)
         )
-        monkeypatch.setattr(docs._pipeline, "ingest", lambda *a, **k: None)
+        monkeypatch.setattr(docs.get_pipeline(), "ingest", lambda *a, **k: None)
 
         resp = client.post(
             "/api/documents",
@@ -187,7 +187,7 @@ class TestResumeAuditHook:
         def fake_resume(doc_id):
             DocumentRegistry().update(doc_id, status="processing")
 
-        monkeypatch.setattr(docs._pipeline, "resume", fake_resume)
+        monkeypatch.setattr(docs.get_pipeline(), "resume", fake_resume)
 
         resp = client.post("/api/documents/0123456789abcdef/resume")
         assert resp.status_code == 200, resp.text

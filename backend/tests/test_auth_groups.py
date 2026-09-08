@@ -8,7 +8,6 @@
   - Валидатор keycloak_group_path_mode.
   - end-to-end: full_path-группы + auth_role_groups с full_path-ключами → роль.
 """
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient

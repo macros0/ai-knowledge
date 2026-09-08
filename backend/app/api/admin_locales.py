@@ -6,7 +6,10 @@
 """
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from app.api import errors
+from app.api.errors import ApiError
+from app.services.errors import DomainError
+from fastapi import APIRouter, Depends, Request
 
 from app.auth.models import User
 from app.auth.service import require_role
@@ -46,12 +49,18 @@ def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-def _raise(exc: Exception) -> HTTPException:
+def _raise(exc: Exception) -> ApiError:
+    """Ошибка локали -> ответ API со стабильным кодом.
+
+    ApiError, а не голый HTTPException: без `code` фронтенд не найдёт ключ в
+    своём словаре и откатится на русский detail — ровно в разделе «Поддержка
+    языков», компоненты которого локализованы (friendlyApiError).
+    """
     if isinstance(exc, LocaleNotFoundError):
-        return HTTPException(status_code=404, detail=str(exc))
+        return ApiError(status_code=404, code=errors.LOCALE_NOT_FOUND, detail=str(exc))
     if isinstance(exc, LocaleError):
-        return HTTPException(status_code=422, detail=str(exc))
-    return HTTPException(status_code=500, detail="Внутренняя ошибка")
+        return ApiError(status_code=422, code=errors.INVALID_REQUEST, detail=str(exc))
+    return ApiError(status_code=500, code=errors.INTERNAL_ERROR, detail="Внутренняя ошибка")
 
 
 @router.get("", response_model=LocaleListOut)
@@ -236,7 +245,11 @@ def probe_stopwords(code: str, body: StopwordProbeRequest, user: User = admin):
         raise _raise(exc) from exc
     queries = [q for q in body.queries if q and q.strip()][:20]
     if not queries:
-        raise HTTPException(status_code=422, detail="Пустой набор запросов для probe")
+        raise ApiError(
+            status_code=422,
+            code=errors.EMPTY_DOCUMENT_LIST,
+            detail="Пустой набор запросов для probe",
+        )
     results = locale_service.probe(queries)
     return StopwordProbeResponse(
         results=[
@@ -270,8 +283,16 @@ def import_ui_dictionary(
             user=user,
             ip_address=_client_ip(request),
         )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        # ui_dictionary бросает ValueError только на «языка нет» — код должен
+        # быть про локаль, а не про документ.
+        raise ApiError(
+            status_code=404,
+            code=errors.LOCALE_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     return UiDictionaryImportResult(**result)
 
 
@@ -312,6 +333,14 @@ def rollback_ui_dictionary(
         result = ui_dictionary.rollback(
             code, body.entry_id, user=user, ip_address=_client_ip(request)
         )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        # ui_dictionary бросает ValueError только на «языка нет» — код должен
+        # быть про локаль, а не про документ.
+        raise ApiError(
+            status_code=404,
+            code=errors.LOCALE_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     return result

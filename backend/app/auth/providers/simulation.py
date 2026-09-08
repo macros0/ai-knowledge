@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from fastapi import HTTPException, Request
+from app.api import errors
+from app.api.errors import ApiError
+from fastapi import Request
 
 from app.auth.identity import AuthenticatedIdentity
 from app.auth.providers.base import AuthProvider
@@ -36,13 +38,18 @@ class SimulationProvider(AuthProvider):
         ]
 
     async def start_login(self, request: Request):
-        raise HTTPException(
+        raise ApiError(
             status_code=400,
+            code=errors.INVALID_REQUEST,
             detail="simulation использует POST /auth/simulate, а не redirect",
         )
 
     async def handle_callback(self, request: Request) -> AuthenticatedIdentity:
-        raise HTTPException(status_code=400, detail="simulation не имеет callback")
+        raise ApiError(
+            status_code=400,
+            code=errors.INVALID_REQUEST,
+            detail="simulation не имеет callback",
+        )
 
     def resolve(self, username: str) -> AuthenticatedIdentity | None:
         for identity in self.list_identities():

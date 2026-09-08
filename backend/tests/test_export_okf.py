@@ -1,5 +1,4 @@
 """Тесты экспорта OKF-бандла из БД (Этап 2b, Фаза 5)."""
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient

@@ -14,6 +14,7 @@ import shutil
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
@@ -26,7 +27,13 @@ from app.services.concept_store import replace_concepts
 from app.services.dev_detector import attach_development, detect
 from app.services.development_registry import get_development_registry
 from app.services.embedder import Embedder
-from app.services.errors import DependencyUnavailableError
+from app import error_codes as codes
+from app.services.errors import (
+    ConflictError,
+    DependencyUnavailableError,
+    DomainError,
+    NotFoundError,
+)
 from app.services import gen_quality
 from app.services.json_atomic import write_json_atomic
 from app.services.language import detect_language
@@ -63,7 +70,14 @@ class Pipeline:
         self.okf_generator = OKFGenerator()
         self._abort_events: dict[str, threading.Event] = {}
         self._threads: dict[str, threading.Thread] = {}
-        self._chunk_locks: dict[str, threading.Lock] = {}
+        # Проверка «не запущен» и регистрация потока должны быть одной
+        # атомарной операцией: эндпоинты синхронные, FastAPI исполняет их в
+        # тредпуле, поэтому два параллельных POST реально идут параллельно.
+        self._start_lock = threading.Lock()
+        # doc_id -> [лок, число ожидающих]. Счётчик нужен, чтобы удалять запись
+        # по выходу последнего и не растить словарь на каждый документ.
+        self._chunk_locks: dict[str, list] = {}
+        self._chunk_locks_guard = threading.Lock()
 
     def ingest(
         self,
@@ -77,13 +91,13 @@ class Pipeline:
     def resume(self, doc_id: str) -> None:
         doc = self.registry.get(doc_id)
         if not doc:
-            raise ValueError("Документ не найден")
+            raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         self._ensure_not_running(doc_id)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
-            raise ValueError("Исходный файл документа не найден")
+            raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=True)
 
     def _ensure_not_running(self, doc_id: str) -> None:
@@ -94,7 +108,7 @@ class Pipeline:
         """
         thread = self._threads.get(doc_id)
         if thread and thread.is_alive():
-            raise ValueError("Документ уже обрабатывается")
+            raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
 
     def regenerate(self, doc_id: str) -> None:
         """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
@@ -106,13 +120,13 @@ class Pipeline:
         """
         doc = self.registry.get(doc_id)
         if not doc:
-            raise ValueError("Документ не найден")
+            raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         self._ensure_not_running(doc_id)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
-            raise ValueError("Исходный файл документа не найден")
+            raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
 
         try:
             self.vector_store.delete_document(doc_id)
@@ -150,7 +164,7 @@ class Pipeline:
         зависнет в промежуточном статусе (processing/splitting/...).
 
         Пример:
-            p = Pipeline()
+            p = get_pipeline()
             p.regenerate(doc_id)
             result = p.wait_for(doc_id)  # блокирует до done/error/failed/paused
 
@@ -172,15 +186,21 @@ class Pipeline:
             time.sleep(2)
 
     def _start(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
-        self._ensure_not_running(doc_id)
-        self._abort_events[doc_id] = threading.Event()
         thread = threading.Thread(
             target=self._run,
             args=(doc_id, filepath, filename, user_tags, resume),
             daemon=True,
         )
-        self._threads[doc_id] = thread
-        thread.start()
+        # Всё под одним локом, включая start(): _ensure_not_running смотрит на
+        # is_alive(), а у зарегистрированного, но не запущенного потока он ещё
+        # False — иначе между регистрацией и стартом осталось бы окно, в которое
+        # проходит второй запрос. Два пайплайна на один doc_id — это общий
+        # staging, общий manifest и гонка на финальном атомарном переносе.
+        with self._start_lock:
+            self._ensure_not_running(doc_id)
+            self._abort_events[doc_id] = threading.Event()
+            self._threads[doc_id] = thread
+            thread.start()
 
     def _run(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         try:
@@ -672,6 +692,34 @@ class Pipeline:
         self._physical_cleanup(doc_id)
         return True
 
+    @contextmanager
+    def _chunk_lock(self, doc_id: str):
+        """Лок на ленивый backfill чанков документа, живущий не дольше нужды.
+
+        Раньше словарь только рос — по объекту на каждый документ, обработанный
+        за всё время жизни процесса. Удалять запись в finally прогона (_run,
+        рядом с _threads/_abort_events) нельзя: этот лок берёт и read-путь
+        (ensure_chunks), не связанный с прогоном. Удаление занятого лока
+        привело бы к тому, что следующий вызов создаст ДРУГОЙ объект и два
+        потока зайдут в backfill одновременно — ровно то, от чего лок и стоит.
+        Поэтому запись удаляет тот, кто вышел последним.
+        """
+        with self._chunk_locks_guard:
+            entry = self._chunk_locks.get(doc_id)
+            if entry is None:
+                entry = [threading.Lock(), 0]
+                self._chunk_locks[doc_id] = entry
+            entry[1] += 1
+            lock = entry[0]
+        try:
+            with lock:
+                yield
+        finally:
+            with self._chunk_locks_guard:
+                entry[1] -= 1
+                if entry[1] <= 0 and self._chunk_locks.get(doc_id) is entry:
+                    del self._chunk_locks[doc_id]
+
     def ensure_chunks(self, doc_id: str) -> list[dict]:
         """Возвращает мету чанков документа, при необходимости строя их из исходника.
 
@@ -688,8 +736,7 @@ class Pipeline:
         if staging.exists():
             return _chunks_meta_from_dir(staging.dir, staging.load())
 
-        lock = self._chunk_locks.setdefault(doc_id, threading.Lock())
-        with lock:
+        with self._chunk_lock(doc_id):
             meta = _chunks_meta_from_db(doc_id)
             if meta:
                 return meta
@@ -703,12 +750,12 @@ class Pipeline:
         """
         doc = self.registry.get(doc_id)
         if not doc:
-            raise ValueError("Документ не найден")
+            raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
-            raise ValueError("Исходный файл документа не найден")
+            raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
         blocks = parse_document(
             filepath, filename,
             attachments_dir=self.settings.uploads_dir / doc_id / "attachments",
@@ -787,11 +834,18 @@ def save_upload_stream(
     Вызывается из обычного def-эндпоинта — FastAPI сам уводит его в threadpool,
     поэтому event loop не блокируется на больших файлах. Лимит размера проверяется
     по факту дочитывания (max_bytes), при превышении файл удаляется и бросается
-    ValueError. Возвращает (doc_id, dest, записанные байты).
+    DomainError. Возвращает (doc_id, dest, записанные байты).
+
+    Оба отказа несут стабильный код (unsupported_file_type / file_too_large):
+    раньше это были неразличимые ValueError, и роутер выбирал статус по
+    подстроке русского сообщения — управляющий поток на тексте диагностики.
     """
     ext = Path(original_filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
-        raise ValueError(f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}")
+        raise DomainError(
+            f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}",
+            code=codes.UNSUPPORTED_FILE_TYPE,
+        )
     settings = get_settings()
     limit = max_bytes or settings.max_upload_mb * 1024 * 1024
     doc_id = uuid.uuid4().hex[:16]
@@ -806,8 +860,9 @@ def save_upload_stream(
                     break
                 written += len(chunk)
                 if written > limit:
-                    raise ValueError(
-                        f"Файл превышает максимальный размер {limit // (1024 * 1024)} МБ"
+                    raise DomainError(
+                        f"Файл превышает максимальный размер {limit // (1024 * 1024)} МБ",
+                        code=codes.FILE_TOO_LARGE,
                     )
                 out.write(chunk)
     except Exception:
@@ -893,6 +948,50 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
             }
         )
     return attachments
+
+
+_INSTANCE: Pipeline | None = None
+_INSTANCE_LOCK = threading.Lock()
+
+
+def get_pipeline() -> Pipeline:
+    """Общий для процесса пайплайн — один инстанс на всех потребителей.
+
+    Состояние обработки (_threads, _abort_events, _start_lock, _chunk_locks) —
+    поля экземпляра, поэтому у каждого `Pipeline()` они свои и пустые. Пока
+    потребители создавали инстансы сами (bulk-job, корзина, purge), это давало
+    два дефекта:
+
+      - _start_lock защищал от параллельного старта только внутри своего
+        экземпляра — окно, которое закрывал 40c806b, оставалось открытым между
+        экземплярами;
+      - soft_delete/remove/remove_if_deleted прерывают живой прогон через
+        _abort_events[doc_id]; у свежего экземпляра словарь пуст, поэтому
+        массовое удаление и purge не прерывали идущую обработку — пайплайн
+        дописывал статус и векторы уже удалённому документу.
+
+    Оба лечатся одним общим инстансом. Прямой `Pipeline()` остаётся законным
+    для изолированных потребителей (тесты, offline-скрипты), которым разделять
+    состояние не с кем.
+    """
+    global _INSTANCE
+    with _INSTANCE_LOCK:
+        if _INSTANCE is None:
+            _INSTANCE = Pipeline()
+        return _INSTANCE
+
+
+def reset_pipeline() -> None:
+    """Сбрасывает синглтон (для тестов — по образцу db.session.configure_for_tests).
+
+    Pipeline фиксирует get_settings() в __init__, а каждый тест поднимает свои
+    settings поверх временного каталога. Без сброса первый же тест, дошедший до
+    get_pipeline(), закреплял бы свои пути за всем прогоном — вплоть до
+    _physical_cleanup, чистящего каталог чужого теста.
+    """
+    global _INSTANCE
+    with _INSTANCE_LOCK:
+        _INSTANCE = None
 
 
 def _extract_section_title(chunk_text: str) -> str:

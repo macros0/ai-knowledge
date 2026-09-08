@@ -22,6 +22,8 @@ from app.config import get_settings
 from app.services import audit
 from app.services.deduplication import find_active_duplicates_for_document
 from app.services.registry import get_registry
+from app import error_codes as codes
+from app.services.errors import ConflictError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +50,9 @@ def restore_document(doc_id: str, user, ip_address: str | None = None, *, force:
     """
     doc = _registry.get(doc_id)
     if doc is None:
-        raise ValueError("Документ не найден")
+        raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
     if doc.get("deleted_at") is None:
-        raise ValueError("Документ не находится в корзине")
+        raise ConflictError("Документ не находится в корзине", code=codes.NOT_IN_TRASH)
 
     if not force:
         dup = find_active_duplicates_for_document(doc_id)
@@ -59,9 +61,9 @@ def restore_document(doc_id: str, user, ip_address: str | None = None, *, force:
 
     # Снятие обоих флагов (Qdrant payload + БД). Импорт локальный — Pipeline
     # тянет за собой embedder/LLM, не нужные для восстановления.
-    from app.services.pipeline import Pipeline
+    from app.services.pipeline import get_pipeline
 
-    Pipeline().restore(doc_id)
+    get_pipeline().restore(doc_id)
 
     audit.record(
         user,
@@ -85,9 +87,9 @@ def bulk_restore(doc_ids: list[str], user, ip_address: str | None = None) -> dic
     c `?force=true`. Пропускает отсутствующие и не-удалённые. Каждый
     восстановленный — отдельная запись в audit.
     """
-    from app.services.pipeline import Pipeline
+    from app.services.pipeline import get_pipeline
 
-    pipeline = Pipeline()
+    pipeline = get_pipeline()
     restored: list[str] = []
     skipped: list[str] = []
     conflicts: list[dict] = []
@@ -124,9 +126,9 @@ def purge_expired_documents() -> int:
     if not doc_ids:
         return 0
 
-    from app.services.pipeline import Pipeline
+    from app.services.pipeline import get_pipeline
 
-    pipeline = Pipeline()
+    pipeline = get_pipeline()
     removed = 0
     for doc_id in doc_ids:
         doc = _registry.get(doc_id)

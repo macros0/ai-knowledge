@@ -18,6 +18,8 @@ from app.models.schemas import Concept
 from app.services.json_atomic import write_json_atomic
 from app.services.okf_generator import OKFGenerator
 from app.services.registry import get_registry
+from app import error_codes as codes
+from app.services.errors import NotFoundError
 from docparser import portable_name
 
 
@@ -31,7 +33,7 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
     generator = OKFGenerator()
     doc = get_registry().get(doc_id)
     if doc is None:
-        raise ValueError("Документ не найден")
+        raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
     filename = doc.get("filename", "")
     global_tags = list(doc.get("tags") or [])
 

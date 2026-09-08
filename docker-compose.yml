@@ -41,7 +41,7 @@ services:
     restart: unless-stopped
 
   # Одноразовая миграция схемы. Отдельный сервис, а не шаг в CMD бэкенда:
-  # backend масштабируется/перезапускается, а `alembic upgrade head` должен
+  # backend перезапускается, а `alembic upgrade head` должен
   # выполниться ровно один раз и ДО старта приложения — в production init_db()
   # намеренно не вызывается (схему ведёт Alembic), поэтому без миграций
   # контейнер поднимется на пустой БД и будет отдавать ошибки.
@@ -59,7 +59,10 @@ services:
       args:
         APP_UID: ${APP_UID:-1000}
         APP_GID: ${APP_GID:-1000}
-    image: okf-backend:local
+    # Свой тег, хотя образ тот же, что у backend: две службы с ОДНИМ image
+    # означают две цели сборки с одинаковым выходным тегом, а сборщики с bake
+    # такое отвергают. Контекст и Dockerfile совпадают, поэтому вторая сборка
+    # берётся из кеша слоёв и ничего не стоит.
     container_name: okf-migrate
     env_file:
       - .env
@@ -76,7 +79,14 @@ services:
     # Разовая задача: перезапускать после успешного выхода не нужно.
     restart: "no"
 
+  # Ровно один процесс: очередь задач, rate limit, потоки пайплайна и
+  # purge-циклы живут в памяти, а `recover_after_restart()` на старте помечает
+  # чужие running-задачи failed. Вторая реплика (или uvicorn --workers N) не
+  # просто не увидит это состояние — она оборвёт работу первой.
+  # Полный список последствий: docs/PRODUCTION_DEPLOYMENT.md §3.3.
   backend:
+    deploy:
+      replicas: 1
     build:
       context: .
       dockerfile: backend/Dockerfile

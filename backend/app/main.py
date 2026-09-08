@@ -26,6 +26,8 @@ from app.api import (
     tags,
     users,
 )
+from app import error_codes
+from app.api.errors import ApiError
 from app.api.settings import router as settings_router
 from app.auth.api import router as auth_router
 from app.auth.service import require_user
@@ -165,16 +167,28 @@ def create_app() -> FastAPI:
     get_store().ensure()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(CatchAllErrorsMiddleware)
+    # Кросс-доменный режим включается САМИМ наличием CORS-allow-list: пустой
+    # (дефолт) означает same-origin через Next.js rewrites, и тогда cookie
+    # остаётся SameSite=Lax — самый строгий вариант, при котором всё работает.
+    cross_origin = bool(settings.cors_allowed_origins)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.app_secret_key,
         max_age=settings.auth_session_ttl_seconds,
-        same_site="lax",
+        # SameSite=Lax браузер НЕ отправляет на кросс-сайтовый XHR, поэтому при
+        # настроенном allow-list сессия жила бы только на бумаге. None требует
+        # Secure — это гарантирует валидатор cors_allowed_origins в config.py.
+        same_site="none" if cross_origin else "lax",
         https_only=settings.auth_session_https_only,
     )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,
+        # Без allow_credentials браузер отбрасывает Set-Cookie и не шлёт cookie
+        # обратно: allow-list выглядел бы рабочим, а сессия не заводилась бы.
+        # Включаем только для явного списка — с '*' спецификация CORS это
+        # сочетание запрещает (и config.py такой список не пропустит).
+        allow_credentials=cross_origin,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -199,13 +213,31 @@ def create_app() -> FastAPI:
     protected.include_router(i18n.router)
     app.include_router(protected, prefix=settings.api_prefix)
 
+    @app.exception_handler(ApiError)
+    async def api_error_handler(request: Request, exc: ApiError):
+        """Плоское тело ошибки: {detail, code, ...}.
+
+        detail — диагностика (русская, для логов), code — стабильный контракт,
+        по которому клиент берёт текст из своего словаря и показывает его на
+        языке интерфейса (см. app/api/errors.py).
+
+        exc.headers пробрасываются в ответ: свой handler подменяет собой
+        штатный http_exception_handler FastAPI, который делал это сам, — без
+        этого Retry-After (429) и WWW-Authenticate (401) до клиента не дойдут.
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail, "code": exc.code, **exc.extra},
+            headers=exc.headers,
+        )
+
     @app.exception_handler(DependencyUnavailableError)
     async def dependency_error_handler(request: Request, exc: DependencyUnavailableError):
         return JSONResponse(
             status_code=503,
             content={
                 "detail": exc.user_message,
-                "code": "dependency_unavailable",
+                "code": error_codes.DEPENDENCY_UNAVAILABLE,
                 "service": exc.service,
             },
         )

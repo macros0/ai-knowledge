@@ -1,5 +1,4 @@
 """Юнит-тесты RRF (Reciprocal Rank Fusion) с весами."""
-import pytest
 
 from app.config import Settings
 from app.services.fusion import Hit, reciprocal_rank_fusion

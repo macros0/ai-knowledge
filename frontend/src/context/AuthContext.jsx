@@ -12,6 +12,7 @@ import {
   getMe,
   simulateAuth,
 } from "@/lib/api";
+import { useI18n } from "@/i18n/LocaleContext";
 
 const AuthContext = createContext(null);
 
@@ -25,6 +26,7 @@ export function AuthProvider({ children }) {
   const [simUsers, setSimUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const { t } = useI18n();
 
   const apply = useCallback((data) => {
     setUser(data?.user ?? null);
@@ -38,7 +40,7 @@ export function AuthProvider({ children }) {
     try {
       apply(await getMe());
     } catch {
-      setAuthError("Не удалось связаться с сервером. Проверьте, что бэкенд запущен.");
+      setAuthError("auth.serverUnreachable");
     } finally {
       setLoading(false);
     }
@@ -97,9 +99,9 @@ export function AuthProvider({ children }) {
           fontFamily: "inherit",
         }}
       >
-        <p>{authError}</p>
+        <p>{t(authError)}</p>
         <button type="button" className="btn" onClick={refresh}>
-          Повторить
+          {t("common.retry")}
         </button>
       </div>
     );

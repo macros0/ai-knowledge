@@ -13,10 +13,8 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-import uuid
 from pathlib import Path
 
-import pytest
 
 from app.config import Settings
 from app.services.concept_store import fetch_contents

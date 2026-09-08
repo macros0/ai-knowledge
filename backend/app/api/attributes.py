@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """Роут generic мини-справочника строковых атрибутов (module, component, ...)."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+from app.api import errors
+from app.api.errors import ApiError
+from fastapi import APIRouter, Depends, Request
 
 from app.auth.models import User
 from app.auth.service import require_role, require_user
@@ -62,9 +64,17 @@ def remove_attribute_value(
     try:
         removed = _registry.remove(key, value)
     except AttributeValueInUseError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=409,
+            code=errors.VALUE_IN_USE,
+            detail=str(exc),
+        ) from exc
     if not removed:
-        raise HTTPException(status_code=404, detail="Значение не найдено")
+        raise ApiError(
+            status_code=404,
+            code=errors.VALUE_NOT_FOUND,
+            detail="Значение не найдено",
+        )
     audit.record(
         user,
         audit.ATTRIBUTE_DELETE,

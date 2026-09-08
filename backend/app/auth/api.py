@@ -16,7 +16,9 @@ import logging
 
 import httpx
 from authlib.integrations.base_client.errors import OAuthError
-from fastapi import APIRouter, HTTPException, Request
+from app.api import errors
+from app.api.errors import ApiError
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from app.auth.factory import build_auth_provider, build_authorizer
@@ -37,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 def _resolve_to_user(identity: AuthenticatedIdentity):
     """identity → User с пересчитанной ролью; None при fail-closed."""
-    from app.auth.models import User
 
     settings = get_settings()
     role = build_authorizer(settings).resolve_role(identity.groups)
@@ -80,15 +81,27 @@ def auth_simulate(body: SimulateLoginIn, request: Request):
     provider = build_auth_provider(settings)
 
     if not isinstance(provider, SimulationProvider):
-        raise HTTPException(status_code=400, detail="simulation недоступен для " + provider.key)
+        raise ApiError(
+            status_code=400,
+            code=errors.AUTH_DISABLED,
+            detail="simulation недоступен для " + provider.key,
+        )
 
     identity = provider.resolve(body.username)
     if identity is None:
-        raise HTTPException(status_code=400, detail="Неизвестный демо-пользователь")
+        raise ApiError(
+            status_code=400,
+            code=errors.USER_NOT_FOUND,
+            detail="Неизвестный демо-пользователь",
+        )
 
     user = _resolve_to_user(identity)
     if user is None:
-        raise HTTPException(status_code=403, detail="Пользователю не назначена роль — доступ запрещён")
+        raise ApiError(
+            status_code=403,
+            code=errors.NO_ROLE,
+            detail="Пользователю не назначена роль — доступ запрещён",
+        )
 
     store_identity(request, identity)
     return {
@@ -115,7 +128,11 @@ async def login(request: Request):
     settings = get_settings()
     provider = build_auth_provider(settings)
     if provider.is_disabled():
-        raise HTTPException(status_code=400, detail="Авторизация отключена")
+        raise ApiError(
+            status_code=400,
+            code=errors.AUTH_DISABLED,
+            detail="Авторизация отключена",
+        )
     try:
         return await provider.start_login(request)
     except httpx.HTTPError as exc:
@@ -130,7 +147,11 @@ async def auth_callback(request: Request):
     settings = get_settings()
     provider = build_auth_provider(settings)
     if provider.is_disabled():
-        raise HTTPException(status_code=400, detail="Авторизация отключена")
+        raise ApiError(
+            status_code=400,
+            code=errors.AUTH_DISABLED,
+            detail="Авторизация отключена",
+        )
 
     try:
         identity = await provider.handle_callback(request)
@@ -146,7 +167,11 @@ async def auth_callback(request: Request):
 
     user = _resolve_to_user(identity)
     if user is None:
-        raise HTTPException(status_code=403, detail="Пользователю не назначена роль — доступ запрещён")
+        raise ApiError(
+            status_code=403,
+            code=errors.NO_ROLE,
+            detail="Пользователю не назначена роль — доступ запрещён",
+        )
 
     store_identity(request, identity)
     return RedirectResponse(url="/", status_code=303)

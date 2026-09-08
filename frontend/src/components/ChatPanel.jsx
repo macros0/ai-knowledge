@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { chat, listAttributeValues, listDevelopments } from "@/lib/api";
+import { chat, friendlyApiError, listAttributeValues, listDevelopments } from "@/lib/api";
 import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
@@ -79,11 +79,13 @@ export default function ChatPanel() {
         }),
       };
     }
-    const module = modules.find((m) => set.has(m));
-    if (module) {
+    // moduleName, а не module: имя `module` затеняет одноимённую переменную
+    // CommonJS-обёртки (@next/next/no-assign-module-variable).
+    const moduleName = modules.find((m) => set.has(m));
+    if (moduleName) {
       return {
-        href: `/?upload_module=${encodeURIComponent(module)}`,
-        label: t("chat.uploadHintModule", { module }),
+        href: `/?upload_module=${encodeURIComponent(moduleName)}`,
+        label: t("chat.uploadHintModule", { module: moduleName }),
       };
     }
     return null;
@@ -167,7 +169,7 @@ export default function ChatPanel() {
       } else {
         setMessages((m) => {
           const copy = [...m];
-          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: err.message }), sources: [] };
+          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [] };
           return copy;
         });
       }

@@ -78,6 +78,34 @@ class TestActiveLocales:
         r2 = client.get("/api/locales", headers={"if-none-match": etag})
         assert r2.status_code == 304
 
+    def test_304_repeats_validator_headers(self, client):
+        """RFC 7232 §4.1: на 304 едут ETag и Cache-Control, что и на 200.
+
+        Раньше 304 собирался отдельным Response, а заголовки ставились на
+        инжектированный `response` — и терялись, поэтому следующий запрос
+        клиента приходил уже без If-None-Match.
+        """
+        login(client)
+        etag = client.get("/api/locales").headers["etag"]
+        r = client.get("/api/locales", headers={"if-none-match": etag})
+        assert r.status_code == 304
+        assert r.headers["etag"] == etag
+        assert r.headers["cache-control"] == "private, max-age=60"
+
+    def test_i18n_304_repeats_validator_headers(self, client):
+        login(client)
+        assert client.post(
+            "/api/admin/locales/en/ui-dictionary/import",
+            json={"data": {"nav.documents": "Papers"}, "confirm": True},
+        ).status_code == 200
+        first = client.get("/api/i18n/en")
+        assert first.status_code == 200, first.text
+        etag = first.headers["etag"]
+        r = client.get("/api/i18n/en", headers={"if-none-match": etag})
+        assert r.status_code == 304
+        assert r.headers["etag"] == etag
+        assert r.headers["cache-control"] == "private, max-age=60"
+
 
 class TestLocalesCrud:
     def test_admin_list_has_counts(self, client):
@@ -467,3 +495,41 @@ class TestStopwordsImport:
         assert "апостроф/дефис" in detail
         assert "aujourd'hui" in detail
         assert "celle-ci" in detail
+
+
+class TestErrorCodes:
+    """Тело ошибки «Поддержки языков» несёт code — иначе UI покажет русский detail.
+
+    Раздел локализован (friendlyApiError в LanguagesPanel/UiDictionaryEditor),
+    но _raise собирал голый HTTPException без кода: клиент не находил ключ и
+    откатывался на diagnostic detail с бэкенда.
+    """
+
+    def test_unknown_locale_404_carries_code(self, client):
+        """Путь через _raise: get_locale -> LocaleNotFoundError -> 404."""
+        login(client)
+        resp = client.get("/api/admin/locales/zz/ui-dictionary")
+        assert resp.status_code == 404
+        assert resp.json()["code"] == "locale_not_found"
+
+    def test_history_unknown_locale_carries_code(self, client):
+        login(client)
+        resp = client.get("/api/admin/locales/zz/ui-dictionary/history")
+        assert resp.status_code == 404
+        assert resp.json()["code"] == "locale_not_found"
+
+    def test_validation_422_carries_code(self, client):
+        login(client)
+        resp = client.post("/api/admin/locales", json={"code": "ru", "name": "X"})
+        assert resp.status_code == 422
+        assert resp.json()["code"] == "invalid_request"
+
+    def test_ui_dictionary_unknown_locale_is_locale_code(self, client):
+        """Не document_not_found: ui_dictionary бросает ValueError на «языка нет»."""
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/zz/ui-dictionary/import",
+            json={"data": {"nav.documents": "X"}, "confirm": False},
+        )
+        assert resp.status_code == 404
+        assert resp.json()["code"] == "locale_not_found"

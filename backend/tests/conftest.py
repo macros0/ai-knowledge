@@ -34,7 +34,12 @@ def _flush_auth_env(monkeypatch):
 def _db(tmp_path):
     """Изолированная SQLite-БД на каждый тест (см. app.db.session.configure_for_tests)."""
     from app.db.session import configure_for_tests, init_db
+    from app.services.pipeline import reset_pipeline
 
     configure_for_tests(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     init_db()
+    # Синглтон пайплайна держит settings и состояние обработки: без сброса он
+    # пережил бы тест вместе с чужими tmp_path (см. services/pipeline.py).
+    reset_pipeline()
     yield
+    reset_pipeline()

@@ -82,7 +82,7 @@ export default function BackfillControl({ locale }) {
     setResult(null);
     backfillTranslations(code, selectedEntities)
       .then((res) => setResult(res.result || {}))
-      .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
+      .catch((err) => showToast(friendlyApiError(err, t), { type: "error" }))
       .finally(() => setBusy(false));
   };
 

@@ -1,7 +1,5 @@
 """Тесты автоопределения номера разработки (regex + LLM + сопоставление)."""
-import pytest
 
-from app.services.attribute_registry import AttributeRegistry
 from app.services.development_registry import get_development_registry
 from app.services.registry import get_registry
 

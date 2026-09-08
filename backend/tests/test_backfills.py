@@ -6,14 +6,29 @@ upsert — записывают вызовы. Реальная БД (SQLite per-
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 import httpx
-import pytest
 
 from app.config import Settings
 from app.services.sparse import to_sparse_vector
 from app.services.vector_store import SPARSE_VECTOR_NAME, VectorStore, chunk_point_id, concept_point_id
+
+
+def _matches(rec, scroll_filter) -> bool:
+    """Минимальная модель серверной фильтрации: has_vector и point_type."""
+    if scroll_filter is None:
+        return True
+    for cond in getattr(scroll_filter, "must_not", None) or []:
+        name = getattr(cond, "has_vector", None)
+        if name is not None and name in (rec.vector or {}):
+            return False
+    for cond in getattr(scroll_filter, "must", None) or []:
+        key = getattr(cond, "key", None)
+        match = getattr(cond, "match", None)
+        if key is not None and match is not None:
+            if (rec.payload or {}).get(key) != getattr(match, "value", None):
+                return False
+    return True
 
 
 class _Rec:
@@ -24,19 +39,35 @@ class _Rec:
 
 
 class FakeQdrant:
+    """Фейковый Qdrant, моделирующий серверную фильтрацию scroll.
+
+    Фильтр обязателен к моделированию: backfill_sparse полагается на то, что
+    точки с уже построенным sparse отсеивает СЕРВЕР (must_not has_vector), а не
+    клиент по выкачанным векторам. Фейк, игнорирующий фильтр, показывал бы
+    зелёные тесты при неработающей фильтрации.
+    """
+
     def __init__(self, records):
         self.records = records
         self.updated_vectors: list = []
         self.upserted: list = []
+        self.scroll_calls: list[dict] = []
+        self.payload_updates: list = []
 
-    def scroll(self, *, collection_name, limit, with_payload, with_vectors, offset=None):
-        return self.records, None
+    def scroll(
+        self, *, collection_name, limit, with_payload, with_vectors, offset=None, scroll_filter=None
+    ):
+        self.scroll_calls.append({"with_vectors": with_vectors, "with_payload": with_payload})
+        return [r for r in self.records if _matches(r, scroll_filter)], None
 
     def update_vectors(self, *, collection_name, points):
         self.updated_vectors.extend(points)
 
     def upsert(self, *, collection_name, points):
         self.upserted.extend(points)
+
+    def set_payload(self, *, collection_name, payload, points):
+        self.payload_updates.append((payload, list(points)))
 
 
 class FakeEmbedder:
@@ -114,7 +145,6 @@ class TestBackfillSparse:
         assert len(fake.updated_vectors) == 1
 
     def test_skips_points_not_in_db(self, tmp_path, monkeypatch):
-        settings = Settings(_env_file=None, data_dir=tmp_path)
         _create_db_concept()  # концепт в БД есть, но точки в Qdrant нет
         vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec("orphan-point", vector={})])
 
@@ -161,6 +191,76 @@ class TestBackfillSparse:
         assert vs.backfill_sparse(include_chunks=True) == 1
         got = fake.updated_vectors[0].vector[SPARSE_VECTOR_NAME]
         assert got.indices == to_sparse_vector("Abschnitt\nÜberstunden und Maßnahmen.").indices
+
+
+class TestBackfillScanCost:
+    """Стоимость прохода на старте: бэкфиллы не должны выкачивать коллекцию.
+
+    Три бэкфилла выполняются при каждом запуске процесса (main.lifespan), в том
+    числе при перезапуске воркера. Полный scroll с векторами/payload превращал
+    старт в скачивание всего корпуса.
+    """
+
+    def test_sparse_does_not_download_vectors(self, tmp_path, monkeypatch):
+        _create_db_concept()
+        point_id = concept_point_id("a1b2c3d4e5f60718", "concept")
+        vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec(point_id, vector={"": [0.1] * 8})])
+
+        vs.backfill_sparse()
+
+        assert fake.scroll_calls, "scroll не вызывался"
+        assert all(c["with_vectors"] is False for c in fake.scroll_calls), (
+            "векторы выкачивать нельзя: наличие sparse определяет фильтр Qdrant"
+        )
+
+    def test_sparse_force_also_does_not_download_vectors(self, tmp_path, monkeypatch):
+        _create_db_concept()
+        point_id = concept_point_id("a1b2c3d4e5f60718", "concept")
+        vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec(point_id, vector={"": [0.1] * 8})])
+
+        vs.backfill_sparse(force=True)
+
+        assert all(c["with_vectors"] is False for c in fake.scroll_calls)
+
+    def test_sparse_asks_qdrant_only_for_points_without_sparse(self, tmp_path, monkeypatch):
+        """Фильтр передаётся серверу: на прогретой коллекции работы нет."""
+        _create_db_concept()
+        point_id = concept_point_id("a1b2c3d4e5f60718", "concept")
+        # У точки sparse уже есть — фейк отсеет её ровно так же, как сервер.
+        vs, fake = _vs(
+            tmp_path,
+            monkeypatch,
+            records=[_Rec(point_id, vector={"": [0.1] * 8, SPARSE_VECTOR_NAME: None})],
+        )
+
+        assert vs.backfill_sparse() == 0
+        assert fake.updated_vectors == []
+
+    def test_relations_requests_only_relations_key(self, tmp_path, monkeypatch):
+        """payload концепта содержит content до 4000 символов — тянуть его нельзя."""
+        from app.db.models import Document, OkfConcept
+        from app.db.session import session_scope
+
+        doc_id = "a1b2c3d4e5f60718"
+        with session_scope() as s:
+            s.add(Document(id=doc_id, filename="a.docx", content_type="doc", size=1))
+            s.add(
+                OkfConcept(
+                    doc_id=doc_id, slug="c1", title="T", content="body", relations=["Другой"]
+                )
+            )
+        point_id = concept_point_id(doc_id, "c1")
+        vs, fake = _vs(
+            tmp_path,
+            monkeypatch,
+            records=[_Rec(point_id, vector={}, payload={"relations": []})],
+        )
+
+        assert vs.backfill_relations() == 1
+        assert fake.scroll_calls, "scroll не вызывался"
+        assert all(c["with_payload"] == ["relations"] for c in fake.scroll_calls), (
+            f"payload запрошен целиком: {[c['with_payload'] for c in fake.scroll_calls]}"
+        )
 
 
 class TestBackfillChunks:
@@ -309,7 +409,9 @@ class _BatchFailingQdrant:
         self.fail_to = fail_to
         self.upserts: list[list] = []
 
-    def scroll(self, *, collection_name, limit, with_payload, with_vectors, offset=None):
+    def scroll(
+        self, *, collection_name, limit, with_payload, with_vectors, offset=None, scroll_filter=None
+    ):
         return [], None
 
     def upsert(self, *, collection_name, points):

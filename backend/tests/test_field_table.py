@@ -3,7 +3,6 @@ import pytest
 
 from app.config import get_settings
 from app.services.field_table import (
-    FieldRow,
     TableBlock,
     build_field_concepts,
     build_overview_concept,

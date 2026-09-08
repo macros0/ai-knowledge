@@ -1,5 +1,8 @@
 """Роут глобального справочника тегов и переводов (Этап 7 фаза B)."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+from app.api import errors
+from app.services.errors import DomainError
+from app.api.errors import ApiError
+from fastapi import APIRouter, Depends, Request
 
 from app.auth.models import User
 from app.auth.service import require_role
@@ -48,9 +51,17 @@ def delete_tag(
     try:
         deleted = _tag_registry.delete(tag)
     except TagInUseError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=409,
+            code=errors.TAG_IN_USE,
+            detail=str(exc),
+        ) from exc
     if not deleted:
-        raise HTTPException(status_code=404, detail="Тег не найден в справочнике")
+        raise ApiError(
+            status_code=404,
+            code=errors.TAG_NOT_FOUND,
+            detail="Тег не найден в справочнике",
+        )
     audit.record(
         user,
         audit.TAG_DELETE,
@@ -94,8 +105,14 @@ def update_tag_translation(
         result = _tag_registry.set_translation(
             tag_id, body.locale, body.text, is_machine=False, reviewed_by=user.username
         )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     audit.record(
         user,
         audit.TAG_TRANSLATION_UPDATE,

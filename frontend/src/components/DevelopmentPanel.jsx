@@ -7,6 +7,7 @@ import {
   createDevelopment,
   deleteAttributeValue,
   deleteDevelopment,
+  friendlyApiError,
   listAttributeValues,
   listDevelopmentsPage,
   updateDevelopment,
@@ -67,7 +68,7 @@ export default function DevelopmentPanel() {
       setDevelopments(res.developments);
       setTotal(res.total);
     } catch (err) {
-      showToast(t("devpanel.loadError", { message: err.message }), { type: "error" });
+      showToast(t("devpanel.loadError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   }, [search, moduleFilter, sortBy, sortOrder, page, showToast, t]);
 
@@ -123,7 +124,7 @@ export default function DevelopmentPanel() {
         await addAttributeValue("module", v);
         setModules((prev) => [...prev, v].sort());
       } catch (err) {
-        showToast(t("devpanel.addModuleError", { message: err.message }), { type: "error" });
+        showToast(t("devpanel.addModuleError", { message: friendlyApiError(err, t) }), { type: "error" });
         throw err;
       }
       return v;
@@ -138,13 +139,13 @@ export default function DevelopmentPanel() {
     if (!number || !name) return;
     setBusy(true);
     try {
-      const module = await ensureModule(form.module);
-      await createDevelopment({ number, name, module });
+      const moduleName = await ensureModule(form.module);
+      await createDevelopment({ number, name, module: moduleName });
       setForm(EMPTY_FORM);
       showToast(t("devpanel.created", { name }), { type: "success" });
       await load();
     } catch (err) {
-      showToast(t("devpanel.createError", { message: err.message }), { type: "error" });
+      showToast(t("devpanel.createError", { message: friendlyApiError(err, t) }), { type: "error" });
     } finally {
       setBusy(false);
     }
@@ -176,8 +177,8 @@ export default function DevelopmentPanel() {
     }
     setBusy(true);
     try {
-      const module = await ensureModule(editForm.module);
-      await updateDevelopment(devId, { number, name, module });
+      const moduleName = await ensureModule(editForm.module);
+      await updateDevelopment(devId, { number, name, module: moduleName });
       setEditing(null);
       setEditForm(EMPTY_FORM);
       showToast(t("devpanel.saved"), { type: "success" });
@@ -187,7 +188,7 @@ export default function DevelopmentPanel() {
         setEditForm((f) => ({ ...f, version: err.data?.current?.version }));
         showToast(t("devpanel.versionConflict"), { type: "error" });
       } else {
-        showToast(t("devpanel.saveError", { message: err.message }), { type: "error" });
+        showToast(t("devpanel.saveError", { message: friendlyApiError(err, t) }), { type: "error" });
       }
     } finally {
       setBusy(false);
@@ -207,7 +208,7 @@ export default function DevelopmentPanel() {
         setPendingDelete(null);
         await load();
       } else {
-        showToast(t("devpanel.deleteError", { message: err.message }), { type: "error" });
+        showToast(t("devpanel.deleteError", { message: friendlyApiError(err, t) }), { type: "error" });
       }
     } finally {
       setBusy(false);
@@ -240,7 +241,7 @@ export default function DevelopmentPanel() {
       setNewModule("");
       showToast(t("devpanel.moduleAdded", { name: value }), { type: "success" });
     } catch (err) {
-      showToast(t("devpanel.addModuleError", { message: err.message }), { type: "error" });
+      showToast(t("devpanel.addModuleError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   };
 
@@ -251,7 +252,7 @@ export default function DevelopmentPanel() {
       setModules((prev) => prev.filter((m) => m !== value));
       showToast(t("devpanel.moduleRemoved", { name: value }), { type: "success" });
     } catch (err) {
-      showToast(t("devpanel.removeModuleError", { message: err.message }), { type: "error" });
+      showToast(t("devpanel.removeModuleError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   };
 

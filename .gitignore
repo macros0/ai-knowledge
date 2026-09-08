@@ -53,3 +53,8 @@ Thumbs.db
 
 # Probe acceptance baseline (local corpus state artifact, regen via --baseline)
 backend/scripts/probe-baseline.json
+
+# Артефакты линтера и покрытия (CI генерирует их на каждом прогоне)
+.ruff_cache/
+backend/.coverage
+backend/htmlcov/

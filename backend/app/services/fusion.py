@@ -12,7 +12,7 @@ RRFscore(d) = sum over ranked-lists m:  w_m / (k + rank_m(d))
 Документ, найденный несколькими ветками, получает кумулятивный буст.
 Дедупликация по point_id — структурная (dict-аккумулятор).
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

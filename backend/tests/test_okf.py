@@ -397,7 +397,6 @@ def _concept_dict(title: str) -> dict:
 
 class TestGenerateChunkTruncation:
     def _make_gen(self, tmp_path, llm, settings=None):
-        from app.config import Settings
         from app.services.okf_generator import OKFGenerator
 
         gen = OKFGenerator(llm=llm, bundle_root=tmp_path / "okf")

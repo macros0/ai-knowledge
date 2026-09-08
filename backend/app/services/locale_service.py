@@ -496,13 +496,11 @@ def probe(queries: list[str]) -> list[dict]:
     Возвращает [{query, hits: [{title, score}]}]. Требует доступного Qdrant —
     при недоступности пробрасывается DependencyUnavailableError → 503.
     """
-    from app.config import get_settings
     from app.services.embedder import Embedder
     from app.services.sparse import to_sparse_vector
     from app.services.stopwords import get_stopwords
     from app.services.vector_store import VectorStore
 
-    settings = get_settings()
     vs = VectorStore()
     emb = Embedder()
     bm25_sw = get_stopwords(KIND_BM25)

@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING
 
 from app.auth.providers.base import AuthProvider
 
+from app.api import errors
+from app.api.errors import ApiError
+
 if TYPE_CHECKING:
     from fastapi import Request
 
@@ -25,11 +28,17 @@ class DisabledProvider(AuthProvider):
         return True
 
     async def start_login(self, request: "Request"):
-        from fastapi import HTTPException
 
-        raise HTTPException(status_code=400, detail="Авторизация отключена")
+        raise ApiError(
+            status_code=400,
+            code=errors.AUTH_DISABLED,
+            detail="Авторизация отключена",
+        )
 
     async def handle_callback(self, request: "Request") -> "AuthenticatedIdentity":
-        from fastapi import HTTPException
 
-        raise HTTPException(status_code=400, detail="Авторизация отключена")
+        raise ApiError(
+            status_code=400,
+            code=errors.AUTH_DISABLED,
+            detail="Авторизация отключена",
+        )

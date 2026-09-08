@@ -1,6 +1,5 @@
 """Тесты короткого замыкания /chat при пустом результате (Этап 4a.1)."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings

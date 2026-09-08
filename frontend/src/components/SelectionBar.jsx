@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { bulkUpdateTags } from "@/lib/api";
+import { bulkUpdateTags, friendlyApiError } from "@/lib/api";
 import { bumpTagVersion } from "@/lib/tagDictionary";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -69,7 +69,7 @@ export default function SelectionBar({
       if (op === "add") setAddTag("");
       else setRemoveTag("");
     } catch (err) {
-      showToast(t("selection.bulkError", { message: err.message }), { type: "error" });
+      showToast(t("selection.bulkError", { message: friendlyApiError(err, t) }), { type: "error" });
     } finally {
       setBusy(false);
     }
