@@ -76,7 +76,7 @@ export default function UiDictionaryEditor({ locale }) {
       }
       return true;
     } catch (err) {
-      setLoadError(friendlyApiError(err));
+      setLoadError(friendlyApiError(err, t));
       return false;
     } finally {
       setLoading(false);
@@ -112,7 +112,7 @@ export default function UiDictionaryEditor({ locale }) {
     setBusy(true);
     importUiDictionary(code, { data, note, confirm: false })
       .then((res) => setResult(res))
-      .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
+      .catch((err) => showToast(friendlyApiError(err, t), { type: "error" }))
       .finally(() => setBusy(false));
   };
 
@@ -137,7 +137,7 @@ export default function UiDictionaryEditor({ locale }) {
           setResult(res);
         }
       })
-      .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
+      .catch((err) => showToast(friendlyApiError(err, t), { type: "error" }))
       .finally(() => setBusy(false));
   };
 
@@ -151,7 +151,7 @@ export default function UiDictionaryEditor({ locale }) {
         await loadActive();
         await loadHistory();
       })
-      .catch((err) => showToast(friendlyApiError(err), { type: "error" }))
+      .catch((err) => showToast(friendlyApiError(err, t), { type: "error" }))
       .finally(() => setBusy(false));
   };
 

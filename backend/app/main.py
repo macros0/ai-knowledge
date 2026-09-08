@@ -26,6 +26,7 @@ from app.api import (
     tags,
     users,
 )
+from app.api.errors import ApiError
 from app.api.settings import router as settings_router
 from app.auth.api import router as auth_router
 from app.auth.service import require_user
@@ -198,6 +199,19 @@ def create_app() -> FastAPI:
     protected.include_router(admin_locales.router)
     protected.include_router(i18n.router)
     app.include_router(protected, prefix=settings.api_prefix)
+
+    @app.exception_handler(ApiError)
+    async def api_error_handler(request: Request, exc: ApiError):
+        """Плоское тело ошибки: {detail, code, ...}.
+
+        detail — диагностика (русская, для логов), code — стабильный контракт,
+        по которому клиент берёт текст из своего словаря и показывает его на
+        языке интерфейса (см. app/api/errors.py).
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail, "code": exc.code, **exc.extra},
+        )
 
     @app.exception_handler(DependencyUnavailableError)
     async def dependency_error_handler(request: Request, exc: DependencyUnavailableError):

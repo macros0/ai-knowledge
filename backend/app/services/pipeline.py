@@ -27,7 +27,12 @@ from app.services.concept_store import replace_concepts
 from app.services.dev_detector import attach_development, detect
 from app.services.development_registry import get_development_registry
 from app.services.embedder import Embedder
-from app.services.errors import DependencyUnavailableError
+from app import error_codes as codes
+from app.services.errors import (
+    ConflictError,
+    DependencyUnavailableError,
+    NotFoundError,
+)
 from app.services import gen_quality
 from app.services.json_atomic import write_json_atomic
 from app.services.language import detect_language
@@ -85,13 +90,13 @@ class Pipeline:
     def resume(self, doc_id: str) -> None:
         doc = self.registry.get(doc_id)
         if not doc:
-            raise ValueError("Документ не найден")
+            raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         self._ensure_not_running(doc_id)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
-            raise ValueError("Исходный файл документа не найден")
+            raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=True)
 
     def _ensure_not_running(self, doc_id: str) -> None:
@@ -102,7 +107,7 @@ class Pipeline:
         """
         thread = self._threads.get(doc_id)
         if thread and thread.is_alive():
-            raise ValueError("Документ уже обрабатывается")
+            raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
 
     def regenerate(self, doc_id: str) -> None:
         """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
@@ -114,13 +119,13 @@ class Pipeline:
         """
         doc = self.registry.get(doc_id)
         if not doc:
-            raise ValueError("Документ не найден")
+            raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         self._ensure_not_running(doc_id)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
-            raise ValueError("Исходный файл документа не найден")
+            raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
 
         try:
             self.vector_store.delete_document(doc_id)
@@ -744,12 +749,12 @@ class Pipeline:
         """
         doc = self.registry.get(doc_id)
         if not doc:
-            raise ValueError("Документ не найден")
+            raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
-            raise ValueError("Исходный файл документа не найден")
+            raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
         blocks = parse_document(
             filepath, filename,
             attachments_dir=self.settings.uploads_dir / doc_id / "attachments",

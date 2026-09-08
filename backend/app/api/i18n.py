@@ -5,6 +5,8 @@ GET /i18n/{locale} — актуальный override-словарь локали
 релиза). Кэш-заголовки: версия меняется редко, ключ/значения — неизменяемый
 снапшот.
 """
+from app.api import errors
+from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from app.auth.models import User
@@ -19,7 +21,11 @@ router = APIRouter(prefix="/i18n", tags=["i18n"])
 def get_ui_dictionary(locale: str, request: Request, response: Response, user: User = Depends(require_user)):
     active = get_active(locale)
     if active is None:
-        raise HTTPException(status_code=404, detail="Нет активного override-словаря")
+        raise ApiError(
+            status_code=404,
+            code=errors.OVERRIDE_NOT_FOUND,
+            detail="Нет активного override-словаря",
+        )
     etag = f"v{active['version']}"
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "private, max-age=60"

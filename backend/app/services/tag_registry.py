@@ -24,6 +24,8 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import Document, DocumentTag, Tag, TagTranslation
 from app.db.session import session_scope
+from app import error_codes as codes
+from app.services.errors import ConflictError, DomainError, NotFoundError
 
 
 def _now() -> datetime:
@@ -242,7 +244,7 @@ class TagRegistry:
         ValueError при отсутствии тега."""
         text = (text or "").strip()
         if not text:
-            raise ValueError("Перевод не может быть пустым")
+            raise DomainError("Перевод не может быть пустым", code=codes.TRANSLATION_EMPTY)
         with session_scope() as s:
             tag = s.get(Tag, tag_id)
             if tag is None:

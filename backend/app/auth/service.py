@@ -12,6 +12,8 @@ import logging
 
 from typing import NoReturn
 
+from app.api import errors
+from app.api.errors import ApiError
 from fastapi import HTTPException, Request
 
 from app import config as config_mod
@@ -50,25 +52,28 @@ def clear_identity(request: Request) -> None:
 
 
 def _unauthorized() -> NoReturn:
-    raise HTTPException(
-        status_code=401,
-        detail="Требуется авторизация",
+    raise ApiError(
+            status_code=401,
+            code=errors.AUTH_REQUIRED,
+            detail="Требуется авторизация",
         headers={"WWW-Authenticate": "Bearer"},
-    )
+        )
 
 
 def _forbidden() -> NoReturn:
-    raise HTTPException(
-        status_code=403,
-        detail="Пользователю не назначена роль — доступ запрещён",
-    )
+    raise ApiError(
+            status_code=403,
+            code=errors.NO_ROLE,
+            detail="Пользователю не назначена роль — доступ запрещён",
+        )
 
 
 def _blocked_user() -> NoReturn:
-    raise HTTPException(
-        status_code=403,
-        detail="Пользователь заблокирован. Обратитесь к администратору безопасности.",
-    )
+    raise ApiError(
+            status_code=403,
+            code=errors.USER_BLOCKED,
+            detail="Пользователь заблокирован. Обратитесь к администратору безопасности.",
+        )
 
 
 def _resolve(identity: AuthenticatedIdentity) -> User | None:
@@ -146,9 +151,11 @@ def require_role(*roles: str):
             return public_user()
         user = require_user(request)
         if not (set(roles) & set(user.roles)):
-            raise HTTPException(
-                status_code=403, detail="Недостаточно прав для выполнения операции"
-            )
+            raise ApiError(
+            status_code=403,
+            code=errors.FORBIDDEN,
+            detail="Недостаточно прав для выполнения операции",
+        )
         return user
 
     return dependency

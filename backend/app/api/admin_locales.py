@@ -4,6 +4,9 @@
 Импорт стоп-слов двухшаговый: без confirm — preview diff, с confirm — применение
 (одна транзакция + синхронная инвалидация кэша стоп-слов).
 """
+from app.api import errors
+from app.services.errors import DomainError
+from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth.models import User
@@ -224,7 +227,11 @@ def probe_stopwords(code: str, body: StopwordProbeRequest, user: User = admin):
         raise _raise(exc) from exc
     queries = [q for q in body.queries if q and q.strip()][:20]
     if not queries:
-        raise HTTPException(status_code=422, detail="Пустой набор запросов для probe")
+        raise ApiError(
+            status_code=422,
+            code=errors.EMPTY_DOCUMENT_LIST,
+            detail="Пустой набор запросов для probe",
+        )
     results = locale_service.probe(queries)
     return StopwordProbeResponse(
         results=[
@@ -258,8 +265,14 @@ def import_ui_dictionary(
             user=user,
             ip_address=_client_ip(request),
         )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     return UiDictionaryImportResult(**result)
 
 
@@ -300,6 +313,12 @@ def rollback_ui_dictionary(
         result = ui_dictionary.rollback(
             code, body.entry_id, user=user, ip_address=_client_ip(request)
         )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     return result

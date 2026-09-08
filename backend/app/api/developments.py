@@ -4,6 +4,9 @@
 """Роут справочника номеров разработки (Этап 4)."""
 from typing import Annotated
 
+from app.api import errors
+from app.services.errors import DomainError
+from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -75,7 +78,11 @@ def create_development(
     try:
         dev = _registry.create(body.number, body.name, body.module, created_by=user.username)
     except DevelopmentModuleError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=422,
+            code=errors.INVALID_REQUEST,
+            detail=str(exc),
+        ) from exc
     except DevelopmentNumberExistsError as exc:
         return JSONResponse(
             status_code=409,
@@ -96,7 +103,11 @@ def create_development(
 def get_development(dev_id: int, request: Request, user: User = Depends(require_user)):
     dev = _registry.get(dev_id)
     if dev is None:
-        raise HTTPException(status_code=404, detail="Разработка не найдена")
+        raise ApiError(
+            status_code=404,
+            code=errors.DEVELOPMENT_NOT_FOUND,
+            detail="Разработка не найдена",
+        )
     _registry.add_display_names([dev], request_locale(request))
     return DevelopmentOut(**dev)
 
@@ -113,7 +124,11 @@ def update_development(
             dev_id, body.version, number=body.number, name=body.name, module=body.module
         )
     except DevelopmentModuleError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=422,
+            code=errors.INVALID_REQUEST,
+            detail=str(exc),
+        ) from exc
     except DevelopmentNumberExistsError as exc:
         return JSONResponse(
             status_code=409,
@@ -128,8 +143,14 @@ def update_development(
                 "current": jsonable_encoder(exc.current),
             },
         )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     audit.record(
         user,
         audit.DEVELOPMENT_UPDATE,
@@ -160,7 +181,11 @@ def delete_development(
             },
         )
     if not deleted:
-        raise HTTPException(status_code=404, detail="Разработка не найдена")
+        raise ApiError(
+            status_code=404,
+            code=errors.DEVELOPMENT_NOT_FOUND,
+            detail="Разработка не найдена",
+        )
     audit.record(
         user,
         audit.DEVELOPMENT_DELETE,
@@ -181,7 +206,11 @@ def list_development_documents(
     user: User = Depends(require_user),
 ):
     if _registry.get(dev_id) is None:
-        raise HTTPException(status_code=404, detail="Разработка не найдена")
+        raise ApiError(
+            status_code=404,
+            code=errors.DEVELOPMENT_NOT_FOUND,
+            detail="Разработка не найдена",
+        )
     from app.services.registry import get_registry
 
     docs, total = get_registry().list_page(

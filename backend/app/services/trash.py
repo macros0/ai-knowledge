@@ -22,6 +22,8 @@ from app.config import get_settings
 from app.services import audit
 from app.services.deduplication import find_active_duplicates_for_document
 from app.services.registry import get_registry
+from app import error_codes as codes
+from app.services.errors import ConflictError, DomainError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +50,9 @@ def restore_document(doc_id: str, user, ip_address: str | None = None, *, force:
     """
     doc = _registry.get(doc_id)
     if doc is None:
-        raise ValueError("Документ не найден")
+        raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
     if doc.get("deleted_at") is None:
-        raise ValueError("Документ не находится в корзине")
+        raise ConflictError("Документ не находится в корзине", code=codes.NOT_IN_TRASH)
 
     if not force:
         dup = find_active_duplicates_for_document(doc_id)

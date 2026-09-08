@@ -18,6 +18,8 @@ from sqlalchemy.exc import IntegrityError
 from app.db.models import Development, DevelopmentTranslation, Document
 from app.db.session import session_scope
 from app.services.attribute_registry import get_attribute_registry
+from app import error_codes as codes
+from app.services.errors import ConflictError, DomainError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +85,9 @@ class DevelopmentRegistry:
         number = number.strip()
         name = name.strip()
         if not number:
-            raise ValueError("Номер разработки не может быть пустым")
+            raise DomainError("Номер разработки не может быть пустым", code=codes.EMPTY_VALUE)
         if not name:
-            raise ValueError("Название разработки не может быть пустым")
+            raise DomainError("Название разработки не может быть пустым", code=codes.EMPTY_VALUE)
         module = self._validate_module(module)
         with session_scope() as s:
             dev = Development(number=number, name=name, module=module, created_by=created_by, version=1)
@@ -196,7 +198,7 @@ class DevelopmentRegistry:
         with session_scope() as s:
             dev = s.get(Development, dev_id)
             if dev is None:
-                raise ValueError("Разработка не найдена")
+                raise NotFoundError("Разработка не найдена", code=codes.DEVELOPMENT_NOT_FOUND)
             if dev.version != version:
                 raise DevelopmentConflictError(_to_dict(dev, self._count(s, dev_id)))
 
@@ -241,7 +243,7 @@ class DevelopmentRegistry:
                     # Между чтением и UPDATE кто-то успел изменить версию.
                     cur = s.get(Development, dev_id, populate_existing=True)
                     if cur is None:
-                        raise ValueError("Разработка не найдена")
+                        raise NotFoundError("Разработка не найдена", code=codes.DEVELOPMENT_NOT_FOUND)
                     raise DevelopmentConflictError(_to_dict(cur, self._count(s, dev_id)))
                 result = {
                     "id": dev_id,

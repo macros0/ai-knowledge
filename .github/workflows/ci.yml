@@ -105,3 +105,25 @@ jobs:
 
       - name: Сборка образов
         run: docker compose build
+
+      # Сборка образа НЕ доказывает, что в нём есть чем выполнить деплой:
+      # без alembic/ и scripts/ образ собирается ровно так же, а обязательные
+      # шаги (docs/PRODUCTION_DEPLOYMENT.md §7) выполнить нечем. Поэтому
+      # прогоняем миграции внутри собранного образа против compose-Postgres.
+      - name: Миграции применяются в собранном образе
+        run: |
+          # DATABASE_URL из .env.example смотрит на 127.0.0.1 — внутри
+          # compose-сети хост называется postgres, пароль берётся из
+          # POSTGRES_PASSWORD по умолчанию (docker-compose.yml).
+          echo "DATABASE_URL=postgresql+psycopg://postgres:okf_dev_pg@postgres:5432/okf_knowledge" >> .env
+          docker compose --profile local-postgres up -d postgres
+          docker compose --profile local-postgres run --rm migrate
+          # Повторный прогон обязан быть no-op: миграции идемпотентны.
+          docker compose --profile local-postgres run --rm migrate
+
+      - name: Скрипты предзаполнения доступны в образе
+        run: docker compose --profile local-postgres run --rm migrate python scripts/seed_attribute_values.py
+
+      - name: Остановить сервисы
+        if: always()
+        run: docker compose --profile local-postgres down -v

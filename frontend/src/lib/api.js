@@ -1,14 +1,13 @@
 const BASE = "/api";
 const CHAT_TIMEOUT_MS = 90_000;
 
-const SERVICE_MESSAGES = {
-  llm: "Сервис генерации ответа недоступен. Проверьте подключение к провайдеру LLM.",
-  ollama: "Сервис эмбеддингов недоступен. Проверьте, что embedding-сервис запущен.",
-  qdrant: "База знаний недоступна. Проверьте, что Qdrant запущен.",
-};
+// Тексты ошибок живут в словарях (i18n/locales), а не здесь: интерфейс
+// двуязычный, и литерал в api.js пришёл бы к англоязычному пользователю
+// по-русски. Здесь — только выбор КЛЮЧА по ответу бэкенда.
+const KNOWN_SERVICES = new Set(["llm", "ollama", "qdrant"]);
 
-export function getServiceMessage(service) {
-  return SERVICE_MESSAGES[service] || null;
+export function serviceMessageKey(service) {
+  return KNOWN_SERVICES.has(service) ? `apiError.service.${service}` : null;
 }
 
 export class ApiError extends Error {
@@ -26,24 +25,44 @@ export class ApiError extends Error {
   }
 }
 
-// Человекочитаемое сообщение об ошибке API (не сырой текст): тосты в админ-UI
-// не должны показывать «Not Found» / «Internal Server Error» без контекста.
-export function friendlyApiError(err) {
-  if (err instanceof ApiError) {
-    if (err.status === 401 || err.status === 403) {
-      return "Сессия истекла или недостаточно прав — обновите страницу и войдите заново.";
-    }
-    if (err.status === 404) {
-      return "Раздел недоступен на backend (возможно, запущена старая версия) — перезапустите backend.";
-    }
-    if (err.status === 0) {
-      return "Backend недоступен. Проверьте, что сервис запущен.";
-    }
-    const svc = err.service ? getServiceMessage(err.service) : null;
-    if (err.isDependencyUnavailable && svc) return svc;
-    return err.message || `Ошибка (HTTP ${err.status})`;
+// Ключ словаря и параметры для ошибки API — чистая функция, тестируется без DOM.
+//
+// Приоритет: стабильный code из тела ответа -> сервис недоступной зависимости
+// -> статус. Если код неизвестен клиенту (бэкенд новее фронтенда), возвращаем
+// null и вызывающий показывает detail — диагностику как есть, лучше чем ничего.
+export function apiErrorKey(err) {
+  if (!(err instanceof ApiError)) return null;
+  if (err.isDependencyUnavailable) {
+    const svcKey = serviceMessageKey(err.service);
+    if (svcKey) return { key: svcKey, params: {} };
   }
-  return (err && err.message) || "Неизвестная ошибка";
+  if (err.code) return { key: `apiError.${err.code}`, params: {} };
+  if (err.status === 401 || err.status === 403) {
+    return { key: "apiError.sessionExpired", params: {} };
+  }
+  if (err.status === 404) return { key: "apiError.endpointMissing", params: {} };
+  if (err.status === 0) return { key: "apiError.backendUnreachable", params: {} };
+  // Кода нет — общая формулировка по статусу потеряла бы смысл сообщения
+  // ("Тег используется документами" информативнее, чем "Ошибка (HTTP 409)").
+  return null;
+}
+
+// Человекочитаемое сообщение об ошибке API на языке интерфейса: тосты в админ-UI
+// не должны показывать «Not Found» / «Internal Server Error» без контекста.
+// t — переводчик из useI18n(); detail с бэкенда остаётся фолбэком для кодов,
+// которых нет в словаре клиента.
+export function friendlyApiError(err, t) {
+  const tr = t || ((k) => k);
+  const picked = apiErrorKey(err);
+  if (picked) {
+    const text = tr(picked.key, picked.params);
+    // text === key означает, что ключа нет в словаре клиента (бэкенд новее) —
+    // тогда лучше показать detail, чем сам ключ.
+    if (text !== picked.key) return text;
+  }
+  if (err && err.message) return err.message;
+  const status = err && err.status;
+  return status ? tr("apiError.http", { status }) : tr("apiError.unknown");
 }
 
 async function request(path, init, timeoutMs) {
@@ -74,10 +93,8 @@ async function request(path, init, timeoutMs) {
     return resp.json();
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new ApiError(
-        "Не удалось получить ответ вовремя: сервис генерации временно недоступен, попробуйте позже.",
-        { status: 0 }
-      );
+      // message — фолбэк-диагностика; текст для пользователя берётся по коду.
+      throw new ApiError("request timeout", { status: 0, code: "timeout" });
     }
     throw err;
   } finally {

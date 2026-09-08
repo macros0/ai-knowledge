@@ -25,6 +25,8 @@ from app.config import get_settings
 from app.db.models import Job
 from app.db.session import session_scope
 from app.services import audit as audit_mod
+from app import error_codes as codes
+from app.services.errors import ConflictError, DomainError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +152,7 @@ class JobQueue:
         if job_type not in JOB_TYPES:
             raise ValueError(f"Неизвестный job_type: {job_type}")
         if not doc_ids:
-            raise ValueError("Список документов пуст")
+            raise DomainError("Список документов пуст", code=codes.EMPTY_DOCUMENT_LIST)
 
         settings = get_settings()
         # Circuit breaker: проверяем ДО создания записи в jobs.
@@ -219,7 +221,7 @@ class JobQueue:
             if job is None:
                 raise JobNotFoundError(f"Задача {job_id} не найдена")
             if job.status != STATUS_AWAITING_APPROVAL:
-                raise ValueError("Задача не ожидает одобрения")
+                raise ConflictError("Задача не ожидает одобрения", code=codes.JOB_NOT_AWAITING_APPROVAL)
             approver_id = getattr(approver, "user_id", None)
             if job.created_by_id is not None and job.created_by_id == approver_id:
                 raise SelfApprovalError(
@@ -246,7 +248,10 @@ class JobQueue:
             if job is None:
                 raise JobNotFoundError(f"Задача {job_id} не найдена")
             if job.status not in (STATUS_QUEUED, STATUS_AWAITING_APPROVAL):
-                raise ValueError("Отменить можно только задачу, ожидающую выполнения")
+                raise ConflictError(
+                    "Отменить можно только задачу, ожидающую выполнения",
+                    code=codes.JOB_NOT_CANCELLABLE,
+                )
             job.status = STATUS_CANCELLED
             job.finished_at = _utcnow()
 
@@ -290,7 +295,7 @@ class JobQueue:
             try:
                 if job["job_type"] == BULK_DELETE:
                     if pipeline.registry.get(doc_id) is None:
-                        raise ValueError("Документ не найден")
+                        raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
                     pipeline.soft_delete(doc_id, deleted_by=job.get("created_by"))
                     audit_mod.record(
                         _JobUser(job),
@@ -326,13 +331,16 @@ class JobQueue:
         while time.time() < deadline:
             doc = pipeline.registry.get(doc_id)
             if doc is None:
-                raise ValueError("Документ не найден")
+                raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
             if doc.get("status") in _DOC_TERMINAL:
                 if doc.get("status") in ("failed", "error"):
                     raise ValueError(doc.get("error") or "Перегенерация завершилась ошибкой")
                 return
             time.sleep(1.0)
-        raise ValueError("Превышено время ожидания перегенерации документа")
+        raise DomainError(
+            "Превышено время ожидания перегенерации документа",
+            code=codes.REGENERATE_TIMEOUT,
+        )
 
     def _set_status(self, job_id: int, status: str, **fields) -> None:
         with session_scope() as s:

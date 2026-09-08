@@ -20,6 +20,8 @@ from sqlalchemy import select
 from app.db.models import Locale, UiDictionary
 from app.db.session import session_scope
 from app.services import audit
+from app import error_codes as codes
+from app.services.errors import ConflictError, DomainError, NotFoundError
 
 _MANIFEST_PATH = Path(__file__).resolve().parents[1] / "i18n" / "ui_keys.json"
 _PARAM_RE = re.compile(r"\{(\w+)\}")
@@ -251,7 +253,7 @@ def rollback(locale: str, version_id: int, *, user=None, ip_address: str | None 
     with session_scope() as s:
         row = s.get(UiDictionary, version_id)
         if row is None or row.locale != locale:
-            raise ValueError("Версия словаря не найдена")
+            raise NotFoundError("Версия словаря не найдена", code=codes.DICT_VERSION_NOT_FOUND)
         loc = s.get(Locale, locale)
         if loc is None:
             raise ValueError(f"Язык '{locale}' не найден")

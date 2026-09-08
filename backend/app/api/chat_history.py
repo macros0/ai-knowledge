@@ -11,6 +11,8 @@
   - GET /chat/admin/history/{user_id}/{sid}   — тред пользователя (+ audit
     chat_history_view — только здесь, при открытии содержимого конкретного треда).
 """
+from app.api import errors
+from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.auth.models import User
@@ -46,9 +48,17 @@ def get_own_thread(session_id: str, user: User = Depends(require_user)):
     try:
         thread = chat_history.get_thread(session_id, user.user_id, check_owner=True)
     except chat_history.ChatOwnershipError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=403,
+            code=errors.FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     if thread is None:
-        raise HTTPException(status_code=404, detail="Сессия не найдена")
+        raise ApiError(
+            status_code=404,
+            code=errors.SESSION_NOT_FOUND,
+            detail="Сессия не найдена",
+        )
     return thread
 
 
@@ -58,9 +68,17 @@ def delete_own_session(session_id: str, user: User = Depends(require_user)):
     try:
         deleted = chat_history.soft_delete_session(session_id, user)
     except chat_history.ChatOwnershipError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=403,
+            code=errors.FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     if not deleted:
-        raise HTTPException(status_code=404, detail="Сессия не найдена")
+        raise ApiError(
+            status_code=404,
+            code=errors.SESSION_NOT_FOUND,
+            detail="Сессия не найдена",
+        )
     return {"status": "deleted", "session_id": session_id}
 
 
@@ -96,7 +114,11 @@ def get_user_thread(
         # Сессия принадлежит не user_id — для запрошенного пользователя не найдена.
         thread = None
     if thread is None:
-        raise HTTPException(status_code=404, detail="Сессия не найдена")
+        raise ApiError(
+            status_code=404,
+            code=errors.SESSION_NOT_FOUND,
+            detail="Сессия не найдена",
+        )
     audit.record(
         user,
         audit.CHAT_HISTORY_VIEW,
