@@ -397,6 +397,21 @@ words apply only on the query side (the sparse.py index formula is frozen to con
 no reindex needed), so editing stop words does not affect stored vectors and needs no extra
 scoping beyond the `admin` role.
 
+### 2026-09-08 — UI language activation gate removed; en-copy auto-seed (Stage 7, phases A/C)
+Change: the activation gate "locale must be present in the frontend manifest
+(`SHIPPED_LOCALES`)" was removed from `locale_service._validate_activation`; activation now
+requires only a non-empty bm25 stop-word set. On successful activation, a locale without a
+runtime UI dictionary gets version 1 seeded as a full en copy
+(`ui_dictionary.seed_english_copy`, source `backend/app/i18n/ui_en.json` generated from
+`en.js`); the seed reuses the existing audited import path (`ui_dictionary_import`) and never
+overwrites an existing override. Reason: a language should be activatable for the corpus
+(stop-word union, `request_locale`) without a frontend UI release — "active" no longer
+implies "UI language"; the UI toggle still filters by the static frontend manifest, so an
+activated language without a manifest entry never reaches users. Authorization boundary is
+unchanged (activation and the seed remain `admin`-role-only); the seed is a side effect of an
+already-audited admin action and is recorded with the same `ui_dictionary_import` action
+(note "auto: en copy on activation").
+
 ### 2026-09-05 — Qdrant v2 + bundles as export (Stage 2b, phases 4–5)
 Change: the Qdrant collection was rebuilt (`okf_knowledge_base_v2`) from PostgreSQL with
 logical point_ids `uuid5("okf:concept:{doc_id}:{slug}")` / `uuid5("okf:chunk:{doc_id}:{chunk_index}")`

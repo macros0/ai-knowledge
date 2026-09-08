@@ -1,10 +1,10 @@
 """Генерация OKF-файлов (YAML-фронтматтер + Markdown) из текста документа через LLM."""
 import logging
 import re
+import unicodedata
 from datetime import date
 from pathlib import Path
 from typing import Protocol
-
 import yaml
 
 from app.config import get_settings
@@ -518,10 +518,25 @@ _CYR_LAT = {
 # doc_id (~16) + пути (~100) + slug → ограничиваем slug до 80.
 _SLUG_MAX_LEN = 80
 
+# Немецкая транслитерация латинских букв в ASCII (DIN 5008-2): умлауты раскрываются
+# по канонической конвенции (ä→ae, ö→oe, ü→ue, ß→ss), а не вырезаются — иначе
+# «Fürsorge» давал бы бессмысленный slug «frsorge». Добавлено 08.09.2026 вместе с
+# ä/ö/ü/ß в алфавит токенайзера.
+_LATIN_TRANS = {
+    "ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
+}
+
 
 def _slugify(text: str) -> str:
     s = text.lower()
-    s = "".join(_CYR_LAT.get(ch, ch) for ch in s)  # транслитерация кириллицы
+    # 1) Транслитерация кириллицы и немецких умлаутов в латиницу/ASCII.
+    s = "".join(_CYR_LAT.get(ch, _LATIN_TRANS.get(ch, ch)) for ch in s)
+    # 2) Прочие европейские диакритики (é, ç, ñ…) — NFKD-разложение + снятие
+    #    combining-знаков (é→e): читаемые слаги французских/испанских заголовков.
+    #    Идёт ПОСЛЕ немецкой карты, чтобы ä→ae, а не «a». Символы без разложения
+    #    (ø и т.п.) вырезаются классом на следующем шаге.
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
     slug = re.sub(r"[^a-z0-9\s-]", "", s)           # убрать non-ascii/спецсимволы
     slug = re.sub(r"[\s_-]+", "-", slug).strip("-")
     # обрезать на границе слова (последний '-' до лимита), чтобы slug был читаемым

@@ -12,15 +12,18 @@ export function effectiveDictionary(locale, override) {
   return getMessages(code, { [code]: override || {} });
 }
 
-// Полный ru-словарь — исходник для перевода/терминологического review.
-export function ruSourceDictionary() {
-  return getMessages("ru");
+// Полный en-словарь — исходник для перевода/терминологического review (фаза 2,
+// 08.09.2026): английский — международный язык-источник в Европе, переводчики
+// нового языка стартуют с него, а не с ru. ru-словарь доступен через
+// effectiveDictionary("ru") (выбор ru в редакторе → «Скачать текущий язык»).
+export function enSourceDictionary() {
+  return getMessages("en");
 }
 
 export function exportFilename(locale, kind) {
   const date = new Date().toISOString().slice(0, 10);
   if (kind === "effective") return `ui-dictionary-${locale}-effective-${date}.json`;
-  if (kind === "ru-source") return `ui-dictionary-ru-source-for-${locale}-${date}.json`;
+  if (kind === "en-source") return `ui-dictionary-en-source-for-${locale}-${date}.json`;
   return `ui-dictionary-${locale}-override-${date}.json`;
 }
 

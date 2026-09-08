@@ -5,8 +5,12 @@
 read-only probe по тестовым запросам (без изменения Qdrant), и резолв локали
 пользователя из cookie okf.locale.
 
-Правила активации (roadmap 7.1): язык должен присутствовать в статическом
-манифесте фронтенда (SHIPPED_LOCALES) и иметь хотя бы один набор stopwords.
+Правила активации (двухуровневая модель, 08.09.2026): язык должен иметь хотя бы
+один набор stopwords (kind=bm25). Гейта «присутствие в статическом манифесте
+фронтенда» НЕТ: язык можно активировать для корпуса/стоп-слов без релиза UI.
+«Активный» ≠ «UI-язык»: в переключатель языка попадают только языки манифеста
+фронтенда (ru/en/de); для остальных активных UI недоступен, а runtime-словарь
+при активации автосидируется en-копией (ui_dictionary.seed_english_copy).
 Переводы справочников — не блокер (фаза B).
 """
 from __future__ import annotations
@@ -17,6 +21,7 @@ from datetime import datetime
 from app.db.models import AuditLog, Locale, Stopword
 from app.db.session import session_scope
 from app.services import audit
+from app.services.sparse import TOKEN_EXTRA_LETTERS
 from app.services.stopwords import (
     KIND_BM25,
     KIND_MARKER,
@@ -25,12 +30,14 @@ from app.services.stopwords import (
     LOCALE_STATUS_DISABLED,
     LOCALE_STATUS_DRAFT,
     LOCALE_STATUSES,
-    SHIPPED_LOCALES,
     invalidate,
 )
 
 _LOCALE_CODE_RE = re.compile(r"^[a-z]{2,3}(-[a-z0-9]{2,8})*$")
-_WORD_RE = re.compile(r"^[a-zа-яё0-9]+$")
+# Единый источник алфавита слов — TOKEN_EXTRA_LETTERS из sparse.py (та же
+# константа, что и TOKEN_RE): слово, которое не может быть токеном поиска,
+# хранить в стоп-листе бессмысленно. Класс не должен расходиться с токенайзером.
+_WORD_RE = re.compile(rf"^[a-zа-яё0-9{TOKEN_EXTRA_LETTERS}]+$")
 _MAX_WORD_LEN = 64
 
 
@@ -136,11 +143,6 @@ def update_locale(code: str, name: str | None = None, status: str | None = None)
 
 
 def _validate_activation(code: str) -> None:
-    if code not in SHIPPED_LOCALES:
-        raise LocaleError(
-            f"Язык '{code}' отсутствует в статическом манифесте фронтенда — "
-            "активация требует релиза со словарём UI"
-        )
     with session_scope() as s:
         n_bm25 = (
             s.query(Stopword)
@@ -168,6 +170,8 @@ def disable(code: str) -> dict:
 def _normalize_words(words: list[str]) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
+    invalid_chars: list[str] = []
+    invalid_sep: list[str] = []
     for raw in words:
         w = (raw or "").strip().lower()
         if not w:
@@ -175,11 +179,36 @@ def _normalize_words(words: list[str]) -> list[str]:
         if len(w) > _MAX_WORD_LEN:
             raise LocaleError(f"Слово длиннее {_MAX_WORD_LEN} символов: {raw!r}")
         if not _WORD_RE.match(w):
-            raise LocaleError(f"Некорректное слово (допустимы буквы/цифры, без пробелов): {raw!r}")
+            # Разделяем причины: символы, по которым токенайзер режет токен
+            # (апостроф/дефис/пробел/подчёркивание — слово НИКОГДА не станет
+            # токеном, хранить его бессмысленно), и буквы вне алфавита.
+            if re.search(r"['\-\s_.]", w):
+                invalid_sep.append(raw)
+            else:
+                invalid_chars.append(raw)
+            continue
         if w in seen:
             continue
         seen.add(w)
         out.append(w)
+    if invalid_sep or invalid_chars:
+        parts: list[str] = []
+        if invalid_sep:
+            shown = ", ".join(repr(x) for x in invalid_sep[:10])
+            more = f" (и ещё {len(invalid_sep) - 10})" if len(invalid_sep) > 10 else ""
+            parts.append(
+                "содержат апостроф/дефис/пробел — токенайзер режет по ним, такое "
+                f"слово никогда не станет токеном поиска; уберите его или разбейте "
+                f"(например, 'celle-ci' → 'celle'): {shown}{more}"
+            )
+        if invalid_chars:
+            shown = ", ".join(repr(x) for x in invalid_chars[:10])
+            more = f" (и ещё {len(invalid_chars) - 10})" if len(invalid_chars) > 10 else ""
+            parts.append(
+                "содержат буквы вне алфавита токенайзера "
+                f"(латиница с европейскими диакритиками, кириллица, цифры): {shown}{more}"
+            )
+        raise LocaleError("Некорректное слово: " + "; ".join(parts))
     return out
 
 

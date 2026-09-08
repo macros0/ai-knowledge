@@ -214,6 +214,10 @@ function StopwordsEditor({ locale }) {
 
       <p className="muted">{t("admin.stopwords.warningFrozen")}</p>
 
+      {code.split("-")[0] === "de" && (
+        <p className="muted">{t("admin.stopwords.hintGermanSharpS")}</p>
+      )}
+
       {currentWords.length === 0 ? (
         <p className="muted">{t("admin.stopwords.noWords")}</p>
       ) : (

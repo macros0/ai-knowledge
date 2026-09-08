@@ -32,6 +32,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db.models import Document, DocumentLshBucket
 from app.db.session import session_scope
+from app.services.sparse import TOKEN_RE
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,10 @@ def content_hash(markdown: str) -> str:
 
 
 def _shingles(markdown: str, n: int) -> list[str]:
-    tokens = re.findall(r"[a-zа-яё0-9]+", (markdown or "").lower())
+    # Тот же алфавит, что у BM25-токенайзера (sparse.TOKEN_RE, включая немецкие
+    # ä/ö/ü/ß с 08.09.2026). НЕ tokenize() со стоп-словами: стоп-фильтр менял бы
+    # шинглы русских документов и сделал бы старые minhash-подписи несравнимыми.
+    tokens = TOKEN_RE.findall((markdown or "").lower())
     if not tokens:
         return []
     if len(tokens) < n:

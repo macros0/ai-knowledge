@@ -39,6 +39,62 @@ class TestTokenize:
         assert "28" in tokens or any("28" in t for t in tokens)
         assert "пр" in tokens or any("10" in t for t in tokens)
 
+    def test_german_umlauts_tokenized(self):
+        # 08.09.2026: ä/ö/ü/ß добавлены в алфавит (немецкий корпус). До фикса
+        # «Überstunden für» давало токены-обрубки или вообще ничего.
+        tokens = tokenize("Überstunden für die Münchener")
+        assert "überstunden" in tokens
+        assert "für" in tokens
+        assert "münchener" in tokens
+        assert "die" in tokens
+
+    def test_german_sharp_s(self):
+        tokens = tokenize("Straße Maßnahme Größe")
+        assert "straße" in tokens
+        assert "maßnahme" in tokens
+        assert "größe" in tokens
+
+    def test_german_ascii_words_unchanged(self):
+        tokens = tokenize("ist das nicht oder und")
+        assert tokens == ["ist", "das", "nicht", "oder", "und"]
+
+    def test_german_uppercase_initial_lowered(self):
+        # Заглавные буквы немецких существительных нормализуются lower()'ом
+        # до findall (Ä→ä, Ü→ü, Ö→ö).
+        tokens = tokenize("Änderung Öffnung Übertragung")
+        assert "änderung" in tokens
+        assert "öffnung" in tokens
+        assert "übertragung" in tokens
+
+    def test_ru_en_de_mixed(self):
+        tokens = tokenize("привет hello Überstunden 123")
+        assert "привет" in tokens
+        assert "hello" in tokens
+        assert "überstunden" in tokens
+
+    def test_french_accents_tokenized(self):
+        # 08.09.2026 (2-я смена формулы): европейская латиница — французские
+        # акценты становятся ЦЕЛЫМИ токенами, а не обрубками.
+        tokens = tokenize("après le congé, élève à Paris")
+        assert "après" in tokens
+        assert "congé" in tokens
+        assert "élève" in tokens
+        assert "paris" in tokens
+
+    def test_spanish_accents_tokenized(self):
+        tokens = tokenize("español corazón fácil niño")
+        assert "español" in tokens
+        assert "corazón" in tokens
+        assert "niño" in tokens
+
+    def test_apostrophe_splits_into_fragments(self):
+        # Апостроф — разделитель: слитная французская форма НЕ токенизируется
+        # целиком (поэтому как стоп-слово хранить её бесполезно).
+        tokens = tokenize("aujourd'hui une belle journée")
+        assert "aujourd" in tokens
+        assert "hui" in tokens
+        assert "aujourd'hui" not in tokens
+
 
 class TestTermIndex:
     def test_index_in_range(self):

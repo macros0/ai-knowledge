@@ -23,6 +23,25 @@ class TestSlugify:
     def test_latin_slug(self):
         assert _slugify("Network Config") == "network-config"
 
+    def test_german_umlauts_din_transliterated(self):
+        # 08.09.2026: умлауты/ß раскрываются по DIN (ä→ae, ö→oe, ü→ue, ß→ss),
+        # а не вырезаются — иначе «Fürsorge» давал бы нечитаемый «frsorge».
+        assert _slugify("Fürsorge") == "fuersorge"
+        assert _slugify("Straße") == "strasse"
+        assert _slugify("Überstundenkonto") == "ueberstundenkonto"
+        assert _slugify("Größe Maßnahme") == "groesse-massnahme"
+
+    def test_german_mixed_with_cyrillic(self):
+        assert _slugify("Справка Überstunden") == "spravka-ueberstunden"
+
+    def test_french_accents_nfkd_stripped(self):
+        # 08.09.2026 (2): прочие европейские диакритики снимаются NFKD (é→e),
+        # чтобы французские/испанские заголовки давали читаемые слаги.
+        assert _slugify("Élève") == "eleve"
+        assert _slugify("Prénom du salarié") == "prenom-du-salarie"
+        assert _slugify("Café au Lait") == "cafe-au-lait"
+        assert _slugify("Niño") == "nino"
+
     def test_pascalcase_preserved_lowercased(self):
         # PascalCase латиница сохраняется в lowercased-форме
         assert _slugify("WSResult") == "wsresult"

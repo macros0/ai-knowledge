@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   effectiveDictionary,
-  ruSourceDictionary,
+  enSourceDictionary,
   exportFilename,
 } from "../src/lib/uiDictExport.mjs";
 
@@ -21,13 +21,13 @@ test("effectiveDictionary: без override — встроенный en", () => {
   assert.equal(eff["nav.documents"], "Documents");
 });
 
-test("ruSourceDictionary: полный ru (nav.documents по-русски)", () => {
-  assert.equal(ruSourceDictionary()["nav.documents"], "Документы");
+test("enSourceDictionary: полный en (nav.documents по-английски)", () => {
+  assert.equal(enSourceDictionary()["nav.documents"], "Documents");
 });
 
 test("exportFilename: содержит локаль и дату ISO", () => {
   const f = exportFilename("en", "effective");
   assert.match(f, /^ui-dictionary-en-effective-\d{4}-\d{2}-\d{2}\.json$/);
-  assert.match(exportFilename("en", "ru-source"), /ru-source-for-en-/);
+  assert.match(exportFilename("de", "en-source"), /en-source-for-de-/);
   assert.match(exportFilename("en", "override"), /-override-/);
 });

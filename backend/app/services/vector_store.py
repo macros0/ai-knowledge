@@ -775,7 +775,9 @@ class VectorStore:
             if next_offset is None:
                 break
 
-    def backfill_sparse(self, batch_size: int = 100, *, force: bool = False) -> int:
+    def backfill_sparse(
+        self, batch_size: int = 100, *, force: bool = False, include_chunks: bool = False
+    ) -> int:
         """Добивает sparse-векторы для старых точек из PostgreSQL (okf_concepts).
 
         Этап 2b: источник истины — БД, а не .md-бандлы. sparse строится по ТОЙ ЖЕ
@@ -784,26 +786,33 @@ class VectorStore:
 
         Идемпотентно: точки, у которых sparse-вектор уже есть, пропускаются
         (scroll проверяет наличие named-вектора). force=True пересчитывает все
-        точки — одноразовая миграция после смены формулы текста (rebuild_sparse.py).
+        точки — одноразовая миграция после смены формулы текста
+        (rebuild_sparse.py).
+
+        include_chunks=True дополнительно пересчитывает sparse ЧАНКОВ
+        (formula: section_title + content[:okf_max_chunk_index_chars]).
+        По умолчанию выключено: стартовый backfill (main.py) добивает только
+        концепты; чанки гоняет rebuild_sparse.py при смене токенайзера
+        (08.09.2026 — немецкие ä/ö/ü/ß в алфавите).
         """
         from sqlalchemy import select
 
-        from app.db.models import Document, OkfConcept
+        from app.db.models import Document, DocumentChunk, OkfConcept
         from app.db.session import session_scope
 
         existing: dict[str, bool] = {}
         for rec in self._scroll_points(with_payload=False, with_vectors=True):
             existing[str(rec.id)] = SPARSE_VECTOR_NAME in (rec.vector or {})
 
+        points: list[qm.PointVectors] = []
+
+        cap = self.settings.okf_max_concept_chars
         with session_scope() as s:
             rows = s.execute(
                 select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.title, OkfConcept.content)
                 .join(Document, OkfConcept.doc_id == Document.id)
                 .where(Document.deleted_at.is_(None))
             ).all()
-
-        cap = self.settings.okf_max_concept_chars
-        points: list[qm.PointVectors] = []
         for doc_id, slug, title, content in rows:
             point_id = concept_point_id(doc_id, slug)
             if point_id not in existing:
@@ -816,6 +825,35 @@ class VectorStore:
             points.append(
                 qm.PointVectors(id=point_id, vector={SPARSE_VECTOR_NAME: sparse_vec})
             )
+
+        if include_chunks:
+            cap_chunk = self.settings.okf_max_chunk_index_chars
+            with session_scope() as s:
+                chunk_rows = s.execute(
+                    select(
+                        DocumentChunk.doc_id,
+                        DocumentChunk.chunk_index,
+                        DocumentChunk.section_title,
+                        DocumentChunk.content,
+                    )
+                    .join(Document, DocumentChunk.doc_id == Document.id)
+                    .where(Document.deleted_at.is_(None))
+                ).all()
+            for doc_id, chunk_index, section_title, content in chunk_rows:
+                point_id = chunk_point_id(doc_id, chunk_index)
+                if point_id not in existing:
+                    continue
+                if existing[point_id] and not force:
+                    continue
+                sparse_vec = to_sparse_vector(
+                    _sparse_text(section_title or "", (content or "")[:cap_chunk])
+                )
+                if not sparse_vec.indices:
+                    continue
+                points.append(
+                    qm.PointVectors(id=point_id, vector={SPARSE_VECTOR_NAME: sparse_vec})
+                )
+
         total = len(points)
         for start in range(0, total, batch_size):
             batch = points[start : start + batch_size]

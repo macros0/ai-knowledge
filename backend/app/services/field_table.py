@@ -26,6 +26,7 @@ from typing import Protocol
 
 from app.config import get_settings
 from app.models.schemas import Concept
+from app.services.sparse import TOKEN_EXTRA_LETTERS, TOKEN_EXTRA_LETTERS_UPPER
 
 logger = logging.getLogger(__name__)
 
@@ -38,19 +39,27 @@ def _min_rows() -> int:
 # XML Name (упрощённо по W3C XML 1.0 NameStartChar/NameChar): первый символ —
 # буква Unicode (латиница ИЛИ кириллица — CommerceML/1С используют кириллические
 # теги <Товар>, <Название>) или _; далее буквы/цифры/_/-/. Не начинается с
-# цифры/-/. Поддерживает PascalCase (WSResult, RowsetWrapper).
-_FIELD_NAME_RE = re.compile(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_\-\.]*$")
+# цифры/-/. Поддерживает PascalCase (WSResult, RowsetWrapper). Класс букв — из
+# TOKEN_EXTRA_LETTERS (+заглавные) единого алфавита токенайзера: немецкие
+# Überstundenkonto и европейские акценты (Prénom) — валидные имена полей.
+# ВАЖНО: XML-имя может отличаться от поискового токена (содержит '-' и '.'),
+# поэтому класс шире TOKEN_RE.
+_FIELD_NAME_RE = re.compile(
+    rf"^[A-Za-z{TOKEN_EXTRA_LETTERS}{TOKEN_EXTRA_LETTERS_UPPER}А-Яа-яЁё_]"
+    rf"[A-Za-z{TOKEN_EXTRA_LETTERS}{TOKEN_EXTRA_LETTERS_UPPER}А-Яа-яЁё0-9_\-\.]*$"
+)
 # Порядковый номер в первой колонке (1, 2, 1.1, 2.3) — тогда имя во второй.
 _ROW_NUMBER_RE = re.compile(r"^\d+(\.\d+)*$")
 # Заголовок таблицы полей: первая колонка про поля/элементы/атрибуты.
+# «feld» (Feld/Feldname/Datenfeld) и «element»/«attribute» — немецкие заголовки.
 _HEADER_FIELD_KEYS = (
-    "поле", "элемент", "атрибут", "field", "element", "attribute",
+    "поле", "элемент", "атрибут", "field", "element", "attribute", "feld",
     "имя", "наименован", "тег", "tag", "name",
 )
 # Заголовок колонки «№/номер» — означает, что имя в следующей колонке.
-_HEADER_NUMBER_KEYS = ("№", "п/п", "номер", "num", "n.")
+_HEADER_NUMBER_KEYS = ("№", "п/п", "номер", "num", "n.", "nr.")
 # Заголовок колонки типа.
-_HEADER_TYPE_KEYS = ("тип", "type")
+_HEADER_TYPE_KEYS = ("тип", "type", "typ")
 # Заголовок сообщения: «Вид сообщения 111», «Тип сообщения 12410».
 _MSG_HEADER_RE = re.compile(r"(?:вид|тип)\s+сообщения\s*[:№]?\s*№?\s*(\d+)", re.IGNORECASE)
 

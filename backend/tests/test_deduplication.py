@@ -53,6 +53,22 @@ class TestMinHash:
         for scheme in banding_schemes():
             assert scheme["bands"] * scheme["rows"] == 128
 
+    def test_german_umlauts_shingled_consistently(self):
+        # 08.09.2026: dedup-шинглы используют тот же алфавит, что и BM25-токенайзер
+        # (вкл. ä/ö/ü/ß). Две версии немецкого документа — высокая близость,
+        # несвязанный документ — почти нулевая (умлауты не ломают MinHash).
+        a = (
+            "Die Erfassung der Überstunden erfolgt über das Personalzeiterfassungssystem "
+            "und wird monatlich mit der Lohnabrechnung vergütet. Zusätzlich werden "
+            "Sonderzahlungen und Zuschläge für Nachtarbeit nach dem geltenden Tarifvertrag "
+            "ausgewiesen. Auch die Verwaltung der Zeitkonten ist im System abgebildet."
+        )
+        copy = a + " Das Verfahren ist im Betriebshandbuch geregelt."
+        other = "Maßnahmen zur Änderung der Öffnungszeiten im Winter sind mit dem Betriebsrat abzustimmen."
+        assert jaccard(minhash_signature(a), minhash_signature(a)) == 1.0
+        assert jaccard(minhash_signature(a), minhash_signature(copy)) > 0.8
+        assert jaccard(minhash_signature(a), minhash_signature(other)) < 0.4
+
 
 class TestFindDuplicates:
     def test_exact_content_hash_match(self):

@@ -99,7 +99,7 @@ export function translate(messages, key, params) {
   return interpolate(value, params);
 }
 
-// Выбор грамматической формы (CLDR-срез, покрывает ru/en).
+// Выбор грамматической формы (CLDR-срез, покрывает ru/uk и en-модель: en/de).
 export function pluralForm(locale, count) {
   const abs = Math.abs(Number(count) || 0);
   const code = normalizeLocale(locale);
@@ -110,7 +110,7 @@ export function pluralForm(locale, count) {
     if (d10 >= 2 && d10 <= 4 && (d100 < 12 || d100 > 14)) return "few";
     return "many";
   }
-  // en и прочие: one/other (zero не используется).
+  // en/de и прочие: one/other (zero не используется).
   return abs === 1 ? "one" : "other";
 }
 

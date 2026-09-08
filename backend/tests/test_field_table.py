@@ -46,6 +46,41 @@ DATA_TABLE = """| Дата | Сумма | Регион |
 | 2024-05-01 | 2500 | Центр |
 """
 
+# Немецкая таблица полей (08.09.2026): заголовок на немецком («Feld»/«Typ») и
+# имена полей с умлаутами — должны распознаваться программной экстракцией.
+GERMAN_FIELD_TABLE = """# Nachrichtenart 998: Überstundenabrechnung
+
+| Feld | Typ | Länge | Kardinalität | Beschreibung |
+|---|---|---|---|---|
+| Überstundenkonto | xs:decimal | | 1..1 | Konto für Überstunden |
+| Führerscheinnummer | xs:string | Typ.Länge: 9 | 1..1 | Nummer des Führerscheins |
+| Änderungsdatum | xs:date | | 1..1 | Datum der Änderung |
+| Straßenschlüssel | xs:string | | 0..1 | Schlüssel der Straße |
+| Wohnungsgröße | xs:decimal | | 1..1 | Größe der Wohnung |
+"""
+
+# Немецкая таблица-справочник БЕЗ ключевых слов заголовка полей — не таблица полей.
+GERMAN_REFERENCE_TABLE = """| Position | Menge | Preis |
+|---|---|---|
+| 1 | 10 | 120,50 |
+| 2 | 20 | 240,00 |
+| 3 | 15 | 180,00 |
+| 4 | 5 | 60,00 |
+| 5 | 8 | 96,00 |
+"""
+
+# Граничный негатив 08.09.2026: есть опасный ключ «typ» и номерная колонка, но
+# НЕТ field-колонки («Beschreibung» не содержит ключей полей) — эвристика обязана
+# вернуть False, таблица уходит на LLM-классификатор (нет ложного срабатывания).
+GERMAN_NR_TYP_TABLE = """| Nr. | Typ | Beschreibung |
+|---|---|---|
+| 1 | FK | Primärschlüssel |
+| 2 | Name | Bezeichnung des Elements |
+| 3 | FK | Fremdschlüssel |
+| 4 | UK | Unique Key |
+| 5 | CK | Check Constraint |
+"""
+
 
 class TestDetectFieldTables:
     def test_detects_field_table(self):
@@ -66,6 +101,42 @@ class TestDetectFieldTables:
     def test_data_table_not_detected_as_field_table(self):
         blocks = detect_field_tables(DATA_TABLE)
         assert blocks == []
+
+    def test_german_field_table_detected(self):
+        # 08.09.2026: немецкие заголовки «Feld»/«Typ» + имена с умлаутами.
+        blocks = detect_field_tables(GERMAN_FIELD_TABLE)
+        assert len(blocks) == 1
+        names = [r.name for r in blocks[0].rows]
+        assert "Überstundenkonto" in names
+        assert "Führerscheinnummer" in names
+
+    def test_german_reference_table_not_detected(self):
+        # Немецкая таблица без ключей заголовка полей — не таблица полей
+        # (негативный случай: без ложного срабатывания новой эвристики).
+        assert detect_field_tables(GERMAN_REFERENCE_TABLE) == []
+
+    def test_german_nr_typ_without_field_col_not_detected(self):
+        # Граничный негатив: «typ» + номерная колонка есть, а field-колонки нет —
+        # эвристика требует field-col И type-col ОДНОВРЕМЕННО, поэтому таблица
+        # уходит на LLM-классификатор, а не перехватывается.
+        assert detect_field_tables(GERMAN_NR_TYP_TABLE) == []
+
+    def test_french_accents_in_field_names(self):
+        # 08.09.2026 (2): европейская латиница в _FIELD_NAME_RE — имена полей с
+        # акцентами (Prénom, Établissement) распознаются программной экстракцией.
+        text = """| Поле | Тип | Описание |
+|---|---|---|
+| Prénom | xs:string | Prénom du salarié |
+| Nom | xs:string | Nom de famille |
+| Congé | xs:date | Date du congé |
+| Établissement | xs:string | Code de l'établissement |
+| Départ | xs:date | Date de départ |
+"""
+        blocks = detect_field_tables(text)
+        assert len(blocks) == 1
+        names = [r.name for r in blocks[0].rows]
+        assert "Prénom" in names
+        assert "Établissement" in names
 
     def test_multiline_cell_gender_parsed(self):
         blocks = detect_field_tables(FIELD_TABLE)

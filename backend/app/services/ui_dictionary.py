@@ -11,6 +11,7 @@ locales.ui_dictionary_version.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -21,7 +22,13 @@ from app.db.models import Locale, UiDictionary
 from app.db.session import session_scope
 from app.services import audit
 
+logger = logging.getLogger(__name__)
+
 _MANIFEST_PATH = Path(__file__).resolve().parents[1] / "i18n" / "ui_keys.json"
+# Полный en-словарь для автосида при активации языка без runtime-override
+# (фаза 2, 08.09.2026). Генерируется node-скриптом export-ui-keys.mjs вместе с
+# ui_keys.json; дрейф ловится frontend/test/i18n.test.mjs.
+_EN_SOURCE_PATH = Path(__file__).resolve().parents[1] / "i18n" / "ui_en.json"
 _PARAM_RE = re.compile(r"\{(\w+)\}")
 
 
@@ -224,6 +231,62 @@ def import_dictionary(
             },
         )
     return {"errors": [], "applied": True, "version": next_version, "preview": preview}
+
+
+def seed_english_copy(locale: str, *, user=None, ip_address: str | None = None) -> bool:
+    """Автосид en-копии при активации языка без runtime-override (фаза 2).
+
+    Модель «активный ≠ UI-язык» (08.09.2026): язык можно активировать без релиза
+    со словарём. Чтобы активированный язык сразу имел работающий словарь (а
+    редактор «Перевод интерфейса» — отправную точку для перевода на целевой язык),
+    при активации без override засевается ПОЛНЫЙ en-словарь (ui_en.json):
+    английский — международный язык-источник.
+
+    Контракт — любая неудача = warning + False, результат активации НЕ затронут:
+      - ru/en       → False (ru — fallback-источник; en — идентичная копия, бессмысленна);
+      - есть override → False (идемпотентность: никогда не перезаписываем);
+      - applied=False (ошибки валидации: ru/uk-модель плюралов и т.п.) → warning + False;
+      - IntegrityError по unique(locale, version) — гонка параллельной активации:
+        оба конкурента вычислили version 1, проигравшего режет БД-констрейнт
+        (не дублируется и audit: он пишется только после успешного коммита) →
+        warning + False;
+      - прочие Exception → warning + exc_info + False.
+    """
+    if locale in ("ru", "en"):
+        return False
+    if get_active(locale) is not None:
+        return False
+    if not _EN_SOURCE_PATH.is_file():
+        logger.warning("Автосид en-копии для '%s' пропущен: нет %s", locale, _EN_SOURCE_PATH)
+        return False
+    try:
+        data = json.loads(_EN_SOURCE_PATH.read_text(encoding="utf-8"))
+        uploaded_by = user.username if user is not None else "system"
+        result = import_dictionary(
+            locale,
+            data,
+            note="auto: en copy on activation",
+            uploaded_by=uploaded_by,
+            confirm=True,
+            user=user,
+            ip_address=ip_address,
+        )
+    except Exception:
+        logger.warning(
+            "Автосид en-копии для '%s' не выполнен (конкурентная активация "
+            "или ошибка БД) — активный словарь останется без override",
+            locale,
+            exc_info=True,
+        )
+        return False
+    if not result.get("applied"):
+        logger.warning(
+            "Автосид en-копии для '%s' отклонён валидацией: %s",
+            locale,
+            result.get("errors"),
+        )
+        return False
+    return True
 
 
 def history(locale: str) -> list[dict]:

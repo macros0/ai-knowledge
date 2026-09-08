@@ -21,9 +21,10 @@ import locales from "../src/i18n/locales/index.js";
 import ru from "../src/i18n/locales/ru.js";
 import en from "../src/i18n/locales/en.js";
 
-test("SUPPORTED_LOCALES содержит ru и en", () => {
+test("SUPPORTED_LOCALES содержит ru, en, de", () => {
   assert.ok(SUPPORTED_LOCALES.includes("ru"));
   assert.ok(SUPPORTED_LOCALES.includes("en"));
+  assert.ok(SUPPORTED_LOCALES.includes("de"));
 });
 
 test("normalizeLocale клампит невалидные значения в дефолт", () => {
@@ -32,16 +33,19 @@ test("normalizeLocale клампит невалидные значения в д
   assert.equal(normalizeLocale("en-US"), "en");
   assert.equal(normalizeLocale("en_US"), "en");
   assert.equal(normalizeLocale("ru"), "ru");
-  assert.equal(normalizeLocale("de"), DEFAULT_LOCALE);
+  assert.equal(normalizeLocale("de"), "de");
+  assert.equal(normalizeLocale("fr"), DEFAULT_LOCALE); // не в манифесте
   assert.equal(normalizeLocale(null), DEFAULT_LOCALE);
   assert.equal(normalizeLocale(""), DEFAULT_LOCALE);
 });
 
-test("detectLocale: en в приоритете, иначе дефолт", () => {
+test("detectLocale: первый поддержанный ≠ дефолт, иначе дефолт", () => {
   assert.equal(detectLocale(["en-US", "ru"]), "en");
   assert.equal(detectLocale(["ru", "en"]), "en");
   assert.equal(detectLocale(["ru"]), DEFAULT_LOCALE);
-  assert.equal(detectLocale(["de"]), DEFAULT_LOCALE);
+  assert.equal(detectLocale(["de"]), "de");
+  assert.equal(detectLocale(["de-DE", "ru"]), "de");
+  assert.equal(detectLocale(["fr"]), DEFAULT_LOCALE);
   assert.equal(detectLocale([]), DEFAULT_LOCALE);
 });
 
@@ -92,20 +96,21 @@ test("fallback-merge: en-ключ в ru есть и виден через getMes
   assert.equal(ruMessages["nav.documents"], "Документы");
 });
 
-test("консистентность словарей: каждый en-ключ есть в ru", () => {
+test("консистентность словарей: ключи каждой локали ⊆ ru", () => {
   const ruKeys = Object.keys(ru);
-  const enKeys = Object.keys(en);
-  for (const key of enKeys) {
-    assert.ok(ruKeys.includes(key), `en-ключ "${key}" отсутствует в ru`);
+  for (const code of SUPPORTED_LOCALES) {
+    const messages = locales[code].messages;
+    for (const key of Object.keys(messages)) {
+      assert.ok(ruKeys.includes(key), `${code}-ключ "${key}" отсутствует в ru`);
+    }
   }
-  // en ⊇ ru по ключам не обязателен (непереведённые ru-ключи валидны), но
-  // проверяем, что ru — полный (защита от опечаток в манифесте).
-  assert.ok(enKeys.length >= 0);
 });
 
 test("манифест: каждый словарь соответствует коду локали", () => {
   assert.equal(locales.ru.messages, ru);
   assert.equal(locales.en.messages, en);
+  // de — ЗАГЛУШКА фазы 2: строки ссылаются на en-объект (без файла de.js).
+  assert.equal(locales.de.messages, en);
   assert.equal(SUPPORTED_LOCALES.join(","), Object.keys(locales).join(","));
 });
 
@@ -146,14 +151,14 @@ test("makeTitle строит заголовок из ключа + app.title", ()
 test("resolveServerLocale: cookie имеет приоритет, иначе Accept-Language", () => {
   assert.equal(resolveServerLocale("ru", "en-US,en;q=0.9"), "ru");
   assert.equal(resolveServerLocale(null, "en-US,en;q=0.9"), "en");
-  assert.equal(resolveServerLocale(null, "de-DE,de;q=0.8"), DEFAULT_LOCALE);
+  assert.equal(resolveServerLocale(null, "de-DE,de;q=0.8"), "de");
   assert.equal(resolveServerLocale(null, null), DEFAULT_LOCALE);
   assert.equal(resolveServerLocale("en", null), "en");
   assert.equal(resolveServerLocale("fr", "en-US"), DEFAULT_LOCALE);
 });
 
-test("полный словарь: каждый plural-объект в ru имеет формы one/few/many", () => {
-  const ruMessages = getMessages("ru");
+test("полный словарь: plural-формы по модели локали", () => {
+  // ru — CLDR one/few/many (+other допустим).
   for (const [key, value] of Object.entries(ru)) {
     if (typeof value === "object" && value !== null) {
       assert.ok(value.one !== undefined, `${key} не имеет формы one`);
@@ -161,11 +166,13 @@ test("полный словарь: каждый plural-объект в ru име
       assert.ok(value.many !== undefined, `${key} не имеет формы many`);
     }
   }
-  // en-объекты должны иметь one/other.
-  for (const [key, value] of Object.entries(en)) {
-    if (typeof value === "object" && value !== null) {
-      assert.ok(value.one !== undefined, `${key} (en) не имеет формы one`);
-      assert.ok(value.other !== undefined, `${key} (en) не имеет формы other`);
+  // en и de (de.messages === en) — CLDR one/other.
+  for (const code of ["en", "de"]) {
+    for (const [key, value] of Object.entries(locales[code].messages)) {
+      if (typeof value === "object" && value !== null) {
+        assert.ok(value.one !== undefined, `${key} (${code}) не имеет формы one`);
+        assert.ok(value.other !== undefined, `${key} (${code}) не имеет формы other`);
+      }
     }
   }
 });
@@ -211,4 +218,15 @@ test("manifest drift: ui_keys.json соответствует ru.js", () => {
   for (const key of ruKeys) {
     assert.deepEqual(paramsOf(ru[key]), manifest[key], `параметры ключа "${key}" расходятся с манифестом`);
   }
+});
+
+test("manifest drift: ui_en.json соответствует en.js (источник автосида)", () => {
+  // ui_en.json — полный en-словарь для автосида en-копии при активации языка
+  // (фаза 2). Расхождение ломает seed_english_copy — перегенерируйте:
+  // node scripts/export-ui-keys.mjs
+  const enPath = fileURLToPath(
+    new URL("../../backend/app/i18n/ui_en.json", import.meta.url)
+  );
+  const enJson = JSON.parse(readFileSync(enPath, "utf-8"));
+  assert.deepEqual(enJson, en, "ui_en.json расходится с en.js");
 });

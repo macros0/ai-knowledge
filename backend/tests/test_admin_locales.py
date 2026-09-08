@@ -99,11 +99,70 @@ class TestLocalesCrud:
         login(client)
         assert client.post("/api/admin/locales", json={"code": "ru", "name": "X"}).status_code == 422
 
-    def test_activate_unshipped_422(self, client):
+    def test_activate_without_stopwords_422(self, client):
         login(client)
+        # 08.09.2026: гейта «presence в UI-манифесте» больше нет — активация
+        # требует только набор stopwords (kind=bm25).
         client.post("/api/admin/locales", json={"code": "de", "name": "Deutsch"})
         resp = client.post("/api/admin/locales/de/activate")
-        assert resp.status_code == 422, resp.text  # нет в статическом манифесте
+        assert resp.status_code == 422, resp.text  # нет bm25-стоп-слов
+        assert "stopwords" in resp.json()["detail"]
+
+    def test_activate_outside_manifest_succeeds_and_seeds_en_copy(self, client):
+        login(client)
+        # Язык вне UI-манифеста фронтенда активируется (двухуровневая модель) —
+        # автосид засевает en-копию как runtime-словарь.
+        client.post("/api/admin/locales", json={"code": "fr", "name": "Français"})
+        resp = client.post(
+            "/api/admin/locales/fr/stopwords/import?mode=merge&kind=bm25",
+            json={"words": ["le", "la"], "confirm": True},
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post("/api/admin/locales/fr/activate")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["status"] == "active"
+
+        # Активный язык появляется в публичном списке.
+        active = {l["code"] for l in client.get("/api/locales").json()["locales"]}
+        assert "fr" in active
+
+        # GET /api/i18n/fr возвращает засеянную en-копию (version 1).
+        i18n = client.get("/api/i18n/fr")
+        assert i18n.status_code == 200, i18n.text
+        body = i18n.json()
+        assert body["version"] == 1
+        assert body["data"]["nav.documents"] == "Documents"
+
+        # Аудит: активация + автосид словаря.
+        from app.services.audit import AuditService, UI_DICTIONARY_IMPORT
+
+        entries = AuditService().query(action_type=UI_DICTIONARY_IMPORT)
+        assert len(entries) == 1
+        assert entries[0]["target_id"] == "fr"
+        assert "auto: en copy" in (entries[0]["meta"] or {}).get("note", "")
+
+    def test_activation_preserves_existing_dictionary(self, client):
+        login(client)
+        client.post("/api/admin/locales", json={"code": "fr", "name": "Français"})
+        # Свой override импортирован ДО активации — автосид не должен его тронуть.
+        resp = client.post(
+            "/api/admin/locales/fr/ui-dictionary/import",
+            json={
+                "data": {"nav.documents": "Documents FR"},
+                "note": "custom fr",
+                "confirm": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        client.post(
+            "/api/admin/locales/fr/stopwords/import?mode=merge&kind=bm25",
+            json={"words": ["le", "la"], "confirm": True},
+        )
+        resp = client.post("/api/admin/locales/fr/activate")
+        assert resp.status_code == 200, resp.text
+        body = client.get("/api/i18n/fr").json()
+        assert body["version"] == 1
+        assert body["data"]["nav.documents"] == "Documents FR"
 
     def test_disable_ru_forbidden(self, client):
         login(client)
@@ -332,3 +391,79 @@ class TestStopwordsImport:
         assert client.delete("/api/admin/locales/ru/stopwords/singleword?kind=bm25").status_code == 200
         words = {w["word"] for w in client.get("/api/admin/locales/ru/stopwords?kind=bm25").json()["words"]}
         assert "singleword" not in words
+
+    def test_import_german_diacritics_accepted(self, client):
+        # Регрессия 08.09.2026: слова с ä/ö/ü/ß (канонический список Snowball DE:
+        # daß, für, können, könnte, über, während, würde, würden) отклонялись
+        # валидатором «Некорректное слово» — весь импорт падал на первом же слове.
+        login(client)
+        words = ["daß", "für", "können", "könnte", "über", "während", "würde", "würden"]
+        resp = client.post(
+            "/api/admin/locales/en/stopwords/import?mode=merge&kind=bm25",
+            json={"words": words, "confirm": True},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["applied"] is True
+        stored = {w["word"] for w in client.get("/api/admin/locales/en/stopwords?kind=bm25").json()["words"]}
+        assert set(words) <= stored
+
+    def test_add_word_uppercase_umlaut_normalized(self, client):
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/en/stopwords", json={"word": "Über", "kind": "bm25"}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["word"] == "über"
+
+    def test_delete_word_with_umlaut_url(self, client):
+        login(client)
+        assert client.post(
+            "/api/admin/locales/en/stopwords", json={"word": "über", "kind": "bm25"}
+        ).status_code == 200
+        resp = client.delete("/api/admin/locales/en/stopwords/über?kind=bm25")
+        assert resp.status_code == 200, resp.text
+        words = {w["word"] for w in client.get("/api/admin/locales/en/stopwords?kind=bm25").json()["words"]}
+        assert "über" not in words
+
+    def test_import_word_with_hyphen_rejected_with_all_words(self, client):
+        # Неподдерживаемые символы по-прежнему блокируют импорт, но сообщение
+        # перечисляет ВСЕ некорректные слова (не только первое).
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/en/stopwords/import?mode=merge&kind=bm25",
+            json={"words": ["gut-besser", "schlechter", "a_b"], "confirm": False},
+        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "gut-besser" in detail
+        assert "a_b" in detail
+
+    def test_import_french_accents_accepted(self, client):
+        # Регрессия 08.09.2026 (2): европейская латиница — французские акценты
+        # (après, allô, ça, élève) больше не блокируют импорт.
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/en/stopwords/import?mode=merge&kind=bm25",
+            json={
+                "words": ["après", "allô", "ça", "élève", "où", "dès"],
+                "confirm": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["applied"] is True
+        stored = {w["word"] for w in client.get("/api/admin/locales/en/stopwords?kind=bm25").json()["words"]}
+        assert {"après", "allô", "ça", "élève"} <= stored
+
+    def test_import_french_apostrophe_hyphen_rejected_with_reason(self, client):
+        # Апострофные/дефисные слитные формы (aujourd'hui, celle-ci) НЕ могут стать
+        # токеном — импорт отклоняет их с объяснением (не «некорректная буква»).
+        login(client)
+        resp = client.post(
+            "/api/admin/locales/en/stopwords/import?mode=merge&kind=bm25",
+            json={"words": ["après", "aujourd'hui", "celle-ci"], "confirm": False},
+        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "апостроф/дефис" in detail
+        assert "aujourd'hui" in detail
+        assert "celle-ci" in detail

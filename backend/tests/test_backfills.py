@@ -121,6 +121,47 @@ class TestBackfillSparse:
         assert vs.backfill_sparse() == 0
         assert fake.updated_vectors == []
 
+    def test_default_backfill_ignores_chunk_points(self, tmp_path, monkeypatch):
+        """Дефолтный backfill_sparse (стартовый путь) добивает только концепты."""
+        doc_id = "2222222222222222"
+        from app.db.models import Document, DocumentChunk
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            s.add(Document(id=doc_id, filename="a.pdf", content_type="application/pdf", size=1))
+            s.add(DocumentChunk(doc_id=doc_id, chunk_index=0, content="Чанк без sparse."))
+
+        chunk_pid = chunk_point_id(doc_id, 0)
+        vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec(chunk_pid, vector={"": [0.1] * 8})])
+
+        assert vs.backfill_sparse() == 0
+        assert fake.updated_vectors == []
+
+    def test_include_chunks_recomputes_chunk_sparse(self, tmp_path, monkeypatch):
+        """include_chunks=True пересчитывает sparse чанков (08.09.2026, смена
+        токенайзера) по той же формуле, что index_chunks/backfill_chunks."""
+        doc_id = "2222222222222222"
+        from app.db.models import Document, DocumentChunk
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            s.add(Document(id=doc_id, filename="a.pdf", content_type="application/pdf", size=1))
+            s.add(
+                DocumentChunk(
+                    doc_id=doc_id,
+                    chunk_index=0,
+                    section_title="Abschnitt",
+                    content="Überstunden und Maßnahmen.\n",
+                )
+            )
+
+        chunk_pid = chunk_point_id(doc_id, 0)
+        vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec(chunk_pid, vector={"": [0.1] * 8})])
+
+        assert vs.backfill_sparse(include_chunks=True) == 1
+        got = fake.updated_vectors[0].vector[SPARSE_VECTOR_NAME]
+        assert got.indices == to_sparse_vector("Abschnitt\nÜberstunden und Maßnahmen.").indices
+
 
 class TestBackfillChunks:
     def _create_chunks(self, doc_id: str, n: int) -> None:

@@ -11,6 +11,32 @@ class TestDetectLanguage:
         text = "This document describes the development guidelines and reference data."
         assert detect_language(text) == "en"
 
+    def test_german_with_umlauts_is_de(self):
+        # 08.09.2026: немецкие маркерные буквы (ä/ö/ü/ß) выделяют «de».
+        text = (
+            "Überstunden werden gemäß dem Tarifvertrag vergütet. "
+            "Die Abrechnung erfolgt monatlich über das System."
+        )
+        assert detect_language(text) == "de"
+
+    def test_german_with_sharp_s_is_de(self):
+        text = "Straßenverzeichnis und die Größe des Maßnahmepakets für das Quartal."
+        assert detect_language(text) == "de"
+
+    def test_english_with_rare_german_names_stays_en(self):
+        # Единичные немецкие имена (Müller) в английском тексте не дают «de».
+        text = (
+            "The report was prepared by Mr. Müller and reviewed by the board. "
+            "It covers the annual results of the whole division."
+        )
+        assert detect_language(text) == "en"
+
+    def test_german_without_umlauts_is_en(self):
+        # Осознанный лимит (08.09.2026): немецкий текст без единой маркерной
+        # буквы неотличим от английского — классифицируется как «en».
+        text = "Diese Verordnung regelt die Verarbeitung und das Meldeverfahren."
+        assert detect_language(text) == "en"
+
     def test_ru_with_latin_identifiers_stays_ru(self):
         # Технический RU-документ с латинскими SAP/XML-идентификаторами.
         text = (

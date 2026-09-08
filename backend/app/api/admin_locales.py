@@ -4,6 +4,8 @@
 Импорт стоп-слов двухшаговый: без confirm — preview diff, с confirm — применение
 (одна транзакция + синхронная инвалидация кэша стоп-слов).
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth.models import User
@@ -101,6 +103,16 @@ def activate_locale(code: str, request: Request, user: User = admin):
     audit.record(
         user, audit.LOCALE_ACTIVATE, audit.TARGET_LOCALE, target_id=code, ip_address=_client_ip(request)
     )
+    # Автосид en-копии при активации языка без runtime-override (фаза 2): словарь
+    # нужен не как блокер активации, а как стартовая точка перевода — провал сида
+    # не должен ронять успешную активацию (см. контракт seed_english_copy).
+    try:
+        ui_dictionary.seed_english_copy(code, user=user, ip_address=_client_ip(request))
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "seed_english_copy для '%s' бросил исключение (не ожидается — "
+            "внутри уже обработка ошибок)", code
+        )
     return LocaleOut(**loc)
 
 

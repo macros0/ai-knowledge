@@ -51,11 +51,6 @@ LOCALE_STATUS_ACTIVE = "active"
 LOCALE_STATUS_DISABLED = "disabled"
 LOCALE_STATUSES = (LOCALE_STATUS_DRAFT, LOCALE_STATUS_ACTIVE, LOCALE_STATUS_DISABLED)
 
-# Языки, поставляемые статическим манифестом фронтенда (frontend/src/i18n/locales).
-# Активация языка допустима только для кода из этого списка — «новый язык = релиз
-# со словарём» (см. roadmap, Этап 7 §0). Backend-сид повторяет манифест.
-SHIPPED_LOCALES = ("ru", "en")
-
 # EN-служебные слова (>= 2 символов; однобуквенные отсеивает MIN_TOKEN_LEN).
 # Лечит диагносцированный сценарий: EN-вопрос с the/of/for против RU-корпуса с
 # латинскими SAP-идентификаторами давал ложные BM25-хиты.

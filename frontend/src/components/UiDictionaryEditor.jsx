@@ -17,7 +17,7 @@ import {
 } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
-import { downloadDict, effectiveDictionary, exportFilename, ruSourceDictionary } from "@/lib/uiDictExport.mjs";
+import { downloadDict, effectiveDictionary, exportFilename, enSourceDictionary } from "@/lib/uiDictExport.mjs";
 
 export default function UiDictionaryEditor({ locale }) {
   const { t } = useI18n();
@@ -181,9 +181,9 @@ export default function UiDictionaryEditor({ locale }) {
           </button>
           <button
             className="modal-btn"
-            onClick={() => downloadDict(ruSourceDictionary(), exportFilename(code, "ru-source"))}
+            onClick={() => downloadDict(enSourceDictionary(), exportFilename(code, "en-source"))}
           >
-            {t("admin.uictl.downloadRuSource")}
+            {t("admin.uictl.downloadEnSource")}
           </button>
           <button
             className="modal-btn"
@@ -195,7 +195,7 @@ export default function UiDictionaryEditor({ locale }) {
           </button>
         </div>
         <p className="muted">{t("admin.uictl.effectiveHint", { locale: code })}</p>
-        <p className="muted">{t("admin.uictl.ruSourceHint")}</p>
+        <p className="muted">{t("admin.uictl.enSourceHint")}</p>
       </div>
 
       {loadError ? (

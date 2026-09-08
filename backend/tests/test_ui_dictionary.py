@@ -114,3 +114,40 @@ class TestImport:
         res = ud.rollback("en", v1["id"], user=_User())
         assert res["version"] == 1
         assert ud.get_active("en")["data"]["nav.documents"] == "Docs V1"
+
+
+class TestSeedEnglishCopy:
+    @staticmethod
+    def _create_locale(code: str) -> None:
+        from app.db.models import Locale
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            s.add(Locale(code=code, name=code, status="draft"))
+
+    def test_seeds_full_en_dictionary_when_empty(self):
+        # de в манифесте фронта, но без runtime-словаря — автосид создаёт v1.
+        self._create_locale("de")
+        assert ud.seed_english_copy("de", user=_User()) is True
+        active = ud.get_active("de")
+        assert active is not None
+        assert active["version"] == 1
+        assert active["data"]["nav.documents"] == "Documents"
+
+    def test_noop_when_override_exists(self):
+        self._create_locale("fr")
+        ud.import_dictionary("fr", {"nav.documents": "Docs FR"}, "custom", "a", confirm=True)
+        assert ud.seed_english_copy("fr", user=_User()) is False
+        active = ud.get_active("fr")
+        assert active["data"] == {"nav.documents": "Docs FR"}
+        assert active["version"] == 1  # автосид не сдвинул версию
+
+    def test_skips_ru_and_en(self):
+        assert ud.seed_english_copy("ru", user=_User()) is False
+        assert ud.seed_english_copy("en", user=_User()) is False
+        assert ud.get_active("ru") is None
+        assert ud.get_active("en") is None
+
+    def test_missing_locale_returns_false(self):
+        # Локали нет вообще — сид не сеет и не падает.
+        assert ud.seed_english_copy("de", user=_User()) is False

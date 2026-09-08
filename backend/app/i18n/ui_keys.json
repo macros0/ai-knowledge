@@ -81,6 +81,7 @@
   "admin.stopwords.error": [
     "message"
   ],
+  "admin.stopwords.hintGermanSharpS": [],
   "admin.stopwords.history": [],
   "admin.stopwords.historyEmpty": [],
   "admin.stopwords.importApply": [],
@@ -122,12 +123,13 @@
   "admin.uictl.downloadEffective": [
     "locale"
   ],
+  "admin.uictl.downloadEnSource": [],
   "admin.uictl.downloadOverride": [],
-  "admin.uictl.downloadRuSource": [],
   "admin.uictl.editingCurrent": [],
   "admin.uictl.effectiveHint": [
     "locale"
   ],
+  "admin.uictl.enSourceHint": [],
   "admin.uictl.history": [],
   "admin.uictl.historyEmpty": [],
   "admin.uictl.invalidJson": [
@@ -149,7 +151,6 @@
     "version"
   ],
   "admin.uictl.rolledBack": [],
-  "admin.uictl.ruSourceHint": [],
   "admin.uictl.samplesTitle": [],
   "admin.uictl.title": [
     "code"
