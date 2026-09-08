@@ -15,6 +15,7 @@ import {
 } from "./core";
 import { makeTitle } from "./titles";
 import { getUiDictionary } from "@/lib/api";
+import { bumpTagVersion } from "@/lib/tagDictionary";
 
 const LocaleContext = createContext(null);
 
@@ -59,6 +60,10 @@ export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}
     const code = normalizeLocale(next);
     setLocaleState(code);
     setStored(code, window);
+    // display-имена тегов локализуются бэкендом по cookie okf.locale — общий
+    // справочник (tagDictionary) сбрасываем, чтобы пикеры/фильтры перечитали его
+    // на новом языке (иначе держат словарь языка до переключения).
+    bumpTagVersion();
   }, []);
 
   const { t, tc } = useMemo(
