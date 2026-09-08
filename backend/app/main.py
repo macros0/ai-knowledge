@@ -207,10 +207,15 @@ def create_app() -> FastAPI:
         detail — диагностика (русская, для логов), code — стабильный контракт,
         по которому клиент берёт текст из своего словаря и показывает его на
         языке интерфейса (см. app/api/errors.py).
+
+        exc.headers пробрасываются в ответ: свой handler подменяет собой
+        штатный http_exception_handler FastAPI, который делал это сам, — без
+        этого Retry-After (429) и WWW-Authenticate (401) до клиента не дойдут.
         """
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail, "code": exc.code, **exc.extra},
+            headers=exc.headers,
         )
 
     @app.exception_handler(DependencyUnavailableError)

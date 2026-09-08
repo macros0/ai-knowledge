@@ -28,10 +28,21 @@ class ApiError(HTTPException):
     Обработчик в app.main разворачивает это в
     {"detail": ..., "code": ..., **extra} — плоско, как уже отдаются
     dependency_unavailable и duplicate, чтобы у клиента была одна форма тела.
+
+    `headers` — отдельный именованный параметр, а не часть **extra: заголовки
+    ответа (Retry-After на 429, WWW-Authenticate на 401) — часть HTTP-контракта.
+    Попав в extra, они ушли бы в JSON-тело и до клиента как заголовки не дошли.
     """
 
-    def __init__(self, status_code: int, code: str, detail: str, **extra):
-        super().__init__(status_code=status_code, detail=detail)
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        detail: str,
+        headers: dict[str, str] | None = None,
+        **extra,
+    ):
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
         self.code = code
         self.extra = extra
 
