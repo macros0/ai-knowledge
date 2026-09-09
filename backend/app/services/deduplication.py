@@ -32,7 +32,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db.models import Document, DocumentLshBucket
 from app.db.session import session_scope
-from app.services.sparse import TOKEN_RE
+from app.services.sparse import TOKEN_RE, normalize_for_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +60,14 @@ def content_hash(markdown: str) -> str:
 
 
 def _shingles(markdown: str, n: int) -> list[str]:
-    # Тот же алфавит, что у BM25-токенайзера (sparse.TOKEN_RE, включая немецкие
-    # ä/ö/ü/ß с 08.09.2026). НЕ tokenize() со стоп-словами: стоп-фильтр менял бы
-    # шинглы русских документов и сделал бы старые minhash-подписи несравнимыми.
-    tokens = TOKEN_RE.findall((markdown or "").lower())
+    # Тот же алфавит И та же нормализация, что у BM25-токенайзера
+    # (sparse.TOKEN_RE + normalize_for_tokens). НЕ tokenize() со стоп-словами:
+    # стоп-фильтр менял бы шинглы русских документов и сделал бы старые
+    # minhash-подписи несравнимыми. ВАЖНО: расширение алфавита/нормализации даёт
+    # ровно тот же эффект для документов с диакритикой — подписи, снятые до
+    # смены, несравнимы с новыми, и LSH-таблицу нужно пересчитать
+    # (scripts/backfill_dedup.py), как sparse — rebuild_sparse.py.
+    tokens = TOKEN_RE.findall(normalize_for_tokens(markdown))
     if not tokens:
         return []
     if len(tokens) < n:

@@ -144,6 +144,31 @@ class TestBackfillSparse:
         assert vs.backfill_sparse(force=True) == 1
         assert len(fake.updated_vectors) == 1
 
+    def test_covers_documents_in_trash(self, tmp_path, monkeypatch):
+        """Документы в корзине пересчитываются наравне с активными.
+
+        Удаление мягкое (точки остаются в Qdrant), а restore не пересчитывает
+        sparse: с фильтром `deleted_at IS NULL` документ, удалённый до смены
+        токенайзера и восстановленный после миграции, навсегда оставался бы на
+        векторах старой формулы.
+        """
+        from datetime import datetime, timezone
+
+        from app.db.models import Document
+        from app.db.session import session_scope
+
+        settings = Settings(_env_file=None, data_dir=tmp_path)
+        _create_db_concept()
+        with session_scope() as s:
+            s.get(Document, "a1b2c3d4e5f60718").deleted_at = datetime.now(timezone.utc)
+
+        point_id = _concept_point_id(settings, "a1b2c3d4e5f60718", "concept")
+        vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec(point_id, vector={"": [0.1] * 8})])
+
+        assert vs.backfill_sparse() == 1
+        got = fake.updated_vectors[0].vector[SPARSE_VECTOR_NAME]
+        assert got.indices == to_sparse_vector("Концепт 12410\nТело концепта с деталями.").indices
+
     def test_skips_points_not_in_db(self, tmp_path, monkeypatch):
         _create_db_concept()  # концепт в БД есть, но точки в Qdrant нет
         vs, fake = _vs(tmp_path, monkeypatch, records=[_Rec("orphan-point", vector={})])

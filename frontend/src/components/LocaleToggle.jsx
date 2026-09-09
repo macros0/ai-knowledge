@@ -12,25 +12,28 @@ import { listActiveLocales } from "@/lib/api";
 // Пока список активных не загружен (или бэкенд недоступен) — фолбэк на
 // статический манифест. Один активный язык — переключатель скрыт.
 export default function LocaleToggle() {
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
   const [active, setActive] = useState(null);
   const [version, setVersion] = useState(0); // bump для рефетча активных
 
   useEffect(() => {
-    let mounted = true;
     const refetch = () => setVersion((v) => v + 1);
+    // Именованный обработчик, а не инлайн-стрелка: снимать надо ту же ссылку,
+    // иначе removeEventListener не снимает ничего и в StrictMode-dev слушатели
+    // копятся (компонент живёт в layout и не перемонтируется при навигации).
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refetch();
+    };
     // Активные языки меняются админом во вкладке «Поддержка языков»: компонент живёт
     // в layout и не перемонтируется при навигации — без события тоггл «застревал» бы
     // в скрытом состоянии после активации второго языка.
     window.addEventListener("okf:locales-changed", refetch);
     window.addEventListener("focus", refetch);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") refetch();
-    });
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("okf:locales-changed", refetch);
       window.removeEventListener("focus", refetch);
-      document.removeEventListener("visibilitychange", refetch);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
@@ -64,8 +67,8 @@ export default function LocaleToggle() {
       type="button"
       className="icon-btn locale-toggle-btn"
       onClick={() => setLocale(next)}
-      aria-label={`Язык интерфейса: ${cur.label}`}
-      title={`Язык: ${cur.label} · клик — переключить на ${nextLabel}`}
+      aria-label={t("locale.ariaLabel", { label: cur.label })}
+      title={t("locale.title", { label: cur.label, nextLabel })}
     >
       <GlobeIcon size={16} />
       <span className="locale-toggle-code">{cur.short}</span>

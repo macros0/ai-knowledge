@@ -126,13 +126,55 @@ class TestSeedEnglishCopy:
             s.add(Locale(code=code, name=code, status="draft"))
 
     def test_seeds_full_en_dictionary_when_empty(self):
-        # de в манифесте фронта, но без runtime-словаря — автосид создаёт v1.
+        # de в манифесте фронта, но без словаря — автосид создаёт v1 в истории.
         self._create_locale("de")
         assert ud.seed_english_copy("de", user=_User()) is True
+        entries = ud.history("de")
+        assert [e["version"] for e in entries] == [1]
+        assert entries[0]["note"] == "auto: en copy on activation"
+        assert entries[0]["key_count"] > 100  # полная копия, а не заглушка
+
+    def test_seed_is_not_active_override(self):
+        """Заготовка НЕ становится активным override.
+
+        Активный override — верхний слой поверх словаря релиза, поэтому полный
+        en-снапшот заморозил бы английский текст на момент активации: улучшенная
+        в следующем релизе формулировка до de/fr уже не дошла бы.
+        """
+        self._create_locale("de")
+        assert ud.seed_english_copy("de", user=_User()) is True
+        assert ud.get_active("de") is None
+
+    def test_seed_can_be_activated_by_rollback(self):
+        # Отправная точка для перевода доступна админу одним откатом на неё.
+        self._create_locale("de")
+        ud.seed_english_copy("de", user=_User())
+        entry = ud.history("de")[0]
+        ud.rollback("de", entry["id"])
         active = ud.get_active("de")
-        assert active is not None
         assert active["version"] == 1
         assert active["data"]["nav.documents"] == "Documents"
+
+    def test_import_after_seed_does_not_collide_on_version(self):
+        # Заготовка занимает v1, не двигая указатель: версия следующего импорта
+        # считается по максимуму истории, иначе он упёрся бы в unique-констрейнт.
+        self._create_locale("de")
+        ud.seed_english_copy("de", user=_User())
+        result = ud.import_dictionary("de", {"nav.documents": "Dokumente"}, "manual", "a", confirm=True)
+        assert result["applied"] is True
+        assert result["version"] == 2
+        assert ud.get_active("de")["data"] == {"nav.documents": "Dokumente"}
+
+    def test_import_after_rollback_does_not_collide_on_version(self):
+        # Тот же расчёт защищает и откат: активный указатель отстаёт от истории.
+        self._create_locale("de")
+        ud.import_dictionary("de", {"nav.documents": "v1"}, "a", "a", confirm=True)
+        ud.import_dictionary("de", {"nav.documents": "v2"}, "b", "a", confirm=True)
+        first = [e for e in ud.history("de") if e["version"] == 1][0]
+        ud.rollback("de", first["id"])
+        result = ud.import_dictionary("de", {"nav.documents": "v3"}, "c", "a", confirm=True)
+        assert result["applied"] is True
+        assert result["version"] == 3
 
     def test_noop_when_override_exists(self):
         self._create_locale("fr")
@@ -141,6 +183,14 @@ class TestSeedEnglishCopy:
         active = ud.get_active("fr")
         assert active["data"] == {"nav.documents": "Docs FR"}
         assert active["version"] == 1  # автосид не сдвинул версию
+
+    def test_noop_when_seed_already_in_history(self):
+        # Повторная активация не плодит заготовки: сид смотрит на историю,
+        # а не на активный указатель (которого у заготовки нет).
+        self._create_locale("de")
+        assert ud.seed_english_copy("de", user=_User()) is True
+        assert ud.seed_english_copy("de", user=_User()) is False
+        assert len(ud.history("de")) == 1
 
     def test_skips_ru_and_en(self):
         assert ud.seed_english_copy("ru", user=_User()) is False

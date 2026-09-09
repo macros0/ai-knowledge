@@ -65,14 +65,18 @@ export function friendlyApiError(err, t) {
   return status ? tr("apiError.http", { status }) : tr("apiError.unknown");
 }
 
-async function request(path, init, timeoutMs) {
+// Единственная точка вызова fetch в модуле: URL берётся как есть, разбор
+// успешного ответа задаёт вызывающий. Нормализация ошибок (таймаут, сетевой
+// сбой, не-2xx с кодом из тела) живёт только здесь — сырой fetch мимо этой
+// обёртки отдал бы наружу браузерное «Failed to fetch» вместо ключа словаря.
+async function fetchApi(url, { init, timeoutMs, parse = (resp) => resp.json() } = {}) {
   const controller = new AbortController();
   const timer =
     timeoutMs != null
       ? setTimeout(() => controller.abort(), timeoutMs)
       : null;
   try {
-    const resp = await fetch(`${BASE}${path}`, { ...init, signal: controller.signal });
+    const resp = await fetch(url, { ...init, signal: controller.signal });
     if (!resp.ok) {
       const detail = await resp.text();
       let message = detail || `HTTP ${resp.status}`;
@@ -90,16 +94,28 @@ async function request(path, init, timeoutMs) {
       }
       throw new ApiError(message, { status: resp.status, code, service, data });
     }
-    return resp.json();
+    return parse(resp);
   } catch (err) {
     if (err.name === "AbortError") {
       // message — фолбэк-диагностика; текст для пользователя берётся по коду.
       throw new ApiError("request timeout", { status: 0, code: "timeout" });
     }
+    // Сетевой сбой (backend не поднят, обрыв связи, CORS) — fetch кидает
+    // TypeError. Без обёртки он уходил наружу как есть, и friendlyApiError
+    // показывал браузерное «Failed to fetch» по-английски мимо словарей.
+    // status 0 без кода → apiError.backendUnreachable.
+    if (err instanceof TypeError) {
+      throw new ApiError(err.message, { status: 0 });
+    }
     throw err;
   } finally {
     if (timer != null) clearTimeout(timer);
   }
+}
+
+// JSON-эндпоинт под /api — частный (и почти всегда нужный) случай fetchApi.
+function request(path, init, timeoutMs) {
+  return fetchApi(`${BASE}${path}`, { init, timeoutMs });
 }
 
 export function uploadDocument(file, tags = [], { developmentId = null } = {}) {
@@ -314,7 +330,11 @@ export function listOkfFiles(docId) {
 }
 
 export function getOkfContent(docId, filename) {
-  return fetch(`${BASE}/documents/${docId}/okf/${filename}`).then((r) => r.text());
+  // Ответ — не JSON, а текст OKF-файла; всё остальное (коды, сетевой сбой) —
+  // как у прочих вызовов.
+  return fetchApi(`${BASE}/documents/${docId}/okf/${filename}`, {
+    parse: (resp) => resp.text(),
+  });
 }
 
 export function search(query, tags = [], topK = 5, mode = "hybrid") {
@@ -398,7 +418,10 @@ export function simulateAuth(username) {
 }
 
 export function getHealth() {
-  return fetch("/health").then((r) => r.json());
+  // /health живёт в корне, а не под /api, — отсюда fetchApi с полным URL.
+  // Деградация приходит как 200 со статусом в теле, так что проверка resp.ok
+  // баннер не ломает: не-2xx здесь означает именно недоступный сервис.
+  return fetchApi("/health");
 }
 
 // --- Справочник разработок (Этап 4) ---

@@ -139,7 +139,7 @@ class TestLocalesCrud:
     def test_activate_outside_manifest_succeeds_and_seeds_en_copy(self, client):
         login(client)
         # Язык вне UI-манифеста фронтенда активируется (двухуровневая модель) —
-        # автосид засевает en-копию как runtime-словарь.
+        # автосид кладёт en-копию в историю словарей как заготовку для перевода.
         client.post("/api/admin/locales", json={"code": "fr", "name": "Français"})
         resp = client.post(
             "/api/admin/locales/fr/stopwords/import?mode=merge&kind=bm25",
@@ -154,10 +154,21 @@ class TestLocalesCrud:
         active = {l["code"] for l in client.get("/api/locales").json()["locales"]}
         assert "fr" in active
 
-        # GET /api/i18n/fr возвращает засеянную en-копию (version 1).
-        i18n = client.get("/api/i18n/fr")
-        assert i18n.status_code == 200, i18n.text
-        body = i18n.json()
+        # Заготовка НЕ активна: активный override заморозил бы английский текст
+        # на момент активации и перекрыл бы словарь следующего релиза. Клиент
+        # получает штатное «override нет» и берёт словарь релиза.
+        assert client.get("/api/i18n/fr").status_code == 404
+
+        # Заготовка видна админу в истории и включается откатом.
+        history = client.get("/api/admin/locales/fr/ui-dictionary/history").json()["entries"]
+        assert len(history) == 1
+        assert history[0]["version"] == 1
+        assert "auto: en copy" in (history[0]["note"] or "")
+        resp = client.post(
+            "/api/admin/locales/fr/ui-dictionary/rollback", json={"entry_id": history[0]["id"]}
+        )
+        assert resp.status_code == 200, resp.text
+        body = client.get("/api/i18n/fr").json()
         assert body["version"] == 1
         assert body["data"]["nav.documents"] == "Documents"
 
@@ -168,6 +179,7 @@ class TestLocalesCrud:
         assert len(entries) == 1
         assert entries[0]["target_id"] == "fr"
         assert "auto: en copy" in (entries[0]["meta"] or {}).get("note", "")
+        assert (entries[0]["meta"] or {}).get("activated") is False
 
     def test_activation_preserves_existing_dictionary(self, client):
         login(client)

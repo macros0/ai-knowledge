@@ -15,7 +15,10 @@ import {
   formatDate,
   formatDateTime,
   resolveServerLocale,
+  readLocaleCookie,
+  setLocaleCookie,
 } from "../src/i18n/core.js";
+import { bootScript } from "../src/i18n/boot.js";
 import { lookupTitleKey, makeTitle } from "../src/i18n/titles.js";
 import locales from "../src/i18n/locales/index.js";
 import ru from "../src/i18n/locales/ru.js";
@@ -42,16 +45,47 @@ test("normalizeLocale клампит невалидные значения в д
   assert.equal(normalizeLocale(""), DEFAULT_LOCALE);
 });
 
-test("detectLocale: первый поддержанный ≠ дефолт, иначе дефолт", () => {
+test("detectLocale: первый ПОДДЕРЖАННЫЙ кандидат, порядок списка решает", () => {
   assert.equal(detectLocale(["en-US", "ru"]), "en");
-  assert.equal(detectLocale(["ru", "en"]), "en");
-  assert.equal(detectLocale(["ru"]), DEFAULT_LOCALE);
-  assert.equal(detectLocale(["de"]), "de");
   assert.equal(detectLocale(["de-DE", "ru"]), "de");
-  assert.equal(detectLocale(["fr"]), "fr");
   assert.equal(detectLocale(["fr-FR", "ru"]), "fr");
+  assert.equal(detectLocale(["de"]), "de");
+  assert.equal(detectLocale(["fr"]), "fr");
+  // Русский первым кандидатом побеждает: стандартный Chrome на русской системе
+  // шлёт ["ru-RU","ru","en-US","en"] — раньше такой пользователь получал en.
+  assert.equal(detectLocale(["ru", "en"]), "ru");
+  assert.equal(detectLocale(["ru-RU", "ru", "en-US", "en"]), "ru");
+  assert.equal(detectLocale(["ru-RU", "de", "fr"]), "ru");
+  // Неподдержанные кандидаты пропускаются, а не клампятся в дефолт.
+  assert.equal(detectLocale(["es", "en"]), "en");
+  assert.equal(detectLocale(["es-ES", "pt", "de-DE"]), "de");
+  assert.equal(detectLocale(["ru"]), DEFAULT_LOCALE);
   assert.equal(detectLocale(["es"]), DEFAULT_LOCALE);
   assert.equal(detectLocale([]), DEFAULT_LOCALE);
+  assert.equal(detectLocale(null), DEFAULT_LOCALE);
+});
+
+test("detectLocale совпадает с boot.js: <html lang> и язык UI не расходятся", () => {
+  // boot.js исполняется до гидратации и ставит <html lang> своим перебором —
+  // литералы там продублированы, поэтому расхождение ловим тестом.
+  const bootLang = (langs) => {
+    const documentElement = { lang: "" };
+    const win = { localStorage: { getItem: () => null }, navigator: { languages: langs } };
+    new Function("window", "document", bootScript())(win, { documentElement });
+    return documentElement.lang;
+  };
+  for (const langs of [
+    ["ru-RU", "ru", "en-US", "en"],
+    ["ru", "en"],
+    ["en-US", "ru"],
+    ["es", "en"],
+    ["de-DE", "ru"],
+    ["fr-FR", "en"],
+    ["es"],
+    [],
+  ]) {
+    assert.equal(bootLang(langs), detectLocale(langs), `расхождение на ${JSON.stringify(langs)}`);
+  }
 });
 
 test("translate возвращает ключ при отсутствии", () => {
@@ -111,6 +145,14 @@ test("консистентность словарей: ключи каждой �
   }
 });
 
+test("en полон: каждый ключ ru переведён (en — язык-источник для de/fr)", () => {
+  // Обратная сторона проверки выше. Забытый ключ в en.js не ломает сборку —
+  // getMessages молча подставит РУССКУЮ строку из фолбэка, и она утечёт в
+  // en/de/fr UI и в ui_en.json (автосид словаря новой локали).
+  const missing = Object.keys(ru).filter((k) => en[k] === undefined);
+  assert.deepEqual(missing, [], `нет en-перевода для ключей: ${missing.join(", ")}`);
+});
+
 test("манифест: каждый словарь соответствует коду локали", () => {
   assert.equal(locales.ru.messages, ru);
   assert.equal(locales.en.messages, en);
@@ -162,6 +204,21 @@ test("resolveServerLocale: cookie имеет приоритет, иначе Acce
   assert.equal(resolveServerLocale("en", null), "en");
   assert.equal(resolveServerLocale("fr", "en-US"), "fr");
   assert.equal(resolveServerLocale("es", "en-US"), DEFAULT_LOCALE);
+});
+
+test("cookie okf.locale — канал языка к серверу: пишется и читается обратно", () => {
+  // LocaleProvider синхронизирует cookie на маунте, чтобы `display`-имена тегов
+  // и SSR приходили на языке UI, а не на дефолтном ru.
+  const win = { document: { cookie: "" } };
+  assert.equal(readLocaleCookie(win), null); // cookie нет — сервер языка не знает
+  setLocaleCookie("de", win);
+  assert.match(win.document.cookie, /okf\.locale=de/);
+  assert.match(win.document.cookie, /max-age=31536000/); // год, обновляется на каждом маунте
+  // Браузер отдаёт при чтении только пары "k=v; k=v".
+  assert.equal(readLocaleCookie({ document: { cookie: "theme=dark; okf.locale=fr" } }), "fr");
+  assert.equal(readLocaleCookie({ document: { cookie: "okf.locale=es" } }), null); // чужой код
+  assert.equal(readLocaleCookie({ document: { cookie: "okf.localeX=en" } }), null); // не наш ключ
+  assert.equal(readLocaleCookie({}), null); // cookie недоступен — не падаем
 });
 
 test("полный словарь: plural-формы по модели локали", () => {

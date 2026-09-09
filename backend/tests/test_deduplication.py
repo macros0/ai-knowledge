@@ -45,6 +45,14 @@ class TestMinHash:
         assert minhash_signature("") == []
         assert minhash_signature("   ") == []
 
+    def test_shingles_share_tokenizer_normalization(self):
+        # Шинглы обязаны нормализоваться ровно как BM25-токены: иначе подписи
+        # дедупликации перестают соответствовать поисковому индексу. Турецкая
+        # «İ» — единственное расхождение, которое давал голый lower().
+        assert minhash_signature("İstanbul raporu " * 20) == minhash_signature(
+            "istanbul raporu " * 20
+        )
+
     def test_bucket_hash_deterministic(self):
         sig = minhash_signature(TEXT_A)
         assert bucket_hash(sig, 0, 16) == bucket_hash(sig, 0, 16)

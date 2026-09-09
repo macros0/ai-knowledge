@@ -21,7 +21,7 @@ from datetime import datetime
 from app.db.models import AuditLog, Locale, Stopword
 from app.db.session import session_scope
 from app.services import audit
-from app.services.sparse import TOKEN_EXTRA_LETTERS
+from app.services.sparse import TOKEN_EXTRA_LETTERS, normalize_for_tokens
 from app.services.stopwords import (
     KIND_BM25,
     KIND_MARKER,
@@ -173,7 +173,9 @@ def _normalize_words(words: list[str]) -> list[str]:
     invalid_chars: list[str] = []
     invalid_sep: list[str] = []
     for raw in words:
-        w = (raw or "").strip().lower()
+        # Та же нормализация, что у токенайзера: турецкое «İstanbul» иначе не
+        # прошло бы валидатор (после lower() в слове остаётся combining-точка).
+        w = normalize_for_tokens(raw).strip()
         if not w:
             continue
         if len(w) > _MAX_WORD_LEN:

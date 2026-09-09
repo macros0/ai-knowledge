@@ -6,7 +6,9 @@ import {
   DEFAULT_LOCALE,
   detectLocale,
   normalizeLocale,
+  readLocaleCookie,
   readStored,
+  setLocaleCookie,
   setStored,
   createTranslator,
   formatDate,
@@ -70,6 +72,27 @@ export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}
     () => createTranslator(effective, overrides),
     [effective, overrides]
   );
+
+  // Cookie okf.locale — единственный канал языка к серверу: по нему резолвятся
+  // SSR-страницы и `display`-имена тегов (backend `request_locale`, фолбэк ru).
+  // Раньше он писался только в `changeLocale`, поэтому первый заход
+  // немецкого/английского пользователя давал английский UI с русскими
+  // display-именами тегов. Синхронизируем cookie с фактическим языком на маунте
+  // — заодно продлевается годичный срок жизни cookie при вечном localStorage.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Без cookie сервер отвечает на DEFAULT_LOCALE — именно с этим и сравниваем.
+    const serverLocale = readLocaleCookie(window) || DEFAULT_LOCALE;
+    setLocaleCookie(effective, window);
+    // Справочник тегов уже мог уйти на бэкенд без cookie (ensureLoaded зовётся в
+    // рендере детей, до эффектов провайдера) — сбрасываем, чтобы пикеры/фильтры
+    // перечитали display-имена на языке, который сервер теперь знает. Проверка
+    // записи обязательна: при заблокированных cookie сервер языка так и не
+    // узнает, и рефетч был бы лишним запросом на каждый маунт.
+    if (serverLocale !== effective && readLocaleCookie(window) === effective) {
+      bumpTagVersion();
+    }
+  }, [effective]);
 
   // lang на <html> держится в синхроне с выбранным языком (до гидратации —
   // bootScript, после — здесь).

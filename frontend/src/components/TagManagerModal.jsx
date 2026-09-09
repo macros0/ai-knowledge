@@ -197,7 +197,11 @@ export default function TagManagerModal({ onClose }) {
                 </button>
                 <span className="tag-manager-name" title={tag.name}>
                   {tag.display}
-                  {tag.display !== tag.name && referenceText(tag) !== tag.display && (
+                  {/* Только сравнение со СПРАВОЧНЫМ текстом: `display !== name`
+                      прятало скобку у тега с каноническим английским name, когда
+                      перевода на текущий язык нет (display = name), а en-перевод
+                      есть и отличается. */}
+                  {referenceText(tag) !== tag.display && (
                     <span className="tag-manager-canonical"> ({referenceText(tag)})</span>
                   )}
                 </span>

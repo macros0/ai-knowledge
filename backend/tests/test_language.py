@@ -24,18 +24,52 @@ class TestDetectLanguage:
         assert detect_language(text) == "de"
 
     def test_english_with_rare_german_names_stays_en(self):
-        # Единичные немецкие имена (Müller) в английском тексте не дают «de».
+        # Единичные немецкие имена (Müller) в английском тексте не дают «de»:
+        # ровно то, от чего защищает _MARKER_MIN_HITS.
         text = (
             "The report was prepared by Mr. Müller and reviewed by the board. "
             "It covers the annual results of the whole division."
         )
         assert detect_language(text) == "en"
 
+    def test_short_english_with_many_german_names_is_de(self):
+        # ИЗВЕСТНЫЙ ЛИМИТ (зафиксирован намеренно): порог по ЧИСЛУ маркеров
+        # спасает от одной-двух фамилий, но не от трёх на коротком тексте —
+        # там доля маркеров неотличима от немецкой прозы. Приемлемо: метка
+        # source_locale информационная и считается со 100 000 символов, где
+        # решает уже доля, а не единичные вкрапления.
+        text = "The Müller and Schröder and Bäcker report is here." * 5
+        assert detect_language(text) == "de"
+
+    def test_french_with_diacritics_is_fr(self):
+        # fr — язык UI-релиза, и его диакритики теперь маркеры, а не «шум».
+        text = (
+            "Le présent règlement définit les modalités de traitement des "
+            "données à caractère personnel et les procédures de déclaration."
+        )
+        assert detect_language(text) == "fr"
+
+    def test_french_without_diacritics_is_en(self):
+        # Тот же осознанный лимит, что у немецкого без умлаутов.
+        text = "Ce document decrit les regles de gestion et de validation."
+        assert detect_language(text) == "en"
+
+    def test_german_wins_over_french_markers(self):
+        # ü общий для обоих — спор решается числом маркеров, а не порядком проверок.
+        text = "Überstunden werden gemäß dem Tarifvertrag vergütet und über das System abgerechnet."
+        assert detect_language(text) == "de"
+
     def test_german_without_umlauts_is_en(self):
         # Осознанный лимит (08.09.2026): немецкий текст без единой маркерной
         # буквы неотличим от английского — классифицируется как «en».
         text = "Diese Verordnung regelt die Verarbeitung und das Meldeverfahren."
         assert detect_language(text) == "en"
+
+    def test_accented_letters_count_as_latin(self):
+        # Акцентированные буквы должны попадать в `lat`: иначе они выпадали из
+        # знаменателя и завышали долю кириллицы в смешанном тексте.
+        text = "Référentiel des privilèges d'accès " * 4 + "Регламент"
+        assert detect_language(text) == "fr"
 
     def test_ru_with_latin_identifiers_stays_ru(self):
         # Технический RU-документ с латинскими SAP/XML-идентификаторами.

@@ -327,10 +327,7 @@ class JobQueue:
     def _regenerate_one(self, pipeline, doc_id: str) -> None:
         """Перегенерация одного документа с ожиданием завершения его пайплайна."""
         settings = get_settings()
-        try:
-            pipeline.regenerate(doc_id)
-        except ValueError:
-            raise
+        pipeline.regenerate(doc_id)
         deadline = time.time() + settings.job_doc_timeout_seconds
         while time.time() < deadline:
             doc = pipeline.registry.get(doc_id)

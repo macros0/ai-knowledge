@@ -87,6 +87,13 @@ class TestTokenize:
         assert "corazón" in tokens
         assert "niño" in tokens
 
+    def test_turkish_dotted_capital_i(self):
+        # «İ».lower() == "i" + U+0307: combining-точки в алфавите нет, поэтому
+        # без normalize_for_tokens токен рвался на «i» (отсеивался по длине) и
+        # «stanbul», который не совпал бы ни с «istanbul», ни с «ISTANBUL».
+        assert tokenize("İstanbul raporu") == ["istanbul", "raporu"]
+        assert tokenize("İSTANBUL") == tokenize("istanbul") == ["istanbul"]
+
     def test_apostrophe_splits_into_fragments(self):
         # Апостроф — разделитель: слитная французская форма НЕ токенизируется
         # целиком (поэтому как стоп-слово хранить её бесполезно).

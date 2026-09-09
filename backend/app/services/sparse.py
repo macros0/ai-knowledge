@@ -12,8 +12,8 @@ BM25-скоринг в Qdrant.
 Алфавит токенов — ASCII-латиница, кириллица, цифры и `TOKEN_EXTRA_LETTERS`
 (европейская латиница: de/fr/es/pt/it/скандинавские/pl/cz/hu/ro/tr с 08.09.2026).
 Апостроф и дефис остаются разделителями (не буквами) — слова со слитными формами
-не токенизируются целиком. Расширение набора = смена индексной формулы +
-rebuild_sparse.
+не токенизируются целиком. Расширение набора (как и правка `normalize_for_tokens`)
+= смена индексной формулы + rebuild_sparse.
 """
 import hashlib
 import math
@@ -45,6 +45,23 @@ TOKEN_EXTRA_LETTERS = "ßà-öø-ÿā-žșț"
 TOKEN_EXTRA_LETTERS_UPPER = "À-ÖØ-ÞẞȘȚ"
 
 TOKEN_RE = re.compile(rf"[a-zа-яё0-9{TOKEN_EXTRA_LETTERS}]+")
+
+# U+0307 COMBINING DOT ABOVE — побочный продукт lower() турецкой «İ»:
+# "İstanbul".lower() == "i" + U+0307 + "stanbul". Combining-знака в алфавите нет,
+# поэтому TOKEN_RE резал слово пополам, «i» отсеивался по MIN_TOKEN_LEN, и в
+# индекс попадал огрызок «stanbul» — не совпадающий ни с одним написанием
+# запроса. Точка над строчной i различительной нагрузки не несёт, снимаем.
+_COMBINING_DOT_ABOVE = "\u0307"
+
+
+def normalize_for_tokens(text: str | None) -> str:
+    """Единая нормализация текста ПЕРЕД разбором TOKEN_RE.
+
+    Общая для BM25 (`tokenize`) и minhash (`deduplication._shingles`): алфавит и
+    нормализация у них обязаны совпадать, иначе подписи дедупликации перестают
+    соответствовать поисковому индексу. Правка = смена индексной формулы.
+    """
+    return (text or "").lower().replace(_COMBINING_DOT_ABOVE, "")
 # Индексное пространство sparse-вектора. Увеличение снижает коллизии хэшей.
 SPARSE_INDEX_DIM = 2**20
 # Короткие токены — шум (союзы, частицы, однобуквенные).
@@ -101,7 +118,7 @@ def tokenize(text: str, stopwords: Collection[str] | None = None) -> list[str]:
     """
     tokens = []
     sw = _STOPWORDS if stopwords is None else stopwords
-    for token in TOKEN_RE.findall(text.lower()):
+    for token in TOKEN_RE.findall(normalize_for_tokens(text)):
         if len(token) < MIN_TOKEN_LEN or token in sw:
             continue
         tokens.append(token)

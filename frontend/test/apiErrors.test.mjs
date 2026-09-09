@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ApiError, apiErrorKey, friendlyApiError, serviceMessageKey } from "../src/lib/api.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  ApiError,
+  apiErrorKey,
+  friendlyApiError,
+  getHealth,
+  getOkfContent,
+  listTags,
+  serviceMessageKey,
+} from "../src/lib/api.js";
 import ru from "../src/i18n/locales/ru.js";
 import en from "../src/i18n/locales/en.js";
 import { createTranslator } from "../src/i18n/core.js";
@@ -25,6 +35,60 @@ test("friendlyApiError: 404 — раздел на старой версии back
 test("friendlyApiError: status 0 (сеть) — недоступен", () => {
   const msg = friendlyApiError(new ApiError("timeout", { status: 0 }), t);
   assert.match(msg, /недоступен/i);
+});
+
+// fetch кидает TypeError, когда backend не поднят. Без обёртки наружу уходило
+// браузерное «Failed to fetch» мимо словарей, а ключ backendUnreachable был мёртв.
+async function withDeadNetwork(fn) {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new TypeError("Failed to fetch");
+  };
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+function assertBackendUnreachable(err) {
+  assert.ok(err instanceof ApiError, "сетевой сбой не обёрнут в ApiError");
+  assert.equal(err.status, 0);
+  assert.equal(err.code, undefined); // без кода — ключ выбирается по статусу
+  assert.equal(apiErrorKey(err).key, "apiError.backendUnreachable");
+  assert.equal(friendlyApiError(err, t), ru["apiError.backendUnreachable"]);
+  assert.equal(
+    friendlyApiError(err, createTranslator("en").t),
+    en["apiError.backendUnreachable"]
+  );
+  return true;
+}
+
+test("сетевой сбой оборачивается в ApiError(status 0) → backendUnreachable", async () => {
+  await withDeadNetwork(() => assert.rejects(listTags(), assertBackendUnreachable));
+});
+
+test("вызовы мимо /api (health, текст OKF) обёрнуты так же", async () => {
+  // getHealth ходит в корневой /health, getOkfContent читает text(), а не json():
+  // оба раньше звали сырой fetch и при недоступном backend отдавали «Failed to fetch».
+  await withDeadNetwork(async () => {
+    await assert.rejects(getHealth(), assertBackendUnreachable);
+    await assert.rejects(getOkfContent(7, "doc.okf"), assertBackendUnreachable);
+  });
+});
+
+test("в api.js нет сырого fetch мимо общей обёртки", () => {
+  // Единственная точка вызова — fetchApi: только она нормализует таймаут,
+  // сетевой сбой и не-2xx в ApiError с кодом для словаря.
+  const src = readFileSync(fileURLToPath(new URL("../src/lib/api.js", import.meta.url)), "utf-8");
+  const calls = src.split("\n").filter((line) => /\bfetch\(/.test(line));
+  assert.equal(
+    calls.length,
+    1,
+    `вызовов fetch должно быть ровно один (внутри fetchApi), а не ${calls.length}:\n${calls.join("\n")}`
+  );
+  // Именно тот, что внутри fetchApi: URL-параметр, а не литерал эндпоинта.
+  assert.match(calls[0], /fetch\(url,/);
 });
 
 test("friendlyApiError: обычная строка-сообщение сохраняется", () => {

@@ -2,9 +2,9 @@
 //
 // Единый источник переключателя языка по образцу темы (`lib/theme.js`):
 // выбор живёт в localStorage (`okf.locale`), по умолчанию — детект браузера
-// (en → "en", иначе "ru"). Фактический язык всегда резолвится через
-// `normalizeLocale`/`getMessages` — невалидные значения клампятся в "ru"
-// (фолбэк-локаль, словарь которой гарантированно полный).
+// (первый поддержанный язык из списка предпочтений, иначе "ru"). Фактический
+// язык всегда резолвится через `normalizeLocale`/`getMessages` — невалидные
+// значения клампятся в "ru" (фолбэк-локаль, словарь которой гарантированно полный).
 
 import locales from "./locales/index.js";
 
@@ -12,20 +12,30 @@ export const DEFAULT_LOCALE = "ru";
 export const SUPPORTED_LOCALES = Object.keys(locales);
 export const STORAGE_KEY = "okf.locale";
 
-// "en-US" / "en_US" / "EN" → код поддерживаемой локали (по префиксу до -/_).
-export function normalizeLocale(input) {
-  if (!input) return DEFAULT_LOCALE;
+// "en-US" / "en_US" / "EN" → код поддерживаемой локали или null. В отличие от
+// normalizeLocale не клампит незнакомое в дефолт — перебор кандидатов должен
+// уметь пропустить неподдержанный язык и посмотреть следующий.
+function supportedCode(input) {
+  if (!input) return null;
   const code = String(input).toLowerCase().split(/[-_]/)[0];
-  return SUPPORTED_LOCALES.includes(code) ? code : DEFAULT_LOCALE;
+  return SUPPORTED_LOCALES.includes(code) ? code : null;
 }
 
-// Первый из кандидатов (navigator.languages и т.п.), отличающийся от дефолтной
-// локали. Список без кандидатов/пустой → DEFAULT_LOCALE.
+// "en-US" / "en_US" / "EN" → код поддерживаемой локали (по префиксу до -/_).
+export function normalizeLocale(input) {
+  return supportedCode(input) || DEFAULT_LOCALE;
+}
+
+// Первый ПОДДЕРЖАННЫЙ из кандидатов (navigator.languages, Accept-Language) —
+// включая дефолтную локаль: порядок в списке и есть предпочтение пользователя,
+// и "ru" первым кандидатом должен побеждать "en" вторым (стандартный Chrome на
+// русской системе шлёт ["ru-RU","ru","en-US","en"]). Тот же перебор, что в
+// boot.js — иначе <html lang> и язык UI расходятся. Ни одного поддержанного /
+// пустой список → DEFAULT_LOCALE.
 export function detectLocale(candidates) {
-  const list = candidates && candidates.length ? candidates : [DEFAULT_LOCALE];
-  for (const c of list) {
-    const code = normalizeLocale(c);
-    if (code !== DEFAULT_LOCALE) return code;
+  for (const c of candidates || []) {
+    const code = supportedCode(c);
+    if (code) return code;
   }
   return DEFAULT_LOCALE;
 }
@@ -53,20 +63,40 @@ export function readStored(win) {
   }
 }
 
+// Локаль, которую СЕЙЧАС видит сервер, или null (cookie нет/значение чужое).
+export function readLocaleCookie(win) {
+  try {
+    for (const entry of String(win.document.cookie || "").split(";")) {
+      const eq = entry.indexOf("=");
+      if (eq < 0 || entry.slice(0, eq).trim() !== STORAGE_KEY) continue;
+      const value = decodeURIComponent(entry.slice(eq + 1).trim());
+      return SUPPORTED_LOCALES.includes(value) ? value : null;
+    }
+  } catch {
+    // cookie недоступен — считаем, что сервер языка не знает.
+  }
+  return null;
+}
+
+// Cookie — единственный канал языка к серверу: по нему резолвятся SSR
+// force-dynamic страницы (okf/fulltext/chunks) и `display`-имена тегов
+// (backend `locale_service.request_locale`). Статичные маршруты cookie не
+// читают — их язык определяет клиентский boot-скрипт.
+export function setLocaleCookie(locale, win) {
+  try {
+    win.document.cookie = `${STORAGE_KEY}=${encodeURIComponent(locale)}; path=/; max-age=31536000; samesite=lax`;
+  } catch {
+    // cookie недоступен — не критично (RSC-страницы отрендерятся на дефолтном языке)
+  }
+}
+
 export function setStored(locale, win) {
   try {
     win.localStorage.setItem(STORAGE_KEY, locale);
   } catch {
     // localStorage недоступен (приватный режим и т.п.) — локаль живёт до перезагрузки.
   }
-  // Cookie нужен только для SSR force-dynamic страниц (okf/fulltext/chunks),
-  // чтобы их серверный HTML совпадал с выбранным языком. Статичные маршруты
-  // cookie не читают — их язык определяет клиентский boot-скрипт.
-  try {
-    win.document.cookie = `${STORAGE_KEY}=${encodeURIComponent(locale)}; path=/; max-age=31536000; samesite=lax`;
-  } catch {
-    // cookie недоступен — не критично (RSC-страницы отрендерятся на дефолтном языке)
-  }
+  setLocaleCookie(locale, win);
 }
 
 // Словарь локали поверх дефолтного (ru): отсутствующие в языке ключи

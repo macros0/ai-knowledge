@@ -16,7 +16,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.models import Locale, UiDictionary
 from app.db.session import session_scope
@@ -171,6 +171,7 @@ def import_dictionary(
     uploaded_by: str | None,
     *,
     confirm: bool = False,
+    activate: bool = True,
     user=None,
     ip_address: str | None = None,
 ) -> dict:
@@ -178,6 +179,11 @@ def import_dictionary(
 
     Возвращает {errors, applied, preview|version}. Семантика — ПОЛНАЯ замена
     override-словаря (загруженный JSON становится актуальным словарём локали).
+
+    `activate=False` создаёт версию, НЕ делая её активной (locales.
+    ui_dictionary_version не двигается): версия ложится в историю как заготовка,
+    которую админ включает откатом. Используется автосидом (см.
+    seed_english_copy).
     """
     errors = validate(locale, data)
     if errors:
@@ -206,7 +212,13 @@ def import_dictionary(
         loc = s.get(Locale, locale)
         if loc is None:
             raise ValueError(f"Язык '{locale}' не найден")
-        next_version = (loc.ui_dictionary_version or 0) + 1
+        # Максимум ПО ИСТОРИИ, а не по активному указателю: тот может отставать
+        # (откат на старую версию, неактивная заготовка автосида), и версия
+        # «активная + 1» упиралась бы в unique(locale, version).
+        max_version = s.execute(
+            select(func.max(UiDictionary.version)).where(UiDictionary.locale == locale)
+        ).scalar()
+        next_version = (max_version or 0) + 1
         s.add(
             UiDictionary(
                 locale=locale,
@@ -216,7 +228,8 @@ def import_dictionary(
                 uploaded_by=uploaded_by,
             )
         )
-        loc.ui_dictionary_version = next_version
+        if activate:
+            loc.ui_dictionary_version = next_version
 
     if user is not None:
         audit.record(
@@ -230,33 +243,52 @@ def import_dictionary(
                 "note": note,
                 "added": len(preview["added"]),
                 "removed": len(preview["removed"]),
+                "activated": activate,
             },
         )
     return {"errors": [], "applied": True, "version": next_version, "preview": preview}
 
 
+def _has_versions(locale: str) -> bool:
+    """Есть ли у локали хоть одна версия словаря (активная или нет)."""
+    with session_scope() as s:
+        row = s.execute(
+            select(UiDictionary.id).where(UiDictionary.locale == locale).limit(1)
+        ).first()
+    return row is not None
+
+
 def seed_english_copy(locale: str, *, user=None, ip_address: str | None = None) -> bool:
-    """Автосид en-копии при активации языка без runtime-override (фаза 2).
+    """Автосид en-копии при активации языка без словаря (фаза 2).
 
     Модель «активный ≠ UI-язык» (08.09.2026): язык можно активировать без релиза
-    со словарём. Чтобы активированный язык сразу имел работающий словарь (а
-    редактор «Перевод интерфейса» — отправную точку для перевода на целевой язык),
-    при активации без override засевается ПОЛНЫЙ en-словарь (ui_en.json):
-    английский — международный язык-источник.
+    со словарём. Чтобы редактор «Перевод интерфейса» имел отправную точку для
+    перевода на целевой язык, при активации засевается ПОЛНЫЙ en-словарь
+    (ui_en.json): английский — международный язык-источник.
+
+    Версия создаётся НЕАКТИВНОЙ (`activate=False`) — она заготовка для
+    редактора, а не работающий override. Активный override — САМЫЙ ВЕРХНИЙ слой
+    (`getMessages`: {...versioned, ...override}), поэтому полный en-снапшот
+    заморозил бы английский текст на момент активации: улучшенная в следующем
+    релизе формулировка ключа до de/fr уже не дошла бы (новые ключи протекают —
+    их в снапшоте нет, а изменённые маскируются навсегда). Без активного
+    override de/fr продолжают следовать версионированному словарю релиза, а
+    админ включает заготовку одним откатом на неё, когда начинает перевод.
 
     Контракт — любая неудача = warning + False, результат активации НЕ затронут:
       - ru/en       → False (ru — fallback-источник; en — идентичная копия, бессмысленна);
-      - есть override → False (идемпотентность: никогда не перезаписываем);
+      - есть версия словаря → False (идемпотентность: не сеем поверх, в том
+        числе поверх собственной прошлой заготовки при повторной активации);
       - applied=False (ошибки валидации: ru/uk-модель плюралов и т.п.) → warning + False;
       - IntegrityError по unique(locale, version) — гонка параллельной активации:
-        оба конкурента вычислили version 1, проигравшего режет БД-констрейнт
+        оба конкурента вычислили одну версию, проигравшего режет БД-констрейнт
         (не дублируется и audit: он пишется только после успешного коммита) →
         warning + False;
       - прочие Exception → warning + exc_info + False.
     """
     if locale in ("ru", "en"):
         return False
-    if get_active(locale) is not None:
+    if _has_versions(locale):
         return False
     if not _EN_SOURCE_PATH.is_file():
         logger.warning("Автосид en-копии для '%s' пропущен: нет %s", locale, _EN_SOURCE_PATH)
@@ -270,13 +302,14 @@ def seed_english_copy(locale: str, *, user=None, ip_address: str | None = None) 
             note="auto: en copy on activation",
             uploaded_by=uploaded_by,
             confirm=True,
+            activate=False,
             user=user,
             ip_address=ip_address,
         )
     except Exception:
         logger.warning(
             "Автосид en-копии для '%s' не выполнен (конкурентная активация "
-            "или ошибка БД) — активный словарь останется без override",
+            "или ошибка БД) — заготовка для редактора не создана",
             locale,
             exc_info=True,
         )

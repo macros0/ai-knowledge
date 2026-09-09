@@ -823,6 +823,15 @@ class VectorStore:
         добивает только концепты; чанки гоняет rebuild_sparse.py при смене
         токенайзера (08.09.2026 — немецкие ä/ö/ü/ß в алфавите).
 
+        Документы В КОРЗИНЕ намеренно НЕ исключаются. Удаление мягкое: точки
+        физически остаются в Qdrant (delete — флаг в payload), и восстановление
+        (`trash.restore_document`) sparse не пересчитывает. Пока здесь стоял
+        фильтр `deleted_at IS NULL`, документ, удалённый ДО смены токенайзера и
+        восстановленный ПОСЛЕ прогона rebuild_sparse.py, навсегда оставался с
+        векторами старой формулы: миграция его не видела, а стартовый backfill
+        не подбирал (sparse уже есть → отсеивает has_vector). Лишней работы это
+        не создаёт — без force трогаются только точки БЕЗ sparse.
+
         Требует Qdrant >= 1.11 (условие has_vector).
         """
         from sqlalchemy import select
@@ -852,7 +861,6 @@ class VectorStore:
             rows = s.execute(
                 select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.title, OkfConcept.content)
                 .join(Document, OkfConcept.doc_id == Document.id)
-                .where(Document.deleted_at.is_(None))
             ).all()
         for doc_id, slug, title, content in rows:
             point_id = concept_point_id(doc_id, slug)
@@ -876,9 +884,7 @@ class VectorStore:
                         DocumentChunk.chunk_index,
                         DocumentChunk.section_title,
                         DocumentChunk.content,
-                    )
-                    .join(Document, DocumentChunk.doc_id == Document.id)
-                    .where(Document.deleted_at.is_(None))
+                    ).join(Document, DocumentChunk.doc_id == Document.id)
                 ).all()
             for doc_id, chunk_index, section_title, content in chunk_rows:
                 point_id = chunk_point_id(doc_id, chunk_index)
