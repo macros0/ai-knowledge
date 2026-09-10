@@ -374,8 +374,9 @@ browser-visible response from the built Next.js server, because a proxy could ot
 rewrite `Set-Cookie` while all backend tests remain green.
 
 ### 2026-09-11 — Next.js API proxy preserves cookies
-The `/api/*` rewrite was replaced with an App Router catch-all proxy that forwards request bodies,
-status, response headers, and repeated `Set-Cookie` headers. This closes the verified gap where
+The `/api/*` rewrite was replaced with an App Router catch-all proxy that streams request bodies,
+forwards status, response headers, and repeated `Set-Cookie` headers. Streaming avoids buffering
+large uploads in the Next.js heap before the backend's size guard runs. This closes the verified gap where
 Next.js rewrites dropped the backend-issued `csrf_token`; an automated unit test covers multiple
 cookies and a standalone-server smoke test confirmed `csrf_token` reaches the client. The proxy
 also strips client-controlled `Forwarded`/`X-Forwarded-*` headers so upstream URL/scheme metadata

@@ -41,7 +41,11 @@ async function proxy(request, context) {
     cache: "no-store",
   };
   if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = await request.arrayBuffer();
+    // Keep uploads streaming; buffering request.arrayBuffer() here would
+    // duplicate up to the configured upload limit in the Next.js heap before
+    // the backend can enforce its own streaming guard.
+    init.body = request.body;
+    init.duplex = "half";
   }
 
   const upstream = await fetch(backendTarget(request, path), init);

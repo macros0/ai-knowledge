@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { GET } from "../src/app/api/[...path]/route.js";
+import { GET, POST } from "../src/app/api/[...path]/route.js";
 
 test("API proxy preserves repeated Set-Cookie headers", async () => {
   const originalFetch = globalThis.fetch;
@@ -62,6 +62,34 @@ test("API proxy does not trust client-controlled forwarding headers", async () =
         },
       }),
       { params: Promise.resolve({ path: ["health"] }) },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("API proxy forwards mutation bodies as a stream", async () => {
+  const originalFetch = globalThis.fetch;
+  const body = new TextEncoder().encode("payload");
+  globalThis.fetch = async (_url, init) => {
+    assert.equal(init.duplex, "half");
+    assert.equal(init.body, requestBody);
+    return new Response("ok");
+  };
+  const requestBody = new ReadableStream({
+    start(controller) {
+      controller.enqueue(body);
+      controller.close();
+    },
+  });
+  try {
+    await POST(
+      new Request("http://localhost:16301/api/documents", {
+        method: "POST",
+        body: requestBody,
+        duplex: "half",
+      }),
+      { params: Promise.resolve({ path: ["documents"] }) },
     );
   } finally {
     globalThis.fetch = originalFetch;
