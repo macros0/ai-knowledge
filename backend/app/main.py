@@ -75,9 +75,10 @@ class CsrfMiddleware(BaseHTTPMiddleware):
             f"{settings.api_prefix}/"
         )
         csrf_cookie = request.cookies.get("csrf_token")
-        if unsafe and protected and csrf_cookie:
+        has_session = bool(request.cookies.get("session"))
+        if unsafe and protected and has_session:
             supplied = request.headers.get("X-CSRF-Token", "")
-            if not secrets.compare_digest(supplied, csrf_cookie):
+            if not csrf_cookie or not secrets.compare_digest(supplied, csrf_cookie):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Недействительный CSRF-токен", "code": "csrf_failed"},
