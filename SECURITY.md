@@ -673,7 +673,7 @@ Change: port 8000 (local Uvicorn) fell into the Windows Hyper-V/WSL excluded ran
 (`netsh interface ipv4 show excludedportrange` — blocks change per boot); the backend
 failed to start with `winerror 10013` (bind `('127.0.0.1', 8000)`). Local startup
 (`scripts/start-all.ps1`) now listens on `127.0.0.1:18000` (above the dynamic TCP range
-1024–15000, HNS does not reserve it); `BACKEND_URL` in `.env` and the frontend-rewrites
+1024–15000, HNS does not reserve it); `BACKEND_URL` in `.env` and the frontend API-proxy
 fallbacks = `http://localhost:18000`. docker-compose is unaffected — inside the network it
 remains `backend:8000`. Security profile unchanged: still only the frontend is published
 outward, the backend binds to loopback. `start-all.ps1` gained an early check of fixed host
