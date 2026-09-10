@@ -57,6 +57,9 @@ backend/scripts/probe-baseline.json
 # Temporary pytest basetemp directories created by local verification
 .pytest-run-*/
 
+# Local understand-anything knowledge graph and dashboard artifacts
+.understand-anything/
+
 # Артефакты линтера и покрытия (CI генерирует их на каждом прогоне)
 .ruff_cache/
 backend/.coverage
