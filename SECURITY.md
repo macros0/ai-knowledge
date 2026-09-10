@@ -283,8 +283,12 @@ does not corrupt data.
   production provider is `keycloak_oidc`).
 - **`AUTH_DEFAULT_ROLE`** when non-empty hands the default role to unknown users — in
   production an empty value is recommended (fail-closed).
-- **Rate limiter** (`app/services/rate_limiter.py`) — in-memory sliding window; multi-worker
-  production needs an external backing (Redis/DB).
+- **Single-replica invariant** — the in-memory sliding-window rate limiter, document pipeline
+  admission state, and purge/recovery state are correct only with one backend process and one
+  backend replica. This is the current architecture choice, not a temporary security control.
+  The application logs a warning when `UVICORN_WORKERS`/`WEB_CONCURRENCY` is greater than one.
+  Redis (or another shared limiter/queue backend) becomes mandatory before enabling multiple
+  workers, adding a second backend replica, or horizontally scaling for load.
 - **Pipeline admission** — the document parser currently remains an in-process worker; the
   production deployment must keep a bounded worker count and pending queue. A multi-worker or
   multi-replica deployment must use a shared queue before increasing process count.

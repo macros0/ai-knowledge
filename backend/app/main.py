@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import logging
+import os
 import secrets
 import threading
 from contextlib import asynccontextmanager
@@ -100,6 +101,17 @@ class CsrfMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    worker_hint = os.getenv("UVICORN_WORKERS") or os.getenv("WEB_CONCURRENCY")
+    try:
+        worker_count = int(worker_hint) if worker_hint else 1
+    except ValueError:
+        worker_count = 1
+    if worker_count > 1:
+        logging.warning(
+            "Backend рассчитан на single-process deployment: UVICORN_WORKERS=%s; "
+            "rate limiter, pipeline и purge state не разделяются между workers",
+            worker_count,
+        )
     # Создание отсутствующих таблиц БД (идемпотентно). Мягкий старт: если БД
     # недоступна — не валить процесс, репозитории будут пытаться при запросах.
     try:
