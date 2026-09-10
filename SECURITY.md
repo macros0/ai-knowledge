@@ -377,7 +377,9 @@ rewrite `Set-Cookie` while all backend tests remain green.
 The `/api/*` rewrite was replaced with an App Router catch-all proxy that forwards request bodies,
 status, response headers, and repeated `Set-Cookie` headers. This closes the verified gap where
 Next.js rewrites dropped the backend-issued `csrf_token`; an automated unit test covers multiple
-cookies and a standalone-server smoke test confirmed `csrf_token` reaches the client.
+cookies and a standalone-server smoke test confirmed `csrf_token` reaches the client. The proxy
+also strips client-controlled `Forwarded`/`X-Forwarded-*` headers so upstream URL/scheme metadata
+cannot be spoofed through the browser-facing endpoint.
 
 Expired `auth_sessions` are purged at application startup and removed on access when detected
 expired. This bounds retention of server-side identity and OIDC tokens; database-level encryption

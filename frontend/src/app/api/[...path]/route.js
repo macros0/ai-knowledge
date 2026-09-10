@@ -8,6 +8,13 @@ const HOP_BY_HOP = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+const CLIENT_CONTROLLED_FORWARDING = [
+  "forwarded",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-port",
+  "x-forwarded-proto",
+];
 
 function backendTarget(request, path) {
   const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:18000";
@@ -21,6 +28,7 @@ async function proxy(request, context) {
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("content-length");
+  for (const name of CLIENT_CONTROLLED_FORWARDING) headers.delete(name);
 
   const init = {
     method: request.method,

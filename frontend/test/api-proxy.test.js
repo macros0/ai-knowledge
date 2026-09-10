@@ -34,3 +34,35 @@ test("API proxy preserves repeated Set-Cookie headers", async () => {
     else process.env.BACKEND_URL = previousBackend;
   }
 });
+
+test("API proxy does not trust client-controlled forwarding headers", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    for (const name of [
+      "forwarded",
+      "x-forwarded-for",
+      "x-forwarded-host",
+      "x-forwarded-port",
+      "x-forwarded-proto",
+    ]) {
+      assert.equal(init.headers.get(name), null);
+    }
+    return new Response("ok");
+  };
+  try {
+    await GET(
+      new Request("http://localhost:16301/api/health", {
+        headers: {
+          Forwarded: "host=evil.example",
+          "X-Forwarded-For": "203.0.113.9",
+          "X-Forwarded-Host": "evil.example",
+          "X-Forwarded-Port": "443",
+          "X-Forwarded-Proto": "https",
+        },
+      }),
+      { params: Promise.resolve({ path: ["health"] }) },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
