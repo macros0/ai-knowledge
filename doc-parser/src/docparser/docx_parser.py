@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from docparser.archive_guard import validate_zip
-from xml.etree import ElementTree as ET
+from defusedxml import ElementTree as ET
 
 from docparser.blocks import Block
 from docparser.embedded import Attachment, process_embedded, save_image_file

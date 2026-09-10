@@ -310,6 +310,8 @@ Next.js frontend responses additionally set `nosniff`, `DENY`, `Referrer-Policy`
 `Permissions-Policy`; CSP remains backend/API-scoped until a nonce-based frontend policy is added.
 Locale ETags now use SHA-256; MD5 remains only for non-security sparse/hash-bucket indexing and is
 explicitly marked `usedforsecurity=False`.
+DOCX XML metadata/comments are parsed with `defusedxml` rather than stdlib ElementTree to prevent
+entity-expansion and related XML attacks.
 
 ### 2026-09-10 — Dependency audit baseline
 `pip-audit` обнаружил уязвимости в установленном `pypdf 6.15.0` (исправлено требованием
