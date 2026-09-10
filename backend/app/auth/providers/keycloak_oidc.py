@@ -66,8 +66,9 @@ class KeycloakOidcProvider(AuthProvider):
         )
         identity.groups = self._normalize_paths(identity.groups)
 
-        # id_token нужен для RP-Initiated Logout (id_token_hint) — храним в
-        # attributes (попадает только в signed-cookie сессию, клиенту не отдаётся).
+        # id_token нужен для RP-Initiated Logout (id_token_hint). Переданный в
+        # identity атрибут временно переносится в server-side auth_sessions при
+        # store_identity(); в браузерную cookie сам токен не попадает.
         id_token = token.get("id_token")
         if id_token:
             attrs = dict(identity.attributes or {})
