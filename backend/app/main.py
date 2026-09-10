@@ -71,8 +71,9 @@ class CsrfMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         settings = get_settings()
         unsafe = request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"}
-        protected = settings.auth_provider == "keycloak_oidc" and request.url.path.startswith(
-            f"{settings.api_prefix}/"
+        protected = (
+            settings.auth_provider not in {"disabled", "simulation"}
+            and request.url.path.startswith(f"{settings.api_prefix}/")
         )
         csrf_cookie = request.cookies.get("csrf_token")
         has_session = bool(request.cookies.get("session"))

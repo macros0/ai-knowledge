@@ -305,11 +305,12 @@ retaining the existing TTL and `APP_SECRET_KEY` requirements. Database encryptio
 an infrastructure responsibility.
 
 ### 2026-09-10 — CSRF protection for cookie-authenticated API mutations
-Change: production Keycloak API requests using POST/PATCH/DELETE require a double-submit token:
+Change: production cookie-authenticated API requests using POST/PATCH/DELETE require a double-submit token:
 the backend issues `csrf_token` and the frontend sends it as `X-CSRF-Token`. Safe methods remain
 unchanged; simulation/disabled development modes are not subject to this gate. Missing or mismatched
 tokens are rejected before route execution with `403 csrf_failed`. This protects state-changing
-endpoints from cross-site form requests while preserving same-origin proxy operation.
+endpoints from cross-site form requests while preserving same-origin proxy operation. The gate is
+enabled for every non-`disabled`/non-`simulation` provider, not only Keycloak.
 
 Logout is a POST returning a redirect target; it is no longer a GET navigation, so logout itself
 also requires the CSRF header. The frontend performs the POST and then navigates to the returned
