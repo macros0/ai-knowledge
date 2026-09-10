@@ -308,6 +308,8 @@ does not corrupt data.
 до установки приложения. Аудит собственного локального пакета `okf-doc-parser` невозможен через
 PyPI и должен дополняться проверкой артефактов CI.
 
+Frontend `npm audit --omit=dev --audit-level=high` завершился с `found 0 vulnerabilities`.
+
 ### 2026-09-10 — Server-side OIDC sessions
 Change: browser cookies now contain only a signed opaque session identifier. Normalized identity,
 OIDC `id_token`, creation time, and expiry are stored in the `auth_sessions` table; expired sessions
