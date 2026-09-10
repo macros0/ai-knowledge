@@ -47,4 +47,4 @@ EXPOSE 8000
 
 # 0.0.0.0 нужен для межконтейнерной связи (frontend -> backend:8000); сам
 # контейнер наружу не публикуется (см. docker-compose.yml без ports у backend).
-CMD ["sh", "-c", "uvicorn app.main:app --host ${UVICORN_HOST:-0.0.0.0} --port 8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host ${UVICORN_HOST:-0.0.0.0} --port 8000 --workers ${UVICORN_WORKERS:-1}"]
