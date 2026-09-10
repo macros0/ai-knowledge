@@ -3,6 +3,8 @@ import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from docparser.archive_guard import validate_zip
 from xml.etree import ElementTree as ET
 
 from docparser.blocks import Block
@@ -54,6 +56,8 @@ def parse_docx(
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
+    # Validate the central directory before python-docx expands XML members.
+    validate_zip(path)
     doc = Document(str(path))
     comments = _load_comments(path, doc)
     threads = _build_threads(comments)

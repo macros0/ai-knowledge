@@ -29,6 +29,7 @@ from app.services.context_builder import (
 from app.services.embedder import Embedder
 from app.services.errors import LLMError
 from app.services.llm_client import LLMClient
+from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.search_filter import build_doc_lookup, drop_invisible_hits
 from app.services.sparse import to_sparse_vector
 from app.services.stopwords import KIND_BM25, get_stopwords
@@ -64,6 +65,19 @@ def _get_llm() -> LLMClient:
 @router.post("", response_model=ChatResponse)
 def chat(req: ChatRequest, current_user: User = Depends(require_user)):
     settings = get_settings()
+    try:
+        get_rate_limiter().check_action(
+            current_user.user_id,
+            "chat",
+            max_requests=settings.chat_rate_limit_per_minute,
+        )
+    except RateLimitExceeded as exc:
+        raise ApiError(
+            status_code=429,
+            code=errors.RATE_LIMITED,
+            detail=str(exc),
+            headers={"Retry-After": str(max(1, int(exc.retry_after)))},
+        ) from exc
     if req.session_id and not chat_history.is_valid_session_id(req.session_id):
         raise ApiError(
             status_code=422,

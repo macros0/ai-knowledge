@@ -4,8 +4,10 @@
 """Роут умного поиска: dense / BM25 по концептам и чанкам."""
 from functools import lru_cache
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.auth.models import User
+from app.auth.service import require_user
 from app.config import get_settings
 from app.models.schemas import SearchHit, SearchRequest, SearchResponse
 from app.services.chunk_store import enrich_chunk_hits
@@ -16,6 +18,9 @@ from app.services.search_filter import build_doc_lookup, drop_invisible_hits
 from app.services.sparse import to_sparse_vector
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
+from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
+from app.api import errors
+from app.api.errors import ApiError
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -35,8 +40,21 @@ def _get_vector_store() -> VectorStore:
 
 
 @router.post("", response_model=SearchResponse)
-def search(req: SearchRequest):
+def search(req: SearchRequest, current_user: User = Depends(require_user)):
     settings = get_settings()
+    try:
+        get_rate_limiter().check_action(
+            current_user.user_id,
+            "search",
+            max_requests=settings.search_rate_limit_per_minute,
+        )
+    except RateLimitExceeded as exc:
+        raise ApiError(
+            status_code=429,
+            code=errors.RATE_LIMITED,
+            detail=str(exc),
+            headers={"Retry-After": str(max(1, int(exc.retry_after)))},
+        ) from exc
     branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
     vector = _get_embedder().embed(req.query) if "dense" in branches else None
     sparse_vec = (

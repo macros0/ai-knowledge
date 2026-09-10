@@ -99,6 +99,13 @@ class KeycloakDownClient(FakeClient):
         raise httpx.ConnectError("connection refused")
 
 
+class KeycloakDownCallbackClient(FakeClient):
+    """Keycloak недоступен во время code/token callback."""
+
+    async def authorize_access_token(self, request, **kwargs):
+        raise httpx.ReadTimeout("token endpoint timeout")
+
+
 class FakeOAuth:
     """Имитирует OAuth-клиент authlib с атрибутом `.keycloak`."""
 
@@ -159,6 +166,14 @@ def test_sso_login_keycloak_unavailable_redirects(tmp_path, monkeypatch):
     """Keycloak недоступен при старте входа → редирект с сообщением, не 500."""
     c = build_sso_client(tmp_path, monkeypatch, client_cls=KeycloakDownClient)
     resp = c.get("/api/auth/login")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/?auth_error=unavailable"
+
+
+def test_sso_callback_keycloak_unavailable_redirects(tmp_path, monkeypatch):
+    """Сбой token/userinfo во время callback → редирект, не 500."""
+    c = build_sso_client(tmp_path, monkeypatch, client_cls=KeycloakDownCallbackClient)
+    resp = c.get("/api/auth/callback")
     assert resp.status_code == 303
     assert resp.headers["location"] == "/?auth_error=unavailable"
 

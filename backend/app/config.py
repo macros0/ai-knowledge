@@ -253,6 +253,13 @@ class Settings(BaseSettings):
     # Circuit breaker: максимум ожидающих массовых задач в очереди. При
     # превышении новые массовые операции отклоняются (503 «очередь перегружена»).
     job_queue_max_pending: int = 5
+    # Admission limits for regular document processing. These cap parser memory
+    # and waiting work; they are per backend process until a shared queue exists.
+    pipeline_max_workers: int = Field(default=2, ge=1, le=32)
+    pipeline_max_pending: int = Field(default=8, ge=0, le=256)
+    # Per-user limits for expensive interactive endpoints (in-memory per process).
+    search_rate_limit_per_minute: int = Field(default=120, ge=1, le=10_000)
+    chat_rate_limit_per_minute: int = Field(default=60, ge=1, le=10_000)
     # Максимальное время ожидания завершения обработки одного документа внутри
     # массовой задачи (сек). По истечении документ помечается ошибкой, job идёт дальше.
     job_doc_timeout_seconds: float = 3600.0

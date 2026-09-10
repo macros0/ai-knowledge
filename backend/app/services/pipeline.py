@@ -15,6 +15,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
@@ -85,7 +86,14 @@ class Pipeline:
         self.vector_store = VectorStore()
         self.okf_generator = OKFGenerator()
         self._abort_events: dict[str, threading.Event] = {}
-        self._threads: dict[str, threading.Thread] = {}
+        self._threads: dict[str, Future] = {}
+        self._executor = ThreadPoolExecutor(
+            max_workers=self.settings.pipeline_max_workers,
+            thread_name_prefix="document-pipeline",
+        )
+        self._pipeline_slots = threading.BoundedSemaphore(
+            self.settings.pipeline_max_workers + self.settings.pipeline_max_pending
+        )
         # Проверка «не запущен» и регистрация потока должны быть одной
         # атомарной операцией: эндпоинты синхронные, FastAPI исполняет их в
         # тредпуле, поэтому два параллельных POST реально идут параллельно.
@@ -122,8 +130,8 @@ class Pipeline:
         Используется всеми входами пайплайна (ingest/resume/regenerate):
         если по doc_id уже живёт поток, повторный запуск отклоняется.
         """
-        thread = self._threads.get(doc_id)
-        if thread and thread.is_alive():
+        task = self._threads.get(doc_id)
+        if task and not task.done():
             raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
 
     def regenerate(self, doc_id: str) -> None:
@@ -174,7 +182,7 @@ class Pipeline:
     def wait_for(self, doc_id: str, timeout: float = 3600) -> dict:
         """Блокирующее ожидание терминального статуса документа.
 
-        Пайплайн работает в daemon-потоке, который умирает вместе с процессом.
+        Пайплайн работает в in-process executor, который умирает вместе с процессом.
         Поэтому программные триггеры (скрипты, батчи, диагностика) из отдельного
         процесса обязаны держать процесс живым до завершения — иначе документ
         зависнет в промежуточном статусе (processing/splitting/...).
@@ -186,12 +194,7 @@ class Pipeline:
 
         Возвращает финальную запись документа (или текущую по истечении timeout).
         """
-        # Дедлайн считаем ДО join: join сам съедает бюджет ожидания, иначе
-        # wait_for мог ждать до 2×timeout (join полностью + цикл заново).
         deadline = time.monotonic() + timeout
-        thread = self._threads.get(doc_id)
-        if thread and thread.is_alive():
-            thread.join(timeout=max(0.0, deadline - time.monotonic()))
         terminal = {"done", "error", "failed", "paused"}
         while True:
             doc = self.registry.get(doc_id)
@@ -202,21 +205,29 @@ class Pipeline:
             time.sleep(2)
 
     def _start(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
-        thread = threading.Thread(
-            target=self._run,
-            args=(doc_id, filepath, filename, user_tags, resume),
-            daemon=True,
-        )
-        # Всё под одним локом, включая start(): _ensure_not_running смотрит на
-        # is_alive(), а у зарегистрированного, но не запущенного потока он ещё
-        # False — иначе между регистрацией и стартом осталось бы окно, в которое
-        # проходит второй запрос. Два пайплайна на один doc_id — это общий
-        # staging, общий manifest и гонка на финальном атомарном переносе.
         with self._start_lock:
             self._ensure_not_running(doc_id)
+            # Keep lightweight Pipeline.__new__ test doubles compatible with the
+            # admission control; production instances initialize these in __init__.
+            if not hasattr(self, "_pipeline_slots"):
+                self._pipeline_slots = threading.BoundedSemaphore(1)
+            if not hasattr(self, "_executor"):
+                self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="document-pipeline")
+            if not self._pipeline_slots.acquire(blocking=False):
+                raise DomainError(
+                    "Очередь обработки документов перегружена",
+                    code=codes.QUEUE_OVERLOADED,
+                )
             self._abort_events[doc_id] = threading.Event()
-            self._threads[doc_id] = thread
-            thread.start()
+            try:
+                task = self._executor.submit(
+                    self._run, doc_id, filepath, filename, user_tags, resume
+                )
+            except Exception:
+                self._abort_events.pop(doc_id, None)
+                self._pipeline_slots.release()
+                raise
+            self._threads[doc_id] = task
 
     def _run(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         try:
@@ -227,6 +238,26 @@ class Pipeline:
         finally:
             self._abort_events.pop(doc_id, None)
             self._threads.pop(doc_id, None)
+            self._pipeline_slots.release()
+
+    def _stop_task(self, doc_id: str) -> None:
+        """Signal a task and wait briefly without blocking deletion indefinitely."""
+        event = self._abort_events.get(doc_id)
+        if event:
+            event.set()
+        task = self._threads.get(doc_id)
+        if task and not task.done():
+            if task.cancel():
+                self._threads.pop(doc_id, None)
+                self._abort_events.pop(doc_id, None)
+                self._pipeline_slots.release()
+                return
+            try:
+                task.result(timeout=2.0)
+            except FutureTimeoutError:
+                logger.warning("Пайплайн %s не завершился за 2 секунды", doc_id)
+            except Exception:
+                pass
 
     def _process(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         self.registry.update(doc_id, status="processing", error=None, problem=None)
@@ -648,12 +679,7 @@ class Pipeline:
         Delete Points) и `deleted_at` в БД. Векторы/файлы/концепты остаются на
         месте — восстановление не требует пере-эмбеддинга.
         """
-        event = self._abort_events.get(doc_id)
-        if event:
-            event.set()
-        thread = self._threads.get(doc_id)
-        if thread and thread.is_alive():
-            thread.join(timeout=2.0)
+        self._stop_task(doc_id)
         try:
             self.vector_store.set_document_deleted(doc_id, True)
         except Exception as exc:
@@ -693,12 +719,7 @@ class Pipeline:
             f.unlink(missing_ok=True)
 
     def remove(self, doc_id: str) -> None:
-        event = self._abort_events.get(doc_id)
-        if event:
-            event.set()
-        thread = self._threads.get(doc_id)
-        if thread and thread.is_alive():
-            thread.join(timeout=2.0)
+        self._stop_task(doc_id)
         self._physical_cleanup(doc_id)
         self.registry.delete(doc_id)
 
@@ -711,12 +732,7 @@ class Pipeline:
         отсекает хиты с doc_id, отсутствующим в БД (services/search_filter.py),
         поэтому между удалением строки и физической чисткой утекать нечему.
         """
-        event = self._abort_events.get(doc_id)
-        if event:
-            event.set()
-        thread = self._threads.get(doc_id)
-        if thread and thread.is_alive():
-            thread.join(timeout=2.0)
+        self._stop_task(doc_id)
         if not self.registry.delete_if_deleted(doc_id):
             return False
         self._physical_cleanup(doc_id)
@@ -987,7 +1003,7 @@ _INSTANCE_LOCK = threading.Lock()
 def get_pipeline() -> Pipeline:
     """Общий для процесса пайплайн — один инстанс на всех потребителей.
 
-    Состояние обработки (_threads, _abort_events, _start_lock, _chunk_locks) —
+    Состояние обработки (_threads, executor, _abort_events, _start_lock, _chunk_locks) —
     поля экземпляра, поэтому у каждого `Pipeline()` они свои и пустые. Пока
     потребители создавали инстансы сами (bulk-job, корзина, purge), это давало
     два дефекта:
@@ -1021,6 +1037,8 @@ def reset_pipeline() -> None:
     """
     global _INSTANCE
     with _INSTANCE_LOCK:
+        if _INSTANCE is not None:
+            _INSTANCE._executor.shutdown(wait=False, cancel_futures=True)
         _INSTANCE = None
 
 

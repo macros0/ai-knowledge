@@ -1,11 +1,36 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.services.problem_codes import problem_message
 
 SearchMode = Literal["dense", "bm25", "hybrid"]
+QueryText = Annotated[str, Field(min_length=1, max_length=8192)]
+FilterValue = Annotated[str, Field(min_length=1, max_length=128)]
+
+
+def _normalize_query(value: str) -> str:
+    """Normalize user text before it reaches embedding, Qdrant or the LLM."""
+    value = value.strip()
+    if not value:
+        raise ValueError("query must not be blank")
+    if any(ord(ch) < 32 and ch not in "\t\n\r" for ch in value):
+        raise ValueError("query contains control characters")
+    return value
+
+
+def _normalize_filter_values(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("filter values must not be blank")
+        if normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result
 
 
 class DocumentOut(BaseModel):
@@ -119,16 +144,21 @@ class ChunkOut(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
-    tags: list[str] = Field(default_factory=list)
+    query: QueryText
+    tags: list[FilterValue] = Field(default_factory=list, max_length=50)
     top_k: int = Field(default=5, ge=1, le=50)
     mode: SearchMode | None = None
     dense: bool | None = None
     bm25: bool | None = None
     # Фильтр по языку документа (Этап 7 фаза D). Пустой список = фильтр не задан;
     # include_unknown_source_locale=true добавляет документы с NULL-языком (OR).
-    source_locales: list[str] = Field(default_factory=list)
+    source_locales: list[FilterValue] = Field(default_factory=list, max_length=20)
     include_unknown_source_locale: bool = False
+
+    _normalize_query = field_validator("query", mode="before")(_normalize_query)
+    _normalize_filters = field_validator("tags", "source_locales", mode="after")(
+        _normalize_filter_values
+    )
 
 
 class SearchHit(BaseModel):
@@ -149,8 +179,8 @@ class SearchResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    query: str = Field(min_length=1)
-    tags: list[str] = Field(default_factory=list)
+    query: QueryText
+    tags: list[FilterValue] = Field(default_factory=list, max_length=50)
     top_k: int = Field(default=5, ge=1, le=50)
     mode: SearchMode | None = None
     dense: bool | None = None
@@ -158,10 +188,15 @@ class ChatRequest(BaseModel):
     # Фильтр по языку документа (Этап 7 фаза D) — применяется ДО поиска в Qdrant
     # (pre-filter), комбинируется AND с tags/dev_tags. Пустой список = фильтр не
     # задан; include_unknown_source_locale=true добавляет документы с NULL (OR).
-    source_locales: list[str] = Field(default_factory=list)
+    source_locales: list[FilterValue] = Field(default_factory=list, max_length=20)
     include_unknown_source_locale: bool = False
     # Клиентский UUID треда (Этап 6). Если не задан — бэкенд создаёт новую сессию.
     session_id: str | None = None
+
+    _normalize_query = field_validator("query", mode="before")(_normalize_query)
+    _normalize_filters = field_validator("tags", "source_locales", mode="after")(
+        _normalize_filter_values
+    )
 
 
 class ChatSettingsOut(BaseModel):

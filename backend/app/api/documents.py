@@ -147,6 +147,7 @@ def upload_document(
             detail=str(exc),
         ) from exc
     if size == 0:
+        _dest.unlink(missing_ok=True)
         raise ApiError(
             status_code=400,
             code=errors.EMPTY_FILE,
@@ -158,7 +159,11 @@ def upload_document(
     file_hash = None
     trash_twin: dict | None = None
     if settings.dedup_enabled:
-        file_hash = sha256_file(_dest)
+        try:
+            file_hash = sha256_file(_dest)
+        except Exception:
+            _dest.unlink(missing_ok=True)
+            raise
         existing = file_hash_exists(file_hash)
         if existing is not None:
             _dest.unlink(missing_ok=True)
@@ -213,7 +218,19 @@ def upload_document(
         if detection.confidence is not None:
             attach_development(doc_id, detection)
             doc = _registry.get(doc_id) or doc
-    get_pipeline().ingest(doc_id, get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}", doc["filename"], user_tags=user_tags)
+    try:
+        get_pipeline().ingest(
+            doc_id,
+            get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}",
+            doc["filename"],
+            user_tags=user_tags,
+        )
+    except DomainError as exc:
+        # Admission can fail after the DB row/file were created. Roll back the
+        # provisional document so a rejected upload cannot leave an orphan.
+        get_pipeline().remove(doc_id)
+        status = 503 if exc.code == errors.QUEUE_OVERLOADED else 400
+        raise errors.domain_error(exc, status) from exc
     audit_value = {"filename": doc.get("filename"), "size": size}
     if bound_development_id is not None:
         audit_value["development_id"] = bound_development_id
@@ -742,7 +759,8 @@ def resume_document(
     try:
         get_pipeline().resume(doc_id)
     except DomainError as exc:
-        raise errors.domain_error(exc, 400) from exc
+        status = 503 if exc.code == errors.QUEUE_OVERLOADED else 400
+        raise errors.domain_error(exc, status) from exc
     except ValueError as exc:
         raise ApiError(
             status_code=400,
@@ -785,7 +803,8 @@ def regenerate_document(
     try:
         get_pipeline().regenerate(doc_id)
     except DomainError as exc:
-        raise errors.domain_error(exc, 400) from exc
+        status = 503 if exc.code == errors.QUEUE_OVERLOADED else 400
+        raise errors.domain_error(exc, status) from exc
     except ValueError as exc:
         raise ApiError(
             status_code=400,
@@ -946,11 +965,12 @@ def export_okf_document(
     Этап 2b / Фаза 5: бандл — производная проекция PostgreSQL, генерируется по
     явному запросу; в штатной работе файлы не требуются.
     """
-    import io
+    import shutil
     import tempfile
     import zipfile
 
     from app.services.export_okf import export_okf_bundle
+    from starlette.background import BackgroundTask
 
     if not _valid_doc_id(doc_id):
         raise ApiError(
@@ -966,24 +986,19 @@ def export_okf_document(
             detail="Документ не найден",
         )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        dest = Path(tmp) / "bundle"
-        try:
-            export_okf_bundle(doc_id, dest)
-        except DomainError as exc:
-            raise errors.domain_error(exc, 404) from exc
-        except ValueError as exc:
-            raise ApiError(
-                status_code=404,
-                code=errors.DOCUMENT_NOT_FOUND,
-                detail=str(exc),
-            ) from exc
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    tmp = Path(tempfile.mkdtemp(prefix=f"okf-export-{doc_id}-"))
+    dest = tmp / "bundle"
+    zip_path = tmp / f"okf_{doc_id}.zip"
+
+    def cleanup() -> None:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    try:
+        export_okf_bundle(doc_id, dest)
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for f in sorted(dest.rglob("*")):
                 if f.is_file():
                     zf.write(f, f.relative_to(dest).as_posix())
-        buf.seek(0)
         audit.record(
             user,
             audit.DOCUMENT_EXPORT,
@@ -991,11 +1006,26 @@ def export_okf_document(
             target_id=doc_id,
             ip_address=_client_ip(request),
         )
-        return Response(
-            content=buf.getvalue(),
-            media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="okf_{doc_id}.zip"'},
-        )
+    except DomainError as exc:
+        cleanup()
+        raise errors.domain_error(exc, 404) from exc
+    except ValueError as exc:
+        cleanup()
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except Exception:
+        cleanup()
+        raise
+
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=f"okf_{doc_id}.zip",
+        background=BackgroundTask(cleanup),
+    )
 
 
 @router.get("/{doc_id}/okf", response_model=list[OkfFileOut])

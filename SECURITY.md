@@ -29,7 +29,14 @@ Splitting with other documents:
   over HTTP).
 - **Main threats**: leaking the document corpus through an open network surface, bypassing
   authorization through a weak/default secret or a wrong `AUTH_PROVIDER`, unauthorized data
-  modification through insufficient role checks.
+  modification through insufficient role checks, decompression bombs in untrusted OOXML, and
+  authenticated resource exhaustion through oversized search/chat requests.
+- **Input/resource boundary** — search and chat queries are normalized and capped at 8,192
+  characters; each tag/locale is capped at 128 characters and each filter list is capped at
+  50/20 values respectively. Validation happens before embedding, Qdrant, or LLM calls.
+  DOCX/XLSX ZIP central directories are checked before `python-docx`/`openpyxl` expansion:
+  member count, member size, total uncompressed size, compression ratio, duplicate names,
+  and traversal paths are rejected.
 
 ## 2. Authentication and authorization
 
@@ -278,10 +285,57 @@ does not corrupt data.
   production an empty value is recommended (fail-closed).
 - **Rate limiter** (`app/services/rate_limiter.py`) — in-memory sliding window; multi-worker
   production needs an external backing (Redis/DB).
+- **Pipeline admission** — the document parser currently remains an in-process worker; the
+  production deployment must keep a bounded worker count and pending queue. A multi-worker or
+  multi-replica deployment must use a shared queue before increasing process count.
+- **Archive limits** — OOXML parsing has fixed safety limits and rejects oversized/unsafe ZIP
+  containers. Raising them requires a capacity review and a corresponding security change-log
+  entry; limits are not a substitute for host-level disk and memory quotas.
 - **In-memory session secrets** — the session is in a signed cookie (not stored on the
   server): compromising `APP_SECRET_KEY` compromises all sessions.
 
 ## 7. Security change log
+
+### 2026-09-10 — Request and OOXML resource guards
+Change: `/search` and `/chat` request models trim and reject blank/control-character queries,
+cap query/filter sizes, and deduplicate filter values before expensive downstream calls.
+DOCX/XLSX parsing validates ZIP central directories before library expansion and applies member,
+total-size, compression-ratio, duplicate-name, and traversal-path limits; embedded members are
+validated before reading their bytes. Reason: an authenticated user could otherwise submit
+unbounded embedding/LLM work, while a small compressed OOXML upload could expand to exhaust
+memory or disk. Tests cover boundary and rejection cases. Future changes to these limits must
+update this section and the deployment capacity guidance.
+
+### 2026-09-10 — Per-user search/chat rate limits
+Change: `/search` and `/chat` now pass through the existing locked rate-limiter before
+embedding/search/LLM work. Limits are configured by `SEARCH_RATE_LIMIT_PER_MINUTE` and
+`CHAT_RATE_LIMIT_PER_MINUTE`; excess requests receive `429 rate_limited` with `Retry-After`.
+The limiter stores only timestamps and action keys, never query text. Limits are per process;
+multi-worker production requires a shared Redis/DB backing or a single-worker deployment.
+Reason: input length limits alone do not prevent repeated expensive requests by an authenticated
+user.
+
+### 2026-09-10 — Bounded document-processing admission
+Change: regular document processing now uses a bounded executor controlled by
+`PIPELINE_MAX_WORKERS` and `PIPELINE_MAX_PENDING`; when all slots are occupied, new work is
+rejected with the stable `queue_overloaded` domain code instead of creating an unbounded daemon
+thread. The limit is per backend process. Reason: parser work and pending documents consume
+memory before the LLM semaphore is reached, so an LLM-only limit did not protect the service
+from authenticated upload bursts. Multi-worker production must account for capacity being
+multiplied per process or deploy a shared queue. Tests cover concurrent starts and task cleanup.
+
+### 2026-09-10 — Recoverable OIDC callback failures
+Change: the OIDC callback now handles `httpx.HTTPError` from token and userinfo requests and
+redirects to `/?auth_error=unavailable`, matching the login-start path. Provider details are
+kept in server logs and are not returned to the browser. Reason: a transient Keycloak outage
+must not become an unhandled 500 or leave a partially-created local session.
+
+### 2026-09-10 — Disk-backed OKF export response
+Change: OKF ZIP exports are now written to a temporary file and returned with `FileResponse`;
+the temporary directory is removed by a response background task and on all pre-response errors.
+The endpoint no longer keeps the complete archive in one or two RAM buffers. The export remains
+authenticated and audited. Reason: a large corpus export could otherwise multiply its size in
+backend memory and allow concurrent export requests to exhaust the process.
 
 ### 2026-09-10 — Manual source-locale correction (Stage 7, phase D)
 Change: a new `PATCH /documents/{doc_id}/source-locale` (roles `editor`/`admin`) lets a

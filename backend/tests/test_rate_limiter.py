@@ -36,3 +36,11 @@ class TestRateLimiter:
         with pytest.raises(RateLimitExceeded) as excinfo:
             rl.check_bulk_regenerate("u1", 1, max_ops_per_hour=1, max_docs_per_hour=10)
         assert excinfo.value.retry_after > 0
+
+    def test_action_limit_is_per_user_and_action(self):
+        rl = RateLimiter()
+        rl.check_action("u1", "chat", max_requests=1)
+        with pytest.raises(RateLimitExceeded):
+            rl.check_action("u1", "chat", max_requests=1)
+        rl.check_action("u1", "search", max_requests=1)
+        rl.check_action("u2", "chat", max_requests=1)

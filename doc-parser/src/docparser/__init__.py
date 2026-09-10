@@ -11,15 +11,18 @@
     portable_name(saved_path)  -> basename без привязки к ОС-разделителю
     SUPPORTED_EXTENSIONS       — какие расширения поддерживаются
     ParseError                 — базовое исключение парсера
+    ArchiveLimitError         — небезопасный OOXML ZIP-контейнер
 """
 
 from .blocks import Block
+from .archive_guard import ArchiveLimitError
 from .markdown import blocks_to_markdown, markdown_attachment_spans
 from .parser import SUPPORTED_EXTENSIONS, ParseError, parse_document
 from .paths import portable_name
 
 __all__ = [
     "Block",
+    "ArchiveLimitError",
     "ParseError",
     "SUPPORTED_EXTENSIONS",
     "blocks_to_markdown",

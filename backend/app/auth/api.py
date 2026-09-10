@@ -164,6 +164,11 @@ async def auth_callback(request: Request):
             getattr(exc, "description", None),
         )
         return RedirectResponse(url="/?auth_error=session_expired", status_code=303)
+    except httpx.HTTPError as exc:
+        # Token/userinfo endpoints are network calls too; a transient IdP outage
+        # should be recoverable from the login page instead of becoming a 500.
+        logger.warning("Keycloak недоступен во время callback: %s", exc)
+        return RedirectResponse(url="/?auth_error=unavailable", status_code=303)
 
     user = _resolve_to_user(identity)
     if user is None:

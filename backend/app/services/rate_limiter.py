@@ -29,6 +29,29 @@ class RateLimiter:
         self._lock = threading.Lock()
         self._ops: dict[str, deque] = defaultdict(deque)  # user_id -> deque[ts]
         self._docs: dict[str, deque] = defaultdict(deque)  # user_id -> deque[(ts, weight)]
+        self._actions: dict[tuple[str, str], deque] = defaultdict(deque)
+
+    def check_action(
+        self,
+        user_id: str,
+        action: str,
+        *,
+        max_requests: int,
+        window_seconds: float = 60.0,
+    ) -> None:
+        """Admission limit for expensive interactive actions (search/chat/export)."""
+        now = time.time()
+        key = (user_id, action)
+        with self._lock:
+            requests = self._actions[key]
+            while requests and now - requests[0] >= window_seconds:
+                requests.popleft()
+            if len(requests) >= max_requests:
+                retry = max(1.0, window_seconds - (now - requests[0]))
+                raise RateLimitExceeded(
+                    f"Превышен лимит запросов для операции {action}", retry_after=retry
+                )
+            requests.append(now)
 
     def check_bulk_regenerate(
         self,
@@ -69,6 +92,7 @@ class RateLimiter:
         with self._lock:
             self._ops.clear()
             self._docs.clear()
+            self._actions.clear()
 
 
 _INSTANCE: RateLimiter | None = None
