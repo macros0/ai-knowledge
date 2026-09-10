@@ -315,6 +315,10 @@ Logout is a POST returning a redirect target; it is no longer a GET navigation, 
 also requires the CSRF header. The frontend performs the POST and then navigates to the returned
 target (including the Keycloak RP-initiated logout URL).
 
+Expired `auth_sessions` are purged at application startup and removed on access when detected
+expired. This bounds retention of server-side identity and OIDC tokens; database-level encryption
+and backup retention remain deployment responsibilities.
+
 ### 2026-09-10 — Request and OOXML resource guards
 Change: `/search` and `/chat` request models trim and reject blank/control-character queries,
 cap query/filter sizes, and deduplicate filter values before expensive downstream calls.

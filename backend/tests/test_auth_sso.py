@@ -208,6 +208,22 @@ def test_sso_logout_requires_csrf_token_and_returns_redirect(tmp_path, monkeypat
     assert resp.json()["redirect_url"].startswith("http://kc.example/")
 
 
+def test_expired_server_sessions_can_be_purged(tmp_path, monkeypatch):
+    c = build_sso_client(tmp_path, monkeypatch)
+    assert c.get("/api/auth/callback").status_code == 303
+    from datetime import datetime, timedelta, timezone
+    from app.auth.service import purge_expired_sessions
+    from app.db.models import AuthSession
+    from app.db.session import session_scope
+
+    with session_scope() as db:
+        row = db.query(AuthSession).one()
+        row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    assert purge_expired_sessions() == 1
+    with session_scope() as db:
+        assert db.query(AuthSession).count() == 0
+
+
 def test_sso_fail_closed_403(tmp_path, monkeypatch):
     c = build_sso_client(tmp_path, monkeypatch, client_cls=NoRoleClient, auth_default_role=None)
     resp = c.get("/api/auth/callback")

@@ -46,6 +46,14 @@ def identity_from_session(request: Request) -> AuthenticatedIdentity | None:
         key = hashlib.sha256(session_id.encode("ascii")).hexdigest()
         with session_scope() as db:
             row = db.get(AuthSession, key)
+            return row.id_token if row is not None else None
+    except Exception:
+        logger.warning("Не удалось прочитать id_token server-side session", exc_info=True)
+        return None
+    try:
+        key = hashlib.sha256(session_id.encode("ascii")).hexdigest()
+        with session_scope() as db:
+            row = db.get(AuthSession, key)
             expires_at = row.expires_at if row is not None else None
             if expires_at is not None and expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
@@ -108,6 +116,16 @@ def session_id_token(request: Request) -> str | None:
     except Exception:
         logger.warning("Не удалось прочитать id_token server-side session", exc_info=True)
         return None
+
+
+def purge_expired_sessions() -> int:
+    """Delete expired server-side sessions and return the number removed."""
+    now = datetime.now(timezone.utc)
+    with session_scope() as db:
+        rows = db.query(AuthSession).filter(AuthSession.expires_at <= now).all()
+        for row in rows:
+            db.delete(row)
+        return len(rows)
 
 
 def _unauthorized() -> NoReturn:

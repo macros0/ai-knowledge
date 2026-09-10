@@ -117,6 +117,11 @@ async def lifespan(app: FastAPI):
         from app.services.registry import reset_stale_statuses
 
         reset_stale_statuses()
+        from app.auth.service import purge_expired_sessions
+
+        purged = purge_expired_sessions()
+        if purged:
+            logging.info("Удалено просроченных auth-сессий: %d", purged)
     except Exception as exc:
         logging.warning("Не удалось инициализировать БД при старте: %s", exc)
 
