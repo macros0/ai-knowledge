@@ -9,6 +9,9 @@
 через authorizer.resolve_role() на каждом запросе.
 """
 import logging
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
 
 from typing import NoReturn
 
@@ -20,6 +23,8 @@ from app import config as config_mod
 from app.auth.factory import build_auth_provider, build_authorizer
 from app.auth.identity import AuthenticatedIdentity
 from app.auth.models import User
+from app.db.models import AuthSession
+from app.db.session import session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -32,23 +37,77 @@ def public_user() -> User:
 
 
 def identity_from_session(request: Request) -> AuthenticatedIdentity | None:
-    """Читает AuthenticatedIdentity, записанную при входе /simulate или /callback."""
-    raw = request.session.get(_SESSION_KEY)
-    if not raw:
+    """Загружает identity по opaque session-id из серверного хранилища."""
+    raw = request.session.get(_SESSION_KEY) or {}
+    session_id = raw.get("session_id") if isinstance(raw, dict) else None
+    if not isinstance(session_id, str) or not session_id:
         return None
     try:
-        return AuthenticatedIdentity(**raw)
+        key = hashlib.sha256(session_id.encode("ascii")).hexdigest()
+        with session_scope() as db:
+            row = db.get(AuthSession, key)
+            expires_at = row.expires_at if row is not None else None
+            if expires_at is not None and expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if row is None or expires_at <= datetime.now(timezone.utc):
+                if row is not None:
+                    db.delete(row)
+                request.session.clear()
+                return None
+            return AuthenticatedIdentity(**row.identity)
     except Exception:
-        logger.warning("Некорректная identity в сессии: %r", raw)
+        logger.warning("Некорректная server-side session")
         return None
 
 
 def store_identity(request: Request, identity: AuthenticatedIdentity) -> None:
-    request.session[_SESSION_KEY] = identity.model_dump()
+    session_id = secrets.token_urlsafe(32)
+    key = hashlib.sha256(session_id.encode("ascii")).hexdigest()
+    settings = config_mod.get_settings()
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.auth_session_ttl_seconds)
+    payload = identity.model_dump(mode="json")
+    id_token = (payload.get("attributes") or {}).get("id_token")
+    with session_scope() as db:
+        db.add(AuthSession(
+            id=key,
+            external_id=identity.external_id,
+            identity=payload,
+            id_token=id_token,
+            expires_at=expires_at,
+        ))
+    request.session.clear()
+    request.session[_SESSION_KEY] = {"session_id": session_id}
 
 
 def clear_identity(request: Request) -> None:
-    request.session.pop(_SESSION_KEY, None)
+    raw = request.session.get(_SESSION_KEY) or {}
+    session_id = raw.get("session_id") if isinstance(raw, dict) else None
+    if isinstance(session_id, str) and session_id:
+        try:
+            key = hashlib.sha256(session_id.encode("ascii")).hexdigest()
+            with session_scope() as db:
+                row = db.get(AuthSession, key)
+                if row is not None:
+                    db.delete(row)
+        except Exception:
+            logger.warning("Не удалось удалить server-side session", exc_info=True)
+    request.session.clear()
+
+
+def session_id_token(request: Request) -> str | None:
+    """Возвращает id_token только из server-side записи для OIDC logout."""
+    raw = request.session.get(_SESSION_KEY) or {}
+    session_id = raw.get("session_id") if isinstance(raw, dict) else None
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    try:
+        key = hashlib.sha256(session_id.encode("ascii")).hexdigest()
+        with session_scope() as db:
+            row = db.get(AuthSession, key)
+            return row.id_token if row is not None else None
+    except Exception:
+        logger.warning("Не удалось прочитать id_token server-side session", exc_info=True)
+        return None
 
 
 def _unauthorized() -> NoReturn:

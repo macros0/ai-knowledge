@@ -505,6 +505,19 @@ class UserBlock(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class AuthSession(Base):
+    """Server-side OIDC session; browser cookie contains only ``session_id``."""
+
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    external_id: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    identity: Mapped[dict] = mapped_column(JSON, nullable=False)
+    id_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
 class ChatSession(Base):
     """Тред чата (история, Этап 6).
 

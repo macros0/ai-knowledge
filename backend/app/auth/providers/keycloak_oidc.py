@@ -87,10 +87,10 @@ class KeycloakOidcProvider(AuthProvider):
         локальный logout и редиректит на "/" (логин-гейт), не отправляя браузер
         на заведомо ошибочный URL.
         """
-        identity_raw = request.session.get("identity") or {}
-        attributes = identity_raw.get("attributes") or {}
-        id_token = attributes.get("id_token")
-        request.session.clear()
+        from app.auth.service import clear_identity, session_id_token
+
+        id_token = session_id_token(request)
+        clear_identity(request)
         if not id_token:
             logger.info(
                 "Logout без id_token в сессии — только локальное завершение "

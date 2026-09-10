@@ -142,7 +142,7 @@ Secrets (not in git, only in a secret store / `.env` with restricted permissions
 
 | Variable | What it protects |
 |---|---|
-| `APP_SECRET_KEY` | session cookie signature (`TimestampSigner`, Starlette `SessionMiddleware`); default `dev-secret-change-me` — session forgery → authorization bypass |
+| `APP_SECRET_KEY` | signature of the opaque session-id cookie (`TimestampSigner`, Starlette `SessionMiddleware`); default `dev-secret-change-me` — session forgery → authorization bypass |
 | `KEYCLOAK_CLIENT_SECRET` | confidential OIDC client |
 | `DATABASE_URL` | PostgreSQL password |
 | `POSTGRES_PASSWORD` | superuser password for the compose `postgres` service (`local-postgres` profile, dev default `okf_dev_pg`) |
@@ -291,10 +291,18 @@ does not corrupt data.
 - **Archive limits** — OOXML parsing has fixed safety limits and rejects oversized/unsafe ZIP
   containers. Raising them requires a capacity review and a corresponding security change-log
   entry; limits are not a substitute for host-level disk and memory quotas.
-- **In-memory session secrets** — the session is in a signed cookie (not stored on the
-  server): compromising `APP_SECRET_KEY` compromises all sessions.
+- **Server-side auth sessions** — the cookie carries only an opaque random identifier;
+  identity and `id_token` are stored in `auth_sessions`. Database compromise still exposes
+  active tokens because encryption at rest is delegated to infrastructure.
 
 ## 7. Security change log
+
+### 2026-09-10 — Server-side OIDC sessions
+Change: browser cookies now contain only a signed opaque session identifier. Normalized identity,
+OIDC `id_token`, creation time, and expiry are stored in the `auth_sessions` table; expired sessions
+are rejected and logout revokes the server-side row. This reduces cookie disclosure impact while
+retaining the existing TTL and `APP_SECRET_KEY` requirements. Database encryption at rest remains
+an infrastructure responsibility.
 
 ### 2026-09-10 — Request and OOXML resource guards
 Change: `/search` and `/chat` request models trim and reject blank/control-character queries,

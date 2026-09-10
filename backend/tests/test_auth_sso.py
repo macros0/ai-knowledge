@@ -148,6 +148,40 @@ def test_sso_callback_passes_redirect_uri_and_sets_session(tmp_path, monkeypatch
     assert me["user"]["roles"] == ["viewer"]
 
 
+def test_sso_cookie_contains_no_identity_or_id_token(tmp_path, monkeypatch):
+    c = build_sso_client(tmp_path, monkeypatch)
+    resp = c.get("/api/auth/callback")
+    assert resp.status_code == 303
+    cookie = resp.headers["set-cookie"]
+    assert "fake-id-token" not in cookie
+    assert '"identity"' not in unquote(cookie)
+
+
+def test_sso_session_is_persisted_server_side(tmp_path, monkeypatch):
+    c = build_sso_client(tmp_path, monkeypatch)
+    assert c.get("/api/auth/callback").status_code == 303
+    from app.db.models import AuthSession
+    from app.db.session import session_scope
+
+    with session_scope() as db:
+        row = db.query(AuthSession).one()
+        assert row.external_id == "kc-sub-123"
+        assert row.id_token == "fake-id-token"
+
+
+def test_expired_sso_session_is_rejected(tmp_path, monkeypatch):
+    c = build_sso_client(tmp_path, monkeypatch)
+    assert c.get("/api/auth/callback").status_code == 303
+    from datetime import datetime, timedelta, timezone
+    from app.db.models import AuthSession
+    from app.db.session import session_scope
+
+    with session_scope() as db:
+        row = db.query(AuthSession).one()
+        row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    assert c.post("/api/search", json={"query": "secret"}).status_code == 401
+
+
 def test_sso_fail_closed_403(tmp_path, monkeypatch):
     c = build_sso_client(tmp_path, monkeypatch, client_cls=NoRoleClient, auth_default_role=None)
     resp = c.get("/api/auth/callback")
