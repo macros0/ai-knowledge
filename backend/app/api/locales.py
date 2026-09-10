@@ -20,7 +20,7 @@ def _etag(active: list[dict]) -> str:
         [{"code": l["code"], "updated_at": str(l["updated_at"])} for l in active],
         sort_keys=True,
     )
-    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @router.get("")

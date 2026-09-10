@@ -111,7 +111,7 @@ class Embedder:
         dim = self.settings.embedding_dimensions
         vec = [0.0] * dim
         for token in re.findall(r"\w+", text.lower()):
-            h = int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16)
+            h = int(hashlib.md5(token.encode("utf-8"), usedforsecurity=False).hexdigest(), 16)
             idx = h % dim
             vec[idx] += (h >> 16) % 7 - 3
         norm = math.sqrt(sum(v * v for v in vec)) or 1.0

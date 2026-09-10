@@ -126,7 +126,7 @@ def tokenize(text: str, stopwords: Collection[str] | None = None) -> list[str]:
 
 
 def _term_index(term: str) -> int:
-    digest = hashlib.md5(term.encode("utf-8")).digest()
+    digest = hashlib.md5(term.encode("utf-8"), usedforsecurity=False).digest()
     return int.from_bytes(digest[:4], "little") % SPARSE_INDEX_DIM
 
 
