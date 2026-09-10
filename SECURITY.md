@@ -286,7 +286,8 @@ does not corrupt data.
 - **Single-replica invariant** — the in-memory sliding-window rate limiter, document pipeline
   admission state, and purge/recovery state are correct only with one backend process and one
   backend replica. This is the current architecture choice, not a temporary security control.
-  The application logs a warning when `UVICORN_WORKERS`/`WEB_CONCURRENCY` is greater than one.
+  Production startup fails fast when `UVICORN_WORKERS`/`WEB_CONCURRENCY` is greater than one;
+  development keeps a warning for visibility.
   Redis (or another shared limiter/queue backend) becomes mandatory before enabling multiple
   workers, adding a second backend replica, or horizontally scaling for load.
 - **Pipeline admission** — the document parser currently remains an in-process worker; the

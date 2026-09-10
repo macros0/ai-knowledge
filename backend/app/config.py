@@ -3,6 +3,7 @@
 
 from functools import lru_cache
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -513,6 +514,16 @@ class Settings(BaseSettings):
                 "auth_provider='simulation' requires at least one user in AUTH_SIM_USERS"
             )
         if self.environment == "production":
+            worker_hint = os.getenv("UVICORN_WORKERS") or os.getenv("WEB_CONCURRENCY")
+            try:
+                worker_count = int(worker_hint) if worker_hint else 1
+            except ValueError:
+                worker_count = 1
+            if worker_count > 1:
+                raise ValueError(
+                    "single-replica: UVICORN_WORKERS/WEB_CONCURRENCY больше 1 "
+                    "недопустимы в production"
+                )
             # Fail-closed: в production авторизация не может быть отключена или
             # заменена на демо-провайдер. `disabled` открывает всё без логина,
             # `simulation` выдаёт демо-админа через /auth/simulate без внешней

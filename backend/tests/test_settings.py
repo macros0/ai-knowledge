@@ -91,6 +91,21 @@ class TestProductionAuthGuard:
         with pytest.raises(ValueError, match="недопустим для production"):
             Settings(_env_file=None, environment="production", auth_provider="simulation")
 
+    def test_multiple_workers_rejected_in_production(self, monkeypatch):
+        monkeypatch.setenv("UVICORN_WORKERS", "2")
+        with pytest.raises(ValueError, match="single-replica"):
+            Settings(
+                _env_file=None,
+                environment="production",
+                auth_provider="keycloak_oidc",
+                keycloak_url="https://kc",
+                keycloak_realm="r",
+                keycloak_client_id="id",
+                keycloak_client_secret="secret",
+                app_secret_key="x" * 32,
+                auth_session_https_only=True,
+            )
+
     def test_disabled_allowed_in_development(self):
         s = Settings(_env_file=None, environment="development", auth_provider="disabled")
         assert s.auth_provider == "disabled"
