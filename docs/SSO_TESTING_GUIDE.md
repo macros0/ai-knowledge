@@ -270,12 +270,13 @@ AUTH_ROLE_GROUPS={"/IDB/KB_Admin":"admin", ...}   # ключи уже с пол�
 
 Покрыто тестами: `backend/tests/test_auth_groups.py` (нормализация групп, partial override
 `field_mapping`, `leaf`/`full_path`, end-to-end full-path).
-### Проверка CSRF-cookie через Next.js rewrites
+### Проверка CSRF-cookie через Next.js API proxy
 
 OAuth callback должен открываться через frontend-origin (`http://localhost:16300/api/auth/callback`),
 а не напрямую на backend (`:18000`). В DevTools → Network выберите callback-запрос и убедитесь, что
 ответ Next содержит `Set-Cookie: csrf_token=...; Path=/`; затем в Application/Storage → Cookies
 проверьте наличие `csrf_token` для frontend-origin. После возврата в приложение выполните любую
 мутацию и убедитесь, что запрос содержит `X-CSRF-Token` с тем же значением. Если заголовок или
-cookie отсутствуют, проверьте reverse-proxy/Next-конфигурацию: `/api/*` должен идти через rewrite,
-а upstream `Set-Cookie` не должен удаляться или переписывать `Path` за пределы `/`.
+cookie отсутствуют, проверьте reverse-proxy/Next-конфигурацию: `/api/*` должен идти через
+`frontend/src/app/api/[...path]/route.js`, а upstream `Set-Cookie` не должен удаляться или
+переписывать `Path` за пределы `/`.

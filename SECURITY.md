@@ -18,9 +18,9 @@ Splitting with other documents:
   authenticated through the corporate SSO (Keycloak/IDB). There is no anonymous access in
   production.
 - **Only public entry point is the frontend** (Next.js). The browser talks same-origin to
-  the frontend; `/api/*` and `/health` are proxied to the backend **server-side** through
-  `rewrites()` in `frontend/next.config.js`. The browser never contacts the backend
-  directly.
+  the frontend; `/api/*` is proxied to the backend **server-side** by the App Router handler
+  `frontend/src/app/api/[...path]/route.js`, while `/health` uses the explicit rewrite in
+  `frontend/next.config.js`. The browser never contacts the backend directly.
 - **Must not be reachable from outside**: backend (`:8000`), Qdrant (`:6333`/`:6334`),
   PostgreSQL (`:5432`), Ollama (`:12400`). In `docker-compose.yml` only `frontend`
   (`8080:3000`) publishes a port.
@@ -367,11 +367,17 @@ could otherwise invalidate a user's session during a sensitive workflow (logout 
 frontend already has the non-HttpOnly token needed to submit the request. The frontend performs
 the POST and then navigates to the returned target (including the Keycloak RP-initiated logout URL).
 
-The `csrf_token` `Set-Cookie` is emitted by the backend middleware and must survive the Next.js
-`/api/*` rewrite. Backend tests verify issuance and enforcement through the ASGI client; the
-deployment smoke test in `docs/SSO_TESTING_GUIDE.md` additionally verifies the browser-visible
-response from Next.js, because a proxy could otherwise strip or rewrite `Set-Cookie` while all
-backend tests remain green.
+The `csrf_token` `Set-Cookie` is emitted by the backend middleware and is explicitly forwarded by
+the Next.js `/api/*` App Router proxy. Backend tests verify issuance and enforcement through the
+ASGI client; the deployment smoke test in `docs/SSO_TESTING_GUIDE.md` additionally verifies the
+browser-visible response from the built Next.js server, because a proxy could otherwise strip or
+rewrite `Set-Cookie` while all backend tests remain green.
+
+### 2026-09-11 — Next.js API proxy preserves cookies
+The `/api/*` rewrite was replaced with an App Router catch-all proxy that forwards request bodies,
+status, response headers, and repeated `Set-Cookie` headers. This closes the verified gap where
+Next.js rewrites dropped the backend-issued `csrf_token`; an automated unit test covers multiple
+cookies and a standalone-server smoke test confirmed `csrf_token` reaches the client.
 
 Expired `auth_sessions` are purged at application startup and removed on access when detected
 expired. This bounds retention of server-side identity and OIDC tokens; database-level encryption

@@ -17,10 +17,6 @@ module.exports = {
         source: "/health",
         destination: `${backendUrl}/health`,
       },
-      {
-        source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`,
-      },
     ];
   },
   async headers() {

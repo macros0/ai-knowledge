@@ -107,7 +107,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
   CORS в `main.py` задан как `allow_origins=settings.cors_allowed_origins`
   (дефолт — пустой список, `CORS_ALLOWED_ORIGINS` в env). Пустой список — намеренно:
   браузер не обращается к бэкенду напрямую (Next.js rewrites проксируют `/api`
-  серверно, same-origin), поэтому cross-origin CORS бэкенду не нужен, а wildcard
+  серверно через `frontend/src/app/api/[...path]/route.js`, same-origin), поэтому cross-origin CORS бэкенду не нужен, а wildcard
   `*` был бы чистой дырой.
   Cross-origin развёртывание (фронтенд на домене A, бэкенд на домене B без
   прокси) поддержано, но включается целиком: непустой `CORS_ALLOWED_ORIGINS`
@@ -127,17 +127,16 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
   для backend/qdrant/postgres обратно: это открывает корпус документов напрямую,
   минуя аутентификацию frontend-слоя.
 
-### 3.1 Грабли: `BACKEND_URL` и Next.js rewrites
+### 3.1 Грабли: `BACKEND_URL` и Next.js API proxy
 
-`frontend/next.config.js` запекает адрес бэкенда в rewrites **на этапе сборки**
-(`process.env.BACKEND_URL` читается при `next build`). Значение, переданное только
-в runtime-контейнер, на rewrites не влияет (клиентские запросы `/api/*` уйдут на
-baked-адрес). Варианты:
+API-запросы обслуживает App Router catch-all `frontend/src/app/api/[...path]/route.js`.
+Он читает `BACKEND_URL` в runtime и явно пересылает тело, статус, заголовки и все
+повторяющиеся `Set-Cookie`; это важно для signed session cookie и `csrf_token`.
+`/health` по-прежнему использует rewrite из `frontend/next.config.js`.
 
 - **Рекомендуемый (прод)**: reverse-proxy сам маршрутизирует `/api/*` и `/health`
-  на бэкенд — тогда rewrites Next.js для этих путей не задействуются.
-- Если без прокси: передавать `BACKEND_URL` как **build-arg** при сборке образа
-  фронтенда, а не только в `environment:` контейнера.
+-  на бэкенд — тогда Next.js API proxy для этих путей не задействуется.
+- Если API проксируется Next.js: передавать `BACKEND_URL` в `environment:` runtime-контейнера.
 
 Серверные компоненты (`frontend/src/lib/backendFetch.js`) читают `BACKEND_URL` в
 runtime — на них это ограничение не распространяется.
