@@ -140,7 +140,19 @@ def merge_and_format(
             chunk = chunks_in_group[0]
             primary = primary_concept
             merged_title = primary.payload.get("title", "")
-            content = chunk.payload.get("content", "")[: settings.chat_chunk_max_chars]
+            concept_content_value = primary.payload.get("content", "")[: settings.chat_concept_max_chars]
+            # Многотемный чанк: несколько ОСНОВНЫХ концептов делят один chunk_index —
+            # сырой чанк начинается с чужой темы, заголовок от концепта не совпадает
+            # с телом (напр. «Infotypes (English)» поверх японской статьи YEA Retro).
+            # В этом случае тело блока — выжимка самого концепта, а не начало чанка.
+            # Чанк с единственным основным концептом оставляет дословный raw-текст
+            # (числа/ABAP/таблицы), который краткая выжимка потеряла бы. review-сиблинги
+            # в определении многотемности не участвуют.
+            multi_topic = len(main_concepts) > 1
+            if multi_topic and concept_content_value:
+                content = concept_content_value
+            else:
+                content = chunk.payload.get("content", "")[: settings.chat_chunk_max_chars]
             if not merged_title:
                 section_title = chunk.payload.get("section_title", "")
                 if section_title:

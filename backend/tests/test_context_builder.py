@@ -125,8 +125,9 @@ class TestMergeAndFormat:
         assert merged[0]["concept_content"] == "выжимка про настройку"
 
     def test_many_to_one_two_concepts_one_chunk(self, settings):
-        """2 концепта из одного чанка + сам чанк → первичный concept+chunk блок
-        (title/content по первому по score) + сиблинг-концепт отдельным блоком."""
+        """2 концепта из одного чанка + сам чанк → многотемный чанк: первичный
+        concept+chunk блок берёт title репрезентативного концепта, а тело — его
+        выжимку (сырой чанк начинается с чужой темы) + сиблинг-концепт отдельным блоком."""
         c1 = Hit("c1", 0.9, {"point_type": "concept", "doc_id": "d1", "chunk_index": 0,
                             "title": "Настройка", "tags": ["a"], "content": "summary1",
                             "filepath": "d1/setup.md", "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 0)
@@ -137,10 +138,11 @@ class TestMergeAndFormat:
                              "tags": ["a"], "content": "полный текст", "section_title": ""}, 2)
         merged = merge_and_format([c1, c2, ch], settings)
         assert len(merged) == 2
-        # Первичный блок: title репрезентативного концепта, content чанка.
+        # Первичный блок: title репрезентативного концепта, content — его выжимка
+        # (многотемный чанк, сырой текст начинается не с этой темы).
         assert merged[0]["title"] == "Настройка"
         assert merged[0]["filepath"] == "d1/setup.md"
-        assert merged[0]["content"] == "полный текст"
+        assert merged[0]["content"] == "summary1"
         assert sorted(merged[0]["tags"]) == ["a", "b"]
         assert merged[0]["kind"] == "concept+chunk"
         # Сиблинг: свой title, свой content, свой filepath.
@@ -150,6 +152,61 @@ class TestMergeAndFormat:
         assert merged[1]["kind"] == "concept"
         assert merged[1]["tags"] == ["b"]
         assert merged[1]["score"] == 0.85
+
+    def test_multitopic_chunk_primary_uses_concept_digest(self, settings):
+        """Регрессия: многотемный чанк, сырой текст начинается с чужой темы
+        (напр. «Infotypes (English)» поверх японской статьи YEA Retro) →
+        тело первичного concept+chunk блока — выжимка концепта, а не начало чанка."""
+        c1 = Hit("c1", 0.9, {"point_type": "concept", "doc_id": "d1", "chunk_index": 66,
+                            "title": "Infotypes (English)", "tags": ["infotypes"],
+                            "content": "| IT0145 | Personnel Tax Status Information JP |",
+                            "filepath": "d1/infotypes-english.md",
+                            "source_document": {"filename": "sap.pdf", "doc_id": "d1"}}, 0)
+        c2 = Hit("c2", 0.85, {"point_type": "concept", "doc_id": "d1", "chunk_index": 66,
+                             "title": "YEA Retro Trigger vs. Regular Retro", "tags": ["payroll"],
+                             "content": "YEA retro explanation",
+                             "filepath": "d1/yea-retro.md",
+                             "source_document": {"filename": "sap.pdf", "doc_id": "d1"}}, 1)
+        ch = Hit("ch66", 0.8, {"point_type": "chunk", "doc_id": "d1", "chunk_index": 66,
+                               "tags": [], "section_title": "",
+                               "content": "Copy this code! 再年末調整と同時に支給額の遡及計算について 給与計算タイプ B…"}, 2)
+        merged = merge_and_format([c1, c2, ch], settings)
+        primary = next(b for b in merged if b["kind"] == "concept+chunk")
+        assert primary["title"] == "Infotypes (English)"
+        assert primary["content"] == "| IT0145 | Personnel Tax Status Information JP |"
+        assert "再年末調整" not in primary["content"]
+
+    def test_review_siblings_do_not_make_chunk_multitopic(self, settings):
+        """1 основной концепт + review-сиблинг + чанк → не многотемный: тело —
+        дословный чанк (review не участвует в определении multi_topic)."""
+        main = Hit("main1", 0.80, {"point_type": "concept", "doc_id": "d1", "chunk_index": 1,
+                                   "title": "Основной концепт", "tags": ["business"],
+                                   "content": "выжимка", "filepath": "d1/main1.md",
+                                   "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 1)
+        review = Hit("rev1", 0.95, {"point_type": "concept", "doc_id": "d1", "chunk_index": 1,
+                                    "title": "Замечание рецензента: Вопрос", "tags": ["review", "comment"],
+                                    "content": "текст замечания", "filepath": "d1/rev1.md",
+                                    "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 0)
+        chunk = Hit("ch1", 0.90, {"point_type": "chunk", "doc_id": "d1", "chunk_index": 1, "tags": [],
+                                  "content": "сырой чанк с дословным текстом", "section_title": "Секция"}, 2)
+        merged = merge_and_format([review, main, chunk], settings)
+        primary = next(b for b in merged if b["kind"] == "concept+chunk")
+        assert primary["content"] == "сырой чанк с дословным текстом"
+
+    def test_multitopic_chunk_with_empty_concept_content_falls_back_to_chunk(self, settings):
+        """Многотемный чанк, но у первичного концепта пустая выжимка → fallback
+        на дословный чанк (не создаём пустой контекст)."""
+        c1 = Hit("c1", 0.9, {"point_type": "concept", "doc_id": "d1", "chunk_index": 0,
+                            "title": "A", "tags": [], "content": "",
+                            "filepath": "d1/a.md", "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 0)
+        c2 = Hit("c2", 0.85, {"point_type": "concept", "doc_id": "d1", "chunk_index": 0,
+                             "title": "B", "tags": [], "content": "summary2",
+                             "filepath": "d1/b.md", "source_document": {"filename": "f.docx", "doc_id": "d1"}}, 1)
+        ch = Hit("ch0", 0.8, {"point_type": "chunk", "doc_id": "d1", "chunk_index": 0,
+                             "tags": [], "content": "полный текст", "section_title": ""}, 2)
+        merged = merge_and_format([c1, c2, ch], settings)
+        primary = next(b for b in merged if b["kind"] == "concept+chunk")
+        assert primary["content"] == "полный текст"
 
     def test_many_to_one_siblings_respect_context_cap(self, settings):
         """Сиблинг-блоки не пробивают жёсткий лимит chat_max_context_chars."""
