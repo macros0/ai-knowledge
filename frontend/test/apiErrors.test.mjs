@@ -11,6 +11,12 @@ import {
   listTags,
   serviceMessageKey,
 } from "../src/lib/api.js";
+import { csrfTokenFromDocument } from "../src/lib/api.js";
+
+test("csrf cookie helper is safe in SSR without document", () => {
+  assert.equal(csrfTokenFromDocument(), null);
+  assert.equal(csrfTokenFromDocument({ cookie: "csrf_token=abc%2F123" }), "abc/123");
+});
 import ru from "../src/i18n/locales/ru.js";
 import en from "../src/i18n/locales/en.js";
 import { createTranslator } from "../src/i18n/core.js";
