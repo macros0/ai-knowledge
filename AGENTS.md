@@ -97,7 +97,7 @@ UI: http://localhost:16300
   достаёт его по `(doc_id, slug)` через `services/concept_store.py`.
 - **Dual-index**: Qdrant хранит два типа точек — `point_type="concept"` (LLM-выжимки) и
   `point_type="chunk"` (сырой текст чанка, минимальный payload: doc_id, chunk_index,
-  tags, section_title, content). Поиск идёт по обоим типам, RRF-fusion в Python
+  tags, section_title, content, source_locale). Поиск идёт по обоим типам, RRF-fusion в Python
   (services/fusion.py), merge/collapse после fusion (services/context_builder.py).
   Tags — жёсткий pre-filter для dense/bm25. Переключатели `SEARCH_*_ENABLED` —
   query-time, реиндекс не требуется.
@@ -583,10 +583,10 @@ ru), полнота plural-форм.
   ß→ss) + карта букв БЕЗ NFKD-разложения (ø→oe, æ→ae, œ→oe, ł→l, đ/ð→d, þ→th —
   иначе класс вырезал бы их: «Łódź»→«odz») + NFKD-снятие прочих диакритик (é→e);
   `deduplication._shingles` использует общий `TOKEN_RE` (regex, НЕ `tokenize()` —
-  стоп-фильтр менял бы minhash всех RU-доков); `detect_language` выделяет «de» по
-  ä/ö/ü/ß и «fr» по однозначно французским диакритикам é/è/à/ç/… (текст без
-  маркерных букв остаётся «en» — лимит; спор общего ü решается числом маркеров);
-  `field_table._FIELD_NAME_RE` использует те же классы букв (обе регистры).
+  стоп-фильтр менял бы minhash всех RU-доков); `detect_language` — офлайн
+  статистическая модель `py3langid` (139 языков + `zxx`), маркерные буквы больше
+  не участвуют (см. `services/language.py`); `field_table._FIELD_NAME_RE`
+  использует те же классы букв (обе регистры).
   **Апостроф и дефис — разделители, НЕ буквы**: слитные формы (`aujourd'hui`,
   `celle-ci`) не токенизируются и как стоп-слова бесполезны — валидатор отклоняет
   их с отдельной категорией ошибки. Стоп-слова для de: и `dass`, и `daß`
@@ -656,9 +656,47 @@ ru), полнота plural-форм.
   `okf_chunk.md`, `okf_system.md` §Language, `dev_number_system.md` §Language →
   «в языке исходного документа»; `chat_system.md` правило 1 → «определи язык вопроса
   и отвечай на нём». Код-дефолты `prompts/okf.py` синхронизированы. `documents.source_locale`
-  (эвристика кириллица/латиница в `services/language.py`, ставится в `pipeline._finalize`).
+  (офлайн статистическая идентификация `py3langid` в `services/language.py`,
+  ставится в `pipeline._finalize`: ISO 639-1 в нижнем регистре, 139 языков;
+  пустой ввод → `None`, короткий/низкоуверенный/`zxx` → нейтральный `en`).
   Оставшееся «Russian» в промптах — правило чата (корректно) и примечание примеров
   `okf_table_classifier.md` (фактическое, про статические примеры) — не хардкод языка источника.
+- **Ручная коррекция `source_locale` (Этап 7 фаза D, 10.09.2026):** паттерн
+  «машинное значение → правка человеком → защита от перезаписи» (по образцу
+  подтверждения переводов). Колонка `documents.source_locale_source` (`'detected' |
+  'manual' | None`, Alembic `e7c8d9f0a1b2`); `pipeline._finalize` перезаписывает
+  `source_locale` только при `source != 'manual'` (чистая функция
+  `pipeline._source_locale_fields`). `PATCH /documents/{doc_id}/source-locale`
+  (editor/admin) ставит `source='manual'` или сбрасывает (`null` → и значение, и
+  источник в None; документ снова под авто-детекцией). Валидация кода —
+  `services/source_locale.py::KNOWN_SOURCE_LOCALES` (статический ~35 ISO 639-1,
+  синхронизирован с `frontend/src/lib/sourceLocales.mjs`) ∪ коды из `locales`;
+  иначе 422 `source_locale_invalid`. Audit `document_source_locale_update`.
+  UI — бейдж «🌐 XX» в карточке документа (✎ → select; `manual` подсвечен),
+  опции — активные локали (`GET /api/locales`) + известный список
+  (Intl.DisplayNames). `source_locale` НЕ подключён к поиску/UI-фильтрам/промптам —
+  отдельная продуктовая задача. Backfill исторических документов не входил в
+  релиз: значения обновятся при следующем `regenerate/resume` (или отдельным
+  разовым скриптом при необходимости).
+- **Фильтр по `source_locale` (Этап 7 фаза D, фильтр, 10.09.2026):** язык документа
+  денормализован в payload Qdrant (`source_locale` на concept И chunk точках; null
+  при NULL в БД — явный null в payload, `is_empty` матчит и null, и отсутствие ключа,
+  `is_null` — только явный null; валидировано spike'ом на qdrant 1.19) и пишется при
+  upsert (`index_concepts`/`index_chunks`/`backfill_chunks` получили параметр
+  `source_locale`; `_finalize` считает язык ДО индексации, manual-guard через
+  `_source_locale_fields`). Ручная правка синкает payload через
+  `services/source_locale_sync.py` (sync-try + daemon-фолбэк, паттерн dev_sync;
+  флаг `source_locale_sync_pending`). **Фильтр**: `GET /documents?source_locales=ru,en`
+  + `source_locale_unknown=true` (OR-семантика, мягкая валидация `^[a-z]{2,3}$`,
+  allowlist — только на PATCH); фасеты `GET /documents/source-locale-facets` (до
+  `/{doc_id}`, visibility = uploader + soft-delete). Чат/поиск: `ChatRequest`/
+  `SearchRequest` += `source_locales` + `include_unknown_source_locale`; фильтр входит
+  в `_build_search_filter` (второй `must`, AND с tags/dev_tags) — единая обёртка.
+  Backfill: `scripts/backfill_source_locale.py` (PG из `document_chunks`, skip manual;
+  `--payload` — синк payload всех точек без пере-эмбеддинга). Регрессия фильтра:
+  `scripts/probe_sources.py --check-locales` (ru/ru+en/unknown-only инварианты).
+  Фильтр НЕ привязан к языку вопроса/интерфейса — осознанное ограничение
+  пользователя (cross-lingual поиск — базовая возможность).
 
 ## Многоязычность — теги и переводы (Этап 7, фаза B)
 

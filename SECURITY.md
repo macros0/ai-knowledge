@@ -283,6 +283,21 @@ does not corrupt data.
 
 ## 7. Security change log
 
+### 2026-09-10 — Manual source-locale correction (Stage 7, phase D)
+Change: a new `PATCH /documents/{doc_id}/source-locale` (roles `editor`/`admin`) lets a
+user correct the machine-detected document language (`documents.source_locale`) and marks it
+`source_locale_source='manual'`, which `pipeline._finalize` never overwrites on a subsequent
+`regenerate` (guard `pipeline._source_locale_fields`); `null` resets both value and source
+(document returns to auto-detection). The code is validated against a static
+`KNOWN_SOURCE_LOCALES` allowlist ∪ the `locales` table — otherwise 422
+`source_locale_invalid` — so the field stays a bounded code, not free text. Every change is
+written to the append-only `audit_log` as a new action type
+`document_source_locale_update` (old/new value + IP), extending the audit type enum
+(`ACTION_TYPES` and the frozen test expectation). Reason: `source_locale` was previously a
+machine-only, non-audited field; making it human-editable required the same
+overwrite-protection and audit trail already used by confirmed reference translations, so a
+manual correction cannot be silently clobbered and is traceable.
+
 ### 2026-09-07 — Local-only logout when the session has no id_token
 Change: `KeycloakOidcProvider.logout` (`backend/app/auth/providers/keycloak_oidc.py`) no
 longer redirects the browser to the Keycloak `end_session_endpoint` when the app session

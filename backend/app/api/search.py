@@ -50,6 +50,8 @@ def search(req: SearchRequest):
         sparse_vec=sparse_vec,
         tags=req.tags or None,
         branches=branches,
+        source_locales=req.source_locales or None,
+        include_unknown_source_locale=req.include_unknown_source_locale,
         # Как в chat.py: берём широкий набор точек, режем по БЛОКАМ после merge —
         # иначе концепты-сиблинги группы с более низким fused-рангом не доживают
         # до группировки.

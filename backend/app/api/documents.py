@@ -30,7 +30,9 @@ from app.models.schemas import (
     DocumentDevelopmentSet,
     DocumentListOut,
     DocumentOut,
+    DocumentSourceLocaleUpdate,
     DocumentStatsOut,
+    SourceLocaleFacetsOut,
     DocumentTagsUpdate,
     OkfFileOut,
     TrashListOut,
@@ -53,6 +55,8 @@ from app.services.okf_generator import _build_markdown
 from app.services.pipeline import get_pipeline, save_upload_stream
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.registry import get_registry
+from app.services.source_locale import is_valid_source_locale, normalize_source_locale
+from app.services.source_locale_sync import reindex_document_source_locale, schedule_source_locale_sync
 from app.services.staging import StagingStore
 from app.services.tag_registry import TagRegistry, normalize_tags
 from app.services.trash import RestoreConflictError, bulk_restore, restore_document
@@ -67,9 +71,30 @@ _tag_registry = TagRegistry()
 # или разделители пути — все запросы с несоответствующим id получают 404.
 _DOC_ID_RE = re.compile(r"^[0-9a-f]{16}$")
 
+# Мягкая валидация кода языка для GET-фильтра (Этап 7 фаза D): отбрасывает явный
+# мусор (пробелы, спецсимволы), но НЕ знает семантику кодов — allowlist остаётся
+# только на PATCH, где человек вводит значение руками. Детектор (py3langid, 139
+# языков) может поставить документу код вне allowlist (af/eo/ca…), и фильтр по
+# нему не должен ломаться 422.
+_LOCALE_CODE_RE = re.compile(r"^[a-z]{2,3}$")
+
 
 def _valid_doc_id(doc_id: str) -> bool:
     return bool(_DOC_ID_RE.fullmatch(doc_id))
+
+
+def _parse_source_locales(raw: str | None) -> list[str] | None:
+    """Разбирает `source_locales=ru,en` → ['ru','en']; мусор → ApiError 422."""
+    if raw is None:
+        return None
+    codes = [c.strip().lower() for c in raw.split(",") if c.strip()]
+    if any(not _LOCALE_CODE_RE.fullmatch(c) for c in codes):
+        raise ApiError(
+            status_code=422,
+            code=errors.SOURCE_LOCALE_INVALID,
+            detail=f"Недопустимый код языка в фильтре: {raw}",
+        )
+    return codes or None
 
 
 @router.post("", response_model=DocumentOut)
@@ -224,6 +249,8 @@ def list_documents(
     tag: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    source_locales: str | None = None,
+    source_locale_unknown: bool = False,
     sort: str = "date_desc",
     limit: Annotated[int | None, Query(ge=1)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -243,6 +270,11 @@ def list_documents(
     problem=true — объединённое «Проблемные» (остановившиеся + дубликаты);
     date_from/date_to — диапазон дат загрузки (ISO YYYY-MM-DD, включительно,
     date_to трактуется как конец дня в UTC).
+
+    source_locales=ru,en — язык документа (WHERE source_locale IN (...));
+    source_locale_unknown=true — документы без языка (source_locale IS NULL);
+    сочетание кодов и unknown — OR (см. _conditions). Мягкая валидация кода
+    (regex ^[a-z]{2,3}$); мусор → 422 source_locale_invalid.
 
     search — текстовый поиск по filename / uploaded_by / тегам / разработке
     (подстрока; * и ? — glob только для filename); sort — ключ сортировки
@@ -264,6 +296,8 @@ def list_documents(
         tag=tag,
         date_from=_parse_date_boundary(date_from, end_of_day=False),
         date_to=_parse_date_boundary(date_to, end_of_day=True),
+        source_locales=_parse_source_locales(source_locales),
+        source_locale_unknown=source_locale_unknown,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -314,6 +348,23 @@ def list_trash(
         offset=offset,
         retention_days=settings.trash_retention_days,
     )
+
+
+@router.get("/source-locale-facets", response_model=SourceLocaleFacetsOut)
+def source_locale_facets(
+    uploader: str | None = None,
+    user: User = Depends(require_user),
+):
+    """Счётчики языков документа для фасет-фильтра (Этап 7 фаза D).
+
+    Visibility-ограничения те же, что у списка: только активные документы
+    (deleted_at IS NULL) + опционально scope по uploader («mine» резолвится на
+    фронтенде в username). Прочие фильтры списка НЕ учитываются — фасеты отвечают
+    «какие языки есть в видимом корпусе», счётчики стабильны.
+
+    Объявлен ДО `/{doc_id}` (иначе «source-locale-facets» попало бы в doc_id).
+    """
+    return SourceLocaleFacetsOut(items=_registry.source_locale_facets(uploaded_by=uploader))
 
 
 @router.get("/{doc_id}", response_model=DocumentOut)
@@ -435,6 +486,79 @@ def update_document_tags_endpoint(
     doc = result["doc"]
     doc["dev_tags_sync_pending"] = result["dev_tags_sync_pending"]
     return doc
+
+
+@router.patch("/{doc_id}/source-locale", response_model=DocumentOut)
+def update_document_source_locale_endpoint(
+    doc_id: str,
+    body: DocumentSourceLocaleUpdate,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    """Ручная правка языка исходного документа (Этап 7 фаза D).
+
+    Ставит `source_locale_source='manual'` — значение защищено от перезаписи
+    следующим `regenerate` (guard в pipeline._finalize). `null` — сброс: и
+    значение, и признак → None (документ снова под авто-детекцией). Код
+    валидируется по `KNOWN_SOURCE_LOCALES` ∪ `locales` (иначе 422).
+    """
+    if not _valid_doc_id(doc_id):
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
+    doc = _registry.get(doc_id)
+    if not doc:
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
+
+    if body.source_locale is None:
+        fields = {"source_locale": None, "source_locale_source": None}
+    else:
+        code = normalize_source_locale(body.source_locale)
+        if not is_valid_source_locale(code):
+            raise ApiError(
+                status_code=422,
+                code=errors.SOURCE_LOCALE_INVALID,
+                detail=f"Недопустимый код языка: {body.source_locale}",
+            )
+        fields = {"source_locale": code, "source_locale_source": "manual"}
+
+    audit.record(
+        user,
+        audit.DOCUMENT_SOURCE_LOCALE_UPDATE,
+        audit.TARGET_DOCUMENT,
+        target_id=doc_id,
+        old_value={
+            "source_locale": doc.get("source_locale"),
+            "source_locale_source": doc.get("source_locale_source"),
+        },
+        new_value=fields,
+        ip_address=_client_ip(request),
+    )
+    _registry.update(doc_id, **fields)
+
+    # Синк payload Qdrant (concept + chunk точки) — денормализованная проекция
+    # source_locale для фильтра поиска. Синхронная попытка + фоновый фолбэк
+    # (паттерн dev_sync); расхождение лечится следующим _finalize.
+    sync_pending = False
+    if not reindex_document_source_locale(doc_id, fields.get("source_locale")):
+        schedule_source_locale_sync(doc_id)
+        sync_pending = True
+
+    result = _registry.get(doc_id)
+    if result is None:
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
+    result["source_locale_sync_pending"] = sync_pending
+    return result
 
 
 @router.post("/{doc_id}/detect-development", response_model=DetectDevelopmentOut)

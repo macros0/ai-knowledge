@@ -17,3 +17,4 @@ alembic>=1.13
 pillow
 pymupdf
 mmh3>=4.0
+py3langid~=0.4.0

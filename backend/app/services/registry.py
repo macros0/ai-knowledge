@@ -139,6 +139,7 @@ def _to_dict(doc: Document) -> dict:
         "deleted_at": doc.deleted_at,
         "deleted_by": doc.deleted_by,
         "source_locale": doc.source_locale,
+        "source_locale_source": doc.source_locale_source,
     }
 
 
@@ -221,6 +222,8 @@ class DocumentRegistry:
         tag: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        source_locales: list[str] | None = None,
+        source_locale_unknown: bool = False,
         active_only: bool = True,
     ) -> list:
         conditions: list = []
@@ -250,6 +253,14 @@ class DocumentRegistry:
             conditions.append(Document.created_at >= date_from)
         if date_to is not None:
             conditions.append(Document.created_at <= date_to)
+        if source_locales is not None or source_locale_unknown:
+            # OR-семантика: коды из списка ИЛИ «не определён» (NULL).
+            locale_conds: list = []
+            if source_locales:
+                locale_conds.append(Document.source_locale.in_(source_locales))
+            if source_locale_unknown:
+                locale_conds.append(Document.source_locale.is_(None))
+            conditions.append(or_(*locale_conds))
         if problem:
             conditions.append(
                 or_(
@@ -285,6 +296,8 @@ class DocumentRegistry:
         tag: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        source_locales: list[str] | None = None,
+        source_locale_unknown: bool = False,
         sort: str = "date_desc",
         limit: int | None = None,
         offset: int = 0,
@@ -311,6 +324,8 @@ class DocumentRegistry:
             tag=tag,
             date_from=date_from,
             date_to=date_to,
+            source_locales=source_locales,
+            source_locale_unknown=source_locale_unknown,
             active_only=True,
         )
         with session_scope() as s:
@@ -336,6 +351,28 @@ class DocumentRegistry:
                 stmt = stmt.limit(limit)
             docs = s.execute(stmt).scalars().all()
             return [_to_dict(d) for d in docs], total
+
+    def source_locale_facets(self, uploaded_by: str | None = None) -> list[dict]:
+        """Счётчики языков документа для фасетов (Этап 7 фаза D, фильтр).
+
+        Visibility-ограничения те же, что у списка: только активные документы
+        (`deleted_at IS NULL`) + опционально scope по uploader. Прочие фильтры
+        списка (tag/status/module/q) НЕ учитываются — фасеты отвечают «какие
+        языки есть в видимом корпусе вообще», счётчики стабильны.
+
+        Возвращает [{"code": str | None, "count": int}]; code=None = «не определён».
+        """
+        with session_scope() as s:
+            stmt = (
+                select(Document.source_locale, func.count())
+                .select_from(Document)
+                .where(Document.deleted_at.is_(None))
+            )
+            if uploaded_by is not None:
+                stmt = stmt.where(Document.uploaded_by == uploaded_by)
+            stmt = stmt.group_by(Document.source_locale).order_by(func.count().desc())
+            rows = s.execute(stmt).all()
+        return [{"code": r[0], "count": r[1]} for r in rows]
 
     def distinct_uploaders(self) -> list[str]:
         with session_scope() as s:

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { deleteDocument, friendlyApiError, getDocumentStats, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, updateDocumentTags } from "@/lib/api";
+import { deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
+import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
@@ -128,6 +129,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const [statusFilter, setStatusFilter] = useState(() => initialParam(searchParams, "status", ""));
   const [dateFrom, setDateFrom] = useState(() => initialParam(searchParams, "from", ""));
   const [dateTo, setDateTo] = useState(() => initialParam(searchParams, "to", ""));
+  // localeFilter — фильтр по языку ДОКУМЕНТА (query-параметр `locale`), НЕ язык
+  // интерфейса (cookie okf.locale): "" = все, "unknown" = «не определён», иначе код.
+  const [localeFilter, setLocaleFilter] = useState(() => initialParam(searchParams, "locale", ""));
   const [groupBy, setGroupBy] = useState(() => initialParam(searchParams, "group", ""));
   const [stats, setStats] = useState(null);
   const [dupDoc, setDupDoc] = useState(null);
@@ -135,6 +139,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   // Спойлер редактора тегов в карточке: по умолчанию свёрнут (чипы + «✎»),
   // раскрытие — только когда нужно редактировать (не частая операция).
   const [editingTags, setEditingTags] = useState({});
+  // Активные локали (GET /api/locales) для селекта языка документа + карта
+  // «doc_id -> редактируется ли язык сейчас».
+  const [activeLocales, setActiveLocales] = useState([]);
+  const [editingLocale, setEditingLocale] = useState({});
+  // Фасеты языков документа (GET /documents/source-locale-facets) для фильтр-селекта.
+  const [localeFacets, setLocaleFacets] = useState([]);
   // Спойлер панели массовых действий: свёрнут по умолчанию, раскрывается по клику
   // или автоматически при появлении выделения.
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -199,6 +209,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         status: statusFilter || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
+        sourceLocales: localeFilter && localeFilter !== "unknown" ? localeFilter : undefined,
+        sourceLocaleUnknown: localeFilter === "unknown" ? true : undefined,
         search: search || undefined,
         sort: sortKey,
         // В grouped-режиме пагинация отключена — нужен весь набор для секций.
@@ -218,7 +230,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       if (seq !== loadSeq.current || !mounted.current) return;
       showToast(t("docs.loadError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
-  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, search, sortKey, page, groupBy, t]);
+  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, localeFilter, search, sortKey, page, groupBy, t]);
 
   const loadUploaders = useCallback(async () => {
     try {
@@ -244,6 +256,22 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     }
   }, []);
 
+  const loadActiveLocales = useCallback(async () => {
+    try {
+      setActiveLocales(await listActiveLocales());
+    } catch {
+      setActiveLocales([]);
+    }
+  }, []);
+
+  const loadFacets = useCallback(async () => {
+    try {
+      setLocaleFacets(await getSourceLocaleFacets(resolvedUploader || undefined));
+    } catch {
+      setLocaleFacets([]);
+    }
+  }, [resolvedUploader]);
+
   const loadStats = useCallback(async () => {
     try {
       setStats(await getDocumentStats());
@@ -265,12 +293,13 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     if (statusFilter) params.set("status", statusFilter);
     if (dateFrom) params.set("from", dateFrom);
     if (dateTo) params.set("to", dateTo);
+    if (localeFilter) params.set("locale", localeFilter);
     if (sortKey !== "date_desc") params.set("sort", sortKey);
     if (page > 0) params.set("page", String(page));
     if (groupBy) params.set("group", groupBy);
     const qs = params.toString();
     router.replace(qs ? `/?${qs}` : "/", { scroll: false });
-  }, [search, chosenUploader, moduleFilter, tagFilter, devFilter, problemOnly, statusFilter, dateFrom, dateTo, sortKey, page, groupBy, router]);
+  }, [search, chosenUploader, moduleFilter, tagFilter, devFilter, problemOnly, statusFilter, dateFrom, dateTo, localeFilter, sortKey, page, groupBy, router]);
 
   // Debounce серверного поиска: не слать запрос на каждое нажатие клавиши.
   useEffect(() => {
@@ -284,7 +313,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   // окажемся на середине старой страницы с новым набором результатов).
   useEffect(() => {
     setPage(0);
-  }, [search, sortKey, resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, groupBy]);
+  }, [search, sortKey, resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, localeFilter, groupBy]);
 
   useEffect(() => {
     if (loading) return;
@@ -293,12 +322,14 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     loadUploaders();
     loadModules();
     loadDevelopments();
+    loadActiveLocales();
+    loadFacets();
     loadStats();
     return () => {
       mounted.current = false;
       clearTimeout(timer.current);
     };
-  }, [loading, refreshKey, load, loadUploaders, loadModules, loadDevelopments, loadStats]);
+  }, [loading, refreshKey, load, loadUploaders, loadModules, loadDevelopments, loadActiveLocales, loadFacets, loadStats]);
 
   const openOkf = (doc) => {
     router.push(`/documents/${doc.id}/okf`);
@@ -400,6 +431,21 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     setEditingTags((s) => ({ ...s, [id]: !s[id] }));
   };
 
+  const toggleEditLocale = (id) => {
+    setEditingLocale((s) => ({ ...s, [id]: !s[id] }));
+  };
+
+  const changeLocale = async (doc, value) => {
+    setEditingLocale((s) => ({ ...s, [doc.id]: false }));
+    try {
+      await setDocumentSourceLocale(doc.id, value || null);
+      load();
+    } catch (err) {
+      showToast(t("docs.changeLocaleError", { message: friendlyApiError(err, t) }), { type: "error" });
+      load();
+    }
+  };
+
   const selectedIds = Object.keys(selected);
 
   // При появлении выделения панель массовых действий раскрывается автоматически
@@ -448,6 +494,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         status: statusFilter || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
+        sourceLocales: localeFilter && localeFilter !== "unknown" ? localeFilter : undefined,
+        sourceLocaleUnknown: localeFilter === "unknown" ? true : undefined,
         search: search || undefined,
         sort: sortKey,
         limit: MAX_SELECT,
@@ -582,6 +630,51 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                     name: doc.development_suggestion.number || doc.development_suggestion.name || "—",
                   })}
                 </span>
+              </>
+            )}
+            {(doc.source_locale || canEdit) && (
+              <>
+                <br />
+                {editingLocale[doc.id] ? (
+                  <>
+                    <select
+                      className="locale-select-inline"
+                      value={doc.source_locale || ""}
+                      onChange={(e) => changeLocale(doc, e.target.value)}
+                      aria-label={t("docs.localeEditAria")}
+                    >
+                      <option value="">{t("docs.localeNone")}</option>
+                      {buildLocaleOptions(doc.source_locale, activeLocales, locale).map((o) => (
+                        <option key={o.code} value={o.code}>{o.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="tag-edit-toggle"
+                      onClick={() => toggleEditLocale(doc.id)}
+                      aria-label={t("docs.collapseLocaleAria")}
+                    >
+                      −
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className={`doc-locale-badge${doc.source_locale_source === "manual" ? " doc-locale-badge-manual" : ""}`}
+                      title={doc.source_locale_source === "manual" ? t("docs.localeManualTitle") : undefined}
+                    >
+                      🌐 {doc.source_locale ? doc.source_locale.toUpperCase() : t("docs.localeNone")}
+                    </span>
+                    {canEdit && (
+                      <button
+                        className="tag-edit-toggle"
+                        onClick={() => toggleEditLocale(doc.id)}
+                        aria-label={t("docs.localeEditAria")}
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </>
+                )}
               </>
             )}
             {doc.problem && (
@@ -833,6 +926,19 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             ))}
           </select>
         )}
+        <select
+          className="doc-filter-select"
+          value={localeFilter}
+          onChange={(e) => setLocaleFilter(e.target.value)}
+          aria-label={t("docs.localeFilterAria")}
+        >
+          <option value="">{t("docs.allLocales")}</option>
+          {facetOptions(localeFacets, locale).map((o) => (
+            <option key={o.code} value={o.code}>
+              {o.code === "unknown" ? t("docs.localeUnknown") : o.label} ({o.count})
+            </option>
+          ))}
+        </select>
         <DevelopmentFilter
           developments={developments}
           value={devFilter}
@@ -904,6 +1010,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               moduleFilter ||
               devFilter ||
               tagFilter ||
+              localeFilter ||
               dateFrom ||
               dateTo) && (
               <li className="document-empty">{t("docs.empty")}</li>

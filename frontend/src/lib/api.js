@@ -188,6 +188,8 @@ export function listDocuments(params = {}) {
   if (params.problem) qs.set("problem", "true");
   if (params.dateFrom) qs.set("date_from", params.dateFrom);
   if (params.dateTo) qs.set("date_to", params.dateTo);
+  if (params.sourceLocales) qs.set("source_locales", params.sourceLocales);
+  if (params.sourceLocaleUnknown) qs.set("source_locale_unknown", "true");
   if (params.search) qs.set("search", params.search);
   if (params.sort) qs.set("sort", params.sort);
   if (params.limit != null) qs.set("limit", String(params.limit));
@@ -203,6 +205,11 @@ export function listDocuments(params = {}) {
 
 export function getDocumentStats() {
   return request("/documents/stats");
+}
+
+export function getSourceLocaleFacets(uploader) {
+  const qs = uploader ? `?uploader=${encodeURIComponent(uploader)}` : "";
+  return request(`/documents/source-locale-facets${qs}`).then((data) => data.items ?? []);
 }
 
 export function listUploaders() {
@@ -345,9 +352,16 @@ export function search(query, tags = [], topK = 5, mode = "hybrid") {
   });
 }
 
-export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null) {
+export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "") {
   const body = { query, tags, top_k: topK, mode };
   if (sessionId) body.session_id = sessionId;
+  // Фильтр по языку документа (Этап 7 фаза D): не отправляем поле при «Все языки».
+  if (sourceLocale === "unknown") {
+    body.include_unknown_source_locale = true;
+  } else if (sourceLocale) {
+    body.source_locales = [sourceLocale];
+    body.include_unknown_source_locale = false;
+  }
   return request(
     "/chat",
     {
@@ -512,6 +526,14 @@ export function setDocumentDevelopment(docId, developmentId, confirmed = false) 
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ development_id: developmentId, confirmed }),
+  });
+}
+
+export function setDocumentSourceLocale(docId, locale) {
+  return request(`/documents/${docId}/source-locale`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_locale: locale }),
   });
 }
 

@@ -202,6 +202,7 @@
   "apiError.service.qdrant": [],
   "apiError.sessionExpired": [],
   "apiError.session_not_found": [],
+  "apiError.source_locale_invalid": [],
   "apiError.tag_in_use": [],
   "apiError.tag_not_found": [],
   "apiError.text_not_found": [],
@@ -257,6 +258,7 @@
   ],
   "chat.historyTitle": [],
   "chat.loading": [],
+  "chat.localeLabel": [],
   "chat.messagesCount": [],
   "chat.modeBm25": [],
   "chat.modeDense": [],
@@ -451,15 +453,20 @@
   "devpanel.total": [],
   "devpanel.versionConflict": [],
   "docs.addTagPlaceholder": [],
+  "docs.allLocales": [],
   "docs.allModules": [],
   "docs.allTags": [],
   "docs.allUploaders": [],
   "docs.changeDevError": [
     "message"
   ],
+  "docs.changeLocaleError": [
+    "message"
+  ],
   "docs.changeTagsError": [
     "message"
   ],
+  "docs.collapseLocaleAria": [],
   "docs.collapseTagsAria": [],
   "docs.confirmRegenerate": [
     "name"
@@ -496,6 +503,14 @@
   "docs.loadError": [
     "message"
   ],
+  "docs.localeBadge": [
+    "code"
+  ],
+  "docs.localeEditAria": [],
+  "docs.localeFilterAria": [],
+  "docs.localeManualTitle": [],
+  "docs.localeNone": [],
+  "docs.localeUnknown": [],
   "docs.markupProgress": [
     "done",
     "pct",

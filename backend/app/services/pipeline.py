@@ -61,6 +61,22 @@ MIN_TEXT_LAYER_CHARS = 200
 _IMAGE_LINK_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 
 
+def _source_locale_fields(detected: str | None, current_source: str | None) -> dict:
+    """Поля source_locale для финализации с учётом ручной правки (Этап 7 фаза D).
+
+    Ручная правка (`source_locale_source == 'manual'`) не перезаписывается
+    повторным `regenerate` — возвращается пустой dict. Иначе значение
+    пересчитывается: `detected` ставится с `source='detected'`, `None` (пустой
+    текст) — сбрасывает и значение, и источник. Чистая функция — юнит-тестируема.
+    """
+    if current_source == "manual":
+        return {}
+    return {
+        "source_locale": detected,
+        "source_locale_source": "detected" if detected else None,
+    }
+
+
 class Pipeline:
     def __init__(self):
         self.settings = get_settings()
@@ -385,6 +401,12 @@ class Pipeline:
         doc = self.registry.get(doc_id)
         if doc and doc.get("development_id"):
             dev_tags = get_development_registry().dev_tags(doc["development_id"])
+        # Язык документа для payload Qdrant (Этап 7 фаза D): считаем ДО индексации,
+        # чтобы source_locale попадал в точки прямо при upsert (без доп. set_payload).
+        # Ручная правка (manual) не перезаписывается — эффективное значение берётся
+        # из текущего поля документа.
+        current_source_locale = doc.get("source_locale_source") if doc else None
+        current_locale = doc.get("source_locale") if doc else None
 
         concepts = staging.concepts()
         slugs = staging.slugs()
@@ -526,6 +548,14 @@ class Pipeline:
             )
 
         self.vector_store.ensure_collection()
+        # Язык документа: детекция идёт по чанкам (тот же вход, что раньше на
+        # финализации), но теперь ДО индексации — payload точек сразу корректен.
+        detected_locale = detect_language(
+            "".join(r["content"] for r in chunk_rows)[:100_000]
+        )
+        locale_fields = _source_locale_fields(detected_locale, current_source_locale)
+        effective_locale = locale_fields.get("source_locale", current_locale)
+
         keep_point_ids: set[str] = set()
         if okf_docs:
             cap = self.settings.okf_max_concept_chars
@@ -539,7 +569,9 @@ class Pipeline:
             # осиротевшие старые. point_id детерминирован (uuid5 от filepath),
             # поэтому upsert идемпотентно перезаписывает совпадающие точки.
             # Если Qdrant отвалится между upsert и cleanup, новые точки уже на месте.
-            concept_point_ids = self.vector_store.index_concepts(doc_id, okf_docs, vectors, dev_tags=dev_tags)
+            concept_point_ids = self.vector_store.index_concepts(
+                doc_id, okf_docs, vectors, dev_tags=dev_tags, source_locale=effective_locale,
+            )
             keep_point_ids = set(concept_point_ids)
 
         # Чанки индексируются ВСЕГДА, включая документы без концептов: dual-index
@@ -559,6 +591,7 @@ class Pipeline:
                 chunk_point_ids = self.vector_store.index_chunks(
                     doc_id, filename, chunk_texts, global_tags, chunk_vectors,
                     section_titles=chunk_section_titles, dev_tags=dev_tags,
+                    source_locale=effective_locale,
                 )
                 keep_point_ids |= chunk_point_ids
                 logger.info("[%s] Проиндексировано %d чанков", doc_id, len(chunk_texts))
@@ -573,16 +606,13 @@ class Pipeline:
 
         total_chunks = manifest.get("total_chunks", 0) if manifest else 0
         staging.remove()
-        source_locale = detect_language(
-            "".join(r["content"] for r in chunk_rows)[:100_000]
-        )
         self.registry.update(
             doc_id,
             status="done",
             okf_concept_count=len(okf_docs),
             error=None,
             problem=problem,
-            source_locale=source_locale,
+            **locale_fields,
         )
         logger.info(
             "Документ %s обработан: %d OKF-концептов, %d чанков%s",

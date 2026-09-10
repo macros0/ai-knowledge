@@ -93,10 +93,72 @@ def run() -> dict:
     return out
 
 
+def _collect_locales(vs, emb, q, tags, source_locales, include_unknown):
+    """doc_id -> source_locale из БД для хитов под заданным фильтром языка."""
+    vec = emb.embed(q)
+    sv = to_sparse_vector(q, stopwords=get_stopwords(KIND_BM25))
+    hits = vs.search_composite(
+        dense_vec=vec, sparse_vec=sv, tags=tags, branches={"dense", "bm25"},
+        top_k=get_settings().search_per_branch_top_k,
+        source_locales=source_locales, include_unknown_source_locale=include_unknown,
+    )
+    lookup = build_doc_lookup(hits)
+    return {did: (d or {}).get("source_locale") for did, d in lookup.items()}
+
+
+def run_locale_checks() -> int:
+    """Регрессии фильтра по языку документа (Этап 7 фаза D).
+
+    Инварианты на реальном корпусе:
+      (б) source_locales=['ru'] — ни одного en/es/... источника;
+      (в) source_locales=['ru','en'] — только ru/en (es исключён);
+      (г) include_unknown (без кодов) — только документы с source_locale IS NULL;
+      (д) 'ru' + include_unknown — ru ИЛИ NULL (не en/es).
+    Пустой фильтр эквивалентен старому поведению — это сам default-прогон
+    (сравнение с --baseline), отдельная команда.
+
+    Возвращает число нарушений (0 = ок).
+    """
+    vs = VectorStore()
+    emb = Embedder()
+    failures = 0
+
+    for probe in PROBES:
+        q, tags = probe["q"], probe["tags"]
+
+        ru = _collect_locales(vs, emb, q, tags, ["ru"], False)
+        bad_ru = {did: loc for did, loc in ru.items() if loc != "ru"}
+
+        ruen = _collect_locales(vs, emb, q, tags, ["ru", "en"], False)
+        bad_ruen = {did: loc for did, loc in ruen.items() if loc not in ("ru", "en")}
+
+        unk = _collect_locales(vs, emb, q, tags, [], True)
+        bad_unk = {did: loc for did, loc in unk.items() if loc is not None}
+
+        ru_unk = _collect_locales(vs, emb, q, tags, ["ru"], True)
+        bad_ru_unk = {did: loc for did, loc in ru_unk.items() if loc not in ("ru", None)}
+
+        label = q if not tags else f"{q} [tags={tags[0]}]"
+        print(f"\n=== {label} ===")
+        print(f"  ru: {len(ru)} док., нарушения: {bad_ru or 'нет'}")
+        print(f"  ru+en: {len(ruen)} док., нарушения: {bad_ruen or 'нет'}")
+        print(f"  unknown-only: {len(unk)} док., нарушения: {bad_unk or 'нет'}")
+        print(f"  ru+unknown: {len(ru_unk)} док., нарушения: {bad_ru_unk or 'нет'}")
+        failures += len(bad_ru) + len(bad_ruen) + len(bad_unk) + len(bad_ru_unk)
+
+    print(f"\nИтог locale-проверки: {failures} нарушений")
+    return failures
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", action="store_true", help="Сохранить baseline в probe-baseline.json")
+    parser.add_argument("--check-locales", action="store_true",
+                        help="Проверить инварианты фильтра по языку документа")
     args = parser.parse_args()
+
+    if args.check_locales:
+        sys.exit(1 if run_locale_checks() else 0)
 
     result = run()
     here = Path(__file__).resolve().parent

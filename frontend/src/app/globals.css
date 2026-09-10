@@ -3261,6 +3261,34 @@ main {
   vertical-align: middle;
 }
 
+/* Бейдж языка исходного документа (source_locale, Этап 7 фаза D). manual — тот
+   же визуальный сигнал, что «изменено вручную» (подсветка + тултип). */
+.doc-locale-badge {
+  display: inline-block;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1px 8px;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.doc-locale-badge-manual {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.locale-select-inline {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 2px 6px;
+  font-size: 12px;
+  max-width: 220px;
+}
+
 .doc-filter-date {
   display: inline-flex;
   align-items: center;

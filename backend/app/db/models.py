@@ -176,9 +176,15 @@ class Document(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     deleted_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Язык исходного документа (Этап 7 фаза D): эвристика кириллица/латиница при
-    # финализации (без LLM). 'ru' | 'en' | None (смешанный/недостаточно текста).
+    # Язык исходного документа (Этап 7 фаза D): офлайн статистическая модель
+    # py3langid (services/language.py) при финализации. ISO 639-1 в нижнем
+    # регистре (139 языков) | 'en' (нейтральный fallback для короткого/мусора) |
+    # None (пустой текст). Ручная правка защищена через source_locale_source.
     source_locale: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Источник source_locale: 'detected' (авто py3langid) | 'manual' (ручная
+    # правка через PATCH, не перезаписывается при regenerate) | None (ещё не
+    # определялся или сброшен).
+    source_locale_source: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     tags_rel: Mapped[list["DocumentTag"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"

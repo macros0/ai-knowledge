@@ -28,6 +28,7 @@ DOCUMENT_RESUME = "document_resume"
 DOCUMENT_DEVELOPMENT_SET = "document_development_set"
 DOCUMENT_TAGS_UPDATE = "document_tags_update"
 DOCUMENT_BULK_TAGS_UPDATE = "document_bulk_tags_update"
+DOCUMENT_SOURCE_LOCALE_UPDATE = "document_source_locale_update"
 JOB_APPROVE = "job_approve"
 JOB_CANCEL = "job_cancel"
 USER_BLOCK = "user_block"
@@ -69,6 +70,7 @@ ACTION_TYPES = frozenset(
         DOCUMENT_DEVELOPMENT_SET,
         DOCUMENT_TAGS_UPDATE,
         DOCUMENT_BULK_TAGS_UPDATE,
+        DOCUMENT_SOURCE_LOCALE_UPDATE,
         JOB_APPROVE,
         JOB_CANCEL,
         USER_BLOCK,

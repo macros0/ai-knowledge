@@ -71,8 +71,9 @@ def main() -> None:
                 .order_by(DocumentChunk.chunk_index)
                 .all()
             )
-            global_tags = list((s.get(Document, doc_id).tags_rel)) if s.get(Document, doc_id) else []
-            global_tags = [t.tag for t in global_tags]
+            doc = s.get(Document, doc_id)
+            global_tags = [t.tag for t in (doc.tags_rel if doc else [])]
+            source_locale = doc.source_locale if doc else None
 
         if concept_rows:
             okf_docs = [
@@ -97,7 +98,7 @@ def main() -> None:
             vectors = embedder.embed_texts(
                 [f"{d.metadata.get('title', '')}\n{d.content[:cap]}" for d in okf_docs]
             )
-            vs.index_concepts(doc_id, okf_docs, vectors, dev_tags=dev_tags)
+            vs.index_concepts(doc_id, okf_docs, vectors, dev_tags=dev_tags, source_locale=source_locale)
             total_concepts += len(okf_docs)
             print(f"[{doc_id}] индексировано концептов: {len(okf_docs)}")
         else:
@@ -115,6 +116,7 @@ def main() -> None:
             vs.index_chunks(
                 doc_id, filename, chunk_texts, global_tags, chunk_vectors,
                 section_titles=section_titles, dev_tags=dev_tags,
+                source_locale=source_locale,
             )
             total_chunks += len(chunk_rows)
             print(f"[{doc_id}] индексировано чанков: {len(chunk_rows)}")

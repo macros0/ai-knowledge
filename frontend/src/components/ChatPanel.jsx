@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { chat, friendlyApiError, listAttributeValues, listDevelopments } from "@/lib/api";
+import { chat, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
 import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
+import { facetOptions } from "@/lib/sourceLocales.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
 import ModulePicker from "./ModulePicker";
@@ -27,7 +28,7 @@ export default function ChatPanel() {
   const { messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
   const [showCustom, setShowCustom] = useState(false);
@@ -35,10 +36,13 @@ export default function ChatPanel() {
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [modules, setModules] = useState([]);
   const [developments, setDevelopments] = useState([]);
+  const [localeFacets, setLocaleFacets] = useState([]);
   // Исключающий scope-фильтр (Этап 4a.1, развитие плана): активен не более один из
   // moduleFilter / devFilter — иначе backend-OR даёт объединение, а не пересечение.
   const [moduleFilter, setModuleFilter] = useState("");
   const [devFilter, setDevFilter] = useState(null);
+  // Фильтр по языку документа: "" = все, "unknown" = «не определён», иначе код.
+  const [sourceLocale, setSourceLocale] = useState("");
   const logRef = useRef(null);
   const copyTimerRef = useRef(null);
 
@@ -58,6 +62,11 @@ export default function ChatPanel() {
     listDevelopments()
       .then((devs) => {
         if (!cancelled) setDevelopments(devs);
+      })
+      .catch(() => {});
+    getSourceLocaleFacets()
+      .then((items) => {
+        if (!cancelled) setLocaleFacets(items);
       })
       .catch(() => {});
     return () => {
@@ -152,7 +161,7 @@ export default function ChatPanel() {
     setPending(true);
     setMessages((m) => [...m, { role: "assistant", text: t("chat.thinking"), sources: [] }]);
     try {
-      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId);
+      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale);
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((m) => {
         const copy = [...m];
@@ -359,6 +368,20 @@ export default function ChatPanel() {
             if (devId != null) setModuleFilter("");
           }}
         />
+        <span className="tag-picker-label">{t("chat.localeLabel")}</span>
+        <select
+          className="doc-filter-select"
+          value={sourceLocale}
+          onChange={(e) => setSourceLocale(e.target.value)}
+          aria-label={t("docs.localeFilterAria")}
+        >
+          <option value="">{t("docs.allLocales")}</option>
+          {facetOptions(localeFacets, locale).map((o) => (
+            <option key={o.code} value={o.code}>
+              {o.code === "unknown" ? t("docs.localeUnknown") : o.label} ({o.count})
+            </option>
+          ))}
+        </select>
       </div>
       <form className="chat-form" onSubmit={send}>
         <input

@@ -298,7 +298,7 @@ alembic upgrade head
 `tags` (surrogate `tag_id`), `tag_translations`, `developments` (колонки
 `name`/`module`), `development_translations`, `attribute_values` (колонка
 `label`), `attribute_value_translations`, `ui_dictionaries` (UI-словари),
-`documents` (колонка `source_locale`).
+`documents` (колонки `source_locale`, `source_locale_source`).
 Приложение на старте тоже выполняет `create_all` (идемпотентно), но
 версионированную схему ведёт Alembic — в проде применяйте миграции явно.
 

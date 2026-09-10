@@ -77,6 +77,7 @@ def build_v2(concepts_only: bool = False) -> dict:
         with session_scope() as s:
             doc = s.get(Document, doc_id)
             global_tags = [t.tag for t in (doc.tags_rel if doc else [])]
+            source_locale = doc.source_locale if doc else None
             concept_rows = s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).all()
             chunk_rows = (
                 s.query(DocumentChunk)
@@ -109,7 +110,7 @@ def build_v2(concepts_only: bool = False) -> dict:
             vectors = embedder.embed_texts(
                 [f"{d.metadata.get('title', '')}\n{d.content[:cap]}" for d in okf_docs]
             )
-            vs.index_concepts(doc_id, okf_docs, vectors, dev_tags=dev_tags)
+            vs.index_concepts(doc_id, okf_docs, vectors, dev_tags=dev_tags, source_locale=source_locale)
             stats["concepts"] += len(okf_docs)
             print(f"[{doc_id}] концептов: {len(okf_docs)}")
         else:
@@ -127,6 +128,7 @@ def build_v2(concepts_only: bool = False) -> dict:
             vs.index_chunks(
                 doc_id, filename, chunk_texts, global_tags, chunk_vectors,
                 section_titles=section_titles, dev_tags=dev_tags,
+                source_locale=source_locale,
             )
             stats["chunks"] += len(chunk_rows)
             print(f"[{doc_id}] чанков: {len(chunk_rows)}")

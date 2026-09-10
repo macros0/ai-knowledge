@@ -45,8 +45,14 @@ class DocumentOut(BaseModel):
     # Корзина (Этап 4a.2): не None — документ удалён и находится в корзине.
     deleted_at: datetime | None = None
     deleted_by: str | None = None
-    # Язык исходного документа (Этап 7 фаза D, эвристика кириллица/латиница).
+    # Язык исходного документа (Этап 7 фаза D, py3langid; None — пустой текст,
+    # 'en' — нейтральный fallback). 'manual' признак — в source_locale_source.
     source_locale: str | None = None
+    # Источник source_locale: 'detected' | 'manual' | None.
+    source_locale_source: str | None = None
+    # True — синхронный реиндекс source_locale в Qdrant не удался, обновление
+    # поставлено в фоновую очередь. Одноразовый флаг в ответе на правку языка.
+    source_locale_sync_pending: bool = False
 
     @model_validator(mode="after")
     def _fill_problem_message(self) -> "DocumentOut":
@@ -83,6 +89,15 @@ class DocumentStatsOut(BaseModel):
     with_development: int = 0
 
 
+class SourceLocaleFacetItem(BaseModel):
+    code: str | None = None
+    count: int = 0
+
+
+class SourceLocaleFacetsOut(BaseModel):
+    items: list[SourceLocaleFacetItem] = Field(default_factory=list)
+
+
 class UploaderListOut(BaseModel):
     uploaders: list[str]
 
@@ -110,6 +125,10 @@ class SearchRequest(BaseModel):
     mode: SearchMode | None = None
     dense: bool | None = None
     bm25: bool | None = None
+    # Фильтр по языку документа (Этап 7 фаза D). Пустой список = фильтр не задан;
+    # include_unknown_source_locale=true добавляет документы с NULL-языком (OR).
+    source_locales: list[str] = Field(default_factory=list)
+    include_unknown_source_locale: bool = False
 
 
 class SearchHit(BaseModel):
@@ -136,6 +155,11 @@ class ChatRequest(BaseModel):
     mode: SearchMode | None = None
     dense: bool | None = None
     bm25: bool | None = None
+    # Фильтр по языку документа (Этап 7 фаза D) — применяется ДО поиска в Qdrant
+    # (pre-filter), комбинируется AND с tags/dev_tags. Пустой список = фильтр не
+    # задан; include_unknown_source_locale=true добавляет документы с NULL (OR).
+    source_locales: list[str] = Field(default_factory=list)
+    include_unknown_source_locale: bool = False
     # Клиентский UUID треда (Этап 6). Если не задан — бэкенд создаёт новую сессию.
     session_id: str | None = None
 
@@ -400,6 +424,16 @@ class DevelopmentUpdate(BaseModel):
 class DocumentDevelopmentSet(BaseModel):
     development_id: int | None = None
     confirmed: bool = False
+
+
+class DocumentSourceLocaleUpdate(BaseModel):
+    """Ручная правка языка исходного документа (Этап 7 фаза D).
+
+    `source_locale=None` сбрасывает и значение, и признак ручной правки
+    (документ вернётся под авто-детекцию при следующем regenerate).
+    """
+
+    source_locale: str | None = None
 
 
 class DetectDevelopmentOut(BaseModel):

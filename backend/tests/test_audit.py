@@ -28,6 +28,7 @@ EXPECTED_ACTION_TYPES = {
     "document_development_set",
     "document_tags_update",
     "document_bulk_tags_update",
+    "document_source_locale_update",
     "job_approve",
     "job_cancel",
     "user_block",

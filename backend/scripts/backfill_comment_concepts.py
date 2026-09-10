@@ -247,7 +247,11 @@ def process_doc(
             [f"{d.metadata.get('title', '')}\n{d.content[:cap]}" for d in new_docs]
         )
         vector_store.ensure_collection()
-        vector_store.index_concepts(doc_id, new_docs, vectors, dev_tags=dev_tags)
+        current = get_registry().get(doc_id) or {}
+        vector_store.index_concepts(
+            doc_id, new_docs, vectors, dev_tags=dev_tags,
+            source_locale=current.get("source_locale"),
+        )
 
     keep = {concept_point_id(doc_id, Path(d.filepath).stem) for d in okf_docs}
     for i in range(len(chunk_texts)):  # chunk-точки не трогаем — в keep

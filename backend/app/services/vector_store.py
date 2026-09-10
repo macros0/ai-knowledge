@@ -100,6 +100,7 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "section_title": "keyword",
     "dev_tags": "keyword",
     "deleted": "bool",
+    "source_locale": "keyword",
 }
 
 
@@ -187,6 +188,33 @@ def _tag_match_filter(tags: list[str]) -> qm.Filter:
             )
         ]
     )
+
+
+def _source_locale_filter(codes: list[str], include_unknown: bool) -> qm.Filter:
+    """Жёсткий pre-filter по языку документа (Этап 7 фаза D, AND с тегами).
+
+    `codes` — допустимые ISO-коды (MatchAny по payload `source_locale`), может быть
+    пустым (тогда матчатся только unknown-документы, если include_unknown=True);
+    `include_unknown` — добавить документы без языка (OR-ветка «не определён»).
+
+    Семантика NULL в Qdrant 1.19 (валидировано spike'ом, 10.09.2026):
+      - payload пишет `source_locale` явным null при NULL в БД (upsert и
+        set_document_source_locale_payload) → `is_null` его матчит;
+      - `is_null` НЕ матчит точки, у которых ключа source_locale нет ВОВСЕ
+        (состояние до payload-backfill); их матчит `is_empty`.
+      - `is_empty` матчит И явный null, И отсутствие ключа — поэтому unknown
+        покрывается единственным условием `is_empty` (оборонительно и для окна
+        до backfill, и после него). MatchAny по отсутствующему ключу не матчит,
+        так что NULL-документы не «просачиваются» при фильтре только по кодам.
+    """
+    conditions: list = []
+    if codes:
+        conditions.append(
+            qm.FieldCondition(key="source_locale", match=qm.MatchAny(any=list(codes)))
+        )
+    if include_unknown:
+        conditions.append(qm.FieldCondition(key="source_locale", is_empty=True))
+    return qm.Filter(should=conditions)
 
 
 class VectorStore:
@@ -336,6 +364,7 @@ class VectorStore:
         okf_docs: list[OkfDocument],
         vectors: list[list[float]],
         dev_tags: list[str] | None = None,
+        source_locale: str | None = None,
     ) -> set[str]:
         """Индексирует концепты в Qdrant. Возвращает set point_id для последующей очистки орфанов."""
         cap = self.settings.okf_max_concept_chars
@@ -369,6 +398,7 @@ class VectorStore:
                         "relations": meta.get("relations", []),
                         "chunk_index": meta.get("chunk_index"),
                         "dev_tags": dev_tags,
+                        "source_locale": source_locale,
                     },
                 )
             )
@@ -393,6 +423,7 @@ class VectorStore:
         vectors: list[list[float]],
         section_titles: list[str] | None = None,
         dev_tags: list[str] | None = None,
+        source_locale: str | None = None,
     ) -> set[str]:
         """Индексирует сырые чанки как отдельные точки Qdrant (point_type="chunk").
 
@@ -431,6 +462,7 @@ class VectorStore:
                         "chunk_index": i,
                         "tags": global_tags or [],
                         "dev_tags": dev_tags,
+                        "source_locale": source_locale,
                     },
                 )
             )
@@ -519,6 +551,25 @@ class VectorStore:
             self.client.set_payload,
             collection_name=self.collection,
             payload={"deleted": bool(deleted)},
+            points=qm.FilterSelector(
+                filter=qm.Filter(
+                    must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))]
+                )
+            ),
+        )
+
+    def set_document_source_locale_payload(self, doc_id: str, source_locale: str | None) -> None:
+        """Обновляет payload `source_locale` на всех точках документа (без пере-эмбеддинга).
+
+        Денормализованная проекция языка документа (Этап 7 фаза D, фильтр): пишется
+        через set_payload по фильтру doc_id на concept И chunk точках — dense/sparse
+        не затрагиваются. `None` пишется как явный null в payload (Qdrant 1.19
+        хранит null в payload) — семантика «язык не определён» для фильтра.
+        """
+        _qdrant_call(
+            self.client.set_payload,
+            collection_name=self.collection,
+            payload={"source_locale": source_locale},
             points=qm.FilterSelector(
                 filter=qm.Filter(
                     must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))]
@@ -717,6 +768,8 @@ class VectorStore:
         tags: list[str] | None,
         branches: set[str],
         top_k: int,
+        source_locales: list[str] | None = None,
+        include_unknown_source_locale: bool = False,
     ) -> list[Hit]:
         """Композитный поиск: запускает включённые ветки, сливает через RRF.
 
@@ -726,11 +779,17 @@ class VectorStore:
             tags: теги для жёсткого pre-filter (OR по MatchAny).
             branches: набор включённых веток {"dense", "bm25"}.
             top_k: финальное число результатов.
+            source_locales: язык документа (pre-filter, AND с тегами); None/пусто —
+                фильтр не применяется.
+            include_unknown_source_locale: добавить документы без языка (OR).
 
         Returns:
             Список Hit, отсортированный по fused RRF score.
         """
-        search_filter = self._build_search_filter(tags)
+        search_filter = self._build_search_filter(
+            tags, source_locales=source_locales,
+            include_unknown=include_unknown_source_locale,
+        )
         per_branch = self.settings.search_per_branch_top_k
         k = self.settings.search_rrf_k
         ranked_lists: list[tuple[list[Hit], float]] = []
@@ -755,18 +814,29 @@ class VectorStore:
         return fused[:top_k]
 
     @staticmethod
-    def _build_search_filter(tags: list[str] | None) -> qm.Filter:
-        """Жёсткий pre-filter по tags для dense и bm25 веток + исключение корзины.
+    def _build_search_filter(
+        tags: list[str] | None,
+        source_locales: list[str] | None = None,
+        include_unknown: bool = False,
+    ) -> qm.Filter:
+        """Жёсткий pre-filter для dense и bm25 веток + исключение корзины.
 
         Матчит тег, если он есть в `tags` ИЛИ в `dev_tags` (денормализованный
-        номер/название/модуль разработки — Этап 4). Всегда добавляет
-        `must_not deleted` (Этап 4a.2) — единая обёртка, чтобы удалённые точки
-        не попадали в поиск из любого нового сценария.
+        номер/название/модуль разработки — Этап 4). Если задан `source_locales` —
+        добавляет AND-условие по языку документа (с опциональной OR-веткой
+        «не определён» через `include_unknown`). Всегда добавляет `must_not
+        deleted` (Этап 4a.2) — единая обёртка, чтобы удалённые точки не попадали
+        в поиск из любого нового сценария.
         """
         must_not = _not_deleted().must_not
-        if not tags:
+        must: list = []
+        if tags:
+            must.append(_tag_match_filter(tags))
+        if source_locales or include_unknown:
+            must.append(_source_locale_filter(source_locales or [], include_unknown))
+        if not must:
             return qm.Filter(must_not=must_not)
-        return qm.Filter(must=[_tag_match_filter(tags)], must_not=must_not)
+        return qm.Filter(must=must, must_not=must_not)
 
     def _scroll_points(
         self,
@@ -961,6 +1031,7 @@ class VectorStore:
                         "filename": filename,
                         "dev_id": dev_id,
                         "global_tags": global_tags,
+                        "source_locale": doc.source_locale,
                         "chunks": [
                             (c.chunk_index, c.section_title or "", c.content or "")
                             for c in chunks
@@ -1001,6 +1072,7 @@ class VectorStore:
                             "chunk_index": ci,
                             "tags": d["global_tags"],
                             "dev_tags": dev_tags,
+                            "source_locale": d["source_locale"],
                         },
                     )
                 )

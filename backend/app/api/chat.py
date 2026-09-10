@@ -103,6 +103,8 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         sparse_vec=sparse_vec,
         tags=req.tags or None,
         branches=branches,
+        source_locales=req.source_locales or None,
+        include_unknown_source_locale=req.include_unknown_source_locale,
         # Берём широкий набор точек (per_branch_top_k): итог режем по БЛОКАМ после
         # merge (группы (doc_id, chunk_index) + сиблинг-концепты). Срез по точкам
         # до группировки ронял концепты-сиблинги с более низким fused-рангом
