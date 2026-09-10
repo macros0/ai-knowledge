@@ -309,6 +309,9 @@ does not corrupt data.
 PyPI и должен дополняться проверкой артефактов CI.
 
 Frontend `npm audit --omit=dev --audit-level=high` завершился с `found 0 vulnerabilities`.
+CI дополнительно устанавливает локальный `doc-parser` и выполняет `pip-audit --local`, чтобы
+проверять транзитивные runtime-зависимости (в частности `pypdf`), которых нет в основном
+`backend/requirements.txt`.
 
 ### 2026-09-10 — Server-side OIDC sessions
 Change: browser cookies now contain only a signed opaque session identifier. Normalized identity,

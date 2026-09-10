@@ -73,8 +73,12 @@ jobs:
       # приходить как красный CI, а не обнаруживаться на проде.
       - name: pip-audit (backend)
         run: |
+          # doc-parser — локальный editable-пакет; его зависимости (включая
+          # pypdf) отсутствуют в backend/requirements.txt и иначе выпадают из
+          # аудита production runtime.
+          pip install -e ./doc-parser
           pip install pip-audit
-          pip-audit -r backend/requirements.txt --progress-spinner off
+          pip-audit --local --progress-spinner off
 
       - name: npm audit (frontend)
         working-directory: frontend
