@@ -143,6 +143,11 @@ export function uploadDocument(file, tags = [], { developmentId = null } = {}) {
   return request("/documents", { method: "POST", body: form });
 }
 
+export async function logoutAuth() {
+  const result = await request("/auth/logout", { method: "POST" });
+  window.location.assign(result.redirect_url || "/");
+}
+
 export function listTags() {
   return request("/tags").then((data) => data.tags ?? []);
 }

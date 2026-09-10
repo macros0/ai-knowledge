@@ -111,16 +111,16 @@ def auth_simulate(body: SimulateLoginIn, request: Request):
     }
 
 
-@router.get("/logout", name="auth_logout")
+@router.post("/logout", name="auth_logout")
 async def logout(request: Request):
     settings = get_settings()
     provider = build_auth_provider(settings)
     resp = await provider.logout(request)
     if resp is not None:
         # OIDC: RP-Initiated Logout — редирект на end_session_endpoint Keycloak.
-        return resp
+        return {"redirect_url": resp.headers.get("location", "/")}
     # simulation/disabled: сессия уже очищена — редирект на корень (login-gate).
-    return RedirectResponse(url="/", status_code=303)
+    return {"redirect_url": "/"}
 
 
 @router.get("/login", name="auth_login")

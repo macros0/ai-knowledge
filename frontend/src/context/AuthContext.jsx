@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   getMe,
+  logoutAuth,
   simulateAuth,
 } from "@/lib/api";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -62,11 +63,7 @@ export function AuthProvider({ children }) {
     [apply]
   );
 
-  const logout = useCallback(() => {
-    // RP-Initiated Logout — браузерная навигация (приложение → Keycloak logout →
-    // post_logout_redirect_uri). fetch не последует за цепочкой редиректов.
-    window.location.assign("/api/auth/logout");
-  }, []);
+  const logout = useCallback(() => logoutAuth(), []);
 
   const role = user?.roles?.[0] ?? null;
 

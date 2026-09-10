@@ -311,6 +311,10 @@ unchanged; simulation/disabled development modes are not subject to this gate. M
 tokens are rejected before route execution with `403 csrf_failed`. This protects state-changing
 endpoints from cross-site form requests while preserving same-origin proxy operation.
 
+Logout is a POST returning a redirect target; it is no longer a GET navigation, so logout itself
+also requires the CSRF header. The frontend performs the POST and then navigates to the returned
+target (including the Keycloak RP-initiated logout URL).
+
 ### 2026-09-10 — Request and OOXML resource guards
 Change: `/search` and `/chat` request models trim and reject blank/control-character queries,
 cap query/filter sizes, and deduplicate filter values before expensive downstream calls.

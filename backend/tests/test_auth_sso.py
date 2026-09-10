@@ -198,6 +198,16 @@ def test_sso_mutation_requires_csrf_token(tmp_path, monkeypatch):
     assert allowed.status_code != 403
 
 
+def test_sso_logout_requires_csrf_token_and_returns_redirect(tmp_path, monkeypatch):
+    c = build_sso_client(tmp_path, monkeypatch)
+    assert c.get("/api/auth/callback").status_code == 303
+    token = c.cookies.get("csrf_token")
+    assert c.post("/api/auth/logout").status_code == 403
+    resp = c.post("/api/auth/logout", headers={"X-CSRF-Token": token})
+    assert resp.status_code == 200
+    assert resp.json()["redirect_url"].startswith("http://kc.example/")
+
+
 def test_sso_fail_closed_403(tmp_path, monkeypatch):
     c = build_sso_client(tmp_path, monkeypatch, client_cls=NoRoleClient, auth_default_role=None)
     resp = c.get("/api/auth/callback")
@@ -231,15 +241,15 @@ def test_sso_callback_keycloak_unavailable_redirects(tmp_path, monkeypatch):
 def _logout_after_login(tmp_path, monkeypatch, client_cls=FakeClient):
     c = build_sso_client(tmp_path, monkeypatch, client_cls=client_cls)
     assert c.get("/api/auth/callback").status_code == 303  # вход
-    resp = c.get("/api/auth/logout", follow_redirects=False)
+    resp = c.post("/api/auth/logout", headers={"X-CSRF-Token": c.cookies.get("csrf_token")})
     return resp
 
 
 def test_sso_logout_redirects_to_keycloak_with_id_token(tmp_path, monkeypatch):
     """RP-Initiated Logout: редирект на end_session_endpoint с id_token_hint."""
     resp = _logout_after_login(tmp_path, monkeypatch, client_cls=FakeClient)
-    assert resp.status_code == 303
-    parsed = urlparse(resp.headers["location"])
+    assert resp.status_code == 200
+    parsed = urlparse(resp.json()["redirect_url"])
     assert parsed.netloc == "kc.example"
     assert parsed.path == "/realms/myrealm/protocol/openid-connect/logout"
     q = parse_qs(parsed.query)
@@ -253,7 +263,7 @@ def test_sso_logout_without_id_token_is_local_only(tmp_path, monkeypatch):
     локальный: редирект на "/" и очистка сессии."""
     c = build_sso_client(tmp_path, monkeypatch, client_cls=NoIdTokenClient)
     assert c.get("/api/auth/callback").status_code == 303  # вход
-    resp = c.get("/api/auth/logout", follow_redirects=False)
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/"
+    resp = c.post("/api/auth/logout", headers={"X-CSRF-Token": c.cookies.get("csrf_token")})
+    assert resp.status_code == 200
+    assert resp.json()["redirect_url"] == "/"
     assert c.get("/api/auth/me").json()["user"]["user_id"] == "anonymous"
