@@ -332,6 +332,12 @@ CI дополнительно устанавливает локальный `doc
 CI также запускает Bandit с порогом medium/high для backend и doc-parser; новые findings этого
 уровня блокируют сборку и требуют либо исправления, либо документированного обоснования.
 
+### 2026-09-11 — Least-privilege CI token
+The GitHub Actions workflow now declares `permissions: contents: read` at workflow level. CI jobs
+only check out, test, audit, and build the repository; they do not need a write-capable
+`GITHUB_TOKEN`. This remains enforced if repository defaults change later and limits the impact
+of a compromised dependency or build step running in CI.
+
 ### 2026-09-10 — Server-side OIDC sessions
 Change: browser cookies now contain only a signed opaque session identifier. Normalized identity,
 OIDC `id_token`, creation time, and expiry are stored in the `auth_sessions` table; expired sessions

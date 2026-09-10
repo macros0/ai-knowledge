@@ -9,6 +9,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# CI only checks out code and builds/tests it; no job needs write access to the
+# repository or other GitHub resources. Keep the token read-only even if the
+# repository-level default permissions are changed later.
+permissions:
+  contents: read
+
 # Новый пуш в ту же ветку отменяет предыдущий прогон — очередь не копится.
 concurrency:
   group: ci-${{ github.ref }}
