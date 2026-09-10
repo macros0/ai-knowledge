@@ -306,6 +306,8 @@ does not corrupt data.
 The backend now emits `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a restrictive
 API CSP (`default-src 'none'; frame-ancestors 'none'`), and `Referrer-Policy`. HSTS is emitted only
 when production HTTPS-only sessions are enabled, avoiding accidental HSTS lock-in for local HTTP.
+Next.js frontend responses additionally set `nosniff`, `DENY`, `Referrer-Policy`, and a restrictive
+`Permissions-Policy`; CSP remains backend/API-scoped until a nonce-based frontend policy is added.
 
 ### 2026-09-10 — Dependency audit baseline
 `pip-audit` обнаружил уязвимости в установленном `pypdf 6.15.0` (исправлено требованием
