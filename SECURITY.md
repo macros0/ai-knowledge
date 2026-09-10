@@ -377,7 +377,7 @@ rewrite `Set-Cookie` while all backend tests remain green.
 The `/api/*` rewrite was replaced with an App Router catch-all proxy that streams request bodies,
 forwards status, response headers, and repeated `Set-Cookie` headers. Streaming avoids buffering
 large uploads in the Next.js heap before the backend's size guard runs. This closes the verified gap where
-Next.js rewrites dropped the backend-issued `csrf_token`; an automated unit test covers multiple
+The previous Next.js rewrite dropped the backend-issued `csrf_token`; an automated unit test covers multiple
 cookies and a standalone-server smoke test confirmed `csrf_token` reaches the client. The proxy
 also strips client-controlled `Forwarded`/`X-Forwarded-*` headers so upstream URL/scheme metadata
 cannot be spoofed through the browser-facing endpoint. Every proxied API response is additionally
