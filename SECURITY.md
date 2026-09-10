@@ -302,6 +302,11 @@ does not corrupt data.
 
 ## 7. Security change log
 
+### 2026-09-10 — Security response headers
+The backend now emits `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a restrictive
+API CSP (`default-src 'none'; frame-ancestors 'none'`), and `Referrer-Policy`. HSTS is emitted only
+when production HTTPS-only sessions are enabled, avoiding accidental HSTS lock-in for local HTTP.
+
 ### 2026-09-10 — Dependency audit baseline
 `pip-audit` обнаружил уязвимости в установленном `pypdf 6.15.0` (исправлено требованием
 `pypdf[image]>=6.16.1`) и в устаревшем installer `pip 25.0.1`. Dockerfile теперь обновляет pip

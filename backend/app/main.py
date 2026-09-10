@@ -99,6 +99,18 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        if get_settings().environment == "production" and get_settings().auth_session_https_only:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return response
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     worker_hint = os.getenv("UVICORN_WORKERS") or os.getenv("WEB_CONCURRENCY")
@@ -218,6 +230,7 @@ def create_app() -> FastAPI:
     get_store().ensure()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(CatchAllErrorsMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CsrfMiddleware)
     # Кросс-доменный режим включается САМИМ наличием CORS-allow-list: пустой
     # (дефолт) означает same-origin через Next.js rewrites, и тогда cookie
