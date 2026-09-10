@@ -16,6 +16,10 @@ const CLIENT_CONTROLLED_FORWARDING = [
   "x-forwarded-proto",
 ];
 
+// Cookie forwarding relies on Node/undici's Headers.getSetCookie(), which is
+// not available in every Edge runtime implementation.
+export const runtime = "nodejs";
+
 function backendTarget(request, path) {
   const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:18000";
   const target = new URL(`/api/${path.join("/")}`, backendUrl);
