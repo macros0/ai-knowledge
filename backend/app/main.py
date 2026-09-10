@@ -106,6 +106,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        # Auth responses can contain identity data, redirects, and session
+        # transitions. Never let an intermediary/browser reuse them for another
+        # request or user; document/search responses keep their existing policy.
+        if request.url.path.startswith(f"{get_settings().api_prefix}/auth/"):
+            response.headers.setdefault("Cache-Control", "no-store")
         if get_settings().environment == "production" and get_settings().auth_session_https_only:
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response

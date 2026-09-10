@@ -15,6 +15,14 @@ def test_security_headers_are_present(tmp_path, monkeypatch):
     assert "Strict-Transport-Security" not in response.headers
 
 
+def test_auth_responses_are_not_cacheable(tmp_path, monkeypatch):
+    settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    response = TestClient(create_app()).get("/api/auth/me")
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+
+
 def test_hsts_is_enabled_for_production_https(tmp_path, monkeypatch):
     settings = Settings(
         _env_file=None,

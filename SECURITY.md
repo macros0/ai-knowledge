@@ -338,6 +338,12 @@ only check out, test, audit, and build the repository; they do not need a write-
 `GITHUB_TOKEN`. This remains enforced if repository defaults change later and limits the impact
 of a compromised dependency or build step running in CI.
 
+### 2026-09-11 — No-store for authentication responses
+Responses under `/api/auth/*` now carry `Cache-Control: no-store`. Login/callback/logout and
+identity responses can contain redirects or session state and must not be replayed by a browser or
+intermediary cache for a different request or user. This policy is tested independently from the
+general security-header middleware.
+
 ### 2026-09-10 — Server-side OIDC sessions
 Change: browser cookies now contain only a signed opaque session identifier. Normalized identity,
 OIDC `id_token`, creation time, and expiry are stored in the `auth_sessions` table; expired sessions
