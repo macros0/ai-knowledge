@@ -23,10 +23,12 @@ export default function AuthBar() {
     // В sso-режиме роль и логин приходят с Keycloak.
     return (
       <div className="authbar">
-        <span className="auth-username">{user.username}</span>
-        <span className="auth-role">
-          {ROLE_LABELS[user.roles?.[0]] ?? user.roles?.[0] ?? "—"}
-        </span>
+        <div className="auth-user">
+          <span className="auth-username">{user.username}</span>
+          <span className="auth-role">
+            {ROLE_LABELS[user.roles?.[0]] ?? user.roles?.[0] ?? "—"}
+          </span>
+        </div>
         <button onClick={logout}>{t("common.logout")}</button>
       </div>
     );
@@ -68,10 +70,12 @@ export default function AuthBar() {
   // simulation: залогинен.
   return (
     <div className="authbar">
-      <span className="auth-username">{user.username}</span>
-      <span className="auth-role">
-        {ROLE_LABELS[user.roles?.[0]] ?? user.roles?.[0] ?? "—"}
-      </span>
+      <div className="auth-user">
+        <span className="auth-username">{user.username}</span>
+        <span className="auth-role">
+          {ROLE_LABELS[user.roles?.[0]] ?? user.roles?.[0] ?? "—"}
+        </span>
+      </div>
       <button onClick={logout}>{t("common.logout")}</button>
     </div>
   );
