@@ -109,7 +109,7 @@ services:
     # (https://qdrant.corp.internal:6333) Qdrant. Аналогично DATABASE_URL указывает
     # на Postgres (внутренний postgres:5432 при профиле local-postgres, либо внешний).
     # Порт наружу НЕ публикуется: доступ к backend'у только через frontend
-    # (Next.js rewrites серверно проксируют /api). Единственная публичная
+    # (Next.js App Router API proxy серверно проксирует /api). Единственная публичная
     # точка — frontend ниже.
     volumes:
       - ./data:/data

@@ -238,7 +238,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CsrfMiddleware)
     # Кросс-доменный режим включается САМИМ наличием CORS-allow-list: пустой
-    # (дефолт) означает same-origin через Next.js rewrites, и тогда cookie
+    # (дефолт) означает same-origin через Next.js App Router proxy, и тогда cookie
     # остаётся SameSite=Lax — самый строгий вариант, при котором всё работает.
     cross_origin = bool(settings.cors_allowed_origins)
     app.add_middleware(

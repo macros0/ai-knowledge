@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     # Кука только по HTTPS — включать в проде, ложь локально (http://localhost).
     auth_session_https_only: bool = False
     # CORS allow-list (список origin). Пусто по умолчанию: браузер не обращается
-    # к бэкенду напрямую — Next.js rewrites проксируют /api серверно (same-origin),
+    # к бэкенду напрямую — Next.js App Router proxy проксирует /api серверно (same-origin),
     # поэтому cross-origin доступ бэкенду не нужен и `*` здесь был бы чистой дырой.
     cors_allowed_origins: list[str] = Field(default_factory=list)
     # Маппинг групп → роли (4 роли Этапа 1 роадмапа). Роль считается по первому

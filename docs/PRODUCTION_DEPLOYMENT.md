@@ -106,7 +106,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
   `/health` на бэкенд с одного домена, что и фронтенд.
   CORS в `main.py` задан как `allow_origins=settings.cors_allowed_origins`
   (дефолт — пустой список, `CORS_ALLOWED_ORIGINS` в env). Пустой список — намеренно:
-  браузер не обращается к бэкенду напрямую (Next.js rewrites проксируют `/api`
+  браузер не обращается к бэкенду напрямую (Next.js App Router proxy проксирует `/api`
   серверно через `frontend/src/app/api/[...path]/route.js`, same-origin), поэтому cross-origin CORS бэкенду не нужен, а wildcard
   `*` был бы чистой дырой.
   Cross-origin развёртывание (фронтенд на домене A, бэкенд на домене B без
