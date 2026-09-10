@@ -60,6 +60,11 @@ async function proxy(request, context) {
     responseHeaders.append("set-cookie", cookie);
   }
 
+  // API responses can contain authenticated documents, search context, or
+  // identity data. Do not allow a browser/shared intermediary to retain them
+  // after the request, regardless of an upstream default.
+  responseHeaders.set("cache-control", "no-store");
+
   return new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,

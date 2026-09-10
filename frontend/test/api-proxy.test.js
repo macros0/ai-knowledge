@@ -28,6 +28,7 @@ test("API proxy preserves repeated Set-Cookie headers", async () => {
       "csrf_token=abc; Path=/; SameSite=Lax",
       "session=xyz; Path=/; HttpOnly",
     ]);
+    assert.equal(response.headers.get("cache-control"), "no-store");
   } finally {
     globalThis.fetch = originalFetch;
     if (previousBackend === undefined) delete process.env.BACKEND_URL;
