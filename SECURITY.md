@@ -31,6 +31,12 @@ Splitting with other documents:
   authorization through a weak/default secret or a wrong `AUTH_PROVIDER`, unauthorized data
   modification through insufficient role checks, decompression bombs in untrusted OOXML, and
   authenticated resource exhaustion through oversized search/chat requests.
+- **CSRF boundary** — the browser authenticates with a cookie, so state-changing requests
+  require the independent `csrf_token` double-submit value in `X-CSRF-Token`. This is not
+  predicated on CORS being disabled: CORS restricts JavaScript reads, while a cross-site form
+  can still send a cookie-authenticated POST. The same-origin Next.js rewrite keeps the token
+  exchange on the public frontend origin; the CSRF check remains defense-in-depth if the
+  deployment later adds an alternate browser path or a permissive CORS allow-list.
 - **Input/resource boundary** — search and chat queries are normalized and capped at 8,192
   characters; each tag/locale is capped at 128 characters and each filter list is capped at
   50/20 values respectively. Validation happens before embedding, Qdrant, or LLM calls.
@@ -338,12 +344,22 @@ Change: production cookie-authenticated API requests using POST/PATCH/DELETE req
 the backend issues `csrf_token` and the frontend sends it as `X-CSRF-Token`. Safe methods remain
 unchanged; simulation/disabled development modes are not subject to this gate. Missing or mismatched
 tokens are rejected before route execution with `403 csrf_failed`. This protects state-changing
-endpoints from cross-site form requests while preserving same-origin proxy operation. The gate is
-enabled for every non-`disabled`/non-`simulation` provider, not only Keycloak.
+endpoints from cross-site form requests while preserving same-origin proxy operation. The rationale
+is cookie authentication itself, not merely the absence of CORS: CORS does not stop a browser from
+issuing a credentialed form POST. The gate is enabled for every non-`disabled`/non-`simulation`
+provider, not only Keycloak.
 
 Logout is a POST returning a redirect target; it is no longer a GET navigation, so logout itself
-also requires the CSRF header. The frontend performs the POST and then navigates to the returned
-target (including the Keycloak RP-initiated logout URL).
+also requires the CSRF header. There is intentionally no logout exception: a cross-site logout
+could otherwise invalidate a user's session during a sensitive workflow (logout CSRF), and the
+frontend already has the non-HttpOnly token needed to submit the request. The frontend performs
+the POST and then navigates to the returned target (including the Keycloak RP-initiated logout URL).
+
+The `csrf_token` `Set-Cookie` is emitted by the backend middleware and must survive the Next.js
+`/api/*` rewrite. Backend tests verify issuance and enforcement through the ASGI client; the
+deployment smoke test in `docs/SSO_TESTING_GUIDE.md` additionally verifies the browser-visible
+response from Next.js, because a proxy could otherwise strip or rewrite `Set-Cookie` while all
+backend tests remain green.
 
 Expired `auth_sessions` are purged at application startup and removed on access when detected
 expired. This bounds retention of server-side identity and OIDC tokens; database-level encryption
