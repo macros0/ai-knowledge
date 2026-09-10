@@ -320,6 +320,11 @@ Expired `auth_sessions` are purged at application startup and removed on access 
 expired. This bounds retention of server-side identity and OIDC tokens; database-level encryption
 and backup retention remain deployment responsibilities.
 
+### 2026-09-10 — SSR-safe CSRF token extraction
+Change: the frontend API client now reads `csrf_token` only when a browser `document` exists and
+handles malformed percent-encoding without throwing. This prevents server-rendered/Node imports
+from bypassing normal request handling or failing before the CSRF-protected request is sent.
+
 ### 2026-09-10 — Request and OOXML resource guards
 Change: `/search` and `/chat` request models trim and reject blank/control-character queries,
 cap query/filter sizes, and deduplicate filter values before expensive downstream calls.
