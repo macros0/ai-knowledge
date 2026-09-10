@@ -323,6 +323,8 @@ Frontend `npm audit --omit=dev --audit-level=high` завершился с `foun
 CI дополнительно устанавливает локальный `doc-parser` и выполняет `pip-audit --local`, чтобы
 проверять транзитивные runtime-зависимости (в частности `pypdf`), которых нет в основном
 `backend/requirements.txt`.
+CI также запускает Bandit с порогом medium/high для backend и doc-parser; новые findings этого
+уровня блокируют сборку и требуют либо исправления, либо документированного обоснования.
 
 ### 2026-09-10 — Server-side OIDC sessions
 Change: browser cookies now contain only a signed opaque session identifier. Normalized identity,

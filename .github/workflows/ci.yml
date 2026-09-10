@@ -84,6 +84,11 @@ jobs:
         working-directory: frontend
         run: npm audit --audit-level=high
 
+      - name: Bandit (Python security)
+        run: |
+          pip install bandit
+          bandit -q -r backend/app doc-parser/src -ll
+
   doc-parser:
     name: doc-parser (pytest)
     runs-on: ubuntu-latest
