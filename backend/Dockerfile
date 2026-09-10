@@ -15,7 +15,8 @@ WORKDIR /app
 
 COPY backend/requirements.txt ./backend/requirements.txt
 COPY doc-parser ./doc-parser
-RUN pip install --no-cache-dir -e ./doc-parser && \
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e ./doc-parser && \
     pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend/app ./app

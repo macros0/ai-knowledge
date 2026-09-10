@@ -302,6 +302,12 @@ does not corrupt data.
 
 ## 7. Security change log
 
+### 2026-09-10 — Dependency audit baseline
+`pip-audit` обнаружил уязвимости в установленном `pypdf 6.15.0` (исправлено требованием
+`pypdf[image]>=6.16.1`) и в устаревшем installer `pip 25.0.1`. Dockerfile теперь обновляет pip
+до установки приложения. Аудит собственного локального пакета `okf-doc-parser` невозможен через
+PyPI и должен дополняться проверкой артефактов CI.
+
 ### 2026-09-10 — Server-side OIDC sessions
 Change: browser cookies now contain only a signed opaque session identifier. Normalized identity,
 OIDC `id_token`, creation time, and expiry are stored in the `auth_sessions` table; expired sessions

@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "python-docx>=1.1",
     "openpyxl>=3.1",
-    "pypdf[image]>=5.0",
+    "pypdf[image]>=6.16.1",
     "olefile>=0.47",
     "pymupdf>=1.24",
 ]
