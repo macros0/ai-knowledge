@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import logging
+import secrets
 import threading
 from contextlib import asynccontextmanager
 
@@ -62,6 +63,37 @@ class CatchAllErrorsMiddleware(BaseHTTPMiddleware):
                     "code": "internal_error",
                 },
             )
+
+
+class CsrfMiddleware(BaseHTTPMiddleware):
+    """Double-submit protection for cookie-authenticated production API calls."""
+
+    async def dispatch(self, request: Request, call_next):
+        settings = get_settings()
+        unsafe = request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"}
+        protected = settings.auth_provider == "keycloak_oidc" and request.url.path.startswith(
+            f"{settings.api_prefix}/"
+        )
+        csrf_cookie = request.cookies.get("csrf_token")
+        if unsafe and protected and csrf_cookie:
+            supplied = request.headers.get("X-CSRF-Token", "")
+            if not secrets.compare_digest(supplied, csrf_cookie):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Недействительный CSRF-токен", "code": "csrf_failed"},
+                )
+        response = await call_next(request)
+        if not csrf_cookie:
+            response.set_cookie(
+                "csrf_token",
+                secrets.token_urlsafe(32),
+                max_age=settings.auth_session_ttl_seconds,
+                secure=settings.auth_session_https_only,
+                httponly=False,
+                samesite="none" if settings.cors_allowed_origins else "lax",
+                path="/",
+            )
+        return response
 
 
 @asynccontextmanager
@@ -167,6 +199,7 @@ def create_app() -> FastAPI:
     get_store().ensure()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(CatchAllErrorsMiddleware)
+    app.add_middleware(CsrfMiddleware)
     # Кросс-доменный режим включается САМИМ наличием CORS-allow-list: пустой
     # (дефолт) означает same-origin через Next.js rewrites, и тогда cookie
     # остаётся SameSite=Lax — самый строгий вариант, при котором всё работает.

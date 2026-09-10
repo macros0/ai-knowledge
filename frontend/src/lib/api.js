@@ -115,7 +115,20 @@ async function fetchApi(url, { init, timeoutMs, parse = (resp) => resp.json() } 
 
 // JSON-эндпоинт под /api — частный (и почти всегда нужный) случай fetchApi.
 function request(path, init, timeoutMs) {
-  return fetchApi(`${BASE}${path}`, { init, timeoutMs });
+  const method = (init?.method || "GET").toUpperCase();
+  const headers = new Headers(init?.headers || {});
+  if (!["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
+    const csrf = document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith("csrf_token="))
+      ?.slice("csrf_token=".length);
+    if (csrf) headers.set("X-CSRF-Token", decodeURIComponent(csrf));
+  }
+  return fetchApi(`${BASE}${path}`, {
+    init: { ...init, headers },
+    timeoutMs,
+  });
 }
 
 export function uploadDocument(file, tags = [], { developmentId = null } = {}) {

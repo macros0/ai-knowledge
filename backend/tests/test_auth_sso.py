@@ -179,7 +179,23 @@ def test_expired_sso_session_is_rejected(tmp_path, monkeypatch):
     with session_scope() as db:
         row = db.query(AuthSession).one()
         row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
-    assert c.post("/api/search", json={"query": "secret"}).status_code == 401
+    token = c.cookies.get("csrf_token")
+    assert c.post(
+        "/api/search", json={"query": "secret"}, headers={"X-CSRF-Token": token}
+    ).status_code == 401
+
+
+def test_sso_mutation_requires_csrf_token(tmp_path, monkeypatch):
+    c = build_sso_client(tmp_path, monkeypatch)
+    assert c.get("/api/auth/callback").status_code == 303
+    denied = c.post("/api/search", json={"query": "secret"})
+    assert denied.status_code == 403
+    token = c.cookies.get("csrf_token")
+    assert token
+    allowed = c.post(
+        "/api/search", json={"query": "secret"}, headers={"X-CSRF-Token": token}
+    )
+    assert allowed.status_code != 403
 
 
 def test_sso_fail_closed_403(tmp_path, monkeypatch):

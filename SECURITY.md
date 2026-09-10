@@ -304,6 +304,13 @@ are rejected and logout revokes the server-side row. This reduces cookie disclos
 retaining the existing TTL and `APP_SECRET_KEY` requirements. Database encryption at rest remains
 an infrastructure responsibility.
 
+### 2026-09-10 — CSRF protection for cookie-authenticated API mutations
+Change: production Keycloak API requests using POST/PATCH/DELETE require a double-submit token:
+the backend issues `csrf_token` and the frontend sends it as `X-CSRF-Token`. Safe methods remain
+unchanged; simulation/disabled development modes are not subject to this gate. Missing or mismatched
+tokens are rejected before route execution with `403 csrf_failed`. This protects state-changing
+endpoints from cross-site form requests while preserving same-origin proxy operation.
+
 ### 2026-09-10 — Request and OOXML resource guards
 Change: `/search` and `/chat` request models trim and reject blank/control-character queries,
 cap query/filter sizes, and deduplicate filter values before expensive downstream calls.
