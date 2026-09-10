@@ -180,6 +180,9 @@ class SearchResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     query: QueryText
+    # Язык ответа при неопределимом языке короткого запроса; UI передаёт
+    # текущую локаль, прямые API-вызовы получают русский fallback.
+    locale: str = "ru"
     tags: list[FilterValue] = Field(default_factory=list, max_length=50)
     top_k: int = Field(default=5, ge=1, le=50)
     mode: SearchMode | None = None

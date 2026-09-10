@@ -180,7 +180,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
                 )
             )
 
-        system = get_store().get("chat_system")
+        system = get_store().format("chat_system", locale=req.locale)
         prompt_user = get_store().format("chat_user", context=context, query=req.query)
         try:
             answer = _get_llm().chat(system, prompt_user)

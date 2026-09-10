@@ -31,7 +31,7 @@ PROMPT_DEFAULTS: Final = {
 }
 
 REQUIRED_PLACEHOLDERS: Final = {
-    "chat_system": (),
+    "chat_system": ("locale",),
     "chat_user": ("context", "query"),
     "okf_system": (),
     "okf_user": ("filename", "content"),

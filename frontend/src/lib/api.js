@@ -1,5 +1,12 @@
+import { detectLocale, readStored } from "../i18n/core.js";
+
 const BASE = "/api";
 const CHAT_TIMEOUT_MS = 90_000;
+
+function currentUiLocale() {
+  if (typeof window === "undefined") return "ru";
+  return readStored(window) || detectLocale(window.navigator?.languages);
+}
 
 // Тексты ошибок живут в словарях (i18n/locales), а не здесь: интерфейс
 // двуязычный, и литерал в api.js пришёл бы к англоязычному пользователю
@@ -382,7 +389,7 @@ export function search(query, tags = [], topK = 5, mode = "hybrid") {
 }
 
 export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "") {
-  const body = { query, tags, top_k: topK, mode };
+  const body = { query, locale: currentUiLocale(), tags, top_k: topK, mode };
   if (sessionId) body.session_id = sessionId;
   // Фильтр по языку документа (Этап 7 фаза D): не отправляем поле при «Все языки».
   if (sourceLocale === "unknown") {
