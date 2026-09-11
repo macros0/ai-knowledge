@@ -7,6 +7,7 @@ import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import { TrashIcon } from "./icons";
 import TagCombobox from "./TagCombobox";
+import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 
 // Должен совпадать с backend BULK_TAGS_MAX_DOCS (config.bulk_tags_max_docs).
 const MAX_BULK_DOCS = 50;
@@ -43,7 +44,8 @@ export default function SelectionBar({
   const [removeTag, setRemoveTag] = useState("");
   const [busy, setBusy] = useState(false);
   const { showToast } = useToast();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const [tagLocale, setTagLocale] = useState(null);
 
   const hasSelection = selectedIds.length > 0;
   const danger = canDelete && hasSelection;
@@ -62,6 +64,7 @@ export default function SelectionBar({
     try {
       const result = await bulkUpdateTags(selectedIds, {
         add: op === "add" ? [value] : [],
+        canonicalLocale: tagLocale || locale,
         remove: op === "remove" ? [value] : [],
       });
       bumpTagVersion();
@@ -113,6 +116,7 @@ export default function SelectionBar({
           <span className="bulk-count">
             {t("selection.selected", { selected: selectedIds.length, total })}
           </span>
+          <ReferenceLocaleSelect value={tagLocale} onChange={setTagLocale} disabled={busy} />
           <TagCombobox
             value={addTag}
             onChange={setAddTag}

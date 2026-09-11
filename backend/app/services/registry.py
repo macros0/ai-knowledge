@@ -152,10 +152,11 @@ class DocumentRegistry:
         size: int,
         tags: list[str] | None = None,
         uploaded_by: str | None = None,
+        canonical_locale: str = "und",
     ) -> dict:
         from app.services.tag_registry import TagRegistry
 
-        tag_ids = TagRegistry().get_or_create_ids(tags, created_by=uploaded_by)
+        tag_ids = TagRegistry().get_or_create_ids(tags, created_by=uploaded_by, canonical_locale=canonical_locale)
         with session_scope() as s:
             doc = Document(
                 id=doc_id,
@@ -405,13 +406,14 @@ class DocumentRegistry:
 
     def update(self, doc_id: str, **fields) -> None:
         tags = fields.pop("tags", None)
+        canonical_locale = fields.pop("canonical_locale", "und")
         if not fields and tags is None:
             return
         tag_ids = None
         if tags is not None:
             from app.services.tag_registry import TagRegistry
 
-            tag_ids = TagRegistry().get_or_create_ids(tags)
+            tag_ids = TagRegistry().get_or_create_ids(tags, canonical_locale=canonical_locale)
         with session_scope() as s:
             doc = s.get(Document, doc_id)
             if doc is None:

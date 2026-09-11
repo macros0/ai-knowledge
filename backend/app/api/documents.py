@@ -34,6 +34,7 @@ from app.models.schemas import (
     DocumentStatsOut,
     SourceLocaleFacetsOut,
     DocumentTagsUpdate,
+    ReferenceLocale,
     OkfFileOut,
     TrashListOut,
     UploaderListOut,
@@ -55,6 +56,7 @@ from app.services.okf_generator import _build_markdown
 from app.services.pipeline import get_pipeline, save_upload_stream
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.registry import get_registry
+from app.services.locale_service import request_locale
 from app.services.source_locale import is_valid_source_locale, normalize_source_locale
 from app.services.source_locale_sync import reindex_document_source_locale, schedule_source_locale_sync
 from app.services.staging import StagingStore
@@ -103,6 +105,7 @@ def upload_document(
     request: Request,
     tags: Annotated[list[str] | None, Form()] = None,
     development_id: Annotated[int | None, Form()] = None,
+    canonical_locale: Annotated[ReferenceLocale | None, Form()] = None,
     user: User = Depends(require_role("editor", "admin")),
 ):
     """Загрузка документа.
@@ -180,13 +183,15 @@ def upload_document(
         trash_twin = file_hash_in_trash(file_hash)
 
     user_tags = normalize_tags(tags)
-    _tag_registry.add(user_tags)
+    origin_locale = canonical_locale or request_locale(request, fallback="und")
+    _tag_registry.add(user_tags, canonical_locale=origin_locale)
     doc = _registry.create(
         doc_id,
         file.filename or "unknown",
         file.content_type or "",
         size,
         tags=user_tags,
+        canonical_locale=origin_locale,
         uploaded_by=user.username,
     )
     if file_hash:
@@ -490,7 +495,8 @@ def update_document_tags_endpoint(
         )
     try:
         result = update_document_tags(
-            doc_id, body.tags, user, ip_address=_client_ip(request)
+            doc_id, body.tags, user, ip_address=_client_ip(request),
+            canonical_locale=body.canonical_locale or request_locale(request, fallback="und"),
         )
     except DomainError as exc:
         raise errors.domain_error(exc, 404) from exc
@@ -920,7 +926,8 @@ def bulk_tags(
     в audit_log (action_type=document_bulk_tags_update).
     """
     doc_ids = _resolve_doc_ids(body.doc_ids, get_settings().bulk_tags_max_docs)
-    result = bulk_update_tags(doc_ids, body.add, body.remove, user, ip_address=_client_ip(request))
+    result = bulk_update_tags(doc_ids, body.add, body.remove, user, ip_address=_client_ip(request),
+                              canonical_locale=body.canonical_locale or request_locale(request, fallback="und"))
     result["total"] = len(doc_ids)
     return result
 

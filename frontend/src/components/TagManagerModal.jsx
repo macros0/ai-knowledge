@@ -229,6 +229,7 @@ export default function TagManagerModal({ onClose }) {
               </div>
               {expanded[tag.id] && (
                 <div className="tag-manager-translations">
+                  <div>{t("reference.original", { locale: tag.canonical_locale })}: {tag.name}</div>
                   {tag.translations.length === 0 ? (
                     <span className="tag-manager-empty">
                       {t("tags.manager.noTranslations")}
@@ -257,7 +258,7 @@ export default function TagManagerModal({ onClose }) {
                       ))}
                     </ul>
                   )}
-                  <div className="tag-manager-edit">
+                  {locale !== tag.canonical_locale && <div className="tag-manager-edit">
                     <input
                       id={`tag-tr-${tag.id}`}
                       defaultValue={currentText(tag)}
@@ -270,7 +271,7 @@ export default function TagManagerModal({ onClose }) {
                     >
                       {t("tags.manager.save")}
                     </button>
-                  </div>
+                  </div>}
                 </div>
               )}
             </li>

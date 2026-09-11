@@ -59,6 +59,8 @@ class Development(Base):
     number: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     module: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Language of the original name; und = not recorded in historical data.
+    canonical_locale: Mapped[str] = mapped_column(String(16), default="und", server_default="und", nullable=False)
     # Оптимистическая блокировка совместного редактирования справочника:
     # клиент шлёт version при PATCH/DELETE, бэкенд сверяет и отдаёт 409 при
     # расхождении (version_conflict). Инкрементируется при каждой правке.
@@ -84,6 +86,7 @@ class AttributeValue(Base):
     attribute_key: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     value: Mapped[str] = mapped_column(String(255), nullable=False)
     label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    canonical_locale: Mapped[str] = mapped_column(String(16), default="und", server_default="und", nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     org_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -238,7 +241,7 @@ class Tag(Base):
     """Тег (Этап 7 фаза B): суррогатный id + канонический текст + переводы.
 
     `canonical_text` — стабильный текстовый идентификатор тега (по нему идёт wire
-    и payload Qdrant), `canonical_locale` — язык канонического текста (ru).
+    и payload Qdrant), `canonical_locale` — язык первично введённого текста.
     Локализованные отображаемые имена — `translations` (tag_translations) для
     не-канонических локалей. Денормализованный `canonical_text` вместо «текст
     только в translations» — осознанное упрощение: канонический текст читается в
@@ -251,7 +254,7 @@ class Tag(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     canonical_text: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    canonical_locale: Mapped[str] = mapped_column(String(16), default="ru", nullable=False)
+    canonical_locale: Mapped[str] = mapped_column(String(16), default="und", nullable=False)
     merged_into_id: Mapped[int | None] = mapped_column(
         ForeignKey("tags.id", ondelete="SET NULL"), nullable=True
     )

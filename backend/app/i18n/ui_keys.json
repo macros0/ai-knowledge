@@ -728,6 +728,12 @@
   ],
   "preview.regenerateBtn": [],
   "preview.title": [],
+  "reference.collapseLanguage": [],
+  "reference.editLanguage": [],
+  "reference.original": [
+    "locale"
+  ],
+  "reference.originalLanguage": [],
   "security.action.attribute_create": [],
   "security.action.attribute_delete": [],
   "security.action.chat_history_auto_delete": [],
@@ -865,9 +871,11 @@
     "message"
   ],
   "tags.manager.translationSaved": [],
+  "tags.picker.addLabel": [],
   "tags.picker.addQuote": [
     "name"
   ],
+  "tags.picker.collapse": [],
   "tags.picker.noTags": [],
   "tags.picker.usedIn": [],
   "theme.ariaLabel": [

@@ -35,6 +35,7 @@ def _to_dict(a: AttributeValue) -> dict:
         "attribute_key": a.attribute_key,
         "value": a.value,
         "label": a.label,
+        "canonical_locale": a.canonical_locale,
         "sort_order": a.sort_order,
         "org_id": a.org_id,
         "created_by": a.created_by,
@@ -78,6 +79,7 @@ class AttributeRegistry:
         sort_order: int = 0,
         org_id: int | None = None,
         created_by: str | None = None,
+        canonical_locale: str = "und",
     ) -> dict:
         """Идемпотентно добавляет значение (если уже есть — возвращает существующее)."""
         with session_scope() as s:
@@ -94,6 +96,7 @@ class AttributeRegistry:
                 attribute_key=key,
                 value=value,
                 label=label,
+                canonical_locale=canonical_locale,
                 sort_order=sort_order,
                 org_id=org_id,
                 created_by=created_by,
@@ -128,7 +131,7 @@ class AttributeRegistry:
         """Заполняет `display_label` (перевод label для locale). None — без перевода."""
         for it in items:
             it["display_label"] = None
-        if not items or not locale or locale == "ru":
+        if not items or not locale:
             return
         ids = [it["id"] for it in items]
         with session_scope() as s:
@@ -143,7 +146,8 @@ class AttributeRegistry:
             ).all()
         trs = dict(rows)
         for it in items:
-            it["display_label"] = trs.get(it["id"])
+            if locale != it.get("canonical_locale"):
+                it["display_label"] = trs.get(it["id"])
 
 
 _INSTANCE: AttributeRegistry | None = None

@@ -33,14 +33,14 @@ from app.services import audit
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
-    "You are a technical translator. Translate each given term/name from Russian "
+    "You are a technical translator. Translate each given term/name from {source} "
     "to {target}. Preserve abbreviations, codes and identifiers verbatim where "
     "they are proper nouns (e.g. СЭДО, ЭЛН, SAP HCM, LK_STAT). Return a JSON "
     "array of strings, one per input, in the same order — nothing else."
 )
 
 
-def translate_texts_batch(texts: list[str], target_locale: str) -> list[str]:
+def translate_texts_batch(texts: list[str], target_locale: str, *, source_locale: str = "und") -> list[str]:
     """Машинный перевод пакета текстов. Возвращает список той же длины/порядка.
 
     `off`-провайдер → пустые строки (переводы не создаются).
@@ -53,7 +53,8 @@ def translate_texts_batch(texts: list[str], target_locale: str) -> list[str]:
     from app.services.llm_client import LLMClient
 
     client = LLMClient(interactive=False)  # bulk-семафор, чат не блокируется
-    system = _SYSTEM_PROMPT.format(target=target_locale)
+    source = source_locale if source_locale != "und" else "its original language (identify it from the input)"
+    system = _SYSTEM_PROMPT.format(source=source, target=target_locale)
     user = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(texts))
     result = client.chat_json(system, user, doc_id="translation", chunk_idx=0)
     if not isinstance(result, list):
@@ -66,8 +67,8 @@ def translate_texts_batch(texts: list[str], target_locale: str) -> list[str]:
     return out
 
 
-def _pending_rows(entity: str, locale: str) -> list[tuple[int, str]]:
-    """[(entity_id, text)] — объекты справочника без РУЧНОГО перевода в locale
+def _pending_rows(entity: str, locale: str) -> list[tuple[int, str, str]]:
+    """[(entity_id, original_text, original_locale)] без РУЧНОГО перевода в locale
     (reviewed_by IS NULL; машинный без review переводится/обновляется).
 
     Единственный источник «что обработает бэкфилл»: count_pending и _backfill_*
@@ -76,7 +77,7 @@ def _pending_rows(entity: str, locale: str) -> list[tuple[int, str]]:
     with session_scope() as s:
         if entity == "tags":
             rows = s.execute(
-                select(Tag.id, Tag.canonical_text, TagTranslation.reviewed_by)
+                select(Tag.id, Tag.canonical_text, Tag.canonical_locale, TagTranslation.reviewed_by)
                 .outerjoin(
                     TagTranslation,
                     (TagTranslation.tag_id == Tag.id) & (TagTranslation.locale == locale),
@@ -85,7 +86,7 @@ def _pending_rows(entity: str, locale: str) -> list[tuple[int, str]]:
             ).all()
         elif entity == "developments":
             rows = s.execute(
-                select(Development.id, Development.name, DevelopmentTranslation.reviewed_by)
+                select(Development.id, Development.name, Development.canonical_locale, DevelopmentTranslation.reviewed_by)
                 .outerjoin(
                     DevelopmentTranslation,
                     (DevelopmentTranslation.development_id == Development.id)
@@ -95,7 +96,7 @@ def _pending_rows(entity: str, locale: str) -> list[tuple[int, str]]:
             ).all()
         elif entity == "attributes":
             rows = s.execute(
-                select(AttributeValue.id, AttributeValue.label, AttributeValueTranslation.reviewed_by)
+                select(AttributeValue.id, AttributeValue.label, AttributeValue.canonical_locale, AttributeValueTranslation.reviewed_by)
                 .outerjoin(
                     AttributeValueTranslation,
                     (AttributeValueTranslation.attribute_value_id == AttributeValue.id)
@@ -106,7 +107,8 @@ def _pending_rows(entity: str, locale: str) -> list[tuple[int, str]]:
             ).all()
         else:
             raise ValueError(f"Неизвестная сущность справочника: {entity}")
-    return [(entity_id, text) for entity_id, text, reviewed in rows if reviewed is None]
+    return [(entity_id, text, source) for entity_id, text, source, reviewed in rows
+            if reviewed is None and source != locale]
 
 
 def backfill_reference_data(
@@ -187,12 +189,12 @@ def _backfill_tags(locale: str, translations: dict[str, str] | None, username: s
         return 0, 0
     created = 0
     failed = 0
-    for tid, text in targets:
+    for tid, text, source in targets:
         tr = _resolve_translation(text, translations) if translations is not None else None
         is_machine = tr is None
         if tr is None:
             try:
-                tr = translate_texts_batch([text], locale)[0]
+                tr = translate_texts_batch([text], locale, source_locale=source)[0]
             except Exception as exc:
                 logger.warning("Перевод тега %d не удался: %s", tid, exc)
                 failed += 1
@@ -220,12 +222,12 @@ def _backfill_developments(locale: str, translations: dict[str, str] | None, use
     created, failed = 0, 0
     if not targets:
         return 0, 0
-    for did, name in targets:
+    for did, name, source in targets:
         tr = _resolve_translation(name, translations) if translations is not None else None
         is_machine = tr is None
         if tr is None:
             try:
-                tr = translate_texts_batch([name], locale)[0]
+                tr = translate_texts_batch([name], locale, source_locale=source)[0]
             except Exception as exc:
                 logger.warning("Перевод разработки %d не удался: %s", did, exc)
                 failed += 1
@@ -254,12 +256,12 @@ def _backfill_attributes(locale: str, translations: dict[str, str] | None, usern
     created, failed = 0, 0
     if not targets:
         return 0, 0
-    for aid, label in targets:
+    for aid, label, source in targets:
         tr = _resolve_translation(label, translations) if translations is not None else None
         is_machine = tr is None
         if tr is None:
             try:
-                tr = translate_texts_batch([label], locale)[0]
+                tr = translate_texts_batch([label], locale, source_locale=source)[0]
             except Exception as exc:
                 logger.warning("Перевод атрибута %d не удался: %s", aid, exc)
                 failed += 1

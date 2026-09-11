@@ -15,17 +15,29 @@ export default function TagPicker({
   onChange,
   refreshKey = 0,
   className = "",
+  collapsible = false,
+  defaultExpanded = false,
+  onCollapse,
 }) {
   const { t, tc } = useI18n();
   const dictionary = useTagDictionary();
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const editing = !collapsible || expanded;
+  const inputRef = useRef(null);
+  const toggleRef = useRef(null);
   const boxRef = useRef(null); // обёртка combobox (для позиционирования и клика)
   const popupRef = useRef(null); // попап в портале
   // Уникальный id listbox на экземпляр: связка combobox ↔ listbox через
   // aria-controls/aria-activedescendant (в отличие от datalist, id не коллизирует).
   const listId = useId();
+  const inputId = `${listId}-input`;
+
+  useEffect(() => {
+    if (collapsible && expanded) inputRef.current?.focus();
+  }, [collapsible, expanded]);
 
   // Совместимость со старым контрактом: при смене refreshKey (например, после
   // загрузки документа) форсируем перечитывание общего справочника.
@@ -89,11 +101,22 @@ export default function TagPicker({
   const displayOf = (name) =>
     dictionary.find((t) => t.name === name)?.display ?? name;
 
+  const collapse = () => {
+    setInput("");
+    setOpen(false);
+    setActive(-1);
+    setExpanded(false);
+    toggleRef.current?.focus();
+    onCollapse?.();
+  };
+
   const addTag = (value) => {
     const v = value.trim();
     if (v && !selected.includes(v)) onChange([...selected, v]);
     setInput("");
     setOpen(false);
+    setActive(-1);
+    if (v && collapsible) collapse();
   };
 
   const removeTag = (tag) => onChange(selected.filter((t) => t !== tag));
@@ -111,7 +134,8 @@ export default function TagPicker({
       if (open && active >= 0 && filtered[active]) addTag(filtered[active].name);
       else addTag(input);
     } else if (e.key === "Escape") {
-      setOpen(false);
+      if (collapsible) collapse();
+      else setOpen(false);
     } else {
       setOpen(true);
       setActive(-1);
@@ -120,16 +144,21 @@ export default function TagPicker({
 
   return (
     <div className={`tag-picker ${className}`.trim()}>
-      <span className="tag-picker-label">{label}</span>
+      {(label || (collapsible && !editing && selected.length === 0)) && (
+        <span className="tag-picker-label">{label || t("tags.picker.addLabel")}</span>
+      )}
       <div className="tag-chips">
         {selected.map((t) => (
-          <span key={t} className="tag-chip" onClick={() => removeTag(t)}>
+          <span key={t} className={`tag-chip${editing ? "" : " tag-chip-readonly"}`}
+            onClick={editing ? () => removeTag(t) : undefined}>
             {displayOf(t)}
           </span>
         ))}
       </div>
-      <div className="tag-combobox" ref={boxRef}>
+      {editing && <div className="tag-combobox" ref={boxRef}>
         <input
+          id={inputId}
+          ref={inputRef}
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
@@ -138,13 +167,19 @@ export default function TagPicker({
           }}
           onKeyDown={onKeyDown}
           onFocus={() => setOpen(true)}
-          onBlur={() => {
+          onBlur={(e) => {
+            // Moving to the collapse button must not commit the draft.
+            if (e.relatedTarget === toggleRef.current) {
+              setOpen(false);
+              return;
+            }
             if (input.trim()) addTag(input);
             else setOpen(false);
           }}
           placeholder={placeholder}
           autoComplete="off"
           role="combobox"
+          aria-label={label || t("tags.picker.addLabel")}
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-controls={listId}
@@ -185,7 +220,16 @@ export default function TagPicker({
             </ul>,
             document.body
           )}
-      </div>
+      </div>}
+      {collapsible && (
+        <button type="button" className="tag-edit-toggle" ref={toggleRef}
+          aria-label={t(editing ? "tags.picker.collapse" : "tags.picker.addLabel")}
+          aria-expanded={editing} aria-controls={editing ? inputId : undefined}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => editing ? collapse() : setExpanded(true)}>
+          {editing ? "−" : "✎"}
+        </button>
+      )}
     </div>
   );
 }

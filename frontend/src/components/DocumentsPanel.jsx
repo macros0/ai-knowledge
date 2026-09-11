@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import TagPicker from "./TagPicker";
+import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import UploadZone from "./UploadZone";
 import DocumentList from "./DocumentList";
 import TrashPanel from "./TrashPanel";
@@ -13,7 +14,8 @@ import { useI18n } from "@/i18n/LocaleContext";
 
 export default function DocumentsPanel() {
   const { mode, hasRole } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const [tagLocale, setTagLocale] = useState(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [uploadTags, setUploadTags] = useState([]);
@@ -96,7 +98,9 @@ export default function DocumentsPanel() {
                       {t("docs.uploadModuleHint", { module: uploadModule })}
                     </div>
                   )}
+                  <ReferenceLocaleSelect value={tagLocale} onChange={setTagLocale} />
                   <TagPicker
+                    collapsible
                     label={t("docs.uploadTagsLabel")}
                     placeholder={t("docs.uploadTagsPlaceholder")}
                     selected={uploadTags}
@@ -115,6 +119,7 @@ export default function DocumentsPanel() {
                   )}
                   <UploadZone
                     tags={uploadTags}
+                    canonicalLocale={tagLocale || locale}
                     developmentId={uploadDevId}
                     onUploaded={() => setRefreshKey((k) => k + 1)}
                   />

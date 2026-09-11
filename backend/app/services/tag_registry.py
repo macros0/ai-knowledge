@@ -54,7 +54,7 @@ class TagRegistry:
     # --- Разрешение / создание ---
 
     def get_or_create_ids(
-        self, tags: list[str] | None, created_by: str | None = None
+        self, tags: list[str] | None, created_by: str | None = None, *, canonical_locale: str = "und"
     ) -> list[int]:
         """Резолвит канонические тексты в tag_id, создавая отсутствующие.
 
@@ -76,7 +76,7 @@ class TagRegistry:
             for name in normalized:
                 tag = existing.get(name)
                 if tag is None:
-                    tag = Tag(canonical_text=name, created_by=created_by)
+                    tag = Tag(canonical_text=name, created_by=created_by, canonical_locale=canonical_locale)
                     s.add(tag)
                     s.flush()
                     existing[name] = tag
@@ -85,9 +85,9 @@ class TagRegistry:
                 ids.append(tag.id)
         return ids
 
-    def add(self, tags: list[str] | None, created_by: str | None = None) -> None:
+    def add(self, tags: list[str] | None, created_by: str | None = None, *, canonical_locale: str = "und") -> None:
         """Регистрирует теги (создаёт строки `tags`; идемпотентно)."""
-        self.get_or_create_ids(tags, created_by=created_by)
+        self.get_or_create_ids(tags, created_by=created_by, canonical_locale=canonical_locale)
 
     def resolve(self, text: str, locale: str | None = None) -> int | None:
         """Резолвит текст → tag_id: перевод в locale → канонический текст.
@@ -149,13 +149,14 @@ class TagRegistry:
                 continue
             translation = (
                 next((tr for tr in t.translations if tr.locale == locale), None)
-                if locale
+                if locale and locale != t.canonical_locale
                 else None
             )
             items.append(
                 {
                     "id": t.id,
                     "name": t.canonical_text,
+                    "canonical_locale": t.canonical_locale,
                     "display": translation.text if translation else t.canonical_text,
                     "count": counts.get(t.id, 0),
                     "needs_review": any(

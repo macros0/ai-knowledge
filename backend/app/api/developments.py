@@ -76,7 +76,8 @@ def create_development(
     user: User = Depends(require_role("editor", "admin")),
 ):
     try:
-        dev = _registry.create(body.number, body.name, body.module, created_by=user.username)
+        dev = _registry.create(body.number, body.name, body.module, created_by=user.username,
+                               canonical_locale=body.canonical_locale or request_locale(request, fallback="und"))
     except DevelopmentModuleError as exc:
         raise ApiError(
             status_code=422,

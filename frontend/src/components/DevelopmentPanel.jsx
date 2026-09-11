@@ -17,6 +17,7 @@ import { TYPED_CONFIRM_THRESHOLD } from "@/lib/constants";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import ConfirmModal from "./ConfirmModal";
+import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 
 const EMPTY_FORM = { number: "", name: "", module: "" };
 const PAGE_SIZE = 50;
@@ -25,7 +26,9 @@ const MODULE_NONE = "__none__";
 export default function DevelopmentPanel() {
   const { mode, hasRole } = useAuth();
   const { showToast } = useToast();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const [originLocale, setOriginLocale] = useState(null);
+  const [moduleLocale, setModuleLocale] = useState(null);
   const [developments, setDevelopments] = useState([]);
   const [total, setTotal] = useState(0);
   const [modules, setModules] = useState([]);
@@ -117,11 +120,11 @@ export default function DevelopmentPanel() {
 
   // Регистрирует module в справочнике, если его там нет (чтобы бэкенд не ответил 422).
   const ensureModule = useCallback(
-    async (value) => {
+    async (value, sourceLocale = moduleLocale || locale) => {
       const v = (value || "").trim();
       if (!v || modules.includes(v)) return v || null;
       try {
-        await addAttributeValue("module", v);
+        await addAttributeValue("module", v, { label: v, canonicalLocale: sourceLocale });
         setModules((prev) => [...prev, v].sort());
       } catch (err) {
         showToast(t("devpanel.addModuleError", { message: friendlyApiError(err, t) }), { type: "error" });
@@ -129,7 +132,7 @@ export default function DevelopmentPanel() {
       }
       return v;
     },
-    [modules, showToast, t]
+    [modules, showToast, t, moduleLocale, locale]
   );
 
   const submitCreate = async (e) => {
@@ -139,8 +142,8 @@ export default function DevelopmentPanel() {
     if (!number || !name) return;
     setBusy(true);
     try {
-      const moduleName = await ensureModule(form.module);
-      await createDevelopment({ number, name, module: moduleName });
+      const moduleName = await ensureModule(form.module, originLocale || locale);
+      await createDevelopment({ number, name, module: moduleName, canonical_locale: originLocale || locale });
       setForm(EMPTY_FORM);
       showToast(t("devpanel.created", { name }), { type: "success" });
       await load();
@@ -236,7 +239,7 @@ export default function DevelopmentPanel() {
       return;
     }
     try {
-      await addAttributeValue("module", value);
+      await addAttributeValue("module", value, { label: value, canonicalLocale: moduleLocale || locale });
       setModules((prev) => [...prev, value].sort());
       setNewModule("");
       showToast(t("devpanel.moduleAdded", { name: value }), { type: "success" });
@@ -294,6 +297,7 @@ export default function DevelopmentPanel() {
                 {modules.length === 0 && <span className="muted">{t("devpanel.noModules")}</span>}
               </div>
               <form className="dev-module-add" onSubmit={addModule}>
+                <ReferenceLocaleSelect value={moduleLocale} onChange={setModuleLocale} />
                 <input
                   className="dev-input"
                   placeholder={t("devpanel.addModulePlaceholder")}
@@ -311,6 +315,7 @@ export default function DevelopmentPanel() {
 
       {canEdit && (
         <form className="dev-form" onSubmit={submitCreate}>
+          <ReferenceLocaleSelect value={originLocale} onChange={setOriginLocale} />
           <input
             className="dev-input"
             placeholder={t("devpanel.numberPlaceholder")}

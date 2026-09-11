@@ -54,6 +54,7 @@ def _to_dict(dev: Development, documents_count: int = 0) -> dict:
         "id": dev.id,
         "number": dev.number,
         "name": dev.name,
+        "canonical_locale": dev.canonical_locale,
         "module": dev.module,
         "version": dev.version,
         "created_at": dev.created_at,
@@ -81,7 +82,7 @@ class DevelopmentRegistry:
 
     # --- CRUD ---
 
-    def create(self, number: str, name: str, module: str | None = None, created_by: str | None = None) -> dict:
+    def create(self, number: str, name: str, module: str | None = None, created_by: str | None = None, *, canonical_locale: str = "und") -> dict:
         number = number.strip()
         name = name.strip()
         if not number:
@@ -90,7 +91,7 @@ class DevelopmentRegistry:
             raise DomainError("Название разработки не может быть пустым", code=codes.EMPTY_VALUE)
         module = self._validate_module(module)
         with session_scope() as s:
-            dev = Development(number=number, name=name, module=module, created_by=created_by, version=1)
+            dev = Development(number=number, name=name, module=module, created_by=created_by, version=1, canonical_locale=canonical_locale)
             s.add(dev)
             try:
                 s.flush()
@@ -249,6 +250,7 @@ class DevelopmentRegistry:
                     "id": dev_id,
                     "number": new_number,
                     "name": new_name,
+                    "canonical_locale": dev.canonical_locale,
                     "module": new_module,
                     "version": version + 1,
                     "created_at": dev.created_at,
@@ -383,7 +385,7 @@ class DevelopmentRegistry:
         """
         for it in items:
             it["display_name"] = None
-        if not items or not locale or locale == "ru":
+        if not items or not locale:
             return
         ids = [it["id"] for it in items]
         with session_scope() as s:
@@ -397,7 +399,8 @@ class DevelopmentRegistry:
             ).all()
         trs = dict(rows)
         for it in items:
-            it["display_name"] = trs.get(it["id"])
+            if locale != it.get("canonical_locale"):
+                it["display_name"] = trs.get(it["id"])
 
 
 _INSTANCE: DevelopmentRegistry | None = None

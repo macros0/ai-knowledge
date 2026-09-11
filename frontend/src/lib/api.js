@@ -149,9 +149,10 @@ function request(path, init, timeoutMs) {
   });
 }
 
-export function uploadDocument(file, tags = [], { developmentId = null } = {}) {
+export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale } = {}) {
   const form = new FormData();
   form.append("file", file);
+  if (canonicalLocale) form.append("canonical_locale", canonicalLocale);
   for (const tag of tags) {
     form.append("tags", tag);
   }
@@ -194,19 +195,19 @@ export function bulkReviewTags(tagIds) {
   });
 }
 
-export function updateDocumentTags(docId, tags) {
+export function updateDocumentTags(docId, tags, canonicalLocale) {
   return request(`/documents/${docId}/tags`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tags }),
+    body: JSON.stringify({ tags, canonical_locale: canonicalLocale }),
   });
 }
 
-export function bulkUpdateTags(docIds, { add = [], remove = [] } = {}) {
+export function bulkUpdateTags(docIds, { add = [], remove = [], canonicalLocale } = {}) {
   return request("/documents/bulk-tags", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ doc_ids: docIds, add, remove }),
+    body: JSON.stringify({ doc_ids: docIds, add, remove, canonical_locale: canonicalLocale }),
   });
 }
 
@@ -498,11 +499,11 @@ export function getDevelopment(devId) {
   return request(`/developments/${devId}`);
 }
 
-export function createDevelopment({ number, name, module }) {
+export function createDevelopment({ number, name, module, canonical_locale }) {
   return request("/developments", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ number, name, module }),
+    body: JSON.stringify({ number, name, module, canonical_locale }),
   });
 }
 
@@ -541,11 +542,11 @@ export function listAttributeValues(key) {
   return request(`/attributes/${key}`).then((data) => data.values ?? []);
 }
 
-export function addAttributeValue(key, value) {
+export function addAttributeValue(key, value, { label, canonicalLocale } = {}) {
   return request(`/attributes/${key}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ value }),
+    body: JSON.stringify({ value, label, canonical_locale: canonicalLocale }),
   });
 }
 

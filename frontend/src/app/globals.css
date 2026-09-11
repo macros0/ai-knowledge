@@ -500,6 +500,12 @@ main {
   border: 1px solid var(--border);
 }
 
+.tag-picker .tag-chip-readonly:hover {
+  text-decoration: none;
+  color: var(--text);
+  border-color: var(--border);
+}
+
 .tag-edit-toggle {
   width: 22px;
   height: 22px;

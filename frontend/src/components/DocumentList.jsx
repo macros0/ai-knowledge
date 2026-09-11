@@ -16,6 +16,7 @@ import DevelopmentFilter from "./DevelopmentFilter";
 import DevelopmentPicker from "./DevelopmentPicker";
 import DuplicateModal from "./DuplicateModal";
 import TagPicker from "./TagPicker";
+import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import TagManagerModal from "./TagManagerModal";
 
 const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
@@ -96,6 +97,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const { mode, hasRole, loading, user } = useAuth();
   const { showToast } = useToast();
   const { t, tc, locale, fmtDate } = useI18n();
+  const [tagLocales, setTagLocales] = useState({});
   const [docs, setDocs] = useState([]);
   const [total, setTotal] = useState(0);
   const [regenerating, setRegenerating] = useState({});
@@ -406,7 +408,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
 
   const changeTags = async (doc, tags) => {
     try {
-      const res = await updateDocumentTags(doc.id, tags);
+        const res = await updateDocumentTags(doc.id, tags, tagLocales[doc.id] || locale);
       if (res?.dev_tags_sync_pending) {
         showToast(t("docs.tagsSyncPending"), { type: "warning" });
       }
@@ -563,20 +565,18 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                 <br />
                 {editingTags[doc.id] ? (
                   <>
+                    <ReferenceLocaleSelect value={tagLocales[doc.id]}
+                      onChange={(value) => setTagLocales((prev) => ({ ...prev, [doc.id]: value }))} />
                     <TagPicker
+                      collapsible
+                      defaultExpanded
+                      onCollapse={() => toggleEditTags(doc.id)}
                       label=""
                       className="tag-picker-inline"
                       selected={doc.tags || []}
                       onChange={(tags) => changeTags(doc, tags)}
                       placeholder={t("docs.addTagPlaceholder")}
                     />
-                    <button
-                      className="tag-edit-toggle"
-                      onClick={() => toggleEditTags(doc.id)}
-                      aria-label={t("docs.collapseTagsAria")}
-                    >
-                      −
-                    </button>
                   </>
                 ) : (
                   <div className="doc-tags-row">

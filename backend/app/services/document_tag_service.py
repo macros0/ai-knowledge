@@ -259,6 +259,7 @@ def update_document_tags(
     *,
     bulk: bool = False,
     bulk_context: dict | None = None,
+    canonical_locale: str = "und",
 ) -> dict:
     """Полная замена набора глобальных тегов документа + синхронизация проекций.
 
@@ -282,7 +283,7 @@ def update_document_tags(
 
     # registry.update резолвит/создаёт теги (tag_id) внутри себя — отдельный
     # TagRegistry.add больше не нужен (пул и document_tags согласованы по FK).
-    _registry.update(doc_id, tags=new_tags, **dev_fields)
+    _registry.update(doc_id, tags=new_tags, canonical_locale=canonical_locale, **dev_fields)
 
     if removed or added:
         removed_set = set(removed)
@@ -341,6 +342,7 @@ def bulk_update_tags(
     remove: list[str],
     user,
     ip_address: str | None = None,
+    canonical_locale: str = "und",
 ) -> dict:
     """Массовое редактирование тегов (delta add/remove) с записью audit на документ.
 
@@ -363,7 +365,8 @@ def bulk_update_tags(
             if t not in new_tags:
                 new_tags.append(t)
         result = update_document_tags(
-            doc_id, new_tags, user, ip_address=ip_address, bulk=True, bulk_context=context
+            doc_id, new_tags, user, ip_address=ip_address, bulk=True, bulk_context=context,
+            canonical_locale=canonical_locale,
         )
         (updated if result["changed"] else unchanged).append(doc_id)
 

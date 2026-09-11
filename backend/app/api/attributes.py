@@ -42,6 +42,7 @@ def add_attribute_value(
         label=body.label,
         sort_order=body.sort_order,
         created_by=user.username,
+        canonical_locale=body.canonical_locale or request_locale(request, fallback="und"),
     )
     audit.record(
         user,

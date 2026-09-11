@@ -2,6 +2,10 @@
 // Добавление нового языка: копия этого файла + строка в locales/index.js.
 
 export default {
+  "reference.originalLanguage": "Язык оригинала",
+  "reference.editLanguage": "Изменить язык оригинала",
+  "reference.collapseLanguage": "Свернуть редактирование языка оригинала",
+  "reference.original": "Оригинал ({locale})",
   "app.title": "OKF Knowledge Service",
 
   "common.close": "Закрыть",
@@ -223,6 +227,8 @@ export default {
 
   "tags.picker.addQuote": "Добавить «{name}»",
   "tags.picker.noTags": "Нет тегов в справочнике",
+  "tags.picker.addLabel": "Добавить тег",
+  "tags.picker.collapse": "Свернуть добавление тега",
   "tags.picker.usedIn": { "one": "Используется в {count} документе", "few": "Используется в {count} документах", "many": "Используется в {count} документах" },
   "tags.combobox.noMatch": "Нет совпадений",
   "tags.manager.title": "Справочник тегов",
@@ -583,7 +589,7 @@ export default {
   "admin.backfill.model": "Модель",
   "admin.backfill.locale": "Язык: {locale}",
   "admin.backfill.pendingTotal": "Без ручного перевода: {count}",
-  "admin.backfill.warning": "Будут созданы машинные черновики (is_machine). Подтверждённые человеком переводы не меняются.",
+  "admin.backfill.warning": "Каждый элемент переводится напрямую с языка оригинала. Будут созданы машинные черновики; подтверждённые человеком переводы сохраняются.",
   "admin.backfill.run": "Перевести",
   "admin.backfill.running": "Перевод…",
   "admin.backfill.providerOff": "Провайдер перевода отключён (translation_provider=off) — запуск недоступен.",

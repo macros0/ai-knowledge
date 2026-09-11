@@ -2,6 +2,10 @@
 // отсутствии здесь).
 
 export default {
+  "reference.originalLanguage": "Original language",
+  "reference.editLanguage": "Edit original language",
+  "reference.collapseLanguage": "Collapse original language editor",
+  "reference.original": "Original ({locale})",
   "app.title": "OKF Knowledge Service",
 
   "common.close": "Close",
@@ -223,6 +227,8 @@ export default {
 
   "tags.picker.addQuote": "Add “{name}”",
   "tags.picker.noTags": "No tags in the dictionary",
+  "tags.picker.addLabel": "Add a tag",
+  "tags.picker.collapse": "Collapse tag editor",
   "tags.picker.usedIn": "Used in {count} document(s)",
   "tags.combobox.noMatch": "No matches",
   "tags.manager.title": "Tag dictionary",
@@ -583,7 +589,7 @@ export default {
   "admin.backfill.model": "Model",
   "admin.backfill.locale": "Locale: {locale}",
   "admin.backfill.pendingTotal": "Without manual translation: {count}",
-  "admin.backfill.warning": "Machine drafts will be created (is_machine). Human-approved translations are not changed.",
+  "admin.backfill.warning": "Each item is translated directly from its original language. Machine drafts will be created; human-approved translations are preserved.",
   "admin.backfill.run": "Translate",
   "admin.backfill.running": "Translating…",
   "admin.backfill.providerOff": "Translation provider is off (translation_provider=off) — cannot run.",

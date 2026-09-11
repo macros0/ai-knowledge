@@ -8,6 +8,7 @@ from app.services.problem_codes import problem_message
 SearchMode = Literal["dense", "bm25", "hybrid"]
 QueryText = Annotated[str, Field(min_length=1, max_length=8192)]
 FilterValue = Annotated[str, Field(min_length=1, max_length=128)]
+ReferenceLocale = Annotated[str, Field(pattern=r"^[a-z]{2,3}(-[a-z0-9]{2,8})*$", max_length=16)]
 
 
 def _normalize_query(value: str) -> str:
@@ -308,6 +309,7 @@ class TagTranslationOut(BaseModel):
 
 class TagOut(BaseModel):
     id: int
+    canonical_locale: str = "und"
     name: str
     display: str
     count: int
@@ -394,6 +396,7 @@ class DocumentTagsUpdate(BaseModel):
     """Полная замена набора глобальных тегов документа (Этап 4a)."""
 
     tags: list[str] = Field(default_factory=list)
+    canonical_locale: ReferenceLocale | None = None
 
 
 class BulkTagsRequest(BaseModel):
@@ -402,6 +405,7 @@ class BulkTagsRequest(BaseModel):
     doc_ids: list[str]
     add: list[str] = Field(default_factory=list)
     remove: list[str] = Field(default_factory=list)
+    canonical_locale: ReferenceLocale | None = None
 
 
 class BulkPreviewOut(BaseModel):
@@ -429,6 +433,7 @@ class BlockUserRequest(BaseModel):
 
 class DevelopmentOut(BaseModel):
     id: int
+    canonical_locale: str = "und"
     number: str
     name: str
     module: str | None = None
@@ -450,6 +455,7 @@ class DevelopmentCreate(BaseModel):
     number: str
     name: str
     module: str | None = None
+    canonical_locale: ReferenceLocale | None = None
 
 
 class DevelopmentUpdate(BaseModel):
@@ -485,6 +491,7 @@ class DetectDevelopmentOut(BaseModel):
 
 class AttributeValueOut(BaseModel):
     id: int
+    canonical_locale: str = "und"
     attribute_key: str
     value: str
     label: str | None = None
@@ -502,6 +509,7 @@ class AttributeCreate(BaseModel):
     value: str
     label: str | None = None
     sort_order: int = 0
+    canonical_locale: ReferenceLocale | None = None
 
 
 class LocaleOut(BaseModel):

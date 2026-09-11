@@ -13,7 +13,7 @@ const extOf = (name) => {
   return i === -1 ? "" : name.slice(i).toLowerCase();
 };
 
-export default function UploadZone({ tags = [], developmentId = null, onUploaded }) {
+export default function UploadZone({ tags = [], developmentId = null, canonicalLocale, onUploaded }) {
   const { t } = useI18n();
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -50,7 +50,7 @@ export default function UploadZone({ tags = [], developmentId = null, onUploaded
     try {
       for (const file of supported) {
         try {
-          const doc = await uploadDocument(file, tags, { developmentId });
+          const doc = await uploadDocument(file, tags, { developmentId, canonicalLocale });
           uploadedCount += 1;
           // Близнец файла в корзине не блокирует загрузку — информационный тост.
           if (doc?.duplicate_in_trash) {
