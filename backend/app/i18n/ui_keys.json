@@ -849,6 +849,7 @@
   "tags.manager.deleted": [
     "name"
   ],
+  "tags.manager.edit": [],
   "tags.manager.editPlaceholder": [
     "locale"
   ],

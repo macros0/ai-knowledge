@@ -12,7 +12,7 @@ import {
 import { bumpTagVersion } from "@/lib/tagDictionary";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
-import { TrashIcon } from "./icons";
+import { PencilIcon, TrashIcon } from "./icons";
 
 /**
  * Модалка управления справочником тегов: список с поиском, счётчики использования,
@@ -205,6 +205,20 @@ export default function TagManagerModal({ onClose }) {
                     <span className="tag-manager-canonical"> ({referenceText(tag)})</span>
                   )}
                 </span>
+                {locale !== tag.canonical_locale && (
+                  <button
+                    type="button"
+                    className="tag-edit-toggle"
+                    onClick={() =>
+                      setExpanded((e) => ({ ...e, [tag.id]: true }))
+                    }
+                    aria-label={t("tags.manager.edit")}
+                    title={t("tags.manager.edit")}
+                    aria-expanded={Boolean(expanded[tag.id])}
+                  >
+                    <PencilIcon size={13} />
+                  </button>
+                )}
                 {tag.needs_review && (
                   <span className="tag-manager-machine" title={t("tags.manager.reviewOnly")}>
                     {t("tags.manager.machineBadge")}

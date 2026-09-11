@@ -247,6 +247,7 @@ export default {
   "tags.manager.reviewAll": "Подтвердить все ({count})",
   "tags.manager.machineBadge": "авто",
   "tags.manager.expand": "Переводы",
+  "tags.manager.edit": "Изменить перевод",
   "tags.manager.approve": "Подтвердить",
   "tags.manager.editPlaceholder": "Перевод на {locale}…",
   "tags.manager.save": "Сохранить",

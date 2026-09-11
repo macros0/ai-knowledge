@@ -247,6 +247,7 @@ export default {
   "tags.manager.reviewAll": "Approve all ({count})",
   "tags.manager.machineBadge": "auto",
   "tags.manager.expand": "Translations",
+  "tags.manager.edit": "Edit translation",
   "tags.manager.approve": "Approve",
   "tags.manager.editPlaceholder": "Translation to {locale}…",
   "tags.manager.save": "Save",
