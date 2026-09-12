@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "scope": "glossary_query_preparation_only",
+  "database_fixture": {
+    "terms": 1000,
+    "aliases": 10000
+  },
+  "warmup_passes": 2,
+  "measured_pairs": 5,
+  "queries_per_pass": 2,
+  "summary": {
+    "off": {
+      "snapshot_ms": {
+        "count": 10,
+        "avg_ms": 0.0,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0
+      },
+      "matcher_ms": {
+        "count": 10,
+        "avg_ms": 0.0,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0
+      },
+      "prepare_ms": {
+        "count": 10,
+        "avg_ms": 0.005,
+        "p50_ms": 0.003,
+        "p95_ms": 0.018
+      },
+      "query_sparse_ms": {
+        "count": 10,
+        "avg_ms": 0.027,
+        "p50_ms": 0.017,
+        "p95_ms": 0.057
+      }
+    },
+    "on": {
+      "snapshot_ms": {
+        "count": 10,
+        "avg_ms": 0.004,
+        "p50_ms": 0.004,
+        "p95_ms": 0.007
+      },
+      "matcher_ms": {
+        "count": 10,
+        "avg_ms": 1.343,
+        "p50_ms": 1.221,
+        "p95_ms": 1.807
+      },
+      "prepare_ms": {
+        "count": 10,
+        "avg_ms": 1.449,
+        "p50_ms": 1.329,
+        "p95_ms": 2.01
+      },
+      "query_sparse_ms": {
+        "count": 10,
+        "avg_ms": 0.096,
+        "p50_ms": 0.098,
+        "p95_ms": 0.144
+      }
+    }
+  },
+  "raw": [
+    {
+      "pair": 1,
+      "enabled": false,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.003,
+      "query_sparse_ms": 0.017,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 5
+    },
+    {
+      "pair": 1,
+      "enabled": false,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.002,
+      "query_sparse_ms": 0.016,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 1,
+      "enabled": true,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.003,
+      "matcher_ms": 1.11,
+      "prepare_ms": 1.061,
+      "query_sparse_ms": 0.083,
+      "sql_statements": 0,
+      "matched_groups": 1,
+      "status": "limited",
+      "sparse_dimensions": 9
+    },
+    {
+      "pair": 1,
+      "enabled": true,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.002,
+      "matcher_ms": 0.879,
+      "prepare_ms": 0.83,
+      "query_sparse_ms": 0.028,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "no_match",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 2,
+      "enabled": true,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.001,
+      "matcher_ms": 1.037,
+      "prepare_ms": 1.901,
+      "query_sparse_ms": 0.136,
+      "sql_statements": 0,
+      "matched_groups": 1,
+      "status": "limited",
+      "sparse_dimensions": 9
+    },
+    {
+      "pair": 2,
+      "enabled": true,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.006,
+      "matcher_ms": 1.697,
+      "prepare_ms": 1.852,
+      "query_sparse_ms": 0.1,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "no_match",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 2,
+      "enabled": false,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.029,
+      "query_sparse_ms": 0.07,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 5
+    },
+    {
+      "pair": 2,
+      "enabled": false,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.005,
+      "query_sparse_ms": 0.03,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 3,
+      "enabled": false,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.003,
+      "query_sparse_ms": 0.041,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 5
+    },
+    {
+      "pair": 3,
+      "enabled": false,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.005,
+      "query_sparse_ms": 0.039,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 3,
+      "enabled": true,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.008,
+      "matcher_ms": 1.853,
+      "prepare_ms": 2.036,
+      "query_sparse_ms": 0.131,
+      "sql_statements": 0,
+      "matched_groups": 1,
+      "status": "limited",
+      "sparse_dimensions": 9
+    },
+    {
+      "pair": 3,
+      "enabled": true,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.006,
+      "matcher_ms": 1.75,
+      "prepare_ms": 1.247,
+      "query_sparse_ms": 0.064,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "no_match",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 4,
+      "enabled": true,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.003,
+      "matcher_ms": 1.206,
+      "prepare_ms": 1.979,
+      "query_sparse_ms": 0.15,
+      "sql_statements": 0,
+      "matched_groups": 1,
+      "status": "limited",
+      "sparse_dimensions": 9
+    },
+    {
+      "pair": 4,
+      "enabled": true,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.006,
+      "matcher_ms": 1.236,
+      "prepare_ms": 1.019,
+      "query_sparse_ms": 0.07,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "no_match",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 4,
+      "enabled": false,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.003,
+      "query_sparse_ms": 0.018,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 5
+    },
+    {
+      "pair": 4,
+      "enabled": false,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.002,
+      "query_sparse_ms": 0.016,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 5,
+      "enabled": false,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.002,
+      "query_sparse_ms": 0.013,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 5
+    },
+    {
+      "pair": 5,
+      "enabled": false,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.0,
+      "matcher_ms": 0.0,
+      "prepare_ms": 0.001,
+      "query_sparse_ms": 0.014,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "disabled",
+      "sparse_dimensions": 6
+    },
+    {
+      "pair": 5,
+      "enabled": true,
+      "query": "benchmark term 0000 alias 00",
+      "snapshot_ms": 0.003,
+      "matcher_ms": 1.121,
+      "prepare_ms": 1.149,
+      "query_sparse_ms": 0.098,
+      "sql_statements": 0,
+      "matched_groups": 1,
+      "status": "limited",
+      "sparse_dimensions": 9
+    },
+    {
+      "pair": 5,
+      "enabled": true,
+      "query": "phrase with no registered glossary term",
+      "snapshot_ms": 0.004,
+      "matcher_ms": 1.538,
+      "prepare_ms": 1.412,
+      "query_sparse_ms": 0.098,
+      "sql_statements": 0,
+      "matched_groups": 0,
+      "status": "no_match",
+      "sparse_dimensions": 6
+    }
+  ],
+  "note": "Dense embedding and Qdrant are intentionally excluded; corpus probe measures those stages separately."
+}

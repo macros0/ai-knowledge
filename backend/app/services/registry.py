@@ -9,9 +9,10 @@ PostgreSQL (prod) / SQLite (dev). Отличие: нет in-memory словар�
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Iterable
 
 from sqlalchemy import and_, false, func, or_, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.db.models import (
     Development,
@@ -173,6 +174,43 @@ class DocumentRegistry:
         with session_scope() as s:
             doc = s.get(Document, doc_id)
             return _to_dict(doc) if doc else None
+
+    def get_many(self, doc_ids: Iterable[str]) -> dict[str, dict | None]:
+        """Load document visibility metadata in one session/query batch."""
+        ids = {str(doc_id) for doc_id in doc_ids if doc_id}
+        if not ids:
+            return {}
+        with session_scope() as s:
+            rows = s.execute(
+                select(Document)
+                .where(Document.id.in_(ids))
+                .options(
+                    joinedload(Document.development),
+                    selectinload(Document.tags_rel).selectinload(DocumentTag.tag_rel),
+                )
+            ).scalars().all()
+        values = {doc.id: _to_dict(doc) for doc in rows}
+        return {doc_id: values.get(doc_id) for doc_id in ids}
+
+    def get_visibility_many(self, doc_ids: Iterable[str]) -> dict[str, dict | None]:
+        """Load only fields needed to filter search hits by visibility."""
+        ids = {str(doc_id) for doc_id in doc_ids if doc_id}
+        if not ids:
+            return {}
+        with session_scope() as s:
+            rows = s.execute(
+                select(Document.id, Document.filename, Document.deleted_at)
+                .where(Document.id.in_(ids))
+            ).all()
+        values = {
+            doc_id: {
+                "id": doc_id,
+                "filename": filename,
+                "deleted_at": deleted_at,
+            }
+            for doc_id, filename, deleted_at in rows
+        }
+        return {doc_id: values.get(doc_id) for doc_id in ids}
 
     def list(
         self,

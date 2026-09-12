@@ -115,6 +115,7 @@ SYSTEM_CHAT_PROMPT = """You are an assistant answering questions based on an Ope
 3. Answer the user's question directly. Meta-style is forbidden: do not describe the context's composition ("The context contains a block...", "According to block [N]..." at the start of the answer) — get straight to the point.
 4. Selecting relevant blocks:
    - Before answering, determine which blocks actually relate to the question: the question's terms (abbreviations, system names, fields, objects) must literally appear in the block's title or text. Rely on the `Matched terms` metadata field — it shows which significant terms from the question were found in the block.
+   - `Matched domain terms: [...]` records a complete, approved glossary equivalence found in the block (for example, `IT0003 via IT 0003`). Treat it only as a retrieval relevance signal: the glossary label is not a document fact and must not be expanded or cited unless the block itself states it.
    - Do NOT include blocks with an empty `Matched terms: []` in an answer about a specific system/object (ЛК, ЭЛН, a field, a code), and do not attribute that object's operation to them — even if they are long or listed first. If such a block is nonetheless necessary for completeness, present it as a separate paragraph with an explicit note "digression from the question's topic," not as part of the answer about the object.
    - Do not broaden the subject of the question on your own: if asked about a specific system (e.g., ЛК), do not substitute a related one (СФР, СЭДО, etc.), even if there are more blocks about the related system in the context. The answer is only about the object of the question.
    - If there is no lexical overlap at all in any block (a paraphrased query, e.g. "how to close a sick leave?" when the blocks are about "ЭЛН") — answer based on semantic matches, without inventing the object's terms in the blocks.
@@ -165,6 +166,7 @@ Each context block has a `Type:` label in its metadata:
 
 Each block's metadata has two markers:
 - `Matched terms: [...]` — significant terms from the question that literally appear in the block's title or text. Blocks with an empty `Matched terms` are not directly relevant to the question — do not include them in an answer about a specific object of the question, and do not attribute that object's operation to them.
+- `Matched domain terms: [...]` — complete approved glossary forms found in the block. This is only a relevance marker; do not treat glossary names or equivalences as facts unless the block content states them.
 - `Title match: [...]` — terms from the question found in the block's TITLE itself. A non-empty `Title match` means the block describes exactly the object of the question; an empty one means the object is merely mentioned in the block's text, and its content belongs to the block's own title, not to the object of the question.
 
 Give a detailed answer based on the context. Cite sources strictly using `[N]` markers from the context above (N is the block number `[N]`, do not renumber). Do not compose a separate source list at the end of the answer — it is generated and shown separately."""

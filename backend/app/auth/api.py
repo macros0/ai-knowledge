@@ -47,25 +47,29 @@ def _resolve_to_user(identity: AuthenticatedIdentity):
     return identity.to_user(build_authorizer(settings))
 
 
+def _simulation_users(provider):
+    if not isinstance(provider, SimulationProvider):
+        return None
+    return [
+        user
+        for user in (_resolve_to_user(identity) for identity in provider.list_identities())
+        if user is not None
+    ]
+
+
 @router.get("/me", response_model=AuthMeOut)
 def auth_me(request: Request):
     settings = get_settings()
     provider = build_auth_provider(settings)
     identity = identity_from_session(request)
+    sim_users = _simulation_users(provider)
 
     if identity is None:
-        return AuthMeOut(mode=provider.mode, user=public_user(), sim_users=None)
+        return AuthMeOut(mode=provider.mode, user=public_user(), sim_users=sim_users)
 
     user = _resolve_to_user(identity)
     if user is None:
-        return AuthMeOut(mode=provider.mode, user=public_user(), sim_users=None)
-
-    sim_users = None
-    identities = provider.list_identities()
-    if identities is not None:
-        sim_users = [
-            u for u in (_resolve_to_user(i) for i in identities) if u is not None
-        ]
+        return AuthMeOut(mode=provider.mode, user=public_user(), sim_users=sim_users)
 
     return AuthMeOut(
         mode=provider.mode,
@@ -107,7 +111,7 @@ def auth_simulate(body: SimulateLoginIn, request: Request):
     return {
         "mode": provider.mode,
         "user": user,
-        "sim_users": None,
+        "sim_users": _simulation_users(provider),
     }
 
 

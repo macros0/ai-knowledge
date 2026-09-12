@@ -30,6 +30,16 @@ STRUCTURAL = (
 )
 
 
+def test_migration_graph_has_single_head():
+    """All published migration branches must converge before new revisions."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    script = ScriptDirectory.from_config(Config(str(BACKEND_DIR / "alembic.ini")))
+
+    assert len(script.get_heads()) == 1
+
+
 @pytest.fixture
 def migrated_db_url(tmp_path, monkeypatch):
     """Чистая БД, накатанная `alembic upgrade head`."""
@@ -72,3 +82,12 @@ def test_migrations_match_models(migrated_db_url):
         "Модели разъехались с миграциями — в production схему ведёт только "
         f"Alembic, и этих объектов там не будет: {drift}"
     )
+from pathlib import Path
+
+
+def test_alembic_logging_does_not_disable_application_loggers():
+    env_source = (Path(__file__).resolve().parents[1] / "alembic" / "env.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "disable_existing_loggers=False" in env_source

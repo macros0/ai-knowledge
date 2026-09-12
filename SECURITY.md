@@ -82,6 +82,16 @@ rejecting `disabled`/`simulation` (`ValueError` before uvicorn starts), as well 
 | `admin` | + bulk/destructive operations and jobs: bulk-delete, bulk-regenerate, approve/cancel job (`require_role("admin")`) |
 | `security` | blocking/unblocking users (`users.py`) and read-only security audit log (`audit.py`, `require_role("security")`) |
 
+The glossary administration API (`/api/admin/glossary`, `app/api/glossary.py`) is
+readable by `editor`/`admin`; only `admin` may create, enable/disable, edit source
+fields, or change aliases. The `editor` role is limited to read/preview access in
+this stage; translation editing is a separate controlled surface. Every glossary
+mutation uses the term version as an atomic CAS precondition and writes its audit
+entry in the same database transaction, including the request IP. The preview
+endpoint only builds a deterministic QueryPlan and does not call Qdrant or LLM.
+Cookie-authenticated mutations remain covered by the global double-submit CSRF
+middleware (`X-CSRF-Token`).
+
 Four-eyes for bulk operations (`app/services/job_queue.py`): a job above the threshold
 (`approval_threshold_docs_<type>`) moves to `awaiting_approval` and requires approval by a
 **different** administrator — the job creator cannot approve their own job
@@ -224,7 +234,8 @@ Invariants enforced by `validate_auth_provider` in `app/config.py` (production):
   development change, tag edits — including one record per document affected by a bulk tag
   edit, removing/cleaning tags from the registry (`tag_delete`/`tag_cleanup`), blocks,
   developments/attributes CRUD, viewing another user's chat history (`chat_history_view`)
-  and auto-purge of chat history (`chat_history_auto_delete`)) with `username`, `target_id`,
+  and auto-purge of chat history (`chat_history_auto_delete`), and glossary term/source/
+  alias mutations) with `username`, `target_id`,
   `old_value`/`new_value`, `ip_address`.
   Only the `security` role reads it (`app/api/audit.py`). For PostgreSQL production, a
   dedicated service account with INSERT-only privileges is recommended
@@ -307,6 +318,16 @@ does not corrupt data.
   active tokens because encryption at rest is delegated to infrastructure.
 
 ## 7. Security change log
+
+### 2026-09-11 — Domain glossary administration and query expansion
+The glossary administration surface is available to `editor`/`admin` for reads and
+preview, while only `admin` can mutate originals, aliases, enablement, or run machine
+translation backfill. Mutations use the existing CSRF boundary, optimistic version
+checks, and append-only audit events. Glossary text is untrusted data: it is shown as
+UI data and retrieval metadata, never as a prompt instruction or numbered source.
+Query expansion remains disabled by default (`GLOSSARY_QUERY_EXPANSION_ENABLED=false`)
+until the corpus acceptance pass; rollback is a flag change or disabling one term and
+does not require reindexing.
 
 ### 2026-09-10 — Security response headers
 The backend now emits `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a restrictive

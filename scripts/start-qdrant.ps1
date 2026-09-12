@@ -66,7 +66,9 @@ Write-Output "Запуск Qdrant: $Exe"
 
 # QDRANT__SERVICE__HOST: биндим только loopback (SECURITY.md §1/§3 — база знаний
 # не должна быть достижима с других машин; без этого Qdrant слушает 0.0.0.0).
-& "$env:USERPROFILE\.config\opencode\scripts\start-background.ps1" `
+$GlobalHelper = "$env:USERPROFILE\.config\opencode\scripts\start-background.ps1"
+$Helper = if (Test-Path -LiteralPath $GlobalHelper -ErrorAction SilentlyContinue) { $GlobalHelper } else { Join-Path $PSScriptRoot 'start-background.ps1' }
+& $Helper `
     -FilePath $Exe `
     -WorkingDirectory $WorkDir `
     -Env @{

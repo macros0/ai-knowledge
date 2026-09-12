@@ -89,6 +89,7 @@ def get_health() -> dict:
     if _cache and (now - _cache_ts) < _CACHE_TTL_SECONDS:
         return _cache
 
+    settings = get_settings()
     deps = {
         "llm": _check_llm(),
         "ollama": _check_embeddings(),
@@ -108,7 +109,13 @@ def get_health() -> dict:
     else:
         overall = "ok"
 
-    result = {"status": overall, "dependencies": deps}
+    result = {
+        "status": overall,
+        # Диагностическая метка помогает отличить основную БД от
+        # измерительного контура; секреты и connection URL здесь не выдаются.
+        "knowledge_profile": settings.knowledge_profile,
+        "dependencies": deps,
+    }
     _cache = result
     _cache_ts = now
     return result

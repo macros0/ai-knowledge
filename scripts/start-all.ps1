@@ -27,7 +27,8 @@
 
 $ErrorActionPreference = 'Stop'
 
-$Helper = "$env:USERPROFILE\.config\opencode\scripts\start-background.ps1"
+$GlobalHelper = "$env:USERPROFILE\.config\opencode\scripts\start-background.ps1"
+$Helper = if (Test-Path -LiteralPath $GlobalHelper -ErrorAction SilentlyContinue) { $GlobalHelper } else { Join-Path $PSScriptRoot 'start-background.ps1' }
 $LogDir = "$env:TEMP\opencode"
 $Root = Split-Path -Parent $PSScriptRoot
 

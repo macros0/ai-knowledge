@@ -69,6 +69,8 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 | `DATABASE_URL` | `postgresql+psycopg://user:pass@host:5432/okf_knowledge` (внешний прод-хост; НЕ `postgres:5432` compose-профиля `local-postgres`) |
 | `QDRANT_URL` | прод-эндпоинт Qdrant (`https://…:6333`) |
 | `QDRANT_API_KEY` | API-ключ Qdrant, если корпоративный Qdrant требует авторизации |
+| `QDRANT_PREFER_GRPC` | `true` только если gRPC endpoint доступен; иначе `false` (HTTP) |
+| `QDRANT_GRPC_PORT` | gRPC-порт Qdrant; пусто — порт `QDRANT_URL` + 1 |
 | `LLM_BASE_URL` / `LLM_API_KEY` | прод-провайдер LLM |
 | `EMBEDDING_API_BASE` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | прод-провайдер эмбеддингов |
 | `STOPWORDS_CACHE_TTL_SECONDS` | TTL кэша динамических стоп-слов (сек); по умолчанию `60`. Действуют только на сторону запроса — индексная формула заморожена, реиндекс не нужен |

@@ -27,6 +27,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -464,6 +465,95 @@ class AuditLog(Base):
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
+class DomainTerm(Base):
+    """Управляемый доменный термин глоссария."""
+
+    __tablename__ = "domain_terms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    canonical: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    original_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    original_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    canonical_locale: Mapped[str] = mapped_column(
+        String(16), default="und", server_default="und", nullable=False
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    source_revision: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    aliases_rel: Mapped[list["DomainTermAlias"]] = relationship(
+        back_populates="term", cascade="all, delete-orphan"
+    )
+    translations_rel: Mapped[list["DomainTermTranslation"]] = relationship(
+        back_populates="term", cascade="all, delete-orphan"
+    )
+
+
+class DomainTermTranslation(Base):
+    """Перевод одного доменного термина в одной локали."""
+
+    __tablename__ = "domain_term_translations"
+
+    term_id: Mapped[int] = mapped_column(
+        ForeignKey("domain_terms.id", ondelete="CASCADE"), primary_key=True
+    )
+    locale: Mapped[str] = mapped_column(String(16), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    is_machine_translated: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    term: Mapped[DomainTerm] = relationship(back_populates="translations_rel")
+
+
+class DomainTermAlias(Base):
+    """Проверенная исходная форма, по которой термин распознаётся."""
+
+    __tablename__ = "domain_term_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    term_id: Mapped[int] = mapped_column(
+        ForeignKey("domain_terms.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    alias: Mapped[str] = mapped_column(String(256), nullable=False)
+    normalized_alias: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    locale: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    auto_expand: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    search_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    term: Mapped[DomainTerm] = relationship(back_populates="aliases_rel")
+
+
 class Job(Base):
     """Системная (массовая) операция администратора.
 
@@ -568,6 +658,7 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(16), nullable=False)  # user | assistant
     content: Mapped[str] = mapped_column(Text, default="")
     sources: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    retrieval_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages_rel")

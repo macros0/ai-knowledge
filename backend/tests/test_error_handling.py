@@ -158,6 +158,7 @@ def test_health_returns_status_structure(client, monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
+    assert isinstance(data["knowledge_profile"], str)
     assert "dependencies" in data
     assert data["dependencies"]["llm"]["status"] == "ok"
     assert data["dependencies"]["ollama"]["status"] == "ok"

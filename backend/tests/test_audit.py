@@ -58,6 +58,15 @@ EXPECTED_ACTION_TYPES = {
     "translations_backfill",
     "ui_dictionary_import",
     "ui_dictionary_rollback",
+    "glossary_term_create",
+    "glossary_term_update",
+    "glossary_source_update",
+    "glossary_alias_create",
+    "glossary_alias_update",
+    "glossary_alias_delete",
+    "glossary_translation_update",
+    "glossary_translation_review",
+    "glossary_translation_backfill",
 }
 
 

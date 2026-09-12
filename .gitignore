@@ -38,6 +38,9 @@ next-env.d.ts
 !/data/uploads/.gitkeep
 !/data/okf_bundles/.gitkeep
 
+# Isolated Stage 8 measurement contour
+/data-stage8-test/
+
 # IDE / OS
 .idea/
 .vscode/
@@ -53,6 +56,7 @@ Thumbs.db
 
 # Probe acceptance baseline (local corpus state artifact, regen via --baseline)
 backend/scripts/probe-baseline.json
+backend/scripts/probe-stage8-*.json
 
 # Temporary pytest basetemp directories created by local verification
 .pytest-run-*/

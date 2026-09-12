@@ -14,7 +14,10 @@ config = context.config
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Alembic's default disables loggers imported by the application. That
+    # makes later tests and long-lived processes silently lose diagnostics
+    # (for example app.services.llm_client). Preserve application loggers.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # URL берётся из настроек приложения (DATABASE_URL / DATABASE_URL_DEV / SQLite),
 # а не из alembic.ini — единый источник правды о подключении.

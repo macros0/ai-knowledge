@@ -146,6 +146,8 @@ class ChunkOut(BaseModel):
 
 class SearchRequest(BaseModel):
     query: QueryText
+    locale: str = "ru"
+    use_glossary: bool = True
     tags: list[FilterValue] = Field(default_factory=list, max_length=50)
     top_k: int = Field(default=5, ge=1, le=50)
     mode: SearchMode | None = None
@@ -177,6 +179,8 @@ class SearchHit(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     hits: list[SearchHit]
+    expansion_status: str = "disabled"
+    applied_terms: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ChatRequest(BaseModel):
@@ -184,6 +188,7 @@ class ChatRequest(BaseModel):
     # Язык ответа при неопределимом языке короткого запроса; UI передаёт
     # текущую локаль, прямые API-вызовы получают русский fallback.
     locale: str = "ru"
+    use_glossary: bool = True
     tags: list[FilterValue] = Field(default_factory=list, max_length=50)
     top_k: int = Field(default=5, ge=1, le=50)
     mode: SearchMode | None = None
@@ -204,6 +209,7 @@ class ChatRequest(BaseModel):
 
 
 class ChatSettingsOut(BaseModel):
+    knowledge_profile: str = "Основной контур"
     top_k_min: int
     top_k_max: int
     top_k_default: int
@@ -211,6 +217,7 @@ class ChatSettingsOut(BaseModel):
     search_mode_default: str
     search_modes: list[str]
     search_index_chunks_enabled: bool = True
+    glossary_query_expansion_enabled: bool = False
     # Провайдер/модель переводов справочников (Этап 7) — для диагностики в UI
     # бэкфилла (внутренний инструмент, конфиг не секрет).
     translation_provider: str | None = None
@@ -239,12 +246,15 @@ class ChatResponse(BaseModel):
     sources: list[ChatSource]
     # UUID треда, к которому относится обмен (для продолжения «Нового чата»).
     session_id: str | None = None
+    expansion_status: str = "disabled"
+    applied_terms: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ChatHistoryMessageOut(BaseModel):
     role: str
     content: str
     sources: list[ChatSource] = Field(default_factory=list)
+    retrieval_metadata: dict[str, Any] | None = None
     created_at: datetime
 
 

@@ -3,10 +3,18 @@
 Merge/collapse: группировка по (doc_id, chunk_index), слияние концепт+чанк.
 XML-формат контекста для LLM.
 """
+import html
 import re
 
 from app.config import Settings, get_settings
 from app.services.fusion import Hit
+from app.services.glossary.matching import (
+    DomainMatchCache,
+    matched_domain_terms,
+    title_matched_domain_terms,
+)
+from app.services.glossary.normalization import normalize_query_with_mapping
+from app.services.glossary.types import MatchGroup
 
 CONCEPT_TYPE = "concept"
 CHUNK_TYPE = "chunk"
@@ -25,6 +33,12 @@ REVIEW_TAG = "review"
 # иначе primary основной группы без чанка (kind="concept", union-теги с
 # review) случайно унаследовал бы иммунитет и перестал фильтроваться как шум.
 REVIEW_KIND = "review"
+
+# Request-local cache for lexical context markers. The same ranked block is
+# inspected by the anti-noise filter and by context formatting; caching this
+# deterministic result avoids tokenizing the query repeatedly without changing
+# retrieval, ranking, or filtering semantics.
+LexicalMatchCache = dict[tuple[str, str, str], list[str]]
 
 
 def _is_review_hit(hit: Hit) -> bool:
@@ -194,6 +208,9 @@ def merge_and_format(
                 "tags": sorted(tags),
                 "filepath": filepath,
                 "doc_id": doc_id,
+                "source_slug": (
+                    primary_concept.payload.get("slug") if primary_concept is not None else None
+                ),
                 "score": best_score,
                 "source_filename": source_filename,
                 "point_type": point_type,
@@ -224,6 +241,7 @@ def merge_and_format(
                     "tags": sorted(concept.payload.get("tags", [])),
                     "filepath": concept.payload.get("filepath", ""),
                     "doc_id": doc_id,
+                    "source_slug": concept.payload.get("slug"),
                     "score": concept.score,
                     "source_filename": source_filename,
                     "point_type": CONCEPT_TYPE,
@@ -300,7 +318,37 @@ def _token_in_text(token: str, text: str) -> bool:
     return stem != token and stem in text
 
 
-def matched_terms(item: dict, query: str | None) -> list[str]:
+def _query_marker_tokens(
+    query: str, *, cache: LexicalMatchCache | None = None
+) -> list[str]:
+    """Return query tokens used by both lexical marker functions.
+
+    ``drop_unmatched_blocks`` and ``format_context`` inspect the same query
+    against several blocks. Cache the query-only part once per request; the
+    block-specific match results remain keyed by their own text.
+    """
+    cache_key = ("query", query, "marker")
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+
+    from app.services.sparse import tokenize
+    from app.services.stopwords import KIND_BM25, KIND_MARKER, get_stopwords
+
+    bm25_sw = get_stopwords(KIND_BM25)
+    marker_sw = get_stopwords(KIND_MARKER)
+    result = [
+        token
+        for token in tokenize(query, stopwords=bm25_sw)
+        if token not in marker_sw
+    ]
+    if cache is not None:
+        cache[cache_key] = result
+    return result
+
+
+def matched_terms(
+    item: dict, query: str | None, *, cache: LexicalMatchCache | None = None
+) -> list[str]:
     """Значимые термины запроса, буквально встречающиеся в заголовке/тексте блока.
 
     Тот же токенайзер, что и в BM25 (services/sparse.py), плюс фильтр служебных
@@ -312,20 +360,25 @@ def matched_terms(item: dict, query: str | None) -> list[str]:
     """
     if not query:
         return []
-    from app.services.sparse import tokenize
-    from app.services.stopwords import KIND_BM25, KIND_MARKER, get_stopwords
-
-    haystack = f"{item.get('title', '')}\n{item.get('content', '')}".lower()
-    bm25_sw = get_stopwords(KIND_BM25)
-    marker_sw = get_stopwords(KIND_MARKER)
-    return [
+    title = item.get("title", "")
+    content = item.get("content", "")
+    cache_key = ("terms", query, f"{title}\n{content}")
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+    haystack = f"{title}\n{content}".lower()
+    result = [
         t
-        for t in tokenize(query, stopwords=bm25_sw)
-        if t not in marker_sw and _token_in_text(t, haystack)
+        for t in _query_marker_tokens(query, cache=cache)
+        if _token_in_text(t, haystack)
     ]
+    if cache is not None:
+        cache[cache_key] = result
+    return result
 
 
-def title_matched_terms(item: dict, query: str | None) -> list[str]:
+def title_matched_terms(
+    item: dict, query: str | None, *, cache: LexicalMatchCache | None = None
+) -> list[str]:
     """Термины запроса, найденные в ЗАГОЛОВКЕ блока.
 
     Отличает блок, ПРО который спросили (имя объекта в Title), от блока,
@@ -336,16 +389,48 @@ def title_matched_terms(item: dict, query: str | None) -> list[str]:
     """
     if not query:
         return []
-    from app.services.sparse import tokenize
+    title = item.get("title", "")
+    cache_key = ("title", query, title)
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+    title = title.lower()
+    result = [
+        t for t in _query_marker_tokens(query, cache=cache) if _token_in_text(t, title)
+    ]
+    if cache is not None:
+        cache[cache_key] = result
+    return result
+
+
+def _significant_tokens_outside_groups(
+    query: str, match_groups: tuple[MatchGroup, ...]
+) -> list[str]:
+    """Return ordinary query terms not covered by a glossary match span."""
+    from app.services.sparse import TOKEN_RE
     from app.services.stopwords import KIND_BM25, KIND_MARKER, get_stopwords
 
-    title = item.get("title", "").lower()
+    normalized = normalize_query_with_mapping(query)
+    covered = [(span.start, span.end) for group in match_groups for span in group.spans]
     bm25_sw = get_stopwords(KIND_BM25)
     marker_sw = get_stopwords(KIND_MARKER)
-    return [t for t in tokenize(query, stopwords=bm25_sw) if t not in marker_sw and _token_in_text(t, title)]
+    result: list[str] = []
+    for match in TOKEN_RE.finditer(normalized.text):
+        start, end = normalized.source_span(*match.span())
+        if any(start < covered_end and covered_start < end for covered_start, covered_end in covered):
+            continue
+        token = match.group(0).lower()
+        if token not in bm25_sw and token not in marker_sw:
+            result.append(token)
+    return result
 
 
-def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[dict]:
+def drop_partial_title_matches(
+    merged: list[dict],
+    query: str | None,
+    *,
+    match_groups: tuple[MatchGroup, ...] = (),
+    domain_cache: DomainMatchCache | None = None,
+) -> list[dict]:
     """Фильтр запросов про точный объект: только блоки «про объект», контент — концепта.
 
     Если заголовок хотя бы одного блока содержит ВСЕ термины запроса
@@ -367,6 +452,30 @@ def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[di
     """
     if not query or not merged:
         return merged
+
+    if match_groups:
+        # A comparison query must retain both thematic sides. Treating the
+        # dense marker names as mandatory title tokens would otherwise make
+        # one of the compared terms disappear from the answer.
+        if len(match_groups) >= 2:
+            return merged
+        remaining_tokens = _significant_tokens_outside_groups(query, match_groups)
+        full = [
+            m
+            for m in merged
+            if title_matched_domain_terms(m, match_groups, cache=domain_cache)
+            and all(_token_in_text(t, m.get("title", "").lower()) for t in remaining_tokens)
+        ]
+        if not full:
+            return merged
+        out: list[dict] = []
+        for m in full:
+            concept_content = m.get("concept_content")
+            if concept_content:
+                m = {**m, "content": concept_content}
+            out.append(m)
+        return out
+
     from app.services.sparse import tokenize
     from app.services.stopwords import KIND_BM25, KIND_MARKER, get_stopwords
 
@@ -391,7 +500,14 @@ def drop_partial_title_matches(merged: list[dict], query: str | None) -> list[di
     return out
 
 
-def drop_unmatched_blocks(merged: list[dict], query: str | None) -> list[dict]:
+def drop_unmatched_blocks(
+    merged: list[dict],
+    query: str | None,
+    *,
+    match_groups: tuple[MatchGroup, ...] = (),
+    domain_cache: DomainMatchCache | None = None,
+    lexical_cache: LexicalMatchCache | None = None,
+) -> list[dict]:
     """Анти-шумовой pre-filter для чата: убирает блоки без лексического совпадения.
 
     Модели (даже сильные) стабильно затаскивают в ответ семантически-смежный
@@ -415,7 +531,9 @@ def drop_unmatched_blocks(merged: list[dict], query: str | None) -> list[dict]:
     if not query or not merged:
         return merged
     matched = [
-        bool(matched_terms(m, query)) or m.get("kind") == REVIEW_KIND
+        bool(matched_terms(m, query, cache=lexical_cache))
+        or bool(matched_domain_terms(m, match_groups, cache=domain_cache))
+        or m.get("kind") == REVIEW_KIND
         for m in merged
     ]
     if not any(matched):
@@ -423,7 +541,18 @@ def drop_unmatched_blocks(merged: list[dict], query: str | None) -> list[dict]:
     return [m for m, has in zip(merged, matched) if has]
 
 
-def format_context(merged: list[dict], query: str | None = None) -> str:
+def _metadata_text(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def format_context(
+    merged: list[dict],
+    query: str | None = None,
+    *,
+    match_groups: tuple[MatchGroup, ...] = (),
+    domain_cache: DomainMatchCache | None = None,
+    lexical_cache: LexicalMatchCache | None = None,
+) -> str:
     """Форматирует merged-блоки в XML-подобный контекст для LLM.
 
     При заданном query в metadata каждого блока добавляется Matched terms —
@@ -434,11 +563,14 @@ def format_context(merged: list[dict], query: str | None = None) -> str:
         tags_str = ", ".join(item.get("tags", []))
         source = item.get("source_filename", "")
         kind = item.get("kind", item.get("point_type", "concept"))
-        terms = matched_terms(item, query)
-        title_terms = title_matched_terms(item, query)
+        terms = matched_terms(item, query, cache=lexical_cache)
+        title_terms = title_matched_terms(item, query, cache=lexical_cache)
+        domain_terms = matched_domain_terms(item, match_groups, cache=domain_cache)
+        title_domain_terms = title_matched_domain_terms(item, match_groups, cache=domain_cache)
+        title_markers = [*title_terms, *title_domain_terms]
         parts.append(
             f'<context_block id="{i}">\n'
-            f'  <metadata>Title: {item["title"]} | Type: {kind} | Tags: [{tags_str}] | Source: {source} | Title match: [{", ".join(title_terms)}] | Matched terms: [{", ".join(terms)}]</metadata>\n'
+            f'  <metadata>Title: {_metadata_text(item["title"])} | Type: {_metadata_text(kind)} | Tags: [{_metadata_text(tags_str)}] | Source: {_metadata_text(source)} | Title match: [{_metadata_text(", ".join(title_markers))}] | Matched terms: [{_metadata_text(", ".join(terms))}] | Matched domain terms: [{_metadata_text(", ".join(domain_terms))}]</metadata>\n'
             f'  <content>\n{item["content"]}\n  </content>\n'
             f'</context_block>'
         )

@@ -123,6 +123,14 @@ def test_me_disabled(tmp_path, monkeypatch):
     assert body["sim_users"] is None
 
 
+def test_me_simulation_lists_users_before_login(client):
+    body = client.get("/api/auth/me").json()
+    assert body["mode"] == "simulation"
+    assert [u["username"] for u in body["sim_users"]] == [
+        "demo.user", "demo.editor", "demo.admin", "demo.security", "demo.guest",
+    ]
+
+
 # ---------- simulation: gates ----------
 
 def test_protected_requires_session_in_simulation(client):

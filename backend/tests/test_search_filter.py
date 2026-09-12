@@ -9,6 +9,22 @@ class _Hit:
 
 
 class TestDropInvisibleHits:
+    def test_build_doc_lookup_batches_document_reads(self, monkeypatch):
+        calls = []
+
+        class _Registry:
+            def get_visibility_many(self, doc_ids):
+                calls.append(set(doc_ids))
+                return {"a": {"id": "a"}, "b": None}
+
+            def get_many(self, _doc_ids):
+                raise AssertionError("full document lookup should not be used")
+
+        monkeypatch.setattr(sf, "get_registry", lambda: _Registry())
+
+        assert sf.build_doc_lookup([_Hit("a"), _Hit("b")]) == {"a": {"id": "a"}, "b": None}
+        assert calls == [{"a", "b"}]
+
     def test_drops_deleted_and_missing_docs(self):
         reg = DocumentRegistry()
         reg.create("1111111111111111", "a.pdf", "application/pdf", 1)

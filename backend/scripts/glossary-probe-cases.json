@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "description": "Размеченная матрица корпусной приёмки query-side glossary expansion.",
+  "cases": [
+    {"id":"pos-it-space","category":"positive","query":"IT 0003","locale":"en","expected_canonicals":["IT0003"]},
+    {"id":"pos-it-ru","category":"positive","query":"инфотип 3","locale":"ru","expected_canonicals":["IT0003"]},
+    {"id":"pos-it-hyphen","category":"positive","query":"it-3","locale":"en","expected_canonicals":["IT0003"]},
+    {"id":"pos-pa20-shell","category":"positive","query":"/nPA20","locale":"en","expected_canonicals":["PA20"]},
+    {"id":"pos-pa20-space","category":"positive","query":"PA 20","locale":"en","expected_canonicals":["PA20"]},
+    {"id":"pos-pa30-shell","category":"positive","query":"/nPA30","locale":"en","expected_canonicals":["PA30"]},
+    {"id":"pos-pa40-shell","category":"positive","query":"/nPA40","locale":"en","expected_canonicals":["PA40"]},
+    {"id":"pos-se16-shell","category":"positive","query":"/nSE16","locale":"en","expected_canonicals":["SE16"]},
+    {"id":"pos-se38-shell","category":"positive","query":"/nSE38","locale":"en","expected_canonicals":["SE38"]},
+    {"id":"pos-sm30-shell","category":"positive","query":"/nSM30","locale":"en","expected_canonicals":["SM30"]},
+
+    {"id":"neg-tr","category":"negative","query":"ТР","locale":"ru","forbidden_canonicals":["PA20","PA30","PA40"]},
+    {"id":"neg-pa","category":"negative","query":"PA","locale":"en","forbidden_canonicals":["PA20","PA30","PA40"]},
+    {"id":"neg-py","category":"negative","query":"PY","locale":"en","forbidden_canonicals":["PA20","PA30","PA40"]},
+    {"id":"neg-om-ru","category":"negative","query":"ОМ","locale":"ru","forbidden_canonicals":["PA20","PA30","PA40"]},
+    {"id":"neg-om-en","category":"negative","query":"OM","locale":"en","forbidden_canonicals":["PA20","PA30","PA40"]},
+    {"id":"neg-number","category":"negative","query":"0003","locale":"en","forbidden_canonicals":["IT0003"]},
+    {"id":"neg-unknown-it","category":"negative","query":"IT12345","locale":"en","forbidden_canonicals":["IT0003"]},
+    {"id":"neg-embedded-it","category":"negative","query":"XIT0003","locale":"en","forbidden_canonicals":["IT0003"]},
+    {"id":"neg-decimal-dot","category":"negative","query":"IT 12.5","locale":"en","forbidden_canonicals":["IT0003"]},
+    {"id":"neg-decimal-comma","category":"negative","query":"IT 12,5","locale":"ru","forbidden_canonicals":["IT0003"]},
+
+    {"id":"compound-two-codes","category":"compound","query":"PA20 и IT0003","locale":"ru","expected_canonicals":["IT0003","PA20"]},
+    {"id":"compound-repeat","category":"compound","query":"PA20 PA20 IT0003","locale":"en","expected_canonicals":["IT0003","PA20"]},
+    {"id":"compound-compare","category":"compound","query":"сравнить PA20 и PA30","locale":"ru","expected_canonicals":["PA20","PA30"]},
+    {"id":"compound-three","category":"compound","query":"PA20 IT0003 PA40","locale":"en","expected_canonicals":["IT0003","PA20","PA40"]},
+    {"id":"compound-ru-shell","category":"compound","query":"инфотип 3 и /nSE16","locale":"ru","expected_canonicals":["IT0003","SE16"]},
+
+    {"id":"multi-de-original-en-ui","category":"multilingual","query":"инфотип 3","locale":"en","expected_canonicals":["IT0003"]},
+    {"id":"multi-en-alias-ru-ui","category":"multilingual","query":"IT 0003","locale":"ru","expected_canonicals":["IT0003"]},
+    {"id":"multi-de-ui","category":"multilingual","query":"/nPA20","locale":"de","expected_canonicals":["PA20"]},
+    {"id":"multi-en-ui","category":"multilingual","query":"PA 20","locale":"en","expected_canonicals":["PA20"]},
+    {"id":"multi-und-context","category":"multilingual","query":"unknown language /nPA30","locale":"ru","expected_canonicals":["PA30"]},
+
+    {"id":"filter-tags","category":"filter-isolation","query":"инфотип 3","locale":"ru","tags":["СФР ПР"],"expected_canonicals":["IT0003"]},
+    {"id":"filter-ru","category":"filter-isolation","query":"IT 0003","locale":"ru","source_locales":["ru"],"expected_canonicals":["IT0003"]},
+    {"id":"filter-en","category":"filter-isolation","query":"/nPA20","locale":"en","source_locales":["en"],"expected_canonicals":["PA20"]},
+    {"id":"filter-unknown","category":"filter-isolation","query":"/nPA30","locale":"ru","source_locales":[],"include_unknown_source_locale":true,"expected_canonicals":["PA30"]},
+    {"id":"filter-ru-unknown","category":"filter-isolation","query":"/nSE16","locale":"ru","source_locales":["ru"],"include_unknown_source_locale":true,"expected_canonicals":["SE16"]},
+
+    {"id":"legacy-tabular-tag","category":"legacy","query":"Выбор табельного номера","locale":"ru","tags":["СФР ПР"]},
+    {"id":"legacy-tabular","category":"legacy","query":"Выбор табельного номера","locale":"ru"},
+    {"id":"legacy-benefit-codes","category":"legacy","query":"Коды условий расчёта пособий","locale":"ru"},
+    {"id":"legacy-2ndfl","category":"legacy","query":"Подписанты в 2-НДФЛ","locale":"ru"},
+    {"id":"legacy-lk","category":"legacy","query":"Какие интеграции с ЛК есть","locale":"ru"},
+    {"id":"legacy-en-disability","category":"legacy","query":"the certificate of disability","locale":"en"},
+    {"id":"legacy-en-table","category":"legacy","query":"for all entries in table","locale":"en"}
+  ]
+}

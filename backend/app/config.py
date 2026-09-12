@@ -29,6 +29,9 @@ class Settings(BaseSettings):
 
     app_name: str = "OKF Knowledge Service"
     api_prefix: str = "/api"
+    # Человеко-читаемое имя активного контура. Показывается в UI, чтобы
+    # загрузка документов и результаты измерений не смешивались между базами.
+    knowledge_profile: str = "Основной контур"
     data_dir: Path = Path("./data")
 
     # --- Реляционная БД (метаданные: документы, теги, OKF-концепты) ---
@@ -139,6 +142,11 @@ class Settings(BaseSettings):
     # требующий авторизации по инфраструктурной политике, — задать здесь.
     qdrant_api_key: str | None = None
     qdrant_collection: str = "okf_knowledge_base"
+    # gRPC даёт меньший overhead на локальном Qdrant, но по умолчанию оставляем
+    # HTTP для совместимости с корпоративными endpoint'ами, где gRPC может быть
+    # закрыт. Включать только если соответствующий порт доступен.
+    qdrant_prefer_grpc: bool = False
+    qdrant_grpc_port: int | None = None
     # Размер батча upsert в Qdrant (точек за один HTTP-запрос). 256 точек с
     # 1024-мерным dense-вектором + sparse + payload ≈ 6-8 МБ — с запасом под
     # серверный лимит max_request_size_mb=32. 0 → дефолт UPSERT_BATCH_SIZE.
@@ -304,6 +312,19 @@ class Settings(BaseSettings):
     # основной концепт) и вытесняли основной контент из топа RRF. 0 — выкл.
     # Query-time, реиндекс не требуется; откат — env SEARCH_REVIEW_CONCEPT_RANK_PENALTY=0.
     search_review_concept_rank_penalty: int = 10
+
+    # --- Query-side domain glossary expansion (Этап 2) ---
+    # Disabled until the corpus acceptance pass proves precision/recall.  The
+    # flag is deliberately read at query-plan build time, not cached by the
+    # glossary service, so a restart is enough to roll the feature back.
+    glossary_query_expansion_enabled: bool = False
+    glossary_max_terms_per_query: int = Field(default=5, ge=1, le=100)
+    glossary_max_aliases_per_term: int = Field(default=50, ge=1, le=500)
+    glossary_max_added_aliases_per_term: int = Field(default=4, ge=0, le=50)
+    glossary_max_added_tokens: int = Field(default=32, ge=1, le=512)
+    glossary_max_added_chars: int = Field(default=768, ge=1, le=8192)
+    glossary_query_text_max_chars: int = Field(default=8192, ge=1, le=32768)
+    glossary_sparse_expansion_weight: float = Field(default=0.35, gt=0.0, le=1.0)
 
     # --- Контекст LLM (форматирование после merge/collapse) ---
     # Жёсткий лимит на суммарный объём контекста, передаваемого в LLM.

@@ -405,6 +405,29 @@ class TestMatchedTermsStemming:
         item = self._item("ЭЛН", "текст")
         assert matched_terms(item, "ЭЛН") == ["элн"]
 
+    def test_query_local_cache_reuses_lexical_match(self):
+        item = self._item("Выбор ТН", "табельных номеров")
+        cache = {}
+
+        first = matched_terms(item, "выбор табельного номера", cache=cache)
+        second = matched_terms(item, "выбор табельного номера", cache=cache)
+
+        assert first == second == ["выбор", "табельного", "номера"]
+        assert len(cache) == 2
+        assert ("query", "выбор табельного номера", "marker") in cache
+
+    def test_query_local_cache_reuses_query_tokens_for_title_matching(self):
+        item = self._item("Выбор ТН", "табельных номеров")
+        cache = {}
+        query = "выбор табельного номера"
+
+        content_terms = matched_terms(item, query, cache=cache)
+        title_terms = title_matched_terms(item, query, cache=cache)
+
+        assert content_terms == ["выбор", "табельного", "номера"]
+        assert title_terms == ["выбор"]
+        assert ("query", query, "marker") in cache
+
 
 class TestDropUnmatchedReviewImmunity:
     """Иммунитет сиблинг-замечаний (kind="review") в анти-шумовом фильтре —

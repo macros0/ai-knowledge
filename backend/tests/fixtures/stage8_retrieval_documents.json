@@ -1,0 +1,53 @@
+[
+  {
+    "id": "stg8deoriginal01",
+    "filename": "de-original.docx",
+    "source_locale": "de",
+    "source_locale_source": "manual",
+    "ui_locale": "en",
+    "tags": ["stage8", "payroll"],
+    "dev_tags": ["12010", "СЭДО", "PY"],
+    "deleted": false
+  },
+  {
+    "id": "stg8undoriginal",
+    "filename": "und-original.pdf",
+    "source_locale": null,
+    "source_locale_source": null,
+    "ui_locale": "ru",
+    "tags": ["stage8", "unknown-language"],
+    "dev_tags": [],
+    "deleted": false
+  },
+  {
+    "id": "stg8ruoriginal1",
+    "filename": "ru-original.docx",
+    "source_locale": "ru",
+    "source_locale_source": "detected",
+    "ui_locale": "ru",
+    "tags": ["stage8"],
+    "dev_tags": ["HR"],
+    "deleted": false
+  },
+  {
+    "id": "stg8deleted001",
+    "filename": "deleted.docx",
+    "source_locale": "de",
+    "source_locale_source": "detected",
+    "ui_locale": "en",
+    "tags": ["stage8"],
+    "dev_tags": [],
+    "deleted": true
+  },
+  {
+    "id": "stg8orphan001",
+    "filename": "orphan-point.docx",
+    "source_locale": "en",
+    "source_locale_source": "detected",
+    "ui_locale": "en",
+    "tags": ["stage8"],
+    "dev_tags": [],
+    "deleted": false,
+    "orphan": true
+  }
+]

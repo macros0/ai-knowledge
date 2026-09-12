@@ -40,7 +40,13 @@ _SYSTEM_PROMPT = (
 )
 
 
-def translate_texts_batch(texts: list[str], target_locale: str, *, source_locale: str = "und") -> list[str]:
+def translate_texts_batch(
+    texts: list[str],
+    target_locale: str,
+    *,
+    source_locale: str = "und",
+    strict: bool = False,
+) -> list[str]:
     """Машинный перевод пакета текстов. Возвращает список той же длины/порядка.
 
     `off`-провайдер → пустые строки (переводы не создаются).
@@ -52,18 +58,26 @@ def translate_texts_batch(texts: list[str], target_locale: str, *, source_locale
         return []
     from app.services.llm_client import LLMClient
 
-    client = LLMClient(interactive=False)  # bulk-семафор, чат не блокируется
+    model = settings.translation_model or settings.llm_model
+    client = LLMClient(interactive=False, model=model)  # bulk-семафор, чат не блокируется
     source = source_locale if source_locale != "und" else "its original language (identify it from the input)"
     system = _SYSTEM_PROMPT.format(source=source, target=target_locale)
     user = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(texts))
     result = client.chat_json(system, user, doc_id="translation", chunk_idx=0)
     if not isinstance(result, list):
         raise ValueError("LLM-переводчик вернул не массив")
+    if strict and any(not isinstance(x, str) for x in result):
+        raise ValueError("Строгий переводчик ожидает только строки")
     out = [str(x) for x in result]
     if len(out) != len(texts):
         raise ValueError(
             f"LLM-переводчик вернул {len(out)} переводов на {len(texts)} текстов"
         )
+    if strict:
+        if not out or not out[0].strip() or len(out[0]) > 256:
+            raise ValueError("Строгий переводчик вернул пустое или слишком длинное имя")
+        if any(len(value) > 8000 for value in out):
+            raise ValueError("Строгий переводчик вернул слишком длинное поле")
     return out
 
 
@@ -118,6 +132,8 @@ def backfill_reference_data(
     translations: dict[str, str] | None = None,
     user,
     ip_address: str | None = None,
+    glossary_term_ids: list[int] | None = None,
+    expected_translation_versions: dict[int, int] | None = None,
 ) -> dict:
     """Заполняет переводы справочников для `locale`. Возвращает счётчики.
 
@@ -152,6 +168,48 @@ def backfill_reference_data(
         result["attributes"] = {"created": created, "failed": failed}
         total_created += created
 
+    if "glossary" in entities:
+        from app.services.glossary.translations import (
+            backfill_glossary_translations,
+            pending_glossary_term_ids,
+        )
+
+        ids = glossary_term_ids or pending_glossary_term_ids(locale)
+        summary = {
+            "requested": 0,
+            "created": 0,
+            "updated": 0,
+            "failed": 0,
+            "skipped_changed": 0,
+            "skipped_reviewed": 0,
+            "skipped_same_locale": 0,
+            "skipped_disabled": 0,
+            "skipped_missing": 0,
+            "skipped_expected_version": 0,
+            "status": "completed",
+        }
+        for start in range(0, len(ids), 10):
+            batch_ids = ids[start : start + 10]
+            batch = backfill_glossary_translations(
+                locale,
+                batch_ids,
+                expected_translation_versions={
+                    term_id: expected_translation_versions[term_id]
+                    for term_id in batch_ids
+                    if expected_translation_versions and term_id in expected_translation_versions
+                },
+                user=user,
+                ip_address=ip_address,
+            )
+            for key in summary:
+                if key == "status":
+                    if batch[key] != "completed":
+                        summary[key] = "partial" if batch[key] == "partial" else batch[key]
+                else:
+                    summary[key] += batch[key]
+        result["glossary"] = summary
+        total_created += summary["created"] + summary["updated"]
+
     if total_created:
         audit.record(
             user,
@@ -174,6 +232,10 @@ def count_pending(locale: str, entities: list[str]) -> dict:
     for ent in entities:
         if ent in ("tags", "developments", "attributes"):
             result[ent] = len(_pending_rows(ent, locale))
+        elif ent == "glossary":
+            from app.services.glossary.translations import pending_glossary_term_ids
+
+            result[ent] = len(pending_glossary_term_ids(locale))
     return result
 
 

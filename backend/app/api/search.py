@@ -9,15 +9,16 @@ from fastapi import APIRouter, Depends
 from app.auth.models import User
 from app.auth.service import require_user
 from app.config import get_settings
+from dataclasses import asdict
+
 from app.models.schemas import SearchHit, SearchRequest, SearchResponse
-from app.services.chunk_store import enrich_chunk_hits
-from app.services.concept_store import enrich_concept_hits
 from app.services.context_builder import merge_and_format, resolve_branches
 from app.services.embedder import Embedder
-from app.services.search_filter import build_doc_lookup, drop_invisible_hits
-from app.services.sparse import to_sparse_vector
+from app.services.retrieval_hydration import load_visible_retrieval_hits
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
+from app.services.glossary.expansion import prepare_query
+from app.services.glossary.query_sparse import build_query_sparse
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.api import errors
 from app.api.errors import ApiError
@@ -55,10 +56,20 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
             detail=str(exc),
             headers={"Retry-After": str(max(1, int(exc.retry_after)))},
         ) from exc
+    plan = prepare_query(
+        req.query,
+        ui_locale=req.locale,
+        enabled=settings.glossary_query_expansion_enabled and req.use_glossary,
+        settings=settings,
+    )
     branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
-    vector = _get_embedder().embed(req.query) if "dense" in branches else None
+    vector = _get_embedder().embed(plan.dense_query) if "dense" in branches else None
     sparse_vec = (
-        to_sparse_vector(req.query, stopwords=get_stopwords(KIND_BM25))
+        build_query_sparse(
+            plan,
+            stopwords=get_stopwords(KIND_BM25),
+            settings=settings,
+        )
         if "bm25" in branches
         else None
     )
@@ -79,11 +90,14 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
     # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
     # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
     # и orphan-точки (документа нет в БД — восстановлен во время purge или сбой).
-    doc_lookup = build_doc_lookup(hits)
-    hits = drop_invisible_hits(hits, doc_lookup)
-
-    enrich_concept_hits(hits)
-    enrich_chunk_hits(hits)
+    # Search returns only a 300-character snippet; do not hydrate the full chat
+    # context budget for every BM25 candidate before merge.
+    snippet_chars = 300
+    hits, doc_lookup = load_visible_retrieval_hits(
+        hits,
+        max_concept_chars=snippet_chars,
+        max_chunk_chars=snippet_chars,
+    )
 
     filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
     merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)
@@ -106,4 +120,14 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
                 source_filename=m["source_filename"],
             )
         )
-    return SearchResponse(query=req.query, hits=result)
+    used_in = [branch for branch in ("dense", "bm25") if branch in branches]
+    applied_terms = [
+        {**asdict(term), "used_in": used_in}
+        for term in plan.applied_terms
+    ]
+    return SearchResponse(
+        query=req.query,
+        hits=result,
+        expansion_status=plan.status,
+        applied_terms=applied_terms,
+    )

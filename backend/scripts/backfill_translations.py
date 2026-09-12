@@ -35,7 +35,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--entities",
         default="tags,developments,attributes",
-        help="Сущности через запятую: tags,developments,attributes",
+        help="Сущности через запятую: tags,developments,attributes,glossary",
     )
     p.add_argument("--user", default="cli", help="Имя оператора для audit_log (username)")
     return p.parse_args(argv)
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     settings = get_settings()
     entities = [e.strip() for e in args.entities.split(",") if e.strip()]
-    unknown = [e for e in entities if e not in ("tags", "developments", "attributes")]
+    unknown = [e for e in entities if e not in ("tags", "developments", "attributes", "glossary")]
     if unknown:
         print(f"Неизвестные сущности: {', '.join(unknown)}", file=sys.stderr)
         return 2

@@ -14,11 +14,11 @@ from app.services.registry import get_registry
 
 
 def build_doc_lookup(hits) -> dict:
-    """doc_id → документ (или None) для всех хитов — по одному get на doc_id."""
+    """doc_id → visibility metadata (или None) for all hits in one query."""
     reg = get_registry()
     ids = {h.payload.get("doc_id", "") for h in hits}
     ids.discard("")
-    return {did: reg.get(did) for did in ids}
+    return reg.get_visibility_many(ids)
 
 
 def drop_invisible_hits(hits, doc_lookup: dict) -> list:

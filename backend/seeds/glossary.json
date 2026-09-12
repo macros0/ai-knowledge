@@ -1,0 +1,73 @@
+[
+  {
+    "canonical": "IT0003",
+    "kind": "sap_infotype",
+    "original_name": "Payroll Status",
+    "original_description": "Payroll status information for an employee.",
+    "canonical_locale": "en",
+    "aliases": [
+      {"alias": "IT 0003", "locale": "en", "auto_expand": true, "search_enabled": true}
+    ]
+  },
+  {
+    "canonical": "PA20",
+    "kind": "sap_transaction",
+    "original_name": "Display HR Master Data",
+    "original_description": "Display personnel master data.",
+    "canonical_locale": "en",
+    "aliases": [
+      {"alias": "/nPA20", "locale": "en", "auto_expand": true, "search_enabled": true},
+      {"alias": "PA 20", "locale": "en", "auto_expand": true, "search_enabled": true}
+    ]
+  },
+  {
+    "canonical": "PA30",
+    "kind": "sap_transaction",
+    "original_name": "Maintain HR Master Data",
+    "original_description": "Maintain personnel master data.",
+    "canonical_locale": "en",
+    "aliases": [
+      {"alias": "/nPA30", "locale": "en", "auto_expand": true, "search_enabled": true}
+    ]
+  },
+  {
+    "canonical": "PA40",
+    "kind": "sap_transaction",
+    "original_name": "Personnel Actions",
+    "original_description": "Execute personnel actions for an employee.",
+    "canonical_locale": "en",
+    "aliases": [
+      {"alias": "/nPA40", "locale": "en", "auto_expand": true, "search_enabled": true}
+    ]
+  },
+  {
+    "canonical": "SE16",
+    "kind": "sap_transaction",
+    "original_name": "Data Browser",
+    "original_description": "Browse table records.",
+    "canonical_locale": "en",
+    "aliases": [
+      {"alias": "/nSE16", "locale": "en", "auto_expand": true, "search_enabled": true}
+    ]
+  },
+  {
+    "canonical": "SE38",
+    "kind": "sap_transaction",
+    "original_name": "ABAP Editor",
+    "original_description": "Create and execute ABAP reports.",
+    "canonical_locale": "en",
+    "aliases": [
+      {"alias": "/nSE38", "locale": "en", "auto_expand": true, "search_enabled": true}
+    ]
+  },
+  {
+    "canonical": "SM30",
+    "kind": "sap_transaction",
+    "original_name": "Call View Maintenance",
+    "original_description": "Maintain table and view entries.",
+    "canonical_locale": "en",
+    "aliases": [
+      {"alias": "/nSM30", "locale": "en", "auto_expand": true, "search_enabled": true}
+    ]
+  }
+]

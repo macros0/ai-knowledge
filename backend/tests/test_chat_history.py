@@ -298,10 +298,20 @@ class TestChatEndpointPersists:
         assert [m["role"] for m in thread["messages"]] == ["user", "assistant"]
         assert thread["messages"][0]["content"] == "тест"
 
-    def test_chat_deleted_session_409(self, client):
+    def test_chat_deleted_session_409_before_retrieval_work(self, client, monkeypatch):
+        from app.api import chat as chat_module
+
         login(client, "demo.user")
         sid = create_session("sim-user")
         ch.soft_delete_session(sid, _U("sim-user", "demo.user"))
+
+        def unexpected(*args, **kwargs):
+            raise AssertionError("deleted session must be rejected before retrieval")
+
+        monkeypatch.setattr(chat_module, "prepare_query", unexpected)
+        monkeypatch.setattr(chat_module, "_get_embedder", unexpected)
+        monkeypatch.setattr(chat_module, "_get_vector_store", unexpected)
+        monkeypatch.setattr(chat_module, "_get_llm", unexpected)
 
         resp = client.post("/api/chat", json={"query": "тест", "session_id": sid})
         assert resp.status_code == 409, resp.text
@@ -309,3 +319,20 @@ class TestChatEndpointPersists:
         # ранний отказ — новый тред не создаётся, в удалённую сессию ничего не пишется
         sessions = client.get("/api/chat/history").json()
         assert sessions["total"] == 0
+
+    def test_chat_foreign_session_403_before_retrieval_work(self, client, monkeypatch):
+        from app.api import chat as chat_module
+
+        sid = create_session("sim-admin", username="demo.admin")
+        login(client, "demo.user")
+
+        def unexpected(*args, **kwargs):
+            raise AssertionError("foreign session must be rejected before retrieval")
+
+        monkeypatch.setattr(chat_module, "prepare_query", unexpected)
+        monkeypatch.setattr(chat_module, "_get_embedder", unexpected)
+        monkeypatch.setattr(chat_module, "_get_vector_store", unexpected)
+        monkeypatch.setattr(chat_module, "_get_llm", unexpected)
+
+        resp = client.post("/api/chat", json={"query": "тест", "session_id": sid})
+        assert resp.status_code == 403, resp.text

@@ -17,4 +17,5 @@ def test_chat_system_prompt_receives_locale_fallback_instruction():
     assert "ИТ 0003" not in prompt
     assert "locale" in prompt
     assert "ru" in prompt
+    assert "Matched domain terms" in prompt
     assert "The provided context does not directly state" not in prompt

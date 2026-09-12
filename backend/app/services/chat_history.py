@@ -20,6 +20,7 @@ CHAT_HISTORY_VIEW — но это делает роут (api/chat_history.py), �
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 import threading
 import time
 import uuid
@@ -96,6 +97,8 @@ def store_turn(
     query: str,
     answer: str,
     sources: list[dict] | None = None,
+    *,
+    retrieval_metadata: dict | None = None,
 ) -> str:
     """Сохраняет пару сообщений (user/assistant) в тред. Возвращает session_id.
 
@@ -105,7 +108,10 @@ def store_turn(
     """
     user_id = getattr(user, "user_id", None) or "anonymous"
     username = getattr(user, "username", None) or "anonymous"
-    sources = sources or []
+    sources = deepcopy(sources or [])
+    retrieval_metadata = (
+        deepcopy(retrieval_metadata) if retrieval_metadata is not None else None
+    )
 
     with session_scope() as s:
         if session_id:
@@ -143,6 +149,7 @@ def store_turn(
                 role="assistant",
                 content=answer,
                 sources=sources,
+                retrieval_metadata=retrieval_metadata,
             )
         )
         return sess.id
@@ -209,6 +216,7 @@ def get_thread(session_id: str, user_id: str | None = None, *, check_owner: bool
                     "role": m.role,
                     "content": m.content,
                     "sources": m.sources or [],
+                    "retrieval_metadata": m.retrieval_metadata,
                     "created_at": m.created_at,
                 }
                 for m in messages

@@ -197,12 +197,12 @@ def _retry_after(exc: Exception) -> float | None:
 
 
 class LLMClient:
-    def __init__(self, interactive: bool = False):
+    def __init__(self, interactive: bool = False, *, model: str | None = None):
         self.settings = get_settings()
         self.interactive = interactive
         # Интерактивному чату — своя модель (LLM_CHAT_MODEL), если задана;
         # bulk-пайплайн OKF-генерации всегда на llm_model.
-        self.model = (
+        self.model = model or (
             self.settings.llm_chat_model
             if interactive and self.settings.llm_chat_model
             else self.settings.llm_model

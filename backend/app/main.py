@@ -8,6 +8,7 @@ import threading
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -19,6 +20,7 @@ from app.api import (
     audit,
     chat,
     chat_history,
+    glossary,
     developments,
     documents,
     i18n,
@@ -271,6 +273,7 @@ def create_app() -> FastAPI:
     protected.include_router(search.router)
     protected.include_router(chat.router)
     protected.include_router(chat_history.router)
+    protected.include_router(glossary.router)
     protected.include_router(tags.router)
     protected.include_router(developments.router)
     protected.include_router(attributes.router)
@@ -300,6 +303,29 @@ def create_app() -> FastAPI:
             content={"detail": exc.detail, "code": exc.code, **exc.extra},
             headers=exc.headers,
         )
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(request: Request, exc: RequestValidationError):
+        """Attach stable client error codes to glossary validation failures."""
+        details = [
+            {
+                "loc": [str(item) for item in error.get("loc", ())],
+                "msg": error.get("msg", "Некорректный запрос"),
+                "type": error.get("type", "value_error"),
+            }
+            for error in exc.errors()
+        ]
+        content: dict = {"detail": details}
+        if request.url.path.startswith(f"{get_settings().api_prefix}/admin/glossary"):
+            locations = " ".join(".".join(str(part) for part in error["loc"]) for error in exc.errors())
+            content["code"] = (
+                error_codes.GLOSSARY_INVALID_LOCALE
+                if "locale" in locations
+                else error_codes.GLOSSARY_INVALID_ALIAS
+                if "alias" in locations
+                else error_codes.INVALID_REQUEST
+            )
+        return JSONResponse(status_code=422, content=content)
 
     @app.exception_handler(DependencyUnavailableError)
     async def dependency_error_handler(request: Request, exc: DependencyUnavailableError):

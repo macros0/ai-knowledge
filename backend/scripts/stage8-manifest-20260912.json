@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "purpose": "stage8_acceptance_reproducibility",
+  "cases": {
+    "path": "backend\\scripts\\glossary-probe-cases.json",
+    "sha256": "8fdb3c4345d0666f6f1152016228ad8a8254d0f18decb5304d1ec3ebf98a478e",
+    "count": 42
+  },
+  "labels": {
+    "sha256": "90880023fa3474ccebd21a0052a32aea31e13787f4929f203b9a51a41ba85981",
+    "approved": false
+  },
+  "glossary": {
+    "snapshot_sha256": "ad3a211ca983b066e82667f5e9e4dfce09284f85080a57975ee9d399bd4649c6",
+    "snapshot_count": 7,
+    "seed_path": "backend/seeds/glossary.json",
+    "seed_sha256": "56603beceb9a7264a7dc79ddde5819106f52001f0a147a0d7a85e44005490be9"
+  },
+  "source_files": {
+    "backend\\app\\api\\chat.py": "973b1d1b1743005277c0885a97b1dd0ab5ee624764b127c30cd79589948f55f2",
+    "backend\\app\\api\\search.py": "8aed5cafc2029b08500b48d3ad839f9447f55767f3c2995c382bc4bbd57d1378",
+    "backend\\app\\config.py": "5a9a1679d67fe3d4dc595b8b5f2f6d154d47b10d5cf193c9d4261d489f62b97e",
+    "backend\\app\\services\\context_builder.py": "334c0cbd827286f1391cf74a35200a04b2332f580cc99952ec0c4ab9f554ca8b",
+    "backend\\app\\services\\glossary\\__init__.py": "3fc42bb697245256b829e6476186b906d12b4cc7e21c260b9486e657377c3b01",
+    "backend\\app\\services\\glossary\\expansion.py": "2a074a9d09c35407587335f39a1acdfe5f00f3ed0a1831ab3444a3555e598a10",
+    "backend\\app\\services\\glossary\\matching.py": "4c05fc779b114f05c20d16f9e1ba8e808e0c6cdcd5afecdf71dca792d27daa62",
+    "backend\\app\\services\\glossary\\normalization.py": "782ed23a64efa799ea87fe6992b6ef09e3cfee4ca3100e9aaba0531c0c3cd188",
+    "backend\\app\\services\\glossary\\query_sparse.py": "4d2a0b29868dd62e5683a338dc87d71d5502c9bba9aa1eb1ea22f7d431e30bee",
+    "backend\\app\\services\\glossary\\registry.py": "04ec128b6a3626ae69c075491bb8aa437789c27da67f4e758ed5ab55e5ee23e2",
+    "backend\\app\\services\\glossary\\seed.py": "aec71a5fc19dba53705232b9d5c2c80ada3d4e6694ce5b4592f95c3e58f43188",
+    "backend\\app\\services\\glossary\\translations.py": "99668ea66b3950c170cc23607c118b0dd65ade80fc951b462f20fef33a9b88d3",
+    "backend\\app\\services\\glossary\\types.py": "cb6eb0bbcd0804732efbeffa6da2931b52f70ccaee13be1259a0908259fc4b99",
+    "backend\\app\\services\\search_filter.py": "25a1e418ae37e878a20c7204c815d398ea0a3cf1f4622d174c2984f8380e0c50",
+    "backend\\app\\services\\vector_store.py": "c885bd90d127f7986d21d70042d537a2adc99eec0b3102f84b74ae48de816f02"
+  },
+  "models": {
+    "embedding": "ollama/bge-m3",
+    "embedding_dimensions": 1024,
+    "llm": "openrouter/mistralai/mistral-nemo",
+    "llm_chat": "openrouter/openai/gpt-4o-mini"
+  },
+  "settings": {
+    "glossary_query_expansion_enabled": false,
+    "glossary_max_terms_per_query": 5,
+    "glossary_max_added_aliases_per_term": 4,
+    "glossary_max_added_tokens": 32,
+    "glossary_max_added_chars": 768,
+    "glossary_query_text_max_chars": 8192,
+    "glossary_sparse_expansion_weight": 0.35,
+    "search_per_branch_top_k": 40,
+    "search_rrf_k": 60,
+    "embedding_provider": "http",
+    "embedding_model": "ollama/bge-m3",
+    "embedding_dimensions": 1024,
+    "qdrant_collection": "okf_knowledge_base_v2"
+  },
+  "database": {
+    "documents": {
+      "count": 26,
+      "sha256": "a69dfc9edbad645b3e62242073844fc742c562cf53af969d2bbe5b735e14d517"
+    },
+    "document_chunks": {
+      "count": 205,
+      "sha256": "32dc662bebca520be6a01e024d7eea7ba4e5ac4f02139a0ace50a1d42bd9fbc7"
+    },
+    "okf_concepts": {
+      "count": 8018,
+      "sha256": "4d440bd89852b580942633fc64433087cffd7575af6e7f7172b53d729a395199"
+    },
+    "active_glossary_versions": {
+      "count": 7,
+      "sha256": "ac58ca76930b2d3870941cca065d9fcdb95eee2de583ab34124a45c9d2c96f9c"
+    }
+  },
+  "qdrant": {
+    "collection": "okf_knowledge_base_v2",
+    "count": 8193,
+    "sha256": "5ebc7a44c16d3dd59c636e5195c1a8acfa4659cd86454f9d59bb46afdb33e575"
+  }
+}

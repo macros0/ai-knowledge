@@ -18,6 +18,7 @@ import time
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import urlparse
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qm
@@ -102,6 +103,30 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "deleted": "bool",
     "source_locale": "keyword",
 }
+
+# Search results are hydrated from the canonical PostgreSQL stores immediately
+# after Qdrant returns.  Request only the metadata needed for fusion/merge and
+# filters; omitting the potentially large payload `content` reduces response
+# serialization without changing point ids, scores, or ranking.
+RETRIEVAL_PAYLOAD_FIELDS = (
+    "point_type",
+    "doc_id",
+    "chunk_index",
+    "slug",
+    "filepath",
+    "title",
+    "type",
+    "tags",
+    "relations",
+    "section_title",
+    "source_document",
+    "source_locale",
+    "dev_tags",
+)
+
+
+def _retrieval_payload_selector() -> qm.PayloadSelectorInclude:
+    return qm.PayloadSelectorInclude(include=list(RETRIEVAL_PAYLOAD_FIELDS))
 
 
 def _sparse_text(title: str, content: str) -> str:
@@ -220,10 +245,16 @@ def _source_locale_filter(codes: list[str], include_unknown: bool) -> qm.Filter:
 class VectorStore:
     def __init__(self):
         self.settings = get_settings()
+        configured_grpc_port = getattr(self.settings, "qdrant_grpc_port", None)
+        if configured_grpc_port is None:
+            parsed_url = urlparse(self.settings.qdrant_url)
+            configured_grpc_port = (parsed_url.port or 6333) + 1
         self.client = QdrantClient(
             url=self.settings.qdrant_url,
             api_key=self.settings.qdrant_api_key,
             timeout=10,
+            prefer_grpc=bool(getattr(self.settings, "qdrant_prefer_grpc", False)),
+            grpc_port=int(configured_grpc_port),
         )
 
     @property
@@ -684,6 +715,7 @@ class VectorStore:
             using=using,
             query_filter=query_filter,
             limit=top_k,
+            with_payload=_retrieval_payload_selector(),
         )
         return [{"score": r.score, "payload": r.payload} for r in results.points]
 
@@ -699,6 +731,7 @@ class VectorStore:
             query=vector,
             query_filter=query_filter,
             limit=top_k,
+            with_payload=_retrieval_payload_selector(),
         )
         return [
             Hit(point_id=str(r.id), score=r.score or 0.0, payload=r.payload or {}, rank=i)
@@ -718,6 +751,7 @@ class VectorStore:
             using=SPARSE_VECTOR_NAME,
             query_filter=query_filter,
             limit=top_k,
+            with_payload=_retrieval_payload_selector(),
         )
         return [
             Hit(point_id=str(r.id), score=r.score or 0.0, payload=r.payload or {}, rank=i)

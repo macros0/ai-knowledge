@@ -58,6 +58,15 @@ TAG_TRANSLATION_REVIEW = "tag_translation_review"
 TRANSLATIONS_BACKFILL = "translations_backfill"
 UI_DICTIONARY_IMPORT = "ui_dictionary_import"
 UI_DICTIONARY_ROLLBACK = "ui_dictionary_rollback"
+GLOSSARY_TERM_CREATE = "glossary_term_create"
+GLOSSARY_TERM_UPDATE = "glossary_term_update"
+GLOSSARY_SOURCE_UPDATE = "glossary_source_update"
+GLOSSARY_ALIAS_CREATE = "glossary_alias_create"
+GLOSSARY_ALIAS_UPDATE = "glossary_alias_update"
+GLOSSARY_ALIAS_DELETE = "glossary_alias_delete"
+GLOSSARY_TRANSLATION_UPDATE = "glossary_translation_update"
+GLOSSARY_TRANSLATION_REVIEW = "glossary_translation_review"
+GLOSSARY_TRANSLATION_BACKFILL = "glossary_translation_backfill"
 
 ACTION_TYPES = frozenset(
     {
@@ -100,6 +109,15 @@ ACTION_TYPES = frozenset(
         TRANSLATIONS_BACKFILL,
         UI_DICTIONARY_IMPORT,
         UI_DICTIONARY_ROLLBACK,
+        GLOSSARY_TERM_CREATE,
+        GLOSSARY_TERM_UPDATE,
+        GLOSSARY_SOURCE_UPDATE,
+        GLOSSARY_ALIAS_CREATE,
+        GLOSSARY_ALIAS_UPDATE,
+        GLOSSARY_ALIAS_DELETE,
+        GLOSSARY_TRANSLATION_UPDATE,
+        GLOSSARY_TRANSLATION_REVIEW,
+        GLOSSARY_TRANSLATION_BACKFILL,
     }
 )
 
@@ -111,6 +129,7 @@ TARGET_ATTRIBUTE = "attribute"
 TARGET_TAG = "tag"
 TARGET_CHAT = "chat_session"
 TARGET_LOCALE = "locale"
+TARGET_GLOSSARY_TERM = "glossary_term"
 
 
 class SystemUser:
@@ -145,6 +164,38 @@ def _to_dict(entry: AuditLog) -> dict:
     }
 
 
+def record_in_session(
+    session,
+    *,
+    action_type: str,
+    user_id: str | None = None,
+    username: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    old_value: dict | None = None,
+    new_value: dict | None = None,
+    ip_address: str | None = None,
+    meta: dict | None = None,
+) -> dict:
+    """Append an audit entry to an existing transaction without committing it."""
+    if action_type not in ACTION_TYPES:
+        raise ValueError(f"Неизвестный action_type: {action_type}")
+    entry = AuditLog(
+        action_type=action_type,
+        user_id=user_id,
+        username=username,
+        target_type=target_type,
+        target_id=target_id,
+        old_value=old_value,
+        new_value=new_value,
+        ip_address=ip_address,
+        meta=meta,
+    )
+    session.add(entry)
+    session.flush()
+    return _to_dict(entry)
+
+
 class AuditService:
     def append(
         self,
@@ -160,10 +211,9 @@ class AuditService:
         meta: dict | None = None,
     ) -> dict:
         """Добавляет запись в журнал. Единственный путь записи — без update/delete."""
-        if action_type not in ACTION_TYPES:
-            raise ValueError(f"Неизвестный action_type: {action_type}")
         with session_scope() as s:
-            entry = AuditLog(
+            return record_in_session(
+                s,
                 action_type=action_type,
                 user_id=user_id,
                 username=username,
@@ -174,9 +224,6 @@ class AuditService:
                 ip_address=ip_address,
                 meta=meta,
             )
-            s.add(entry)
-            s.flush()
-            return _to_dict(entry)
 
     def query(
         self,
