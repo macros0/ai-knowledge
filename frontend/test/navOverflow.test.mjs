@@ -8,3 +8,11 @@ test("navigation does not clip the expanded overflow menu", async () => {
 
   assert.match(navRule, /overflow\s*:\s*visible\s*;/);
 });
+
+test("overflow menu closes after selecting a link or clicking outside", async () => {
+  const source = await readFile(new URL("../src/components/Nav.jsx", import.meta.url), "utf8");
+
+  assert.match(source, /onClick=\{\(\) => setMoreOpen\(false\)\}/);
+  assert.match(source, /document\.addEventListener\("pointerdown"/);
+  assert.match(source, /!moreRef\.current\?\.contains\(event\.target\)/);
+});

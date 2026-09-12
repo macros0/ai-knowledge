@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/i18n/LocaleContext";
 
@@ -9,6 +10,19 @@ export default function Nav() {
   const pathname = usePathname();
   const { mode, hasRole } = useAuth();
   const { t } = useI18n();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef(null);
+
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+
+    const handleOutsidePointer = (event) => {
+      if (!moreRef.current?.contains(event.target)) setMoreOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handleOutsidePointer);
+    return () => document.removeEventListener("pointerdown", handleOutsidePointer);
+  }, [moreOpen]);
 
   const baseItems = [
     { href: "/", label: t("nav.documents"), exact: true },
@@ -47,9 +61,25 @@ export default function Nav() {
     <nav>
       {items.map(renderItem)}
       {overflowItems.length > 0 && (
-        <details className="nav-more">
+        <details
+          ref={moreRef}
+          className="nav-more"
+          open={moreOpen}
+          onToggle={(event) => setMoreOpen(event.currentTarget.open)}
+        >
           <summary className="tab">{t("nav.more")}</summary>
-          <div className="nav-more-menu">{overflowItems.map(renderItem)}</div>
+          <div className="nav-more-menu">
+            {overflowItems.map((it) => (
+              <Link
+                key={it.href}
+                href={it.href}
+                className={`tab${(it.exact ? pathname === it.href : pathname.startsWith(it.href)) ? " active" : ""}`}
+                onClick={() => setMoreOpen(false)}
+              >
+                {it.label}
+              </Link>
+            ))}
+          </div>
         </details>
       )}
     </nav>
