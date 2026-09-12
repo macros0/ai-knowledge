@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
-import { buildCompactDocumentMeta, countActiveDocumentFilters } from "@/lib/documentLayout.mjs";
+import { buildCompactDocumentMeta, countActiveDocumentFilters, resetDocumentFilters } from "@/lib/documentLayout.mjs";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
@@ -197,6 +197,22 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     chosenUploader ?? (hasRole("editor", "admin") ? "__me__" : "");
 
   const chooseUploader = (next) => setChosenUploader(next);
+
+  const clearDocumentFilters = () => {
+    const defaults = resetDocumentFilters();
+    setSearchInput(defaults.searchInput);
+    setSearch(defaults.search);
+    setChosenUploader(defaults.chosenUploader);
+    setProblemOnly(defaults.problemOnly);
+    setModuleFilter(defaults.moduleFilter);
+    setDevFilter(defaults.devFilter);
+    setTagFilter(defaults.tagFilter);
+    setStatusFilter(defaults.statusFilter);
+    setDateFrom(defaults.dateFrom);
+    setDateTo(defaults.dateTo);
+    setLocaleFilter(defaults.localeFilter);
+    setPage(defaults.page);
+  };
 
   const resolvedUploader =
     selectedUploader === "__me__" ? user?.username ?? "" : selectedUploader;
@@ -536,6 +552,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
 
   const groups = groupBy ? buildGroups(docs, groupBy, locale, t) : [];
   const activeFilterCount = countActiveDocumentFilters({
+    search: searchInput.trim() || search,
+    uploader: chosenUploader,
+    status: statusFilter,
     problemOnly,
     module: moduleFilter,
     development: devFilter,
@@ -938,6 +957,14 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               <input type="date" className="doc-filter-date-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label={t("docs.dateToAria")} />
             </label>
             {canEdit && <button className="doc-filter-btn" onClick={() => setShowTags(true)}>{t("docs.tagDictionary")}</button>}
+            <button
+              type="button"
+              className="doc-filter-btn"
+              onClick={clearDocumentFilters}
+              disabled={activeFilterCount === 0 && chosenUploader !== null}
+            >
+              {t("docs.resetFilters")}
+            </button>
           </div>
         )}
       </div>

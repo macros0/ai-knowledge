@@ -104,6 +104,7 @@ export default {
   "docs.searchPlaceholder": "Поиск: название, тег, разработка, загрузчик",
   "docs.searchAria": "Поиск по документам",
   "docs.filtersButton": "Фильтры ({count})",
+  "docs.resetFilters": "Сбросить все",
   "docs.searchDevAria": "Поиск по документам разработки",
   "docs.uploaderFilterAria": "Фильтр по загрузчику",
   "docs.quickSelect": "Быстрый выбор",

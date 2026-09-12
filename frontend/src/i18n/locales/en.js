@@ -104,6 +104,7 @@ export default {
   "docs.searchPlaceholder": "Search: name, tag, development, uploader",
   "docs.searchAria": "Search documents",
   "docs.filtersButton": "Filters ({count})",
+  "docs.resetFilters": "Reset all",
   "docs.searchDevAria": "Search development documents",
   "docs.uploaderFilterAria": "Filter by uploader",
   "docs.quickSelect": "Quick select",

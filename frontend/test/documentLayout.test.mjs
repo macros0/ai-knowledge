@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import * as documentLayout from "../src/lib/documentLayout.mjs";
 import { buildCompactDocumentMeta, countActiveDocumentFilters } from "../src/lib/documentLayout.mjs";
 
 test("compact document metadata omits empty optional fields", () => {
@@ -46,4 +48,43 @@ test("active filter count ignores default values", () => {
     dateFrom: "",
     dateTo: "",
   }), 2);
+});
+
+test("active filter count includes primary filters", () => {
+  assert.equal(countActiveDocumentFilters({
+    search: "contract",
+    uploader: "",
+    status: "done",
+    problemOnly: false,
+    module: "",
+    development: null,
+  }), 2);
+});
+
+test("resetDocumentFilters clears every filter and selects all uploaders", () => {
+  assert.equal(typeof documentLayout.resetDocumentFilters, "function");
+  assert.deepEqual(documentLayout.resetDocumentFilters(), {
+    searchInput: "",
+    search: "",
+    chosenUploader: "",
+    problemOnly: false,
+    moduleFilter: "",
+    devFilter: null,
+    tagFilter: "",
+    statusFilter: "",
+    dateFrom: "",
+    dateTo: "",
+    localeFilter: "",
+    page: 0,
+  });
+});
+
+test("documents filter button counts primary filters so reset stays available", async () => {
+  const source = await readFile(new URL("../src/components/DocumentList.jsx", import.meta.url), "utf8");
+  const countBlock = source.match(/const activeFilterCount = countActiveDocumentFilters\(\{([\s\S]*?)\}\);/)?.[1] ?? "";
+
+  assert.match(countBlock, /search:/);
+  assert.match(countBlock, /uploader:/);
+  assert.match(countBlock, /status:/);
+  assert.match(source, /disabled=\{activeFilterCount === 0 && chosenUploader !== null\}/);
 });

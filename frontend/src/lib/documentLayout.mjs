@@ -26,3 +26,20 @@ export function buildCompactDocumentMeta({
 export function countActiveDocumentFilters(filters = {}) {
   return Object.values(filters).filter((value) => value !== false && value !== null && value !== undefined && value !== "").length;
 }
+
+export function resetDocumentFilters() {
+  return {
+    searchInput: "",
+    search: "",
+    chosenUploader: "",
+    problemOnly: false,
+    moduleFilter: "",
+    devFilter: null,
+    tagFilter: "",
+    statusFilter: "",
+    dateFrom: "",
+    dateTo: "",
+    localeFilter: "",
+    page: 0,
+  };
+}
