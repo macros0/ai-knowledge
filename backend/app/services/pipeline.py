@@ -62,6 +62,21 @@ MIN_TEXT_LAYER_CHARS = 200
 _IMAGE_LINK_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 
 
+def _generation_problem(chunks_data: dict) -> str | None:
+    """Map generation degradation events to the most specific problem code."""
+    events = {
+        item.get("event")
+        for info in chunks_data.values()
+        for item in ((info or {}).get("degradation") or [])
+        if isinstance(item, dict)
+    }
+    if gen_quality.LLM_SALVAGE in events:
+        return problem_codes.LLM_PARTIAL_RESULT
+    if gen_quality.CLASSIFIER_FALLBACK in events:
+        return problem_codes.LLM_CLASSIFIER_FALLBACK
+    return None
+
+
 def _source_locale_fields(detected: str | None, current_source: str | None) -> dict:
     """Поля source_locale для финализации с учётом ручной правки (Этап 7 фаза D).
 
@@ -554,7 +569,8 @@ class Pipeline:
 
         # Problem-коды (инцидент 03.09.2026: done ≠ «документ полон»).
         # Приоритет: no_text_layer/no_concepts (0 концептов) >
-        # llm_partial_result (salvage при генерации) > index_partial_failure
+        # llm_partial_result (salvage) > llm_classifier_fallback >
+        # index_partial_failure
         # (чанк-индексация пропущена) — первична причина, из-за которой
         # документ может быть неполон или неищем.
         problem: str | None = None
@@ -568,15 +584,16 @@ class Pipeline:
                 "[%s] Документ %s не содержит концептов (problem=%s); чанки индексируются",
                 doc_id, filename, problem,
             )
-        elif any((info or {}).get("degradation") for info in chunks_data.values()):
-            problem = problem_codes.LLM_PARTIAL_RESULT
-            degraded = [
-                idx for idx, info in chunks_data.items() if (info or {}).get("degradation")
-            ]
-            logger.warning(
-                "[%s] Документ %s: чанки с деградацией генерации %s (problem=%s)",
-                doc_id, filename, degraded, problem,
-            )
+        else:
+            problem = _generation_problem(chunks_data)
+            if problem:
+                degraded = [
+                    idx for idx, info in chunks_data.items() if (info or {}).get("degradation")
+                ]
+                logger.warning(
+                    "[%s] Документ %s: чанки с деградацией генерации %s (problem=%s)",
+                    doc_id, filename, degraded, problem,
+                )
 
         self.vector_store.ensure_collection()
         # Язык документа: детекция идёт по чанкам (тот же вход, что раньше на

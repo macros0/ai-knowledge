@@ -283,6 +283,56 @@ class TestPipelineNoConcepts:
         assert doc["problem"] == "llm_partial_result", f"problem={doc.get('problem')}"
         assert gen_quality.drain() == [], "события должны дренироваться пайплайном"
 
+    def test_classifier_fallback_has_accurate_problem_code(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+
+        reg, src = isolated_env
+        doc_id = "classifier-fallback"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        def generate_with_classifier_fallback(*args, **kwargs):
+            gen_quality.record(gen_quality.CLASSIFIER_FALLBACK, "chunk 1: test")
+            return [_concept()]
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = generate_with_classifier_fallback
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        gen_quality.drain()
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "done"
+        assert doc["problem"] == "llm_classifier_fallback"
+
+    def test_salvage_problem_precedes_classifier_fallback(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+
+        reg, src = isolated_env
+        doc_id = "salvage-and-classifier"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        def generate_with_both(*args, **kwargs):
+            gen_quality.record(gen_quality.CLASSIFIER_FALLBACK, "chunk 1: classifier")
+            gen_quality.record(gen_quality.LLM_SALVAGE, "chunk 1: salvage")
+            return [_concept()]
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = generate_with_both
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_document = lambda *a, **k: None
+        pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
+        pipeline.vector_store.index_concepts = lambda *a, **k: set()
+        pipeline.vector_store.index_chunks = lambda *a, **k: set()
+
+        gen_quality.drain()
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+        assert reg.get(doc_id)["problem"] == "llm_partial_result"
+
     def test_clean_run_has_no_problem(self, isolated_env, monkeypatch):
         reg, src = isolated_env
         doc_id = "clean-run"

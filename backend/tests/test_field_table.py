@@ -447,7 +447,15 @@ class FakeClassifierLLM:
         self._responses = list(responses)
         self.call_count = 0
 
-    def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+    def chat_json(
+        self,
+        system,
+        user,
+        doc_id="unknown",
+        chunk_idx=0,
+        salvage_truncated=False,
+        single_object=False,
+    ):
         self.call_count += 1
         if not self._responses:
             raise RuntimeError("no more mock responses")
@@ -541,6 +549,40 @@ class TestClassifierNoneTolerance:
 
 
 class TestLLMClassifier:
+    def test_table_classifier_requests_single_json_object(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        settings = get_settings()
+        monkeypatch.setattr(settings, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+
+        class RecordingLLM:
+            single_object = None
+
+            def chat_json(
+                self,
+                system,
+                user,
+                doc_id="unknown",
+                chunk_idx=0,
+                salvage_truncated=False,
+                single_object=False,
+            ):
+                self.single_object = single_object
+                return {
+                    "concept_per_row": True,
+                    "title_col": 0,
+                    "description_cols": [4],
+                    "concept_type": "reference",
+                    "extraction_mode": "per_row",
+                }
+
+        llm = RecordingLLM()
+        concepts, _ = extract_table_concepts(
+            FIELD_TABLE, chunk_index=1, llm=llm, use_llm_classify=True
+        )
+        assert llm.single_object is True
+        assert len(concepts) >= 6
+
     def test_llm_classifies_field_table_as_concept_per_row(self, tmp_path, monkeypatch):
         monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
         s = get_settings()
@@ -656,7 +698,15 @@ class TestLLMClassifier:
 
         class FailingLLM:
             call_count = 0
-            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+            def chat_json(
+                self,
+                system,
+                user,
+                doc_id="unknown",
+                chunk_idx=0,
+                salvage_truncated=False,
+                single_object=False,
+            ):
                 self.call_count += 1
                 raise RuntimeError("LLM unavailable")
 

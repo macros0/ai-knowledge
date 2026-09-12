@@ -145,7 +145,8 @@ class Document(Base):
     status: Mapped[str] = mapped_column(String(32), default="uploaded")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Диагностический код неполноты при зелёном done (services/problem_codes.py):
-    # no_concepts / no_text_layer / llm_partial_result / index_partial_failure.
+    # no_concepts / no_text_layer / llm_partial_result /
+    # llm_classifier_fallback / index_partial_failure.
     # None — терминальных проблем не зафиксировано. «done + problem» — документ
     # завершён без исключения, но может быть неполным/неищемым (UI: бейдж).
     problem: Mapped[str | None] = mapped_column(String(64), nullable=True)

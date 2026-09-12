@@ -3,8 +3,9 @@
 События пишутся из глубины llm_client/_parse_json (salvage частичного JSON)
 и field_table (fallback на XML-эвристику), а пайплайн после каждого
 generate_chunk дренирует их в staging-манифест (chunks_data → degradation).
-При финализации события агрегируются в documents.problem =
-"llm_partial_result" — жёлтый бейдж «возможна неполнота» в UI
+При финализации события агрегируются в разные problem-коды: salvage получает
+"llm_partial_result", а fallback классификатора — отдельный код
+"llm_classifier_fallback".
 (инцидент 03.09.2026: «ФС 3509» тихо завершался done с 4-5 концептами
 вместо 11 из-за молчаливого отбрасывания хвоста JSON).
 

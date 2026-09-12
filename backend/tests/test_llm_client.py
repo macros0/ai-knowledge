@@ -570,6 +570,27 @@ class TestParseJson:
             _parse_json(raw)
         assert gen_quality.drain() == []
 
+    def test_single_object_mode_accepts_first_complete_dict_with_structured_tail(self):
+        from app.services.llm_client import _parse_json
+        from app.services import gen_quality
+
+        gen_quality.drain()
+        raw = (
+            '{"concept_per_row":true,"title_col":0,"description_cols":[1],'
+            '"concept_type":"reference","extraction_mode":"per_row"}'
+            ' {"concept_per_row":true,"title_col":0}'
+        )
+        parsed = _parse_json(raw, single_object=True)
+        assert parsed["title_col"] == 0
+        assert gen_quality.drain() == []
+
+    def test_single_object_mode_never_accepts_finish_reason_length(self):
+        from app.services.llm_client import _parse_json
+
+        raw = '{"concept_per_row":true,"title_col":0}'
+        with pytest.raises(LLMTruncationError, match="обрезан по лимиту токенов"):
+            _parse_json(raw, finish_reason="length", single_object=True)
+
     def test_closed_array_with_open_json_tail_raises_truncation(self):
         """Закрытый массив + ОТКРЫТЫЙ второй (глубина не сходится) — тоже отказ."""
         from app.services.llm_client import _parse_json

@@ -405,12 +405,21 @@ class LLMClient:
         doc_id: str = "unknown",
         chunk_idx: int = 0,
         salvage_truncated: bool = False,
+        single_object: bool = False,
     ) -> list | dict:
         # Слот параллельности — на каждый запрос внутри (_complete_once), см. chat().
-        return self._chat_json_with_truncation_retry(system, user, doc_id, chunk_idx, salvage_truncated)
+        return self._chat_json_with_truncation_retry(
+            system, user, doc_id, chunk_idx, salvage_truncated, single_object
+        )
 
     def _chat_json_with_truncation_retry(
-        self, system: str, user: str, doc_id: str, chunk_idx: int, salvage_truncated: bool
+        self,
+        system: str,
+        user: str,
+        doc_id: str,
+        chunk_idx: int,
+        salvage_truncated: bool,
+        single_object: bool,
     ) -> list | dict:
         """chat_json + повтор при обрезании JSON (потеря данных).
 
@@ -437,6 +446,7 @@ class LLMClient:
                     doc_id=doc_id,
                     chunk_idx=chunk_idx,
                     salvage_truncated=salvage_truncated,
+                    single_object=single_object,
                 )
             except LLMTruncationError:
                 if attempt == max_attempts - 1:
@@ -492,6 +502,7 @@ def _parse_json(
     doc_id: str = "unknown",
     chunk_idx: int = 0,
     salvage_truncated: bool = False,
+    single_object: bool = False,
 ) -> list | dict:
     """Извлекает JSON из ответа LLM.
 
@@ -542,6 +553,28 @@ def _parse_json(
         (cleaned.find("{") if "{" in cleaned else len(cleaned)),
     )
     fragment = cleaned[start:] if start < len(cleaned) else cleaned
+
+    # Табличный классификатор ожидает ровно один объект. Некоторые модели
+    # после полного объекта повторяют JSON-решение (иногда второй объект
+    # остаётся незакрытым). Первый объект уже содержит всё решение
+    # классификатора, поэтому в явно запрошенном single_object-режиме
+    # принимаем его. finish_reason="length" обработан выше и по-прежнему
+    # запрещает любое принятие ответа без retry.
+    if single_object:
+        closed = _top_level_close_pos(fragment)
+        if closed != -1:
+            prefix = fragment[: closed + 1].strip()
+            first = _try_load(prefix)
+            if isinstance(first, dict):
+                tail = fragment[closed + 1 :].strip()
+                if tail:
+                    logger.warning(
+                        "[%s] Чанк %s: лишний хвост после одиночного JSON-объекта "
+                        "классификатора отброшен",
+                        doc_id,
+                        chunk_idx,
+                    )
+                return first
 
     if _is_truncated(fragment):
         if not salvage_truncated:

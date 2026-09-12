@@ -432,6 +432,7 @@ class _ClassifierLLM(Protocol):
         doc_id: str = "unknown",
         chunk_idx: int = 0,
         salvage_truncated: bool = False,
+        single_object: bool = False,
     ) -> list | dict: ...
 
 
@@ -614,7 +615,13 @@ def _llm_classify_table(
     for r in sample_rows:
         table_preview += r + "\n"
     user = f"Заголовок таблицы: {header}\n\nПервые строки:\n\n{table_preview}\n\nКлассифицируй таблицу."
-    raw = llm.chat_json(system, user, doc_id=doc_id, chunk_idx=chunk_idx)
+    raw = llm.chat_json(
+        system,
+        user,
+        doc_id=doc_id,
+        chunk_idx=chunk_idx,
+        single_object=True,
+    )
     if isinstance(raw, dict):
         mode = str(raw.get("extraction_mode") or "per_row")
         if mode not in ("per_row", "whole"):
