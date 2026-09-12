@@ -7,6 +7,7 @@ import {
   SUPPORTED_LOCALES,
   normalizeLocale,
   detectLocale,
+  detectBrowserLocale,
   getMessages,
   translate,
   translatePlural,
@@ -60,9 +61,20 @@ test("detectLocale: первый ПОДДЕРЖАННЫЙ кандидат, по
   assert.equal(detectLocale(["es", "en"]), "en");
   assert.equal(detectLocale(["es-ES", "pt", "de-DE"]), "de");
   assert.equal(detectLocale(["ru"]), DEFAULT_LOCALE);
-  assert.equal(detectLocale(["es"]), DEFAULT_LOCALE);
-  assert.equal(detectLocale([]), DEFAULT_LOCALE);
-  assert.equal(detectLocale(null), DEFAULT_LOCALE);
+  assert.equal(detectLocale(["es"]), "en");
+  assert.equal(detectLocale([]), "en");
+  assert.equal(detectLocale(null), "en");
+});
+
+test("detectLocale использует одиночный язык браузера и английский fallback", () => {
+  assert.equal(detectLocale(["es-ES", "en-US"]), "en");
+  assert.equal(detectLocale(["ja-JP"]), "en");
+});
+
+test("detectBrowserLocale учитывает navigator.language после списка предпочтений", () => {
+  assert.equal(detectBrowserLocale({ languages: [], language: "de-DE" }), "de");
+  assert.equal(detectBrowserLocale({ languages: ["es-ES"], language: "fr-FR" }), "fr");
+  assert.equal(detectBrowserLocale({ language: "ja-JP" }), "en");
 });
 
 test("detectLocale совпадает с boot.js: <html lang> и язык UI не расходятся", () => {
@@ -86,6 +98,26 @@ test("detectLocale совпадает с boot.js: <html lang> и язык UI н�
   ]) {
     assert.equal(bootLang(langs), detectLocale(langs), `расхождение на ${JSON.stringify(langs)}`);
   }
+});
+
+test("boot.js использует navigator.language, если список предпочтений пуст", () => {
+  const documentElement = { lang: "" };
+  const win = {
+    localStorage: { getItem: () => null },
+    navigator: { languages: [], language: "de-DE" },
+  };
+  new Function("window", "document", bootScript())(win, { documentElement });
+  assert.equal(documentElement.lang, "de");
+});
+
+test("boot.js сохраняет ранее выбранную локаль поверх языка браузера", () => {
+  const documentElement = { lang: "" };
+  const win = {
+    localStorage: { getItem: () => "en" },
+    navigator: { languages: ["ru-RU"], language: "ru-RU" },
+  };
+  new Function("window", "document", bootScript())(win, { documentElement });
+  assert.equal(documentElement.lang, "en");
 });
 
 test("translate возвращает ключ при отсутствии", () => {
@@ -200,10 +232,12 @@ test("resolveServerLocale: cookie имеет приоритет, иначе Acce
   assert.equal(resolveServerLocale("ru", "en-US,en;q=0.9"), "ru");
   assert.equal(resolveServerLocale(null, "en-US,en;q=0.9"), "en");
   assert.equal(resolveServerLocale(null, "de-DE,de;q=0.8"), "de");
-  assert.equal(resolveServerLocale(null, null), DEFAULT_LOCALE);
+  assert.equal(resolveServerLocale(null, null), "en");
   assert.equal(resolveServerLocale("en", null), "en");
   assert.equal(resolveServerLocale("fr", "en-US"), "fr");
-  assert.equal(resolveServerLocale("es", "en-US"), DEFAULT_LOCALE);
+  assert.equal(resolveServerLocale("es", "en-US"), "en");
+  assert.equal(resolveServerLocale("es", null), "en");
+  assert.equal(resolveServerLocale(null, "es-ES,ja-JP"), "en");
 });
 
 test("cookie okf.locale — канал языка к серверу: пишется и читается обратно", () => {

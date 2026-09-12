@@ -6,10 +6,10 @@
 // возвращаем Promise<translator>.
 
 import { cookies, headers } from "next/headers";
-import { createTranslator, resolveServerLocale } from "./core";
+import { AUTO_FALLBACK_LOCALE, createTranslator, resolveServerLocale } from "./core";
 
 export async function serverTranslator() {
-  let locale = "ru";
+  let locale = AUTO_FALLBACK_LOCALE;
   try {
     const cookieStore = await cookies();
     const headerStore = await headers();

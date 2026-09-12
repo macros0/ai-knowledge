@@ -3,8 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
-  DEFAULT_LOCALE,
-  detectLocale,
+  detectBrowserLocale,
+  AUTO_FALLBACK_LOCALE,
   normalizeLocale,
   readLocaleCookie,
   readStored,
@@ -24,12 +24,12 @@ const LocaleContext = createContext(null);
 // SSR-безопасный начальный язык:
 //  - на клиенте (после гидратации) — сохранённый выбор или авто по браузеру;
 //  - на сервере — переданный из layout (SSR-локаль из cookie/Accept-Language),
-//    иначе дефолт.
+//    иначе автоматический английский fallback.
 function initialLocale(ssrLocale) {
   if (typeof window !== "undefined") {
-    return readStored(window) || detectLocale(window.navigator?.languages);
+    return readStored(window) || detectBrowserLocale(window.navigator);
   }
-  return normalizeLocale(ssrLocale) || DEFAULT_LOCALE;
+  return ssrLocale ? normalizeLocale(ssrLocale) : AUTO_FALLBACK_LOCALE;
 }
 
 export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}, children }) {

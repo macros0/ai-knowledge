@@ -2,13 +2,16 @@
 //
 // Единый источник переключателя языка по образцу темы (`lib/theme.js`):
 // выбор живёт в localStorage (`okf.locale`), по умолчанию — детект браузера
-// (первый поддержанный язык из списка предпочтений, иначе "ru"). Фактический
+// (первый поддержанный язык из списка предпочтений, иначе "en"). Фактический
 // язык всегда резолвится через `normalizeLocale`/`getMessages` — невалидные
 // значения клампятся в "ru" (фолбэк-локаль, словарь которой гарантированно полный).
 
 import locales from "./locales/index.js";
 
 export const DEFAULT_LOCALE = "ru";
+// Автоматический выбор нового пользователя не должен зависеть от русского
+// языка, который остаётся базовым слоем словарей и fallback для явных значений.
+export const AUTO_FALLBACK_LOCALE = "en";
 export const SUPPORTED_LOCALES = Object.keys(locales);
 export const STORAGE_KEY = "okf.locale";
 
@@ -31,27 +34,38 @@ export function normalizeLocale(input) {
 // и "ru" первым кандидатом должен побеждать "en" вторым (стандартный Chrome на
 // русской системе шлёт ["ru-RU","ru","en-US","en"]). Тот же перебор, что в
 // boot.js — иначе <html lang> и язык UI расходятся. Ни одного поддержанного /
-// пустой список → DEFAULT_LOCALE.
+// пустой список → AUTO_FALLBACK_LOCALE.
 export function detectLocale(candidates) {
   for (const c of candidates || []) {
     const code = supportedCode(c);
     if (code) return code;
   }
-  return DEFAULT_LOCALE;
+  return AUTO_FALLBACK_LOCALE;
+}
+
+// Браузер обычно передаёт языки ОС через navigator.languages. navigator.language
+// остаётся запасным кандидатом для браузеров, которые не заполняют этот список.
+export function detectBrowserLocale(navigatorLike) {
+  const preferred = Array.isArray(navigatorLike?.languages)
+    ? [...navigatorLike.languages]
+    : [];
+  if (navigatorLike?.language) preferred.push(navigatorLike.language);
+  return detectLocale(preferred);
 }
 
 // Резолв локали для SSR из cookie (сохранённый выбор) + Accept-Language
 // (первый заход). Cookie имеет приоритет — явный выбор пользователя побеждает
 // заголовок браузера.
 export function resolveServerLocale(cookieLocale, acceptLanguage) {
-  if (cookieLocale) return normalizeLocale(cookieLocale);
+  const saved = supportedCode(cookieLocale);
+  if (saved) return saved;
   if (acceptLanguage) {
     const parts = String(acceptLanguage)
       .split(",")
       .map((p) => p.split(";")[0].trim());
     return detectLocale(parts);
   }
-  return DEFAULT_LOCALE;
+  return AUTO_FALLBACK_LOCALE;
 }
 
 export function readStored(win) {

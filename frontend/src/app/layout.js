@@ -15,7 +15,7 @@ import AuthErrorBanner from "@/components/AuthErrorBanner";
 import HealthBanner from "@/components/HealthBanner";
 import { bootScript } from "@/lib/theme";
 import { bootScript as localeBootScript } from "@/i18n/boot";
-import { resolveServerLocale } from "@/i18n/core";
+import { AUTO_FALLBACK_LOCALE, resolveServerLocale } from "@/i18n/core";
 import { backendFetch } from "@/lib/backendFetch";
 import InlineScript from "@/components/InlineScript";
 
@@ -26,13 +26,13 @@ export const metadata = {
 };
 
 export default async function RootLayout({ children }) {
-  // SSR-локаль: cookie (сохранённый выбор) → Accept-Language (первый заход) → ru.
+  // SSR-локаль: cookie (сохранённый выбор) → Accept-Language (первый заход) → en.
   // Чтение cookies()/headers() переводит layout в dynamic-рендеринг — осознанное
   // решение: без этого SSR-разметка (Nav, заголовки) расходилась бы с языком
   // клиента и давала hydration-mismatch. Для внутреннего инструмента за
   // авторизацией это приемлемо.
-  let ssrLocale = "ru";
-  let lang = "ru";
+  let ssrLocale = AUTO_FALLBACK_LOCALE;
+  let lang = AUTO_FALLBACK_LOCALE;
   let initialOverrides = {};
   try {
     const cookieStore = await cookies();
