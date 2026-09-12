@@ -19,6 +19,7 @@ import DuplicateModal from "./DuplicateModal";
 import TagPicker from "./TagPicker";
 import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import TagManagerModal from "./TagManagerModal";
+import SearchableSelect from "./SearchableSelect";
 
 const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
 
@@ -563,6 +564,34 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     dateFrom,
     dateTo,
   });
+  const uploaderOptions = [
+    { value: "__me__", label: t("docs.myDocuments") },
+    { value: "", label: t("docs.allUploaders") },
+    ...uploaders.map((uploader) => ({ value: uploader, label: uploader })),
+  ];
+  const tagOptions = [
+    { value: "", label: t("docs.allTags") },
+    ...filterTags.map((tag) => ({
+      value: tag.name,
+      label: `${tag.display || tag.name} (${tag.count})`,
+      searchText: `${tag.name} ${tag.display || ""}`,
+    })),
+  ];
+  const moduleOptions = [
+    { value: "", label: t("docs.allModules") },
+    ...modules.map((module) => ({ value: module, label: module, searchText: module })),
+  ];
+  const localeOptions = [
+    { value: "", label: t("docs.allLocales") },
+    ...facetOptions(localeFacets, locale).map((option) => ({
+      value: option.code,
+      label: option.code === "unknown" ? `${t("docs.localeUnknown")} (${option.count})` : `${option.label} (${option.count})`,
+      searchText: `${option.code} ${option.label}`,
+    })),
+  ];
+  if (localeFilter && !localeOptions.some((option) => option.value === localeFilter)) {
+    localeOptions.push({ value: localeFilter, label: localeFilter, searchText: localeFilter });
+  }
   const markupPct =
     stats && stats.total > 0
       ? Math.round((stats.with_development / stats.total) * 100)
@@ -662,17 +691,23 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             {(doc.source_locale || canEdit) && (
               editingLocale[doc.id] ? (
                 <>
-                  <select
-                    className="locale-select-inline"
+                  <SearchableSelect
+                    className="document-locale-searchable"
+                    triggerClassName="locale-select-inline"
+                    options={[
+                      { value: "", label: t("docs.localeNone") },
+                      ...buildLocaleOptions(doc.source_locale, activeLocales, locale).map((o) => ({
+                        value: o.code,
+                        label: o.label,
+                        searchText: `${o.code} ${o.label}`,
+                      })),
+                    ]}
                     value={doc.source_locale || ""}
-                    onChange={(e) => changeLocale(doc, e.target.value)}
-                    aria-label={t("docs.localeEditAria")}
-                  >
-                    <option value="">{t("docs.localeNone")}</option>
-                    {buildLocaleOptions(doc.source_locale, activeLocales, locale).map((o) => (
-                      <option key={o.code} value={o.code}>{o.label}</option>
-                    ))}
-                  </select>
+                    onChange={(next) => changeLocale(doc, next)}
+                    searchPlaceholder={t("docs.localeSearchPlaceholder")}
+                    emptyLabel={t("docs.empty")}
+                    ariaLabel={t("docs.localeEditAria")}
+                  />
                   <button
                     className="tag-edit-toggle"
                     onClick={() => toggleEditLocale(doc.id)}
@@ -859,20 +894,14 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             onChange={(e) => setSearchInput(e.target.value)}
             aria-label={t("docs.searchAria")}
           />
-          <select
-            className="doc-filter-select"
+          <SearchableSelect
+            options={uploaderOptions}
             value={selectedUploader}
-            onChange={(e) => chooseUploader(e.target.value)}
-            aria-label={t("docs.uploaderFilterAria")}
-          >
-            <optgroup label={t("docs.quickSelect")}>
-              <option value="__me__">{t("docs.myDocuments")}</option>
-              <option value="">{t("docs.allUploaders")}</option>
-            </optgroup>
-            <optgroup label={t("docs.uploaders")}>
-              {uploaders.map((u) => <option key={u} value={u}>{u}</option>)}
-            </optgroup>
-          </select>
+            onChange={chooseUploader}
+            searchPlaceholder={t("docs.optionSearchPlaceholder")}
+            emptyLabel={t("docs.empty")}
+            ariaLabel={t("docs.uploaderFilterAria")}
+          />
           <select
             className="doc-filter-select"
             value={statusFilter}
@@ -920,35 +949,32 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               />
               {t("docs.problemOnly")}
             </label>
-            <select
-              className="doc-filter-select"
+            <SearchableSelect
+              options={moduleOptions}
               value={moduleFilter}
-              onChange={(e) => setModuleFilter(e.target.value)}
-              aria-label={t("docs.moduleFilterAria")}
-            >
-              <option value="">{t("docs.allModules")}</option>
-              {modules.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
+              onChange={setModuleFilter}
+              searchPlaceholder={t("docs.optionSearchPlaceholder")}
+              emptyLabel={t("docs.empty")}
+              ariaLabel={t("docs.moduleFilterAria")}
+            />
             {groupBy !== "tag" && (
-              <select
-                className="doc-filter-select"
+              <SearchableSelect
+                options={tagOptions}
                 value={tagFilter}
-                onChange={(e) => setTagFilter(e.target.value)}
-                aria-label={t("docs.tagFilterAria")}
-              >
-                <option value="">{t("docs.allTags")}</option>
-                {filterTags.map((tg) => <option key={tg.name} value={tg.name}>{tg.display || tg.name} ({tg.count})</option>)}
-              </select>
+                onChange={setTagFilter}
+                searchPlaceholder={t("docs.optionSearchPlaceholder")}
+                emptyLabel={t("docs.empty")}
+                ariaLabel={t("docs.tagFilterAria")}
+              />
             )}
-            <select
-              className="doc-filter-select"
+            <SearchableSelect
+              options={localeOptions}
               value={localeFilter}
-              onChange={(e) => setLocaleFilter(e.target.value)}
-              aria-label={t("docs.localeFilterAria")}
-            >
-              <option value="">{t("docs.allLocales")}</option>
-              {facetOptions(localeFacets, locale).map((o) => <option key={o.code} value={o.code}>{o.code === "unknown" ? t("docs.localeUnknown") : o.label} ({o.count})</option>)}
-            </select>
+              onChange={setLocaleFilter}
+              searchPlaceholder={t("docs.localeFilterAria")}
+              emptyLabel={t("docs.empty")}
+              ariaLabel={t("docs.localeFilterAria")}
+            />
             <DevelopmentFilter developments={developments} value={devFilter} onChange={setDevFilter} />
             <label className="doc-filter-date">
               <span>{t("docs.dateFrom")}</span>

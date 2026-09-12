@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { friendlyApiError, getDevelopment, listDevelopmentDocuments } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useI18n } from "@/i18n/LocaleContext";
+import SearchableSelect from "@/components/SearchableSelect";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -69,6 +70,14 @@ export default function DevelopmentCardPage() {
   }, [load]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const sortOptions = [
+    { value: "date_desc", label: `${t("sort.groupDate")}: ${t("sort.newFirst")}`, searchText: `${t("sort.groupDate")} ${t("sort.newFirst")}` },
+    { value: "date_asc", label: `${t("sort.groupDate")}: ${t("sort.oldFirst")}`, searchText: `${t("sort.groupDate")} ${t("sort.oldFirst")}` },
+    { value: "name_asc", label: `${t("sort.groupName")}: ${t("sort.alphaAsc")}`, searchText: `${t("sort.groupName")} ${t("sort.alphaAsc")}` },
+    { value: "name_desc", label: `${t("sort.groupName")}: ${t("sort.alphaDesc")}`, searchText: `${t("sort.groupName")} ${t("sort.alphaDesc")}` },
+    { value: "uploader_asc", label: `${t("sort.groupUploader")}: ${t("sort.alphaAsc")}`, searchText: `${t("sort.groupUploader")} ${t("sort.alphaAsc")}` },
+    { value: "uploader_desc", label: `${t("sort.groupUploader")}: ${t("sort.alphaDesc")}`, searchText: `${t("sort.groupUploader")} ${t("sort.alphaDesc")}` },
+  ];
 
   return (
     <section className="panel">
@@ -92,25 +101,15 @@ export default function DevelopmentCardPage() {
           onChange={(e) => setSearchInput(e.target.value)}
           aria-label={t("dev.card.searchAria")}
         />
-        <select
-          className="doc-filter-select"
+        <SearchableSelect
+          options={sortOptions}
+          triggerClassName="doc-filter-select"
           value={sortKey}
-          onChange={(e) => setSortKey(e.target.value)}
-          aria-label={t("sort.label")}
-        >
-          <optgroup label={t("sort.groupDate")}>
-            <option value="date_desc">{t("sort.newFirst")}</option>
-            <option value="date_asc">{t("sort.oldFirst")}</option>
-          </optgroup>
-          <optgroup label={t("sort.groupName")}>
-            <option value="name_asc">{t("sort.alphaAsc")}</option>
-            <option value="name_desc">{t("sort.alphaDesc")}</option>
-          </optgroup>
-          <optgroup label={t("sort.groupUploader")}>
-            <option value="uploader_asc">{t("sort.alphaAsc")}</option>
-            <option value="uploader_desc">{t("sort.alphaDesc")}</option>
-          </optgroup>
-        </select>
+          onChange={setSortKey}
+          searchPlaceholder={t("sort.label")}
+          emptyLabel={t("docs.empty")}
+          ariaLabel={t("sort.label")}
+        />
       </div>
       {docs.length === 0 ? (
         <p className="muted">

@@ -15,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import AppliedTerms from "./AppliedTerms";
+import SearchableSelect from "./SearchableSelect";
 
 function getPresetLabel(preset, settings, t) {
   if (preset === settings.top_k_default) return t("chat.topkStandard");
@@ -151,6 +152,17 @@ export default function ChatPanel() {
   const effectiveTags = Array.from(
     new Set([...tags, ...(moduleFilter ? [moduleFilter] : []), ...(devNumber ? [devNumber] : [])])
   );
+  const localeOptions = [
+    { value: "", label: t("docs.allLocales") },
+    ...facetOptions(localeFacets, locale).map((option) => ({
+      value: option.code,
+      label: option.code === "unknown" ? t("docs.localeUnknown") : `${option.label} (${option.count})`,
+      searchText: `${option.code} ${option.label}`,
+    })),
+  ];
+  if (sourceLocale && !localeOptions.some((option) => option.value === sourceLocale)) {
+    localeOptions.push({ value: sourceLocale, label: sourceLocale, searchText: sourceLocale });
+  }
 
   const send = async (e) => {
     e.preventDefault();
@@ -403,19 +415,14 @@ export default function ChatPanel() {
           }}
         />
         <span className="tag-picker-label">{t("chat.localeLabel")}</span>
-        <select
-          className="doc-filter-select"
+        <SearchableSelect
+          options={localeOptions}
           value={sourceLocale}
-          onChange={(e) => setSourceLocale(e.target.value)}
-          aria-label={t("docs.localeFilterAria")}
-        >
-          <option value="">{t("docs.allLocales")}</option>
-          {facetOptions(localeFacets, locale).map((o) => (
-            <option key={o.code} value={o.code}>
-              {o.code === "unknown" ? t("docs.localeUnknown") : o.label} ({o.count})
-            </option>
-          ))}
-        </select>
+          onChange={setSourceLocale}
+          searchPlaceholder={t("docs.localeSearchPlaceholder")}
+          emptyLabel={t("docs.empty")}
+          ariaLabel={t("docs.localeFilterAria")}
+        />
       </div>
       <form className="chat-form" onSubmit={send}>
         <input

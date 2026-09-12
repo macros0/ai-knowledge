@@ -5,9 +5,11 @@
 // bulk-баре (добавить/убрать тег). Полностью контролируемый: value/onChange —
 // как у обычного input.
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTagDictionary } from "@/lib/tagDictionary";
 import { useI18n } from "@/i18n/LocaleContext";
+import { positionPopup } from "@/lib/popupPosition";
 
 const MAX_OPTIONS = 20;
 
@@ -25,8 +27,31 @@ export default function TagCombobox({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const boxRef = useRef(null);
+  const popupRef = useRef(null);
   // Уникальный id listbox на экземпляр (aria-controls/aria-activedescendant).
   const listId = useId();
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const trigger = boxRef.current;
+    const popup = popupRef.current;
+    if (trigger && popup) {
+      const triggerWidth = trigger.getBoundingClientRect().width;
+      const availableWidth = Math.max(0, window.innerWidth - 16);
+      const popupWidth = Math.min(Math.max(triggerWidth, 260), Math.min(420, availableWidth));
+      positionPopup(trigger, popup, { width: popupWidth });
+    }
+    const onScroll = (event) => {
+      if (!popupRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onResize = () => setOpen(false);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open]);
 
   const q = value.trim().toLowerCase();
   const filtered = (
@@ -41,7 +66,9 @@ export default function TagCombobox({
 
   useEffect(() => {
     const onDocClick = (e) => {
-      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+      if (boxRef.current?.contains(e.target)) return;
+      if (popupRef.current?.contains(e.target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -100,8 +127,8 @@ export default function TagCombobox({
         aria-label={ariaLabel}
         className={className}
       />
-      {open && (
-        <ul className="tag-combobox-list" role="listbox" id={listId}>
+      {open && createPortal(
+        <ul className="tag-combobox-list" role="listbox" id={listId} ref={popupRef}>
           {filtered.length === 0 && (
             <li className="tag-combobox-empty">
               {allowNew && value.trim()
@@ -128,7 +155,8 @@ export default function TagCombobox({
               </span>
             </li>
           ))}
-        </ul>
+        </ul>,
+        document.body
       )}
     </div>
   );

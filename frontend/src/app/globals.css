@@ -734,6 +734,9 @@ main {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  min-width: 260px;
+  max-width: min(420px, calc(100vw - 16px));
+  box-sizing: border-box;
 }
 
 .tag-combobox-item {
@@ -746,6 +749,9 @@ main {
   cursor: pointer;
   font-size: 13px;
   color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .tag-combobox-item.active {
@@ -759,6 +765,8 @@ main {
 }
 
 .tag-combobox-name {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3151,10 +3159,27 @@ main {
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dev-picker-option:hover {
   background: rgba(79, 140, 255, 0.12);
+}
+
+.dev-picker-option.active {
+  background: rgba(79, 140, 255, 0.18);
+}
+
+.searchable-select {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.searchable-select > button {
+  min-width: 0;
 }
 
 .dev-picker-num {
@@ -3164,6 +3189,8 @@ main {
 }
 
 .dev-picker-name {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3488,6 +3515,8 @@ main {
   padding: 2px 6px;
   font-size: 12px;
   max-width: 220px;
+  cursor: pointer;
+  text-align: left;
 }
 
 .doc-filter-date {

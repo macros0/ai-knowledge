@@ -16,7 +16,9 @@ export default {
   "common.loginAgain": "Войти снова",
 
   "locale.ariaLabel": "Язык интерфейса: {label}",
-  "locale.title": "Язык: {label} · клик — переключить на {nextLabel}",
+  "locale.title": "Язык: {label} · открыть список языков",
+  "locale.searchPlaceholder": "Поиск языка…",
+  "locale.notFound": "Язык не найден",
   "locale.ru": "Русский",
   "locale.en": "English",
 
@@ -107,6 +109,7 @@ export default {
   "docs.resetFilters": "Сбросить все",
   "docs.searchDevAria": "Поиск по документам разработки",
   "docs.uploaderFilterAria": "Фильтр по загрузчику",
+  "docs.optionSearchPlaceholder": "Поиск по коду или названию…",
   "docs.quickSelect": "Быстрый выбор",
   "docs.myDocuments": "Мои документы",
   "docs.allUploaders": "Все загрузчики",
@@ -146,6 +149,7 @@ export default {
   "docs.collapseLocaleAria": "Свернуть редактирование языка",
   "docs.localeNone": "Язык не определён",
   "docs.localeFilterAria": "Фильтр по языку документа",
+  "docs.localeSearchPlaceholder": "Поиск языка…",
   "docs.allLocales": "Все языки",
   "docs.localeUnknown": "Не определён",
   "docs.changeLocaleError": "Не удалось изменить язык: {message}",

@@ -6,9 +6,11 @@ import { translationState } from "@/lib/glossaryUi.mjs";
 import { SUPPORTED_LOCALES } from "@/i18n/core";
 import { useI18n } from "@/i18n/LocaleContext";
 import { useToast } from "./Toast";
+import SearchableSelect from "./SearchableSelect";
+import { languageLabel } from "@/lib/sourceLocales.mjs";
 
 export default function GlossaryTranslations({ term, onSaved }) {
-  const { t } = useI18n();
+  const { t, locale: uiLocale } = useI18n();
   const { showToast } = useToast();
   const [active, setActive] = useState([]);
   const [locale, setLocale] = useState("");
@@ -28,6 +30,12 @@ export default function GlossaryTranslations({ term, onSaved }) {
     values.delete(term.canonical_locale);
     return [...values].filter(Boolean).sort();
   }, [active, term.canonical_locale]);
+
+  const targetOptions = useMemo(() => targets.map((code) => ({
+    value: code,
+    label: languageLabel(code, uiLocale) || code,
+    searchText: `${code} ${languageLabel(code, uiLocale) || ""}`,
+  })), [targets, uiLocale]);
 
   useEffect(() => {
     const next = locale && targets.includes(locale) ? locale : targets[0] || "";
@@ -76,9 +84,14 @@ export default function GlossaryTranslations({ term, onSaved }) {
       <h3>{t("admin.glossary.translations")}</h3>
       <p className="muted glossary-save-hint">{t("admin.glossary.translationSaveHint")}</p>
       <label className="glossary-field">{t("admin.glossary.targetLocale")}
-        <select value={locale} onChange={(e) => { setDirty(false); setLocale(e.target.value); }}>
-          {targets.map((code) => <option key={code} value={code}>{code}</option>)}
-        </select>
+        <SearchableSelect
+          options={targetOptions}
+          value={locale}
+          onChange={(next) => { setDirty(false); setLocale(next); }}
+          searchPlaceholder={t("docs.localeSearchPlaceholder")}
+          emptyLabel={t("docs.empty")}
+          ariaLabel={t("admin.glossary.targetLocale")}
+        />
       </label>
       <div className="glossary-source-preview"><b>{term.original_name}</b><small>{term.canonical_locale}</small></div>
       <span className={`glossary-translation-state ${state.kind}`}>{t(`admin.glossary.state.${state.kind}`)}</span>

@@ -18,6 +18,7 @@ import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import ConfirmModal from "./ConfirmModal";
 import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
+import SearchableSelect from "./SearchableSelect";
 
 const EMPTY_FORM = { number: "", name: "", module: "" };
 const PAGE_SIZE = 50;
@@ -56,6 +57,12 @@ export default function DevelopmentPanel() {
     { key: "name", label: t("devpanel.colName") },
     { key: "module", label: t("devpanel.colModule") },
     { key: "documents_count", label: t("devpanel.colDocs") },
+  ];
+
+  const moduleOptions = [
+    { value: "", label: t("devpanel.allModules") },
+    { value: MODULE_NONE, label: t("devpanel.noModule"), searchText: t("devpanel.noModule") },
+    ...modules.map((module) => ({ value: module, label: module, searchText: module })),
   ];
 
   const load = useCallback(async () => {
@@ -360,20 +367,14 @@ export default function DevelopmentPanel() {
           onChange={(e) => setSearchInput(e.target.value)}
           aria-label={t("devpanel.searchAria")}
         />
-        <select
-          className="doc-filter-select"
+        <SearchableSelect
+          options={moduleOptions}
           value={moduleFilter}
-          onChange={(e) => changeModuleFilter(e.target.value)}
-          aria-label={t("devpanel.moduleFilterAria")}
-        >
-          <option value="">{t("devpanel.allModules")}</option>
-          <option value={MODULE_NONE}>{t("devpanel.noModule")}</option>
-          {modules.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+          onChange={changeModuleFilter}
+          searchPlaceholder={t("docs.optionSearchPlaceholder")}
+          emptyLabel={t("docs.empty")}
+          ariaLabel={t("devpanel.moduleFilterAria")}
+        />
       </div>
 
       <div className="dev-table-scroll">

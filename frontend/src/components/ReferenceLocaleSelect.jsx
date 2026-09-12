@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/LocaleContext";
 import { listActiveLocales } from "@/lib/api";
 import { buildLocaleOptions, languageLabel } from "@/lib/sourceLocales.mjs";
+import SearchableSelect from "./SearchableSelect";
 
 export default function ReferenceLocaleSelect({
   value,
@@ -16,7 +17,6 @@ export default function ReferenceLocaleSelect({
   const { t, locale } = useI18n();
   const [active, setActive] = useState([]);
   const [editing, setEditing] = useState(false);
-  const selectId = useId();
   // Null means the stored language is unknown; do not silently display the
   // UI language as if it described the reference.
   const selectedLocale = value || "und";
@@ -29,16 +29,23 @@ export default function ReferenceLocaleSelect({
     <span className="reference-locale-select">
       {editing ? (
         <>
-          <label htmlFor={selectId}>{t(labelKey)}</label>{" "}
-          <select id={selectId} className="doc-filter-select" value={selectedLocale}
-            onChange={(e) => {
-              onChange(e.target.value);
+          <span>{t(labelKey)}</span>{" "}
+          <SearchableSelect
+            options={buildLocaleOptions(selectedLocale, active, locale).map((option) => ({
+              value: option.code,
+              label: option.label,
+              searchText: `${option.code} ${option.label}`,
+            }))}
+            value={selectedLocale}
+            onChange={(next) => {
+              onChange(next);
               setEditing(false);
-            }} disabled={disabled}>
-            {buildLocaleOptions(selectedLocale, active, locale).map((option) => (
-              <option key={option.code} value={option.code}>{option.label}</option>
-            ))}
-          </select>
+            }}
+            disabled={disabled}
+            searchPlaceholder={t("docs.localeSearchPlaceholder")}
+            emptyLabel={t("docs.empty")}
+            ariaLabel={t(labelKey)}
+          />
         </>
       ) : (
         <span className="doc-locale-badge" title={t(labelKey)}>
@@ -47,7 +54,7 @@ export default function ReferenceLocaleSelect({
       )}{" "}
       <button type="button" className="tag-edit-toggle"
         aria-label={t(editing ? collapseLabelKey : editLabelKey)}
-        aria-expanded={editing} aria-controls={editing ? selectId : undefined}
+        aria-expanded={editing}
         onClick={() => setEditing((current) => !current)} disabled={disabled}>
         {editing ? "−" : "✎"}
       </button>

@@ -16,7 +16,9 @@ export default {
   "common.loginAgain": "Sign in again",
 
   "locale.ariaLabel": "Interface language: {label}",
-  "locale.title": "Language: {label} · click — switch to {nextLabel}",
+  "locale.title": "Language: {label} · open language list",
+  "locale.searchPlaceholder": "Search language…",
+  "locale.notFound": "Language not found",
   "locale.ru": "Русский",
   "locale.en": "English",
 
@@ -107,6 +109,7 @@ export default {
   "docs.resetFilters": "Reset all",
   "docs.searchDevAria": "Search development documents",
   "docs.uploaderFilterAria": "Filter by uploader",
+  "docs.optionSearchPlaceholder": "Search by code or name…",
   "docs.quickSelect": "Quick select",
   "docs.myDocuments": "My documents",
   "docs.allUploaders": "All uploaders",
@@ -146,6 +149,7 @@ export default {
   "docs.collapseLocaleAria": "Collapse language editing",
   "docs.localeNone": "Language not determined",
   "docs.localeFilterAria": "Filter by document language",
+  "docs.localeSearchPlaceholder": "Search language…",
   "docs.allLocales": "All languages",
   "docs.localeUnknown": "Not determined",
   "docs.changeLocaleError": "Failed to change language: {message}",

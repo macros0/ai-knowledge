@@ -585,6 +585,7 @@
   ],
   "docs.localeEditAria": [],
   "docs.localeFilterAria": [],
+  "docs.localeSearchPlaceholder": [],
   "docs.localeManualTitle": [],
   "docs.localeNone": [],
   "docs.localeUnknown": [],
@@ -666,6 +667,7 @@
     "name"
   ],
   "docs.uploaderFilterAria": [],
+  "docs.optionSearchPlaceholder": [],
   "docs.uploaders": [],
   "docs.view.development": [],
   "docs.view.documents": [],
@@ -717,10 +719,11 @@
     "label"
   ],
   "locale.en": [],
+  "locale.notFound": [],
+  "locale.searchPlaceholder": [],
   "locale.ru": [],
   "locale.title": [
-    "label",
-    "nextLabel"
+    "label"
   ],
   "markdown.close": [],
   "markdown.image": [],

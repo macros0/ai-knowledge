@@ -6,6 +6,8 @@ import { useI18n } from "@/i18n/LocaleContext";
 import { SUPPORTED_LOCALES } from "@/i18n/core";
 import locales from "@/i18n/locales/index.js";
 import { listActiveLocales } from "@/lib/api";
+import { languageLabel } from "@/lib/sourceLocales.mjs";
+import SearchableSelect from "./SearchableSelect";
 
 // Циклический переключатель языка по АКТИВНЫМ языкам (из бэкенда, «Поддержка
 // языков»): админ может отключить язык — он исчезает из цикла переключения.
@@ -57,21 +59,29 @@ export default function LocaleToggle() {
   const cycle = active && active.length ? active : SUPPORTED_LOCALES;
   if (cycle.length < 2) return null;
 
-  const index = cycle.indexOf(locale);
-  const next = cycle[(index + 1) % cycle.length];
   const cur = locales[locale] ?? locales.ru;
-  const nextLabel = locales[next]?.label ?? next;
+  const localeOptions = cycle.map((code) => ({
+    value: code,
+    label: locales[code]?.label ?? languageLabel(code, locale) ?? code,
+    searchText: `${code} ${locales[code]?.label ?? languageLabel(code, locale) ?? ""}`,
+  }));
 
   return (
-    <button
-      type="button"
-      className="icon-btn locale-toggle-btn"
-      onClick={() => setLocale(next)}
-      aria-label={t("locale.ariaLabel", { label: cur.label })}
-      title={t("locale.title", { label: cur.label, nextLabel })}
-    >
-      <GlobeIcon size={16} />
-      <span className="locale-toggle-code">{cur.short}</span>
-    </button>
+    <SearchableSelect
+      options={localeOptions}
+      value={locale}
+      onChange={setLocale}
+      ariaLabel={t("locale.ariaLabel", { label: cur.label })}
+      title={t("locale.title", { label: cur.label })}
+      searchPlaceholder={t("locale.searchPlaceholder")}
+      emptyLabel={t("locale.notFound")}
+      triggerClassName="icon-btn locale-toggle-btn"
+      renderTrigger={() => (
+        <>
+          <GlobeIcon size={16} />
+          <span className="locale-toggle-code">{cur.short}</span>
+        </>
+      )}
+    />
   );
 }
