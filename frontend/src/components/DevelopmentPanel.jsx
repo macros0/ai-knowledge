@@ -27,8 +27,8 @@ export default function DevelopmentPanel() {
   const { mode, hasRole } = useAuth();
   const { showToast } = useToast();
   const { t, locale } = useI18n();
-  const [originLocale, setOriginLocale] = useState(null);
-  const [moduleLocale, setModuleLocale] = useState(null);
+  const [originLocale, setOriginLocale] = useState(locale);
+  const [moduleLocale, setModuleLocale] = useState(locale);
   const [developments, setDevelopments] = useState([]);
   const [total, setTotal] = useState(0);
   const [modules, setModules] = useState([]);
@@ -162,6 +162,7 @@ export default function DevelopmentPanel() {
       module: dev.module || "",
       originalNumber: dev.number,
       documentsCount: dev.documents_count,
+      version: dev.version,
     });
   };
 
@@ -181,7 +182,12 @@ export default function DevelopmentPanel() {
     setBusy(true);
     try {
       const moduleName = await ensureModule(editForm.module);
-      await updateDevelopment(devId, { number, name, module: moduleName });
+      await updateDevelopment(devId, {
+        number,
+        name,
+        module: moduleName,
+        version: editForm.version,
+      });
       setEditing(null);
       setEditForm(EMPTY_FORM);
       showToast(t("devpanel.saved"), { type: "success" });

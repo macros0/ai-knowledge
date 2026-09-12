@@ -217,6 +217,7 @@ test("lookupTitleKey резолвит специфичные пути раньш
   assert.equal(lookupTitleKey("/chat/history/admin"), "titles.historyAdmin");
   assert.equal(lookupTitleKey("/developments/5"), "titles.developmentCard");
   assert.equal(lookupTitleKey("/admin"), "titles.admin");
+  assert.equal(lookupTitleKey("/admin/glossary"), "titles.adminGlossary");
   assert.equal(lookupTitleKey("/security"), "titles.security");
   assert.equal(lookupTitleKey("/unknown"), null);
 });

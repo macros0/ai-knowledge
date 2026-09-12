@@ -14,6 +14,7 @@ import { useChat } from "@/context/ChatContext";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
+import AppliedTerms from "./AppliedTerms";
 
 function getPresetLabel(preset, settings, t) {
   if (preset === settings.top_k_default) return t("chat.topkStandard");
@@ -25,7 +26,7 @@ function getPresetLabel(preset, settings, t) {
 }
 
 export default function ChatPanel() {
-  const { messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
+  const { messages, tags, pending, settings, selectedMode, sessionId, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
   const { user } = useAuth();
   const { showToast } = useToast();
   const { t, locale } = useI18n();
@@ -156,16 +157,16 @@ export default function ChatPanel() {
     const q = query.trim();
     if (!q || pending) return;
     const uploadHint = resolveUploadHint(effectiveTags);
-    setMessages((m) => [...m, { role: "user", text: q }]);
+    setMessages((m) => [...m, { role: "user", text: q, query: q }]);
     setQuery("");
     setPending(true);
     setMessages((m) => [...m, { role: "assistant", text: t("chat.thinking"), sources: [] }]);
     try {
-      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale);
+      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale, useGlossary);
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((m) => {
         const copy = [...m];
-        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, uploadHint };
+        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, requestTags: effectiveTags, requestTopK: selectedTopK, requestMode: selectedMode, requestSourceLocale: sourceLocale };
         return copy;
       });
     } catch (err) {
@@ -178,13 +179,36 @@ export default function ChatPanel() {
       } else {
         setMessages((m) => {
           const copy = [...m];
-          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [] };
+          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q };
           return copy;
         });
       }
     } finally {
       setPending(false);
     }
+  };
+
+  const repeatWithoutGlossary = async (message) => {
+    if (pending || !message.query) return;
+    const q = message.query;
+    setMessages((items) => [...items, { role: "user", text: q, query: q }]);
+    setPending(true);
+    setMessages((items) => [...items, { role: "assistant", text: t("chat.thinking"), sources: [] }]);
+    try {
+      const resp = await chat(q, message.requestTags ?? effectiveTags, message.requestTopK ?? selectedTopK, message.requestMode ?? selectedMode, sessionId, message.requestSourceLocale ?? sourceLocale, false);
+      if (resp.session_id) setSessionId(resp.session_id);
+      setMessages((items) => {
+        const copy = [...items];
+        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q };
+        return copy;
+      });
+    } catch (err) {
+      setMessages((items) => {
+        const copy = [...items];
+        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q };
+        return copy;
+      });
+    } finally { setPending(false); }
   };
 
   return (
@@ -235,6 +259,12 @@ export default function ChatPanel() {
                 m.text
               )}
             </div>
+            {m.role === "assistant" && <AppliedTerms status={m.expansion_status} appliedTerms={m.applied_terms} />}
+            {m.role === "assistant" && m.applied_terms?.length > 0 && (
+              <button type="button" className="btn ghost glossary-repeat" onClick={() => repeatWithoutGlossary(m)} disabled={pending}>
+                {t("chat.glossary.repeatWithout")}
+              </button>
+            )}
             {m.sources && m.sources.length > 0 && (
               <details className="sources">
                 <summary>{t("chat.sources")}</summary>
@@ -289,6 +319,10 @@ export default function ChatPanel() {
       </div>
       <details className="search-settings">
         <summary>{t("chat.searchSettings")}</summary>
+        {settings.glossary_query_expansion_enabled === false && (
+          <div className="glossary-status-warning" role="status">{t("chat.glossary.disabled")}</div>
+        )}
+        <label className="glossary-toggle"><input type="checkbox" checked={useGlossary} disabled={!settings.glossary_query_expansion_enabled} onChange={(e) => setUseGlossary(e.target.checked)} /> {t("chat.glossary.toggle")}</label>
         <div className="mode-picker" role="radiogroup" aria-label={t("chat.modePickerAria")}>
         {settings.search_modes.map((mode) => (
           <button

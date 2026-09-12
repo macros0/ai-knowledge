@@ -5,12 +5,14 @@ import { getChatSettings } from "@/lib/api";
 import { useI18n } from "@/i18n/LocaleContext";
 
 const FALLBACK_SETTINGS = {
+  knowledge_profile: null,
   top_k_min: 1,
   top_k_max: 10,
   top_k_default: 5,
   top_k_presets: [4, 5, 10],
   search_mode_default: "hybrid",
   search_modes: ["dense", "bm25", "hybrid"],
+  glossary_query_expansion_enabled: null,
 };
 
 const ChatContext = createContext(null);
@@ -23,6 +25,7 @@ export function ChatProvider({ children }) {
   const [sessionId, setSessionId] = useState(null);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
+  const [useGlossary, setUseGlossary] = useState(true);
 
   const MODE_LABELS = useMemo(
     () => ({
@@ -60,8 +63,8 @@ export function ChatProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ messages, tags, pending, settings, selectedMode, sessionId, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }),
-    [messages, tags, pending, settings, selectedMode, sessionId, MODE_LABELS]
+    () => ({ messages, tags, pending, settings, selectedMode, sessionId, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }),
+    [messages, tags, pending, settings, selectedMode, sessionId, useGlossary, MODE_LABELS]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

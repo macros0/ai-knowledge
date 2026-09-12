@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import Nav from "@/components/Nav";
+import KnowledgeProfile from "@/components/KnowledgeProfile";
 import { ChatProvider } from "@/context/ChatContext";
 import { ToastProvider } from "@/components/Toast";
 import { AuthProvider } from "@/context/AuthContext";
@@ -73,14 +74,19 @@ export default async function RootLayout({ children }) {
                 <ChatProvider>
                   <div className="app-shell">
                     <header className="topbar">
-                      <Link href="/" className="brand">
-                        <img src="/icon.png" alt="" className="brand-logo" width="32" height="32" />
-                        <h1>OKF Knowledge Service</h1>
-                      </Link>
+                      <div className="topbar-main">
+                        <Link href="/" className="brand">
+                          <img src="/icon.png" alt="" className="brand-logo" width="32" height="32" />
+                          <h1>OKF Knowledge Service</h1>
+                        </Link>
+                        <div className="topbar-tools">
+                          <KnowledgeProfile />
+                          <AuthBar />
+                          <ThemeToggle />
+                          <LocaleToggle />
+                        </div>
+                      </div>
                       <Nav />
-                      <AuthBar />
-                      <ThemeToggle />
-                      <LocaleToggle />
                     </header>
                     <HealthBanner />
                     <main>

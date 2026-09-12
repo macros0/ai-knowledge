@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
+import { buildCompactDocumentMeta, countActiveDocumentFilters } from "@/lib/documentLayout.mjs";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
@@ -150,6 +151,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   // Спойлер панели массовых действий: свёрнут по умолчанию, раскрывается по клику
   // или автоматически при появлении выделения.
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const mounted = useRef(true);
   const timer = useRef(null);
   const loadSeq = useRef(0);
@@ -533,6 +535,15 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const groups = groupBy ? buildGroups(docs, groupBy, locale, t) : [];
+  const activeFilterCount = countActiveDocumentFilters({
+    problemOnly,
+    module: moduleFilter,
+    development: devFilter,
+    tag: tagFilter,
+    locale: localeFilter,
+    dateFrom,
+    dateTo,
+  });
   const markupPct =
     stats && stats.total > 0
       ? Math.round((stats.with_development / stats.total) * 100)
@@ -543,6 +554,23 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       !BUSY_STATUSES.includes(doc.status) &&
       !doc.development_id &&
       !doc.development_suggestion;
+    const progress = progressText(doc, t);
+    const fallbackMeta = t("docs.metaFile", {
+      size: (doc.size / 1024).toFixed(1),
+      count: doc.okf_concept_count,
+    });
+    const displayTags = (doc.tags || []).map(tagDisplay);
+    const compactMeta = buildCompactDocumentMeta({
+      tags: displayTags,
+      development:
+        doc.development_number && (!canEdit || developments.length === 0)
+          ? `${doc.development_number}${doc.development_name ? ` · ${doc.development_name}` : ""}`
+          : null,
+      locale: doc.source_locale || null,
+      uploader: doc.uploaded_by ? t("docs.uploadedBy", { name: doc.uploaded_by }) : null,
+      date: doc.created_at ? fmtDate(doc.created_at) : null,
+    });
+    const metaValue = (key) => compactMeta.find((item) => item.key === key)?.value;
     return (
       <li key={doc.id} className={`document-item ${selected[doc.id] ? "selected" : ""}`}>
         {canEdit && (
@@ -554,178 +582,130 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             onChange={() => toggleSelect(doc.id)}
           />
         )}
-        <div>
-          <strong>{doc.filename}</strong>
-          <div className="meta">
-            {doc.error
-              ? t("docs.errorText", { message: doc.error })
-              : (progressText(doc, t) ?? t("docs.metaFile", { size: (doc.size / 1024).toFixed(1), count: doc.okf_concept_count }))}
+        <div className="doc-main">
+          <div className="doc-primary">
+            <strong title={doc.filename}>{doc.filename}</strong>
+            <span className="meta doc-primary-meta">
+              {doc.error ? t("docs.errorText", { message: doc.error }) : (progress || fallbackMeta)}
+            </span>
+          </div>
+          <div className="doc-meta-line">
             {canEdit ? (
-              <>
-                <br />
-                {editingTags[doc.id] ? (
-                  <>
-                    <ReferenceLocaleSelect value={tagLocales[doc.id]}
-                      onChange={(value) => setTagLocales((prev) => ({ ...prev, [doc.id]: value }))} />
-                    <TagPicker
-                      collapsible
-                      defaultExpanded
-                      onCollapse={() => toggleEditTags(doc.id)}
-                      label=""
-                      className="tag-picker-inline"
-                      selected={doc.tags || []}
-                      onChange={(tags) => changeTags(doc, tags)}
-                      placeholder={t("docs.addTagPlaceholder")}
-                    />
-                  </>
-                ) : (
-                  <div className="doc-tags-row">
-                    {doc.tags && doc.tags.length > 0 ? (
-                      doc.tags.map((tag) => (
-                        <span key={tag} className="tag-chip tag-chip-readonly">
-                          {tagDisplay(tag)}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="doc-tags-muted">{t("docs.tagsNone")}</span>
-                    )}
-                    <button
-                      className="tag-edit-toggle"
-                      onClick={() => toggleEditTags(doc.id)}
-                      aria-label={t("docs.editTagsAria")}
-                    >
-                      ✎
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              doc.tags &&
-              doc.tags.length > 0 && (
+              editingTags[doc.id] ? (
                 <>
-                  <br />
-                  <span className="doc-tags">{t("docs.tagsList", { tags: doc.tags.map(tagDisplay).join(", ") })}</span>
+                  <ReferenceLocaleSelect value={tagLocales[doc.id]}
+                    onChange={(value) => setTagLocales((prev) => ({ ...prev, [doc.id]: value }))} />
+                  <TagPicker
+                    collapsible
+                    defaultExpanded
+                    onCollapse={() => toggleEditTags(doc.id)}
+                    label=""
+                    className="tag-picker-inline"
+                    selected={doc.tags || []}
+                    onChange={(tags) => changeTags(doc, tags)}
+                    placeholder={t("docs.addTagPlaceholder")}
+                  />
                 </>
+              ) : (
+                <div className="doc-tags-row">
+                  {displayTags.map((tag) => (
+                    <span key={tag} className="tag-chip tag-chip-readonly">{tag}</span>
+                  ))}
+                  <button
+                    className="tag-edit-toggle"
+                    onClick={() => toggleEditTags(doc.id)}
+                    aria-label={t("docs.editTagsAria")}
+                  >
+                    ✎
+                  </button>
+                </div>
               )
+            ) : (
+              metaValue("tags") && <span className="doc-tags">{metaValue("tags")}</span>
             )}
             {doc.development_number && (!canEdit || developments.length === 0) && (
-              <>
-                <br />
-                <Link
-                  className="dev-tag-link"
-                  href={`/developments/${doc.development_id}`}
-                  title={t("docs.developmentTitle", { name: doc.development_name || "" })}
-                >
-                  <LinkIcon size={12} />
-                  {doc.development_number}
-                  {doc.development_name ? ` · ${doc.development_name}` : ""}
-                </Link>
-              </>
+              <Link
+                className="dev-tag-link"
+                href={`/developments/${doc.development_id}`}
+                title={t("docs.developmentTitle", { name: doc.development_name || "" })}
+              >
+                <LinkIcon size={12} />
+                {metaValue("development")}
+              </Link>
             )}
             {doc.development_suggestion && !doc.development_id && (
-              <>
-                <br />
-                <span className="dev-suggestion">
-                  {t("docs.devSuggestion", {
-                    name: doc.development_suggestion.number || doc.development_suggestion.name || "—",
-                  })}
-                </span>
-              </>
+              <span className="dev-suggestion">
+                {t("docs.devSuggestion", {
+                  name: doc.development_suggestion.number || doc.development_suggestion.name || "—",
+                })}
+              </span>
             )}
             {(doc.source_locale || canEdit) && (
-              <>
-                <br />
-                {editingLocale[doc.id] ? (
-                  <>
-                    <select
-                      className="locale-select-inline"
-                      value={doc.source_locale || ""}
-                      onChange={(e) => changeLocale(doc, e.target.value)}
-                      aria-label={t("docs.localeEditAria")}
-                    >
-                      <option value="">{t("docs.localeNone")}</option>
-                      {buildLocaleOptions(doc.source_locale, activeLocales, locale).map((o) => (
-                        <option key={o.code} value={o.code}>{o.label}</option>
-                      ))}
-                    </select>
+              editingLocale[doc.id] ? (
+                <>
+                  <select
+                    className="locale-select-inline"
+                    value={doc.source_locale || ""}
+                    onChange={(e) => changeLocale(doc, e.target.value)}
+                    aria-label={t("docs.localeEditAria")}
+                  >
+                    <option value="">{t("docs.localeNone")}</option>
+                    {buildLocaleOptions(doc.source_locale, activeLocales, locale).map((o) => (
+                      <option key={o.code} value={o.code}>{o.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="tag-edit-toggle"
+                    onClick={() => toggleEditLocale(doc.id)}
+                    aria-label={t("docs.collapseLocaleAria")}
+                  >
+                    −
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span
+                    className={`doc-locale-badge${doc.source_locale_source === "manual" ? " doc-locale-badge-manual" : ""}`}
+                    title={doc.source_locale_source === "manual" ? t("docs.localeManualTitle") : undefined}
+                  >
+                    🌐 {metaValue("locale") || t("docs.localeNone")}
+                  </span>
+                  {canEdit && (
                     <button
                       className="tag-edit-toggle"
                       onClick={() => toggleEditLocale(doc.id)}
-                      aria-label={t("docs.collapseLocaleAria")}
+                      aria-label={t("docs.localeEditAria")}
                     >
-                      −
+                      ✎
                     </button>
-                  </>
-                ) : (
-                  <>
-                    <span
-                      className={`doc-locale-badge${doc.source_locale_source === "manual" ? " doc-locale-badge-manual" : ""}`}
-                      title={doc.source_locale_source === "manual" ? t("docs.localeManualTitle") : undefined}
-                    >
-                      🌐 {doc.source_locale ? doc.source_locale.toUpperCase() : t("docs.localeNone")}
-                    </span>
-                    {canEdit && (
-                      <button
-                        className="tag-edit-toggle"
-                        onClick={() => toggleEditLocale(doc.id)}
-                        aria-label={t("docs.localeEditAria")}
-                      >
-                        ✎
-                      </button>
-                    )}
-                  </>
-                )}
-              </>
+                  )}
+                </>
+              )
             )}
             {doc.problem && (
-              <>
-                <br />
-                <span
-                  className="doc-problem-badge"
-                  title={doc.problem_message || doc.problem}
-                >
-                  ⚠ {doc.problem_message || doc.problem}
-                </span>
-              </>
+              <span className="doc-problem-badge" title={doc.problem_message || doc.problem}>
+                ⚠ {doc.problem_message || doc.problem}
+              </span>
             )}
-            {needsMarkup && (
-              <>
-                <br />
-                <span className="dev-draft-badge">{t("docs.draftBadge")}</span>
-              </>
-            )}
+            {needsMarkup && <span className="dev-draft-badge">{t("docs.draftBadge")}</span>}
             {doc.has_duplicates && (
-              <>
-                <br />
-                <button
-                  type="button"
-                  className="dup-badge"
-                  onClick={() => setDupDoc(doc)}
-                  title={t("docs.duplicateTitle")}
-                >
-                  {t("docs.duplicateBadge")}
-                </button>
-              </>
+              <button type="button" className="dup-badge" onClick={() => setDupDoc(doc)} title={t("docs.duplicateTitle")}>
+                {t("docs.duplicateBadge")}
+              </button>
             )}
             {canEdit && developments.length > 0 && (
-              <>
-                <br />
-                <DevelopmentPicker
-                  developments={developments}
-                  value={doc.development_id ?? null}
-                  onChange={(devId) => changeDevelopment(doc, devId)}
-                />
-              </>
+              <DevelopmentPicker
+                developments={developments}
+                value={doc.development_id ?? null}
+                onChange={(devId) => changeDevelopment(doc, devId)}
+              />
             )}
             {(doc.uploaded_by || doc.created_at) && (
-              <>
-                <br />
-                <span className="doc-uploader">
-                  {doc.uploaded_by ? t("docs.uploadedBy", { name: doc.uploaded_by }) : t("docs.uploaded")}
-                  {doc.uploaded_by && doc.created_at ? " · " : ""}
-                  {doc.created_at ? fmtDate(doc.created_at) : ""}
-                </span>
-              </>
+              <span className="doc-uploader">
+                {metaValue("uploader") || t("docs.uploaded")}
+                {doc.uploaded_by && doc.created_at ? " · " : ""}
+                {metaValue("date") || ""}
+              </span>
             )}
           </div>
         </div>
@@ -851,141 +831,115 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         </button>
       </div>
       <div className="doc-filter-bar">
-        <input
-          type="text"
-          className="doc-filter-input"
-          placeholder={t("docs.searchPlaceholder")}
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          aria-label={t("docs.searchAria")}
-        />
-        <select
-          className="doc-filter-select"
-          value={selectedUploader}
-          onChange={(e) => chooseUploader(e.target.value)}
-          aria-label={t("docs.uploaderFilterAria")}
-        >
-          <optgroup label={t("docs.quickSelect")}>
-            <option value="__me__">{t("docs.myDocuments")}</option>
-            <option value="">{t("docs.allUploaders")}</option>
-          </optgroup>
-          <optgroup label={t("docs.uploaders")}>
-            {uploaders.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-        <label className="doc-filter-problem">
+        <div className="doc-filter-primary">
           <input
-            type="checkbox"
-            checked={problemOnly}
-            onChange={(e) => setProblemOnly(e.target.checked)}
-            aria-label={t("docs.problemOnlyAria")}
+            type="text"
+            className="doc-filter-input"
+            placeholder={t("docs.searchPlaceholder")}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            aria-label={t("docs.searchAria")}
           />
-          {t("docs.problemOnly")}
-        </label>
-        <select
-          className="doc-filter-select"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label={t("docs.statusFilterAria")}
-        >
-          {STATUS_FILTER_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="doc-filter-select"
-          value={moduleFilter}
-          onChange={(e) => setModuleFilter(e.target.value)}
-          aria-label={t("docs.moduleFilterAria")}
-        >
-          <option value="">{t("docs.allModules")}</option>
-          {modules.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-        {groupBy !== "tag" && (
           <select
             className="doc-filter-select"
-            value={tagFilter}
-            onChange={(e) => setTagFilter(e.target.value)}
-            aria-label={t("docs.tagFilterAria")}
+            value={selectedUploader}
+            onChange={(e) => chooseUploader(e.target.value)}
+            aria-label={t("docs.uploaderFilterAria")}
           >
-            <option value="">{t("docs.allTags")}</option>
-            {filterTags.map((tg) => (
-              <option key={tg.name} value={tg.name}>
-                {tg.display || tg.name} ({tg.count})
-              </option>
-            ))}
+            <optgroup label={t("docs.quickSelect")}>
+              <option value="__me__">{t("docs.myDocuments")}</option>
+              <option value="">{t("docs.allUploaders")}</option>
+            </optgroup>
+            <optgroup label={t("docs.uploaders")}>
+              {uploaders.map((u) => <option key={u} value={u}>{u}</option>)}
+            </optgroup>
           </select>
-        )}
-        <select
-          className="doc-filter-select"
-          value={localeFilter}
-          onChange={(e) => setLocaleFilter(e.target.value)}
-          aria-label={t("docs.localeFilterAria")}
-        >
-          <option value="">{t("docs.allLocales")}</option>
-          {facetOptions(localeFacets, locale).map((o) => (
-            <option key={o.code} value={o.code}>
-              {o.code === "unknown" ? t("docs.localeUnknown") : o.label} ({o.count})
-            </option>
-          ))}
-        </select>
-        <DevelopmentFilter
-          developments={developments}
-          value={devFilter}
-          onChange={setDevFilter}
-        />
-        <label className="doc-filter-date">
-          <span>{t("docs.dateFrom")}</span>
-          <input
-            type="date"
-            className="doc-filter-date-input"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            aria-label={t("docs.dateFromAria")}
-          />
-          <span>{t("docs.dateTo")}</span>
-          <input
-            type="date"
-            className="doc-filter-date-input"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            aria-label={t("docs.dateToAria")}
-          />
-        </label>
-        {canEdit && (
-          <button className="doc-filter-btn" onClick={() => setShowTags(true)}>
-            {t("docs.tagDictionary")}
+          <select
+            className="doc-filter-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            aria-label={t("docs.statusFilterAria")}
+          >
+            {STATUS_FILTER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select
+            className="doc-filter-select"
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value)}
+            aria-label={t("sort.label")}
+          >
+            <optgroup label={t("sort.groupDate")}>
+              <option value="date_desc">{t("sort.newFirst")}</option>
+              <option value="date_asc">{t("sort.oldFirst")}</option>
+            </optgroup>
+            <optgroup label={t("sort.groupName")}>
+              <option value="name_asc">{t("sort.alphaAsc")}</option>
+              <option value="name_desc">{t("sort.alphaDesc")}</option>
+            </optgroup>
+            <optgroup label={t("sort.groupUploader")}>
+              <option value="uploader_asc">{t("sort.alphaAsc")}</option>
+              <option value="uploader_desc">{t("sort.alphaDesc")}</option>
+            </optgroup>
+          </select>
+          <button
+            type="button"
+            className={`doc-filter-btn${filtersOpen ? " active" : ""}`}
+            onClick={() => setFiltersOpen((value) => !value)}
+            aria-expanded={filtersOpen}
+          >
+            {t("docs.filtersButton", { count: activeFilterCount })}
           </button>
+        </div>
+        {filtersOpen && (
+          <div className="doc-filter-secondary">
+            <label className="doc-filter-problem">
+              <input
+                type="checkbox"
+                checked={problemOnly}
+                onChange={(e) => setProblemOnly(e.target.checked)}
+                aria-label={t("docs.problemOnlyAria")}
+              />
+              {t("docs.problemOnly")}
+            </label>
+            <select
+              className="doc-filter-select"
+              value={moduleFilter}
+              onChange={(e) => setModuleFilter(e.target.value)}
+              aria-label={t("docs.moduleFilterAria")}
+            >
+              <option value="">{t("docs.allModules")}</option>
+              {modules.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+            {groupBy !== "tag" && (
+              <select
+                className="doc-filter-select"
+                value={tagFilter}
+                onChange={(e) => setTagFilter(e.target.value)}
+                aria-label={t("docs.tagFilterAria")}
+              >
+                <option value="">{t("docs.allTags")}</option>
+                {filterTags.map((tg) => <option key={tg.name} value={tg.name}>{tg.display || tg.name} ({tg.count})</option>)}
+              </select>
+            )}
+            <select
+              className="doc-filter-select"
+              value={localeFilter}
+              onChange={(e) => setLocaleFilter(e.target.value)}
+              aria-label={t("docs.localeFilterAria")}
+            >
+              <option value="">{t("docs.allLocales")}</option>
+              {facetOptions(localeFacets, locale).map((o) => <option key={o.code} value={o.code}>{o.code === "unknown" ? t("docs.localeUnknown") : o.label} ({o.count})</option>)}
+            </select>
+            <DevelopmentFilter developments={developments} value={devFilter} onChange={setDevFilter} />
+            <label className="doc-filter-date">
+              <span>{t("docs.dateFrom")}</span>
+              <input type="date" className="doc-filter-date-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label={t("docs.dateFromAria")} />
+              <span>{t("docs.dateTo")}</span>
+              <input type="date" className="doc-filter-date-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label={t("docs.dateToAria")} />
+            </label>
+            {canEdit && <button className="doc-filter-btn" onClick={() => setShowTags(true)}>{t("docs.tagDictionary")}</button>}
+          </div>
         )}
-        <select
-          className="doc-filter-select"
-          value={sortKey}
-          onChange={(e) => setSortKey(e.target.value)}
-          aria-label={t("sort.label")}
-        >
-          <optgroup label={t("sort.groupDate")}>
-            <option value="date_desc">{t("sort.newFirst")}</option>
-            <option value="date_asc">{t("sort.oldFirst")}</option>
-          </optgroup>
-          <optgroup label={t("sort.groupName")}>
-            <option value="name_asc">{t("sort.alphaAsc")}</option>
-            <option value="name_desc">{t("sort.alphaDesc")}</option>
-          </optgroup>
-          <optgroup label={t("sort.groupUploader")}>
-            <option value="uploader_asc">{t("sort.alphaAsc")}</option>
-            <option value="uploader_desc">{t("sort.alphaDesc")}</option>
-          </optgroup>
-        </select>
       </div>
       {groupBy ? (
         <div className="document-groups">

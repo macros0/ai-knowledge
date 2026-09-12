@@ -45,7 +45,7 @@ export default function SelectionBar({
   const [busy, setBusy] = useState(false);
   const { showToast } = useToast();
   const { t, locale } = useI18n();
-  const [tagLocale, setTagLocale] = useState(null);
+  const [tagLocale, setTagLocale] = useState(locale);
 
   const hasSelection = selectedIds.length > 0;
   const danger = canDelete && hasSelection;

@@ -381,16 +381,16 @@ export function getOkfContent(docId, filename) {
   });
 }
 
-export function search(query, tags = [], topK = 5, mode = "hybrid") {
+export function search(query, tags = [], topK = 5, mode = "hybrid", useGlossary = true) {
   return request("/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, tags, top_k: topK, mode }),
+    body: JSON.stringify({ query, tags, top_k: topK, mode, use_glossary: useGlossary }),
   });
 }
 
-export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "") {
-  const body = { query, locale: currentUiLocale(), tags, top_k: topK, mode };
+export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true) {
+  const body = { query, locale: currentUiLocale(), tags, top_k: topK, mode, use_glossary: useGlossary };
   if (sessionId) body.session_id = sessionId;
   // Фильтр по языку документа (Этап 7 фаза D): не отправляем поле при «Все языки».
   if (sourceLocale === "unknown") {
@@ -586,6 +586,101 @@ export function listDocumentDuplicates(docId) {
 
 export function listActiveLocales() {
   return request("/locales").then((data) => data.locales ?? []);
+}
+
+// --- Доменный глоссарий ---
+
+export function listGlossary(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") qs.set(key, value);
+  }
+  const query = qs.toString();
+  return request(`/admin/glossary${query ? `?${query}` : ""}`);
+}
+
+export function getGlossaryTerm(termId) {
+  return request(`/admin/glossary/${termId}`);
+}
+
+export function createGlossaryTerm(data) {
+  return request("/admin/glossary", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateGlossaryTerm(termId, data) {
+  return request(`/admin/glossary/${termId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateGlossarySource(termId, data) {
+  return request(`/admin/glossary/${termId}/source`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function addGlossaryAlias(termId, data) {
+  return request(`/admin/glossary/${termId}/aliases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateGlossaryAlias(termId, aliasId, data) {
+  return request(`/admin/glossary/${termId}/aliases/${aliasId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteGlossaryAlias(termId, aliasId, version) {
+  return request(`/admin/glossary/${termId}/aliases/${aliasId}?version=${encodeURIComponent(version)}`, { method: "DELETE" });
+}
+
+export function previewGlossaryQuery(query, locale) {
+  return request("/admin/glossary/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, locale }),
+  });
+}
+
+export function glossaryTranslation(termId, locale, data) {
+  return request(`/admin/glossary/${termId}/translations/${encodeURIComponent(locale)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function reviewGlossaryTranslation(termId, locale, data) {
+  return request(`/admin/glossary/${termId}/translations/${encodeURIComponent(locale)}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function pendingGlossaryTranslations(locale) {
+  return request(`/admin/glossary/translations/pending?locale=${encodeURIComponent(locale)}`);
+}
+
+export function backfillGlossaryTranslations(locale, termIds, expectedTranslationVersions = {}) {
+  return request("/admin/glossary/translations/backfill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ locale, term_ids: termIds, expected_translation_versions: expectedTranslationVersions }),
+  });
 }
 
 export async function getUiDictionary(locale) {

@@ -15,7 +15,7 @@ import { useI18n } from "@/i18n/LocaleContext";
 export default function DocumentsPanel() {
   const { mode, hasRole } = useAuth();
   const { t, locale } = useI18n();
-  const [tagLocale, setTagLocale] = useState(null);
+  const [tagLocale, setTagLocale] = useState(locale);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [uploadTags, setUploadTags] = useState([]);

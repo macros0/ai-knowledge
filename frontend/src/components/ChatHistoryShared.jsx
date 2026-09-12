@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { useI18n } from "@/i18n/LocaleContext";
 import MarkdownViewer from "./MarkdownViewer";
+import AppliedTerms from "./AppliedTerms";
 
 export function fmtDate(iso) {
   if (!iso) return "—";
@@ -65,6 +66,9 @@ export function HistoryMessage({ m, userLabel }) {
     <div className={`msg ${m.role}`}>
       <div className="role">{m.role === "user" ? youLabel : t("chat.assistant")}</div>
       <div className="bubble history-bubble">{content}</div>
+      {m.role === "assistant" && m.retrieval_metadata && (
+        <AppliedTerms status={m.retrieval_metadata.expansion_status} appliedTerms={m.retrieval_metadata.applied_terms} />
+      )}
       <SourceBadges sources={m.sources} />
     </div>
   );
