@@ -92,6 +92,13 @@ export default function MarkdownViewer({
         </a>
       );
     },
+    table({ node, children, ...props }) {
+      return (
+        <div className="okf-table-scroll">
+          <table {...props}>{children}</table>
+        </div>
+      );
+    },
     p({ node, children, ...props }) {
       // TODO: inline-изображение внутри текста абзаца (`текст ![img](src) ещё`) всё
       // равно даст <figure> внутри <p> — в текущем пайплайне не встречается (снимки

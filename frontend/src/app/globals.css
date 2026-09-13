@@ -1452,6 +1452,13 @@ main {
   padding: 0;
 }
 
+.okf-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
 .okf-markdown table {
   border-collapse: collapse;
   margin: 8px 0;
