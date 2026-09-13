@@ -7,7 +7,6 @@ from typing import Iterable
 
 from app.services.glossary.normalization import (
     GlossaryValidationError,
-    normalize_alias,
     normalize_canonical,
     validate_alias_options,
     validate_locale,
@@ -31,11 +30,6 @@ def validate_seed(entries: Iterable[dict]) -> None:
     rows = list(entries)
     canonicals: set[str] = set()
     aliases: set[str] = set()
-    canonical_keys = {
-        normalize_alias(normalize_canonical(entry["canonical"], entry["kind"]))
-        for entry in rows
-        if isinstance(entry, dict) and "canonical" in entry and "kind" in entry
-    }
     for index, entry in enumerate(rows):
         if not isinstance(entry, dict):
             raise GlossaryValidationError(f"Запись seed #{index + 1} должна быть объектом")
@@ -49,7 +43,7 @@ def validate_seed(entries: Iterable[dict]) -> None:
         validate_locale(entry["canonical_locale"])
         if not isinstance(entry["aliases"], list):
             raise GlossaryValidationError(f"aliases записи #{index + 1} должен быть массивом")
-        local_aliases = {normalize_alias(canonical)}
+        local_aliases = set()
         for alias in entry["aliases"]:
             if not isinstance(alias, dict) or "alias" not in alias:
                 raise GlossaryValidationError(f"Некорректный alias в записи #{index + 1}")
@@ -59,7 +53,7 @@ def validate_seed(entries: Iterable[dict]) -> None:
                 auto_expand=bool(alias.get("auto_expand", False)),
                 search_enabled=bool(alias.get("search_enabled", False)),
             )
-            if normalized in local_aliases or normalized in aliases or normalized in canonical_keys:
+            if normalized in local_aliases or normalized in aliases:
                 raise GlossaryValidationError(f"Коллизия alias в seed: {alias['alias']}")
             local_aliases.add(normalized)
             aliases.add(normalized)

@@ -44,7 +44,7 @@ def inspect_schema(engine) -> dict:
         }
         expected = {
             "domain_terms": {("canonical",)},
-            "domain_term_aliases": {("normalized_alias",)},
+            "domain_term_aliases": {("term_id", "normalized_alias")},
         }.get(table.name, set())
         missing_unique = sorted(expected - unique_columns)
         if missing_unique:

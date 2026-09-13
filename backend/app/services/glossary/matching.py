@@ -16,7 +16,7 @@ DomainMatchCache = dict[tuple[str, tuple], list[str]]
 
 def _unique_forms(group: MatchGroup) -> tuple[str, ...]:
     """Return only complete, approved forms for one matched term."""
-    forms = [group.canonical, *group.matched_forms]
+    forms = list(group.matched_forms)
     # The query span is a complete structural/alias form even when it was not
     # copied into ``matched_forms`` by an older QueryPlan producer.
     forms.extend(span.matched_text for span in group.spans)
@@ -40,14 +40,14 @@ def _contains_complete_form(text: str, forms: Iterable[str]) -> bool:
 def _via_form(group: MatchGroup) -> str:
     if group.spans:
         return group.spans[0].matched_text
-    return group.canonical
+    return group.original_name
 
 
 def _matched_domain_terms(text: str, match_groups: tuple[MatchGroup, ...]) -> list[str]:
     result: list[str] = []
     for group in match_groups:
         if _contains_complete_form(text, _unique_forms(group)):
-            result.append(f"{group.canonical} via {_via_form(group)}")
+            result.append(f"{group.original_name} via {_via_form(group)}")
     return result
 
 

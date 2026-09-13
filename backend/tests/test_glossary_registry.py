@@ -14,7 +14,7 @@ from app.services.glossary.expansion import load_glossary_snapshot
 from app.services.glossary.types import GlossaryAliasInput
 
 
-def test_create_term_atomically_adds_reserved_canonical_alias_and_audit():
+def test_create_term_without_implicit_alias_writes_audit():
     registry = GlossaryRegistry()
 
     term = registry.create(
@@ -29,15 +29,14 @@ def test_create_term_atomically_adds_reserved_canonical_alias_and_audit():
     assert term["canonical"] == "IT0003"
     assert term["canonical_locale"] == "de"
     assert term["version"] == 1
-    assert len(term["aliases"]) == 1
-    assert term["aliases"][0]["alias"] == "IT0003"
-    assert term["aliases"][0]["normalized_alias"] == "it0003"
+    assert term["aliases"] == []
     assert AuditService().query(action_type=audit.GLOSSARY_TERM_CREATE)[0]["target_id"] == str(term["id"])
 
 
 def test_duplicate_normalized_alias_is_rejected_without_partial_term():
     registry = GlossaryRegistry()
     first = registry.create("IT0003", "sap_infotype", "First")
+    first = registry.add_alias(first["id"], first["version"], "IT0003")
 
     with pytest.raises(GlossaryAliasConflictError):
         registry.add_alias(
@@ -72,7 +71,7 @@ def test_noop_does_not_increment_version_or_write_audit():
 
 def test_disable_preserves_aliases_and_increments_version():
     registry = GlossaryRegistry()
-    term = registry.create("IT0003", "sap_infotype", "First")
+    term = registry.create("IT0003", "sap_infotype", "First", aliases=[GlossaryAliasInput("IT0003")])
     disabled = registry.update(term["id"], term["version"], enabled=False, updated_by="u1")
 
     assert disabled["enabled"] is False
@@ -115,7 +114,7 @@ def test_initial_aliases_are_validated_and_created_atomically():
         aliases=[GlossaryAliasInput("/nPA20", auto_expand=True, search_enabled=True)],
     )
 
-    assert [item["normalized_alias"] for item in term["aliases"]] == ["pa20", "/npa20"]
+    assert [item["normalized_alias"] for item in term["aliases"]] == ["/npa20"]
 
 
 def test_snapshot_is_reused_until_a_registry_mutation_invalidates_it():
@@ -141,7 +140,7 @@ def test_alias_update_uses_the_term_cas_and_audit():
         "Изменение данных",
         aliases=[GlossaryAliasInput("old-pa20", auto_expand=True, search_enabled=True)],
     )
-    alias_id = term["aliases"][1]["id"]
+    alias_id = term["aliases"][0]["id"]
 
     updated = registry.update_alias(
         term["id"],
@@ -152,7 +151,7 @@ def test_alias_update_uses_the_term_cas_and_audit():
     )
 
     assert updated["version"] == term["version"] + 1
-    assert updated["aliases"][1]["normalized_alias"] == "new-pa20"
+    assert updated["aliases"][0]["normalized_alias"] == "new-pa20"
     with pytest.raises(GlossaryVersionConflictError):
         registry.update_alias(term["id"], term["version"], alias_id, alias="other-pa20")
 

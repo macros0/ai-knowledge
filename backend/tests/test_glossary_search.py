@@ -338,4 +338,4 @@ def test_chat_keeps_domain_context_and_original_question_language(monkeypatch):
     assert "Response locale: en" in llm_prompts[0]
     assert "User question: инфотип 3" in llm_prompts[1]
     assert "Domain term: IT0003" not in llm_prompts[1]
-    assert "Matched domain terms: [IT0003 via инфотип 3]" in llm_prompts[1]
+    assert "Matched domain terms: [Payroll infotype via инфотип 3]" in llm_prompts[1]

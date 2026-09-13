@@ -7,6 +7,8 @@ import { useToast } from "./Toast";
 import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import GlossaryTranslations from "./GlossaryTranslations";
 import GlossaryPreview from "./GlossaryPreview";
+import GlossaryAliasCheck, { GlossaryConflicts } from "./GlossaryAliasCheck";
+import { hasPendingGlossaryAlias } from "@/lib/glossaryUi.mjs";
 
 const emptyAlias = { alias: "", locale: null, auto_expand: false, search_enabled: false };
 
@@ -19,7 +21,7 @@ const aliasDraftsFor = (aliases) => Object.fromEntries(
   }]),
 );
 
-export default function GlossaryEditor({ term, canManage = false, onSaved, onClose }) {
+export default function GlossaryEditor({ term, canManage = false, onSaved, onClose, onOpenTerm, onPendingAliasChange }) {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const [name, setName] = useState(term.original_name);
@@ -31,6 +33,10 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    onPendingAliasChange?.(hasPendingGlossaryAlias(aliasDraft));
+  }, [aliasDraft, onPendingAliasChange]);
+
+  useEffect(() => {
     // A newly selected card must replace the local draft.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(term.original_name); setDescription(term.original_description || "");
@@ -40,7 +46,12 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
 
   const apply = async (fn) => {
     setBusy(true);
-    try { onSaved(await fn()); showToast(t("admin.glossary.saved"), { type: "success" }); return true; }
+    try {
+      const updated = await fn();
+      onSaved(updated);
+      showToast(t(updated.has_duplicates ? "admin.glossary.savedWithDuplicates" : "admin.glossary.saved"), { type: updated.has_duplicates ? "warning" : "success" });
+      return true;
+    }
     catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); return false; }
     finally { setBusy(false); }
   };
@@ -49,7 +60,12 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
     ...current,
     [aliasId]: { ...(current[aliasId] || emptyAlias), ...patch },
   }));
+  const confirmDiscardNewAlias = () => {
+    if (!hasPendingGlossaryAlias(aliasDraft)) return true;
+    return window.confirm(t("admin.glossary.unsavedAliasConfirm"));
+  };
   const saveAlias = (alias) => {
+    if (!confirmDiscardNewAlias()) return;
     const draft = aliasDrafts[alias.id] || alias;
     if (!draft.alias.trim()) return;
     return apply(() => updateGlossaryAlias(term.id, alias.id, {
@@ -65,11 +81,15 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
     const saved = await apply(() => addGlossaryAlias(term.id, { version: term.version, ...aliasDraft, locale: aliasDraft.locale || locale, alias: aliasDraft.alias.trim() }));
     if (saved) setAliasDraft(emptyAlias);
   };
-  const removeAlias = (alias) => apply(() => deleteGlossaryAlias(term.id, alias.id, term.version));
+  const removeAlias = (alias) => {
+    if (!confirmDiscardNewAlias()) return;
+    return apply(() => deleteGlossaryAlias(term.id, alias.id, term.version));
+  };
 
   return (
     <div className="glossary-editor">
-      <div className="glossary-editor-head"><div><strong>{term.canonical}</strong><span className="meta"> · {term.kind} · v{term.version}</span></div><button className="btn ghost" onClick={onClose}>{t("common.cancel")}</button></div>
+      <div className="glossary-editor-head"><div><strong>{term.original_name}</strong><span className="meta"> · {term.kind} · v{term.version}</span>{term.has_duplicates && <span className="glossary-duplicate-badge">{t("admin.glossary.duplicate")}</span>}</div><button className="btn ghost" onClick={onClose}>{t("common.cancel")}</button></div>
+      <GlossaryConflicts conflicts={term.alias_conflicts} onOpen={onOpenTerm} />
       <section className="glossary-section">
         <h3>{t("admin.glossary.original")}</h3>
         <p className="muted glossary-save-hint">{t("admin.glossary.sourceSaveHint")}</p>
@@ -77,7 +97,7 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
         <label className="glossary-field">{t("admin.glossary.description")}<textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} readOnly={!canManage} /></label>
         <ReferenceLocaleSelect value={canonicalLocale} onChange={setCanonicalLocale} disabled={busy || !canManage} />
         <label className="glossary-check"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={busy || !canManage} /> {t("admin.glossary.enabled")}</label>
-        {canManage && <button className="modal-btn" onClick={saveSource} disabled={busy || !name.trim()}>{t("admin.glossary.save")}</button>}
+        {canManage && <button className="modal-btn" onClick={() => confirmDiscardNewAlias() && saveSource()} disabled={busy || !name.trim()}>{t("admin.glossary.save")}</button>}
       </section>
       <section className="glossary-section">
         <h3>{t("admin.glossary.aliases")}</h3>
@@ -96,6 +116,7 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
           <label><input type="checkbox" checked={draft.search_enabled} disabled={!canManage || busy} onChange={(e) => updateAliasDraft(alias.id, { search_enabled: e.target.checked })} /> {t("admin.glossary.searchEnabled")}</label>
           {canManage && <button className="modal-btn" onClick={() => saveAlias(alias)} disabled={busy || !draft.alias.trim()}>{t("admin.glossary.save")}</button>}
           {canManage && <button className="btn ghost" onClick={() => removeAlias(alias)} disabled={busy} aria-label={t("admin.glossary.deleteAlias")}>×</button>}
+          {canManage && draft.alias !== alias.alias && <GlossaryAliasCheck value={draft.alias} termId={term.id} onOpen={onOpenTerm} />}
         </div>;
         })}
         {canManage && <div className="glossary-alias-row glossary-alias-new">
@@ -109,9 +130,10 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
           <label><input type="checkbox" checked={aliasDraft.auto_expand} onChange={(e) => setAliasDraft((v) => ({ ...v, auto_expand: e.target.checked }))} /> {t("admin.glossary.autoExpand")}</label>
           <label><input type="checkbox" checked={aliasDraft.search_enabled} onChange={(e) => setAliasDraft((v) => ({ ...v, search_enabled: e.target.checked }))} /> {t("admin.glossary.searchEnabled")}</label>
           <button className="modal-btn" onClick={addAlias} disabled={busy || !aliasDraft.alias.trim()}>+</button>
+          <GlossaryAliasCheck value={aliasDraft.alias} termId={term.id} onOpen={onOpenTerm} />
         </div>}
       </section>
-      <GlossaryTranslations key={`${term.id}:${term.canonical_locale}`} term={term} onSaved={onSaved} />
+      <GlossaryTranslations key={`${term.id}:${term.canonical_locale}`} term={term} onSaved={onSaved} beforeSave={confirmDiscardNewAlias} />
       <GlossaryPreview locale={canonicalLocale} />
     </div>
   );

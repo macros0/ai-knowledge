@@ -9,6 +9,7 @@ from app.services.glossary.expansion import prepare_query
 from app.services.glossary.matching import matched_domain_terms
 from app.services.glossary import matching
 from app.services.glossary.registry import GlossaryRegistry
+from app.services.glossary.types import GlossaryAliasInput
 
 
 def _block(title: str, content: str, *, concept_content: str | None = None) -> dict:
@@ -30,11 +31,12 @@ def _infotype_plan(query: str = "инфотип 3"):
         "sap_infotype",
         "Payroll infotype",
         canonical_locale="de",
+        aliases=[GlossaryAliasInput(text, auto_expand=True, search_enabled=True) for text in ["инфотип 3", "IT0003"]],
     )
     return prepare_query(query, ui_locale="ru", enabled=True)
 
 
-def test_domain_match_keeps_canonical_source_for_structural_query():
+def test_domain_match_keeps_source_with_explicit_equivalent_alias():
     plan = _infotype_plan()
     source = _block("Настройка IT0003", "Параметры IT0003 задаются в системе.")
     unrelated = _block("Другой раздел", "Описание инфотипа без конкретного кода.")
@@ -46,7 +48,7 @@ def test_domain_match_keeps_canonical_source_for_structural_query():
     )
 
     assert kept == [source, unrelated]
-    assert matched_domain_terms(source, plan.match_groups) == ["IT0003 via инфотип 3"]
+    assert matched_domain_terms(source, plan.match_groups) == ["Payroll infotype via инфотип 3"]
     assert matched_domain_terms(unrelated, plan.match_groups) == []
 
 
@@ -74,7 +76,7 @@ def test_domain_match_can_reuse_request_local_cache():
     first = matched_domain_terms(source, plan.match_groups, cache=cache)
     cached = matched_domain_terms(source, plan.match_groups, cache=cache)
 
-    assert cached == first == ["IT0003 via инфотип 3"]
+    assert cached == first == ["Payroll infotype via инфотип 3"]
     assert len(cache) == 1
 
 
@@ -111,8 +113,8 @@ def test_exact_domain_title_uses_own_concept_content_but_numeric_title_does_not(
 
 def test_two_domain_groups_keep_both_sides_and_do_not_require_added_name_in_title():
     registry = GlossaryRegistry()
-    registry.create("IT0001", "sap_infotype", "Employee grouping", canonical_locale="de")
-    registry.create("IT0003", "sap_infotype", "Payroll infotype", canonical_locale="de")
+    registry.create("IT0001", "sap_infotype", "Employee grouping", canonical_locale="de", aliases=[GlossaryAliasInput("IT0001", auto_expand=True, search_enabled=True)])
+    registry.create("IT0003", "sap_infotype", "Payroll infotype", canonical_locale="de", aliases=[GlossaryAliasInput("IT0003", auto_expand=True, search_enabled=True)])
     plan = prepare_query("IT0001 и IT0003", ui_locale="ru", enabled=True)
     first = _block("Описание IT0001", "Факты про IT0001")
     second = _block("Описание IT0003", "Факты про IT0003")
@@ -134,7 +136,5 @@ def test_two_domain_groups_keep_both_sides_and_do_not_require_added_name_in_titl
     )
 
     assert exact_filtered == [first, second]
-    assert "Matched domain terms: [IT0001 via IT0001]" in context
-    assert "Matched domain terms: [IT0003 via IT0003]" in context
-    assert "Employee grouping" not in context
-    assert "Payroll infotype" not in context
+    assert "Matched domain terms: [Employee grouping via IT0001]" in context
+    assert "Matched domain terms: [Payroll infotype via IT0003]" in context

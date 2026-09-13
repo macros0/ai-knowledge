@@ -25,7 +25,7 @@ class GlossaryAliasCreate(BaseModel):
 
 
 class GlossaryTermCreate(BaseModel):
-    canonical: str = Field(min_length=1, max_length=128)
+    canonical: str | None = Field(default=None, min_length=1, max_length=128)
     kind: GlossaryKind
     original_name: str = Field(min_length=1, max_length=256)
     original_description: str | None = Field(default=None, max_length=8000)
@@ -118,6 +118,19 @@ class GlossaryTermOut(BaseModel):
     updated_by: str | None = None
     aliases: list[GlossaryAliasOut] = Field(default_factory=list)
     translations: list[GlossaryTranslationOut] = Field(default_factory=list)
+    has_duplicates: bool = False
+    alias_conflicts: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GlossaryAliasCheck(BaseModel):
+    aliases: list[str] = Field(max_length=100)
+    term_id: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _bounded_aliases(self):
+        if any(len(alias) > 256 for alias in self.aliases):
+            raise ValueError("Алиас не может быть длиннее 256 символов")
+        return self
 
 
 class GlossaryListOut(BaseModel):

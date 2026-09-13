@@ -32,6 +32,7 @@ class GlossaryAliasSnapshot:
     locale: str | None
     auto_expand: bool
     search_enabled: bool
+    is_conflicting: bool = False
 
 
 @dataclass(frozen=True)

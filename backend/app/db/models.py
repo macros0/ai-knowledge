@@ -537,7 +537,7 @@ class DomainTermAlias(Base):
         ForeignKey("domain_terms.id", ondelete="CASCADE"), index=True, nullable=False
     )
     alias: Mapped[str] = mapped_column(String(256), nullable=False)
-    normalized_alias: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    normalized_alias: Mapped[str] = mapped_column(String(256), index=True, nullable=False)
     locale: Mapped[str | None] = mapped_column(String(16), nullable=True)
     auto_expand: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"), nullable=False
@@ -553,6 +553,10 @@ class DomainTermAlias(Base):
     updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     term: Mapped[DomainTerm] = relationship(back_populates="aliases_rel")
+
+    __table_args__ = (
+        UniqueConstraint("term_id", "normalized_alias", name="uq_domain_term_alias_per_term"),
+    )
 
 
 class Job(Base):

@@ -12,6 +12,7 @@ from app.auth.service import require_role
 from app.config import get_settings
 from app.models.glossary import (
     GlossaryAliasAdd,
+    GlossaryAliasCheck,
     GlossaryAliasPatch,
     GlossaryListOut,
     GlossaryPendingOut,
@@ -124,6 +125,14 @@ def list_glossary(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post("/aliases/check")
+def check_glossary_aliases(
+    body: GlossaryAliasCheck,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    return {"conflicts": _registry().check_aliases(body.aliases, term_id=body.term_id)}
 
 
 @router.post("/preview", response_model=GlossaryPreviewOut)

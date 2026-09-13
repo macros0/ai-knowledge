@@ -9,7 +9,7 @@ import { useToast } from "./Toast";
 import SearchableSelect from "./SearchableSelect";
 import { languageLabel } from "@/lib/sourceLocales.mjs";
 
-export default function GlossaryTranslations({ term, onSaved }) {
+export default function GlossaryTranslations({ term, onSaved, beforeSave }) {
   const { t, locale: uiLocale } = useI18n();
   const { showToast } = useToast();
   const [active, setActive] = useState([]);
@@ -54,6 +54,7 @@ export default function GlossaryTranslations({ term, onSaved }) {
 
   const save = async () => {
     if (!locale || !name.trim()) return;
+    if (beforeSave && !beforeSave()) return;
     setBusy(true);
     try {
       const updated = await glossaryTranslation(term.id, locale, {
@@ -72,6 +73,7 @@ export default function GlossaryTranslations({ term, onSaved }) {
 
   const review = async () => {
     if (!current) return;
+    if (beforeSave && !beforeSave()) return;
     setBusy(true);
     try { onSaved(await reviewGlossaryTranslation(term.id, locale, { translation_version: current.version, source_revision: term.source_revision })); }
     catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); }

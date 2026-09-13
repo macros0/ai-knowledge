@@ -66,9 +66,9 @@ def test_seed_reports_conflict_without_overwriting_existing_source():
     assert registry.list()[0]["original_name"] == "Locally edited name"
 
 
-def test_seed_rejects_alias_colliding_with_another_canonical():
+def test_seed_allows_alias_matching_a_technical_identifier():
     entries = load_seed()
+    entries[1]["canonical"] = "INTERNAL_ONLY"
     entries[0]["aliases"].append({"alias": entries[1]["canonical"], "auto_expand": False, "search_enabled": False})
 
-    with pytest.raises(ValueError, match="Коллизия alias"):
-        validate_seed(entries)
+    validate_seed(entries)

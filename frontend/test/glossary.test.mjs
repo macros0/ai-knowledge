@@ -6,10 +6,17 @@ import {
   buildGlossaryListParams,
   chunkTermIds,
   glossaryTermDisplay,
+  hasPendingGlossaryAlias,
   isCurrentGlossaryResponse,
   keepGlossarySelection,
   translationState,
 } from "../src/lib/glossaryUi.mjs";
+
+test("detects a typed new glossary alias before the add action", () => {
+  assert.equal(hasPendingGlossaryAlias({ alias: "  новый алиас  " }), true);
+  assert.equal(hasPendingGlossaryAlias({ alias: "   " }), false);
+  assert.equal(hasPendingGlossaryAlias(null), false);
+});
 
 test("buildGlossaryListParams keeps filters server-side and paginates", () => {
   assert.deepEqual(
@@ -37,9 +44,8 @@ test("late glossary responses never replace the selected term", () => {
   assert.deepEqual(keepGlossarySelection(null, { id: "term-1" }), { id: "term-1" });
 });
 
-test("glossaryTermDisplay exposes canonical and original locale without fallback", () => {
+test("glossaryTermDisplay hides the technical identifier", () => {
   assert.deepEqual(glossaryTermDisplay({ canonical: "IT0003", original_name: "Payroll Status", canonical_locale: "und" }), {
-    code: "IT0003",
     name: "Payroll Status",
     locale: "und",
   });
@@ -130,6 +136,16 @@ test("new alias draft is cleared only after a successful save", () => {
   assert.match(editor, /return false;\s*\}\s*finally/);
   assert.match(editor, /const saved = await apply\(\(\) => addGlossaryAlias/);
   assert.match(editor, /if \(saved\) setAliasDraft\(emptyAlias\)/);
+});
+
+test("glossary editor guards a typed alias before another action", () => {
+  const editor = readFileSync(new URL("../src/components/GlossaryEditor.jsx", import.meta.url), "utf8");
+  const panel = readFileSync(new URL("../src/components/GlossaryPanel.jsx", import.meta.url), "utf8");
+  assert.match(editor, /hasPendingGlossaryAlias\(aliasDraft\)/);
+  assert.match(editor, /unsavedAliasConfirm/);
+  assert.match(editor, /beforeSave=\{confirmDiscardNewAlias\}/);
+  assert.match(panel, /pendingAlias/);
+  assert.match(panel, /onPendingAliasChange=\{setPendingAlias\}/);
 });
 
 test("chat explains when the global glossary expansion flag is disabled", () => {

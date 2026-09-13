@@ -6,7 +6,18 @@
     "original_description": "Payroll status information for an employee.",
     "canonical_locale": "en",
     "aliases": [
-      {"alias": "IT 0003", "locale": "en", "auto_expand": true, "search_enabled": true}
+      {
+        "alias": "IT0003",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      },
+      {
+        "alias": "IT 0003",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      }
     ]
   },
   {
@@ -16,8 +27,24 @@
     "original_description": "Display personnel master data.",
     "canonical_locale": "en",
     "aliases": [
-      {"alias": "/nPA20", "locale": "en", "auto_expand": true, "search_enabled": true},
-      {"alias": "PA 20", "locale": "en", "auto_expand": true, "search_enabled": true}
+      {
+        "alias": "PA20",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      },
+      {
+        "alias": "/nPA20",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      },
+      {
+        "alias": "PA 20",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      }
     ]
   },
   {
@@ -27,7 +54,18 @@
     "original_description": "Maintain personnel master data.",
     "canonical_locale": "en",
     "aliases": [
-      {"alias": "/nPA30", "locale": "en", "auto_expand": true, "search_enabled": true}
+      {
+        "alias": "PA30",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      },
+      {
+        "alias": "/nPA30",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      }
     ]
   },
   {
@@ -37,7 +75,18 @@
     "original_description": "Execute personnel actions for an employee.",
     "canonical_locale": "en",
     "aliases": [
-      {"alias": "/nPA40", "locale": "en", "auto_expand": true, "search_enabled": true}
+      {
+        "alias": "PA40",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      },
+      {
+        "alias": "/nPA40",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      }
     ]
   },
   {
@@ -47,7 +96,18 @@
     "original_description": "Browse table records.",
     "canonical_locale": "en",
     "aliases": [
-      {"alias": "/nSE16", "locale": "en", "auto_expand": true, "search_enabled": true}
+      {
+        "alias": "SE16",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      },
+      {
+        "alias": "/nSE16",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      }
     ]
   },
   {
@@ -57,7 +117,18 @@
     "original_description": "Create and execute ABAP reports.",
     "canonical_locale": "en",
     "aliases": [
-      {"alias": "/nSE38", "locale": "en", "auto_expand": true, "search_enabled": true}
+      {
+        "alias": "SE38",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      },
+      {
+        "alias": "/nSE38",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      }
     ]
   },
   {
@@ -67,7 +138,18 @@
     "original_description": "Maintain table and view entries.",
     "canonical_locale": "en",
     "aliases": [
-      {"alias": "/nSM30", "locale": "en", "auto_expand": true, "search_enabled": true}
+      {
+        "alias": "SM30",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      },
+      {
+        "alias": "/nSM30",
+        "locale": "en",
+        "auto_expand": true,
+        "search_enabled": true
+      }
     ]
   }
 ]

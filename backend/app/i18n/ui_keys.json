@@ -36,6 +36,7 @@
   "admin.glossary.aliases": [],
   "admin.glossary.allKinds": [],
   "admin.glossary.allStatuses": [],
+  "admin.glossary.ambiguousSkipped": [],
   "admin.glossary.autoExpand": [],
   "admin.glossary.canonical": [],
   "admin.glossary.check": [],
@@ -47,11 +48,17 @@
   "admin.glossary.description": [],
   "admin.glossary.disabled": [],
   "admin.glossary.disabledOnly": [],
+  "admin.glossary.duplicate": [],
+  "admin.glossary.duplicateCheckFailed": [],
+  "admin.glossary.duplicateDraft": [],
+  "admin.glossary.duplicateHint": [],
   "admin.glossary.editAliasLocale": [],
   "admin.glossary.empty": [],
   "admin.glossary.enabled": [],
   "admin.glossary.enabledOnly": [],
   "admin.glossary.expansionDisabled": [],
+  "admin.glossary.firstAlias": [],
+  "admin.glossary.firstAliasHint": [],
   "admin.glossary.hint": [],
   "admin.glossary.kind": [],
   "admin.glossary.locale": [],
@@ -68,6 +75,7 @@
   "admin.glossary.review": [],
   "admin.glossary.save": [],
   "admin.glossary.saved": [],
+  "admin.glossary.savedWithDuplicates": [],
   "admin.glossary.searchEnabled": [],
   "admin.glossary.searchPlaceholder": [],
   "admin.glossary.sourceSaveHint": [],
@@ -86,6 +94,7 @@
   "admin.glossary.translationSaveHint": [],
   "admin.glossary.translationSaved": [],
   "admin.glossary.translations": [],
+  "admin.glossary.unsavedAliasConfirm": [],
   "admin.jobDocs": [],
   "admin.jobStatus.awaiting_approval": [],
   "admin.jobStatus.cancelled": [],
@@ -574,7 +583,6 @@
     "message"
   ],
   "docs.filtersButton": [],
-  "docs.resetFilters": [],
   "docs.group.noDevelopment": [],
   "docs.group.noTag": [],
   "docs.loadError": [
@@ -585,9 +593,9 @@
   ],
   "docs.localeEditAria": [],
   "docs.localeFilterAria": [],
-  "docs.localeSearchPlaceholder": [],
   "docs.localeManualTitle": [],
   "docs.localeNone": [],
+  "docs.localeSearchPlaceholder": [],
   "docs.localeUnknown": [],
   "docs.markupProgress": [
     "done",
@@ -604,6 +612,7 @@
   "docs.moduleFilterAria": [],
   "docs.myDocuments": [],
   "docs.openTrash": [],
+  "docs.optionSearchPlaceholder": [],
   "docs.problemOnly": [],
   "docs.problemOnlyAria": [],
   "docs.progressChunk": [
@@ -622,6 +631,7 @@
   "docs.removedToTrash": [
     "name"
   ],
+  "docs.resetFilters": [],
   "docs.resumeBtn": [],
   "docs.resumeError": [
     "message"
@@ -667,7 +677,6 @@
     "name"
   ],
   "docs.uploaderFilterAria": [],
-  "docs.optionSearchPlaceholder": [],
   "docs.uploaders": [],
   "docs.view.development": [],
   "docs.view.documents": [],
@@ -720,8 +729,8 @@
   ],
   "locale.en": [],
   "locale.notFound": [],
-  "locale.searchPlaceholder": [],
   "locale.ru": [],
+  "locale.searchPlaceholder": [],
   "locale.title": [
     "label"
   ],

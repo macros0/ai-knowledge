@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import threading
+from uuid import uuid4
 from typing import Sequence
 
-from sqlalchemy import delete, select, update
-from sqlalchemy.orm import selectinload
+from sqlalchemy import delete, event, select, update
+from sqlalchemy.orm import object_session, selectinload
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import DomainTerm, DomainTermAlias
@@ -14,6 +15,7 @@ from app.db.session import get_engine, session_scope
 from app.services import audit
 from app.services.glossary.normalization import (
     GlossaryValidationError,
+    SUPPORTED_KINDS,
     normalize_alias,
     normalize_canonical,
     validate_alias_options,
@@ -35,14 +37,22 @@ _UNSET = object()
 _SNAPSHOT_LOCK = threading.RLock()
 _SNAPSHOT_ENGINE = None
 _SNAPSHOT_CACHE: tuple[GlossaryTermSnapshot, ...] | None = None
+_SNAPSHOT_REVISION = 0
 
 
 def invalidate_snapshot_cache() -> None:
     """Drop the process-local read snapshot after a glossary mutation."""
-    global _SNAPSHOT_CACHE, _SNAPSHOT_ENGINE
+    global _SNAPSHOT_CACHE, _SNAPSHOT_ENGINE, _SNAPSHOT_REVISION
     with _SNAPSHOT_LOCK:
         _SNAPSHOT_CACHE = None
         _SNAPSHOT_ENGINE = None
+        _SNAPSHOT_REVISION += 1
+
+
+def _invalidate_on_commit(session) -> None:
+    # Invalidate after commit, so another reader cannot cache pre-commit aliases
+    # (especially the other side of a newly created or resolved duplicate).
+    event.listen(session, "after_commit", lambda _: invalidate_snapshot_cache(), once=True)
 
 
 class GlossaryNotFoundError(LookupError):
@@ -92,7 +102,42 @@ def _alias_dict(alias: DomainTermAlias) -> dict:
     }
 
 
-def _term_dict(term: DomainTerm) -> dict:
+def _alias_conflict_map(session, keys: Sequence[str] | None = None) -> dict:
+    """Derive both sides from saved aliases, across all locales and statuses."""
+    stmt = select(
+        DomainTermAlias.id, DomainTermAlias.term_id, DomainTermAlias.alias,
+        DomainTermAlias.normalized_alias, DomainTerm.original_name,
+        DomainTerm.canonical_locale, DomainTerm.enabled,
+    ).join(DomainTerm, DomainTerm.id == DomainTermAlias.term_id)
+    if keys is not None:
+        if not keys:
+            return {}
+        stmt = stmt.where(DomainTermAlias.normalized_alias.in_(keys))
+    groups = {}
+    for row in session.execute(stmt.order_by(DomainTermAlias.id)):
+        groups.setdefault(row.normalized_alias, []).append(row)
+    result = {}
+    for rows in groups.values():
+        for row in rows:
+            conflicts = [
+                {"alias_id": row.id, "alias": row.alias,
+                 "normalized_alias": row.normalized_alias, "term_id": other.term_id,
+                 "name": other.original_name, "locale": other.canonical_locale,
+                 "enabled": other.enabled}
+                for other in rows if other.term_id != row.term_id
+            ]
+            if conflicts:
+                result[row.id] = conflicts
+    return result
+
+
+def _term_dict(term: DomainTerm, conflict_map: dict | None = None) -> dict:
+    if conflict_map is None:
+        session = object_session(term)
+        conflict_map = _alias_conflict_map(
+            session, [alias.normalized_alias for alias in term.aliases_rel]
+        ) if session is not None else {}
+    conflicts = [item for alias in term.aliases_rel for item in conflict_map.get(alias.id, [])]
     return {
         "id": term.id,
         "canonical": term.canonical,
@@ -107,6 +152,8 @@ def _term_dict(term: DomainTerm) -> dict:
         "updated_at": term.updated_at,
         "created_by": term.created_by,
         "updated_by": term.updated_by,
+        "has_duplicates": bool(conflicts),
+        "alias_conflicts": conflicts,
         "aliases": [_alias_dict(alias) for alias in sorted(term.aliases_rel, key=lambda item: item.id)],
         "translations": [
             {
@@ -150,7 +197,7 @@ class GlossaryRegistry:
 
     def create(
         self,
-        canonical: str,
+        canonical: str | None,
         kind: str,
         original_name: str,
         original_description: str | None = None,
@@ -161,7 +208,10 @@ class GlossaryRegistry:
         ip_address: str | None = None,
         audit_username: str | None = None,
     ) -> dict:
-        canonical = normalize_canonical(canonical, kind)
+        # Legacy import identifiers remain supported, but UI creates opaque keys.
+        if kind not in SUPPORTED_KINDS:
+            raise GlossaryValidationError(f"Неизвестный вид термина: {kind}")
+        canonical = normalize_canonical(canonical, kind) if canonical else f"TERM_{uuid4().hex.upper()}"
         original_name = _clean_name(original_name)
         original_description = _clean_description(original_description)
         canonical_locale = validate_locale(canonical_locale)
@@ -169,19 +219,7 @@ class GlossaryRegistry:
         prepared_aliases = [
             self._prepare_alias(item, kind=kind, created_by=created_by) for item in aliases
         ]
-        service_auto = kind not in {"abbreviation", "business_term"}
-        canonical_alias = self._prepare_alias(
-            GlossaryAliasInput(
-                canonical,
-                locale=canonical_locale,
-                auto_expand=service_auto,
-                search_enabled=service_auto,
-                created_by=created_by,
-            ),
-            kind=kind,
-            created_by=created_by,
-        )
-        all_aliases = [canonical_alias, *prepared_aliases]
+        all_aliases = prepared_aliases
         normalized = [item["normalized_alias"] for item in all_aliases]
         if len(set(normalized)) != len(normalized):
             raise GlossaryAliasConflictError("Алиасы термина дублируются после нормализации")
@@ -191,13 +229,6 @@ class GlossaryRegistry:
                 select(DomainTerm.id).where(DomainTerm.canonical == canonical)
             ).scalar_one_or_none() is not None:
                 raise GlossaryCanonicalConflictError(f"Код уже занят: {canonical}")
-            if session.execute(
-                select(DomainTermAlias.term_id).where(
-                    DomainTermAlias.normalized_alias.in_(normalized)
-                )
-            ).first() is not None:
-                raise GlossaryAliasConflictError("Алиас уже принадлежит другому термину")
-
             term = DomainTerm(
                 canonical=canonical,
                 kind=kind,
@@ -229,7 +260,7 @@ class GlossaryRegistry:
             try:
                 session.flush()
             except IntegrityError as exc:
-                raise GlossaryAliasConflictError("Алиас уже принадлежит другому термину") from exc
+                raise GlossaryAliasConflictError("Алиас уже есть в этой карточке") from exc
 
             audit.record_in_session(
                 session,
@@ -241,7 +272,7 @@ class GlossaryRegistry:
                 new_value=_audit_term_dict(term),
                 ip_address=ip_address,
             )
-            invalidate_snapshot_cache()
+            _invalidate_on_commit(session)
             return _term_dict(term)
 
     def get(self, term_id: int) -> dict | None:
@@ -264,7 +295,27 @@ class GlossaryRegistry:
             ).order_by(DomainTerm.canonical)
             if enabled is not None:
                 stmt = stmt.where(DomainTerm.enabled == enabled)
-            return [_term_dict(item) for item in session.execute(stmt).scalars().all()]
+            conflicts = _alias_conflict_map(session)
+            return [_term_dict(item, conflicts) for item in session.execute(stmt).scalars().all()]
+
+    def check_aliases(self, aliases: Sequence[str], *, term_id: int | None = None) -> list[dict]:
+        """Read-only preflight; the saved duplicate state is always authoritative."""
+        keys = {normalize_alias(alias) for alias in aliases if alias.strip()}
+        if not keys:
+            return []
+        with session_scope() as session:
+            stmt = select(DomainTermAlias, DomainTerm).join(DomainTerm).where(
+                DomainTermAlias.normalized_alias.in_(keys)
+            )
+            if term_id is not None:
+                stmt = stmt.where(DomainTerm.id != term_id)
+            return [
+                {"alias_id": alias.id, "alias": alias.alias,
+                 "normalized_alias": alias.normalized_alias, "term_id": term.id,
+                 "name": term.original_name, "locale": term.canonical_locale,
+                 "enabled": term.enabled}
+                for alias, term in session.execute(stmt.order_by(DomainTerm.id, DomainTermAlias.id))
+            ]
 
     def list_page(
         self,
@@ -295,7 +346,7 @@ class GlossaryRegistry:
             for term in rows:
                 translations = list(term.translations_rel)
                 if needle:
-                    values = [term.canonical, term.original_name, term.original_description or ""]
+                    values = [term.original_name, term.original_description or ""]
                     values.extend(alias.alias for alias in term.aliases_rel)
                     values.extend(item.display_name for item in translations)
                     if not any(needle in value.casefold() for value in values):
@@ -319,8 +370,9 @@ class GlossaryRegistry:
                 filtered.append(term)
 
             page = filtered[offset : offset + limit]
+            conflicts = _alias_conflict_map(session)
             return {
-                "terms": [_term_dict(item) for item in page],
+                "terms": [_term_dict(item, conflicts) for item in page],
                 "total": len(filtered),
                 "limit": limit,
                 "offset": offset,
@@ -373,6 +425,7 @@ class GlossaryRegistry:
         with _SNAPSHOT_LOCK:
             if _SNAPSHOT_ENGINE is engine and _SNAPSHOT_CACHE is not None:
                 return _SNAPSHOT_CACHE
+            revision = _SNAPSHOT_REVISION
 
         with session_scope() as session:
             stmt = (
@@ -385,6 +438,7 @@ class GlossaryRegistry:
                 .order_by(DomainTerm.id)
             )
             terms = session.execute(stmt).scalars().all()
+            conflicts = _alias_conflict_map(session)
             snapshot = tuple(
                 GlossaryTermSnapshot(
                     term_id=term.id,
@@ -404,6 +458,7 @@ class GlossaryRegistry:
                             locale=alias.locale,
                             auto_expand=alias.auto_expand,
                             search_enabled=alias.search_enabled,
+                            is_conflicting=alias.id in conflicts,
                         )
                         for alias in sorted(term.aliases_rel, key=lambda item: item.id)
                     ),
@@ -420,8 +475,9 @@ class GlossaryRegistry:
                 for term in terms
             )
         with _SNAPSHOT_LOCK:
-            _SNAPSHOT_ENGINE = engine
-            _SNAPSHOT_CACHE = snapshot
+            if revision == _SNAPSHOT_REVISION:
+                _SNAPSHOT_ENGINE = engine
+                _SNAPSHOT_CACHE = snapshot
             return snapshot
 
     def update(
@@ -497,7 +553,7 @@ class GlossaryRegistry:
                 new_value=_audit_term_dict(current),
                 ip_address=ip_address,
             )
-            invalidate_snapshot_cache()
+            _invalidate_on_commit(session)
             return _term_dict(current)
 
     def add_alias(
@@ -524,10 +580,11 @@ class GlossaryRegistry:
             )
             if session.execute(
                 select(DomainTermAlias.id).where(
-                    DomainTermAlias.normalized_alias == item["normalized_alias"]
+                    DomainTermAlias.normalized_alias == item["normalized_alias"],
+                    DomainTermAlias.term_id == term_id,
                 )
             ).scalar_one_or_none() is not None:
-                raise GlossaryAliasConflictError("Алиас уже принадлежит другому термину")
+                raise GlossaryAliasConflictError("Такой алиас уже есть в этой карточке")
 
             outcome = session.execute(
                 update(DomainTerm)
@@ -557,7 +614,7 @@ class GlossaryRegistry:
             try:
                 session.flush()
             except IntegrityError as exc:
-                raise GlossaryAliasConflictError("Алиас уже принадлежит другому термину") from exc
+                raise GlossaryAliasConflictError("Алиас уже есть в этой карточке") from exc
 
             current = session.get(DomainTerm, term_id, populate_existing=True)
             session.expire(current, ["aliases_rel"])
@@ -571,7 +628,7 @@ class GlossaryRegistry:
                 new_value=item,
                 ip_address=ip_address,
             )
-            invalidate_snapshot_cache()
+            _invalidate_on_commit(session)
             return _term_dict(current)
 
     def delete_alias(
@@ -591,8 +648,6 @@ class GlossaryRegistry:
             alias = session.get(DomainTermAlias, alias_id)
             if alias is None or alias.term_id != term_id:
                 raise GlossaryNotFoundError(f"Алиас не найден: {alias_id}")
-            if alias.normalized_alias == normalize_alias(term.canonical):
-                raise GlossaryValidationError("Служебный канонический алиас нельзя удалить")
             outcome = session.execute(
                 update(DomainTerm)
                 .where(DomainTerm.id == term_id, DomainTerm.version == version)
@@ -614,7 +669,7 @@ class GlossaryRegistry:
                 old_value=_audit_alias_dict(alias),
                 ip_address=ip_address,
             )
-            invalidate_snapshot_cache()
+            _invalidate_on_commit(session)
             return _term_dict(current)
 
     def update_alias(
@@ -638,8 +693,6 @@ class GlossaryRegistry:
             current_alias = session.get(DomainTermAlias, alias_id)
             if current_alias is None or current_alias.term_id != term_id:
                 raise GlossaryNotFoundError(f"Алиас не найден: {alias_id}")
-            if current_alias.normalized_alias == normalize_alias(term.canonical):
-                raise GlossaryValidationError("Служебный канонический алиас нельзя изменять")
 
             next_alias = current_alias.alias if alias is None else alias.strip()
             next_locale = current_alias.locale if locale is None else validate_locale(locale, allow_und=False)
@@ -662,10 +715,11 @@ class GlossaryRegistry:
             if normalized != current_alias.normalized_alias and session.execute(
                 select(DomainTermAlias.id).where(
                     DomainTermAlias.normalized_alias == normalized,
+                    DomainTermAlias.term_id == term_id,
                     DomainTermAlias.id != alias_id,
                 )
             ).scalar_one_or_none() is not None:
-                raise GlossaryAliasConflictError("Алиас уже принадлежит другому термину")
+                raise GlossaryAliasConflictError("Такой алиас уже есть в этой карточке")
             old_alias = _audit_alias_dict(current_alias)
 
             outcome = session.execute(
@@ -693,7 +747,7 @@ class GlossaryRegistry:
                 )
                 session.flush()
             except IntegrityError as exc:
-                raise GlossaryAliasConflictError("Алиас уже принадлежит другому термину") from exc
+                raise GlossaryAliasConflictError("Алиас уже есть в этой карточке") from exc
 
             session.expire(current_alias)
             current = session.get(DomainTerm, term_id, populate_existing=True)
@@ -715,7 +769,7 @@ class GlossaryRegistry:
                 },
                 ip_address=ip_address,
             )
-            invalidate_snapshot_cache()
+            _invalidate_on_commit(session)
             return _term_dict(current)
 
     @staticmethod

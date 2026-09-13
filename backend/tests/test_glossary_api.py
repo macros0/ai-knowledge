@@ -90,7 +90,7 @@ def test_glossary_crud_is_role_gated_and_audited(client):
     )
     assert response.status_code == 201, response.text
     term = response.json()
-    assert len(term["aliases"]) == 2
+    assert len(term["aliases"]) == 1
     assert AuditService().query(action_type=audit.GLOSSARY_TERM_CREATE)
 
     listed = client.get("/api/admin/glossary?limit=1&offset=0&q=Infotype").json()
@@ -196,8 +196,8 @@ def test_glossary_preview_is_available_to_editor_but_not_user(client):
 
 def test_glossary_preview_validates_locale_and_exposes_skipped_reasons(client, monkeypatch):
     login(client, "admin")
-    first = create_term(client, canonical="PA01", kind="sap_transaction").json()
-    second = create_term(client, canonical="PA02", kind="sap_transaction").json()
+    first = create_term(client, canonical="PA01", kind="sap_transaction", aliases=[{"alias": "PA01", "auto_expand": True}]).json()
+    second = create_term(client, canonical="PA02", kind="sap_transaction", aliases=[{"alias": "PA02", "auto_expand": True}]).json()
     assert first["id"] != second["id"]
 
     class PreviewSettings:
@@ -230,6 +230,35 @@ def test_glossary_static_preview_route_is_not_parsed_as_term_id(client):
     login(client, "editor")
     response = client.get("/api/admin/glossary/translations/pending")
     assert response.status_code == 422
+
+
+def test_alias_preflight_and_persistent_duplicate_lifecycle(client):
+    login(client, "admin")
+    first = create_term(client, canonical=None, aliases=[{"alias": "Payroll", "auto_expand": True}]).json()
+    second = create_term(client, canonical=None, original_name="Русское имя").json()
+    assert first["canonical"] != second["canonical"]
+    checked = client.post("/api/admin/glossary/aliases/check", json={"aliases": [" payroll "], "term_id": second["id"]})
+    assert checked.status_code == 200, checked.text
+    assert checked.json()["conflicts"][0]["term_id"] == first["id"]
+    assert not client.get(f"/api/admin/glossary/{first['id']}").json()["has_duplicates"]
+    saved = client.post(f"/api/admin/glossary/{second['id']}/aliases", json={"version": second["version"], "alias": "PAYROLL"})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["has_duplicates"]
+    listed = client.get("/api/admin/glossary?limit=1&offset=0").json()
+    assert listed["terms"][0]["has_duplicates"]
+    assert client.get(f"/api/admin/glossary/{first['id']}").json()["has_duplicates"]
+    updated = saved.json()
+    rejected = client.patch(f"/api/admin/glossary/{second['id']}/aliases/{updated['aliases'][0]['id']}", json={"version": second["version"], "alias": "unique"})
+    assert rejected.status_code == 409
+    assert client.get(f"/api/admin/glossary/{first['id']}").json()["has_duplicates"]
+    renamed = client.patch(f"/api/admin/glossary/{second['id']}/aliases/{updated['aliases'][0]['id']}", json={"version": updated["version"], "alias": "unique"})
+    assert renamed.status_code == 200, renamed.text
+    assert not renamed.json()["has_duplicates"]
+    assert not client.get(f"/api/admin/glossary/{first['id']}").json()["has_duplicates"]
+    login(client, "editor")
+    assert client.post("/api/admin/glossary/aliases/check", json={"aliases": ["Payroll"]}).status_code == 200
+    login(client, "viewer")
+    assert client.post("/api/admin/glossary/aliases/check", json={"aliases": ["Payroll"]}).status_code == 403
 
 
 def test_glossary_pending_route_is_static_and_role_gated(client):

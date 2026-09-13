@@ -603,6 +603,14 @@ export function getGlossaryTerm(termId) {
   return request(`/admin/glossary/${termId}`);
 }
 
+export function checkGlossaryAliases(aliases, termId) {
+  return request("/admin/glossary/aliases/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ aliases, term_id: termId ?? null }),
+  });
+}
+
 export function createGlossaryTerm(data) {
   return request("/admin/glossary", {
     method: "POST",

@@ -36,9 +36,12 @@ export function keepGlossarySelection(current, updated) {
   return current && current.id !== updated?.id ? current : updated;
 }
 
+export function hasPendingGlossaryAlias(draft) {
+  return Boolean(draft?.alias?.trim());
+}
+
 export function glossaryTermDisplay(term) {
   return {
-    code: term?.canonical || "",
     name: term?.original_name || "",
     locale: term?.canonical_locale || "und",
   };
@@ -49,6 +52,6 @@ export function appliedTermsSummary(appliedTerms = []) {
     canonical: term.canonical,
     matched: term.matched_texts || [],
     added: term.added_forms || [],
-    displayName: term.display_name || term.canonical,
+    displayName: term.display_name || (term.matched_texts || []).join(", "),
   }));
 }

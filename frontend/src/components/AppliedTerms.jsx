@@ -18,9 +18,8 @@ export default function AppliedTerms({ status = "disabled", appliedTerms = [] })
           <ul>
             {items.map((item) => (
               <li key={`${item.canonical}-${item.matched.join("|")}`}>
-                <span>{item.matched.join(", ") || item.canonical} → <b>{item.canonical}</b></span>
+                <span>{item.matched.join(", ")} → <b>{item.displayName}</b></span>
                 {item.added.length > 0 && <small>{item.added.join(", ")}</small>}
-                {item.displayName !== item.canonical && <small>{item.displayName}</small>}
               </li>
             ))}
           </ul>
