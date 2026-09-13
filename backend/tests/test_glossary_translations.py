@@ -149,7 +149,7 @@ def test_legacy_translation_backfill_and_pending_accept_glossary_entity(monkeypa
     settings = _settings()
     monkeypatch.setattr("app.services.translation.get_settings", lambda: settings)
     monkeypatch.setattr("app.services.glossary.translations.get_settings", lambda: settings)
-    term = _term(description=None)
+    _term(description=None)
     monkeypatch.setattr(
         "app.services.glossary.translations.translate_texts_batch",
         lambda texts, target, **kwargs: ["Translated"],

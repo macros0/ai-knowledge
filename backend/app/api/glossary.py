@@ -11,7 +11,6 @@ from app.auth.models import User
 from app.auth.service import require_role
 from app.config import get_settings
 from app.models.glossary import (
-    GlossaryAliasCreate,
     GlossaryAliasAdd,
     GlossaryAliasPatch,
     GlossaryListOut,
