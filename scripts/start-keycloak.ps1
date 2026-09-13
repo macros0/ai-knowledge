@@ -4,7 +4,7 @@
     and waits until it is ready.
 
 .DESCRIPTION
-    Runs `docker run quay.io/keycloak/keycloak:25 start-dev` via the opencode
+    Runs `docker run quay.io/keycloak/keycloak:25.0.1 start-dev` via the opencode
     start-background.ps1 helper (hidden window, logs to %TEMP%\opencode, kills a
     stale instance by port) and polls the realm discovery endpoint with retries.
 
@@ -27,7 +27,7 @@ $PidFile = Join-Path $LogDir 'keycloak.pid'
 # с winerror 10013. 18081 выше динамического диапазона TCP — HNS его не резервирует.
 $Port = 18081
 $Container = 'okf-keycloak'
-$Image = 'quay.io/keycloak/keycloak:25.0.0'
+$Image = 'quay.io/keycloak/keycloak:25.0.1'
 
 # Убить старый контейнер с тем же именем (idempotent).
 $ErrorActionPreference = 'SilentlyContinue'

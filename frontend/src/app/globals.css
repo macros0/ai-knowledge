@@ -406,7 +406,8 @@ main {
   border-radius: 10px;
   padding: 9px 12px;
   margin-bottom: 6px;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: flex-start;
   gap: 10px;
 }
@@ -426,31 +427,34 @@ main {
 }
 
 .doc-main {
-  flex: 1 1 auto;
   min-width: 0;
+  display: contents;
 }
 
 .doc-primary {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
+  display: contents;
   min-width: 0;
 }
 
 .doc-primary strong {
-  flex: 1 1 auto;
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
 }
 
 .doc-primary-meta {
-  flex: 0 1 auto;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  max-width: 100%;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .doc-meta-line {
+  grid-column: 2 / -1;
+  grid-row: 3;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -491,6 +495,8 @@ main {
 }
 
 .doc-actions {
+  grid-column: 3;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -498,7 +504,7 @@ main {
   /* Прижимаем колонку действий к правому краю. Без auto-margin названия
      карточек разной ширины «плавали» по горизонтали (justify-content:
      space-between распределял свободное место между [чекбокс][контент][действия]). */
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .status {
@@ -4183,14 +4189,14 @@ main {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
   }
-  .document-item > .doc-main { grid-column: 2; grid-row: 1; }
+  .document-item > .doc-main { grid-column: 2; grid-row: 1; display: block; }
   .document-item > .doc-actions {
     grid-column: 2;
     grid-row: 2;
     justify-content: flex-start;
     margin-left: 0;
   }
-  .doc-primary { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .doc-primary { display: flex; align-items: flex-start; flex-direction: column; gap: 2px; }
   .doc-primary strong { width: 100%; }
   .doc-primary-meta { max-width: 100%; }
   .doc-actions { gap: 3px; }

@@ -27,8 +27,21 @@ function Stop-Tree {
     param([int]$ProcessId)
     if ($ProcessId -le 0) { return }
     try {
-        taskkill /PID $ProcessId /T /F 2>$null | Out-Null
+        Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+        return
     } catch { }
+    try { taskkill /PID $ProcessId /T /F 2>$null | Out-Null } catch { }
+}
+
+function Wait-PortFree {
+    param([int]$Port)
+    if ($Port -le 0) { return }
+    for ($attempt = 0; $attempt -lt 50; $attempt++) {
+        $listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+        if (-not $listeners) { return }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "Порт $Port не освободился после остановки предыдущего процесса."
 }
 
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
@@ -49,6 +62,7 @@ if ($Port -gt 0) {
     foreach ($listener in $listeners) {
         Stop-Tree -ProcessId ([int]$listener.OwningProcess)
     }
+    Wait-PortFree -Port $Port
 }
 
 $safeName = [System.IO.Path]::GetFileNameWithoutExtension($FilePath)

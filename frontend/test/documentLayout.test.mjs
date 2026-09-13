@@ -88,3 +88,20 @@ test("documents filter button counts primary filters so reset stays available", 
   assert.match(countBlock, /status:/);
   assert.match(source, /disabled=\{activeFilterCount === 0 && chosenUploader !== null\}/);
 });
+
+test("document cards place file metadata below the title", async () => {
+  const styles = await readFile(new URL("../src/app/globals.css", import.meta.url), "utf8");
+  const baseStyles = styles.split("@media", 1)[0];
+  assert.match(baseStyles, /\.doc-primary\s*\{[\s\S]*?display:\s*contents/);
+  assert.match(baseStyles, /\.doc-primary-meta\s*\{[\s\S]*?grid-row:\s*2/);
+});
+
+test("document card metadata spans beneath the action controls", async () => {
+  const styles = await readFile(new URL("../src/app/globals.css", import.meta.url), "utf8");
+  const baseStyles = styles.split("@media", 1)[0];
+  assert.match(baseStyles, /\.document-item\s*\{[\s\S]*?display:\s*grid/);
+  assert.match(baseStyles, /\.doc-main\s*\{[\s\S]*?display:\s*contents/);
+  assert.match(baseStyles, /\.doc-primary\s*\{[\s\S]*?display:\s*contents/);
+  assert.match(baseStyles, /\.doc-primary-meta\s*\{[\s\S]*?grid-column:\s*2\s*\/\s*-1/);
+  assert.match(baseStyles, /\.doc-meta-line\s*\{[\s\S]*?grid-column:\s*2\s*\/\s*-1/);
+});

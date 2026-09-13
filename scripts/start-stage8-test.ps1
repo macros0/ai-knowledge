@@ -22,7 +22,7 @@ $TestDataDir = $profile.DataDir
 Write-Output '=== Stage 8: изолированный измерительный контур ==='
 Write-Output 'Поднимаю общие зависимости и frontend...'
 & (Join-Path $PSScriptRoot 'start-all.ps1')
-if ($LASTEXITCODE -ne 0) {
+if (-not $?) {
     throw 'Общий стек не запустился.'
 }
 
@@ -52,7 +52,7 @@ function Ensure-TestDatabase {
 
 $null = Ensure-TestDatabase
 $helper = Join-Path $env:USERPROFILE '.config\opencode\scripts\start-background.ps1'
-if (-not (Test-Path -LiteralPath $helper)) {
+if (-not (Test-Path -LiteralPath $helper -ErrorAction SilentlyContinue)) {
     $helper = Join-Path $PSScriptRoot 'start-background.ps1'
 }
 
@@ -74,7 +74,10 @@ for ($i = 0; $i -lt 40; $i++) {
     Start-Sleep -Seconds 1
     try {
         $health = Invoke-RestMethod -Uri 'http://127.0.0.1:18000/health' -TimeoutSec 4
-        if ($health.status -eq 'ok') { $healthy = $true; break }
+        if ($health.status -eq 'ok' -and $health.knowledge_profile -eq $profile.KnowledgeProfile) {
+            $healthy = $true
+            break
+        }
     } catch { }
 }
 if (-not $healthy) { throw 'Backend измерительного контура не стал healthy за 40 секунд.' }
