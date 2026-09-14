@@ -324,7 +324,8 @@ class Settings(BaseSettings):
     glossary_max_added_tokens: int = Field(default=32, ge=1, le=512)
     glossary_max_added_chars: int = Field(default=768, ge=1, le=8192)
     glossary_query_text_max_chars: int = Field(default=8192, ge=1, le=32768)
-    glossary_sparse_expansion_weight: float = Field(default=0.35, gt=0.0, le=1.0)
+    # All query forms admitted by the glossary are equivalent search forms.
+    glossary_sparse_expansion_weight: float = Field(default=1.0, gt=0.0, le=1.0)
 
     # --- Контекст LLM (форматирование после merge/collapse) ---
     # Жёсткий лимит на суммарный объём контекста, передаваемого в LLM.

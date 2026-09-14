@@ -27,25 +27,26 @@ def build_query_sparse(
     if not plan.added_sparse_texts:
         return original
 
-    seen_tokens: set[str] = set()
-    added_tokens: list[str] = []
-    for text in plan.added_sparse_texts:
-        for token in tokenize(text, stopwords=stopwords):
-            if token not in seen_tokens:
-                seen_tokens.add(token)
-                added_tokens.append(token)
+    # All forms admitted by the immutable query plan are equivalent search
+    # forms.  Their coefficient must not depend on whether the form came from
+    # a rule, an explicit alias, or the source name.
+    source = settings if settings is not None else get_settings()
+    weight = float(getattr(source, "glossary_sparse_expansion_weight", 1.0))
+    added_tokens = sorted({
+        token
+        for text in plan.added_sparse_texts
+        for token in tokenize(text, stopwords=stopwords)
+    })
     if not added_tokens:
         return original
 
-    source = settings if settings is not None else get_settings()
-    weight = float(getattr(source, "glossary_sparse_expansion_weight", 0.35))
     additions = to_sparse_vector(" ".join(added_tokens), stopwords=stopwords)
     original_values = dict(zip(original.indices, original.values))
     combined = dict(original_values)
     for index, value in zip(additions.indices, additions.values):
         if index in original_values:
             continue
-        combined[index] = combined.get(index, 0.0) + value * weight
+        combined[index] = value * weight
 
     indices = sorted(combined)
     return qm.SparseVector(indices=indices, values=[combined[index] for index in indices])
