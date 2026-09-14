@@ -1,11 +1,11 @@
-<#
+﻿<#
 Shared configuration for the isolated Stage 8 measurement contour.
 
 This file only describes the contour. It does not start services or modify data.
 #>
 
 function Get-Stage8TestProfile {
-    $root = Split-Path -Parent $PSScriptRoot
+    $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     $envFile = Join-Path $root '.env'
     $line = Get-Content -LiteralPath $envFile |
         Where-Object { $_ -match '^\s*DATABASE_URL\s*=' } |
@@ -20,7 +20,7 @@ function Get-Stage8TestProfile {
     $profile = [ordered]@{
         DatabaseName     = 'okf_stage8_test'
         CollectionName   = 'okf_knowledge_stage8_test'
-        DataDir          = './data-stage8-test'
+        DataDir          = './tests/tmp/stage8-data'
         KnowledgeProfile = 'Измерительная база Stage 8'
         GlossaryEnabled  = 'true'
         DatabaseUser     = $Matches[1]

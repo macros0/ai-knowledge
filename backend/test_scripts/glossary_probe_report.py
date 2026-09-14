@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from probe_sources import compare_results
+from test_scripts.probe_sources import compare_results
 
 
 def _key(source: dict[str, Any]) -> tuple[Any, Any, Any]:

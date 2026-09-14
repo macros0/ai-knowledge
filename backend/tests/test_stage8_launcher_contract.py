@@ -3,9 +3,9 @@ from pathlib import Path
 
 def test_stage8_launcher_checks_start_all_invocation_status():
     script = (
-        Path(__file__).resolve().parents[2] / "scripts" / "start-stage8-test.ps1"
+        Path(__file__).resolve().parents[2] / "tests" / "scripts" / "stage8" / "start-stage8-test.ps1"
     ).read_text(encoding="utf-8")
-    start = script.index("& (Join-Path $PSScriptRoot 'start-all.ps1')")
+    start = script.index("& (Join-Path $Root 'scripts\\start-all.ps1')")
     end = script.index("function Ensure-TestDatabase", start)
     handoff = script[start:end]
 
@@ -15,7 +15,7 @@ def test_stage8_launcher_checks_start_all_invocation_status():
 
 def test_stage8_launcher_ignores_inaccessible_global_helper():
     script = (
-        Path(__file__).resolve().parents[2] / "scripts" / "start-stage8-test.ps1"
+        Path(__file__).resolve().parents[2] / "tests" / "scripts" / "stage8" / "start-stage8-test.ps1"
     ).read_text(encoding="utf-8")
 
     assert (
@@ -25,7 +25,7 @@ def test_stage8_launcher_ignores_inaccessible_global_helper():
 
 def test_stage8_launcher_requires_measurement_profile_before_ready():
     script = (
-        Path(__file__).resolve().parents[2] / "scripts" / "start-stage8-test.ps1"
+        Path(__file__).resolve().parents[2] / "tests" / "scripts" / "stage8" / "start-stage8-test.ps1"
     ).read_text(encoding="utf-8")
 
     assert (

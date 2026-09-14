@@ -3,6 +3,7 @@
 [tool.ruff]
 line-length = 100
 extend-exclude = ["alembic/versions"]
+cache-dir = "../tests/tmp/ruff-cache"
 
 [tool.ruff.lint]
 # Осознанно узкий набор — правила, ловящие дефекты, а не стиль:
@@ -17,3 +18,10 @@ select = ["E9", "F"]
 [tool.ruff.lint.per-file-ignores]
 # Реэкспорт кодов ошибок как errors.XXX — импорт «неиспользован» по букве правила.
 "app/api/errors.py" = ["F403", "F405"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Все временные данные pytest должны жить в общей папке тестовых артефактов.
+# -p no:cacheprovider не даёт создавать .pytest_cache в корне backend.
+addopts = "--basetemp=../tests/tmp/pytest-runs/backend -p no:cacheprovider"
+cache_dir = "../tests/tmp/pytest-runs/backend-cache"

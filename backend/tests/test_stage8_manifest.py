@@ -4,8 +4,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import stage8_manifest
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from test_scripts import stage8_manifest
 
 
 def test_runtime_snapshot_identifies_contour_without_database_credentials():
@@ -13,7 +13,7 @@ def test_runtime_snapshot_identifies_contour_without_database_credentials():
         knowledge_profile="Измерительная база Stage 8",
         database_url="postgresql+psycopg://user:secret@127.0.0.1:5432/okf_stage8_test",
         database_url_dev=None,
-        data_dir=Path("./data-stage8-test"),
+        data_dir=Path("./tests/tmp/stage8-data"),
         qdrant_collection="okf_knowledge_stage8_test",
     )
 
@@ -22,7 +22,7 @@ def test_runtime_snapshot_identifies_contour_without_database_credentials():
     assert snapshot == {
         "knowledge_profile": "Измерительная база Stage 8",
         "database_name": "okf_stage8_test",
-        "data_dir": "data-stage8-test",
+        "data_dir": str(Path("tests/tmp/stage8-data")),
         "qdrant_collection": "okf_knowledge_stage8_test",
     }
     assert "secret" not in str(snapshot)

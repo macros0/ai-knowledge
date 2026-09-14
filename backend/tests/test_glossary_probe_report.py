@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import glossary_probe_report
+from test_scripts import glossary_probe_report
 
 
 def _source(doc_id: str, slug: str | None, chunk_index: int = 0) -> dict:

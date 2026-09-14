@@ -1,11 +1,11 @@
 @echo off
 setlocal
 set "script_dir=%~dp0"
-cd /d "%script_dir%.."
+cd /d "%script_dir%..\..\.."
 
 if "%~1"=="" (
-    echo Usage: scripts\run-stage8-test.cmd ^<python-script^> [arguments]
-    echo Example: scripts\run-stage8-test.cmd backend\scripts\stage8_manifest.py --output scripts\stage8-test-manifest.json
+    echo Usage: tests\scripts\stage8\run-stage8-test.cmd ^<python-script^> [arguments]
+    echo Example: tests\scripts\stage8\run-stage8-test.cmd backend\test_scripts\stage8_manifest.py --output tests\artifacts\stage8\stage8-test-manifest.json
     exit /b 2
 )
 

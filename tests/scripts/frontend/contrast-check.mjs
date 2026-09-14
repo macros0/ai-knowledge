@@ -7,13 +7,16 @@
 // (нижняя граница 3:1 для заливок/UI, т.к. она не редизайнится в этой задаче).
 // Код выхода 1 при провале светлой темы.
 //
-//   node frontend/scripts/contrast-check.mjs
+//   node tests/scripts/frontend/contrast-check.mjs
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const cssPath = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "app", "globals.css");
+const cssPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..", "..", "..", "frontend", "src", "app", "globals.css"
+);
 const css = readFileSync(cssPath, "utf8");
 
 const NORMAL_MIN = 4.5;

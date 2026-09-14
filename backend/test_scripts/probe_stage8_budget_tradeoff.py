@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.config import get_settings
 from app.services.vector_store import VectorStore
-from probe_sources import load_cases, run_case
+from test_scripts.probe_sources import load_cases, run_case
 
 
 def _percentile(values: list[float], p: float) -> float:

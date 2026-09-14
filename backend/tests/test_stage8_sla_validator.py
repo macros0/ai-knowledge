@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import stage8_sla_validator
+from test_scripts import stage8_sla_validator
 
 
 def _summary(*, chat_hybrid_p95: float = 11.321) -> dict:

@@ -1,7 +1,7 @@
 /* Темы: тёмная — дефолт (no-JS fallback); светлая включается атрибутом
    data-theme="light" на <html> (выставляется bootScript-скриптом до отрисовки).
    Палитры подобраны под WCAG AA (текст >= 4.5:1, белый на заливке >= 4.5:1),
-   проверка — frontend/scripts/contrast-check.mjs. */
+   проверка — tests/scripts/frontend/contrast-check.mjs. */
 :root {
   color-scheme: dark;
   --bg: #0f1115;

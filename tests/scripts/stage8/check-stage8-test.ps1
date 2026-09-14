@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Verifies that the running backend is the isolated Stage 8 contour.
 
@@ -26,7 +26,7 @@ try {
     $client.Encoding = [System.Text.Encoding]::UTF8
     $health = $client.DownloadString('http://127.0.0.1:18000/health') | ConvertFrom-Json
 } catch {
-    throw 'Backend недоступен. Сначала выполните scripts\start-stage8-test.cmd.'
+    throw 'Backend недоступен. Сначала выполните tests\scripts\stage8\start-stage8-test.cmd.'
 }
 
 Write-Output "Фактический профиль: $($health.knowledge_profile)"

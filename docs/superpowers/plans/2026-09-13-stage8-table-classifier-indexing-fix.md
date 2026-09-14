@@ -14,7 +14,7 @@
 
 - Исправление вносится в общий backend и не содержит ветвлений по имени контура.
 - Основной и тестовый контуры продолжают использовать отдельные БД, Qdrant-коллекции и data-dir.
-- До завершения приёмки активным остаётся Stage 8: `okf_stage8_test`, `okf_knowledge_stage8_test`, `./data-stage8-test`.
+- До завершения приёмки активным остаётся Stage 8: `okf_stage8_test`, `okf_knowledge_stage8_test`, `./tests/tmp/stage8-data`.
 - Не ослаблять строгую обработку массивов концептов: `finish_reason="length"`, незакрытый JSON и дополнительная JSON-структура должны по-прежнему приводить к retry/`LLMTruncationError`, а salvage обязан выставлять `llm_partial_result`.
 - Послабление разрешено только для контракта «ровно один объект классификации таблицы»: первый полный `dict` можно принять при лишнем структурированном хвосте, если `finish_reason != "length"`.
 - Настоящий fallback табличного классификатора не скрывать: он получает отдельный problem-код и точное сообщение.
@@ -499,12 +499,12 @@ problem-коды; первый означает резервную эврист�
 ### Task 5: Развернуть исправленный backend в Stage 8 и переиндексировать документ 3409
 
 **Files / Runtime targets:**
-- Execute: `scripts/start-stage8-test.ps1`
-- Execute: `scripts/check-stage8-test.ps1`
-- Execute: `scripts/run-stage8-test.ps1`
+- Execute: `tests/scripts/stage8/start-stage8-test.ps1`
+- Execute: `tests/scripts/stage8/check-stage8-test.ps1`
+- Execute: `tests/scripts/stage8/run-stage8-test.ps1`
 - Execute: `backend/scripts/check_integrity.py`
 - Inspect: `%TEMP%\opencode\python-err.log`
-- Mutate only: PostgreSQL `okf_stage8_test`, Qdrant `okf_knowledge_stage8_test`, `data-stage8-test`
+- Mutate only: PostgreSQL `okf_stage8_test`, Qdrant `okf_knowledge_stage8_test`, `tests/tmp/stage8-data`
 
 **Interfaces:**
 - Consumes: проверенный код Tasks 1-4; документ `d30837ec6e97406e`.
@@ -526,7 +526,7 @@ table rows by chunk: 0=10, 1=0, 4=29, 6=0, 7=27
 Запустить read-only integrity:
 
 ```powershell
-.\scripts\run-stage8-test.ps1 `
+.\tests\scripts\stage8\run-stage8-test.ps1 `
   -PythonScript backend/scripts/check_integrity.py `
   -PythonArgumentLine '--doc-id d30837ec6e97406e --json'
 ```
@@ -538,8 +538,8 @@ table rows by chunk: 0=10, 1=0, 4=29, 6=0, 7=27
 From repository root:
 
 ```powershell
-.\scripts\start-stage8-test.ps1
-.\scripts\check-stage8-test.ps1
+.\tests\scripts\stage8\start-stage8-test.ps1
+.\tests\scripts\stage8\check-stage8-test.ps1
 ```
 
 Expected profile:
@@ -548,14 +548,14 @@ Expected profile:
 Knowledge profile: Измерительная база Stage 8
 Database: okf_stage8_test
 Qdrant collection: okf_knowledge_stage8_test
-Data dir: ./data-stage8-test
+Data dir: ./tests/tmp/stage8-data
 ```
 
 Дополнительно создать manifest runtime-снимок:
 
 ```powershell
-.\scripts\run-stage8-test.ps1 `
-  -PythonScript backend/scripts/stage8_manifest.py `
+.\tests\scripts\stage8\run-stage8-test.ps1 `
+  -PythonScript backend/test_scripts/stage8_manifest.py `
   -PythonArgumentLine '--output scripts/stage8-manifest-table-fix-before.json'
 ```
 
@@ -572,7 +572,7 @@ Data dir: ./data-stage8-test
 Через профиль из `stage8-test-profile.ps1` выполнить read-only SQL без печати пароля:
 
 ```powershell
-. .\scripts\stage8-test-profile.ps1
+. .\tests\scripts\stage8\stage8-test-profile.ps1
 $profile = Get-Stage8TestProfile
 $env:PGPASSWORD = $profile.DatabasePassword
 try {
@@ -624,7 +624,7 @@ order by chunk_index;
 - [x] **Step 6: Сверить PostgreSQL и Qdrant**
 
 ```powershell
-.\scripts\run-stage8-test.ps1 `
+.\tests\scripts\stage8\run-stage8-test.ps1 `
   -PythonScript backend/scripts/check_integrity.py `
   -PythonArgumentLine '--doc-id d30837ec6e97406e --json'
 ```
@@ -650,8 +650,8 @@ Acceptance: нет `LLM_SALVAGE`; нет fallback для chunk 1/4/6, вызва
 - [x] **Step 8: Снять after-manifest и зафиксировать результат**
 
 ```powershell
-.\scripts\run-stage8-test.ps1 `
-  -PythonScript backend/scripts/stage8_manifest.py `
+.\tests\scripts\stage8\run-stage8-test.ps1 `
+  -PythonScript backend/test_scripts/stage8_manifest.py `
   -PythonArgumentLine '--output scripts/stage8-manifest-table-fix-after.json'
 ```
 
@@ -713,11 +713,11 @@ Expected: нет совпадений. Следовательно, тот же �
 ## Execution Status
 
 - Code tests: целевой набор `130 passed, 2 warnings`; свежий полный backend-suite `1201 passed, 6 warnings` (exit code 0).
-- Stage 8 profile: verified (`Измерительная база Stage 8`, `okf_stage8_test`, `okf_knowledge_stage8_test`, `data-stage8-test`).
+- Stage 8 profile: verified (`Измерительная база Stage 8`, `okf_stage8_test`, `okf_knowledge_stage8_test`, `tests/tmp/stage8-data`).
 - Document `d30837ec6e97406e`: before `done/problem=llm_partial_result/113 concepts`; after `done/problem=NULL/200 concepts`, `8/8` chunks processed.
 - PostgreSQL vs Qdrant integrity: PASS (`issues=[]`, `qdrant_unavailable=false`); exact document counts are `200` concept points and `8` chunk points.
 - Table coverage: PASS against clean-reference minima: chunk 0 `10/1`, chunk 1 `14/1`, chunk 4 `35/2`, chunk 6 `72/1`, chunk 7 `27/2` (`table-row/table-overview`).
 - Last regeneration output showed accepted duplicate classifier JSON tails for affected chunks; final `problem=NULL` confirms no salvage or classifier-fallback degradation was persisted. Historical entries in `%TEMP%\opencode\python-err.log` were not used as evidence for the final run because that file predates the direct runner.
-- Manifests: `backend/scripts/stage8-manifest-table-fix-before.json` and `backend/scripts/stage8-manifest-table-fix-after.json`; both record the Stage 8 runtime.
+- Manifests: `tests/artifacts/stage8/stage8-manifest-table-fix-before.json` and `tests/artifacts/stage8/stage8-manifest-table-fix-after.json`; both record the Stage 8 runtime.
 - Main contour data touched: no. Main document `d183200d2a814983` remains `done`, `problem=NULL`, `8/8`, `191` concepts.
 - Open follow-ups: none for the requested Stage 8 indexing fix. Changes remain uncommitted in the shared `main` worktree by user instruction.

@@ -658,7 +658,7 @@ def main(argv: list[str] | None = None) -> int:
     result = run(cases, glossary_mode=args.glossary_mode)
     output = args.output
     if args.baseline and output is None:
-        output = Path(__file__).with_name("probe-baseline.json")
+        output = Path(__file__).resolve().parents[2] / "tests" / "artifacts" / "stage8" / "probe-baseline.json"
         if output.exists():
             parser.error(f"{output} exists; copy it or pass --output explicitly")
     if output:

@@ -209,7 +209,7 @@ def validate_sla(
 
 
 def main(argv: list[str] | None = None) -> int:
-    script_dir = Path(__file__).resolve().parent
+    script_dir = Path(__file__).resolve().parents[2] / "tests" / "artifacts" / "stage8"
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--summary",

@@ -1,4 +1,4 @@
-from scripts.benchmark_glossary import build_benchmark_rows, summarize_samples
+from test_scripts.benchmark_glossary import build_benchmark_rows, summarize_samples
 
 
 def test_benchmark_workload_has_exact_term_and_alias_counts():

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from probe_stage8_budget_tradeoff import _source_diff
+from test_scripts.probe_stage8_budget_tradeoff import _source_diff
 
 
 def _case(case_id: str, raw: list[tuple], final: list[tuple]) -> dict:

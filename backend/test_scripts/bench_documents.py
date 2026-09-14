@@ -6,8 +6,8 @@
 R прогонов, выводя p50/p95 латентности и медианный размер payload.
 
 Запуск (из backend/, требуется поднятый Postgres):
-    python scripts/bench_documents.py --counts 100,500,1000 --runs 10
-    python scripts/bench_documents.py --csv bench.csv
+    python test_scripts/bench_documents.py --counts 100,500,1000 --runs 10
+    python test_scripts/bench_documents.py --csv ..\tests\artifacts\documents\bench.csv
 """
 from __future__ import annotations
 

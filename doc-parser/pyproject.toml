@@ -30,3 +30,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Не создавать временные каталоги и pytest-кэш рядом с исходниками.
+addopts = "--basetemp=../tests/tmp/pytest-runs/doc-parser -p no:cacheprovider"
+cache_dir = "../tests/tmp/pytest-runs/doc-parser-cache"

@@ -22,7 +22,7 @@ from app.services.glossary.registry import invalidate_snapshot_cache
 from app.services.embedder import Embedder
 from app.services.llm_client import LLMClient
 from app.services.vector_store import VectorStore
-from probe_sources import load_cases, run_case
+from test_scripts.probe_sources import load_cases, run_case
 
 
 class CountingEmbedder:

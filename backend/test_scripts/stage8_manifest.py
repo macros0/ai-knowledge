@@ -19,7 +19,7 @@ from app.db.models import Document, DocumentChunk, DomainTerm, OkfConcept
 from app.db.session import session_scope
 from app.services.glossary.registry import get_glossary_registry
 from app.services.vector_store import VectorStore
-from probe_sources import load_cases
+from test_scripts.probe_sources import load_cases
 
 
 def _json_value(value: Any) -> Any:
@@ -204,11 +204,11 @@ def main() -> int:
         source_root / "backend" / "app" / "services" / "retrieval_hydration.py",
         source_root / "backend" / "app" / "services" / "search_filter.py",
         source_root / "backend" / "app" / "services" / "vector_store.py",
-        source_root / "backend" / "scripts" / "probe_sources.py",
-        source_root / "backend" / "scripts" / "glossary_probe_report.py",
-        source_root / "backend" / "scripts" / "validate_stage8_labels.py",
-        source_root / "backend" / "scripts" / "stage8_sla_validator.py",
-        source_root / "backend" / "scripts" / "stage8_manifest.py",
+        source_root / "backend" / "test_scripts" / "probe_sources.py",
+        source_root / "backend" / "test_scripts" / "glossary_probe_report.py",
+        source_root / "backend" / "test_scripts" / "validate_stage8_labels.py",
+        source_root / "backend" / "test_scripts" / "stage8_sla_validator.py",
+        source_root / "backend" / "test_scripts" / "stage8_manifest.py",
     ]
     setting_names = (
         "glossary_query_expansion_enabled",

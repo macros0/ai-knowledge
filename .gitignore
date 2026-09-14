@@ -38,7 +38,7 @@ next-env.d.ts
 !/data/uploads/.gitkeep
 !/data/okf_bundles/.gitkeep
 
-# Isolated Stage 8 measurement contour
+# Isolated Stage 8 measurement contour (disposable data lives under tests/tmp)
 /data-stage8-test/
 
 # IDE / OS
@@ -60,6 +60,23 @@ backend/scripts/probe-stage8-*.json
 
 # Temporary pytest basetemp directories created by local verification
 .pytest-run-*/
+.pytest-*/
+pytest-*/
+backend/.pytest-*/
+backend/pytest-*/
+.tmp-*/
+backend/.tmp-*/
+.runtime-cookie-check/
+.stage8-runtime-logs/
+
+# Maintained test outputs and disposable test runtime data
+tests/artifacts/
+tests/tmp/
+!tests/artifacts/
+!tests/artifacts/stage8/
+tests/artifacts/stage8/*
+!tests/artifacts/stage8/stage8-manifest*.json
+!tests/artifacts/stage8/glossary-stage8-benchmark*.json
 
 # Local understand-anything knowledge graph and dashboard artifacts
 .understand-anything/

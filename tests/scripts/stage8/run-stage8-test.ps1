@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Runs one Stage 8 Python measurement script against the isolated contour.
 
@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Root = Split-Path -Parent $PSScriptRoot
+$Root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 . (Join-Path $PSScriptRoot 'stage8-test-profile.ps1')
 $profile = Get-Stage8TestProfile
 
@@ -36,8 +36,8 @@ if (-not (Test-Path -LiteralPath $python)) {
 $PythonArgs = if ([string]::IsNullOrWhiteSpace($PythonArgumentLine)) {
     @()
 } else {
-    [regex]::Matches($PythonArgumentLine, '"(?:[^"]|"")*"|\S+') |
-        ForEach-Object { $_.Value.Trim('"') }
+    @([regex]::Matches($PythonArgumentLine, '"(?:[^"]|"")*"|\S+') |
+        ForEach-Object { $_.Value.Trim('"') })
 }
 
 $saved = @{}
@@ -57,7 +57,7 @@ try {
     try {
         Write-Output "Профиль: $($profile.KnowledgeProfile)"
         Write-Output "БД: $($profile.DatabaseName); Qdrant: $($profile.CollectionName)"
-        & $python $scriptPath @PythonArgs
+        & $python $scriptPath @($PythonArgs)
         $exitCode = $LASTEXITCODE
     } finally {
         Pop-Location

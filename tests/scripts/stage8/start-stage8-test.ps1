@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Starts the isolated Stage 8 measurement contour.
 
@@ -11,8 +11,9 @@
 #>
 
 $ErrorActionPreference = 'Stop'
-$Root = Split-Path -Parent $PSScriptRoot
+$Root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $LogDir = Join-Path $env:TEMP 'opencode'
+$StageLogDir = Join-Path $LogDir 'stage8-test'
 . (Join-Path $PSScriptRoot 'stage8-test-profile.ps1')
 $profile = Get-Stage8TestProfile
 $TestDatabase = $profile.DatabaseName
@@ -21,7 +22,7 @@ $TestDataDir = $profile.DataDir
 
 Write-Output '=== Stage 8: изолированный измерительный контур ==='
 Write-Output 'Поднимаю общие зависимости и frontend...'
-& (Join-Path $PSScriptRoot 'start-all.ps1')
+& (Join-Path $Root 'scripts\start-all.ps1')
 if (-not $?) {
     throw 'Общий стек не запустился.'
 }
@@ -51,9 +52,44 @@ function Ensure-TestDatabase {
 }
 
 $null = Ensure-TestDatabase
+
+# start-all.ps1 deliberately leaves a healthy main-contour backend running.
+# Stage 8 reuses the same host port with a different database/profile, so stop
+# that listener before invoking the detached-process helper.  Relying on the
+# helper's PID file alone is insufficient when the main contour was started by
+# another script and has no Stage 8 PID file.
+function Get-BackendListenerPids {
+    # Get-NetTCPConnection can be denied for a non-elevated PowerShell on this
+    # host.  netstat is read-only and gives us the same owning PID fallback.
+    $lines = netstat -ano -p tcp 2>$null | Select-String '\s127\.0\.0\.1:18000\s+\S+\s+LISTENING\s+(\d+)\s*$'
+    foreach ($line in $lines) {
+        if ($line.Matches.Count -gt 0) {
+            [int]$line.Matches[0].Groups[1].Value
+        }
+    }
+}
+
+$listeners = @(Get-BackendListenerPids | Select-Object -Unique)
+foreach ($listenerPid in $listeners) {
+    try {
+        Stop-Process -Id ([int]$listenerPid) -Force -ErrorAction Stop
+    } catch {
+        throw "Не удалось освободить backend-порт 18000 (PID $listenerPid)."
+    }
+}
+for ($i = 0; $i -lt 50; $i++) {
+    if (-not @(Get-BackendListenerPids)) {
+        break
+    }
+    Start-Sleep -Milliseconds 100
+}
+if (@(Get-BackendListenerPids)) {
+    throw 'Порт 18000 не освободился после остановки основного backend.'
+}
+
 $helper = Join-Path $env:USERPROFILE '.config\opencode\scripts\start-background.ps1'
 if (-not (Test-Path -LiteralPath $helper -ErrorAction SilentlyContinue)) {
-    $helper = Join-Path $PSScriptRoot 'start-background.ps1'
+    $helper = Join-Path $Root 'scripts\start-background.ps1'
 }
 
 $backend = Join-Path $Root 'backend\.venv\Scripts\python.exe'
@@ -67,7 +103,8 @@ Write-Output 'Переключаю backend на измерительный ко�
     -WorkingDirectory (Join-Path $Root 'backend') `
     -Env $overrides `
     -Port 18000 `
-    -PidFile (Join-Path $LogDir 'backend.pid')
+    -PidFile (Join-Path $StageLogDir 'backend.pid') `
+    -LogDir $StageLogDir
 
 $healthy = $false
 for ($i = 0; $i -lt 40; $i++) {

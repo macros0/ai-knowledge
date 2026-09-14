@@ -10,7 +10,7 @@
 |---|---|
 | PostgreSQL database | `okf_stage8_test` |
 | Qdrant collection | `okf_knowledge_stage8_test` |
-| файловое хранилище | `data-stage8-test` |
+| файловое хранилище | `tests/tmp/stage8-data` |
 | начальное состояние | 0 документов, пустая коллекция |
 | feature flag | `GLOSSARY_QUERY_EXPANSION_ENABLED=true` |
 
@@ -31,7 +31,7 @@
 Для запуска именно измерительного контура в дальнейшем достаточно выполнить:
 
 ```cmd
-scripts\start-stage8-test.cmd
+tests\scripts\stage8\start-stage8-test.cmd
 ```
 
 CMD проверен реальным запуском: общий стек поднят, backend переключён на
@@ -41,7 +41,7 @@ CMD проверен реальным запуском: общий стек по
 общий runner:
 
 ```cmd
-scripts\run-stage8-test.cmd backend\scripts\stage8_manifest.py --output ..\data-stage8-test\stage8-manifest.json
+tests\scripts\stage8\run-stage8-test.cmd backend\test_scripts\stage8_manifest.py --output ..\tests\tmp\stage8-data\stage8-manifest.json
 ```
 
 Runner временно передаёт дочернему процессу `DATABASE_URL`, `DATA_DIR`, имя
@@ -53,7 +53,7 @@ manifest проверены; исходный manifest показал пусту
 Перед загрузкой документов можно выполнить лёгкий read-only preflight:
 
 ```cmd
-scripts\check-stage8-test.cmd
+tests\scripts\stage8\check-stage8-test.cmd
 ```
 
 Он проверяет `/health` работающего backend и сравнивает фактический

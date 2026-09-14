@@ -158,7 +158,7 @@ UI: http://localhost:16300
   чанка «Доработка расширения для ZPRP_DISABILITY_CHLD»), и модели сливают
   их в описание объекта. Плюс маркер `Title match` в metadata блока
   (`title_matched_terms`) — какие термины запроса стоят в заголовке.
-  **Probe-приёмка поисковых правок** (`backend/scripts/probe_sources.py`,
+  **Probe-приёмка поисковых правок** (`backend/test_scripts/probe_sources.py`,
   02.09.2026): baseline/after по 5 запросам реального корпуса
   (`--baseline` сохраняет `probe-baseline.json` — локальный артефакт
   состояния корпуса, в git не попадает). Критерий ложного срабатывания
@@ -508,7 +508,7 @@ $c = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)
 - **Скрипты**: `backfill_db_store.py` (одноразовый перенос корпуса в БД),
   `check_integrity.py` (БД↔FS↔Qdrant сверка), `rebuild_qdrant_v2.py` (пересборка
   индекса из БД), `export_okf.py`, `reindex.py` (теперь из БД). Диагностика/приёмка
-  поиска — `probe_sources.py` (baseline в `scripts/probe-baseline.json`, gitignored).
+  поиска — `probe_sources.py` (baseline в `tests/artifacts/stage8/probe-baseline.json`, gitignored).
 - **Формула dense-эмбеддинга** едина (пайплайн = reindex = rebuild v2):
   концепт `title + "\n" + content[:okf_max_concept_chars]`, чанк `section_title + "\n" +
   text[:okf_max_chunk_index_chars]` — иначе rebuild из БД расходился бы со свежей
@@ -701,7 +701,7 @@ ru), полнота plural-форм.
   в `_build_search_filter` (второй `must`, AND с tags/dev_tags) — единая обёртка.
   Backfill: `scripts/backfill_source_locale.py` (PG из `document_chunks`, skip manual;
   `--payload` — синк payload всех точек без пере-эмбеддинга). Регрессия фильтра:
-  `scripts/probe_sources.py --check-locales` (ru/ru+en/unknown-only инварианты).
+  `test_scripts/probe_sources.py --check-locales` (ru/ru+en/unknown-only инварианты).
   Фильтр НЕ привязан к языку вопроса/интерфейса — осознанное ограничение
   пользователя (cross-lingual поиск — базовая возможность).
 
