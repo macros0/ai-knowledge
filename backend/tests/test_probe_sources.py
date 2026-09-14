@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +10,22 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from test_scripts import probe_sources
+from app.services.fusion import Hit
+from app.services.glossary.types import MatchGroup, MatchSpan
+
+
+_MATCH_GROUP = MatchGroup(
+    term_id=1,
+    canonical="IT0003",
+    kind="sap_infotype",
+    canonical_locale="en",
+    original_name="Payroll Status",
+    term_version=1,
+    source_revision=1,
+    spans=(MatchSpan(0, 11, "alias query", "alias", "alias query"),),
+    matched_forms=("IT0003",),
+    match_type="alias",
+)
 
 
 @dataclass(frozen=True)
@@ -17,7 +33,8 @@ class _Plan:
     original_query: str = "alias query"
     dense_query: str = "alias query\n[Domain term: IT0003 — Payroll Status]"
     added_sparse_texts: tuple[str, ...] = ("IT0003", "инфотип 3")
-    match_groups: tuple = ("group",)
+    match_groups: tuple = (_MATCH_GROUP,)
+    strict_groups: tuple = (_MATCH_GROUP,)
     applied_terms: tuple = ()
     status: str = "applied"
     skipped_reasons: tuple = ()
@@ -44,8 +61,10 @@ class _VectorStore:
     def search_composite(self, **kwargs):
         self.calls.append(kwargs)
         return [
-            {
-                "payload": {
+            Hit(
+                point_id="point-1",
+                score=0.9,
+                payload={
                     "doc_id": "doc-full-id",
                     "slug": "concept-full-slug",
                     "chunk_index": 4,
@@ -53,13 +72,15 @@ class _VectorStore:
                     "content": "Alias content",
                     "point_type": "concept",
                 },
-                "score": 0.9,
-            }
+            )
         ]
 
 
-def test_run_case_uses_api_query_pipeline_and_keeps_full_source_identity(monkeypatch):
-    plan = _Plan()
+@pytest.mark.parametrize("use_strict_groups", [False, True])
+def test_run_case_uses_api_query_pipeline_and_keeps_full_source_identity(monkeypatch, use_strict_groups):
+    strict_group = replace(_MATCH_GROUP, canonical="PA30", kind="sap_transaction", matched_forms=("PA30",))
+    plan = _Plan(strict_groups=(strict_group,) if use_strict_groups else ())
+    expected_groups = plan.strict_groups or plan.match_groups
     embedder = _Embedder()
     vector_store = _VectorStore()
     events = []
@@ -67,8 +88,14 @@ def test_run_case_uses_api_query_pipeline_and_keeps_full_source_identity(monkeyp
     monkeypatch.setattr(probe_sources, "prepare_query", lambda *args, **kwargs: events.append(("prepare", args[0], kwargs["enabled"])) or plan)
     monkeypatch.setattr(probe_sources, "resolve_branches", lambda *args, **kwargs: {"dense", "bm25"})
     monkeypatch.setattr(probe_sources, "build_query_sparse", lambda *args, **kwargs: events.append(("sparse", args[0])) or "sparse")
-    monkeypatch.setattr(probe_sources, "load_visible_retrieval_hits", lambda hits, **kwargs: (hits, {}))
-    monkeypatch.setattr(probe_sources, "merge_and_format", lambda *args, **kwargs: [{
+    hydration_calls = []
+    monkeypatch.setattr(
+        probe_sources,
+        "load_visible_retrieval_hits",
+        lambda hits, **kwargs: hydration_calls.append(kwargs) or (hits, {}),
+    )
+    merge_calls = []
+    monkeypatch.setattr(probe_sources, "merge_and_format", lambda *args, **kwargs: merge_calls.append(kwargs) or [{
         "title": "Alias title",
         "content": "Alias content",
         "tags": [],
@@ -112,8 +139,10 @@ def test_run_case_uses_api_query_pipeline_and_keeps_full_source_identity(monkeyp
     assert result["final_blocks"][0]["source"]["slug"] == "concept-full-slug"
     assert "expected_documents" not in result
     assert "mandatory_sources" not in result
-    assert any(event[:2] == ("unmatched", plan.match_groups) and event[2] is not None for event in events)
-    assert any(event[:2] == ("partial", plan.match_groups) and event[2] is not None for event in events)
+    assert hydration_calls[0]["exact_groups"] == expected_groups
+    assert merge_calls[0]["exact_groups"] == expected_groups
+    assert any(event[:2] == ("unmatched", expected_groups) and event[2] is not None for event in events)
+    assert any(event[:2] == ("partial", expected_groups) and event[2] is not None for event in events)
 
 
 def test_run_case_preserves_quality_annotations_for_the_report(monkeypatch):

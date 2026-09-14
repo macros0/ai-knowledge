@@ -47,15 +47,16 @@ export default function SearchableSelect({
     : null;
   const visibleOptions = customOption ? [customOption, ...filtered] : filtered;
 
-  const close = () => {
+  const close = (restoreFocus = false) => {
     setOpen(false);
     setQuery("");
     setActive(-1);
+    if (restoreFocus) rootRef.current?.querySelector('button')?.focus();
   };
 
   const choose = (next) => {
     onChange?.(next);
-    close();
+    close(true);
   };
 
   useEffect(() => {
@@ -111,7 +112,7 @@ export default function SearchableSelect({
       else if (open && allowCustomInput && query.trim()) choose(query.trim());
     } else if (event.key === "Escape") {
       event.preventDefault();
-      close();
+      close(true);
     }
   };
 
@@ -133,13 +134,17 @@ export default function SearchableSelect({
         title={title}
         aria-expanded={open}
         aria-haspopup="listbox"
+        aria-controls={open ? listId : undefined}
         disabled={disabled}
       >
         {triggerContent}
       </button>
       {open &&
         createPortal(
-          <div className="dev-picker-pop searchable-select-pop" ref={popupRef}>
+          <div className="dev-picker-pop searchable-select-pop" ref={popupRef} data-dialog-popup
+            onKeyDown={(event) => {
+              if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); }
+            }}>
             <input
               ref={inputRef}
               className="dev-picker-input"

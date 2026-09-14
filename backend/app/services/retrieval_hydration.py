@@ -9,6 +9,8 @@ from sqlalchemy import func, select, tuple_
 
 from app.db.models import Document, DocumentChunk, OkfConcept
 from app.db.session import session_scope
+from app.services.glossary.matching import group_form_matches
+from app.services.glossary.types import MatchGroup
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +86,7 @@ def _enrich_retrieval_hits_in_session(
     *,
     max_concept_chars: int,
     max_chunk_chars: int,
+    full_text: bool = False,
 ) -> list:
     """Hydrate concept and chunk hits using an already-open DB session."""
     concept_pairs: list[tuple[str, str]] = []
@@ -114,13 +117,13 @@ def _enrich_retrieval_hits_in_session(
             select(
                 OkfConcept.doc_id,
                 OkfConcept.slug,
-                func.substr(OkfConcept.content, 1, max_concept_chars),
+                OkfConcept.content if full_text else func.substr(OkfConcept.content, 1, max_concept_chars),
             ).where(tuple_(OkfConcept.doc_id, OkfConcept.slug).in_(concept_pairs))
         ).all()
         concept_contents = {
             (doc_id, slug): content for doc_id, slug, content in rows
         }
-    needed_chunk_pairs = _chunk_pairs_needed_for_merge(
+    needed_chunk_pairs = chunk_pairs if full_text else _chunk_pairs_needed_for_merge(
         hits, concept_contents, chunk_pairs
     )
     skipped_chunk_pairs = set(chunk_pairs) - set(needed_chunk_pairs)
@@ -129,7 +132,7 @@ def _enrich_retrieval_hits_in_session(
             select(
                 DocumentChunk.doc_id,
                 DocumentChunk.chunk_index,
-                func.substr(DocumentChunk.content, 1, max_chunk_chars),
+                DocumentChunk.content if full_text else func.substr(DocumentChunk.content, 1, max_chunk_chars),
                 DocumentChunk.section_title,
             ).where(
                 tuple_(DocumentChunk.doc_id, DocumentChunk.chunk_index).in_(
@@ -194,12 +197,27 @@ def enrich_retrieval_hits(hits: list) -> list:
     return hits
 
 
+def _filter_exact_hits(hits: list, exact_groups: tuple[MatchGroup, ...]) -> list:
+    if not exact_groups:
+        return hits
+    return [
+        hit for hit in hits
+        if any(
+            group_form_matches(
+                f"{hit.payload.get('title', '')}\n{hit.payload.get('content', '')}", group
+            )
+            for group in exact_groups
+        )
+    ]
+
+
 def load_visible_retrieval_hits(
     hits: list,
     *,
     timings: dict[str, float] | None = None,
     max_concept_chars: int | None = None,
     max_chunk_chars: int | None = None,
+    exact_groups: tuple[MatchGroup, ...] = (),
 ) -> tuple[list, dict]:
     """Filter visibility and hydrate retrieval hits inside one DB session.
 
@@ -263,7 +281,9 @@ def load_visible_retrieval_hits(
             session,
             max_concept_chars=concept_chars,
             max_chunk_chars=chunk_chars,
+            full_text=bool(exact_groups),
         )
+        visible = _filter_exact_hits(visible, exact_groups)
         if timings is not None:
             timings["enrichment_ms"] = round((perf_counter() - started) * 1000, 3)
     return visible, doc_lookup

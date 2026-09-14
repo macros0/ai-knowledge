@@ -9,6 +9,8 @@ import re
 from app.config import Settings, get_settings
 from app.services.fusion import Hit
 from app.services.glossary.matching import (
+    exact_excerpt,
+    group_form_matches,
     DomainMatchCache,
     matched_domain_terms,
     title_matched_domain_terms,
@@ -70,7 +72,8 @@ def resolve_branches(
 
 
 def merge_and_format(
-    hits: list[Hit], settings: Settings | None = None, filename_lookup: dict[str, str] | None = None
+    hits: list[Hit], settings: Settings | None = None, filename_lookup: dict[str, str] | None = None,
+    *, exact_groups: tuple[MatchGroup, ...] = (),
 ) -> list[dict]:
     """Группировка по (doc_id, chunk_index), merge концепт+чанк.
 
@@ -92,6 +95,21 @@ def merge_and_format(
     if settings is None:
         settings = get_settings()
 
+    if exact_groups:
+        hits = [
+            hit for hit in hits
+            if group_form_matches(
+                f"{hit.payload.get('title', '')}\n{hit.payload.get('content', '')}",
+                exact_groups[0],
+            )
+            or any(
+                group_form_matches(
+                    f"{hit.payload.get('title', '')}\n{hit.payload.get('content', '')}", group
+                )
+                for group in exact_groups[1:]
+            )
+        ]
+
     groups: dict[tuple[str, int | None], list[Hit]] = {}
     for hit in hits:
         doc_id = hit.payload.get("doc_id", "")
@@ -100,10 +118,7 @@ def merge_and_format(
         groups.setdefault(key, []).append(hit)
 
     merged: list[dict] = []
-    total_chars = 0
     for (doc_id, chunk_idx), group_hits in groups.items():
-        if total_chars >= settings.chat_max_context_chars:
-            break
 
         chunks_in_group = [h for h in group_hits if h.payload.get("point_type") == CHUNK_TYPE]
         concepts_in_group = [h for h in group_hits if h.payload.get("point_type") == CONCEPT_TYPE]
@@ -154,7 +169,7 @@ def merge_and_format(
             chunk = chunks_in_group[0]
             primary = primary_concept
             merged_title = primary.payload.get("title", "")
-            concept_content_value = primary.payload.get("content", "")[: settings.chat_concept_max_chars]
+            concept_content_value = exact_excerpt(primary.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
             # Многотемный чанк: несколько ОСНОВНЫХ концептов делят один chunk_index —
             # сырой чанк начинается с чужой темы, заголовок от концепта не совпадает
             # с телом (напр. «Infotypes (English)» поверх японской статьи YEA Retro).
@@ -166,7 +181,7 @@ def merge_and_format(
             if multi_topic and concept_content_value:
                 content = concept_content_value
             else:
-                content = chunk.payload.get("content", "")[: settings.chat_chunk_max_chars]
+                content = exact_excerpt(chunk.payload.get("content", ""), settings.chat_chunk_max_chars, exact_groups)
             if not merged_title:
                 section_title = chunk.payload.get("section_title", "")
                 if section_title:
@@ -178,7 +193,7 @@ def merge_and_format(
         elif primary_concept is not None:
             concept = primary_concept
             merged_title = concept.payload.get("title", "Без названия")
-            content = concept.payload.get("content", "")[: settings.chat_concept_max_chars]
+            content = exact_excerpt(concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
             point_type = CONCEPT_TYPE
             kind = "concept"
         else:
@@ -188,11 +203,10 @@ def merge_and_format(
                 merged_title = section_title
             else:
                 merged_title = f"{source_filename} (Раздел {chunk_idx + 1})" if chunk_idx is not None else source_filename
-            content = chunk.payload.get("content", "")[: settings.chat_chunk_max_chars]
+            content = exact_excerpt(chunk.payload.get("content", ""), settings.chat_chunk_max_chars, exact_groups)
             point_type = CHUNK_TYPE
             kind = "chunk"
 
-        total_chars += len(content)
         merged.append(
             {
                 "title": merged_title,
@@ -201,7 +215,7 @@ def merge_and_format(
                 # содержит чужие подразделы раздела, выжимка — только про объект.
                 # Используется точным фильтром (drop_partial_title_matches).
                 "concept_content": (
-                    primary_concept.payload.get("content", "")[: settings.chat_concept_max_chars]
+                    exact_excerpt(primary_concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
                     if chunks_in_group and primary_concept is not None
                     else None
                 ),
@@ -228,12 +242,9 @@ def merge_and_format(
         # отдельным блоком. Замечания получают kind="review" (иммунитет
         # анти-шумового фильтра — см. drop_unmatched_blocks).
         for concept in sibling_concepts:
-            if total_chars >= settings.chat_max_context_chars:
-                break
-            sibling_content = concept.payload.get("content", "")[: settings.chat_concept_max_chars]
+            sibling_content = exact_excerpt(concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
             if not sibling_content:
                 continue
-            total_chars += len(sibling_content)
             merged.append(
                 {
                     "title": concept.payload.get("title", "Без названия"),
@@ -254,7 +265,17 @@ def merge_and_format(
     # стоять выше первичного блока другой группы с более сильным попаданием.
     # Stable sort сохраняет очерёдность равных (группа остаётся компактной).
     merged.sort(key=lambda b: b["score"], reverse=True)
-    return merged
+    limited = []
+    total_chars = 0
+    for block in merged:
+        if total_chars >= settings.chat_max_context_chars:
+            break
+        if exact_groups and not any(group_form_matches(
+            f"{block['title']}\n{block['content']}", group) for group in exact_groups):
+            continue
+        limited.append(block)
+        total_chars += len(block['content'])
+    return limited
 
 
 # Служебные слова вопроса, бесполезные как маркер выбора блока. В отличие от
@@ -513,8 +534,11 @@ def drop_unmatched_blocks(
     Модели (даже сильные) стабильно затаскивают в ответ семантически-смежный
     блок с пустым Matched terms, приписывая ему тему вопроса — промпт-правила
     этому только вероятностная защита. Детерминированное решение: если хотя
-    бы у одного блока есть совпадение терминов запроса, блоки без совпадений
-    в контекст не попадают вовсе.
+    бы у одного блока есть лексическое совпадение с исходными терминами
+    запроса, блоки без совпадений в контекст не попадают вовсе. Доменное
+    совпадение сохраняет блок после активации фильтра, но само не активирует
+    глобальное отсечение: иначе точный алиас в одном блоке удаляет смысловые
+    варианты из остальных уже найденных блоков.
 
     Иммунитет у сиблинг-замечаний рецензентов (kind="review", проставляется в
     merge_and_format): их узкий текст (дословный диалог вопроса-ответ) часто
@@ -530,15 +554,18 @@ def drop_unmatched_blocks(
     """
     if not query or not merged:
         return merged
-    matched = [
-        bool(matched_terms(m, query, cache=lexical_cache))
+    lexical_matches = [
+        bool(matched_terms(m, query, cache=lexical_cache)) for m in merged
+    ]
+    if not any(lexical_matches):
+        return merged
+    return [
+        m
+        for m, lexical_match in zip(merged, lexical_matches)
+        if lexical_match
         or bool(matched_domain_terms(m, match_groups, cache=domain_cache))
         or m.get("kind") == REVIEW_KIND
-        for m in merged
     ]
-    if not any(matched):
-        return merged
-    return [m for m, has in zip(merged, matched) if has]
 
 
 def _metadata_text(value: object) -> str:

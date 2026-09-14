@@ -113,6 +113,17 @@ function Start-Service {
     param([string]$Name, [scriptblock]$Launch, [string]$Url)
     Write-Output ""
     Write-Output "=== $Name ==="
+    # Reuse a healthy listener instead of replacing it.  On Windows a
+    # service's child processes may keep the previous redirected log handle
+    # open for a short time after the parent is stopped; restarting a healthy
+    # service then fails with a misleading "file is being used" error.
+    try {
+        $existing = Invoke-WebRequest -Uri $Url -TimeoutSec 4 -UseBasicParsing
+        if ($existing.StatusCode -eq 200) {
+            Write-Output "  [OK] $Name уже работает; существующий процесс переиспользован."
+            return $true
+        }
+    } catch { }
     try {
         & $Launch | ForEach-Object { Write-Output "  $_" }
     } catch {

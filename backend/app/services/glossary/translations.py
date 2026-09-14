@@ -19,6 +19,7 @@ from app.services import audit
 from app.services.glossary.normalization import GlossaryValidationError, validate_locale
 from app.services.glossary.registry import GlossaryNotFoundError, GlossaryRegistry
 from app.services.glossary.registry import invalidate_snapshot_cache
+from app.services.glossary.mutation import glossary_write_session, bump_glossary_revision
 from app.services.translation import translate_texts_batch
 
 logger = logging.getLogger(__name__)
@@ -151,7 +152,7 @@ def _write_machine_translation(
     ip_address: str | None,
 ) -> str:
     """Commit one result only if the source and target remained unchanged."""
-    with session_scope() as session:
+    with glossary_write_session() as (session, state):
         term = session.get(DomainTerm, term_id)
         if term is None or not term.enabled or term.source_revision != source_revision:
             return "skipped_changed"
@@ -203,6 +204,7 @@ def _write_machine_translation(
             new_value=_translation_dict(translation),
             ip_address=ip_address,
         )
+        bump_glossary_revision(session, state)
         return "created" if old_value is None else "updated"
 
 
@@ -340,10 +342,12 @@ def set_glossary_translation(
     if translation_version < 0 or source_revision < 1:
         raise GlossaryTranslationValidationError("Некорректная версия перевода или исходника")
 
-    with session_scope() as session:
+    with glossary_write_session() as (session, state):
         term = session.get(DomainTerm, term_id)
         if term is None:
             raise GlossaryNotFoundError(f"Термин не найден: {term_id}")
+        if not term.enabled:
+            raise GlossaryTranslationConflictError("Термин отключён")
         if term.source_revision != source_revision:
             raise GlossaryTranslationConflictError("Исходный текст термина уже изменён")
         translation = session.execute(
@@ -393,6 +397,7 @@ def set_glossary_translation(
             new_value=_translation_dict(translation),
             ip_address=ip_address,
         )
+        bump_glossary_revision(session, state)
     invalidate_snapshot_cache()
     return GlossaryRegistry().get(term_id)  # type: ignore[return-value]
 
@@ -408,10 +413,12 @@ def review_glossary_translation(
 ) -> dict:
     """Confirm a machine translation without changing its text."""
     locale = _validate_target_locale(locale)
-    with session_scope() as session:
+    with glossary_write_session() as (session, state):
         term = session.get(DomainTerm, term_id)
         if term is None:
             raise GlossaryNotFoundError(f"Термин не найден: {term_id}")
+        if not term.enabled:
+            raise GlossaryTranslationConflictError("Термин отключён")
         if term.source_revision != source_revision:
             raise GlossaryTranslationConflictError("Исходный текст термина уже изменён")
         translation = session.execute(
@@ -424,6 +431,8 @@ def review_glossary_translation(
         ).scalar_one_or_none()
         if translation is None or translation.version != translation_version:
             raise GlossaryTranslationConflictError("Версия перевода уже изменена или перевод отсутствует")
+        if translation.source_revision != term.source_revision:
+            raise GlossaryTranslationConflictError("Перевод относится к прежнему исходному тексту")
         if translation.reviewed_by:
             pass
         else:
@@ -445,5 +454,6 @@ def review_glossary_translation(
                 new_value=_translation_dict(translation),
                 ip_address=ip_address,
             )
+            bump_glossary_revision(session, state)
     invalidate_snapshot_cache()
     return GlossaryRegistry().get(term_id)  # type: ignore[return-value]

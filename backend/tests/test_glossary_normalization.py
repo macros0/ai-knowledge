@@ -6,6 +6,8 @@ from app.services.glossary.normalization import (
     normalize_canonical,
     validate_alias_options,
 )
+from app.services.glossary.rules import match_infotypes
+from app.services.glossary.types import InfotypeRuleSnapshot
 
 
 def test_normalize_alias_is_unicode_literal_normalization():
@@ -53,3 +55,31 @@ def test_four_digit_numeric_alias_is_only_searchable_for_infotypes():
     validate_alias_options("0003", kind="sap_infotype", auto_expand=False, search_enabled=True)
     with pytest.raises(GlossaryValidationError):
         validate_alias_options("0003", kind="business_term", auto_expand=False, search_enabled=True)
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["IT0003", "ИТ 0003", "Infotyp 0003", "инфо-типа 0003"],
+)
+def test_user_infotype_rule_accepts_only_configured_prefixes_with_four_digits(query):
+    rules = (InfotypeRuleSnapshot(1, "Configured", 0, 9999, ("IT", "ИТ ", "Infotyp ", "инфо-типа ")),)
+    matches = match_infotypes(query, rules)
+
+    assert len(matches) == 1
+    assert matches[0].number == "0003"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "IT3",
+        "IT003",
+        "инфотип 3",
+        "Infotyp 003",
+        "IT00037",
+        "XIT0003Y",
+    ],
+)
+def test_user_infotype_rule_rejects_short_codes_typos_and_embedded_identifiers(query):
+    rules = (InfotypeRuleSnapshot(1, "Configured", 0, 9999, ("IT", "ИТ", "Infotyp", "инфо-типа")),)
+    assert match_infotypes(query, rules) == ()

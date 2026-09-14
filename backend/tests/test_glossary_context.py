@@ -6,10 +6,14 @@ from app.services.context_builder import (
     format_context,
 )
 from app.services.glossary.expansion import prepare_query
-from app.services.glossary.matching import matched_domain_terms
+from app.services.glossary.matching import (
+    matched_domain_terms,
+    promote_glossary_identifier_hits,
+)
 from app.services.glossary import matching
 from app.services.glossary.registry import GlossaryRegistry
-from app.services.glossary.types import GlossaryAliasInput
+from app.services.glossary.types import GlossaryAliasInput, MatchGroup, MatchSpan
+from app.services.fusion import Hit
 
 
 def _block(title: str, content: str, *, concept_content: str | None = None) -> dict:
@@ -66,6 +70,69 @@ def test_complete_form_matching_does_not_build_source_offset_mapping(monkeypatch
     monkeypatch.setattr(matching, "normalize_query_with_mapping", fail_mapping)
 
     assert matching._contains_complete_form("Настройка IT0003", ("IT0003",))
+
+
+def test_exact_identifier_priority_is_generic_and_boundary_safe():
+    group = MatchGroup(
+        term_id=20,
+        canonical="PA20",
+        kind="sap_transaction",
+        canonical_locale="en",
+        original_name="Payroll Status",
+        term_version=1,
+        source_revision=1,
+        spans=(MatchSpan(0, 4, "PA20", "alias", "PA20"),),
+        matched_forms=("/nPA20",),
+        match_type="alias",
+    )
+    near = Hit("near", 1.0, {"title": "X/nPA20Y", "content": ""})
+    exact = Hit("exact", 0.01, {"title": "Run /nPA20", "content": ""})
+
+    promoted = promote_glossary_identifier_hits([near, exact], (group,))
+
+    assert [hit.point_id for hit in promoted] == ["exact", "near"]
+
+
+def test_transaction_identifier_priority_does_not_use_a_text_alias():
+    group = MatchGroup(
+        term_id=20,
+        canonical="PA30",
+        kind="sap_transaction",
+        canonical_locale="en",
+        original_name="Payroll transaction",
+        term_version=1,
+        source_revision=1,
+        spans=(MatchSpan(0, 4, "PA30", "alias", "PA30"),),
+        matched_forms=("PA30", "AHK payroll"),
+        match_type="alias",
+    )
+    first = Hit("first", 1.0, {"title": "Other", "content": ""})
+    text_alias = Hit("text", 0.01, {"title": "AHK payroll", "content": ""})
+    hits = [first, text_alias]
+
+    promoted = promote_glossary_identifier_hits(hits, (group,))
+
+    assert promoted is hits
+
+
+def test_text_only_glossary_form_does_not_change_ranking():
+    group = MatchGroup(
+        term_id=21,
+        canonical="PAYROLL_STATUS",
+        kind="business_term",
+        canonical_locale="en",
+        original_name="Payroll Status",
+        term_version=1,
+        source_revision=1,
+        spans=(MatchSpan(0, 14, "Payroll Status", "alias", "Payroll Status"),),
+        matched_forms=("Payroll Status",),
+        match_type="alias",
+    )
+    first = Hit("first", 1.0, {"title": "Other", "content": ""})
+    second = Hit("second", 0.01, {"title": "Payroll Status", "content": ""})
+    hits = [first, second]
+
+    assert promote_glossary_identifier_hits(hits, (group,)) is hits
 
 
 def test_domain_match_can_reuse_request_local_cache():

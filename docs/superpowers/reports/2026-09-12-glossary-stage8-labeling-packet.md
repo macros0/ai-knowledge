@@ -12,14 +12,14 @@ JSON-объекте указывается `null`, а в ключе `relevance` 
 `doc_id|None|chunk_index` также принимается валидатором.
 
 Для ускорения проверки подготовлен машинный черновик кандидатов:
-[harnessfix4 labeling candidates](../../../backend/scripts/probe-stage8-labeling-candidates-harnessfix4-20260912.json).
+[harnessfix4 labeling candidates](../../../tests/artifacts/stage8/probe-stage8-labeling-candidates-harnessfix4-20260912.json).
 Он содержит 15 positive/compound кейсов, 209 уникальных источников,
 наблюдения в top-5 по API/mode и off/on, а также excerpt из canonical БД.
 Поле `status=draft_unapproved`: его нельзя переносить в утверждённые labels
 без решения эксперта.
 
 Для отдельной проверки изменения состава final-блоков после выравнивания
-search hydration подготовлен дополнительный [final-only review packet](../../../backend/scripts/probe-stage8-search-bounded-final-only-review-20260912.json).
+search hydration подготовлен дополнительный [final-only review packet](../../../tests/artifacts/stage8/probe-stage8-search-bounded-final-only-review-20260912.json).
 Он содержит 75 case-run (21 off, 54 on): старые final-блоки остаются в raw-пуле,
 полных raw source losses — `0`. Этот пакет также имеет статус
 `draft_unapproved` и не заменяет предметную разметку.
@@ -113,7 +113,7 @@ reviewer: <имя>
 reviewed_at: <ISO-8601>
 ```
 
-После утверждения labels их нужно перенести в `backend/scripts/glossary-probe-cases.json`,
+После утверждения labels их нужно перенести в `backend/test_scripts/glossary-probe-cases.json`,
 зафиксировать версию/хэш labels и заново выполнить off/on на одном snapshot.
 В актуальном bounded protocol-1 quality report зафиксировано `7951 unresolved`
 событие изменения; более ранние `8049` и другие числа относятся к историческим

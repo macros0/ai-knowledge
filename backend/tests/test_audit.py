@@ -60,6 +60,8 @@ EXPECTED_ACTION_TYPES = {
     "ui_dictionary_rollback",
     "glossary_term_create",
     "glossary_term_update",
+    "glossary_term_merge",
+    "glossary_identity_migration",
     "glossary_source_update",
     "glossary_alias_create",
     "glossary_alias_update",
@@ -67,6 +69,9 @@ EXPECTED_ACTION_TYPES = {
     "glossary_translation_update",
     "glossary_translation_review",
     "glossary_translation_backfill",
+    "glossary_rule_create",
+    "glossary_rule_update",
+    "glossary_rule_delete",
 }
 
 

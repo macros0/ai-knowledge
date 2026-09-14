@@ -149,6 +149,14 @@ function request(path, init, timeoutMs) {
   });
 }
 
+function jsonRequest(path, method, data, timeoutMs) {
+  return request(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  }, timeoutMs);
+}
+
 export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale } = {}) {
   const form = new FormData();
   form.append("file", file);
@@ -603,11 +611,19 @@ export function getGlossaryTerm(termId) {
   return request(`/admin/glossary/${termId}`);
 }
 
-export function checkGlossaryAliases(aliases, termId) {
+export function checkGlossaryAliases(aliases, termId, draftContext) {
   return request("/admin/glossary/aliases/check", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ aliases, term_id: termId ?? null }),
+    body: JSON.stringify({ aliases, term_id: termId ?? null, ...draftContext }),
+  });
+}
+
+export function checkGlossaryConflicts(draft, termId) {
+  return request("/admin/glossary/conflicts/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({...draft, term_id: termId ?? null}),
   });
 }
 
@@ -689,6 +705,42 @@ export function backfillGlossaryTranslations(locale, termIds, expectedTranslatio
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ locale, term_ids: termIds, expected_translation_versions: expectedTranslationVersions }),
   });
+}
+
+export function listGlossaryRules() {
+  return request("/admin/glossary/rules");
+}
+
+export function createGlossaryRule(data) {
+  return jsonRequest("/admin/glossary/rules", "POST", data);
+}
+
+export function updateGlossaryRule(ruleId, data) {
+  return jsonRequest(`/admin/glossary/rules/${ruleId}`, "PATCH", data);
+}
+
+export function deleteGlossaryRule(ruleId, version) {
+  return request(`/admin/glossary/rules/${ruleId}?version=${encodeURIComponent(version)}`, { method: "DELETE" });
+}
+
+export function previewGlossaryMerge(data) {
+  return jsonRequest("/admin/glossary/merge/preview", "POST", data);
+}
+
+export function commitGlossaryMerge(data) {
+  return jsonRequest("/admin/glossary/merge", "POST", data);
+}
+
+export function previewGlossaryRuleMerge(data) {
+  return jsonRequest("/admin/glossary/rules/merge/preview", "POST", data);
+}
+
+export function previewGlossaryRule(data) {
+  return jsonRequest("/admin/glossary/rules/preview", "POST", data);
+}
+
+export function commitGlossaryRuleMerge(data) {
+  return jsonRequest("/admin/glossary/rules/merge", "POST", data);
 }
 
 export async function getUiDictionary(locale) {

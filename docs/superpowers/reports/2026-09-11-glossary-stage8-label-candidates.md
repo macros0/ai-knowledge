@@ -1,6 +1,6 @@
 # Stage 8: кандидаты для предметной разметки
 
-Дата: 11.09.2026. Источник: `backend/scripts/probe-stage8-matrix-on.json`,
+Дата: 11.09.2026. Источник: `tests/artifacts/stage8/probe-stage8-matrix-on.json`,
 вариант `hybrid/chat`, top-5. Статус всех строк: `unresolved`; этот файл не
 является утверждением релевантности и требует проверки предметным экспертом.
 

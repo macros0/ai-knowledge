@@ -84,6 +84,22 @@ function Ensure-Database {
     }
 }
 
+$pg_isready = Join-Path $PgBin 'pg_isready.exe'
+if (-not (Test-Path -LiteralPath $pg_isready)) {
+    throw "pg_isready.exe не найден в $pg_isready."
+}
+
+# Keep the launcher idempotent.  Restarting a healthy PostgreSQL instance is
+# unsafe on Windows: the postmaster's child processes can still hold the
+# redirected postgres-out.log handle after the parent is stopped, making the
+# next Start-Process fail with "file is being used by another process".
+& $pg_isready -h 127.0.0.1 -p $PgPort -q 2>$null
+if ($LASTEXITCODE -eq 0) {
+    Write-Output "PostgreSQL уже готов на 127.0.0.1:$PgPort; существующий процесс переиспользован."
+    Ensure-Database
+    return
+}
+
 Write-Output "Запуск PostgreSQL: $Exe"
 
 $GlobalHelper = "$env:USERPROFILE\.config\opencode\scripts\start-background.ps1"
@@ -96,7 +112,6 @@ $Helper = if (Test-Path -LiteralPath $GlobalHelper -ErrorAction SilentlyContinue
     -PidFile $PidFile `
     -LogDir $LogDir
 
-$pg_isready = Join-Path $PgBin 'pg_isready.exe'
 $ready = $false
 for ($i = 0; $i -lt 30; $i++) {
     Start-Sleep -Seconds 1

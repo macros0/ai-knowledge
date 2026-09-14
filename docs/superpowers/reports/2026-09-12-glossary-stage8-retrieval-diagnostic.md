@@ -23,8 +23,8 @@ LLM, но расширяет последующую гидратацию кон�
 
 Артефакты после обоих исправлений:
 
-- `backend/scripts/probe-stage8-diagnostic2-off-20260912.json`
-- `backend/scripts/probe-stage8-diagnostic2-on-20260912.json`
+- `tests/artifacts/stage8/probe-stage8-diagnostic2-off-20260912.json`
+- `tests/artifacts/stage8/probe-stage8-diagnostic2-on-20260912.json`
 
 Каждая сторона содержит 252 варианта (42 кейса × 3 mode × 2 API),
 `acceptance_failures=[]`.
@@ -47,7 +47,7 @@ off. Retrieval-бюджет произвольно не уменьшался.
 ## Проверка гипотезы о меньшем retrieval-бюджете
 
 Отдельный эксперимент с `SEARCH_PER_BRANCH_TOP_K=20` сохранён в
-`backend/scripts/probe-stage8-top20-on-20260912.json`. Технических
+`tests/artifacts/stage8/probe-stage8-top20-on-20260912.json`. Технических
 `acceptance_failures` нет, но относительно default-артефакта изменились 108
 кейсов, исчезли 252 final-блока и появились 120 других. Без утверждённых
 relevance labels такой trade-off неприемлем, поэтому значение бюджета в коде
@@ -181,7 +181,7 @@ BM25: оставшийся эффект связан с более широки�
 
 Чтобы проверить безопасную настройку без изменения production defaults, выполнен
 отдельный прогон 42 кейсов для лимитов `0/1/2/4` через `search/bm25` и
-`chat/bm25`. Артефакт: `backend/scripts/probe-stage8-budget-tradeoff-20260912.json`.
+`chat/bm25`. Артефакт: `tests/artifacts/stage8/probe-stage8-budget-tradeoff-20260912.json`.
 
 | Лимит | search avg/p95, ms | chat avg/p95, ms | Изменившиеся кейсы относительно лимита 4 | Потери raw source keys |
 |---:|---:|---:|---:|---:|
@@ -266,7 +266,7 @@ average остаётся открытым критерием, а выбор ли
 После cache3 visibility lookup и canonical hydration объединены в одну DB-сессию
 для `/search`, `/chat` и probe. Выполнены 2 warmup и 5 чередующихся пар,
 по 210 наблюдений на сторону для каждого API/mode. Полная сводка сохранена в
-`backend/scripts/probe-stage8-combined-hydration-summary-20260912.json`.
+`tests/artifacts/stage8/probe-stage8-combined-hydration-summary-20260912.json`.
 
 | API/mode | off avg/p95, ms | on avg/p95, ms | delta avg/p95 | SLA |
 |---|---:|---:|---:|---|

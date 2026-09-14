@@ -183,12 +183,12 @@ python scripts/backfill_dedup.py   # minhash-подписи и LSH-бакеты 
    ```powershell
    .\scripts\start-all.ps1        # нужен живой стек (Qdrant, Ollama, PG)
    cd backend
-   python scripts/probe_sources.py --baseline
+   python test_scripts/probe_sources.py --baseline
    ```
 3. Применить изменение стоп-слов через UI («Предпросмотр» → «Применить»).
 4. Повторить прогон и сравнить:
    ```powershell
-   python scripts/probe_sources.py
+   python test_scripts/probe_sources.py
    ```
    Вывод: `ok` — все baseline-источники на месте; `!!` — источник пропал,
    разбирайте по критерию. Для каждого источника показаны matched terms (`mt=…`) —

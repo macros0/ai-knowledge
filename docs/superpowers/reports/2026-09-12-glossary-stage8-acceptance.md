@@ -67,30 +67,30 @@ production build (15 маршрутов) — PASS.
 - [Main implementation plan](../plans/2026-09-11-glossary-query-expansion.md)
 - [Retrieval diagnostic](2026-09-12-glossary-stage8-retrieval-diagnostic.md)
 - [Subject-matter labeling packet](2026-09-12-glossary-stage8-labeling-packet.md)
-- [Budget trade-off artifact](../../../backend/scripts/probe-stage8-budget-tradeoff-20260912.json)
-- [Reproducibility manifest](../../../backend/scripts/stage8-manifest-20260912.json)
-- [Current reproducibility manifest](../../../backend/scripts/stage8-manifest-current-20260912.json)
+- [Budget trade-off artifact](../../../tests/artifacts/stage8/probe-stage8-budget-tradeoff-20260912.json)
+- [Reproducibility manifest](../../../tests/artifacts/stage8/stage8-manifest-20260912.json)
+- [Current reproducibility manifest](../../../tests/artifacts/stage8/stage8-manifest-current-20260912.json)
 - [Rollback and roles smoke](2026-09-12-glossary-stage8-rollback-roles.md)
 - [Migration smoke](2026-09-11-glossary-stage8-migration-smoke.md)
 - [Hermetic retrieval fixture](../../../backend/tests/fixtures/stage8_retrieval_documents.json)
-- [Matrix quality report](../../../backend/scripts/probe-stage8-matrix-quality-report-20260912.json)
-- [Fresh single-matrix quality report](../../../backend/scripts/probe-stage8-cache2-quality-report-20260912.json)
-- [gRPC pair quality re-evaluation](../../../backend/scripts/probe-stage8-grpc-quality-report-corrected-20260912.json)
-- [same-process harnessfix3 summary](../../../backend/scripts/probe-stage8-harnessfix3-summary-20260912.json)
-- [same-process harnessfix4 summary](../../../backend/scripts/probe-stage8-harnessfix4-summary-20260912.json)
-- [harnessfix4 BM25 category breakdown](../../../backend/scripts/probe-stage8-harnessfix4-bm25-breakdown-20260912.json)
-- [harnessfix4 labeling candidates](../../../backend/scripts/probe-stage8-labeling-candidates-harnessfix4-20260912.json)
-- [same-process harnessfix5 summary](../../../backend/scripts/probe-stage8-harnessfix5-summary-20260912.json)
-- [harnessfix5 BM25 category breakdown](../../../backend/scripts/probe-stage8-harnessfix5-bm25-breakdown-20260912.json)
-- [combined visibility/hydration protocol summary](../../../backend/scripts/probe-stage8-combined-hydration-summary-20260912.json)
-- [bounded hydration protocol summary](../../../backend/scripts/probe-stage8-bounded-hydration-summary-20260912.json)
-- [bounded hydration BM25 breakdown](../../../backend/scripts/probe-stage8-bounded-hydration-bm25-breakdown-20260912.json)
-- [bounded hydration quality report](../../../backend/scripts/probe-stage8-bounded-hydration-quality-report-20260912.json)
-- [bounded hydration SLA recheck](../../../backend/scripts/probe-stage8-bounded-hydration-sla-recheck-20260912.json)
-- [Strict SLA artifact validator](../../../backend/scripts/stage8_sla_validator.py)
-- [Label validator](../../../backend/scripts/validate_stage8_labels.py)
+- [Matrix quality report](../../../tests/artifacts/stage8/probe-stage8-matrix-quality-report-20260912.json)
+- [Fresh single-matrix quality report](../../../tests/artifacts/stage8/probe-stage8-cache2-quality-report-20260912.json)
+- [gRPC pair quality re-evaluation](../../../tests/artifacts/stage8/probe-stage8-grpc-quality-report-corrected-20260912.json)
+- [same-process harnessfix3 summary](../../../tests/artifacts/stage8/probe-stage8-harnessfix3-summary-20260912.json)
+- [same-process harnessfix4 summary](../../../tests/artifacts/stage8/probe-stage8-harnessfix4-summary-20260912.json)
+- [harnessfix4 BM25 category breakdown](../../../tests/artifacts/stage8/probe-stage8-harnessfix4-bm25-breakdown-20260912.json)
+- [harnessfix4 labeling candidates](../../../tests/artifacts/stage8/probe-stage8-labeling-candidates-harnessfix4-20260912.json)
+- [same-process harnessfix5 summary](../../../tests/artifacts/stage8/probe-stage8-harnessfix5-summary-20260912.json)
+- [harnessfix5 BM25 category breakdown](../../../tests/artifacts/stage8/probe-stage8-harnessfix5-bm25-breakdown-20260912.json)
+- [combined visibility/hydration protocol summary](../../../tests/artifacts/stage8/probe-stage8-combined-hydration-summary-20260912.json)
+- [bounded hydration protocol summary](../../../tests/artifacts/stage8/probe-stage8-bounded-hydration-summary-20260912.json)
+- [bounded hydration BM25 breakdown](../../../tests/artifacts/stage8/probe-stage8-bounded-hydration-bm25-breakdown-20260912.json)
+- [bounded hydration quality report](../../../tests/artifacts/stage8/probe-stage8-bounded-hydration-quality-report-20260912.json)
+- [bounded hydration SLA recheck](../../../tests/artifacts/stage8/probe-stage8-bounded-hydration-sla-recheck-20260912.json)
+- [Strict SLA artifact validator](../../../backend/test_scripts/stage8_sla_validator.py)
+- [Label validator](../../../backend/test_scripts/validate_stage8_labels.py)
 - [SLA decision note](2026-09-12-glossary-stage8-sla-decision.md)
-- [fresh harnessfix2 quality report](../../../backend/scripts/probe-stage8-harnessfix2-quality-report-20260912.json)
+- [fresh harnessfix2 quality report](../../../tests/artifacts/stage8/probe-stage8-harnessfix2-quality-report-20260912.json)
 - [Recommendations](2026-09-12-glossary-stage8-recommendations.md)
 
 ## Контрольная перепроверка приёмочного контура
@@ -151,7 +151,7 @@ harnessfix5 average/p95 составили: `search/bm25 +72.31%/+16.77%`,
 `chat/bm25 +103.88%/+32.16%`. Dense/hybrid и `chat/dense` прошли SLA.
 Сравнение protocol-1 старого и нового кода дало `0` различий финальных
 identity/kind/title для off и on. Артефакт:
-`backend/scripts/probe-stage8-combined-hydration-summary-20260912.json`.
+`tests/artifacts/stage8/probe-stage8-combined-hydration-summary-20260912.json`.
 
 В следующей версии canonical text в SQL-запросе ограничен границами фактического
 ответа (`4000` символов концепта и `6000` чанка). Это не изменило финальные
@@ -160,8 +160,8 @@ identity/kind/title (`0` различий против combined protocol-1), н�
 (average/p95). Поэтому ограничение оставлено как защита от лишней передачи
 данных, а не как решение SLA. При критерии плана p95 ≤110% дополнительно
 `chat/hybrid` не проходит p95 (`+11.78%`). SLA recheck сохранён в
-`backend/scripts/probe-stage8-bounded-hydration-sla-recheck-20260912.json`,
-исходный протокол — в `backend/scripts/probe-stage8-bounded-hydration-summary-20260912.json`.
+`tests/artifacts/stage8/probe-stage8-bounded-hydration-sla-recheck-20260912.json`,
+исходный протокол — в `tests/artifacts/stage8/probe-stage8-bounded-hydration-summary-20260912.json`.
 
 В первом реальном прогоне после оптимизации появились многочисленные
 предупреждения `Чанк (...) не найден в document_chunks — рассинхрон БД и Qdrant`.
@@ -175,7 +175,7 @@ Read-only inventory подтвердил `0` отсутствующих ключ
 идентичность `doc_id/slug/chunk_index`, `relevant|irrelevant`, `mandatory` и
 причина. После этого labels переносятся в cases, фиксируется новый manifest,
 сначала запускается read-only валидатор
-`backend/scripts/validate_stage8_labels.py`, затем пересчитываются
+`backend/test_scripts/validate_stage8_labels.py`, затем пересчитываются
 Precision/Recall встроенным отчётом и выполняется новый
 2-warmup/5-pair protocol. Неразмеченный блок остаётся `BLOCKED`, а не считается
 нерелевантным автоматически.
@@ -208,9 +208,9 @@ SLA: он не заменяет обязательные `2` warmup + `5` пар
 сторону. Labels всё ещё не утверждены, quality report содержит `7951
 unresolved`, а authoritative SLA остаётся `3/6` PASS. Артефакты:
 
-- [fresh bounded off probe](../../../backend/scripts/probe-stage8-search-bounded-off-20260912.json)
-- [fresh bounded on probe](../../../backend/scripts/probe-stage8-search-bounded-on-20260912.json)
-- [fresh bounded quality report](../../../backend/scripts/probe-stage8-search-bounded-quality-report-20260912.json)
+- [fresh bounded off probe](../../../tests/artifacts/stage8/probe-stage8-search-bounded-off-20260912.json)
+- [fresh bounded on probe](../../../tests/artifacts/stage8/probe-stage8-search-bounded-on-20260912.json)
+- [fresh bounded quality report](../../../tests/artifacts/stage8/probe-stage8-search-bounded-quality-report-20260912.json)
 
 ## Уточнение протокола search hydration
 
@@ -237,8 +237,8 @@ SLA validator вернул структурный `READY`, но содержат
 
 Новые артефакты:
 
-- [bounded search protocol summary](../../../backend/scripts/probe-stage8-search-bounded-summary-20260912.json)
-- [bounded search SLA recheck](../../../backend/scripts/probe-stage8-search-bounded-sla-recheck-20260912.json)
+- [bounded search protocol summary](../../../tests/artifacts/stage8/probe-stage8-search-bounded-summary-20260912.json)
+- [bounded search SLA recheck](../../../tests/artifacts/stage8/probe-stage8-search-bounded-sla-recheck-20260912.json)
 
 После протокола также исправлен отсутствующий импорт `build_doc_lookup` в
 locale-check probe. Повторная проверка завершилась `14 passed`, `ruff check` —
@@ -250,7 +250,7 @@ Manifest после выравнивания probe зафиксировал не
 подтвердил `BLOCKED`: `15` quality-кейсов, `0` complete.
 
 Для экспертной проверки состава final-блоков подготовлен дополнительный
-[final-only review packet](../../../backend/scripts/probe-stage8-search-bounded-final-only-review-20260912.json):
+[final-only review packet](../../../tests/artifacts/stage8/probe-stage8-search-bounded-final-only-review-20260912.json):
 75 case-run (21 off, 54 on). Полных raw source losses — `0`; старые final-
 источники остаются среди raw-кандидатов. Пакет не содержит автоматически
 назначенных labels и имеет статус `draft_unapproved`.

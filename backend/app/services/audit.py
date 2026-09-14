@@ -60,6 +60,7 @@ UI_DICTIONARY_IMPORT = "ui_dictionary_import"
 UI_DICTIONARY_ROLLBACK = "ui_dictionary_rollback"
 GLOSSARY_TERM_CREATE = "glossary_term_create"
 GLOSSARY_TERM_UPDATE = "glossary_term_update"
+GLOSSARY_TERM_MERGE = "glossary_term_merge"
 GLOSSARY_SOURCE_UPDATE = "glossary_source_update"
 GLOSSARY_ALIAS_CREATE = "glossary_alias_create"
 GLOSSARY_ALIAS_UPDATE = "glossary_alias_update"
@@ -67,6 +68,10 @@ GLOSSARY_ALIAS_DELETE = "glossary_alias_delete"
 GLOSSARY_TRANSLATION_UPDATE = "glossary_translation_update"
 GLOSSARY_TRANSLATION_REVIEW = "glossary_translation_review"
 GLOSSARY_TRANSLATION_BACKFILL = "glossary_translation_backfill"
+GLOSSARY_RULE_CREATE = "glossary_rule_create"
+GLOSSARY_RULE_UPDATE = "glossary_rule_update"
+GLOSSARY_RULE_DELETE = "glossary_rule_delete"
+GLOSSARY_IDENTITY_MIGRATION = "glossary_identity_migration"
 
 ACTION_TYPES = frozenset(
     {
@@ -111,6 +116,7 @@ ACTION_TYPES = frozenset(
         UI_DICTIONARY_ROLLBACK,
         GLOSSARY_TERM_CREATE,
         GLOSSARY_TERM_UPDATE,
+        GLOSSARY_TERM_MERGE,
         GLOSSARY_SOURCE_UPDATE,
         GLOSSARY_ALIAS_CREATE,
         GLOSSARY_ALIAS_UPDATE,
@@ -118,6 +124,10 @@ ACTION_TYPES = frozenset(
         GLOSSARY_TRANSLATION_UPDATE,
         GLOSSARY_TRANSLATION_REVIEW,
         GLOSSARY_TRANSLATION_BACKFILL,
+        GLOSSARY_RULE_CREATE,
+        GLOSSARY_RULE_UPDATE,
+        GLOSSARY_RULE_DELETE,
+        GLOSSARY_IDENTITY_MIGRATION,
     }
 )
 

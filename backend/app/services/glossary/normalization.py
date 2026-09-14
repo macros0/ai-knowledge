@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from app import error_codes as codes
 from dataclasses import dataclass
+from functools import lru_cache
 
 SUPPORTED_KINDS = frozenset(
-    {"sap_infotype", "sap_transaction", "sap_table", "abbreviation", "business_term"}
+    {"sap_infotype", "sap_transaction", "sap_table", "sap_program", "sap_object", "abbreviation", "business_term"}
 )
 _CANONICAL_RE = re.compile(r"^[A-Z0-9_/:.\-]{1,128}$")
 _CANONICAL_LETTER_RE = re.compile(r"[A-Z]")
@@ -18,6 +20,41 @@ _IDENTIFIER_EXTRA = "_"
 
 class GlossaryValidationError(ValueError):
     """A glossary value violates a deterministic input rule."""
+    code = codes.GLOSSARY_INVALID_ALIAS
+
+
+class GlossaryMigrationRequiredError(GlossaryValidationError):
+    """The glossary namespace has not passed metadata validation yet."""
+    code = codes.GLOSSARY_MIGRATION_REQUIRED
+
+
+class GlossaryRedundantAliasError(GlossaryValidationError):
+    """An explicit alias repeats an identity already owned by this card."""
+    code = codes.GLOSSARY_REDUNDANT_ALIAS
+
+
+class GlossaryMultipleInfotypeNumbersError(GlossaryValidationError):
+    code = codes.GLOSSARY_MULTIPLE_INFOTYPE_NUMBERS
+
+
+class GlossaryInvalidRuleError(GlossaryValidationError):
+    code = codes.GLOSSARY_INVALID_RULE
+
+
+class GlossaryInvalidLocaleError(GlossaryValidationError):
+    code = codes.GLOSSARY_INVALID_LOCALE
+
+
+class GlossaryUnsafeAutoExpandError(GlossaryValidationError):
+    code = codes.GLOSSARY_UNSAFE_AUTO_EXPAND
+
+
+def validate_infotype_number(kind: str, number: str | None) -> None:
+    if kind == "sap_infotype":
+        if not isinstance(number, str) or not re.fullmatch(r"[0-9]{4}", number):
+            raise GlossaryValidationError("Номер инфотипа обязателен и должен содержать ровно четыре цифры")
+    elif number is not None:
+        raise GlossaryValidationError("Номер инфотипа допустим только для вида sap_infotype")
 
 
 def normalize_alias(text: str) -> str:
@@ -29,6 +66,15 @@ def normalize_alias(text: str) -> str:
     """
     if not isinstance(text, str):
         raise GlossaryValidationError("Алиас должен быть строкой")
+    return _normalize_short_alias(text) if len(text) <= 256 else _normalize_literal(text)
+
+
+@lru_cache(maxsize=4096)
+def _normalize_short_alias(text: str) -> str:
+    return _normalize_literal(text)
+
+
+def _normalize_literal(text: str) -> str:
     value = unicodedata.normalize("NFC", text).strip()
     value = _WS_RE.sub(" ", value).lower().replace("\u0307", "")
     return unicodedata.normalize("NFC", value)
@@ -98,14 +144,38 @@ def is_identifier_char(value: str) -> bool:
     return bool(value) and (value.isalnum() or value in _IDENTIFIER_EXTRA)
 
 
-def literal_matches(normalized: NormalizedText, form: str) -> tuple[tuple[int, int], ...]:
+def is_technical_identifier_char(value: str) -> bool:
+    return is_identifier_char(value) or (bool(value) and value in "/.:-")
+
+
+def technical_span_boundary(text: str, start: int, end: int) -> bool:
+    """Reject embedded codes while allowing sentence punctuation at their edges.
+
+    A slash belongs to SAP namespaces. A dot, colon or hyphen only joins a
+    neighbouring identifier when there is another identifier part beyond it.
+    """
+    def continues(index: int, direction: int) -> bool:
+        while 0 <= index < len(text) and text[index] in ".:-":
+            index += direction
+        return 0 <= index < len(text) and (
+            is_identifier_char(text[index]) or text[index] == "/"
+        )
+
+    return not continues(start - 1, -1) and not continues(end, 1)
+
+
+def literal_matches(normalized: NormalizedText, form: str, *, boundary_mode: str = "phrase") -> tuple[tuple[int, int], ...]:
     """Find literal, identifier-boundary-safe occurrences of ``form``."""
     key = normalize_alias(form)
     if not key:
         return ()
     result: list[tuple[int, int]] = []
-    for match in re.finditer(re.escape(key), normalized.text):
+    for match in _literal_pattern(key).finditer(normalized.text):
         start, end = match.span()
+        if boundary_mode == "identifier":
+            if technical_span_boundary(normalized.text, start, end):
+                result.append((start, end))
+            continue
         if start and is_identifier_char(normalized.text[start - 1]) and is_identifier_char(key[0]):
             continue
         if end < len(normalized.text) and is_identifier_char(normalized.text[end]) and is_identifier_char(key[-1]):
@@ -114,40 +184,9 @@ def literal_matches(normalized: NormalizedText, form: str) -> tuple[tuple[int, i
     return tuple(result)
 
 
-_INFOTYPE_RE = re.compile(
-    r"(?<![\w])(?P<prefix>it|ит|infotype|инфотип(?:а|е|у|ом)?)(?P<separator>\s*-?\s*)(?P<number>[0-9]{1,4})",
-    re.IGNORECASE,
-)
-
-
-def infotype_matches(normalized: NormalizedText) -> tuple[tuple[int, int, str], ...]:
-    """Return safe structural infotype forms as normalized spans and IT codes."""
-    result: list[tuple[int, int, str]] = []
-    text = normalized.text
-    for match in _INFOTYPE_RE.finditer(text):
-        start, end = match.span()
-        if start and is_identifier_char(text[start - 1]):
-            continue
-        if end < len(text) and is_identifier_char(text[end]):
-            continue
-        next_index = end
-        while next_index < len(text) and text[next_index] == " ":
-            next_index += 1
-        if next_index < len(text) and text[next_index] in ".,/":
-            tail = next_index + 1
-            while tail < len(text) and text[tail] == " ":
-                tail += 1
-            if tail < len(text) and text[tail].isdigit():
-                continue
-        if next_index < len(text) and text[next_index] in "-–—":
-            tail = next_index + 1
-            while tail < len(text) and text[tail] == " ":
-                tail += 1
-            if tail < len(text) and text[tail].isdigit():
-                continue
-        number = match.group("number")
-        result.append((start, end, f"IT{int(number):04d}"))
-    return tuple(result)
+@lru_cache(maxsize=4096)
+def _literal_pattern(key: str) -> re.Pattern:
+    return re.compile(re.escape(key))
 
 
 def normalize_canonical(value: str, kind: str) -> str:
@@ -167,12 +206,12 @@ def normalize_canonical(value: str, kind: str) -> str:
 
 def validate_locale(locale: str, *, allow_und: bool = True) -> str:
     if not isinstance(locale, str):
-        raise GlossaryValidationError("Язык должен быть строкой")
+        raise GlossaryInvalidLocaleError("Язык должен быть строкой")
     value = locale.strip()
     if allow_und and value == "und":
         return value
     if not _REFERENCE_LOCALE_RE.fullmatch(value):
-        raise GlossaryValidationError("Недопустимый код языка")
+        raise GlossaryInvalidLocaleError("Недопустимый код языка")
     return value
 
 
@@ -188,17 +227,17 @@ def validate_alias_options(
         raise GlossaryValidationError("Алиас должен быть непустым и не длиннее 256 символов")
 
     if normalized in _SHORT_DENYLIST and (auto_expand or search_enabled):
-        raise GlossaryValidationError("Короткая форма запрещена для автоматических прав поиска")
+        raise GlossaryUnsafeAutoExpandError("Короткая форма запрещена для автоматических прав поиска")
 
     letters_only = normalized.isalpha()
     if letters_only and len(normalized) < 3 and (auto_expand or search_enabled):
-        raise GlossaryValidationError("Слишком короткий алиас нельзя включить автоматически")
+        raise GlossaryUnsafeAutoExpandError("Слишком короткий алиас нельзя включить автоматически")
 
     if normalized.isdigit():
         if auto_expand:
-            raise GlossaryValidationError("Числовой алиас не может быть триггером")
+            raise GlossaryUnsafeAutoExpandError("Числовой алиас не может быть триггером")
         if search_enabled and (kind != "sap_infotype" or len(normalized) != 4):
-            raise GlossaryValidationError(
+            raise GlossaryUnsafeAutoExpandError(
                 "Числовой алиас можно включить в поиск только для четырёхзначного инфотипа"
             )
     return normalized

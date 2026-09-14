@@ -33,7 +33,10 @@ from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
 from app.services.glossary.expansion import prepare_query
+from app.services.glossary.matching import exact_excerpt
 from app.services.glossary.query_sparse import build_query_sparse
+from app.services.glossary.snapshot import GlossaryMigrationRequiredError
+from app.services.ui_dictionary import localized_message
 
 logger = logging.getLogger(__name__)
 
@@ -102,12 +105,15 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             detail=str(exc),
         ) from exc
 
-    plan = prepare_query(
-        req.query,
-        ui_locale=req.locale,
-        enabled=settings.glossary_query_expansion_enabled and req.use_glossary,
-        settings=settings,
-    )
+    try:
+        plan = prepare_query(
+            req.query,
+            ui_locale=req.locale,
+            enabled=settings.glossary_query_expansion_enabled and req.use_glossary,
+            settings=settings,
+        )
+    except GlossaryMigrationRequiredError as exc:
+        raise ApiError(status_code=503, code=errors.GLOSSARY_MIGRATION_REQUIRED, detail=str(exc)) from exc
     branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
     vector = _get_embedder().embed(plan.dense_query) if "dense" in branches else None
     # Query-путь: динамический набор стоп-слов активных locales (индексная формула
@@ -136,15 +142,16 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         # доживали до merge и не попадали ни в контекст LLM, ни в sources.
         top_k=settings.search_per_branch_top_k,
     )
+    exact_groups = plan.strict_groups or plan.match_groups
     # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
     # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
     # и orphan-точки (документа нет в БД — восстановлен во время purge или сбой).
-    hits, doc_lookup = load_visible_retrieval_hits(hits)
+    hits, doc_lookup = load_visible_retrieval_hits(hits, **({"exact_groups": exact_groups} if exact_groups else {}))
     # Короткое замыкание (Этап 4a.1): при нуле хитов не зовём LLM — ответ
     # без источников формируется здесь, фронтенд по пустому `sources` покажет
     # переход «загрузить документ» при активном фильтре модуля/разработки.
     if not hits:
-        answer = "Источники не найдены. Попробуйте изменить запрос или убрать фильтры."
+        answer = localized_message('chat.noSources', req.locale, russian_fallback='Источники не найдены.')
         sources: list[ChatSource] = []
     else:
         # Этап 2b: полный текст чанков — из document_chunks (natural key), а не
@@ -152,7 +159,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         # payload["content"]/["section_title"] чанк-точек.
 
         filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
-        merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)
+        merged = merge_and_format(hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups)
         # top_k — число БЛОКОВ в контексте/источниках (группы с сиблингами), не точек.
         merged = merged[: req.top_k]
         domain_cache = {}
@@ -164,7 +171,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         merged = drop_unmatched_blocks(
             merged,
             req.query,
-            match_groups=plan.match_groups,
+            match_groups=exact_groups,
             domain_cache=domain_cache,
             lexical_cache=lexical_cache,
         )
@@ -174,13 +181,13 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         merged = drop_partial_title_matches(
             merged,
             req.query,
-            match_groups=plan.match_groups,
+            match_groups=exact_groups,
             domain_cache=domain_cache,
         )
         context = format_context(
             merged,
             query=req.query,
-            match_groups=plan.match_groups,
+            match_groups=exact_groups,
             domain_cache=domain_cache,
             lexical_cache=lexical_cache,
         )
@@ -197,7 +204,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
                     tags=m["tags"],
                     doc_id=m["doc_id"],
                     filename=Path(m["filepath"]).name,
-                    snippet=m["content"][:200],
+                    snippet=exact_excerpt(m["content"], 200, exact_groups),
                     point_type=m["point_type"],
                     chunk_index=m["chunk_index"],
                     development_number=src_doc.get("development_number"),
@@ -206,15 +213,17 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
                 )
             )
 
-        system = get_store().format("chat_system", locale=req.locale)
-        prompt_user = get_store().format("chat_user", context=context, query=req.query)
-        try:
-            answer = _get_llm().chat(system, prompt_user)
-        except Exception as exc:
-            raise LLMError(cause=exc) from exc
-        # LLM иногда пишет «блок с ID 2» вместо [2] — фронтенд рендерит ссылки
-        # только по формату [N]. Нормализуем до отдачи клиенту и записи в историю.
-        answer = normalize_citations(answer, max_index=len(merged))
+        if not merged:
+            answer = localized_message('chat.noSources', req.locale, russian_fallback='Источники не найдены.')
+        else:
+            system = get_store().format("chat_system", locale=req.locale)
+            prompt_user = get_store().format("chat_user", context=context, query=req.query)
+            try:
+                answer = _get_llm().chat(system, prompt_user)
+            except Exception as exc:
+                raise LLMError(cause=exc) from exc
+            # Normalize citations only after an answer was produced from sources.
+            answer = normalize_citations(answer, max_index=len(merged))
 
     used_in = [branch for branch in ("dense", "bm25") if branch in branches]
     applied_terms = [

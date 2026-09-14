@@ -17,6 +17,25 @@ def test_dedupe_pairs_preserves_first_seen_order():
     ) == [("doc-a", "slug-a"), ("doc-b", "slug-b")]
 
 
+def test_exact_filter_reads_full_chunk_even_when_multitopic_concepts_would_skip_it():
+    from app.services.glossary.registry import GlossaryRegistry
+    from app.services.glossary.expansion import prepare_query
+    GlossaryRegistry().create(None, 'sap_transaction', 'PA30')
+    groups = prepare_query('PA30', ui_locale='en', enabled=True).strict_groups
+    content = 'Other information. ' * 100 + 'PA30'
+    with session_scope() as session:
+        session.add(Document(id='exact-full-chunk', filename='source.docx'))
+        for slug in ('first', 'second'):
+            session.add(OkfConcept(doc_id='exact-full-chunk', slug=slug, title=slug, content='Unrelated concept', chunk_index=0))
+        session.add(DocumentChunk(doc_id='exact-full-chunk', chunk_index=0, content=content, char_count=len(content)))
+    hits = [Hit(slug, 1.0, dict(point_type='concept', doc_id='exact-full-chunk', slug=slug, title=slug, chunk_index=0))
+            for slug in ('first', 'second')]
+    hits.append(Hit('chunk', 0.9, dict(point_type='chunk', doc_id='exact-full-chunk', chunk_index=0)))
+    kept, _ = load_visible_retrieval_hits(hits, max_concept_chars=10, max_chunk_chars=10, exact_groups=groups)
+    assert [hit.point_id for hit in kept] == ['chunk']
+    assert kept[0].payload['content'] == content
+
+
 def test_enrich_retrieval_hits_hydrates_concepts_and_chunks_together():
     with session_scope() as session:
         session.add(Document(id="doc-hydrate", filename="source.docx"))

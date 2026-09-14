@@ -38,7 +38,7 @@ Breakdown показывает рост числа сырых кандидато
    `BLOCKED`, а не ложный PASS.
 
 Перед переносом разметки прогонять read-only проверку:
-`python backend/scripts/validate_stage8_labels.py --cases backend/scripts/glossary-probe-cases.json`.
+`python backend/test_scripts/validate_stage8_labels.py --cases backend/test_scripts/glossary-probe-cases.json`.
 Она не меняет cases и сейчас ожидаемо возвращает `BLOCKED` (`15` quality-кейсов,
 `0` complete); это контроль полноты разметки, а не новая оценка релевантности.
 
@@ -52,7 +52,7 @@ Breakdown показывает рост числа сырых кандидато
 каждый `API × mode`, а не только среднее по всей матрице. Для текущего
 baseline критерий SLA — on не выше 110% off и по average, и по p95 согласно
 acceptance plan. Перед фиксацией результата запускать независимый
-`backend/scripts/stage8_sla_validator.py`: он сверяет summary с recheck и не
+`backend/test_scripts/stage8_sla_validator.py`: он сверяет summary с recheck и не
 позволяет принять устаревший `sla_pass`.
 
 До этого прогона не менять:
@@ -117,23 +117,23 @@ failures`; production build — PASS. В UI дополнительно устр�
 менять критерии качества; SLA recheck даёт `3/6` PASS при едином строгом
 критерии; итоговый acceptance audit остаётся BLOCKED.
 
-Свежий single-matrix report: `backend/scripts/probe-stage8-cache2-quality-report-20260912.json`.
+Свежий single-matrix report: `tests/artifacts/stage8/probe-stage8-cache2-quality-report-20260912.json`.
 После исправления harness сохранена отдельная переоценка уже имеющейся gRPC
-пары: `backend/scripts/probe-stage8-grpc-quality-report-corrected-20260912.json`.
+пары: `tests/artifacts/stage8/probe-stage8-grpc-quality-report-corrected-20260912.json`.
 Она подтверждает `BLOCKED` (`90` вариантов), но не является новым прогоном
 корпуса: для него требуется заново выполнить probe с исправленным `run_case`.
 
 После этого выполнен контрольный однопроцессный протокол harnessfix4: два
 прогрева и пять чередующихся пар с общими клиентами, по 210 наблюдений на
 сторону для каждой API/mode-пары. Сводка —
-`backend/scripts/probe-stage8-harnessfix4-summary-20260912.json`.
+`tests/artifacts/stage8/probe-stage8-harnessfix4-summary-20260912.json`.
 Aggregate: `search/bm25` average/p95 `+75.21%/+16.70%`,
 `chat/bm25` `+106.69%/+33.37%`; обе BM25-пары не проходят SLA. Dense/hybrid
 для search и chat в этом прогоне прошли установленный порог. Quality во всех
 пяти парах остаётся `BLOCKED` по 90 кейсам, поскольку labels не утверждены.
 
 После добавления query-token cache выполнен harnessfix5 по тому же протоколу;
-сводка — `backend/scripts/probe-stage8-harnessfix5-summary-20260912.json`.
+сводка — `tests/artifacts/stage8/probe-stage8-harnessfix5-summary-20260912.json`.
 Aggregate harnessfix5: `search/bm25` average/p95 `+82.96%/+18.20%`,
 `chat/bm25` `+114.04%/+38.03%`, а `chat/dense` оказался на границе и не прошёл
 average (`+10.23%`). Cache немного снизил chat context-filter
@@ -148,7 +148,7 @@ DB-сессию для `/search`, `/chat` и probe. Контрольный пр�
 `chat/dense` в этом прогоне прошёл (`+4.79%/+8.82%`), но обе BM25-пары
 остались FAIL. Сравнение protocol-1 с прежним кодом: `0` изменений финальных
 identity/kind/title для off и on. Сводка сохранена в
-`backend/scripts/probe-stage8-combined-hydration-summary-20260912.json`.
+`tests/artifacts/stage8/probe-stage8-combined-hydration-summary-20260912.json`.
 
 Затем canonical text в SQL-запросе ограничен фактическими границами ответа:
 `4000` символов для концепта и `6000` для чанка. Новый 2-warmup/5-pair
@@ -158,7 +158,7 @@ identity/kind/title, но не дал надёжного улучшения: `se
 При едином критерии плана p95 ≤110% дополнительно `chat/hybrid` не проходит
 p95 (`+11.78%`). Ограничение оставить, поскольку оно снижает риск лишней
 передачи больших текстов; SLA считать непройденным. Полный recheck всех шести
-пар сохранён в `backend/scripts/probe-stage8-bounded-hydration-sla-recheck-20260912.json`.
+пар сохранён в `tests/artifacts/stage8/probe-stage8-bounded-hydration-sla-recheck-20260912.json`.
 
 Категориальный разбор текущей версии подтверждает локализацию причины: в
 `search/bm25` raw-пул растёт с `4.0 → 24.0` на positive-кейсах и с
@@ -189,9 +189,9 @@ positive/compound/multilingual/filter-isolation кейсов raw-пул заме
 меняются (`17.10 → 17.10` и `32.86 → 32.86`) и почти не получают overhead.
 Следовательно, это не скрытый SQL-запрос на каждый alias, а цена расширенного
 BM25 retrieval-пула. Полный разбор сохранён в
-`backend/scripts/probe-stage8-harnessfix4-bm25-breakdown-20260912.json`;
+`tests/artifacts/stage8/probe-stage8-harnessfix4-bm25-breakdown-20260912.json`;
 harnessfix5 подтвердил тот же профиль, его breakdown сохранён в
-`backend/scripts/probe-stage8-harnessfix5-bm25-breakdown-20260912.json`.
+`tests/artifacts/stage8/probe-stage8-harnessfix5-bm25-breakdown-20260912.json`.
 Формализованный выбор между строгим относительным и дополнительным абсолютным
 SLA вынесен в `2026-09-12-glossary-stage8-sla-decision.md`; критерий без
 решения владельца продукта не меняется.
@@ -262,6 +262,6 @@ PASS; актуальные FAIL: `search/bm25 +68.43%/+10.762%`, `chat/bm25
 полный acceptance protocol.
 
 Для этого review подготовлен отдельный draft packet:
-`backend/scripts/probe-stage8-search-bounded-final-only-review-20260912.json`.
+`tests/artifacts/stage8/probe-stage8-search-bounded-final-only-review-20260912.json`.
 Он охватывает `75` case-run (`21` off, `54` on); автоматически назначенных
 labels нет.

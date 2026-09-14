@@ -19,6 +19,7 @@ export default function AppliedTerms({ status = "disabled", appliedTerms = [] })
             {items.map((item) => (
               <li key={`${item.canonical}-${item.matched.join("|")}`}>
                 <span>{item.matched.join(", ")} → <b>{item.displayName}</b></span>
+                {item.systemRule === "sap_infotype" && <small>{t("chat.glossary.infotypeRule")}</small>}
                 {item.added.length > 0 && <small>{item.added.join(", ")}</small>}
               </li>
             ))}

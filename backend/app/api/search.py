@@ -18,7 +18,9 @@ from app.services.retrieval_hydration import load_visible_retrieval_hits
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
 from app.services.glossary.expansion import prepare_query
+from app.services.glossary.matching import exact_excerpt
 from app.services.glossary.query_sparse import build_query_sparse
+from app.services.glossary.snapshot import GlossaryMigrationRequiredError
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.api import errors
 from app.api.errors import ApiError
@@ -56,12 +58,15 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
             detail=str(exc),
             headers={"Retry-After": str(max(1, int(exc.retry_after)))},
         ) from exc
-    plan = prepare_query(
-        req.query,
-        ui_locale=req.locale,
-        enabled=settings.glossary_query_expansion_enabled and req.use_glossary,
-        settings=settings,
-    )
+    try:
+        plan = prepare_query(
+            req.query,
+            ui_locale=req.locale,
+            enabled=settings.glossary_query_expansion_enabled and req.use_glossary,
+            settings=settings,
+        )
+    except GlossaryMigrationRequiredError as exc:
+        raise ApiError(status_code=503, code=errors.GLOSSARY_MIGRATION_REQUIRED, detail=str(exc)) from exc
     branches = resolve_branches(req.mode, req.dense, req.bm25, settings)
     vector = _get_embedder().embed(plan.dense_query) if "dense" in branches else None
     sparse_vec = (
@@ -87,6 +92,7 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
         top_k=settings.search_per_branch_top_k,
     )
 
+    exact_groups = plan.strict_groups or plan.match_groups
     # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
     # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
     # и orphan-точки (документа нет в БД — восстановлен во время purge или сбой).
@@ -97,10 +103,11 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
         hits,
         max_concept_chars=snippet_chars,
         max_chunk_chars=snippet_chars,
+        **({"exact_groups": exact_groups} if exact_groups else {}),
     )
 
     filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
-    merged = merge_and_format(hits, settings, filename_lookup=filename_lookup)
+    merged = merge_and_format(hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups)
     # top_k — число БЛОКОВ (merge-групп с сиблингами), не точек.
     merged = merged[: req.top_k]
     max_score = max((m["score"] for m in merged), default=0.0)
@@ -115,7 +122,7 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
                 point_type=m["point_type"],
                 tags=m["tags"],
                 filepath=m["filepath"],
-                snippet=m["content"][:300],
+                snippet=exact_excerpt(m["content"], 300, exact_groups),
                 chunk_index=m["chunk_index"],
                 source_filename=m["source_filename"],
             )

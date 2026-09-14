@@ -9,7 +9,15 @@ from app.auth.models import User
 from app.config import Settings
 from app.models.schemas import ChatRequest, SearchRequest
 from app.services.errors import VectorStoreError
-from app.services.glossary.types import AppliedTerm, MatchGroup, MatchSpan, QueryPlan
+from app.services.fusion import Hit
+from app.services.glossary.types import (
+    AppliedTerm,
+    FormSource,
+    MatchGroup,
+    MatchSpan,
+    QueryPlan,
+    ResolvedForm,
+)
 from app.services.sparse import _term_index, to_sparse_vector
 
 
@@ -33,6 +41,69 @@ def _settings(**overrides):
     }
     values.update(overrides)
     return Settings(**values)
+
+
+def _identifier_plan(*, enabled: bool = True) -> QueryPlan:
+    if not enabled:
+        return _plan("инфо-тип 0003", status="disabled")
+    group = MatchGroup(
+        term_id=1,
+        canonical="IT0003",
+        kind="sap_infotype",
+        canonical_locale="en",
+        original_name="Payroll infotype",
+        term_version=1,
+        source_revision=1,
+        spans=(MatchSpan(0, 14, "инфо-тип 0003", "alias", "инфо-тип 0003"),),
+        matched_forms=("IT0003",),
+        match_type="alias",
+    )
+    return QueryPlan(
+        original_query="инфо-тип 0003",
+        dense_query="инфо-тип 0003\n[Domain term: Payroll infotype]",
+        added_sparse_texts=("IT0003",),
+        match_groups=(group,),
+        applied_terms=(),
+        status="applied",
+    )
+
+
+def _identifier_hits() -> list[Hit]:
+    return [
+        Hit(
+            "near-code",
+            1.0,
+            {
+                "point_type": "concept",
+                "doc_id": "noise-doc",
+                "chunk_index": 0,
+                "title": "Ссылка на IT00037",
+                "content": "Шумовой документ с похожим, но другим кодом IT00037.",
+                "tags": [],
+                "filepath": "noise-doc/noise.md",
+            },
+        ),
+        Hit(
+            "exact-code",
+            0.01,
+            {
+                "point_type": "concept",
+                "doc_id": "exact-doc",
+                "chunk_index": 0,
+                "title": "PY-ES: IT0003",
+                "content": "Payroll data for IT0003.",
+                "tags": [],
+                "filepath": "exact-doc/it0003.md",
+            },
+        ),
+    ]
+
+
+def _identifier_docs() -> dict[str, dict[str, str]]:
+    return {
+        "noise-doc": {"filename": "noise.docx"},
+        "exact-doc": {"filename": "py-es.docx"},
+    }
 
 
 def test_query_sparse_preserves_original_vector_for_no_match_and_repeated_words():
@@ -76,6 +147,51 @@ def test_query_sparse_weights_limited_additions_and_aggregates_collisions():
         to_sparse_vector("kept", stopwords=frozenset()).values[0] * weight
     )
     assert _term_index("omitted") not in values
+
+
+def test_query_sparse_gives_all_configured_forms_the_same_weight():
+    from app.services.glossary.query_sparse import build_query_sparse
+
+    structural = ResolvedForm(
+        text="it0003",
+        normalized="it0003",
+        identity_key="infotype:0003",
+        boundary_mode="identifier",
+        sources=(FormSource(kind="rule_alias", rule_id=1, rule_version=1),),
+        can_trigger=True,
+        can_search=True,
+    )
+    group = MatchGroup(
+        term_id=None,
+        canonical="IT0003",
+        kind="sap_infotype",
+        canonical_locale="und",
+        original_name="IT0003",
+        term_version=0,
+        source_revision=1,
+        spans=(MatchSpan(0, 7, "ИТ 0003", "structural", "ИТ 0003"),),
+        matched_forms=("it0003",),
+        match_type="structural",
+        system_rule="sap_infotype",
+        structural_code="IT0003",
+        resolved_forms=(structural,),
+    )
+    plan = QueryPlan(
+        original_query="ИТ 0003",
+        dense_query="ИТ 0003\nit0003",
+        added_sparse_texts=("it0003",),
+        match_groups=(group,),
+        applied_terms=(),
+        status="applied",
+    )
+
+    actual = build_query_sparse(
+        plan,
+        stopwords=frozenset(),
+        settings=SimpleNamespace(glossary_sparse_expansion_weight=1.0),
+    )
+    values = dict(zip(actual.indices, actual.values))
+    assert values[_term_index("it0003")] == pytest.approx(to_sparse_vector("it0003", stopwords=frozenset()).values[0])
 
 
 def test_search_prepares_once_and_passes_expanded_vectors_and_filters(monkeypatch):
@@ -315,7 +431,7 @@ def test_chat_keeps_domain_context_and_original_question_language(monkeypatch):
     monkeypatch.setattr(
         chat_module,
         "load_visible_retrieval_hits",
-        lambda hits: (hits, {"doc-1": {"filename": "source.docx"}}),
+        lambda hits, **kwargs: (hits, {"doc-1": {"filename": "source.docx"}}),
     )
     monkeypatch.setattr(chat_module.chat_history, "store_turn", lambda *a, **k: "session-1")
 
@@ -339,3 +455,116 @@ def test_chat_keeps_domain_context_and_original_question_language(monkeypatch):
     assert "User question: инфотип 3" in llm_prompts[1]
     assert "Domain term: IT0003" not in llm_prompts[1]
     assert "Matched domain terms: [Payroll infotype via инфотип 3]" in llm_prompts[1]
+
+
+def test_search_promotes_exact_added_identifier_before_context_limit(monkeypatch):
+    """A low-ranked exact glossary code must survive the pre-merge char limit.
+
+    ``IT00037`` deliberately ranks first: identifier boundaries must prevent it
+    from receiving the exact ``IT0003`` glossary priority.
+    """
+    from app.api import search as search_module
+
+    settings = _settings(chat_max_context_chars=10)
+    hits = _identifier_hits()
+
+    monkeypatch.setattr(search_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(search_module, "prepare_query", lambda *a, **k: _identifier_plan())
+    monkeypatch.setattr(search_module._get_embedder(), "embed", lambda query: [1.0])
+    monkeypatch.setattr(
+        search_module._get_vector_store(),
+        "search_composite",
+        lambda **kwargs: hits,
+    )
+    monkeypatch.setattr(
+        search_module,
+        "load_visible_retrieval_hits",
+        lambda found, **kwargs: (found, _identifier_docs()),
+    )
+    monkeypatch.setattr(search_module.get_rate_limiter(), "check_action", lambda *a, **k: None)
+
+    response = search_module.search(
+        SearchRequest(query="инфо-тип 0003", mode="dense", top_k=1),
+        User(),
+    )
+
+    assert [hit.title for hit in response.hits] == ["PY-ES: IT0003"]
+
+
+def test_chat_promotes_exact_added_identifier_before_context_limit(monkeypatch):
+    from app.api import chat as chat_module
+
+    settings = _settings(chat_max_context_chars=10)
+    hits = _identifier_hits()
+
+    monkeypatch.setattr(chat_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(chat_module, "prepare_query", lambda *a, **k: _identifier_plan())
+    monkeypatch.setattr(chat_module._get_embedder(), "embed", lambda query: [1.0])
+    monkeypatch.setattr(
+        chat_module._get_vector_store(),
+        "search_composite",
+        lambda **kwargs: hits,
+    )
+    monkeypatch.setattr(
+        chat_module,
+        "load_visible_retrieval_hits",
+        lambda found, **kwargs: (found, _identifier_docs()),
+    )
+    monkeypatch.setattr(chat_module._get_llm(), "chat", lambda *a, **k: "Ответ [1]")
+    monkeypatch.setattr(chat_module.chat_history, "store_turn", lambda *a, **k: "session-1")
+    monkeypatch.setattr(chat_module.get_rate_limiter(), "check_action", lambda *a, **k: None)
+
+    response = chat_module.chat(
+        ChatRequest(query="инфо-тип 0003", mode="dense", top_k=1),
+        User(user_id="user-1"),
+    )
+
+    assert [source.title for source in response.sources] == ["PY-ES: IT0003"]
+
+
+def test_search_without_glossary_preserves_existing_rank_order(monkeypatch):
+    from app.api import search as search_module
+
+    settings = _settings(chat_max_context_chars=10)
+    hits = _identifier_hits()
+
+    monkeypatch.setattr(search_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        search_module,
+        "prepare_query",
+        lambda *a, **k: _identifier_plan(enabled=False),
+    )
+    monkeypatch.setattr(search_module._get_embedder(), "embed", lambda query: [1.0])
+    monkeypatch.setattr(
+        search_module._get_vector_store(),
+        "search_composite",
+        lambda **kwargs: hits,
+    )
+    monkeypatch.setattr(
+        search_module,
+        "load_visible_retrieval_hits",
+        lambda found, **kwargs: (found, _identifier_docs()),
+    )
+    monkeypatch.setattr(search_module.get_rate_limiter(), "check_action", lambda *a, **k: None)
+
+    response = search_module.search(
+        SearchRequest(query="инфо-тип 0003", mode="dense", top_k=1, use_glossary=False),
+        User(),
+    )
+
+    assert [hit.title for hit in response.hits] == ["Ссылка на IT00037"]
+
+
+def test_chat_does_not_call_llm_when_exact_merge_removes_last_candidate(monkeypatch):
+    from app.api import chat as chat_module
+    monkeypatch.setattr(chat_module, 'get_settings', lambda: _settings())
+    monkeypatch.setattr(chat_module, 'prepare_query', lambda *a, **k: _identifier_plan())
+    monkeypatch.setattr(chat_module, '_get_embedder', lambda: SimpleNamespace(embed=lambda query: [1.0]))
+    monkeypatch.setattr(chat_module, '_get_vector_store', lambda: SimpleNamespace(search_composite=lambda **kwargs: _identifier_hits()[:1]))
+    monkeypatch.setattr(chat_module, 'load_visible_retrieval_hits', lambda hits, **kwargs: (hits, _identifier_docs()))
+    monkeypatch.setattr(chat_module, '_get_llm', lambda: SimpleNamespace(chat=lambda *args: pytest.fail('LLM called with no exact context')))
+    monkeypatch.setattr(chat_module.chat_history, 'store_turn', lambda *a, **k: 'session-1')
+    monkeypatch.setattr(chat_module.get_rate_limiter(), 'check_action', lambda *a, **k: None)
+    response = chat_module.chat(ChatRequest(query='инфо-тип 0003', mode='dense', locale='en'), User(user_id='test'))
+    assert response.sources == []
+    assert response.answer == 'No sources found.'

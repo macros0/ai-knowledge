@@ -1,7 +1,7 @@
-import pytest
-
 from app.services.glossary.seed import load_seed, seed_glossary, validate_seed
 from app.services.glossary.registry import GlossaryRegistry
+from app.services.glossary.types import GlossaryAliasInput
+import pytest
 
 
 def test_seed_file_contains_only_valid_verified_entries():
@@ -72,3 +72,14 @@ def test_seed_allows_alias_matching_a_technical_identifier():
     entries[0]["aliases"].append({"alias": entries[1]["canonical"], "auto_expand": False, "search_enabled": False})
 
     validate_seed(entries)
+
+
+def test_seed_rolls_back_entire_batch_on_existing_alias_conflict():
+    registry = GlossaryRegistry()
+    owner = registry.create(None, 'business_term', 'Existing owner', aliases=[GlossaryAliasInput('Reserved form')])
+    entries = [dict(canonical=key, kind='business_term', original_name=name,
+                    canonical_locale='en', aliases=[])
+               for key, name in [('FIRST_NEW', 'First new'), ('SECOND_NEW', 'Reserved form')]]
+    with pytest.raises(ValueError):
+        seed_glossary(registry, entries, apply=True)
+    assert [item['id'] for item in registry.list()] == [owner['id']]

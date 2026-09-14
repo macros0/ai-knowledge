@@ -35,6 +35,22 @@ _PARAM_RE = re.compile(r"\{(\w+)\}")
 
 
 @lru_cache(maxsize=1)
+def _english_messages() -> dict:
+    return json.loads(_EN_SOURCE_PATH.read_text(encoding="utf-8"))
+
+
+def localized_message(key: str, locale: str, *, russian_fallback: str) -> str:
+    """Resolve a plain server message through the existing UI dictionary."""
+    override = get_active(locale)
+    value = (override or {}).get('data', {}).get(key)
+    if isinstance(value, str) and value:
+        return value
+    if locale == 'ru':
+        return russian_fallback
+    return _english_messages().get(key, russian_fallback)
+
+
+@lru_cache(maxsize=1)
 def canonical_manifest() -> dict[str, list[str]]:
     """Канонический набор ключей → список {param}-плейсхолдеров (без count)."""
     if not _MANIFEST_PATH.is_file():

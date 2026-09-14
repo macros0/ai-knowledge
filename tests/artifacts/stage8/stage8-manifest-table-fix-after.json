@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "purpose": "stage8_acceptance_reproducibility",
+  "runtime": {
+    "knowledge_profile": "Измерительная база Stage 8",
+    "database_name": "okf_stage8_test",
+    "data_dir": "C:\\Users\\alexey\\ai-workspace\\ai-knowledge\\data-stage8-test",
+    "qdrant_collection": "okf_knowledge_stage8_test"
+  },
+  "cases": {
+    "path": "backend\\scripts\\glossary-probe-cases.json",
+    "sha256": "8fdb3c4345d0666f6f1152016228ad8a8254d0f18decb5304d1ec3ebf98a478e",
+    "count": 42
+  },
+  "labels": {
+    "sha256": "41513579d3e870771f3dad366165d56bfb6c7aabd6597486bc7d6c21377c17b2",
+    "approved": false
+  },
+  "glossary": {
+    "snapshot_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "snapshot_count": 0,
+    "seed_path": "backend/seeds/glossary.json",
+    "seed_sha256": "56603beceb9a7264a7dc79ddde5819106f52001f0a147a0d7a85e44005490be9"
+  },
+  "source_files": {
+    "backend\\app\\api\\chat.py": "b55758d33d31d93e1995b9f42609d4c834d954c1cf8986d1da60ae93a6cc9756",
+    "backend\\app\\api\\search.py": "ea936d92e83e65fd5f7acd5f9631e9acbd261c93d5af8202bb517dd21403549c",
+    "backend\\app\\config.py": "bc73b43b8169567d28f2d97814672c20998415ebf1d9c13488bb9606844ef32c",
+    "backend\\app\\services\\context_builder.py": "8410562063cc99ccae804e422b9edfe78e4dce0f97745293d7d96322ab4510c2",
+    "backend\\app\\services\\glossary\\__init__.py": "3fc42bb697245256b829e6476186b906d12b4cc7e21c260b9486e657377c3b01",
+    "backend\\app\\services\\glossary\\expansion.py": "2a074a9d09c35407587335f39a1acdfe5f00f3ed0a1831ab3444a3555e598a10",
+    "backend\\app\\services\\glossary\\matching.py": "4c05fc779b114f05c20d16f9e1ba8e808e0c6cdcd5afecdf71dca792d27daa62",
+    "backend\\app\\services\\glossary\\normalization.py": "782ed23a64efa799ea87fe6992b6ef09e3cfee4ca3100e9aaba0531c0c3cd188",
+    "backend\\app\\services\\glossary\\query_sparse.py": "4d2a0b29868dd62e5683a338dc87d71d5502c9bba9aa1eb1ea22f7d431e30bee",
+    "backend\\app\\services\\glossary\\registry.py": "04ec128b6a3626ae69c075491bb8aa437789c27da67f4e758ed5ab55e5ee23e2",
+    "backend\\app\\services\\glossary\\seed.py": "aec71a5fc19dba53705232b9d5c2c80ada3d4e6694ce5b4592f95c3e58f43188",
+    "backend\\app\\services\\glossary\\translations.py": "99668ea66b3950c170cc23607c118b0dd65ade80fc951b462f20fef33a9b88d3",
+    "backend\\app\\services\\glossary\\types.py": "cb6eb0bbcd0804732efbeffa6da2931b52f70ccaee13be1259a0908259fc4b99",
+    "backend\\app\\services\\retrieval_hydration.py": "de20cb3d3ba6c7cf70d9097964fd33fb88bea4f2ea611476c81b49f7b6610439",
+    "backend\\app\\services\\search_filter.py": "25a1e418ae37e878a20c7204c815d398ea0a3cf1f4622d174c2984f8380e0c50",
+    "backend\\app\\services\\vector_store.py": "4e1022435f6b0bca95f46b3f1d7309a3e81a391d0263fb008709c35cd6bd69a5",
+    "backend\\scripts\\glossary_probe_report.py": "68e1e09b3fabfd0bae8b7db0ffefa5f150902e0318c44a507824a5da2368898c",
+    "backend\\scripts\\probe_sources.py": "fb975ba2442769e43b258ea8689eb7cab8351b7495e159bd9e6a23bdeb732551",
+    "backend\\scripts\\stage8_manifest.py": "7cb9cfcb1f80d259c5683fa3c50926dca86ab5e4d0328cd3fa35f56c122e027f",
+    "backend\\scripts\\stage8_sla_validator.py": "cdce77dd884f55483b08ed0b93f3525514060ff0776ec486ea4b3848b19d31a1",
+    "backend\\scripts\\validate_stage8_labels.py": "c5236d8161321468d9e3b793c6591c349951a60d2ac44107ccfed823494ad83a"
+  },
+  "models": {
+    "embedding": "ollama/bge-m3",
+    "embedding_dimensions": 1024,
+    "llm": "openrouter/mistralai/mistral-nemo",
+    "llm_chat": "openrouter/openai/gpt-4o-mini"
+  },
+  "settings": {
+    "glossary_query_expansion_enabled": true,
+    "glossary_max_terms_per_query": 5,
+    "glossary_max_added_aliases_per_term": 4,
+    "glossary_max_added_tokens": 32,
+    "glossary_max_added_chars": 768,
+    "glossary_query_text_max_chars": 8192,
+    "glossary_sparse_expansion_weight": 0.35,
+    "search_per_branch_top_k": 40,
+    "search_rrf_k": 60,
+    "embedding_provider": "http",
+    "embedding_model": "ollama/bge-m3",
+    "embedding_dimensions": 1024,
+    "qdrant_collection": "okf_knowledge_stage8_test"
+  },
+  "database": {
+    "documents": {
+      "count": 9,
+      "sha256": "31cb73e7d377e4ffb6bf4975aa1461c37ffab01c747e37d3fa97f3a2b492b090"
+    },
+    "document_chunks": {
+      "count": 66,
+      "sha256": "7f6bdb21e41d103a1b3d6d8105c5a6c38d2adbb90c00bcee57a789623d0ea10f"
+    },
+    "okf_concepts": {
+      "count": 864,
+      "sha256": "a92b41186b4d277825ff57606379f0b1b2c83ae072afc1fccd638873360cd523"
+    },
+    "active_glossary_versions": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  },
+  "qdrant": {
+    "collection": "okf_knowledge_stage8_test",
+    "count": 930,
+    "sha256": "c3475dfaa69b92cbaf7b6020c0b5123d6da4be01478ff6d7e34aaca9b6383c60"
+  }
+}

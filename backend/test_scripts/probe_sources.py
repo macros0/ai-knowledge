@@ -262,13 +262,21 @@ def run_case(
         # Keep the probe equivalent to /search: that API returns only a
         # 300-character snippet and does not need the chat context budget.
         hydration_kwargs.update(max_concept_chars=300, max_chunk_chars=300)
+    exact_groups = getattr(plan, "strict_groups", ()) or plan.match_groups
+    if exact_groups:
+        hydration_kwargs["exact_groups"] = exact_groups
     visible_hits, doc_lookup = load_visible_retrieval_hits(raw_hits, **hydration_kwargs)
 
     started = perf_counter()
     filename_lookup = {
         doc_id: (doc or {}).get("filename", "") for doc_id, doc in doc_lookup.items()
     }
-    merged = merge_and_format(visible_hits, settings, filename_lookup=filename_lookup)
+    merged = merge_and_format(
+        visible_hits,
+        settings,
+        filename_lookup=filename_lookup,
+        exact_groups=exact_groups,
+    )
     timings["merge_ms"] = round((perf_counter() - started) * 1000, 3)
     merged_before_top_k = merged
     merged = merged[: int(case.get("top_k", 10))]
@@ -282,14 +290,14 @@ def run_case(
         merged = drop_unmatched_blocks(
             merged,
             query,
-            match_groups=plan.match_groups,
+            match_groups=exact_groups,
             domain_cache=domain_cache,
             lexical_cache=lexical_cache,
         )
         merged = drop_partial_title_matches(
             merged,
             query,
-            match_groups=plan.match_groups,
+            match_groups=exact_groups,
             domain_cache=domain_cache,
         )
     timings["context_filter_ms"] = round((perf_counter() - started) * 1000, 3)

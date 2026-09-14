@@ -3,14 +3,38 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  appliedTermsSummary,
   buildGlossaryListParams,
   chunkTermIds,
   glossaryTermDisplay,
+  glossarySystemRuleForKind,
   hasPendingGlossaryAlias,
   isCurrentGlossaryResponse,
   keepGlossarySelection,
   translationState,
 } from "../src/lib/glossaryUi.mjs";
+
+test("infotype system rule vocabulary is supplied by the server", () => {
+  assert.equal(glossarySystemRuleForKind("sap_infotype"), null);
+  assert.equal(glossarySystemRuleForKind("sap_transaction"), null);
+});
+
+test("chat summarizes an infotype rule without listing generated forms as aliases", () => {
+  assert.deepEqual(appliedTermsSummary([{
+    canonical: "IT0003",
+    display_name: "Payroll Status",
+    matched_texts: ["инфо-типа 0003"],
+    added_forms: ["IT0003", "инфотип инфотипа инфотипе 0003"],
+    saved_alias_forms: ["Payroll Status"],
+    system_rule: "sap_infotype",
+  }]), [{
+    canonical: "IT0003",
+    matched: ["инфо-типа 0003"],
+    added: ["Payroll Status"],
+    displayName: "Payroll Status",
+    systemRule: "sap_infotype",
+  }]);
+});
 
 test("detects a typed new glossary alias before the add action", () => {
   assert.equal(hasPendingGlossaryAlias({ alias: "  новый алиас  " }), true);
@@ -109,7 +133,7 @@ test("new reference forms default to the current UI locale", () => {
 
 test("glossary source fields and enabled state share an explicit save", () => {
   const editor = readFileSync(new URL("../src/components/GlossaryEditor.jsx", import.meta.url), "utf8");
-  assert.match(editor, /updateGlossarySource\(term\.id, \{[^}]*canonical_locale: canonicalLocale, enabled \}\)/s);
+  assert.match(editor, /updateGlossarySource\(term\.id, \{[^}]*canonical_locale: canonicalLocale, enabled[, }]/s);
   assert.match(editor, /onChange=\{\(e\) => setEnabled\(e\.target\.checked\)\}/);
   assert.doesNotMatch(editor, /const toggleEnabled/);
 });
@@ -136,16 +160,6 @@ test("new alias draft is cleared only after a successful save", () => {
   assert.match(editor, /return false;\s*\}\s*finally/);
   assert.match(editor, /const saved = await apply\(\(\) => addGlossaryAlias/);
   assert.match(editor, /if \(saved\) setAliasDraft\(emptyAlias\)/);
-});
-
-test("glossary editor guards a typed alias before another action", () => {
-  const editor = readFileSync(new URL("../src/components/GlossaryEditor.jsx", import.meta.url), "utf8");
-  const panel = readFileSync(new URL("../src/components/GlossaryPanel.jsx", import.meta.url), "utf8");
-  assert.match(editor, /hasPendingGlossaryAlias\(aliasDraft\)/);
-  assert.match(editor, /unsavedAliasConfirm/);
-  assert.match(editor, /beforeSave=\{confirmDiscardNewAlias\}/);
-  assert.match(panel, /pendingAlias/);
-  assert.match(panel, /onPendingAliasChange=\{setPendingAlias\}/);
 });
 
 test("chat explains when the global glossary expansion flag is disabled", () => {

@@ -8,9 +8,63 @@ GlossaryKind = Literal[
     "sap_infotype",
     "sap_transaction",
     "sap_table",
+    "sap_program",
+    "sap_object",
     "abbreviation",
     "business_term",
 ]
+
+
+@dataclass(frozen=True)
+class InfotypeRuleSnapshot:
+    """Immutable user-configured number range and literal prefixes."""
+
+    rule_id: int
+    name: str
+    number_from: int
+    number_to: int
+    prefixes: tuple[str, ...]
+    enabled: bool = True
+    version: int = 1
+
+
+@dataclass(frozen=True)
+class FormSource:
+    """Why a resolved search form is allowed."""
+
+    kind: Literal["name", "explicit_alias", "rule_alias"]
+    alias_id: int | None = None
+    rule_id: int | None = None
+    rule_version: int | None = None
+
+
+@dataclass(frozen=True)
+class ResolvedForm:
+    """One complete literal form accepted by the query-side matcher."""
+
+    text: str
+    normalized: str
+    identity_key: str
+    boundary_mode: Literal["phrase", "identifier"]
+    sources: tuple[FormSource, ...] = ()
+    can_trigger: bool = False
+    can_search: bool = False
+
+
+@dataclass(frozen=True)
+class RuleMatch:
+    start: int
+    end: int
+    matched_text: str
+    number: str
+    rule_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class GlossarySnapshot:
+    revision: int
+    terms: tuple["GlossaryTermSnapshot", ...]
+    rules: tuple[InfotypeRuleSnapshot, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -58,6 +112,7 @@ class GlossaryTermSnapshot:
     source_revision: int
     aliases: tuple[GlossaryAliasSnapshot, ...] = ()
     translations: tuple[GlossaryTranslationSnapshot, ...] = ()
+    infotype_number: str | None = None
 
 
 @dataclass(frozen=True)
@@ -71,7 +126,7 @@ class MatchSpan:
 
 @dataclass(frozen=True)
 class MatchGroup:
-    term_id: int
+    term_id: int | None
     canonical: str
     kind: str
     canonical_locale: str
@@ -81,11 +136,14 @@ class MatchGroup:
     spans: tuple[MatchSpan, ...]
     matched_forms: tuple[str, ...]
     match_type: Literal["alias", "structural", "mixed"]
+    system_rule: Literal["sap_infotype"] | None = None
+    structural_code: str | None = None
+    resolved_forms: tuple[ResolvedForm, ...] = ()
 
 
 @dataclass(frozen=True)
 class AppliedTerm:
-    term_id: int
+    term_id: int | None
     canonical: str
     kind: str
     display_name: str
@@ -99,6 +157,9 @@ class AppliedTerm:
     match_type: Literal["alias", "structural", "mixed"]
     added_forms: tuple[str, ...]
     used_in: tuple[str, ...] = ("dense", "bm25")
+    system_rule: Literal["sap_infotype"] | None = None
+    saved_alias_forms: tuple[str, ...] = ()
+    form_sources: tuple[FormSource, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -121,3 +182,5 @@ class QueryPlan:
     status: Literal["disabled", "no_match", "applied", "limited", "unavailable"]
     skipped_reasons: tuple[SkippedReason, ...] = ()
     rules_version: str = "glossary-v1"
+    glossary_revision: int = 0
+    strict_groups: tuple[MatchGroup, ...] = ()

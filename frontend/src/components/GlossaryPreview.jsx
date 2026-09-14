@@ -31,7 +31,7 @@ export default function GlossaryPreview({ locale }) {
         <div><b>{t("admin.glossary.status")}</b>: {result.expansion_status}</div>
         <div><b>{t("admin.glossary.denseQuery")}</b>: {result.dense_query}</div>
         <div><b>{t("admin.glossary.addedForms")}</b>: {result.added_sparse_texts.join(", ") || "—"}</div>
-        {result.applied_terms.length > 0 ? <ul>{result.applied_terms.map((item) => <li key={item.term_id}>{item.display_name}: {(item.matched_texts || []).join(", ")}</li>)}</ul> : <p className="muted">{t("admin.glossary.noMatches")}</p>}
+        {result.applied_terms.length > 0 ? <ul>{result.applied_terms.map((item) => <li key={`${item.term_id ?? "system"}:${item.canonical}:${(item.matched_texts || []).join("|")}`}>{item.display_name}: {(item.matched_texts || []).join(", ")}{item.system_rule === "sap_infotype" && <small> · {t("admin.glossary.systemRuleApplied")}</small>}</li>)}</ul> : <p className="muted">{t("admin.glossary.noMatches")}</p>}
         {(result.skipped_reasons || []).some((item) => item.reason === "ambiguous_alias") && <p className="glossary-conflicts" role="status">{t("admin.glossary.ambiguousSkipped")}</p>}
       </div>}
     </section>

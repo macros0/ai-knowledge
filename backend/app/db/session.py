@@ -119,3 +119,10 @@ def init_db() -> None:
     from app.db import models  # noqa: F401  (регистрация таблиц)
 
     Base.metadata.create_all(get_engine())
+    # The glossary writer lock is a singleton row.  Seed it before request
+    # threads can start so two first writers cannot race on its INSERT.
+    if hasattr(models, "GlossaryState"):
+        with session_scope() as session:
+            if session.get(models.GlossaryState, 1) is None:
+                has_terms = session.query(models.DomainTerm.id).limit(1).first() is not None
+                session.add(models.GlossaryState(id=1, revision=0, identities_ready=not has_terms))

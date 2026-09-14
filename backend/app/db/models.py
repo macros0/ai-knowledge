@@ -474,6 +474,7 @@ class DomainTerm(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     canonical: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    infotype_number: Mapped[str | None] = mapped_column(String(4), nullable=True, index=True)
     original_name: Mapped[str] = mapped_column(String(256), nullable=False)
     original_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     canonical_locale: Mapped[str] = mapped_column(
@@ -557,6 +558,90 @@ class DomainTermAlias(Base):
     __table_args__ = (
         UniqueConstraint("term_id", "normalized_alias", name="uq_domain_term_alias_per_term"),
     )
+
+
+class GlossaryInfotypeRule(Base):
+    """User-owned number range which produces query-only infotype forms."""
+
+    __tablename__ = "glossary_infotype_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    number_from: Mapped[int] = mapped_column(Integer, nullable=False)
+    number_to: Mapped[int] = mapped_column(Integer, nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    prefixes_rel: Mapped[list["GlossaryInfotypePrefix"]] = relationship(
+        back_populates="rule", cascade="all, delete-orphan", order_by="GlossaryInfotypePrefix.position"
+    )
+
+
+class GlossaryInfotypePrefix(Base):
+    """Literal prefix belonging to one infotype rule."""
+
+    __tablename__ = "glossary_infotype_prefixes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    rule_id: Mapped[int] = mapped_column(
+        ForeignKey("glossary_infotype_rules.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    prefix: Mapped[str] = mapped_column(String(64), nullable=False)
+    normalized_prefix: Mapped[str] = mapped_column(String(64), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    rule: Mapped[GlossaryInfotypeRule] = relationship(back_populates="prefixes_rel")
+    __table_args__ = (
+        UniqueConstraint("rule_id", "normalized_prefix", name="uq_glossary_rule_prefix"),
+        UniqueConstraint("rule_id", "position", name="uq_glossary_rule_prefix_position"),
+    )
+
+
+class GlossaryIdentityKey(Base):
+    """Cross-table uniqueness key for one saved glossary term."""
+
+    __tablename__ = "glossary_identity_keys"
+
+    key_kind: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key_value: Mapped[str] = mapped_column(String(256), primary_key=True)
+    term_id: Mapped[int] = mapped_column(
+        ForeignKey("domain_terms.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    field_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class GlossaryState(Base):
+    """Singleton revision used to serialize glossary writes and snapshots."""
+
+    __tablename__ = "glossary_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    identities_ready: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class GlossaryMergeReceipt(Base):
+    """Idempotency receipt for a committed glossary merge."""
+
+    __tablename__ = "glossary_merge_receipts"
+
+    request_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    result: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class Job(Base):

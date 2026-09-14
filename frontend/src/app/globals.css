@@ -4176,6 +4176,21 @@ main {
 .glossary-preview-result { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 12px; overflow-wrap: anywhere; }
 .glossary-preview-result ul { margin-bottom: 0; padding-left: 20px; }
 .glossary-pagination { justify-content: center; }
+.glossary-rules { margin: 18px 0; padding: 16px; border: 1px solid var(--border); border-radius: 9px; }
+.glossary-rules h3, .glossary-rule-form h4 { margin: 0; }
+.glossary-rules > .muted { margin: 8px 0 14px; line-height: 1.5; }
+.glossary-rule-list { list-style: none; padding: 0; margin: 0; }
+.glossary-rule-list > li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.glossary-rule-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
+.glossary-rule-summary code { padding: 4px 8px; background: var(--accent-dim); border-radius: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.glossary-rule-form { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.glossary-rule-fields { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(100px, 1fr)); gap: 12px; }
+.glossary-rule-fields input { min-width: 0; width: 100%; box-sizing: border-box; }
+.glossary-rule-prefixes { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+  .glossary-rule-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .glossary-rule-name { grid-column: 1 / -1; }
+}
 .applied-terms { margin-top: 7px; display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
 .applied-terms strong { color: var(--accent); }
 .applied-terms details { display: inline; }
@@ -4186,6 +4201,8 @@ main {
 .applied-terms.unavailable { color: var(--color-orange); }
 .glossary-toggle { display: block; margin: 10px 0; color: var(--muted); font-size: 13px; }
 .glossary-status-warning { margin: 10px 0; padding: 9px 12px; border-left: 3px solid var(--color-orange); background: color-mix(in srgb, var(--color-orange) 10%, transparent); color: var(--color-orange); font-size: 12px; line-height: 1.45; }
+.glossary-system-rule { margin: 10px 0; padding: 9px 12px; border-left: 3px solid var(--accent); background: var(--accent-dim); display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.45; }
+.glossary-system-rule-inline { margin: 0; padding: 7px 9px; border-left: 3px solid var(--accent); background: var(--accent-dim); color: var(--muted); font-size: 12px; line-height: 1.4; }
 
 @media (max-width: 900px) {
   .glossary-layout { grid-template-columns: 1fr; }

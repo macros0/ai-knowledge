@@ -2,7 +2,7 @@
 
 Дата: 11.09.2026. Статус: частичная техническая приёмка 8.6.
 
-Артефакт полного прогона: `backend/scripts/glossary-stage8-benchmark-20260911b.json`.
+Артефакт полного прогона: `tests/artifacts/stage8/glossary-stage8-benchmark-20260911b.json`.
 Стенд: отдельная PostgreSQL БД
 `okf_glossary_stage8_bench_20260911b`, ровно 1000 активных терминов и 10000
 алиасов. Данные рабочего корпуса и рабочей БД не использовались.
@@ -67,7 +67,7 @@ SQL-вызовы отсутствуют.
 запросов, режим `chat/hybrid`, отдельно для `GLOSSARY_QUERY_EXPANSION_ENABLED`
 off/on. Ответ LLM намеренно не генерировался; область прогона — preparation,
 embedding, Qdrant, visibility, hydration, merge и chat-фильтры контекста.
-Артефакт: `backend/scripts/probe-stage8-parallel-retrieval-20260912.json`.
+Артефакт: `tests/artifacts/stage8/probe-stage8-parallel-retrieval-20260912.json`.
 
 | Сторона | Запросы | Ошибки | Acceptance failures | SQL statements | Embedding calls | avg/p50/p95, ms |
 |---|---:|---:|---:|---:|---:|---:|
@@ -93,9 +93,9 @@ preparation не добавляет LLM-вызовов и не включает 
 
 Manifest guard сохранён до и после короткого retrieval-only smoke:
 
-- `backend/scripts/stage8-manifest-before-20260912.json`;
-- `backend/scripts/stage8-manifest-after-20260912.json`;
-- основной снимок: `backend/scripts/stage8-manifest-20260912.json`.
+- `tests/artifacts/stage8/stage8-manifest-before-20260912.json`;
+- `tests/artifacts/stage8/stage8-manifest-after-20260912.json`;
+- основной снимок: `tests/artifacts/stage8/stage8-manifest-20260912.json`.
 
 После добавления Qdrant payload projection основной снимок пересоздан, чтобы
 его hash исходников соответствовал текущему коду. Поэтому before/after guard

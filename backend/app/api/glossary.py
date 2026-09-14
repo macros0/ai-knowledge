@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.encoders import jsonable_encoder
 
 from app.api import errors
 from app.api.errors import ApiError
@@ -13,6 +14,7 @@ from app.config import get_settings
 from app.models.glossary import (
     GlossaryAliasAdd,
     GlossaryAliasCheck,
+    GlossaryConflictCheck,
     GlossaryAliasPatch,
     GlossaryListOut,
     GlossaryPendingOut,
@@ -25,8 +27,20 @@ from app.models.glossary import (
     GlossaryTranslationBackfillRequest,
     GlossaryTranslationPatch,
     GlossaryTranslationReview,
+    GlossaryRuleCreate,
+    GlossaryRulePatch,
+    GlossaryRuleOut,
+    GlossaryRuleMergeRequest,
+    GlossaryRuleMergePreviewOut,
+    GlossaryMergeRequest,
+    GlossaryMergePreviewOut,
+    GlossaryMergeCommit,
+    GlossaryRuleCheck,
+    GlossaryRulePreviewRequest,
+    GlossaryRulePreviewOut,
 )
 from app.services.glossary.expansion import prepare_query
+from app.services.glossary.merge import GlossaryMergeConflictError
 from app.services.glossary.normalization import GlossaryValidationError
 from app.services.glossary.normalization import SUPPORTED_KINDS, validate_locale
 from app.services.glossary.registry import (
@@ -35,7 +49,14 @@ from app.services.glossary.registry import (
     GlossaryNotFoundError,
     GlossaryRegistry,
     GlossaryVersionConflictError,
+    GlossaryIdentityConflictError,
     get_glossary_registry,
+)
+from app.services.glossary.rule_registry import (
+    GlossaryRuleConflictError,
+    GlossaryRuleNotFoundError,
+    GlossaryRuleRegistry,
+    GlossaryRuleVersionConflictError,
 )
 from app.services.glossary.translations import (
     GlossaryTranslationConflictError,
@@ -45,6 +66,12 @@ from app.services.glossary.translations import (
     set_glossary_translation,
 )
 from app.services.glossary.types import GlossaryAliasInput
+from app.services.glossary.types import InfotypeRuleSnapshot
+from app.services.glossary.forms import forms_for_number
+from app.services.glossary.rules import match_infotypes, validate_rule
+from app.services.glossary.snapshot import GlossaryMigrationRequiredError
+from app.services.glossary.normalization import GlossaryRedundantAliasError
+from app.services.glossary.registry import GlossaryMergePreviewStaleError
 
 
 router = APIRouter(prefix="/admin/glossary", tags=["glossary"])
@@ -56,17 +83,16 @@ def _client_ip(request: Request) -> str | None:
 
 def _validation_error(exc: GlossaryValidationError) -> ApiError:
     message = str(exc)
-    lowered = message.lower()
-    if any(word in lowered for word in ("корот", "числов", "автоматичес", "триггер")):
-        code = errors.GLOSSARY_UNSAFE_AUTO_EXPAND
-    elif "язык" in lowered:
-        code = errors.GLOSSARY_INVALID_LOCALE
-    else:
-        code = errors.GLOSSARY_INVALID_ALIAS
-    return ApiError(status_code=422, code=code, detail=message)
+    return ApiError(status_code=422, code=exc.code, detail=message)
 
 
 def _raise_mutation_error(exc: Exception, *, alias_not_found: bool = False) -> None:
+    if isinstance(exc, GlossaryMigrationRequiredError):
+        raise ApiError(status_code=503, code=errors.GLOSSARY_MIGRATION_REQUIRED, detail=str(exc)) from exc
+    if isinstance(exc, GlossaryRedundantAliasError):
+        raise ApiError(status_code=422, code=errors.GLOSSARY_REDUNDANT_ALIAS, detail=str(exc)) from exc
+    if isinstance(exc, GlossaryMergeConflictError):
+        raise ApiError(status_code=409, code=exc.code, detail=str(exc)) from exc
     if isinstance(exc, GlossaryNotFoundError):
         code = errors.GLOSSARY_ALIAS_NOT_FOUND if alias_not_found else errors.GLOSSARY_TERM_NOT_FOUND
         raise ApiError(status_code=404, code=code, detail=str(exc)) from exc
@@ -74,14 +100,26 @@ def _raise_mutation_error(exc: Exception, *, alias_not_found: bool = False) -> N
         raise ApiError(status_code=409, code=errors.GLOSSARY_CANONICAL_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, GlossaryAliasConflictError):
         raise ApiError(status_code=409, code=errors.GLOSSARY_ALIAS_CONFLICT, detail=str(exc)) from exc
-    if isinstance(exc, GlossaryVersionConflictError):
+    if isinstance(exc, GlossaryIdentityConflictError):
+        raise ApiError(status_code=409, code=exc.code, detail=str(exc), conflicts=list(exc.conflicts),
+                       **({'preview': jsonable_encoder(exc.preview)} if getattr(exc, 'preview', None) else {})) from exc
+    if isinstance(exc, GlossaryRuleConflictError):
+        raise ApiError(status_code=409, code=exc.code, detail=str(exc), conflicts=jsonable_encoder(exc.conflicts)) from exc
+    if isinstance(exc, GlossaryRuleNotFoundError):
+        raise ApiError(status_code=404, code=errors.GLOSSARY_RULE_NOT_FOUND, detail=str(exc)) from exc
+    if isinstance(exc, GlossaryRuleVersionConflictError):
         raise ApiError(status_code=409, code=errors.VERSION_CONFLICT, detail=str(exc)) from exc
+    if isinstance(exc, GlossaryVersionConflictError):
+        raise ApiError(status_code=409, code=exc.code, detail=str(exc),
+                       **({'preview': jsonable_encoder(exc.preview)} if getattr(exc, 'preview', None) else {})) from exc
     if isinstance(exc, GlossaryValidationError):
         raise _validation_error(exc) from exc
     raise exc
 
 
 def _raise_translation_error(exc: Exception) -> None:
+    if isinstance(exc, GlossaryMigrationRequiredError):
+        raise ApiError(status_code=503, code=errors.GLOSSARY_MIGRATION_REQUIRED, detail=str(exc)) from exc
     if isinstance(exc, GlossaryNotFoundError):
         raise ApiError(status_code=404, code=errors.GLOSSARY_TERM_NOT_FOUND, detail=str(exc)) from exc
     if isinstance(exc, GlossaryTranslationConflictError):
@@ -132,7 +170,19 @@ def check_glossary_aliases(
     body: GlossaryAliasCheck,
     user: User = Depends(require_role("editor", "admin")),
 ):
-    return {"conflicts": _registry().check_aliases(body.aliases, term_id=body.term_id)}
+    return {"conflicts": _registry().check_aliases(body.aliases, term_id=body.term_id,
+        kind=body.kind, infotype_number=body.infotype_number)}
+
+
+@router.post("/conflicts/check")
+def check_glossary_conflicts(
+    body: GlossaryConflictCheck,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    try:
+        return _registry().check_conflicts(body.model_dump(exclude={"term_id"}), term_id=body.term_id)
+    except Exception as exc:
+        _raise_mutation_error(exc)
 
 
 @router.post("/preview", response_model=GlossaryPreviewOut)
@@ -141,7 +191,10 @@ def preview_query(
     user: User = Depends(require_role("editor", "admin")),
 ):
     settings = get_settings()
-    plan = prepare_query(body.query, ui_locale=body.locale, enabled=True, settings=settings)
+    try:
+        plan = prepare_query(body.query, ui_locale=body.locale, enabled=True, settings=settings)
+    except GlossaryMigrationRequiredError as exc:
+        raise ApiError(status_code=503, code=errors.GLOSSARY_MIGRATION_REQUIRED, detail=str(exc)) from exc
     return GlossaryPreviewOut(
         original_query=plan.original_query,
         dense_query=plan.dense_query,
@@ -150,6 +203,7 @@ def preview_query(
         applied_terms=[asdict(item) for item in plan.applied_terms],
         match_groups=[asdict(item) for item in plan.match_groups],
         skipped_reasons=[asdict(item) for item in plan.skipped_reasons],
+        glossary_revision=plan.glossary_revision,
         limits={
             "max_terms_per_query": settings.glossary_max_terms_per_query,
             "max_added_aliases_per_term": settings.glossary_max_added_aliases_per_term,
@@ -157,6 +211,114 @@ def preview_query(
             "max_added_chars": settings.glossary_max_added_chars,
         },
     )
+
+
+@router.post("/rules/preview", response_model=GlossaryRulePreviewOut)
+def preview_glossary_rule(body: GlossaryRulePreviewRequest, user: User = Depends(require_role("editor", "admin"))):
+    """Try a detached proposed rule without loading or changing the glossary."""
+    try:
+        prefixes = validate_rule(body.number_from, body.number_to, tuple(body.prefixes), name=body.name)
+    except GlossaryValidationError as exc:
+        raise _validation_error(exc) from exc
+    proposed = InfotypeRuleSnapshot(rule_id=0, name=body.name, number_from=body.number_from,
+                                   number_to=body.number_to, prefixes=prefixes, enabled=body.enabled)
+    matches = {}
+    for match in match_infotypes(body.query, (proposed,)):
+        if match.number not in matches:
+            matches[match.number] = {"number": match.number, "code": f"IT{match.number}", "spans": [],
+                                     "generated_forms": [form.text for form in forms_for_number(match.number, (proposed,))]}
+        matches[match.number]["spans"].append({"start": match.start, "end": match.end, "text": match.matched_text})
+    return {"query": body.query, "enabled": body.enabled, "matches": list(matches.values())}
+
+
+@router.get("/rules", response_model=list[GlossaryRuleOut])
+def list_glossary_rules(user: User = Depends(require_role("editor", "admin"))):
+    return GlossaryRuleRegistry().list()
+
+
+@router.post("/rules", response_model=GlossaryRuleOut, status_code=status.HTTP_201_CREATED)
+def create_glossary_rule(body: GlossaryRuleCreate, user: User = Depends(require_role("admin"))):
+    try:
+        return GlossaryRuleRegistry().create(
+            name=body.name, number_from=body.number_from, number_to=body.number_to,
+            prefixes=body.prefixes, enabled=body.enabled, actor_id=user.user_id,
+        )
+    except Exception as exc:
+        _raise_mutation_error(exc)
+    raise AssertionError("unreachable")
+
+
+@router.post('/rules/check')
+def check_glossary_rule(body: GlossaryRuleCheck, user: User = Depends(require_role('editor', 'admin'))):
+    try:
+        return {'conflicts': GlossaryRuleRegistry().check(number_from=body.number_from,
+            number_to=body.number_to, prefixes=body.prefixes, exclude_rule_id=body.exclude_rule_id)}
+    except Exception as exc:
+        _raise_mutation_error(exc)
+    raise AssertionError('unreachable')
+
+
+@router.patch("/rules/{rule_id}", response_model=GlossaryRuleOut)
+def update_glossary_rule(rule_id: int, body: GlossaryRulePatch, user: User = Depends(require_role("admin"))):
+    try:
+        return GlossaryRuleRegistry().update(
+            rule_id, body.version, name=body.name, number_from=body.number_from,
+            number_to=body.number_to, prefixes=body.prefixes, enabled=body.enabled,
+            actor_id=user.user_id,
+        )
+    except Exception as exc:
+        _raise_mutation_error(exc)
+    raise AssertionError("unreachable")
+
+
+@router.post("/rules/merge/preview", response_model=GlossaryRuleMergePreviewOut)
+def preview_glossary_rule_merge(body: GlossaryRuleMergeRequest, user: User = Depends(require_role("editor", "admin"))):
+    try:
+        return GlossaryRuleRegistry().merge_preview(body.model_dump())
+    except Exception as exc:
+        _raise_mutation_error(exc)
+    raise AssertionError("unreachable")
+
+
+@router.post("/rules/merge", response_model=GlossaryRuleOut)
+def merge_glossary_rules(body: GlossaryRuleMergeRequest, user: User = Depends(require_role("admin"))):
+    try:
+        if body.preview_digest is None or body.expected_revision is None:
+            raise GlossaryRuleVersionConflictError("Для объединения правил нужен актуальный предпросмотр")
+        return GlossaryRuleRegistry().merge(body.model_dump(), body.preview_digest, actor_id=user.user_id)
+    except Exception as exc:
+        _raise_mutation_error(exc)
+    raise AssertionError("unreachable")
+
+
+@router.delete("/rules/{rule_id}", response_model=GlossaryRuleOut)
+def delete_glossary_rule(rule_id: int, version: int = Query(..., ge=1), user: User = Depends(require_role("admin"))):
+    try:
+        return GlossaryRuleRegistry().delete(rule_id, version, actor_id=user.user_id)
+    except Exception as exc:
+        _raise_mutation_error(exc)
+    raise AssertionError("unreachable")
+
+
+@router.post("/merge/preview", response_model=GlossaryMergePreviewOut)
+def preview_glossary_merge(body: GlossaryMergeRequest, user: User = Depends(require_role("editor", "admin"))):
+    try:
+        return _registry().merge_preview(body.model_dump())
+    except Exception as exc:
+        _raise_mutation_error(exc)
+    raise AssertionError("unreachable")
+
+
+@router.post("/merge", response_model=GlossaryTermOut)
+def merge_glossary_terms(body: GlossaryMergeCommit, user: User = Depends(require_role("admin"))):
+    try:
+        payload = body.model_dump()
+        if not body.preview_digest or body.expected_revision is None:
+            raise GlossaryMergePreviewStaleError("Для merge нужен актуальный предпросмотр")
+        return _registry().merge(payload, body.preview_digest, actor_id=user.user_id)
+    except Exception as exc:
+        _raise_mutation_error(exc)
+    raise AssertionError("unreachable")
 
 
 @router.get("/translations/pending", response_model=GlossaryPendingOut)
@@ -258,6 +420,7 @@ def create_glossary_term(
             body.original_description,
             body.canonical_locale,
             user.user_id,
+            infotype_number=body.infotype_number,
             aliases=[GlossaryAliasInput(**item.model_dump(), created_by=user.user_id) for item in body.aliases],
             ip_address=_client_ip(request),
             audit_username=user.username,
@@ -294,7 +457,7 @@ def update_glossary_source(
 ):
     values = {
         field: getattr(body, field)
-        for field in ("original_name", "original_description", "canonical_locale", "enabled")
+        for field in ("original_name", "original_description", "canonical_locale", "enabled", "infotype_number", "kind")
         if field in body.model_fields_set
     }
     try:
