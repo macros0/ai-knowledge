@@ -1,6 +1,7 @@
 {
   "name": "okf-knowledge-frontend",
   "version": "0.2.0",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "next dev",

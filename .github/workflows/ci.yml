@@ -162,46 +162,200 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Сервисы объявляют env_file: .env, поэтому без него compose не читается.
-      # Заодно это проверка самого .env.example: он должен парситься форматом
-      # dotenv (многострочные значения ломают и compose, и pydantic-settings).
+      # CI deliberately creates its own named runtime file. Explicit
+      # --env-file plus OKF_RUNTIME_ENV_FILE proves that a developer .env is
+      # never an implicit source for production-like compose invocations.
       - name: .env из .env.example
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          # CI runs the bundled topology explicitly. Runtime env_file is .env
+          # only because this job created it; production must name its own file.
+          cat >> .env <<'EOF'
+          STORAGE_MODE=bundled
+          COMPOSE_PROFILES=bundled
+          COMPOSE_PROJECT_NAME=okf-ci-bundled
+          POSTGRES_PASSWORD=okf_ci_pg_password
+          DATABASE_URL=postgresql+psycopg://okf:okf_ci_pg_password@postgres:5432/okf_knowledge
+          QDRANT_URL=http://qdrant:6333
+          EMBEDDING_PROVIDER=fake
+          LLM_BASE_URL=http://llm-health:8000
+          LLM_MODEL=fake
+          EOF
+          cp .env .ci-bundled.env
 
       - name: Проверка конфигурации compose
-        run: docker compose config --quiet
+        run: |
+          docker compose --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml config --quiet
 
       - name: Сборка образов
-        run: docker compose build
-
-      # Сборка образа НЕ доказывает, что в нём есть чем выполнить деплой:
-      # без alembic/ и scripts/ образ собирается ровно так же, а обязательные
-      # шаги (docs/PRODUCTION_DEPLOYMENT.md §7) выполнить нечем. Поэтому
-      # прогоняем миграции внутри собранного образа против compose-Postgres.
-      - name: Миграции применяются в собранном образе
         run: |
-          # DATABASE_URL из .env.example смотрит на 127.0.0.1 — внутри
-          # compose-сети хост называется postgres, пароль берётся из
-          # POSTGRES_PASSWORD по умолчанию (docker-compose.yml).
-          echo "DATABASE_URL=postgresql+psycopg://postgres:okf_dev_pg@postgres:5432/okf_knowledge" >> .env
-          docker compose --profile local-postgres up -d postgres
-          docker compose --profile local-postgres run --rm migrate
-          # Повторный прогон обязан быть no-op: миграции идемпотентны.
-          docker compose --profile local-postgres run --rm migrate
+          docker compose --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml build
 
-      # Схема из миграций обязана совпасть с моделями. Именно этой проверки не
-      # хватало, когда documents.problem и шесть NOT NULL-колонок разъехались:
-      # миграции накатывались, но никто не сверял результат с models.py.
-      # Здесь, а не в pytest-джобе: против НАСТОЯЩЕГО Postgres. На SQLite
-      # `alembic check` даёт ложный add_fk (диалект не отражает внешние ключи),
-      # поэтому герметичный тест tests/test_schema_drift.py сверяет только
-      # диалект-независимые расхождения, а полную сверку делаем здесь.
-      - name: Схема миграций совпадает с моделями (alembic check)
-        run: docker compose --profile local-postgres run --rm migrate alembic check
+      - name: Standard image uses PDFium and contains no MuPDF artifacts
+        run: |
+          docker compose --env-file .env run --rm --no-deps backend python -c "import importlib.metadata as m, importlib.util; assert m.version('pypdfium2'); assert importlib.util.find_spec('pymupdf') is None; assert importlib.util.find_spec('fitz') is None"
+          sh scripts/production/audit-standard-image.sh okf-backend:local
+          docker compose --env-file .env run --rm --no-deps backend sh -ceu 'python scripts/generate_sbom.py --output /tmp/backend-sbom.json; ! grep -Eiq "pymupdf|mupdf|fitz" /tmp/backend-sbom.json'
 
-      - name: Скрипты предзаполнения доступны в образе
-        run: docker compose --profile local-postgres run --rm migrate python scripts/seed_attribute_values.py
+      - name: MIT declarations and third-party notices
+        run: |
+          test "$(head -n 1 LICENSE)" = "MIT License"
+          ! rg -n "SPDX-License-Identifier: AGPL-3.0-or-later|GNU AFFERO" backend doc-parser README.md README.ru.md README.de.md README.es.md frontend/package.json LICENSE
+          rg -q "pypdfium2" THIRD_PARTY_NOTICES.md
+          rg -q "PDFium" THIRD_PARTY_NOTICES.md
+          docker compose --env-file .env run --rm --no-deps backend test -s /app/THIRD_PARTY_NOTICES.md
 
-      - name: Остановить сервисы
+      - name: Bundled migration and JSON-ready backend
+        run: |
+          docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml \
+            up -d --wait postgres qdrant llm-health
+          docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml run --rm --no-deps migrate
+          # The migration path must remain idempotent.
+          docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml run --rm --no-deps migrate
+          docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml run --rm --no-deps migrate alembic check
+          docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml run --rm --no-deps migrate python scripts/seed_attribute_values.py
+          docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml up -d backend
+          for attempt in $(seq 1 30); do
+            if docker compose --project-name okf-ci-bundled --env-file .env \
+              -f docker-compose.yml -f docker-compose.ci-runtime.yml exec -T backend \
+              python -c 'import json, urllib.request; assert json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5))["status"] == "ok"'; then
+              break
+            fi
+            if [ "$attempt" = 30 ]; then
+              docker compose --project-name okf-ci-bundled --env-file .env \
+                -f docker-compose.yml -f docker-compose.ci-runtime.yml logs backend
+              exit 1
+            fi
+            sleep 2
+          done
+          if docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml ps --format json | grep -Eq '"PublishedPort":[1-9]'; then
+            echo 'bundled database or backend unexpectedly published a host port' >&2
+            exit 1
+          fi
+
+      - name: External topology boots without bundled storage
+        run: |
+          cat > .ci-external.env <<'EOF'
+          OKF_RUNTIME_ENV_FILE=.ci-external.env
+          STORAGE_MODE=external
+          DATABASE_URL=postgresql+psycopg://okf:okf_ci_external_password@postgres-external:5432/okf_knowledge
+          QDRANT_URL=http://qdrant-external:6333
+          QDRANT_COLLECTION=okf_knowledge_base
+          ENVIRONMENT=development
+          AUTH_PROVIDER=disabled
+          EMBEDDING_PROVIDER=fake
+          LLM_BASE_URL=http://llm-health:8000
+          LLM_MODEL=fake
+          EOF
+          # This root .env intentionally describes an invalid bundled topology.
+          # The explicit external env file below must fully override it.
+          cat > .env <<'EOF'
+          STORAGE_MODE=bundled
+          DATABASE_URL=postgresql+psycopg://wrong:wrong@postgres:5432/wrong
+          QDRANT_URL=http://qdrant:6333
+          EOF
+          if docker compose --project-name okf-ci-external --env-file .ci-external.env \
+            -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml \
+            config --services | rg -x 'postgres|qdrant'; then
+            echo 'external configuration leaked bundled storage services' >&2
+            exit 1
+          fi
+          docker compose --project-name okf-ci-external --env-file .ci-external.env \
+            -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml config --quiet
+          docker compose --project-name okf-ci-external --env-file .ci-external.env \
+            -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml \
+            up -d --wait postgres-external qdrant-external llm-health
+          docker compose --project-name okf-ci-external --env-file .ci-external.env \
+            -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml \
+            run --rm --no-deps migrate
+          docker compose --project-name okf-ci-external --env-file .ci-external.env \
+            -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml up -d backend
+          for attempt in $(seq 1 30); do
+            if docker compose --project-name okf-ci-external --env-file .ci-external.env \
+              -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+              -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml exec -T backend \
+              python -c 'import json, urllib.request; assert json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5))["status"] == "ok"'; then
+              break
+            fi
+            if [ "$attempt" = 30 ]; then
+              docker compose --project-name okf-ci-external --env-file .ci-external.env \
+                -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+                -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml logs backend
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Invalid mixed storage mode is rejected before migration
+        run: |
+          cat > .ci-invalid.env <<'EOF'
+          OKF_RUNTIME_ENV_FILE=.ci-invalid.env
+          STORAGE_MODE=external
+          DATABASE_URL=postgresql+psycopg://okf:password@postgres:5432/okf_knowledge
+          QDRANT_URL=http://qdrant:6333
+          QDRANT_COLLECTION=okf_knowledge_base
+          ENVIRONMENT=development
+          AUTH_PROVIDER=disabled
+          EMBEDDING_PROVIDER=fake
+          EOF
+          if docker compose --project-name okf-ci-invalid --env-file .ci-invalid.env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml \
+            run --rm --no-deps migrate python scripts/validate_storage_mode.py; then
+            echo 'mixed external topology unexpectedly passed validation' >&2
+            exit 1
+          fi
+
+      - name: Backup and restore shell safety suite
+        run: bash scripts/production/tests/test_backup_scripts.sh
+
+      - name: Nonempty bundled backup restores into a fresh project
+        run: |
+          docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml \
+            run --rm --no-deps backend python scripts/seed_backup_fixture.py --confirm-ci-fixture
+          rm -rf .ci-backup .ci-restored-data
+          bash scripts/production/backup-bundled.sh --env-file .ci-bundled.env --backup-dir "$PWD/.ci-backup"
+          backup_dir=$(find "$PWD/.ci-backup" -mindepth 1 -maxdepth 1 -type d -name 'backup-*' -print -quit)
+          test -n "$backup_dir"
+          BACKUP_DIR="$backup_dir" python -c 'import json, os, pathlib; m=json.loads((pathlib.Path(os.environ["BACKUP_DIR"]) / "manifest.json").read_text()); assert m["totals"] == {"documents": 1, "chunks": 1, "concepts": 1, "qdrant_points": 2}; assert len(m["files"]) == 2; assert m["schema_revision"]; assert m["pdf_provider"]["provider"] == "pypdf-pdfium"'
+          bash scripts/production/restore-bundled.sh --env-file .ci-bundled.env --backup-dir "$backup_dir" \
+            --target-project okf-ci-restored --target-data-dir "$PWD/.ci-restored-data"
+
+      # Release-candidate manual acceptance (not a CI substitute): reboot the
+      # staging host; confirm the systemd unit starts the selected topology and
+      # backend /health is JSON-ready; record corpus totals; back up a nonempty
+      # corpus; restore into a new --target-project/--target-data-dir; compare
+      # manifest totals and run check_integrity.py --strict.
+      - name: Остановить bundled CI services
         if: always()
-        run: docker compose --profile local-postgres down -v
+        run: |
+          docker compose --project-name okf-ci-bundled --env-file .ci-bundled.env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml down -v --remove-orphans
+
+      - name: Остановить external CI services
+        if: always()
+        run: |
+          test -f .ci-external.env || exit 0
+          docker compose --project-name okf-ci-external --env-file .ci-external.env \
+            -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml down -v --remove-orphans
+
+      - name: Остановить restored CI services
+        if: always()
+        run: |
+          docker compose --project-name okf-ci-restored --env-file .ci-bundled.env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml down -v --remove-orphans

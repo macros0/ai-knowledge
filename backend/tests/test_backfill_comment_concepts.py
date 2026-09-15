@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Alexey
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: MIT
 
 """Тесты backfill концептов из комментариев рецензентов
 (scripts/backfill_comment_concepts.py).

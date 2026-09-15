@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Alexey
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -40,9 +40,18 @@ from app.prompts.store import get_store
 from app.services.errors import DependencyUnavailableError
 from app.services.health import get_health
 from app.services.vector_store import VectorStore
+from docparser import PdfProviderUnavailable, get_pdf_provider_metadata
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _validate_runtime_dependencies() -> None:
+    """Fail startup when the mandatory standard PDF provider cannot load."""
+    try:
+        get_pdf_provider_metadata()
+    except PdfProviderUnavailable:
+        raise
 
 
 class CatchAllErrorsMiddleware(BaseHTTPMiddleware):
@@ -131,6 +140,7 @@ async def lifespan(app: FastAPI):
             "rate limiter, pipeline и purge state не разделяются между workers",
             worker_count,
         )
+    _validate_runtime_dependencies()
     # Создание отсутствующих таблиц БД (идемпотентно). Мягкий старт: если БД
     # недоступна — не валить процесс, репозитории будут пытаться при запросах.
     try:

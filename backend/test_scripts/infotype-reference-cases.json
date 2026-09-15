@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "provenance": "User nominated IT3330 and IT3273 searches as a reference; minimum sources are the union of the latest saved off/on searches.",
+  "rank_is_not_required": true,
+  "cases": [
+    {
+      "query": "IT3330",
+      "expected_canonicals": [
+        "IT3330"
+      ],
+      "mandatory_sources": [
+        {
+          "doc_id": "d30837ec6e97406e",
+          "slug": "est-vse-dannye-dlya-zapolneniya-it-3330-i-3273",
+          "chunk_index": 3,
+          "title": "Есть все данные для заполнения ИТ 3330 и 3273",
+          "point_type": "concept"
+        },
+        {
+          "doc_id": "d30837ec6e97406e",
+          "slug": "dorabotka-vybora-otsutstviy-pri-provedenii-meropriyatiya-uu",
+          "chunk_index": 4,
+          "title": "Доработка выбора отсутствий при проведении мероприятия UU",
+          "point_type": "concept"
+        },
+        {
+          "doc_id": "d1e08a3344994fc0",
+          "slug": "period-s-narusheniem-perioda-v-it-3330",
+          "chunk_index": 5,
+          "title": "Период с нарушением периода в ИТ 3330",
+          "point_type": "concept"
+        },
+        {
+          "doc_id": "d1e08a3344994fc0",
+          "slug": "est-vse-dannye-dlya-zapolneniya-it-3330-i-3273",
+          "chunk_index": 5,
+          "title": "Есть все данные для заполнения ИТ 3330 и 3273",
+          "point_type": "concept"
+        },
+        {
+          "doc_id": "d1e08a3344994fc0",
+          "slug": "otsutstvuet-pervichnyy-eln-v-it-3330",
+          "chunk_index": 5,
+          "title": "Отсутствует первичный ЭЛН в ИТ 3330",
+          "point_type": "concept"
+        }
+      ],
+      "historical_evidence": [
+        {
+          "glossary": "off",
+          "query_at": "2026-09-14 23:09:37.649340+03:00",
+          "sources": [
+            {
+              "doc_id": "d30837ec6e97406e",
+              "slug": "est-vse-dannye-dlya-zapolneniya-it-3330-i-3273",
+              "chunk_index": 3,
+              "title": "Есть все данные для заполнения ИТ 3330 и 3273",
+              "point_type": "concept"
+            },
+            {
+              "doc_id": "d30837ec6e97406e",
+              "slug": "dorabotka-vybora-otsutstviy-pri-provedenii-meropriyatiya-uu",
+              "chunk_index": 4,
+              "title": "Доработка выбора отсутствий при проведении мероприятия UU",
+              "point_type": "concept"
+            }
+          ]
+        },
+        {
+          "glossary": "on",
+          "query_at": "2026-09-14 23:09:26.788480+03:00",
+          "sources": [
+            {
+              "doc_id": "d30837ec6e97406e",
+              "slug": "est-vse-dannye-dlya-zapolneniya-it-3330-i-3273",
+              "chunk_index": 3,
+              "title": "Есть все данные для заполнения ИТ 3330 и 3273",
+              "point_type": "concept"
+            },
+            {
+              "doc_id": "d1e08a3344994fc0",
+              "slug": "period-s-narusheniem-perioda-v-it-3330",
+              "chunk_index": 5,
+              "title": "Период с нарушением периода в ИТ 3330",
+              "point_type": "concept"
+            },
+            {
+              "doc_id": "d1e08a3344994fc0",
+              "slug": "est-vse-dannye-dlya-zapolneniya-it-3330-i-3273",
+              "chunk_index": 5,
+              "title": "Есть все данные для заполнения ИТ 3330 и 3273",
+              "point_type": "concept"
+            },
+            {
+              "doc_id": "d1e08a3344994fc0",
+              "slug": "otsutstvuet-pervichnyy-eln-v-it-3330",
+              "chunk_index": 5,
+              "title": "Отсутствует первичный ЭЛН в ИТ 3330",
+              "point_type": "concept"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query": "IT3273",
+      "expected_canonicals": [
+        "IT3273"
+      ],
+      "mandatory_sources": [
+        {
+          "doc_id": "d30837ec6e97406e",
+          "slug": "est-vse-dannye-dlya-zapolneniya-it-3330-i-3273",
+          "chunk_index": 3,
+          "title": "Есть все данные для заполнения ИТ 3330 и 3273",
+          "point_type": "concept"
+        },
+        {
+          "doc_id": "190276e79a174565",
+          "slug": "po-periodu-analiza-osuschestvlyaetsya-vybor-zapisey-info-tipa-3273-po-date",
+          "chunk_index": 0,
+          "title": "По периоду анализа осуществляется выбор записей инфо-типа 3273 по дате заведения инфо-типа, поле «Действие С»",
+          "point_type": "concept"
+        }
+      ],
+      "historical_evidence": [
+        {
+          "glossary": "off",
+          "query_at": "2026-09-14 22:58:43.599909+03:00",
+          "sources": [
+            {
+              "doc_id": "d30837ec6e97406e",
+              "slug": "est-vse-dannye-dlya-zapolneniya-it-3330-i-3273",
+              "chunk_index": 3,
+              "title": "Есть все данные для заполнения ИТ 3330 и 3273",
+              "point_type": "concept"
+            }
+          ]
+        },
+        {
+          "glossary": "on",
+          "query_at": "2026-09-14 22:57:23.656321+03:00",
+          "sources": [
+            {
+              "doc_id": "190276e79a174565",
+              "slug": "po-periodu-analiza-osuschestvlyaetsya-vybor-zapisey-info-tipa-3273-po-date",
+              "chunk_index": 0,
+              "title": "По периоду анализа осуществляется выбор записей инфо-типа 3273 по дате заведения инфо-типа, поле «Действие С»",
+              "point_type": "concept"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

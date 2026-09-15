@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { usePathname } from "next/navigation";
 import {
   detectBrowserLocale,
+  DEFAULT_LOCALE,
   AUTO_FALLBACK_LOCALE,
   normalizeLocale,
   readLocaleCookie,

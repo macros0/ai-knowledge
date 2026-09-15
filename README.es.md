@@ -115,21 +115,20 @@ Carga (docx / xlsx / pdf)
 
 ## Inicio rápido
 
-### Docker (pila totalmente local)
+### Docker (pila local bundled)
 
 ```bash
-cp .env.example .env
-# Apunta .env a los servicios locales de compose y al endpoint de tu modelo:
-#   DATABASE_URL=postgresql+psycopg://postgres:<tu-contraseña>@postgres:5432/okf_knowledge
-#   QDRANT_URL=http://qdrant:6333
-#   LLM_BASE_URL / EMBEDDING_API_BASE = endpoint de tu modelo (p. ej. http://host.docker.internal:11434)
-#   ENVIRONMENT=development          # compose usa production por defecto (fail-fast)
-docker compose --profile local-qdrant --profile local-postgres up --build
+cp deploy/production/bundled.env.example .docker.local.env
+# Configura la contraseña de PostgreSQL y los endpoints de LLM/embeddings. Para
+# una comprobación UX local usa ENVIRONMENT=development y AUTH_PROVIDER=disabled.
+export OKF_RUNTIME_ENV_FILE=.docker.local.env
+docker compose --env-file "$OKF_RUNTIME_ENV_FILE" up -d --build
 ```
 
 - Interfaz: http://localhost:8080
-- Perfiles: `local-qdrant` / `local-postgres` levantan las bases vectorial y de metadatos
-  incluidas; sin ellos el backend se conecta a tus propios Qdrant / PostgreSQL vía `.env`.
+- `STORAGE_MODE=bundled` inicia PostgreSQL y Qdrant en el único perfil `bundled`
+  sin publicar puertos de host. Para bases administradas por el cliente usa
+  `external.env.example` con `deploy/production/docker-compose.external.yml`.
 
 ### Desarrollo local (sin Docker)
 
@@ -170,9 +169,7 @@ repositorio). Usa `ENVIRONMENT=development` para las ejecuciones locales.
 
 ## Licencia
 
-[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
-
-La dependencia de extracción de texto de PDF [PyMuPDF](https://github.com/pymupdf/PyMuPDF)
-es AGPL-3.0, por lo que este proyecto se distribuye bajo los mismos términos. La AGPL añade
-además protección copyleft para los usuarios de despliegues en red o en la nube: el código
-fuente debe ofrecerse a cualquiera que use el servicio a través de la red.
+[licencia MIT](LICENSE). Las versiones publicadas antes del cambio de licencia
+mantienen sus condiciones AGPL-3.0 originales. El proveedor PDF estándar es
+pypdf + pypdfium2; las notificaciones de terceros están en
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -100,21 +100,21 @@ Upload (docx / xlsx / pdf)
 
 ## Quick start
 
-### Docker (fully local stack)
+### Docker (bundled local stack)
 
 ```bash
-cp .env.example .env
-# Point .env at the local compose services and your model endpoint:
-#   DATABASE_URL=postgresql+psycopg://postgres:<your-password>@postgres:5432/okf_knowledge
-#   QDRANT_URL=http://qdrant:6333
-#   LLM_BASE_URL / EMBEDDING_API_BASE = your model endpoint (e.g. http://host.docker.internal:11434)
-#   ENVIRONMENT=development          # compose defaults to production (fail-fast)
-docker compose --profile local-qdrant --profile local-postgres up --build
+cp deploy/production/bundled.env.example .docker.local.env
+# Set a PostgreSQL password and the LLM/embedding endpoints. For a local UX
+# smoke run set ENVIRONMENT=development and AUTH_PROVIDER=disabled.
+export OKF_RUNTIME_ENV_FILE=.docker.local.env
+docker compose --env-file "$OKF_RUNTIME_ENV_FILE" up -d --build
 ```
 
 - UI: http://localhost:8080
-- Profiles: `local-qdrant` / `local-postgres` start the bundled vector/metadata DBs;
-  without them the backend connects to your own Qdrant / PostgreSQL via `.env`.
+- `STORAGE_MODE=bundled` starts PostgreSQL and Qdrant in the single `bundled`
+  profile without publishing their host ports. For customer-managed databases,
+  use `deploy/production/external.env.example` together with
+  `deploy/production/docker-compose.external.yml`.
 
 ### Local development (no Docker)
 
@@ -154,9 +154,6 @@ documented there; never commit real secrets). Set `ENVIRONMENT=development` for 
 
 ## License
 
-[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
-
-The PDF text-extraction dependency [PyMuPDF](https://github.com/pymupdf/PyMuPDF) is
-AGPL-3.0, so this project is distributed under the same terms. AGPL additionally grants
-copyleft protection to users of network/cloud deployments (source must be offered to
-anyone using the service over a network).
+[MIT License](LICENSE). Releases published before this license change remain under
+their original AGPL-3.0 terms. The standard PDF provider is pypdf + pypdfium2;
+third-party notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

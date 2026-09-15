@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Alexey
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: MIT
 
 """docparser — извлечение текста из DOCX / XLSX / PDF в структурированные блоки.
 
@@ -19,16 +19,20 @@ from .archive_guard import ArchiveLimitError
 from .markdown import blocks_to_markdown, markdown_attachment_spans
 from .parser import SUPPORTED_EXTENSIONS, ParseError, parse_document
 from .paths import portable_name
+from .pdf_provider import PdfParseError, PdfProviderUnavailable, get_pdf_provider_metadata
 
 __all__ = [
     "Block",
     "ArchiveLimitError",
     "ParseError",
+    "PdfParseError",
+    "PdfProviderUnavailable",
     "SUPPORTED_EXTENSIONS",
     "blocks_to_markdown",
     "markdown_attachment_spans",
     "parse_document",
     "portable_name",
+    "get_pdf_provider_metadata",
 ]
 
 __version__ = "0.1.0"

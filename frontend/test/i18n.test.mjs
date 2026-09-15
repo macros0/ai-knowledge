@@ -25,6 +25,14 @@ import locales from "../src/i18n/locales/index.js";
 import ru from "../src/i18n/locales/ru.js";
 import en from "../src/i18n/locales/en.js";
 
+test("LocaleProvider imports the DEFAULT_LOCALE it uses for the server cookie fallback", () => {
+  const provider = readFileSync(
+    fileURLToPath(new URL("../src/i18n/LocaleContext.jsx", import.meta.url)),
+    "utf-8"
+  );
+  assert.match(provider, /import\s*\{[^}]*\bDEFAULT_LOCALE\b[^}]*\}\s*from\s*"\.\/core";/s);
+});
+
 test("SUPPORTED_LOCALES содержит ru, en, de, fr", () => {
   assert.ok(SUPPORTED_LOCALES.includes("ru"));
   assert.ok(SUPPORTED_LOCALES.includes("en"));

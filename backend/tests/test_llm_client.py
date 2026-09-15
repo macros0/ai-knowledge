@@ -86,6 +86,33 @@ def _settings(**overrides):
 
 
 class TestRetries:
+    def test_openrouter_standard_endpoint_uses_litellm_default_api_base(self, monkeypatch):
+        """LiteLLM сам выбирает корректный OpenRouter endpoint для `openrouter/...`.
+
+        Явный https://openrouter.ai/api/v1 меняет маршрут авторизации в
+        актуальном LiteLLM и приводил к 401 при живом ключе. Настройка адреса
+        остаётся полезной для других провайдеров; это исключение только для
+        стандартного OpenRouter URL.
+        """
+        monkeypatch.setattr(
+            llm_module,
+            "get_settings",
+            lambda: _settings(
+                llm_model="openrouter/mistralai/mistral-nemo",
+                llm_base_url="https://openrouter.ai/api/v1",
+            ),
+        )
+        client = LLMClient()
+        captured = {}
+
+        def fake(**kwargs):
+            captured.update(kwargs)
+            return _stream_response("ok")
+
+        monkeypatch.setattr(litellm, "completion", fake)
+        assert client.chat("s", "u") == "ok"
+        assert captured["api_base"] is None
+
     def test_success_first_try(self, client, monkeypatch):
         monkeypatch.setattr(litellm, "completion", lambda **kwargs: _stream_response("привет"))
         assert client.chat("s", "u") == "привет"

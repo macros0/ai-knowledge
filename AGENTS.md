@@ -25,6 +25,24 @@
 
 UI: http://localhost:16300
 
+## Docker production modes
+
+Локальный `start-all.ps1` использует Windows-бинарники и не является production
+рецептом. Для Linux Docker Compose предусмотрены ровно два режима:
+
+- `STORAGE_MODE=bundled` + `COMPOSE_PROFILES=bundled`: PostgreSQL и Qdrant
+  запускаются на том же сервере в internal `storage_network`, без host-портов.
+- `STORAGE_MODE=external`: запускать базовый compose вместе с
+  `deploy/production/docker-compose.external.yml`; PostgreSQL/Qdrant остаются
+  внешними сервисами заказчика.
+
+В обоих случаях передавайте один и тот же выбранный runtime env-файл через
+`OKF_RUNTIME_ENV_FILE` и `docker compose --env-file`; корневой `.env` не должен
+служить production-конфигурацией. Обычное восстановление bundled backup всегда
+идёт в новый Compose project/data directory. PyMuPDF fallback в проекте не
+существует: стандартный PDF-провайдер — `pypdf + pypdfium2`; процедура особого
+возврата описана только в `docs/PYMUPDF_PROVIDER.md`.
+
 ## Важные квирки (не исследовать заново)
 
 - **Ollama слушает порт 12400, НЕ 11434.** Порт 11434 попадает в исключённый диапазон Windows Hyper-V

@@ -13,6 +13,7 @@ import httpx
 from app.config import get_settings
 from app.services.embedder import Embedder
 from app.services.vector_store import VectorStore
+from docparser import PdfProviderUnavailable, get_pdf_provider_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,13 @@ def _check_database() -> dict:
         return {"status": "down", "error": str(exc)[:120]}
 
 
+def _check_pdf_provider() -> dict:
+    try:
+        return {"status": "ok", **get_pdf_provider_metadata()}
+    except PdfProviderUnavailable:
+        return {"status": "down", "error": "PDF provider unavailable"}
+
+
 def get_health() -> dict:
     """Возвращает агрегированный статус здоровья зависимостей.
 
@@ -95,6 +103,7 @@ def get_health() -> dict:
         "ollama": _check_embeddings(),
         "qdrant": _check_qdrant(),
         "database": _check_database(),
+        "pdf_parser": _check_pdf_provider(),
     }
 
     qdrant_ok = deps["qdrant"]["status"] == "ok"

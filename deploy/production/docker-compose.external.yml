@@ -1,0 +1,5 @@
+services:
+  # The base migrator is restricted to storage_network. External mode explicitly
+  # grants the egress-capable app_network to reach customer-managed endpoints.
+  migrate:
+    networks: [storage_network, app_network]

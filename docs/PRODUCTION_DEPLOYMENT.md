@@ -19,7 +19,7 @@ Keycloak/IDB — в `SSO_TESTING_GUIDE.md` (разделы 11–12). Здесь 
 | 5 | Секреты `KEYCLOAK_CLIENT_SECRET`, БД, LLM/embedding — вне git и README | ✅ блокер |
 | 6 | HTTPS/TLS терминируется на reverse-proxy, cookie ходит только по HTTPS | ✅ блокер |
 | 7 | Зарегистрировать redirect/post-logout URIs на **прод**-Keycloak (IDB) | ✅ блокер |
-| 8 | БД PostgreSQL, Qdrant, LLM/embeddings — прод-эндпоинты | ✅ |
+| 8 | Выбрать ровно один storage mode: customer-managed `external` или локальный `bundled` | ✅ блокер |
 | 8а | **Ровно одна реплика `backend`** (`deploy.replicas: 1`, без `--scale backend=N`) — см. §3.3 | ✅ блокер |
 | 9 | Проверить fail-fast: бэкенд не стартует с дефолтным секретом / без HTTPS / с `disabled|simulation` | ✅ |
 | 10 | `alembic upgrade head` + сид модулей (`seed_attribute_values.py`, с учётом модулей клиента) | ✅ |
@@ -66,8 +66,9 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 | `KEYCLOAK_URL` / `KEYCLOAK_REALM` / `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | указывают на **IDB** (broker), не на AD/IDP |
 | `SSO_REDIRECT_URI` | `https://<host>/api/auth/callback` |
 | `SSO_POST_LOGOUT_REDIRECT_URI` | `https://<host>/` |
-| `DATABASE_URL` | `postgresql+psycopg://user:pass@host:5432/okf_knowledge` (внешний прод-хост; НЕ `postgres:5432` compose-профиля `local-postgres`) |
-| `QDRANT_URL` | прод-эндпоинт Qdrant (`https://…:6333`) |
+| `STORAGE_MODE` | ровно `external` или `bundled`; смешанные URL отклоняются до Alembic |
+| `DATABASE_URL` | `external`: customer FQDN; `bundled`: `postgres:5432` |
+| `QDRANT_URL` | `external`: customer endpoint; `bundled`: `http://qdrant:6333` |
 | `QDRANT_API_KEY` | API-ключ Qdrant, если корпоративный Qdrant требует авторизации |
 | `QDRANT_PREFER_GRPC` | `true` только если gRPC endpoint доступен; иначе `false` (HTTP) |
 | `QDRANT_GRPC_PORT` | gRPC-порт Qdrant; пусто — порт `QDRANT_URL` + 1 |
@@ -84,23 +85,54 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 В `docker-compose.yml` уже задан дефолт `ENVIRONMENT=${ENVIRONMENT:-production}` —
 контейнер не поднимется в незащищённом режиме, если вы не переопределите его явно.
 
+### 2.1 Выбор topology и запуск
+
+Не используйте корневой `.env` как production runtime file. Скопируйте только
+один шаблон из `deploy/production/`, заполните секреты и передайте тот же файл
+одновременно в Compose и `OKF_RUNTIME_ENV_FILE`:
+
+```bash
+cp deploy/production/bundled.env.example deploy/production/bundled.env
+# сгенерировать и заменить все REPLACE_WITH_* значения
+export OKF_RUNTIME_ENV_FILE=deploy/production/bundled.env
+docker compose --env-file "$OKF_RUNTIME_ENV_FILE" up -d --wait
+```
+
+`bundled` включает один профиль PostgreSQL/Qdrant без host-портов и хранит
+данные в named volumes. Для инфраструктуры заказчика используйте
+`external.env` вместе с overlay `deploy/production/docker-compose.external.yml`:
+
+```bash
+export OKF_RUNTIME_ENV_FILE=deploy/production/external.env
+docker compose --env-file "$OKF_RUNTIME_ENV_FILE" \
+  -f docker-compose.yml -f deploy/production/docker-compose.external.yml up -d --wait
+```
+
+В external режиме резервное копирование PostgreSQL/Qdrant остаётся обязанностью
+владельца внешней инфраструктуры. В bundled режиме применяйте только
+`scripts/production/backup-bundled.sh`; обычное восстановление создаёт новый
+Compose project и новые тома, а не заменяет работающий контур.
+
+Перед cutover выполните на staging непустой drill: загрузите документ, создайте
+backup, восстановите его в новый `--target-project`/`--target-data-dir` и
+запустите `check_integrity.py --strict --expected-manifest`. Успешный старт
+пустых PostgreSQL/Qdrant доказывает только топологию, но не восстановление
+документов, вложений и векторов.
+
 ---
 
 ## 3. Инфраструктура
 
-- **БД**: PostgreSQL (синхронный драйвер psycopg3). Схема создаётся на старте
-  (`init_db`/`create_all`); версионированные миграции — Alembic (`backend/alembic/`).
-  В проде использовать Postgres, а не SQLite-фолбэк. Сервис `postgres` в
-  `docker-compose.yml` — опциональный (профиль `local-postgres`, по умолчанию не
-  поднимается). В проде композ не включает локальный Postgres: backend ходит на
-  внешний корпоративный инстанс по `DATABASE_URL` — трафик вне доверенной
-  compose-сети, см. `SECURITY.md` §3.
-- **Qdrant**: прод-инстанс с персистентным томом. Версии клиента и сервера
-  согласовывать (процедура апгрейда — в `README.md`). Сервис `qdrant` в
-  `docker-compose.yml` — опциональный (профиль `local-qdrant`, по умолчанию не
-  поднимается). В проде композ не включает локальный Qdrant: backend ходит на
-  внешний корпоративный инстанс по `QDRANT_URL` (HTTPS) и, при необходимости,
-  `QDRANT_API_KEY` — трафик вне доверенной compose-сети, см. `SECURITY.md` §3.
+- **PostgreSQL**: схема создаётся через Alembic (`backend/alembic/`), а не через
+  SQLite-фолбэк. В `STORAGE_MODE=bundled` сервис `postgres` запускается только
+  профилем `bundled`, хранит данные в named volume и доступен исключительно в
+  `storage_network`. В `external` приложению передаётся customer-managed URL
+  через `DATABASE_URL`; жизненный цикл и backup такой БД остаются у заказчика.
+- **Qdrant**: в `bundled` сервис `qdrant` так же изолирован в
+  `storage_network` и хранит данные в named volume. В `external` используйте
+  внешний HTTPS endpoint, `QDRANT_API_KEY` и при необходимости CA bundle;
+  совместимость версий клиента/сервера и резервное копирование — обязанность
+  владельца внешней инфраструктуры.
 - **LLM / эмбеддинги**: прод-эндпоинты; `LLM_API_KEY` / `EMBEDDING_API_KEY` — из
   секрет-хранилища.
 - **HTTPS и reverse-proxy** (обязательно): TLS терминируется на прокси
@@ -120,11 +152,10 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
   запрещён (спецификация CORS не допускает его вместе с credentials). Все три
   условия проверяются на старте (`Settings.validate_cors`) — неполная
   конфигурация роняет процесс, а не молча ломает вход в браузере.
-- **Публикация портов**: в `docker-compose.yml` наружу публикуется **только
-  frontend** (`8080:3000`). `backend` (`8000`), `qdrant` (`6333`/`6334`) и
-  `postgres` (`5432`) host-портов не публикуют — они доступны только внутри
-  compose-сети (qdrant/postgres при этом вообще опциональны: профили `local-qdrant`
-  и `local-postgres`). Единственный путь к данным
+- **Публикация портов**: наружу публикуется **только frontend**
+  (`${FRONTEND_PORT:-8080}:3000`). `backend` (`8000`), `qdrant` (`6333`/`6334`)
+  и `postgres` (`5432`) host-портов не получают; bundled-хранилища доступны
+  только внутри internal `storage_network`. Единственный путь к данным
   из сети — через frontend (который сам за reverse-proxy). Не возвращайте `ports`
   для backend/qdrant/postgres обратно: это открывает корпус документов напрямую,
   минуя аутентификацию frontend-слоя.
@@ -290,13 +321,13 @@ $env:AUTH_PROVIDER="keycloak_oidc"
 шага не требуется:
 
 ```bash
-docker compose up -d
+docker compose --env-file "$OKF_RUNTIME_ENV_FILE" up -d
 ```
 
 Применить миграции вручную (повторно, либо к внешней БД) — тем же образом:
 
 ```bash
-docker compose run --rm migrate
+docker compose --env-file "$OKF_RUNTIME_ENV_FILE" run --rm migrate
 ```
 
 Без compose (Python на хосте):
@@ -324,7 +355,7 @@ alembic upgrade head
 внутри контейнера и на хосте:
 
 ```bash
-docker compose run --rm migrate python scripts/seed_attribute_values.py
+docker compose --env-file "$OKF_RUNTIME_ENV_FILE" run --rm migrate python scripts/seed_attribute_values.py
 ```
 
 Без compose (Python на хосте, из `backend/`):

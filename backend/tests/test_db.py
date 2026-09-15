@@ -64,7 +64,14 @@ def test_session_scope_initializes_engine_without_deadlock(monkeypatch, tmp_path
     from app.config import Settings as _Settings
     from sqlalchemy import text
 
-    monkeypatch.setattr("app.config.get_settings", lambda: _Settings(_env_file=None, data_dir=tmp_path))
+    monkeypatch.setattr(
+        "app.config.get_settings",
+        lambda: _Settings(
+            _env_file=None,
+            data_dir=tmp_path,
+            database_url=f"sqlite:///{(tmp_path / 'session-scope.db').as_posix()}",
+        ),
+    )
     ds._engine = None
     ds._session_factory = None
 

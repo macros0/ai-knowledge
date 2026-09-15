@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Alexey
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: MIT
 
 """Проверка целостности корпуса между БД, FS и Qdrant (Этап 2b, Фаза 2).
 
@@ -21,6 +21,7 @@ Qdrant его проверки помечаются unavailable, а не оши�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -32,6 +33,87 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db.models import Document, DocumentChunk, OkfAttachment, OkfConcept
 from app.db.session import session_scope
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def manifest_file_issues(manifest: dict, data_dir: Path) -> list[str]:
+    """Validate every original/attachment checksum carried by a backup manifest.
+
+    Paths are always portable, relative paths below the restored DATA_DIR. A
+    manifest must never be able to make integrity verification read outside it.
+    """
+    entries = manifest.get("files")
+    if not isinstance(entries, list):
+        return ["backup manifest has no files list"]
+
+    root = data_dir.resolve()
+    issues: list[str] = []
+    for item in entries:
+        if not isinstance(item, dict):
+            issues.append("backup manifest contains an invalid file entry")
+            continue
+        relative = item.get("path")
+        expected = item.get("sha256")
+        if not isinstance(relative, str) or not isinstance(expected, str):
+            issues.append("backup manifest contains an invalid file checksum")
+            continue
+        candidate = Path(relative)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            issues.append(f"unsafe manifest file path: {relative}")
+            continue
+        path = (root / candidate).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            issues.append(f"unsafe manifest file path: {relative}")
+            continue
+        if not path.is_file():
+            issues.append(f"missing archived file: {relative}")
+        elif _sha256_file(path) != expected:
+            issues.append(f"checksum mismatch: {relative}")
+    return issues
+
+
+def strict_runtime_issues(
+    results: list[dict], *, qdrant_available: bool | None = None
+) -> list[str]:
+    """Return strict invariants that do not depend on a backup manifest."""
+    if any(result.get("qdrant_unavailable") for result in results) or qdrant_available is False:
+        return ["Qdrant is unavailable"]
+    return []
+
+
+def strict_issues(
+    results: list[dict], manifest: dict, *, qdrant_available: bool | None = None
+) -> list[str]:
+    """Return non-negotiable restore invariants derived from a backup manifest."""
+    expected = manifest.get("totals")
+    if not isinstance(expected, dict):
+        return ["backup manifest has no totals object"]
+
+    issues = strict_runtime_issues(results, qdrant_available=qdrant_available)
+    if not results and qdrant_available is None:
+        issues.append("Qdrant is unavailable")
+
+    actual = {
+        "documents": len(results),
+        "chunks": sum(int(result.get("db_chunks", 0)) for result in results),
+        "concepts": sum(int(result.get("db_concepts", 0)) for result in results),
+        "qdrant_points": sum(int(result.get("qdrant_points") or 0) for result in results),
+    }
+    for name, value in actual.items():
+        if name not in expected:
+            issues.append(f"backup manifest has no totals.{name}")
+        elif value != int(expected[name]):
+            issues.append(f"{name}={value} != manifest={expected[name]}")
+    return issues
 
 
 def iter_done_docs(doc_id: str | None = None) -> list[tuple[str, str, int, int]]:
@@ -75,6 +157,7 @@ def check_doc(
 ) -> dict:
     issues: list[str] = []
     qdrant_unavailable = False
+    qdrant_points: int | None = None
 
     with session_scope() as s:
         db_chunks = s.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).count()
@@ -97,12 +180,14 @@ def check_doc(
     if vector_store is not None:
         try:
             q_chunks = _qdrant_count(vector_store, doc_id, "chunk")
+            qdrant_points = q_chunks
             if db_chunks != q_chunks:
                 issues.append(f"document_chunks={db_chunks} != Qdrant chunk-точек={q_chunks}")
         except Exception:
             qdrant_unavailable = True
         try:
             q_concepts = _qdrant_count(vector_store, doc_id, "concept")
+            qdrant_points = (qdrant_points or 0) + q_concepts
             if db_concepts != q_concepts:
                 issues.append(f"okf_concepts={db_concepts} != Qdrant concept-точек={q_concepts}")
         except Exception:
@@ -132,7 +217,15 @@ def check_doc(
             if p.is_file() and p.read_text(encoding="utf-8") != content:
                 issues.append(f"chunk_{chunk_index:02d}.md расходится с document_chunks.content")
 
-    return {"doc_id": doc_id, "issues": issues, "ok": not issues, "qdrant_unavailable": qdrant_unavailable}
+    return {
+        "doc_id": doc_id,
+        "issues": issues,
+        "ok": not issues,
+        "qdrant_unavailable": qdrant_unavailable,
+        "db_chunks": db_chunks,
+        "db_concepts": db_concepts,
+        "qdrant_points": qdrant_points,
+    }
 
 
 def main() -> None:
@@ -140,7 +233,11 @@ def main() -> None:
     parser.add_argument("--doc-id", type=str, default=None, help="Проверить один документ")
     parser.add_argument("--verify-content", action="store_true", help="Сверить content чанков с бандлом")
     parser.add_argument("--json", action="store_true", help="Машиночитаемый вывод")
+    parser.add_argument("--strict", action="store_true", help="Требовать доступный Qdrant и сверку manifest")
+    parser.add_argument("--expected-manifest", type=Path, help="manifest.json ожидаемого backup")
     args = parser.parse_args()
+    if args.expected_manifest and not args.strict:
+        parser.error("--expected-manifest requires --strict")
 
     settings = get_settings()
     vector_store = None
@@ -150,6 +247,13 @@ def main() -> None:
         vector_store = VectorStore()
     except Exception:
         vector_store = None
+
+    qdrant_available = False
+    if vector_store is not None:
+        try:
+            qdrant_available = bool(vector_store.ping())
+        except Exception:
+            qdrant_available = False
 
     docs = iter_done_docs(args.doc_id)
     if args.doc_id and not docs:
@@ -168,6 +272,23 @@ def main() -> None:
         )
         results.append(r)
 
+    strict_failures: list[str] = []
+    if args.strict:
+        if args.expected_manifest:
+            try:
+                manifest = json.loads(args.expected_manifest.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                strict_failures.append(f"cannot read backup manifest: {exc}")
+            else:
+                strict_failures = strict_issues(
+                    results, manifest, qdrant_available=qdrant_available
+                )
+                strict_failures.extend(manifest_file_issues(manifest, settings.data_dir))
+        else:
+            strict_failures = strict_runtime_issues(
+                results, qdrant_available=qdrant_available
+            )
+
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=1))
     else:
@@ -185,7 +306,10 @@ def main() -> None:
         if vector_store is None:
             print("Внимание: Qdrant недоступен, сверка точек пропущена для всех документов.")
 
-    if any(not r["ok"] for r in results):
+    for issue in strict_failures:
+        print(f"STRICT: {issue}")
+
+    if any(not r["ok"] for r in results) or strict_failures:
         sys.exit(1)
 
 

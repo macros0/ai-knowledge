@@ -107,21 +107,20 @@
 
 ## Быстрый старт
 
-### Docker (полностью локальный стек)
+### Docker (локальный bundled-стек)
 
 ```bash
-cp .env.example .env
-# Направьте .env на локальные сервисы compose и ваш endpoint модели:
-#   DATABASE_URL=postgresql+psycopg://postgres:<ваш-пароль>@postgres:5432/okf_knowledge
-#   QDRANT_URL=http://qdrant:6333
-#   LLM_BASE_URL / EMBEDDING_API_BASE = endpoint вашей модели (например, http://host.docker.internal:11434)
-#   ENVIRONMENT=development          # в compose по умолчанию production (fail-fast)
-docker compose --profile local-qdrant --profile local-postgres up --build
+cp deploy/production/bundled.env.example .docker.local.env
+# Задайте пароль PostgreSQL и endpoint-ы LLM/эмбеддингов. Для локальной UX-проверки
+# укажите ENVIRONMENT=development и AUTH_PROVIDER=disabled.
+export OKF_RUNTIME_ENV_FILE=.docker.local.env
+docker compose --env-file "$OKF_RUNTIME_ENV_FILE" up -d --build
 ```
 
 - Интерфейс: http://localhost:8080
-- Профили: `local-qdrant` / `local-postgres` поднимают встроенные векторную БД и БД
-  метаданных; без них бэкенд подключается к вашим Qdrant / PostgreSQL через `.env`.
+- `STORAGE_MODE=bundled` запускает PostgreSQL и Qdrant одним профилем `bundled`
+  без host-портов. Для БД заказчика используйте `external.env.example` вместе с
+  `deploy/production/docker-compose.external.yml`.
 
 ### Локальная разработка (без Docker)
 
@@ -162,9 +161,7 @@ Endpoint'ы моделей и аутентификация настраиваю�
 
 ## Лицензия
 
-[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
-
-Зависимость для извлечения текста из PDF — [PyMuPDF](https://github.com/pymupdf/PyMuPDF) —
-распространяется под AGPL-3.0, поэтому проект распространяется на тех же условиях. AGPL
-дополнительно защищает права пользователей сетевых/облачных развёртываний (исходный код
-должен быть доступен любому, кто пользуется сервисом по сети).
+[лицензия MIT](LICENSE). Релизы, опубликованные до смены лицензии, сохраняют
+исходные условия AGPL-3.0. Стандартный PDF-провайдер — pypdf + pypdfium2;
+уведомления о сторонних компонентах приведены в
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

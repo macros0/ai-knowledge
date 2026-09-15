@@ -181,7 +181,7 @@ class TestAttachmentOriginMeta:
 
 
 
-    def test_render_capped_at_limit(self, tmp_path: Path, monkeypatch):
+    def test_render_capped_at_limit(self, tmp_path: Path):
         """PDF из пустых страниц-сканов: рендер ограничен _RENDER_PAGE_LIMIT."""
         from pypdf import PdfWriter
 
@@ -195,11 +195,40 @@ class TestAttachmentOriginMeta:
             writer.write(f)
 
         calls = {"n": 0}
-        monkeypatch.setattr(pdf_parser, "_open_render_doc", lambda path: object())
-        monkeypatch.setattr(
-            pdf_parser, "_render_page_image", lambda *a, **k: calls.__setitem__("n", calls["n"] + 1)
+
+        class FakeDocument:
+            closed = False
+
+            def page_count(self):
+                return 250
+
+            def extract_text(self, page_index):
+                return ""
+
+            def extract_images(self, page_index):
+                return []
+
+            def render_page_jpeg(self, page_index, *, dpi, quality):
+                calls["n"] += 1
+                return b"jpeg"
+
+            def attachments(self):
+                return []
+
+            def close(self):
+                self.closed = True
+
+        class FakeProvider:
+            def open(self, path):
+                return document
+
+        document = FakeDocument()
+        blocks = pdf_parser.parse_pdf(
+            pdf,
+            attachments_dir=tmp_path / "att",
+            provider_factory=FakeProvider,
         )
 
-        parse_document(pdf, attachments_dir=tmp_path / "att")
-
         assert calls["n"] == pdf_parser._RENDER_PAGE_LIMIT
+        assert len([block for block in blocks if block.type == "image"]) == pdf_parser._RENDER_PAGE_LIMIT
+        assert document.closed

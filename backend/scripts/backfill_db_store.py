@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Alexey
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: MIT
 
 """Backfill исторического корпуса в canonical-таблицы БД (Этап 2b, Фаза 2).
 

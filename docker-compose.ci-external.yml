@@ -1,0 +1,29 @@
+services:
+  postgres-external:
+    image: postgres:17@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675
+    environment:
+      POSTGRES_USER: okf
+      POSTGRES_PASSWORD: okf_ci_external_password
+      POSTGRES_DB: okf_knowledge
+    networks: [app_network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U okf -d okf_knowledge"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  qdrant-external:
+    image: qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
+    networks: [app_network]
+    volumes:
+      - qdrant_ci_data:/qdrant/storage
+
+  migrate:
+    depends_on:
+      postgres-external:
+        condition: service_healthy
+      qdrant-external:
+        condition: service_started
+
+volumes:
+  qdrant_ci_data:

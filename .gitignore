@@ -23,6 +23,8 @@ next-env.d.ts
 # Environment
 .env
 .env.local
+.docker-ux.env
+.docker-ux-llm.override.yml
 
 # Runtime data
 /data/uploads/*
@@ -77,6 +79,13 @@ tests/tmp/
 tests/artifacts/stage8/*
 !tests/artifacts/stage8/stage8-manifest*.json
 !tests/artifacts/stage8/glossary-stage8-benchmark*.json
+
+# Keep the parent required by the component pytest basetemp paths below.
+!tests/tmp/
+tests/tmp/*
+!tests/tmp/pytest-runs/
+tests/tmp/pytest-runs/*
+!tests/tmp/pytest-runs/.gitkeep
 
 # Local understand-anything knowledge graph and dashboard artifacts
 .understand-anything/

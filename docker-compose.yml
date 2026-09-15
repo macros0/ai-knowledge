@@ -1,139 +1,119 @@
 services:
+  # Bundled storage is an all-or-nothing production profile. Neither service
+  # has a host port: only containers on storage_network can reach them.
   postgres:
-    image: postgres:17
-    container_name: okf-postgres
-    # Опциональный сервис: поднимается только при явном включении профиля
-    #   docker compose --profile local-postgres up
-    # В остальных случаях backend подключается к внешнему Postgres по DATABASE_URL
-    # из .env (например, корпоративный). Инициализация кластера — UTF8 по умолчанию.
-    profiles: ["local-postgres"]
+    image: postgres:17@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675
+    profiles: ["bundled"]
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-okf_dev_pg}
+      POSTGRES_USER: okf
+      # Empty is accepted by `config` for the external profile; the official
+      # Postgres image refuses to initialize without it, while the migration
+      # preflight gives the topology-specific error before Alembic runs.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
       POSTGRES_DB: okf_knowledge
-    # Порт наружу НЕ публикуется: Postgres нужен только backend'у внутри сети.
-    # Если нужен прямой доступ с localhost (psql/DBeaver) — раскомментируйте:
-    # ports:
-    #   - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks: [storage_network]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d okf_knowledge"]
+      test: ["CMD-SHELL", "pg_isready -U okf -d okf_knowledge"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
     restart: unless-stopped
 
   qdrant:
-    image: qdrant/qdrant:v1.19.0
-    container_name: okf-qdrant
-    # Опциональный сервис: поднимается только при явном включении профиля
-    #   docker compose --profile local-qdrant up
-    # В остальных случаях backend подключается к внешнему Qdrant по QDRANT_URL
-    # из .env (например, корпоративный https://qdrant.corp.internal:6333).
-    profiles: ["local-qdrant"]
-    # Порт наружу НЕ публикуется: Qdrant нужен только backend'у внутри сети.
-    # Если нужен прямой доступ с localhost (curl/дашборд) — раскомментируйте:
-    # ports:
-    #   - "127.0.0.1:6333:6333"
+    image: qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
+    profiles: ["bundled"]
     volumes:
       - qdrant_data:/qdrant/storage
+    networks: [storage_network]
     restart: unless-stopped
 
-  # Одноразовая миграция схемы. Отдельный сервис, а не шаг в CMD бэкенда:
-  # backend перезапускается, а `alembic upgrade head` должен
-  # выполниться ровно один раз и ДО старта приложения — в production init_db()
-  # намеренно не вызывается (схему ведёт Alembic), поэтому без миграций
-  # контейнер поднимется на пустой БД и будет отдавать ошибки.
-  # Сид справочников (docs/PRODUCTION_DEPLOYMENT.md §7.2) автоматически НЕ
-  # выполняется — он клиент-специфичен (--org). Запускать вручную тем же образом:
-  #   docker compose run --rm migrate python scripts/seed_attribute_values.py
+  # Schema migration is a one-shot gate. Validation and the read-only Qdrant
+  # wait run before Alembic so a mixed topology cannot touch either database.
   migrate:
     build:
       context: .
       dockerfile: backend/Dockerfile
-      # UID/GID непривилегированного пользователя в образе. Должны совпадать с
-      # владельцем ./data на хосте — иначе бинд-маунт /data будет недоступен на
-      # запись: docker compose build --build-arg APP_UID=$(id -u) ... либо
-      # APP_UID/APP_GID в .env.
       args:
         APP_UID: ${APP_UID:-1000}
         APP_GID: ${APP_GID:-1000}
-    # Свой тег, хотя образ тот же, что у backend: две службы с ОДНИМ image
-    # означают две цели сборки с одинаковым выходным тегом, а сборщики с bake
-    # такое отвергают. Контекст и Dockerfile совпадают, поэтому вторая сборка
-    # берётся из кеша слоёв и ничего не стоит.
-    container_name: okf-migrate
+    image: okf-migrate:local
     env_file:
-      - .env
+      - ${OKF_RUNTIME_ENV_FILE:?set OKF_RUNTIME_ENV_FILE to the selected runtime env file}
     environment:
-      - DATA_DIR=/data
-      - ENVIRONMENT=${ENVIRONMENT:-production}
+      DATA_DIR: /data
+      ENVIRONMENT: ${ENVIRONMENT:-production}
     volumes:
-      - ./data:/data
-    command: ["alembic", "upgrade", "head"]
+      - ${OKF_DATA_DIR:-./data}:/data
+    networks: [storage_network]
+    command:
+      - sh
+      - -ceu
+      - >-
+        python scripts/validate_storage_mode.py &&
+        python scripts/wait_for_qdrant.py --url "$QDRANT_URL" --timeout-seconds 60 &&
+        alembic upgrade head
     depends_on:
       postgres:
         condition: service_healthy
         required: false
-    # Разовая задача: перезапускать после успешного выхода не нужно.
+      qdrant:
+        condition: service_started
+        required: false
     restart: "no"
 
-  # Ровно один процесс: очередь задач, rate limit, потоки пайплайна и
-  # purge-циклы живут в памяти, а `recover_after_restart()` на старте помечает
-  # чужие running-задачи failed. Вторая реплика (или uvicorn --workers N) не
-  # просто не увидит это состояние — она оборвёт работу первой.
-  # Полный список последствий: docs/PRODUCTION_DEPLOYMENT.md §3.3.
+  # A single backend process is required: queues and recovery state are local.
+  # In external mode app_network provides egress to customer-owned storage;
+  # bundled storage remains confined to the internal network.
   backend:
     deploy:
       replicas: 1
     build:
       context: .
       dockerfile: backend/Dockerfile
-      # UID/GID непривилегированного пользователя в образе. Должны совпадать с
-      # владельцем ./data на хосте — иначе бинд-маунт /data будет недоступен на
-      # запись: docker compose build --build-arg APP_UID=$(id -u) ... либо
-      # APP_UID/APP_GID в .env.
       args:
         APP_UID: ${APP_UID:-1000}
         APP_GID: ${APP_GID:-1000}
     image: okf-backend:local
-    container_name: okf-backend
     env_file:
-      - .env
+      - ${OKF_RUNTIME_ENV_FILE:?set OKF_RUNTIME_ENV_FILE to the selected runtime env file}
     environment:
-      - DATA_DIR=/data
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-    # QDRANT_URL приходит только из .env (через env_file) — backend не различает
-    # локальный (http://qdrant:6333, профиль local-qdrant) и корпоративный
-    # (https://qdrant.corp.internal:6333) Qdrant. Аналогично DATABASE_URL указывает
-    # на Postgres (внутренний postgres:5432 при профиле local-postgres, либо внешний).
-    # Порт наружу НЕ публикуется: доступ к backend'у только через frontend
-    # (Next.js App Router API proxy серверно проксирует /api). Единственная публичная
-    # точка — frontend ниже.
+      DATA_DIR: /data
+      ENVIRONMENT: ${ENVIRONMENT:-production}
     volumes:
-      - ./data:/data
+      - ${OKF_DATA_DIR:-./data}:/data
+    networks: [app_network, storage_network]
     depends_on:
       migrate:
         condition: service_completed_successfully
-      qdrant:
-        condition: service_started
-        required: false
-      postgres:
-        condition: service_healthy
-        required: false
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c 'import json, urllib.request; health = json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5)); assert health["status"] == "ok"'
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 20s
     restart: unless-stopped
 
   frontend:
     build: ./frontend
-    container_name: okf-frontend
     environment:
-      - BACKEND_URL=http://backend:8000
+      BACKEND_URL: http://backend:8000
     ports:
-      - "8080:3000"
+      - "${FRONTEND_PORT:-8080}:3000"
+    networks: [app_network]
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
+
+networks:
+  app_network: {}
+  storage_network:
+    internal: true
 
 volumes:
   qdrant_data:

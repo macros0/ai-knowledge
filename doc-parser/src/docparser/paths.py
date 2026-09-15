@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Alexey
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: MIT
 
 """Имена файлов вложений, не зависящие от ОС обработки."""
 from pathlib import PureWindowsPath

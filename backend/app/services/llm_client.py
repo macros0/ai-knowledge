@@ -29,6 +29,25 @@ _retryable_statuses = {403, 429, 500, 502, 503, 504}
 
 _FATAL_STATUSES = {401, 402, 404}
 
+_OPENROUTER_STANDARD_API_BASE = "https://openrouter.ai/api/v1"
+
+
+def _completion_api_base(model: str, configured_base: str | None) -> str | None:
+    """Возвращает api_base для LiteLLM, сохраняя его provider-specific routing.
+
+    LiteLLM корректно подставляет штатный endpoint и авторизацию OpenRouter,
+    когда модель задана как ``openrouter/...`` без явного ``api_base``. В новых
+    версиях передача того же стандартного URL меняет маршрут авторизации и
+    приводит к 401. Кастомные OpenRouter-compatible gateway остаются явными.
+    """
+    base = configured_base.strip() if configured_base else ""
+    if (
+        model.lower().startswith("openrouter/")
+        and base.rstrip("/").lower() == _OPENROUTER_STANDARD_API_BASE
+    ):
+        return None
+    return base or None
+
 
 def is_fatal_error(exc: Exception) -> bool:
     """Фатальные ошибки LLM — бессмысленно ретраить (auth, биллинг, модель)."""
@@ -314,7 +333,9 @@ class LLMClient:
             try:
                 stream = litellm.completion(
                     model=self.model,
-                    api_base=self.settings.llm_base_url or None,
+                    api_base=_completion_api_base(
+                        self.model, self.settings.llm_base_url
+                    ),
                     api_key=self.settings.llm_api_key or None,
                     messages=[
                         {"role": "system", "content": system},

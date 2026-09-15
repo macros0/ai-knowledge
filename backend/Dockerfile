@@ -15,9 +15,11 @@ WORKDIR /app
 
 COPY backend/requirements.txt ./backend/requirements.txt
 COPY doc-parser ./doc-parser
+COPY THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e ./doc-parser && \
-    pip install --no-cache-dir -r backend/requirements.txt
+    pip install --no-cache-dir -r backend/requirements.txt && \
+    python -c "import importlib.metadata as m, importlib.util; assert m.version('pypdfium2'); assert importlib.util.find_spec('pymupdf') is None; assert importlib.util.find_spec('fitz') is None"
 
 COPY backend/app ./app
 COPY backend/prompts ./prompts
@@ -41,6 +43,7 @@ RUN groupadd --gid "${APP_GID}" app && \
     useradd --uid "${APP_UID}" --gid "${APP_GID}" --home-dir /app --shell /usr/sbin/nologin app && \
     mkdir -p /data && \
     chown -R app:app /app /data && \
+    sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && \
     chmod +x /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
