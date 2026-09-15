@@ -36,6 +36,12 @@ test("all language selectors use the shared searchable control", async () => {
   }
 });
 
+test("locale toggle cycles directly between two active interface languages", async () => {
+  const source = await readFile(new URL("../src/components/LocaleToggle.jsx", import.meta.url), "utf8");
+  assert.match(source, /if \(cycle\.length < 3\)[\s\S]*?onClick=\{\(\) => setLocale\(cycle\[\(currentIndex \+ 1\) % cycle\.length\]\)\}/);
+  assert.match(source, /if \(cycle\.length >= 3\)[\s\S]*?<SearchableSelect/);
+});
+
 test("searchable popup keeps a readable width and single-line options", async () => {
   const component = await readFile(new URL("../src/components/SearchableSelect.jsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../src/app/globals.css", import.meta.url), "utf8");
