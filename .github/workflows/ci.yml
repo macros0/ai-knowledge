@@ -159,6 +159,8 @@ jobs:
   docker:
     name: docker compose build
     runs-on: ubuntu-latest
+    env:
+      OKF_RUNTIME_ENV_FILE: .env
     steps:
       - uses: actions/checkout@v4
 
@@ -243,6 +245,8 @@ jobs:
           fi
 
       - name: External topology boots without bundled storage
+        env:
+          OKF_RUNTIME_ENV_FILE: .ci-external.env
         run: |
           cat > .ci-external.env <<'EOF'
           OKF_RUNTIME_ENV_FILE=.ci-external.env
@@ -301,6 +305,8 @@ jobs:
           done
 
       - name: Invalid mixed storage mode is rejected before migration
+        env:
+          OKF_RUNTIME_ENV_FILE: .ci-invalid.env
         run: |
           cat > .ci-invalid.env <<'EOF'
           OKF_RUNTIME_ENV_FILE=.ci-invalid.env
