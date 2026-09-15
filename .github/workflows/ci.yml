@@ -351,7 +351,24 @@ jobs:
           bash scripts/production/backup-bundled.sh --env-file .ci-bundled.env --backup-dir "$PWD/.ci-backup"
           backup_dir=$(find "$PWD/.ci-backup" -mindepth 1 -maxdepth 1 -type d -name 'backup-*' -print -quit)
           test -n "$backup_dir"
-          BACKUP_DIR="$backup_dir" python -c 'import json, os, pathlib; m=json.loads((pathlib.Path(os.environ["BACKUP_DIR"]) / "manifest.json").read_text()); assert m["totals"] == {"documents": 1, "chunks": 1, "concepts": 1, "qdrant_points": 2}; assert len(m["files"]) == 2; assert m["schema_revision"]; assert m["pdf_provider"]["provider"] == "pypdf-pdfium"'
+          BACKUP_DIR="$backup_dir" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = json.loads((Path(os.environ["BACKUP_DIR"]) / "manifest.json").read_text())
+          summary = {
+              "totals": manifest.get("totals"),
+              "files_count": len(manifest.get("files", [])),
+              "schema_revision": manifest.get("schema_revision"),
+              "pdf_provider": manifest.get("pdf_provider"),
+          }
+          print("backup manifest summary:", json.dumps(summary, ensure_ascii=False, sort_keys=True))
+          assert summary["totals"] == {"documents": 1, "chunks": 1, "concepts": 1, "qdrant_points": 2}, summary
+          assert summary["files_count"] == 2, summary
+          assert summary["schema_revision"], summary
+          assert summary["pdf_provider"].get("provider") == "pypdf-pdfium", summary
+          PY
           bash scripts/production/restore-bundled.sh --env-file .ci-bundled.env --backup-dir "$backup_dir" \
             --target-project okf-ci-restored --target-data-dir "$PWD/.ci-restored-data"
 
