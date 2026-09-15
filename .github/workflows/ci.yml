@@ -161,6 +161,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OKF_RUNTIME_ENV_FILE: .env
+      ENVIRONMENT: development
     steps:
       - uses: actions/checkout@v4
 
