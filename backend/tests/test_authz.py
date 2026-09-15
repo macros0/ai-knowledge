@@ -143,6 +143,32 @@ class TestBulkPreviewRoleGate:
         assert resp.status_code == expected
 
 
+class TestBulkExportRoleGate:
+    @pytest.mark.parametrize(
+        "username,expected",
+        [
+            ("demo.user", 403),
+            ("demo.editor", 403),
+            ("demo.security", 403),
+            ("demo.admin", 202),
+        ],
+    )
+    def test_create_requires_admin(self, client, monkeypatch, username, expected):
+        class _ExportQueue:
+            @staticmethod
+            def submit(doc_ids, user, *, ip_address=None):
+                return {"id": 71, "job_type": "bulk_export", "status": "queued", "doc_ids": doc_ids}
+
+        monkeypatch.setattr("app.api.documents.get_export_queue", lambda: _ExportQueue())
+        login(client, username)
+        response = client.post(
+            "/api/documents/bulk-export", json={"doc_ids": ["0123456789abcdef"]}
+        )
+        assert response.status_code == expected
+        if expected == 202:
+            assert response.json()["id"] == 71
+
+
 class TestAuditRoleGate:
     @pytest.mark.parametrize(
         "username,expected",

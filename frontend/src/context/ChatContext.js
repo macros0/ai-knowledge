@@ -13,6 +13,9 @@ const FALLBACK_SETTINGS = {
   search_mode_default: "hybrid",
   search_modes: ["dense", "bm25", "hybrid"],
   glossary_query_expansion_enabled: null,
+  bulk_export_enabled: false,
+  bulk_export_download_enabled: false,
+  bulk_export_max_docs: 1000,
 };
 
 const ChatContext = createContext(null);

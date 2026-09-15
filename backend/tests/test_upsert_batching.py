@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+import grpc
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 import app.services.vector_store as vs_module
@@ -159,6 +160,39 @@ class TestUpsertBatching:
 
 
 class TestQdrantCallClassification:
+    def test_qdrant_disk_full_response_keeps_storage_full_classification(self):
+        """A Qdrant volume full response must pause indexing rather than look unavailable."""
+        from app.services.storage import StorageFullError
+        from app.services.vector_store import _qdrant_call
+
+        err = UnexpectedResponse(
+            status_code=500,
+            reason_phrase="Internal Server Error",
+            content=b'{"status":{"error":"No space left on device"}}',
+            headers=httpx.Headers(),
+        )
+
+        with pytest.raises(StorageFullError):
+            _qdrant_call(lambda: (_ for _ in ()).throw(err))
+
+    def test_qdrant_grpc_disk_full_keeps_storage_full_classification(self):
+        """The production gRPC path must stop immediately and preserve ENOSPC."""
+        from app.services.storage import StorageFullError
+        from app.services.vector_store import _qdrant_call
+
+        class DiskFullRpc(grpc.RpcError):
+            def code(self):
+                return grpc.StatusCode.RESOURCE_EXHAUSTED
+
+            def details(self):
+                return "No space left on device"
+
+            def __str__(self):
+                return "RESOURCE_EXHAUSTED: No space left on device"
+
+        with pytest.raises(StorageFullError):
+            _qdrant_call(lambda: (_ for _ in ()).throw(DiskFullRpc()))
+
     def test_unexpected_response_becomes_http_error_message(self):
         from app.services.vector_store import _qdrant_call
 

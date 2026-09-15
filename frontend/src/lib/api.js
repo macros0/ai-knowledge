@@ -596,6 +596,18 @@ export function listActiveLocales() {
   return request("/locales").then((data) => data.locales ?? []);
 }
 
+export function createBulkExport(docIds) {
+  return request("/documents/bulk-export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_ids: docIds }),
+  });
+}
+
+export function deleteExportArtifacts(jobId) {
+  return request(`/jobs/${jobId}/export`, { method: "DELETE" });
+}
+
 // --- Доменный глоссарий ---
 
 export function listGlossary(params = {}) {

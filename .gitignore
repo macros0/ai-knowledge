@@ -68,6 +68,8 @@ backend/.pytest-*/
 backend/pytest-*/
 .tmp-*/
 backend/.tmp-*/
+data/exports/*
+!data/exports/.gitkeep
 .runtime-cookie-check/
 .stage8-runtime-logs/
 
@@ -79,6 +81,8 @@ tests/tmp/
 tests/artifacts/stage8/*
 !tests/artifacts/stage8/stage8-manifest*.json
 !tests/artifacts/stage8/glossary-stage8-benchmark*.json
+# Full raw-export benchmark output is local acceptance evidence, never a fixture.
+tests/artifacts/bulk-export/
 
 # Keep the parent required by the component pytest basetemp paths below.
 !tests/tmp/

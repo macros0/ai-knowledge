@@ -1,8 +1,12 @@
 """Тесты очереди массовых операций (jobs): four-eyes, circuit breaker, статусы."""
 import pytest
 
+from app import error_codes as codes
 from app.config import Settings
+from app.db.models import Job
+from app.db.session import session_scope
 from app.services import job_queue as jq
+from app.services.errors import ConflictError
 from app.services.job_queue import (
     BULK_DELETE,
     BULK_REGENERATE,
@@ -190,3 +194,63 @@ class TestRestartRecovery:
         job = q.get(running_id)
         assert job["status"] == STATUS_FAILED
         assert "перезапущен" in (job["result"] or {}).get("error", "")
+
+
+class TestQueueOwnership:
+    @staticmethod
+    def _insert_export_job(status: str) -> int:
+        with session_scope() as session:
+            job = Job(
+                job_type="bulk_export",
+                status=status,
+                created_by_id="u-admin",
+                created_by="demo.admin",
+                params={"doc_ids": ["doc-export"]},
+            )
+            session.add(job)
+            session.flush()
+            return job.id
+
+    def test_regular_recovery_leaves_export_jobs_for_export_queue(self):
+        queue = JobQueue(start_worker=False)
+        queued_id = self._insert_export_job(STATUS_QUEUED)
+        running_id = self._insert_export_job(STATUS_RUNNING)
+
+        queue.recover_after_restart()
+
+        assert queue._queue.empty()
+        assert queue.get(queued_id)["status"] == STATUS_QUEUED
+        assert queue.get(running_id)["status"] == STATUS_RUNNING
+
+    def test_regular_queue_cannot_cancel_export_job(self):
+        queue = JobQueue(start_worker=False)
+        export_id = self._insert_export_job(STATUS_QUEUED)
+
+        with pytest.raises(ConflictError) as exc_info:
+            queue.cancel(export_id, _User())
+
+        assert exc_info.value.code == codes.JOB_NOT_CANCELLABLE
+        assert queue.get(export_id)["status"] == STATUS_QUEUED
+
+    def test_regular_queue_does_not_execute_export_job(self, monkeypatch):
+        class _Registry:
+            @staticmethod
+            def get(_doc_id):
+                return {"status": "done"}
+
+        class _Pipeline:
+            registry = _Registry()
+            regenerate_calls = 0
+
+            def regenerate(self, _doc_id):
+                self.regenerate_calls += 1
+
+        pipeline = _Pipeline()
+        monkeypatch.setattr("app.services.pipeline.get_pipeline", lambda: pipeline)
+        queue = JobQueue(start_worker=False)
+        export_id = self._insert_export_job(STATUS_QUEUED)
+
+        queue._execute(export_id)
+
+        assert pipeline.regenerate_calls == 0
+        assert queue.get(export_id)["status"] == STATUS_QUEUED

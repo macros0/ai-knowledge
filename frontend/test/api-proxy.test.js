@@ -95,3 +95,33 @@ test("API proxy forwards mutation bodies as a stream", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("API proxy preserves a streaming ZIP response without buffering", async () => {
+  const originalFetch = globalThis.fetch;
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array([0x50, 0x4b, 0x03, 0x04]));
+      controller.close();
+    },
+  });
+  globalThis.fetch = async () => new Response(stream, {
+    headers: {
+      "content-type": "application/zip",
+      "content-length": "4",
+      "content-disposition": "attachment; filename=part.zip",
+      "cache-control": "no-store",
+    },
+  });
+  try {
+    const response = await GET(
+      new Request("http://localhost:16301/api/jobs/1/export/1"),
+      { params: Promise.resolve({ path: ["jobs", "1", "export", "1"] }) },
+    );
+    assert.equal(response.body, stream);
+    assert.equal(response.headers.get("content-length"), "4");
+    assert.equal(response.headers.get("content-disposition"), "attachment; filename=part.zip");
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

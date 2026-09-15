@@ -6,6 +6,7 @@
   - Qdrant недоступен на финализации -> status="failed" + понятная ошибка
 Всё изолировано: settings и реестр перенаправляются в tmp_path.
 """
+import errno
 import threading
 import time
 from pathlib import Path
@@ -119,6 +120,33 @@ class TestPipelineLLMChaos:
         assert doc["error"]
 
 
+def test_finalize_keeps_staging_when_done_status_cannot_be_persisted(isolated_env, monkeypatch):
+    """A full database after indexing must leave resume checkpoints intact."""
+    reg, _src = isolated_env
+    doc_id = "finalize-db-full"
+    reg.create(doc_id, "test.doc", "doc", 100)
+    pipeline = Pipeline()
+    staging = StagingStore(doc_id)
+    staging.create(0)
+    pipeline.okf_generator.build_okf_docs = lambda *_args, **_kwargs: ([], {})
+    pipeline.vector_store.ensure_collection = lambda: None
+    pipeline.vector_store.delete_orphaned_points = lambda *_args, **_kwargs: None
+    monkeypatch.setattr(pipeline, "_chunks_lack_text", lambda *_args: False)
+    original_update = reg.update
+
+    def full_on_done(doc, **fields):
+        if fields.get("status") == "done":
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return original_update(doc, **fields)
+
+    monkeypatch.setattr(reg, "update", full_on_done)
+
+    with pytest.raises(OSError):
+        pipeline._finalize(doc_id, "test.doc", staging, attachments=[], global_tags=[])
+
+    assert staging.exists()
+
+
 class TestPipelineVectorChaos:
     def test_qdrant_unavailable_pauses_document(self, isolated_env, monkeypatch):
         """Qdrant недоступен на финализации -> paused (transient, можно resume)."""
@@ -142,6 +170,29 @@ class TestPipelineVectorChaos:
 
 
 class TestPipelineFinalizeRetry:
+    def test_disk_full_while_writing_checkpoint_pauses_with_resumable_code(self, isolated_env, monkeypatch):
+        """A checkpoint write failure must preserve the staging directory for resume."""
+        reg, src = isolated_env
+        doc_id = "disk-checkpoint"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        pipeline = Pipeline()
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        monkeypatch.setattr(
+            StagingStore,
+            "append_chunk",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                OSError(errno.ENOSPC, "No space left on device")
+            ),
+        )
+
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+
+        doc = reg.get(doc_id)
+        assert doc["status"] == "paused"
+        assert doc["error_code"] == "storage_full"
+        assert (pipeline.settings.staging_dir / doc_id).is_dir()
+
     def test_finalize_failure_keeps_staging_and_resume_skips_llm(self, isolated_env, monkeypatch):
         reg, src = isolated_env
         doc_id = "fin-retry"

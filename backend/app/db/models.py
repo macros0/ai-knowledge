@@ -144,6 +144,8 @@ class Document(Base):
     size: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(32), default="uploaded")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Стабильный код ошибки остановленной обработки; detail остаётся в error.
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Диагностический код неполноты при зелёном done (services/problem_codes.py):
     # no_concepts / no_text_layer / llm_partial_result /
     # llm_classifier_fallback / index_partial_failure.

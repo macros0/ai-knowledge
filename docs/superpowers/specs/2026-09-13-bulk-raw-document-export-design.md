@@ -86,13 +86,15 @@ documents-export-<job_id>-part-001-of-003.zip
 
 Архив создаётся с `zipfile.ZIP_STORED` и `allowZip64=True`. PDF, DOCX и XLSX уже используют внутреннее сжатие; повторный deflate не оправдывает нагрузку CPU.
 
-Путь документа внутри ZIP:
+Путь документа внутри ZIP — в корне архива:
 
 ```text
-documents/<doc_id>/<safe-original-filename>
+<safe-original-filename>
 ```
 
-`safe-original-filename` строится только из basename, без каталогов, управляющих символов и специальных сегментов `.`/`..`. Префикс `doc_id` исключает конфликт одинаковых исходных имён.
+`safe-original-filename` строится только из basename, без каталогов, управляющих символов и специальных сегментов `.`/`..`.
+При коллизии имя получает детерминированный суффикс перед расширением:
+`<stem>__<doc_id><extension>`; manifest хранит фактическое имя.
 
 Каждая часть содержит `_manifest.json`:
 
@@ -105,7 +107,7 @@ documents/<doc_id>/<safe-original-filename>
     {
       "doc_id": "03713ad7b0db416c",
       "filename": "Регламент.docx",
-      "archive_path": "documents/03713ad7b0db416c/Регламент.docx",
+      "archive_path": "Регламент.docx",
       "size_bytes": 2032928
     }
   ]

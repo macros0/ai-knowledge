@@ -41,6 +41,7 @@ class DocumentOut(BaseModel):
     size: int
     status: str
     error: str | None = None
+    error_code: str | None = None
     # Диагностический код неполноты при зелёном done (services/problem_codes.py).
     problem: str | None = None
     # Человекочитаемое объяснение problem-кода — вычисляется из кода.
@@ -222,6 +223,11 @@ class ChatSettingsOut(BaseModel):
     # бэкфилла (внутренний инструмент, конфиг не секрет).
     translation_provider: str | None = None
     translation_model: str | None = None
+    # Export capabilities are intentionally limited to client-safe controls.
+    # Quotas, storage reserve, and rate limits remain server-side only.
+    bulk_export_enabled: bool = False
+    bulk_export_download_enabled: bool = False
+    bulk_export_max_docs: int = 1000
 
 
 class ChatSource(BaseModel):

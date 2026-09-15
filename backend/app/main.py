@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -39,6 +40,7 @@ from app.config import get_settings
 from app.prompts.store import get_store
 from app.services.errors import DependencyUnavailableError
 from app.services.health import get_health
+from app.services.storage import is_storage_full
 from app.services.vector_store import VectorStore
 from docparser import PdfProviderUnavailable, get_pdf_provider_metadata
 
@@ -64,10 +66,20 @@ class CatchAllErrorsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
             return await call_next(request)
-        except DependencyUnavailableError:
+        except DependencyUnavailableError as exc:
+            if is_storage_full(exc):
+                return JSONResponse(
+                    status_code=507,
+                    content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
+                )
             raise
         except Exception as exc:
             logger.exception("Необработанная ошибка: %s", exc)
+            if is_storage_full(exc):
+                return JSONResponse(
+                    status_code=507,
+                    content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
+                )
             return JSONResponse(
                 status_code=500,
                 content={
@@ -178,6 +190,15 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logging.warning("Не удалось восстановить очередь массовых операций: %s", exc)
 
+    # Экспорт исходников владеет отдельным worker: generic JobQueue намеренно
+    # не берёт его задачи, чтобы не обойти leases и retention артефактов.
+    try:
+        from app.services.export_queue import get_export_queue
+
+        get_export_queue().recover_after_restart()
+    except Exception as exc:
+        logging.warning("Не удалось восстановить очередь массовых экспортов: %s", exc)
+
     # Мягкий старт: не валить процесс, если Qdrant недоступен.
     # ensure_collection будет повторена при первом запросе или бэкфилле.
     try:
@@ -239,7 +260,14 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logging.warning("Автоочистка истории чата не запущена: %s", exc)
 
-    yield
+    try:
+        yield
+    finally:
+        # Функция не создаёт singleton, поэтому teardown не поднимет worker при
+        # неудачном старте приложения.
+        from app.services.export_queue import shutdown_export_queue_if_started
+
+        shutdown_export_queue_if_started()
 
 
 def create_app() -> FastAPI:
@@ -314,6 +342,18 @@ def create_app() -> FastAPI:
             headers=exc.headers,
         )
 
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(request: Request, exc: StarletteHTTPException):
+        # Multipart parser сохраняет UploadFile во временный файл ещё до
+        # входа в documents.upload_document. FastAPI превращает ENOSPC там в
+        # HTTP 400, но клиенту всё равно нужен единый контракт storage_full.
+        if is_storage_full(exc):
+            return JSONResponse(
+                status_code=507,
+                content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
+            )
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(request: Request, exc: RequestValidationError):
         """Attach stable client error codes to glossary validation failures."""
@@ -339,6 +379,11 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(DependencyUnavailableError)
     async def dependency_error_handler(request: Request, exc: DependencyUnavailableError):
+        if is_storage_full(exc):
+            return JSONResponse(
+                status_code=507,
+                content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
+            )
         return JSONResponse(
             status_code=503,
             content={

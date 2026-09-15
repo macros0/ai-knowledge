@@ -44,6 +44,7 @@ export default function UploadZone({ tags = [], developmentId = null, canonicalL
 
     setBusy(true);
     const failed = [];
+    let storageFull = false;
     let duplicateInfo = null;
     let uploadedCount = 0;
     const trashTwins = [];
@@ -62,6 +63,10 @@ export default function UploadZone({ tags = [], developmentId = null, canonicalL
             break;
           }
           failed.push(file.name);
+          if (err.code === "storage_full") {
+            storageFull = true;
+            break;
+          }
         }
       }
     } finally {
@@ -94,7 +99,12 @@ export default function UploadZone({ tags = [], developmentId = null, canonicalL
       });
     }
     if (failed.length > 0) {
-      showToast(t("upload.failed", { names: failed.join(", ") }), { type: "error" });
+      showToast(
+        storageFull
+          ? `${t("apiError.storage_full")} (${failed.join(", ")})`
+          : t("upload.failed", { names: failed.join(", ") }),
+        { type: "error" },
+      );
     }
   };
 

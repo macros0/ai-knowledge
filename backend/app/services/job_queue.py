@@ -109,10 +109,20 @@ class JobQueue:
         """
         with session_scope() as s:
             queued = list(
-                s.execute(select(Job.id).where(Job.status == STATUS_QUEUED)).scalars().all()
+                s.execute(
+                    select(Job.id).where(
+                        Job.job_type.in_(JOB_TYPES),
+                        Job.status == STATUS_QUEUED,
+                    )
+                )
+                .scalars()
+                .all()
             )
             stale_running = s.execute(
-                select(Job.id).where(Job.status == STATUS_RUNNING)
+                select(Job.id).where(
+                    Job.job_type.in_(JOB_TYPES),
+                    Job.status == STATUS_RUNNING,
+                )
             ).scalars().all()
             for job_id in stale_running:
                 job = s.get(Job, job_id)
@@ -213,7 +223,12 @@ class JobQueue:
     def pending_count(self) -> int:
         with session_scope() as s:
             return (
-                s.query(Job).filter(Job.status.in_(PENDING_STATUSES)).count()
+                s.query(Job)
+                .filter(
+                    Job.job_type.in_(JOB_TYPES),
+                    Job.status.in_(PENDING_STATUSES),
+                )
+                .count()
             )
 
     def approve(self, job_id: int, approver, *, ip_address: str | None = None) -> dict:
@@ -222,6 +237,11 @@ class JobQueue:
             job = s.get(Job, job_id)
             if job is None:
                 raise JobNotFoundError(f"Задача {job_id} не найдена")
+            if job.job_type not in JOB_TYPES:
+                raise ConflictError(
+                    "Эта задача не поддерживает four-eyes в обычной очереди",
+                    code=codes.JOB_NOT_AWAITING_APPROVAL,
+                )
             if job.status != STATUS_AWAITING_APPROVAL:
                 raise ConflictError("Задача не ожидает одобрения", code=codes.JOB_NOT_AWAITING_APPROVAL)
             approver_id = getattr(approver, "user_id", None)
@@ -249,6 +269,11 @@ class JobQueue:
             job = s.get(Job, job_id)
             if job is None:
                 raise JobNotFoundError(f"Задача {job_id} не найдена")
+            if job.job_type not in JOB_TYPES:
+                raise ConflictError(
+                    "Эта задача не отменяется через обычную очередь",
+                    code=codes.JOB_NOT_CANCELLABLE,
+                )
             if job.status not in (STATUS_QUEUED, STATUS_AWAITING_APPROVAL):
                 raise ConflictError(
                     "Отменить можно только задачу, ожидающую выполнения",
@@ -281,7 +306,11 @@ class JobQueue:
 
     def _execute(self, job_id: int) -> None:
         job = self.get(job_id)
-        if job is None or job["status"] != STATUS_QUEUED:
+        if (
+            job is None
+            or job["job_type"] not in JOB_TYPES
+            or job["status"] != STATUS_QUEUED
+        ):
             return
         self._set_status(job_id, STATUS_RUNNING, started_at=_utcnow())
 

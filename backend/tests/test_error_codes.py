@@ -4,8 +4,13 @@
 словаря и показывает его на языке интерфейса. `detail` остаётся русской
 диагностикой: клиент показывает её только как фолбэк.
 """
+import asyncio
+import errno
 import io
 import pathlib
+import tempfile
+
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -214,6 +219,73 @@ class TestServiceLayerCodes:
             pipeline_mod.save_upload_stream(io.BytesIO(b"x" * 64), "big.pdf", max_bytes=8)
         assert excinfo.value.code == errors.FILE_TOO_LARGE
 
+    @pytest.mark.parametrize(
+        "make_error",
+        [
+            lambda: OSError(errno.ENOSPC, "No space left on device"),
+            lambda: _windows_disk_full_error(),
+        ],
+        ids=["linux-enospc", "windows-disk-full"],
+    )
+    def test_disk_full_during_upload_cleans_partial_file_and_has_stable_code(
+        self, tmp_path, monkeypatch, make_error
+    ):
+        """Removing the storage-full branch must leak a partial upload or the wrong API contract."""
+        from app.services import pipeline as pipeline_mod
+        from app.services.errors import DomainError
+
+        settings = Settings(_env_file=None, data_dir=tmp_path)
+        monkeypatch.setattr(pipeline_mod, "get_settings", lambda: settings)
+        original_open = pathlib.Path.open
+
+        class _FullWriter:
+            def __init__(self, target):
+                self.target = target
+
+            def __enter__(self):
+                self.target.__enter__()
+                return self
+
+            def __exit__(self, *args):
+                return self.target.__exit__(*args)
+
+            def write(self, data):
+                self.target.write(data[:1])
+                raise make_error()
+
+        def open_with_full_disk(path, mode="r", *args, **kwargs):
+            target = original_open(path, mode, *args, **kwargs)
+            return _FullWriter(target) if "w" in mode and path.suffix == ".pdf" else target
+
+        monkeypatch.setattr(pipeline_mod.Path, "open", open_with_full_disk)
+
+        with pytest.raises(DomainError) as excinfo:
+            pipeline_mod.save_upload_stream(io.BytesIO(b"pdf bytes"), "source.pdf")
+
+        assert excinfo.value.code == "storage_full"
+        assert list(settings.uploads_dir.iterdir()) == []
+
+    def test_disk_full_creating_upload_directory_has_stable_code(self, tmp_path, monkeypatch):
+        """The upload contract also covers the first write: creating uploads/ itself."""
+        from app.services import pipeline as pipeline_mod
+        from app.services.errors import DomainError
+
+        settings = Settings(_env_file=None, data_dir=tmp_path)
+        monkeypatch.setattr(pipeline_mod, "get_settings", lambda: settings)
+        original_mkdir = pathlib.Path.mkdir
+
+        def mkdir_on_full_disk(path, *args, **kwargs):
+            if path == settings.uploads_dir:
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return original_mkdir(path, *args, **kwargs)
+
+        monkeypatch.setattr(pipeline_mod.Path, "mkdir", mkdir_on_full_disk)
+
+        with pytest.raises(DomainError) as excinfo:
+            pipeline_mod.save_upload_stream(io.BytesIO(b"pdf bytes"), "source.pdf")
+
+        assert excinfo.value.code == "storage_full"
+
     def test_unknown_job_type_has_its_own_code(self):
         import pytest as _pytest
 
@@ -258,3 +330,129 @@ class TestUploadStatusFromCode:
         )
         assert resp.status_code == 413, resp.text
         assert resp.json()["code"] == errors.FILE_TOO_LARGE
+
+    def test_disk_full_is_507(self, tmp_path, monkeypatch):
+        from app.services.errors import DomainError
+
+        client = self._client_with_login(tmp_path, monkeypatch)
+
+        def disk_full(*_args, **_kwargs):
+            raise DomainError("disk full", code="storage_full")
+
+        monkeypatch.setattr("app.api.documents.save_upload_stream", disk_full)
+
+        resp = client.post(
+            "/api/documents", files={"file": ("x.pdf", b"%PDF-1.4", "application/pdf")}
+        )
+
+        assert resp.status_code == 507, resp.text
+        assert resp.json()["code"] == "storage_full"
+
+    def test_multipart_tempfile_disk_full_is_507(self, tmp_path, monkeypatch):
+        """The multipart parser writes before the endpoint; it needs the same contract."""
+        client = self._client_with_login(tmp_path, monkeypatch)
+
+        with monkeypatch.context() as context:
+            context.setattr(
+                tempfile.SpooledTemporaryFile,
+                "rollover",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    OSError(errno.ENOSPC, "No space left on device")
+                ),
+            )
+            response = client.post(
+                "/api/documents",
+                files={"file": ("x.pdf", b"x" * (2 * 1024 * 1024), "application/pdf")},
+            )
+
+        assert response.status_code == 507, response.text
+        assert response.json()["code"] == errors.STORAGE_FULL
+
+
+def test_catch_all_returns_507_for_storage_full_database_error():
+    """Any API write path must not turn an SQL disk-full into an opaque 500."""
+    from app.main import CatchAllErrorsMiddleware
+
+    async def disk_full(_request):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    response = asyncio.run(CatchAllErrorsMiddleware(None).dispatch(None, disk_full))
+
+    assert response.status_code == 507
+    assert b'"code":"storage_full"' in response.body
+
+
+@pytest.mark.parametrize(
+    "attribute,value",
+    [("sqlstate", "53100"), ("sqlite_errorcode", 13)],
+    ids=["postgres-disk-full", "sqlite-full"],
+)
+def test_database_storage_full_codes_are_recognized(attribute, value):
+    """Removing a database driver's code mapping must not degrade API UX to 500."""
+    from app.services.storage import is_storage_full
+
+    error = RuntimeError("database write failed")
+    setattr(error, attribute, value)
+
+    assert is_storage_full(error)
+
+
+def test_provider_quota_message_is_not_a_disk_full_error():
+    """A provider's quota must remain a provider failure, not a local disk incident."""
+    from app.services.errors import LLMError
+    from app.services.storage import is_storage_full
+
+    assert not is_storage_full(LLMError("Provider quota exceeded"))
+
+
+def test_foreign_error_text_is_not_promoted_to_disk_full():
+    """Only a storage adapter may interpret free-form provider text as ENOSPC."""
+    from app.services.errors import LLMError
+    from app.services.storage import is_storage_full
+
+    error = LLMError("upstream error")
+    error.content = b"No space left on device"
+
+    assert not is_storage_full(error)
+
+
+def test_transient_storage_failure_is_visible_while_database_is_full():
+    """The document list must not keep saying 'processing' when its status write failed."""
+    from app.services.registry import DocumentRegistry
+    from app.services.storage import (
+        clear_transient_storage_failure,
+        mark_transient_storage_failure,
+    )
+
+    doc_id = "abcdeabcdeabcdea"
+    registry = DocumentRegistry()
+    registry.create(doc_id, "waiting.pdf", "application/pdf", 1)
+    mark_transient_storage_failure(doc_id)
+    try:
+        document = registry.get(doc_id)
+        assert document["status"] == "paused"
+        assert document["error"] == "Недостаточно свободного места на диске"
+        assert document["error_code"] == errors.STORAGE_FULL
+    finally:
+        clear_transient_storage_failure(doc_id)
+
+
+def test_manual_resume_invalidates_a_pending_storage_failure_retry():
+    """A delayed retry must never overwrite a document that the user resumed."""
+    from app.services.storage import (
+        clear_transient_storage_failure,
+        mark_transient_storage_failure,
+        transient_storage_failure_is_active,
+    )
+
+    doc_id = "bcdeabcdeabcdeab"
+    token = mark_transient_storage_failure(doc_id)
+    clear_transient_storage_failure(doc_id)
+
+    assert not transient_storage_failure_is_active(doc_id, token)
+
+
+def _windows_disk_full_error() -> OSError:
+    error = OSError("The disk is full")
+    error.winerror = 112
+    return error

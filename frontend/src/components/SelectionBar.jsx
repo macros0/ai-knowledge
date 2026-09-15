@@ -33,11 +33,13 @@ export default function SelectionBar({
   allByFilterOn,
   allByFilterPartial,
   canDelete = false,
+  canExport = false,
   open = false,
   onToggle,
   onToggleAllByFilter,
   onSelectPage,
   onOpenPreview,
+  onExport,
   onDone,
 }) {
   const [addTag, setAddTag] = useState("");
@@ -116,6 +118,17 @@ export default function SelectionBar({
           <span className="bulk-count">
             {t("selection.selected", { selected: selectedIds.length, total })}
           </span>
+          {canExport && (
+            <button
+              type="button"
+              className="bulk-tag-btn"
+              onClick={onExport}
+              disabled={busy || !hasSelection}
+              title={t("selection.exportTitle", { selected: selectedIds.length })}
+            >
+              {t("selection.export")}
+            </button>
+          )}
           <ReferenceLocaleSelect value={tagLocale} onChange={setTagLocale} disabled={busy} />
           <TagCombobox
             value={addTag}

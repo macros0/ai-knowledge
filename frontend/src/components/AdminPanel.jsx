@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { approveJob, cancelJob, friendlyApiError, listJobs } from "@/lib/api";
+import { approveJob, cancelJob, deleteExportArtifacts, friendlyApiError, listJobs } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
+import { useChat } from "@/context/ChatContext";
 
 const PENDING_STATUSES = ["queued", "running", "awaiting_approval"];
 
@@ -15,6 +16,7 @@ function fmtTime(iso) {
 export default function AdminPanel() {
   const { showToast } = useToast();
   const { t } = useI18n();
+  const { settings } = useChat();
   const [jobs, setJobs] = useState([]);
   const [busy, setBusy] = useState({});
   const mounted = useRef(true);
@@ -31,6 +33,7 @@ export default function AdminPanel() {
   const JOB_TYPE_LABELS = {
     bulk_delete: t("admin.jobType.bulk_delete"),
     bulk_regenerate: t("admin.jobType.bulk_regenerate"),
+    bulk_export: t("admin.jobType.bulk_export"),
   };
 
   const load = useCallback(async () => {
@@ -87,14 +90,14 @@ export default function AdminPanel() {
                 </span>
                 <strong>{JOB_TYPE_LABELS[job.job_type] ?? job.job_type}</strong>
                 <span className="job-docs">
-                  {t("admin.jobDocs", { count: (job.params?.doc_ids ?? []).length })}
+                  {t("admin.jobDocs", { count: (job.params?.doc_ids ?? job.params?.documents ?? []).length })}
                 </span>
               </div>
               <div className="job-meta">
                 #{job.id} · {job.created_by ?? "—"} · {fmtTime(job.created_at)}
                 {job.approved_by ? ` · ${t("admin.approvedBy", { name: job.approved_by })}` : ""}
               </div>
-              {job.error && <div className="job-error">{job.error}</div>}
+              {job.error && <div className="job-error">{job.result?.error_code ? t(`apiError.${job.result.error_code}`) : job.error}</div>}
               {job.result?.errors?.length > 0 && (
                 <div className="job-error">
                   {t("admin.errorsByDocs", {
@@ -102,8 +105,18 @@ export default function AdminPanel() {
                   })}
                 </div>
               )}
+              {job.job_type === "bulk_export" && job.result && (
+                <div className="job-meta">
+                  {t("admin.exportProgress", { processed: job.result.processed ?? 0, total: job.result.total ?? 0 })}
+                  {job.result.expires_at ? ` · ${t("admin.exportExpires", { time: fmtTime(job.result.expires_at) })}` : ""}
+                  {job.result.artifact_status === "available" && !settings.bulk_export_download_enabled ? ` · ${t("admin.exportDownloadDisabled")}` : ""}
+                  {job.result.artifact_status === "available" && settings.bulk_export_download_enabled && (job.result.parts ?? []).map((part) => (
+                    <span key={part.number}> · <a href={`/api/jobs/${job.id}/export/${part.number}`}>{t("admin.exportDownload", { number: part.number })}</a></span>
+                  ))}
+                </div>
+              )}
               <div className="job-actions">
-                {job.status === "awaiting_approval" && (
+                {job.job_type !== "bulk_export" && job.status === "awaiting_approval" && (
                   <button
                     className="modal-btn"
                     disabled={busy[job.id]}
@@ -112,13 +125,18 @@ export default function AdminPanel() {
                     {t("admin.approve")}
                   </button>
                 )}
-                {(job.status === "queued" || job.status === "awaiting_approval") && (
+                {job.job_type !== "bulk_export" && (job.status === "queued" || job.status === "awaiting_approval") && (
                   <button
                     className="modal-btn"
                     disabled={busy[job.id]}
                     onClick={() => act(job.id, cancelJob)}
                   >
                     {t("admin.cancel")}
+                  </button>
+                )}
+                {job.job_type === "bulk_export" && job.result?.artifact_status === "available" && (
+                  <button className="modal-btn" disabled={busy[job.id]} onClick={() => act(job.id, deleteExportArtifacts)}>
+                    {t("admin.exportDelete")}
                   </button>
                 )}
               </div>

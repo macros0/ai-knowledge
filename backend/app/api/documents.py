@@ -52,6 +52,7 @@ from app.services.dev_sync import reindex_document_dev_tags, schedule_document_d
 from app.services.development_registry import get_development_registry
 from app.services.document_tag_service import bulk_update_tags, update_document_tags
 from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, QueueOverloadedError, get_job_queue
+from app.services.export_queue import ExportAdmissionError, ExportAuditUnavailableError, get_export_queue
 from app.services.okf_generator import _build_markdown
 from app.services.pipeline import get_pipeline, save_upload_stream
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
@@ -68,6 +69,23 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 _registry = get_registry()
 _tag_registry = TagRegistry()
 
+EXPORT_ERROR_STATUS = {
+    errors.BULK_EXPORT_DISABLED: 404,
+    errors.EMPTY_DOCUMENT_LIST: 400,
+    errors.INVALID_REQUEST: 400,
+    errors.BULK_EXPORT_SOURCE_CONFLICT: 409,
+    errors.BULK_EXPORT_USER_ACTIVE: 409,
+    errors.BULK_EXPORT_SIZE_LIMIT: 413,
+    errors.BULK_EXPORT_RATE_LIMITED: 429,
+    errors.BULK_EXPORT_QUEUE_FULL: 503,
+    errors.BULK_EXPORT_AUDIT_UNAVAILABLE: 503,
+    errors.BULK_EXPORT_STORAGE_QUOTA: 507,
+    errors.BULK_EXPORT_STORAGE_RESERVE: 507,
+    errors.BULK_EXPORT_NOT_READY: 409,
+    errors.BULK_EXPORT_GONE: 410,
+    errors.BULK_EXPORT_PART_NOT_FOUND: 404,
+}
+
 # doc_id генерируется как uuid.uuid4().hex[:16] (16 hex-символов нижнего
 # регистра). Строгий формат не даёт doc_id уйти из okf_bundles через `..`
 # или разделители пути — все запросы с несоответствующим id получают 404.
@@ -83,6 +101,18 @@ _LOCALE_CODE_RE = re.compile(r"^[a-z]{2,3}$")
 
 def _valid_doc_id(doc_id: str) -> bool:
     return bool(_DOC_ID_RE.fullmatch(doc_id))
+
+
+def _raise_export_error(exc: ExportAdmissionError) -> None:
+    headers = None
+    if exc.code == errors.BULK_EXPORT_RATE_LIMITED:
+        headers = {"Retry-After": str(max(1, exc.retry_after_seconds or 1))}
+    raise ApiError(
+        status_code=EXPORT_ERROR_STATUS.get(exc.code, 400),
+        code=exc.code,
+        detail=str(exc),
+        headers=headers,
+    ) from exc
 
 
 def _parse_source_locales(raw: str | None) -> list[str] | None:
@@ -141,7 +171,7 @@ def upload_document(
     except DomainError as exc:
         # Статус выбирается по коду, а не по подстроке русского detail: текст —
         # диагностика и может меняться, код — контракт (services/pipeline.py).
-        status = 413 if exc.code == errors.FILE_TOO_LARGE else 400
+        status = 507 if exc.code == errors.STORAGE_FULL else 413 if exc.code == errors.FILE_TOO_LARGE else 400
         raise errors.domain_error(exc, status) from exc
     except ValueError as exc:
         raise ApiError(
@@ -1033,6 +1063,27 @@ def export_okf_document(
         filename=f"okf_{doc_id}.zip",
         background=BackgroundTask(cleanup),
     )
+
+
+@router.post("/bulk-export", status_code=202)
+def bulk_export(
+    body: BulkOperationRequest,
+    request: Request,
+    user: User = Depends(require_role("admin")),
+):
+    """Queue an audited raw-document export without reading sources in HTTP."""
+    if not get_settings().bulk_export_enabled:
+        raise ApiError(
+            status_code=404,
+            code=errors.BULK_EXPORT_DISABLED,
+            detail="Массовый экспорт отключён",
+        )
+    try:
+        return get_export_queue().submit(body.doc_ids, user, ip_address=_client_ip(request))
+    except ExportAuditUnavailableError as exc:
+        raise ApiError(status_code=503, code=exc.code, detail=str(exc)) from exc
+    except ExportAdmissionError as exc:
+        _raise_export_error(exc)
 
 
 @router.get("/{doc_id}/okf", response_model=list[OkfFileOut])

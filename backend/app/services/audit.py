@@ -46,6 +46,12 @@ DOCUMENT_AUTO_DELETE = "document_auto_delete"
 CHAT_HISTORY_VIEW = "chat_history_view"
 CHAT_HISTORY_AUTO_DELETE = "chat_history_auto_delete"
 DOCUMENT_EXPORT = "document_export"
+DOCUMENT_BULK_EXPORT_REQUESTED = "document_bulk_export_requested"
+DOCUMENT_BULK_EXPORT_COMPLETED = "document_bulk_export_completed"
+DOCUMENT_BULK_EXPORT_FAILED = "document_bulk_export_failed"
+DOCUMENT_BULK_EXPORT_DOWNLOAD_STARTED = "document_bulk_export_download_started"
+DOCUMENT_BULK_EXPORT_EXPIRED = "document_bulk_export_expired"
+DOCUMENT_BULK_EXPORT_DELETED = "document_bulk_export_deleted"
 LOCALE_CREATE = "locale_create"
 LOCALE_UPDATE = "locale_update"
 LOCALE_ACTIVATE = "locale_activate"
@@ -102,6 +108,12 @@ ACTION_TYPES = frozenset(
         CHAT_HISTORY_VIEW,
         CHAT_HISTORY_AUTO_DELETE,
         DOCUMENT_EXPORT,
+        DOCUMENT_BULK_EXPORT_REQUESTED,
+        DOCUMENT_BULK_EXPORT_COMPLETED,
+        DOCUMENT_BULK_EXPORT_FAILED,
+        DOCUMENT_BULK_EXPORT_DOWNLOAD_STARTED,
+        DOCUMENT_BULK_EXPORT_EXPIRED,
+        DOCUMENT_BULK_EXPORT_DELETED,
         LOCALE_CREATE,
         LOCALE_UPDATE,
         LOCALE_ACTIVATE,

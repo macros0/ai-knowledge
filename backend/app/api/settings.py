@@ -23,4 +23,7 @@ def get_chat_settings(settings: Settings = Depends(get_settings)) -> ChatSetting
         glossary_query_expansion_enabled=settings.glossary_query_expansion_enabled,
         translation_provider=settings.translation_provider,
         translation_model=settings.translation_model or settings.llm_model,
+        bulk_export_enabled=settings.bulk_export_enabled,
+        bulk_export_download_enabled=settings.bulk_export_download_enabled,
+        bulk_export_max_docs=settings.bulk_export_max_docs,
     )

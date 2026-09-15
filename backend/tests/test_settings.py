@@ -80,6 +80,55 @@ class TestSettingsEndpoint:
         assert data["top_k_presets"] == [5, 10, 20]
 
 
+class TestBulkExportSettings:
+    def test_defaults_and_export_root(self, tmp_path: Path):
+        settings = Settings(_env_file=None, data_dir=tmp_path)
+
+        assert settings.bulk_export_enabled is True
+        assert settings.bulk_export_download_enabled is True
+        assert settings.bulk_export_max_docs == 1000
+        assert settings.bulk_export_max_total_mb == 1024
+        assert settings.bulk_export_part_size_mb == 250
+        assert settings.bulk_export_max_pending == 3
+        assert settings.bulk_export_max_active_per_user == 1
+        assert settings.bulk_export_max_ops_per_hour == 3
+        assert settings.bulk_export_ttl_hours == 24
+        assert settings.bulk_export_max_retained_mb == 5120
+        assert settings.bulk_export_min_free_mb == 2048
+        assert settings.exports_dir == tmp_path / "exports"
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("bulk_export_max_docs", 0),
+            ("bulk_export_max_total_mb", 0),
+            ("bulk_export_part_size_mb", 0),
+            ("bulk_export_max_pending", 0),
+            ("bulk_export_max_active_per_user", 0),
+            ("bulk_export_max_ops_per_hour", 0),
+            ("bulk_export_ttl_hours", 0),
+            ("bulk_export_max_retained_mb", 0),
+            ("bulk_export_min_free_mb", -1),
+        ],
+    )
+    def test_limits_reject_invalid_values(self, tmp_path: Path, field: str, value: int):
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, data_dir=tmp_path, **{field: value})
+
+    def test_settings_endpoint_exposes_only_export_capabilities(self, tmp_path: Path, monkeypatch):
+        settings = Settings(_env_file=None, data_dir=tmp_path)
+        monkeypatch.setattr("app.config.get_settings", lambda: settings)
+        monkeypatch.setattr("app.main.get_settings", lambda: settings)
+
+        with TestClient(create_app()) as client:
+            data = client.get("/api/settings").json()
+
+        assert data["bulk_export_enabled"] is True
+        assert data["bulk_export_download_enabled"] is True
+        assert data["bulk_export_max_docs"] == 1000
+        assert "bulk_export_max_retained_mb" not in data
+
+
 class TestProductionAuthGuard:
     """В production авторизация не может быть отключена или заменена демо-провайдером."""
 

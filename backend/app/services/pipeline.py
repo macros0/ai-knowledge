@@ -43,6 +43,14 @@ from app.services.okf_generator import ATTACHMENT_TAG, OKFGenerator
 from app.services import problem_codes
 from app.services.registry import get_registry
 from app.services.staging import StagingStore
+from app.services.storage import (
+    StorageFullError,
+    clear_transient_storage_failure,
+    is_storage_full,
+    mark_transient_storage_failure,
+    storage_failure_lock,
+    transient_storage_failure_is_active,
+)
 from app.services.vector_store import VectorStore
 from docparser import (
     SUPPORTED_EXTENSIONS,
@@ -117,6 +125,8 @@ class Pipeline:
         # по выходу последнего и не растить словарь на каждый документ.
         self._chunk_locks: dict[str, list] = {}
         self._chunk_locks_guard = threading.Lock()
+        self._storage_failure_docs: set[tuple[str, int]] = set()
+        self._storage_failure_docs_lock = threading.Lock()
 
     def ingest(
         self,
@@ -191,7 +201,7 @@ class Pipeline:
         table_cache = self.settings.cache_dir / "table_classify"
         if table_cache.is_dir():
             shutil.rmtree(table_cache, ignore_errors=True)
-        self.registry.update(doc_id, status="processing", error=None, problem=None)
+        self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False)
 
     def wait_for(self, doc_id: str, timeout: float = 3600) -> dict:
@@ -249,11 +259,66 @@ class Pipeline:
             self._process(doc_id, filepath, filename, user_tags, resume=resume)
         except Exception as exc:
             logger.exception("Ошибка обработки документа %s", filename)
-            self.registry.update(doc_id, status="error", error=str(exc))
+            if is_storage_full(exc):
+                self._record_storage_full(doc_id)
+            else:
+                self.registry.update(doc_id, status="error", error=str(exc), error_code=None)
         finally:
             self._abort_events.pop(doc_id, None)
             self._threads.pop(doc_id, None)
             self._pipeline_slots.release()
+
+    def _record_storage_full(self, doc_id: str, *, processed_chunks: int | None = None) -> None:
+        """Ставит pause и сохраняет его после освобождения места в БД.
+
+        Если том PostgreSQL/SQLite заполнен, обновить саму строку документа
+        невозможно. В этот промежуток реестр накладывает оперативный статус на
+        ответы API, а daemon повторяет компактный UPDATE до успеха.
+        """
+        fields: dict[str, object] = {
+            "status": "paused",
+            "error": str(StorageFullError()),
+            "error_code": codes.STORAGE_FULL,
+        }
+        if processed_chunks is not None:
+            fields["processed_chunks"] = processed_chunks
+        try:
+            self.registry.update(doc_id, **fields)
+        except Exception:
+            token = mark_transient_storage_failure(doc_id)
+            logger.exception("Не удалось сохранить storage_full для документа %s", doc_id)
+            self._schedule_storage_full_retry(doc_id, fields, token)
+            return
+        clear_transient_storage_failure(doc_id)
+
+    def _schedule_storage_full_retry(self, doc_id: str, fields: dict[str, object], token: int) -> None:
+        key = (doc_id, token)
+        with self._storage_failure_docs_lock:
+            if key in self._storage_failure_docs:
+                return
+            self._storage_failure_docs.add(key)
+
+        def retry() -> None:
+            try:
+                while True:
+                    with storage_failure_lock():
+                        if not transient_storage_failure_is_active(doc_id, token):
+                            return
+                        try:
+                            self.registry.update(doc_id, **fields)
+                        except Exception as exc:
+                            logger.warning(
+                                "[%s] Не удалось зафиксировать storage_full в БД: %s", doc_id, exc
+                            )
+                        else:
+                            clear_transient_storage_failure(doc_id)
+                            return
+                    time.sleep(5)
+            finally:
+                with self._storage_failure_docs_lock:
+                    self._storage_failure_docs.discard(key)
+
+        threading.Thread(target=retry, name=f"storage-status-{doc_id}", daemon=True).start()
 
     def _stop_task(self, doc_id: str) -> None:
         """Signal a task and wait briefly without blocking deletion indefinitely."""
@@ -275,7 +340,7 @@ class Pipeline:
                 pass
 
     def _process(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
-        self.registry.update(doc_id, status="processing", error=None, problem=None)
+        self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
         # Вложения (бинарники) пишутся парсером в uploads/<doc_id>/attachments/ —
         # рядом с оригиналом, а не в будущий бандл (Этап 2b: бандл — производная
         # проекция, вложения — байты-источники в FS, описанные в okf_attachments).
@@ -403,12 +468,16 @@ class Pipeline:
                 self.registry.update(doc_id, processed_chunks=len(staging.processed_chunks), current_chunk=None)
         except Exception as exc:
             logger.warning("Генерация OKF прервана на документе %s: %s", doc_id, exc)
-            self.registry.update(
-                doc_id,
-                status="paused",
-                error=str(exc),
-                processed_chunks=len(staging.processed_chunks),
-            )
+            if is_storage_full(exc):
+                self._record_storage_full(doc_id, processed_chunks=len(staging.processed_chunks))
+            else:
+                self.registry.update(
+                    doc_id,
+                    status="paused",
+                    error=str(exc),
+                    error_code=None,
+                    processed_chunks=len(staging.processed_chunks),
+                )
             return
 
         self.registry.update(doc_id, status="indexing")
@@ -430,7 +499,10 @@ class Pipeline:
             # повторный resume повторил только финализацию (embed+index),
             # не перегенерируя концепты через LLM.
             logger.exception("Финализация документа %s не удалась", doc_id)
-            self.registry.update(doc_id, status="failed", error=str(exc))
+            if is_storage_full(exc):
+                self._record_storage_full(doc_id)
+            else:
+                self.registry.update(doc_id, status="failed", error=str(exc), error_code=None)
             return
 
     def _finalize(
@@ -653,15 +725,18 @@ class Pipeline:
         self.vector_store.delete_orphaned_points(doc_id, keep_point_ids)
 
         total_chunks = manifest.get("total_chunks", 0) if manifest else 0
-        staging.remove()
         self.registry.update(
             doc_id,
             status="done",
             okf_concept_count=len(okf_docs),
             error=None,
+            error_code=None,
             problem=problem,
             **locale_fields,
         )
+        # Checkpoints — единственный способ возобновить финализацию. Удаляем
+        # их лишь после подтверждённого UPDATE документа в БД.
+        staging.remove()
         logger.info(
             "Документ %s обработан: %d OKF-концептов, %d чанков%s",
             filename, len(okf_docs), total_chunks,
@@ -914,8 +989,8 @@ def save_upload_stream(
     doc_id = uuid.uuid4().hex[:16]
     dest = settings.uploads_dir / f"{doc_id}{ext}"
     written = 0
-    dest.parent.mkdir(parents=True, exist_ok=True)
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
         with dest.open("wb") as out:
             while True:
                 chunk = fileobj.read(1024 * 1024)
@@ -928,8 +1003,10 @@ def save_upload_stream(
                         code=codes.FILE_TOO_LARGE,
                     )
                 out.write(chunk)
-    except Exception:
+    except Exception as exc:
         dest.unlink(missing_ok=True)
+        if is_storage_full(exc):
+            raise StorageFullError() from exc
         raise
     return doc_id, dest, written
 

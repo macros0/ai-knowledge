@@ -245,6 +245,19 @@ class Settings(BaseSettings):
     # Soft-лимит числа документов на одну массовую операцию.
     bulk_delete_max_docs: int = 50
     bulk_regenerate_max_docs: int = 20
+    # Выгрузка исходных документов: отдельная очередь/worker (не JobQueue).
+    # Размеры задаются в MiB и переводятся в байты только в export-сервисе.
+    bulk_export_enabled: bool = True
+    bulk_export_download_enabled: bool = True
+    bulk_export_max_docs: int = Field(default=1000, ge=1, le=10_000)
+    bulk_export_max_total_mb: int = Field(default=1024, ge=1)
+    bulk_export_part_size_mb: int = Field(default=250, ge=1)
+    bulk_export_max_pending: int = Field(default=3, ge=1, le=100)
+    bulk_export_max_active_per_user: int = Field(default=1, ge=1, le=10)
+    bulk_export_max_ops_per_hour: int = Field(default=3, ge=1, le=100)
+    bulk_export_ttl_hours: int = Field(default=24, ge=1, le=168)
+    bulk_export_max_retained_mb: int = Field(default=5120, ge=1)
+    bulk_export_min_free_mb: int = Field(default=2048, ge=0)
     # Лимит массового редактирования тегов (Этап 4a). Синхронная, недеструктивная
     # операция — лимит НЕ ниже порога более опасной перегенерации
     # (bulk_regenerate_max_docs=20 / approval_threshold_docs_regenerate=15).
@@ -608,6 +621,10 @@ class Settings(BaseSettings):
     @property
     def staging_dir(self) -> Path:
         return self.data_dir / "staging"
+
+    @property
+    def exports_dir(self) -> Path:
+        return self.data_dir / "exports"
 
     @property
     def prompts_override_dir(self) -> Path:

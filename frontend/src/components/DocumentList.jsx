@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
+import { createBulkExport, deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
 import { buildCompactDocumentMeta, countActiveDocumentFilters, resetDocumentFilters } from "@/lib/documentLayout.mjs";
@@ -11,6 +11,8 @@ import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
+import { useChat } from "@/context/ChatContext";
+import { selectionLimit } from "@/lib/documentBulkLimits.mjs";
 import SelectionBar from "./SelectionBar";
 import PreviewModal from "./PreviewModal";
 import DevelopmentFilter from "./DevelopmentFilter";
@@ -31,7 +33,6 @@ const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "pause
 const PAGE_SIZE = 50;
 // Кап «Выделить все по фильтру» — совпадает с bulk_tags_max_docs. Бэкенд всё равно
 // отклоняет превышение реального лимита понятным 400; кап защищает от лишнего набора.
-const MAX_SELECT = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
 function progressText(doc, t) {
@@ -97,6 +98,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { mode, hasRole, loading, user } = useAuth();
+  const { settings } = useChat();
   const { showToast } = useToast();
   const { t, tc, locale, fmtDate } = useI18n();
   const [tagLocales, setTagLocales] = useState({});
@@ -190,6 +192,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   // В disabled-режиме (всё открыто) действия доступны, как и на бэкенде.
   const canEdit = mode === "disabled" || hasRole("editor", "admin");
   const isAdmin = mode === "disabled" || hasRole("admin");
+  const exportEnabled = isAdmin && settings.bulk_export_enabled;
+  const selectLimit = selectionLimit({ isAdmin, exportEnabled, exportMaxDocs: settings.bulk_export_max_docs });
 
   // Единый фильтр по загрузчику: дефолт — «мои» для editor/admin, иначе «все».
   // "__me__" — спец-значение только для UI; на бэкенд уходит либо ничего (все),
@@ -443,13 +447,25 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     setSelected((s) => {
       const next = { ...s };
       if (next[id]) delete next[id];
-      else next[id] = true;
+      else if (Object.keys(next).length < selectLimit) next[id] = true;
+      else showToast(t("docs.selectionCapToast", { max: selectLimit }), { type: "warning" });
       return next;
     });
   };
 
   const toggleEditTags = (id) => {
     setEditingTags((s) => ({ ...s, [id]: !s[id] }));
+  };
+
+  const exportSelected = async () => {
+    if (!selectedIds.length || !exportEnabled) return;
+    if (!window.confirm(t("selection.exportConfirm", { selected: selectedIds.length }))) return;
+    try {
+      const job = await createBulkExport(selectedIds);
+      showToast(t("selection.exportQueued", { id: job.id }), { type: "success" });
+    } catch (err) {
+      showToast(t("selection.exportError", { message: friendlyApiError(err, t) }), { type: "error" });
+    }
   };
 
   const toggleEditLocale = (id) => {
@@ -468,6 +484,15 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   };
 
   const selectedIds = Object.keys(selected);
+
+  useEffect(() => {
+    setSelected((current) => {
+      const ids = Object.keys(current);
+      if (ids.length <= selectLimit) return current;
+      return Object.fromEntries(ids.slice(0, selectLimit).map((id) => [id, true]));
+    });
+    setFilterSelectedIds((ids) => ids.slice(0, selectLimit));
+  }, [selectLimit]);
 
   // При появлении выделения панель массовых действий раскрывается автоматически
   // (чтобы можно было сразу применить операцию); ручное сворачивание сохраняется.
@@ -491,9 +516,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       // (limit=None), «страница» фактически равна ему; выделяем не больше
       // лимита массовой операции, иначе bulk-tags молча упадёт на 400.
       for (const id of pageDocIds) {
-        if (Object.keys(next).length >= MAX_SELECT) {
+        if (Object.keys(next).length >= selectLimit) {
           showToast(
-            t("docs.selectionCapToast", { max: MAX_SELECT }),
+            t("docs.selectionCapToast", { max: selectLimit }),
             { type: "warning" }
           );
           break;
@@ -519,7 +544,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         sourceLocaleUnknown: localeFilter === "unknown" ? true : undefined,
         search: search || undefined,
         sort: sortKey,
-        limit: MAX_SELECT,
+        limit: selectLimit,
         offset: 0,
       });
       const ids = result.documents.map((d) => d.id);
@@ -634,7 +659,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           <div className="doc-primary">
             <strong title={doc.filename}>{doc.filename}</strong>
             <span className="meta doc-primary-meta">
-              {doc.error ? t("docs.errorText", { message: doc.error }) : (progress || fallbackMeta)}
+              {doc.error_code ? t(`apiError.${doc.error_code}`) : doc.error ? t("docs.errorText", { message: doc.error }) : (progress || fallbackMeta)}
             </span>
           </div>
           <div className="doc-meta-line">
@@ -812,11 +837,13 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           allByFilterOn={allByFilterOn}
           allByFilterPartial={allByFilterPartial}
           canDelete={isAdmin}
+          canExport={exportEnabled && selectedIds.length <= settings.bulk_export_max_docs}
           open={bulkOpen}
           onToggle={() => setBulkOpen((v) => !v)}
           onToggleAllByFilter={toggleAllByFilter}
           onSelectPage={selectPage}
           onOpenPreview={() => setShowPreview(true)}
+          onExport={exportSelected}
           onDone={(result) => {
             const n = result?.updated?.length ?? 0;
             showToast(n > 0 ? tc("docs.tagsUpdated", n) : t("docs.tagsUnchanged"));

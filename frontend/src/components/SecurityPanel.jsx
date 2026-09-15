@@ -66,6 +66,8 @@ export default function SecurityPanel() {
     "development_delete", "attribute_create", "attribute_delete", "tag_delete", "tag_cleanup",
     "document_restore", "document_bulk_restore", "document_auto_delete",
     "chat_history_view", "chat_history_auto_delete",
+    "document_bulk_export_requested", "document_bulk_export_completed", "document_bulk_export_failed",
+    "document_bulk_export_download_started", "document_bulk_export_expired", "document_bulk_export_deleted",
   ];
 
   const actionLabels = (type) => {

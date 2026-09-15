@@ -47,7 +47,14 @@ def _summary(values: list[float]) -> dict[str, float | int]:
     }
 
 
-def _run_state(cases: list[dict], state: str, clients: int, queries_per_client: int) -> dict:
+def run_parallel_retrieval(
+    cases: list[dict],
+    *,
+    state: str,
+    clients: int,
+    queries_per_client: int,
+) -> dict:
+    """Run the retrieval probe in-process, without parsing CLI output."""
     invalidate_snapshot_cache()
     embedder = CountingEmbedder()
     vector_store = VectorStore()
@@ -164,7 +171,12 @@ def main() -> int:
         "queries_per_client": args.queries_per_client,
         "cases": [case["id"] for case in cases],
         "states": {
-            state: _run_state(cases, state, args.clients, args.queries_per_client)
+            state: run_parallel_retrieval(
+                cases,
+                state=state,
+                clients=args.clients,
+                queries_per_client=args.queries_per_client,
+            )
             for state in ("off", "on")
         },
     }

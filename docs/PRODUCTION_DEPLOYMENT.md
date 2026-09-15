@@ -5,6 +5,16 @@
 Keycloak/IDB — в `SSO_TESTING_GUIDE.md` (разделы 11–12). Здесь — только то, что
 отличает прод от локального стенда, и то, что нельзя пропустить.
 
+## Массовая выгрузка исходников
+
+`data/exports` — временное admin-only raw-data egress-хранилище вне web-root.
+Нужен один backend worker, writable storage, 5 GiB retained quota и 2 GiB
+free-space reserve; ready ZIP удаляются после 24 часов. Перед включением
+проверьте streaming, buffering/body-size и timeouts reverse proxy. Для отката
+сначала отключите create/download feature flags, остановите backend, выполните
+guarded rollback в dry-run режиме и только затем применяйте подтверждённое
+удаление; не удаляйте каталог вручную.
+
 Модель безопасности (угрозы, роли, границы доверия, журнал инцидентов) — в
 `SECURITY.md`. Этот файл — операционный чек-лист деплоя и ссылается на неё.
 

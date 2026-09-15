@@ -241,6 +241,25 @@ Invariants enforced by `validate_auth_provider` in `app/config.py` (production):
   dedicated service account with INSERT-only privileges is recommended
   (see `README.md`, "Audit log hardening").
 
+### Raw-document bulk export
+
+`bulk_export` is a deliberate **raw-data egress** path, not an OKF export. Only
+`admin` may create, download, or delete it; exports are disabled by default and
+the independent download flag allows an operator to stop new egress without
+stopping retention cleanup. The worker writes ZIP_STORED parts only below
+`data/exports`, which must be writable by the backend but must never be a
+web-served static root. Source fingerprints are verified while streaming, part
+paths are server-derived, and every create/completion/download/deletion action
+is audited fail-closed: if its mandatory audit row cannot be committed, no
+request/response transition succeeds.
+
+Ready parts use in-process download leases. Cleanup, manual deletion, and
+code-rollback refuse an active lease rather than racing a streaming response.
+Operators must use the guarded `scripts/rollback_bulk_exports.py` dry-run and
+its exact confirmation token before removing code that understands export jobs;
+manual recursive deletion of `data/exports` bypasses these checks and is not an
+approved recovery procedure.
+
 ### Collaboration and concurrent data conflicts
 
 Concurrency model: **optimistic locking — only for the developments registry**; all other

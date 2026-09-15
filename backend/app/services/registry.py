@@ -26,6 +26,12 @@ from app.db.models import (
     Tag,
 )
 from app.db.session import session_scope
+from app import error_codes as codes
+from app.services.storage import (
+    clear_transient_storage_failure,
+    storage_failure_lock,
+    transient_storage_failure,
+)
 
 # Статусы, которые на старте считаются «зависшими» (сервер перезапустили посреди
 # обработки) и сбрасываются в paused для ручного возобновления.
@@ -113,13 +119,14 @@ def _search_conditions(search: str | None) -> list:
 
 def _to_dict(doc: Document) -> dict:
     dev = doc.development
-    return {
+    result = {
         "id": doc.id,
         "filename": doc.filename,
         "content_type": doc.content_type,
         "size": doc.size,
         "status": doc.status,
         "error": doc.error,
+        "error_code": doc.error_code,
         "problem": doc.problem,
         "okf_concept_count": doc.okf_concept_count,
         "total_chunks": doc.total_chunks,
@@ -142,6 +149,12 @@ def _to_dict(doc: Document) -> dict:
         "source_locale": doc.source_locale,
         "source_locale_source": doc.source_locale_source,
     }
+    # PostgreSQL/SQLite могут отвергнуть UPDATE статуса из-за заполненного
+    # своего тома. До повторной успешной записи UI обязан видеть pause, а не
+    # вечное «обрабатывается» из старой строки.
+    if transient := transient_storage_failure(doc.id):
+        result.update(transient)
+    return result
 
 
 class DocumentRegistry:
@@ -209,6 +222,27 @@ class DocumentRegistry:
                 "deleted_at": deleted_at,
             }
             for doc_id, filename, deleted_at in rows
+        }
+        return {doc_id: values.get(doc_id) for doc_id in ids}
+
+    def get_export_metadata_many(self, doc_ids: Iterable[str]) -> dict[str, dict | None]:
+        """Load the small, stable document snapshot needed by export admission."""
+        ids = {str(doc_id) for doc_id in doc_ids if doc_id}
+        if not ids:
+            return {}
+        with session_scope() as s:
+            rows = s.execute(
+                select(Document.id, Document.filename, Document.size, Document.deleted_at)
+                .where(Document.id.in_(ids))
+            ).all()
+        values = {
+            doc_id: {
+                "id": doc_id,
+                "filename": filename,
+                "size": size,
+                "deleted_at": deleted_at,
+            }
+            for doc_id, filename, size, deleted_at in rows
         }
         return {doc_id: values.get(doc_id) for doc_id in ids}
 
@@ -443,25 +477,32 @@ class DocumentRegistry:
         return {"total": total, "with_development": with_development}
 
     def update(self, doc_id: str, **fields) -> None:
-        tags = fields.pop("tags", None)
-        canonical_locale = fields.pop("canonical_locale", "und")
-        if not fields and tags is None:
-            return
-        tag_ids = None
-        if tags is not None:
-            from app.services.tag_registry import TagRegistry
-
-            tag_ids = TagRegistry().get_or_create_ids(tags, canonical_locale=canonical_locale)
-        with session_scope() as s:
-            doc = s.get(Document, doc_id)
-            if doc is None:
+        # Resume обязан быть атомарен относительно фоновой попытки сохранить
+        # старый storage_full, иначе поздний retry снова поставит paused.
+        with storage_failure_lock():
+            tags = fields.pop("tags", None)
+            canonical_locale = fields.pop("canonical_locale", "und")
+            if not fields and tags is None:
                 return
-            for key, value in fields.items():
-                setattr(doc, key, value)
-            if tag_ids is not None:
-                doc.tags_rel.clear()
-                for tid in tag_ids:
-                    doc.tags_rel.append(DocumentTag(tag_id=tid))
+            tag_ids = None
+            if tags is not None:
+                from app.services.tag_registry import TagRegistry
+
+                tag_ids = TagRegistry().get_or_create_ids(tags, canonical_locale=canonical_locale)
+            with session_scope() as s:
+                doc = s.get(Document, doc_id)
+                if doc is None:
+                    return
+                for key, value in fields.items():
+                    setattr(doc, key, value)
+                if tag_ids is not None:
+                    doc.tags_rel.clear()
+                    for tid in tag_ids:
+                        doc.tags_rel.append(DocumentTag(tag_id=tid))
+            if fields.get("status") and not (
+                fields.get("status") == "paused" and fields.get("error_code") == codes.STORAGE_FULL
+            ):
+                clear_transient_storage_failure(doc_id)
 
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:

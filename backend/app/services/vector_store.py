@@ -29,6 +29,7 @@ from app.models.schemas import OkfDocument
 from app.services.errors import VectorStoreError
 from app.services.fusion import Hit
 from app.services.sparse import to_sparse_vector
+from app.services.storage import StorageFullError, is_storage_full_text
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,8 @@ def _qdrant_call(func, *args, **kwargs):
     """
     try:
         return func(*args, **kwargs)
+    except StorageFullError:
+        raise
     except VectorStoreError:
         raise
     except UnexpectedResponse as exc:
@@ -53,11 +56,19 @@ def _qdrant_call(func, *args, **kwargs):
             detail = exc.content.decode("utf-8", errors="replace")[:500]
         except Exception:
             detail = str(exc)
+        if is_storage_full_text(detail):
+            raise StorageFullError() from exc
         raise VectorStoreError(
             f"Qdrant отклонил запрос (HTTP {exc.status_code}): {detail}",
             cause=exc,
         ) from exc
     except Exception as exc:
+        # В gRPC transport Qdrant отдаёт RpcError вместо HTTP body. Проверка
+        # текста допустима именно здесь: источник уже установлен как Qdrant.
+        details = getattr(exc, "details", None)
+        detail = details() if callable(details) else ""
+        if is_storage_full_text(detail):
+            raise StorageFullError() from exc
         url = None
         try:
             # Именно модульный get_settings (импортирован выше): локальный
