@@ -52,7 +52,7 @@ services:
       - -ceu
       - >-
         python scripts/validate_storage_mode.py &&
-        python scripts/wait_for_qdrant.py --url "$QDRANT_URL" --timeout-seconds 60 &&
+        python scripts/wait_for_qdrant.py --url "$$QDRANT_URL" --timeout-seconds 60 &&
         alembic upgrade head
     depends_on:
       postgres:
