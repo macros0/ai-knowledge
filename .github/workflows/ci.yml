@@ -184,6 +184,10 @@ jobs:
           LLM_BASE_URL=http://llm-health:8000
           LLM_MODEL=fake
           EOF
+          # Bind-mounted CI data belongs to the GitHub runner.  Build the
+          # non-root app user with the same identity so the entrypoint can
+          # drop privileges without losing access to /data or backup mounts.
+          printf 'APP_UID=%s\nAPP_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
           cp .env .ci-bundled.env
 
       - name: Проверка конфигурации compose
@@ -195,6 +199,13 @@ jobs:
         run: |
           docker compose --env-file .env \
             -f docker-compose.yml -f docker-compose.ci-runtime.yml build
+
+      - name: CI container data identity matches runner
+        run: |
+          grep -qx "APP_UID=$(id -u)" .env
+          grep -qx "APP_GID=$(id -g)" .env
+          docker compose --env-file .env run --rm --no-deps backend \
+            sh -ceu 'test -r /data && test -w /data && test "$(id -u)" = "$APP_UID" && test "$(id -g)" = "$APP_GID"'
 
       - name: Standard image uses PDFium and contains no MuPDF artifacts
         run: |
