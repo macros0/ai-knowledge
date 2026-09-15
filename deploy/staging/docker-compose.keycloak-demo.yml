@@ -1,0 +1,26 @@
+services:
+  # Opt-in staging SSO companion. It is intentionally kept outside the
+  # production deployment topology: customer installations use their own IDB.
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.1
+    command: ["start-dev", "--import-realm"]
+    environment:
+      # Keycloak 25 uses these legacy bootstrap names. KC_BOOTSTRAP_ADMIN_*
+      # only became the supported form in later Keycloak releases.
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:?set KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT:-18081}:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ${KEYCLOAK_IMPORT_DIR:?set KEYCLOAK_IMPORT_DIR}:/opt/keycloak/data/import:ro
+    networks: [app_network]
+    restart: unless-stopped
+
+volumes:
+  # Keep a failed/previous staging volume intact for rollback. The name is
+  # configurable so a deliberate migration can choose a new initialized DB.
+  keycloak_data:
+    name: ${KEYCLOAK_DATA_VOLUME:-okf-keycloak-data-v2}
