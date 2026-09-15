@@ -9,6 +9,7 @@ from scripts.write_backup_manifest import archived_files, compose_images
 
 
 def test_archived_files_records_upload_originals_and_attachments(tmp_path):
+    placeholder = tmp_path / "uploads" / ".gitkeep"
     original = tmp_path / "uploads" / "document.pdf"
     attachment = tmp_path / "uploads" / "document" / "attachments" / "appendix.docx"
     ignored = tmp_path / "okf" / "document" / "bundle.md"
@@ -18,6 +19,7 @@ def test_archived_files_records_upload_originals_and_attachments(tmp_path):
     original.write_bytes(b"original")
     attachment.write_bytes(b"attachment")
     ignored.write_bytes(b"not an upload")
+    placeholder.write_bytes(b"")
 
     assert archived_files(tmp_path) == [
         {

@@ -32,6 +32,8 @@ def archived_files(data_dir: Path) -> list[dict[str, str]]:
         return []
     result: list[dict[str, str]] = []
     for path in sorted(path for path in uploads_dir.rglob("*") if path.is_file()):
+        if path == uploads_dir / ".gitkeep":
+            continue
         relative = path.relative_to(data_dir).as_posix()
         result.append({"path": relative, "sha256": sha256_file(path)})
     return result
