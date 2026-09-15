@@ -50,3 +50,9 @@ fi
 PATH="$fixture_bin:$PATH" FAKE_DOCKER_LOG="$fake_docker_log" \
   "$root/scripts/production/restore-bundled.sh" --env-file "$fixture_env" --backup-dir "$tmp/backup" --target-project recovered --target-data-dir "$tmp/recovered3" --replace-existing --confirm-replace-existing --dry-run
 ! grep -q 'volume rm' "$fake_docker_log"
+
+# A fresh PostgreSQL volume briefly accepts pg_isready while its image entrypoint
+# is still running initdb, then restarts the server. Restore must wait for the
+# Compose healthcheck rather than the transient socket probe.
+grep -qx 'compose up -d --wait --no-deps postgres qdrant' "$root/scripts/production/restore-bundled.sh"
+! grep -q 'pg_isready -U okf -d okf_knowledge' "$root/scripts/production/restore-bundled.sh"

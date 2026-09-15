@@ -67,16 +67,10 @@ for volume in "${target_project}_postgres_data" "${target_project}_qdrant_data";
 done
 mkdir "$target_data"
 tar --extract --file "$backup_dir/data.tar" --directory "$target_data"
-compose up -d --no-deps postgres qdrant
-postgres_ready=0
-for _ in $(seq 1 60); do
-  if compose exec -T postgres pg_isready -U okf -d okf_knowledge >/dev/null 2>&1; then
-    postgres_ready=1
-    break
-  fi
-  sleep 1
-done
-((postgres_ready)) || { echo 'PostgreSQL did not become ready before restore' >&2; exit 1; }
+# On a fresh volume the official image briefly accepts pg_isready while initdb
+# uses a temporary server, then restarts PostgreSQL. Wait for Compose's
+# healthcheck, which survives that transition, before invoking pg_restore.
+compose up -d --wait --no-deps postgres qdrant
 compose cp "$backup_dir/postgres.dump" postgres:/tmp/okf-restore.dump
 compose exec -T postgres pg_restore --clean --if-exists -U okf -d okf_knowledge /tmp/okf-restore.dump
 snapshot=$(find "$backup_dir/qdrant" -maxdepth 1 -type f ! -name '*.sha256' -print -quit)
