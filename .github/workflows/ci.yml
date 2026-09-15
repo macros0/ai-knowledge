@@ -369,7 +369,8 @@ jobs:
           assert summary["schema_revision"], summary
           assert summary["pdf_provider"].get("provider") == "pypdf-pdfium", summary
           PY
-          bash scripts/production/restore-bundled.sh --env-file .ci-bundled.env --backup-dir "$backup_dir" \
+          COMPOSE_FILE=docker-compose.yml:docker-compose.ci-runtime.yml \
+            bash scripts/production/restore-bundled.sh --env-file .ci-bundled.env --backup-dir "$backup_dir" \
             --target-project okf-ci-restored --target-data-dir "$PWD/.ci-restored-data"
 
       # Release-candidate manual acceptance (not a CI substitute): reboot the

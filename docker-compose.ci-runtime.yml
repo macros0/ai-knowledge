@@ -1,4 +1,11 @@
 services:
+  backend:
+    # A restored CI project receives the fake LLM endpoint only through this
+    # override.  Start it with backend so the normal healthcheck is meaningful.
+    depends_on:
+      llm-health:
+        condition: service_started
+
   # The deployment CI validates storage, parser and migration readiness without
   # spending tokens at a real LLM provider. health.py only needs GET /models to
   # be reachable; this tiny in-network responder supplies that contract.
