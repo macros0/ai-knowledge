@@ -202,9 +202,9 @@ jobs:
       - name: MIT declarations and third-party notices
         run: |
           test "$(head -n 1 LICENSE)" = "MIT License"
-          ! rg -n "SPDX-License-Identifier: AGPL-3.0-or-later|GNU AFFERO" backend doc-parser README.md README.ru.md README.de.md README.es.md frontend/package.json LICENSE
-          rg -q "pypdfium2" THIRD_PARTY_NOTICES.md
-          rg -q "PDFium" THIRD_PARTY_NOTICES.md
+          ! git grep -n -E "SPDX-License-Identifier: AGPL-3.0-or-later|GNU AFFERO" -- backend doc-parser README.md README.ru.md README.de.md README.es.md frontend/package.json LICENSE
+          git grep -q "pypdfium2" -- THIRD_PARTY_NOTICES.md
+          git grep -q "PDFium" -- THIRD_PARTY_NOTICES.md
           docker compose --env-file .env run --rm --no-deps backend test -s /app/THIRD_PARTY_NOTICES.md
 
       - name: Bundled migration and JSON-ready backend
@@ -266,7 +266,7 @@ jobs:
           if docker compose --project-name okf-ci-external --env-file .ci-external.env \
             -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
             -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml \
-            config --services | rg -x 'postgres|qdrant'; then
+            config --services | grep -xE 'postgres|qdrant'; then
             echo 'external configuration leaked bundled storage services' >&2
             exit 1
           fi
