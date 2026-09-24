@@ -357,6 +357,7 @@
   "apiError.not_resumable": [],
   "apiError.operator_rollback": [],
   "apiError.override_not_found": [],
+  "apiError.partial_regeneration_unavailable": [],
   "apiError.processing_unavailable": [],
   "apiError.queue_overloaded": [],
   "apiError.rate_limited": [],
@@ -728,6 +729,7 @@
   "docs.removedToTrash": [
     "name"
   ],
+  "docs.repairPartialBtn": [],
   "docs.resetFilters": [],
   "docs.resumeBtn": [],
   "docs.resumeError": [

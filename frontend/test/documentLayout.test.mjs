@@ -4,6 +4,12 @@ import { readFile } from "node:fs/promises";
 import * as documentLayout from "../src/lib/documentLayout.mjs";
 import { buildCompactDocumentMeta, countActiveDocumentFilters } from "../src/lib/documentLayout.mjs";
 
+test("partial generation action uses resume and only appears for recoverable completed documents", async () => {
+  const source = await readFile(new URL("../src/components/DocumentList.jsx", import.meta.url), "utf8");
+  assert.match(source, /doc\.status === "done" && doc\.partial_chunks\?\.length > 0/);
+  assert.match(source, /docs\.repairPartialBtn/);
+});
+
 test("compact document metadata omits empty optional fields", () => {
   const meta = buildCompactDocumentMeta({
     progress: "Генерация чанка 1 из 1",
@@ -84,7 +90,7 @@ test("documents filter button counts primary filters so reset stays available", 
   const countBlock = source.match(/const activeFilterCount = countActiveDocumentFilters\(\{([\s\S]*?)\}\);/)?.[1] ?? "";
 
   assert.match(countBlock, /search:/);
-  assert.match(countBlock, /uploader:/);
+  assert.match(countBlock, /uploader: selectedUploader/);
   assert.match(countBlock, /status:/);
   assert.match(source, /disabled=\{activeFilterCount === 0 && chosenUploader !== null\}/);
 });

@@ -171,13 +171,24 @@ def _document_dicts(session, docs: list[Document]) -> list[dict]:
         .where(OkfConcept.doc_id.in_([doc.id for doc in docs]))
         .group_by(OkfConcept.doc_id)
     ).all())
+    from app.services.gen_quality import partial_chunk_indices
+
+    partial = {
+        doc_id: partial_chunk_indices(chunks_data or {})
+        for doc_id, chunks_data in session.execute(
+            select(DocumentStaging.doc_id, DocumentStaging.chunks_data)
+            .where(DocumentStaging.doc_id.in_([doc.id for doc in docs]))
+        ).all()
+    }
     result = []
     for doc in docs:
         timestamp = generated.get(doc.id)
         # SQLite drops timezone info; provenance is written in UTC.
         if timestamp is not None and timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
-        result.append(_to_dict(doc, timestamp))
+        item = _to_dict(doc, timestamp)
+        item["partial_chunks"] = partial.get(doc.id, [])
+        result.append(item)
     return result
 
 
@@ -567,7 +578,10 @@ class DocumentRegistry:
                 return False
             doc.deleted_at = datetime.now(timezone.utc)
             doc.deleted_by = deleted_by
-            return True
+        from app.services.deduplication import refresh_duplicate_flags
+
+        refresh_duplicate_flags(doc_id)
+        return True
 
     def restore(self, doc_id: str) -> bool:
         """Снимает флаг удаления (восстановление из корзины)."""
@@ -577,7 +591,10 @@ class DocumentRegistry:
                 return False
             doc.deleted_at = None
             doc.deleted_by = None
-            return True
+        from app.services.deduplication import refresh_duplicate_flags
+
+        refresh_duplicate_flags(doc_id)
+        return True
 
     def list_trash(
         self,

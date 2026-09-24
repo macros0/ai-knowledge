@@ -12,6 +12,18 @@ def _concept(title: str, cid: str) -> Concept:
 
 
 class TestStagingAppend:
+    def test_replace_chunk_reuses_own_slugs_and_preserves_other_chunk(self, tmp_path):
+        store = StagingStore("doc1", staging_root=tmp_path / "staging")
+        store.create(2)
+        store.append_chunk(0, [_concept("Bridge", "a")], degradation=[{"event": "llm_salvage"}])
+        store.append_chunk(1, [_concept("Bridge", "b")], provenance={"model_id": "original"})
+        untouched = store.load()["chunks_data"]["1"]
+        store.append_chunk(0, [_concept("Bridge", "fixed")])
+        assert store.slugs() == ["bridge", "bridge-1"]
+        assert store.load()["used_slugs"] == ["bridge-1", "bridge"]
+        assert store.load()["chunks_data"]["1"] == untouched
+        assert "degradation" not in store.load()["chunks_data"]["0"]
+
     def test_append_roundtrip(self, tmp_path):
         store = StagingStore("doc1", staging_root=tmp_path / "staging")
         store.create(2, global_tags=["proxmox"])

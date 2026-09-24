@@ -71,6 +71,252 @@ def _concept() -> Concept:
     return Concept(id="c1", title="Один", type="concept", content="текст концепта")
 
 
+class TestPartialGenerationRecovery:
+    def setup_pipeline(self, monkeypatch):
+        pipeline = Pipeline()
+        pipeline.settings.dedup_enabled = False
+        pipeline.settings.dev_detection_enabled = False
+        pipeline.okf_generator.chunk_text = lambda text: ["first chunk", "second chunk"]
+        for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
+            monkeypatch.setattr(pipeline.vector_store, method, lambda *a, **k: None)
+        for method in ("index_concepts", "index_chunks"):
+            monkeypatch.setattr(pipeline.vector_store, method, lambda *a, **k: set())
+        return pipeline
+
+    def test_automatic_retry_only_repeats_incomplete_chunk(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        pipeline = self.setup_pipeline(monkeypatch)
+        calls = []
+
+        def generate(text, filename, index, total, **kwargs):
+            calls.append(index)
+            if index == 2 and calls.count(2) == 1:
+                gen_quality.record(gen_quality.LLM_SALVAGE)
+            return [Concept(id=str(index), title=f"Chunk {index}", type="concept", content=text)]
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline._process("partial", src, "test.doc", [], resume=False)
+        assert calls == [1, 2, 2]
+        assert reg.get("partial")["status"] == "done"
+        assert reg.get("partial")["problem"] is None
+        assert not StagingStore("partial").exists()
+
+    def test_exhausted_retries_keep_checkpoints_and_resume_only_partial(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+        from app.db.models import OkfConcept
+        from app.db.session import session_scope
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        pipeline = self.setup_pipeline(monkeypatch)
+        calls = []
+
+        def generate(text, filename, index, total, **kwargs):
+            calls.append(index)
+            if index == 2:
+                gen_quality.record(gen_quality.LLM_SALVAGE)
+            return [Concept(id=str(index), title=f"Chunk {index}", type="concept", content=text)]
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline._process("partial", src, "test.doc", [], resume=False)
+        assert calls == [1, 2, 2]
+        assert reg.get("partial")["problem"] == "llm_partial_result"
+        store = StagingStore("partial")
+        assert store.exists()
+        original = store.load()["chunks_data"]["0"]
+        original_file = (store.dir / "chunk_00.json").read_bytes()
+        with session_scope() as session:
+            row = session.query(OkfConcept).filter_by(doc_id="partial", chunk_index=0).one()
+            original_provenance = (row.slug, row.generated_at, row.model_id, row.prompt_version)
+
+        calls.clear()
+
+        def repair(text, filename, index, total, **kwargs):
+            calls.append(index)
+            assert store.load()["chunks_data"]["0"] == original
+            assert (store.dir / "chunk_00.json").read_bytes() == original_file
+            return [Concept(id=str(index), title=f"Chunk {index}", type="concept", content="complete")]
+
+        pipeline.okf_generator.generate_chunk = repair
+        pipeline._process("partial", src, "test.doc", [], resume=True)
+        assert calls == [2]
+        assert reg.get("partial")["status"] == "done"
+        assert reg.get("partial")["problem"] is None
+        with session_scope() as session:
+            row = session.query(OkfConcept).filter_by(doc_id="partial", chunk_index=0).one()
+            assert (row.slug, row.generated_at, row.model_id, row.prompt_version) == original_provenance
+        assert not store.exists()
+
+    def test_events_from_failed_attempt_do_not_taint_success(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        pipeline = self.setup_pipeline(monkeypatch)
+        calls = []
+
+        def generate(text, filename, index, total, **kwargs):
+            calls.append(index)
+            if len(calls) == 1:
+                gen_quality.record(gen_quality.LLM_SALVAGE)
+                raise LLMTimeoutError("timeout after a partial subchunk")
+            return [_concept()]
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline._process("partial", src, "test.doc", [], resume=False)
+        assert calls == [1, 1, 2]
+        assert reg.get("partial")["problem"] is None
+
+    def test_classifier_fallback_does_not_trigger_partial_retry(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        pipeline = self.setup_pipeline(monkeypatch)
+        calls = []
+
+        def generate(text, filename, index, total, **kwargs):
+            calls.append(index)
+            gen_quality.record(gen_quality.CLASSIFIER_FALLBACK)
+            return [_concept()]
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline._process("partial", src, "test.doc", [], resume=False)
+        assert calls == [1, 2]
+        assert reg.get("partial")["problem"] == "llm_classifier_fallback"
+        assert not StagingStore("partial").exists()
+
+    def test_failed_recovery_keeps_partial_checkpoint(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        pipeline = self.setup_pipeline(monkeypatch)
+        calls = []
+
+        def generate(*args, **kwargs):
+            calls.append(1)
+            if len(calls) == 1:
+                gen_quality.record(gen_quality.LLM_SALVAGE)
+                return [_concept()]
+            raise LLMTimeoutError("recovery timed out")
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline._process("partial", src, "test.doc", [], resume=False)
+        assert len(calls) == 2
+        assert reg.get("partial")["status"] == "paused"
+        store = StagingStore("partial")
+        assert store.partial_chunks == [0]
+        assert [c.title for c in store.concepts()] == [_concept().title]
+
+    def test_cancel_during_partial_retry_preserves_checkpoint(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        pipeline = self.setup_pipeline(monkeypatch)
+        pipeline._abort_events["partial"] = threading.Event()
+        monkeypatch.setattr(pipeline._abort_events["partial"], "wait", lambda **kwargs: True)
+        calls = []
+
+        def generate(*args, **kwargs):
+            calls.append(1)
+            gen_quality.record(gen_quality.LLM_SALVAGE)
+            return [_concept()]
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline._process("partial", src, "test.doc", [], resume=False)
+        assert len(calls) == 1
+        assert StagingStore("partial").partial_chunks == [0]
+        assert reg.get("partial")["status"] != "done"
+
+    def test_resume_rejects_changed_chunk_layout_before_overwriting(self, isolated_env, monkeypatch):
+        from app.services.errors import DomainError
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        store = StagingStore("partial")
+        store.create(1)
+        store.save_chunk_text(0, "original text")
+        store.append_chunk(0, [_concept()], degradation=[{"event": "llm_salvage"}])
+        before = store.load()
+        pipeline = self.setup_pipeline(monkeypatch)
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: pytest.fail("must not call LLM")
+        with pytest.raises(DomainError):
+            pipeline._process("partial", src, "test.doc", [], resume=True)
+        assert store.load() == before
+        assert (store.dir / "chunk_00.md").read_text(encoding="utf-8") == "original text"
+
+    def test_resume_done_requires_complete_checkpoint_files(self, isolated_env, monkeypatch):
+        from app.services.errors import DomainError
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        reg.update("partial", status="done", problem="llm_partial_result")
+        store = StagingStore("partial")
+        store.create(1)
+        store.append_chunk(0, [_concept()], degradation=[{"event": "llm_salvage"}])
+        pipeline = self.setup_pipeline(monkeypatch)
+        pipeline._start = lambda *a, **k: pytest.fail("must not enqueue without source checkpoint")
+        with pytest.raises(DomainError):
+            pipeline.resume("partial")
+        assert reg.get("partial")["status"] == "done"
+
+    def test_partial_resume_keeps_current_user_tags_on_unchanged_chunks(self, isolated_env, monkeypatch):
+        from app.services import gen_quality
+        from app.db.models import OkfConcept
+        from app.db.session import session_scope
+
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100, tags=["old"])
+        pipeline = self.setup_pipeline(monkeypatch)
+
+        def generate(text, filename, index, total, **kwargs):
+            if index == 2:
+                gen_quality.record(gen_quality.LLM_SALVAGE)
+            return [Concept(id=str(index), title=f"Chunk {index}", type="concept", content=text, tags=["semantic"])]
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline._process("partial", src, "test.doc", ["old"], resume=False)
+        reg.update("partial", tags=["new"])
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline._process("partial", src, "test.doc", ["new"], resume=True)
+        with session_scope() as session:
+            concepts = session.query(OkfConcept).filter_by(doc_id="partial").all()
+            assert all("old" not in c.tags and "new" in c.tags for c in concepts)
+            assert "semantic" in next(c for c in concepts if c.chunk_index == 0).tags
+
+    def test_completed_partial_recovery_runs_through_queue(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        reg.create("partial", "test.doc", "doc", 100)
+        reg.update("partial", status="done", problem="llm_partial_result")
+        pipeline = self.setup_pipeline(monkeypatch)
+        pipeline.settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+        (pipeline.settings.uploads_dir / "partial.doc").write_bytes(Path(src).read_bytes())
+        store = StagingStore("partial")
+        store.create(2)
+        for i, text in enumerate(["first chunk", "second chunk"]):
+            store.save_chunk_text(i, text)
+            store.append_chunk(i, [_concept()], degradation=[{"event": "llm_salvage"}] if i == 1 else [])
+        calls = []
+
+        def generate(text, filename, index, total, **kwargs):
+            calls.append(index)
+            return [_concept()]
+
+        pipeline.okf_generator.generate_chunk = generate
+        pipeline.resume("partial")
+        pipeline._executor.shutdown(wait=True)
+        assert calls == [2]
+        assert reg.get("partial")["status"] == "done"
+        assert reg.get("partial")["problem"] is None
+        assert reg.get("partial")["partial_chunks"] == []
+        assert not store.exists()
+
+
 class TestPipelineLLMChaos:
     def test_chunk_retry_recovers_after_transient_timeout(self, isolated_env, monkeypatch):
         reg, src = isolated_env

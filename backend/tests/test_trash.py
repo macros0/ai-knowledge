@@ -59,6 +59,31 @@ def no_qdrant(monkeypatch):
 
 
 class TestSoftDelete:
+    def test_delete_and_restore_update_duplicate_badges_in_api(self, client, monkeypatch):
+        from app.services.deduplication import index_document
+
+        login(client)
+        no_qdrant(monkeypatch)
+        reg = DocumentRegistry()
+        a, b = "aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"
+        for did in (a, b):
+            reg.create(did, f"{did}.pdf", "application/pdf", 123)
+            index_document(did, "Одинаковый текст документа для проверки дубликатов")
+
+        response = client.delete(f"/api/documents/{b}")
+        assert response.status_code == 200, response.text
+        active = client.get("/api/documents").json()["documents"]
+        assert len(active) == 1
+        assert active[0]["id"] == a
+        assert active[0]["has_duplicates"] is False
+        assert client.get("/api/documents?has_duplicates=true").json()["documents"] == []
+
+        response = client.post(f"/api/documents/{b}/restore?force=true")
+        assert response.status_code == 200, response.text
+        assert response.json()["has_duplicates"] is True
+        duplicates = client.get("/api/documents?has_duplicates=true").json()["documents"]
+        assert {doc["id"] for doc in duplicates} == {a, b}
+
     def test_delete_moves_to_trash_and_hides_from_list(self, client, monkeypatch):
         login(client)
         no_qdrant(monkeypatch)

@@ -29,6 +29,16 @@ CLASSIFIER_FALLBACK = "classifier_fallback"
 KNOWN_EVENTS = {LLM_SALVAGE, CLASSIFIER_FALLBACK}
 
 
+def has_salvage(events: list[dict] | None) -> bool:
+    return any(isinstance(item, dict) and item.get("event") == LLM_SALVAGE for item in (events or []))
+
+
+def partial_chunk_indices(chunks_data: dict) -> list[int]:
+    """Zero-based indices with incomplete LLM output, excluding classifier fallback."""
+    return sorted(int(index) for index, info in chunks_data.items()
+                  if has_salvage((info or {}).get("degradation")))
+
+
 def record(event: str, detail: str = "") -> None:
     """Фиксирует событие деградации в thread-local буфер.
 

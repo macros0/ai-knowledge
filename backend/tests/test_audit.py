@@ -198,6 +198,42 @@ class TestUploadAuditHook:
 
 
 class TestResumeAuditHook:
+    @pytest.mark.parametrize("problem", ["llm_partial_result", "no_concepts"])
+    def test_done_partial_document_can_resume_with_checkpoints(self, client, monkeypatch, problem):
+        from app.api import documents as docs
+        from app.models.schemas import Concept
+        from app.services.staging import StagingStore
+
+        login(client)
+        reg = DocumentRegistry()
+        did = "0123456789abcdef"
+        reg.create(did, "a.pdf", "application/pdf", 123)
+        reg.update(did, status="done", problem=problem)
+        store = StagingStore(did)
+        store.create(1)
+        store.append_chunk(0, [Concept(id="a", title="A", type="concept", content="partial")],
+                           degradation=[{"event": "llm_salvage"}])
+        assert client.get(f"/api/documents/{did}").json()["partial_chunks"] == [0]
+        called = []
+        monkeypatch.setattr(docs.get_pipeline(), "resume", lambda doc_id: called.append(doc_id))
+        response = client.post(f"/api/documents/{did}/resume")
+        assert response.status_code == 200, response.text
+        assert called == [did]
+
+    def test_done_legacy_partial_without_checkpoints_is_not_silently_regenerated(self, client, monkeypatch):
+        from app.api import documents as docs
+
+        login(client)
+        reg = DocumentRegistry()
+        did = "0123456789abcdef"
+        reg.create(did, "a.pdf", "application/pdf", 123)
+        reg.update(did, status="done", problem="llm_partial_result")
+        called = []
+        monkeypatch.setattr(docs.get_pipeline(), "resume", lambda doc_id: called.append(doc_id))
+        response = client.post(f"/api/documents/{did}/resume")
+        assert response.status_code == 400
+        assert not called
+
     def test_resume_records_document_resume_and_transitions_status(self, client, monkeypatch):
         from app.api import documents as docs
 

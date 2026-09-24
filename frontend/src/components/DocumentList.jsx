@@ -582,7 +582,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const groups = groupBy ? buildGroups(docs, groupBy, locale, t) : [];
   const activeFilterCount = countActiveDocumentFilters({
     search: searchInput.trim() || search,
-    uploader: chosenUploader,
+    uploader: selectedUploader,
     status: statusFilter,
     problemOnly,
     module: moduleFilter,
@@ -819,9 +819,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                   <RefreshIcon className={regenerating[doc.id] ? "spin" : undefined} />
                 </button>
               )}
-              {(doc.status === "paused" || doc.status === "failed") && (
+              {(doc.status === "paused" || doc.status === "failed" || (doc.status === "done" && doc.partial_chunks?.length > 0)) && (
                 <button className="delete-btn" onClick={() => resume(doc)}>
-                  {t("docs.resumeBtn")}
+                  {t(doc.status === "done" ? "docs.repairPartialBtn" : "docs.resumeBtn")}
                 </button>
               )}
               <button className="delete-btn" onClick={() => remove(doc)} title={t("docs.deleteTitle")}>

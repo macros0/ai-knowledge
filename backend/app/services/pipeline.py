@@ -143,6 +143,15 @@ class Pipeline:
         if not doc:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         self._ensure_not_running(doc_id)
+        if doc.get("status") == "done":
+            staging = StagingStore(doc_id)
+            manifest = staging.load() or {}
+            if not staging.partial_chunks or any(
+                not (staging.dir / f"chunk_{i:02d}.{ext}").is_file()
+                for i in range(manifest.get("total_chunks", 0))
+                for ext in ("md", "json")
+            ):
+                raise DomainError("Нет контрольных данных для догенерации", code=codes.PARTIAL_REGENERATION_UNAVAILABLE)
         filename = doc["filename"]
         ext = Path(filename).suffix.lower()
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
@@ -381,12 +390,9 @@ class Pipeline:
         # поиске дублей до следующего реиндекса.
         if self.settings.dedup_enabled:
             try:
-                from app.services.deduplication import find_duplicates_for_document, index_document
+                from app.services.deduplication import index_document
 
                 index_document(doc_id, markdown)
-                dup = find_duplicates_for_document(doc_id)
-                if dup["level2"] or dup["level3"]:
-                    self.registry.update(doc_id, has_duplicates=True)
             except Exception:
                 logger.warning(
                     "[%s] Индексация сигнатуры дедупликации не удалась", doc_id, exc_info=True
@@ -405,6 +411,15 @@ class Pipeline:
         gen_quality.drain()
         if resume and staging.exists():
             manifest = staging.load()
+            if staging.partial_chunks:
+                # Never mix previous concept checkpoints with a new chunk layout.
+                # Changes to parser/chunk settings require full regeneration.
+                if total != manifest.get("total_chunks") or any(
+                    not (staging.dir / f"chunk_{i:02d}.md").is_file()
+                    or (staging.dir / f"chunk_{i:02d}.md").read_text(encoding="utf-8") != chunk
+                    for i, chunk in enumerate(chunks)
+                ):
+                    raise DomainError("Изменилась разбивка документа на чанки", code=codes.PARTIAL_REGENERATION_UNAVAILABLE)
             done = len(manifest.get("processed_chunks", [])) if manifest else 0
             logger.info("Resume документа %s: продолжено с %d/%d чанков", doc_id, done, total)
         else:
@@ -421,7 +436,7 @@ class Pipeline:
         for i, chunk in enumerate(chunks):
             staging.save_chunk_text(i, chunk)
 
-        max_chunk_retries = self.settings.llm_chunk_retry_attempts
+        max_chunk_retries = max(1, self.settings.llm_chunk_retry_attempts)
         chunk_backoff = self.settings.llm_chunk_retry_backoff_seconds
         # Провенанс генерации (Этап 2b): модель/промпт — константы прохода,
         # generated_at — момент успешной генерации конкретного чанка (ниже).
@@ -429,8 +444,9 @@ class Pipeline:
         run_prompt_version = self.okf_generator.prompt_version()
 
         try:
+            partial_chunks = set(staging.partial_chunks)
             for i, chunk in enumerate(chunks):
-                if staging.has_chunk(i):
+                if staging.has_chunk(i) and i not in partial_chunks:
                     continue
                 if self._abort_events.get(doc_id, threading.Event()).is_set():
                     logger.info("Генерация %s прервана по запросу удаления", doc_id)
@@ -440,6 +456,7 @@ class Pipeline:
                 degradation: list[dict] = []
                 for chunk_attempt in range(1, max_chunk_retries + 1):
                     try:
+                        gen_quality.drain()
                         self.registry.update(doc_id, current_chunk=i + 1)
                         concepts = self.okf_generator.generate_chunk(chunk, filename, i + 1, total, doc_id=doc_id)
                         # Телеметрия деградации этого чанка (salvage JSON,
@@ -449,8 +466,32 @@ class Pipeline:
                             logger.info("Генерация %s прервана после чанка %d", doc_id, i + 1)
                             return
                         self.registry.update(doc_id, error=None, error_code=None)
+                        incomplete = gen_quality.has_salvage(degradation)
+                        # Keep the previous partial checkpoint until a complete
+                        # replacement is ready; never discard a usable result
+                        # because a subsequent recovery attempt failed.
+                        if not incomplete or not staging.has_chunk(i):
+                            if user_tags and concepts:
+                                for concept in concepts:
+                                    concept.tags = _merge_tags(concept.tags, user_tags)
+                            if attachment_shares and concepts and attachment_shares[i] >= self.settings.okf_attachment_tag_threshold:
+                                for concept in concepts:
+                                    concept.tags = _merge_tags(concept.tags, [ATTACHMENT_TAG])
+                            provenance = {
+                                "generated_at": datetime.now(timezone.utc).isoformat(),
+                                "model_id": run_model_id,
+                                "prompt_version": run_prompt_version,
+                            }
+                            staging.append_chunk(i, concepts, degradation=degradation, provenance=provenance, global_tags=user_tags)
+                        if incomplete and chunk_attempt < max_chunk_retries:
+                            logger.info("[%s] Догенерация чанка %d/%d: попытка %d/%d",
+                                        doc_id, i + 1, total, chunk_attempt + 1, max_chunk_retries)
+                            if self._abort_events.get(doc_id, threading.Event()).wait(timeout=chunk_backoff * chunk_attempt):
+                                return
+                            continue
                         break
                     except Exception as exc:
+                        gen_quality.drain()
                         if (
                             isinstance(exc, LLMTruncationError)
                             or is_fatal_error(exc)
@@ -468,19 +509,6 @@ class Pipeline:
                         if self._abort_events.get(doc_id, threading.Event()).wait(timeout=delay):
                             return
 
-                if user_tags and concepts:
-                    for concept in concepts:
-                        concept.tags = _merge_tags(concept.tags, user_tags)
-                if attachment_shares and concepts and attachment_shares[i] >= self.settings.okf_attachment_tag_threshold:
-                    for concept in concepts:
-                        concept.tags = _merge_tags(concept.tags, [ATTACHMENT_TAG])
-                if concepts is not None:
-                    provenance = {
-                        "generated_at": datetime.now(timezone.utc).isoformat(),
-                        "model_id": run_model_id,
-                        "prompt_version": run_prompt_version,
-                    }
-                    staging.append_chunk(i, concepts, degradation=degradation, provenance=provenance)
                 self.registry.update(doc_id, processed_chunks=len(staging.processed_chunks), current_chunk=None)
         except Exception as exc:
             logger.warning("Генерация OKF прервана на документе %s: %s", doc_id, exc, exc_info=True)
@@ -534,6 +562,8 @@ class Pipeline:
         # Qdrant `dev_tags` — отдельное поле, не смешивается с `tags`.
         dev_tags: list[str] = []
         doc = self.registry.get(doc_id)
+        if doc is not None:
+            global_tags = list(doc.get("tags") or [])
         if doc and doc.get("development_id"):
             dev_tags = get_development_registry().dev_tags(doc["development_id"])
         # Язык документа для payload Qdrant (Этап 7 фаза D): считаем ДО индексации,
@@ -560,6 +590,15 @@ class Pipeline:
                     provenance_of_chunk[int(idx_str)] = prov
                 except (TypeError, ValueError):
                     pass
+
+        # Retained checkpoints can outlive edits to document tags. Reconcile
+        # each checkpoint's original user tags, preserving generated tags and
+        # all content/provenance of the chunks that did not need regeneration.
+        for concept, slug in zip(concepts, slugs):
+            info = chunks_data.get(str(chunk_of_slug.get(slug))) or {}
+            original_tags = set(info.get("global_tags", manifest.get("global_tags", [])))
+            removed = original_tags - set(global_tags)
+            concept.tags = _merge_tags([tag for tag in concept.tags if tag not in removed], global_tags)
 
         chunks_meta: list[dict] = []
         chunk_rows: list[dict] = []
@@ -751,9 +790,10 @@ class Pipeline:
             problem=problem,
             **locale_fields,
         )
-        # Checkpoints — единственный способ возобновить финализацию. Удаляем
-        # их лишь после подтверждённого UPDATE документа в БД.
-        staging.remove()
+        # Keep incomplete generation checkpoints for selective recovery, even
+        # after successful indexing. Clean runs release them after the DB update.
+        if not staging.partial_chunks:
+            staging.remove()
         logger.info(
             "Документ %s обработан: %d OKF-концептов, %d чанков%s",
             filename, len(okf_docs), total_chunks,

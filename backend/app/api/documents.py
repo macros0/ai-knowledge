@@ -789,7 +789,11 @@ def resume_document(
             code=errors.DOCUMENT_NOT_FOUND,
             detail="Документ не найден",
         )
-    if doc.get("status") not in ("paused", "failed"):
+    if doc.get("deleted_at") is not None:
+        raise ApiError(status_code=404, code=errors.DOCUMENT_NOT_FOUND, detail="Документ удалён")
+    if doc.get("status") not in ("paused", "failed") and not (
+        doc.get("status") == "done" and doc.get("partial_chunks")
+    ):
         raise ApiError(
             status_code=400,
             code=errors.NOT_RESUMABLE,

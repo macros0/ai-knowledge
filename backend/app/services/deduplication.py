@@ -163,6 +163,7 @@ def set_file_hash(doc_id: str, file_hash: str) -> None:
 
 def index_document(doc_id: str, markdown: str) -> None:
     """Вычисляет content_hash + MinHash-подпись и заполняет LSH-бакеты документа."""
+    previous_ids = _duplicate_ids(find_duplicates_for_document(doc_id))
     settings = get_settings()
     ch = content_hash(markdown)
     sig = minhash_signature(markdown)
@@ -190,6 +191,29 @@ def index_document(doc_id: str, markdown: str) -> None:
                             bucket_hash=bucket_hash(sig, band_index, rows),
                         )
                     )
+    refresh_duplicate_flags(doc_id, previous_ids)
+
+
+def _duplicate_ids(result: dict) -> set[str]:
+    return {item["doc"]["id"] for items in result.values() for item in items}
+
+
+def refresh_duplicate_flags(doc_id: str, previous_ids: set[str] | None = None) -> None:
+    """Пересчитывает бейдж документа и его соседей по актуальному составу.
+
+    У удалённого документа подпись сохранена: по ней находим затронутых
+    активных соседей. При смене подписи учитываем также прежних соседей.
+    У каждого соседа могут оставаться другие дубли, поэтому флаг нельзя
+    просто сбросить у всей группы.
+    """
+    duplicates = find_duplicates_for_document(doc_id)
+    affected = {doc_id} | _duplicate_ids(duplicates) | (previous_ids or set())
+    for affected_id in sorted(affected):
+        matches = duplicates if affected_id == doc_id else find_duplicates_for_document(affected_id)
+        with session_scope() as s:
+            doc = s.get(Document, affected_id)
+            if doc is not None:
+                doc.has_duplicates = doc.deleted_at is None and bool(matches["level2"] or matches["level3"])
 
 
 def _load_signature(doc_id: str) -> list[int] | None:

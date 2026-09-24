@@ -84,12 +84,6 @@ def process_doc(doc_id: str, filename: str, pipeline: Pipeline, settings) -> dic
         if markdown.strip():
             index_document(doc_id, markdown)
             result["content"] = True
-            from app.services.deduplication import find_duplicates_for_document
-            from app.services.registry import get_registry
-
-            dup = find_duplicates_for_document(doc_id)
-            if dup["level2"] or dup["level3"]:
-                get_registry().update(doc_id, has_duplicates=True)
         else:
             result["skipped"].append("empty_markdown")
     except Exception as exc:

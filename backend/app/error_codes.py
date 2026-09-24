@@ -66,6 +66,7 @@ PROCESSING_UNAVAILABLE = "processing_unavailable"
 # --- Доменные правила (коды для DomainError сервисного слоя) ---
 NOT_IN_TRASH = "not_in_trash"
 NOT_RESUMABLE = "not_resumable"
+PARTIAL_REGENERATION_UNAVAILABLE = "partial_regeneration_unavailable"
 UNSUPPORTED_FILE_TYPE = "unsupported_file_type"
 EMPTY_VALUE = "empty_value"
 TAG_IN_USE = "tag_in_use"

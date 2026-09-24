@@ -8,7 +8,8 @@
 Результаты каждого чанка пишутся сразу после генерации LLM, поэтому при падении
 обработанные чанки сохраняются, а повторный запуск пропускает их (has_chunk /
 processed_chunks). При финализации концепты читаются из чанков в порядке
-индексов, бандл собирается в okf_bundles, staging удаляется.
+индексов, бандл собирается в okf_bundles. При неполной генерации staging
+сохраняется для догенерации только проблемных чанков; при полной — удаляется.
 
 Замена data/staging/{doc_id}/manifest.json → таблица document_staging (JSONB),
 как в MIGRATION_PLAN.md §3.3/§5.
@@ -26,6 +27,7 @@ from app.db.models import DocumentStaging
 from app.db.session import session_scope
 from app.models.schemas import Concept
 from app.services.json_atomic import write_json_atomic
+from app.services.gen_quality import partial_chunk_indices
 from app.services.okf_generator import _slugify
 
 
@@ -112,6 +114,10 @@ class StagingStore:
     def has_chunk(self, index: int) -> bool:
         return index in self.processed_chunks
 
+    @property
+    def partial_chunks(self) -> list[int]:
+        return partial_chunk_indices((self.load() or {}).get("chunks_data", {}))
+
     def save_chunk_text(self, index: int, text: str) -> None:
         """Сохраняет сырой текст чанка (LLM-вход) для просмотра в UI.
 
@@ -127,6 +133,7 @@ class StagingStore:
         concepts: list[Concept],
         degradation: list[dict] | None = None,
         provenance: dict | None = None,
+        global_tags: list[str] | None = None,
     ) -> list[str]:
         """Сохраняет концепты чанка и обновляет manifest. Возвращает занятые слаги.
 
@@ -138,6 +145,9 @@ class StagingStore:
         {generated_at (ISO), model_id, prompt_version}. Переживает resume:
         при финализации попадает в okf_concepts.generated_at/model_id/
         prompt_version, не перезаписываясь при смене только тегов/разработки.
+
+        global_tags — пользовательские теги на момент этой генерации, чтобы
+        последующая догенерация не возвращала удалённые пользователем теги.
         """
         with self._lock:
             manifest = self.load() or self.create(index + 1, global_tags=[])
@@ -145,17 +155,19 @@ class StagingStore:
             if index not in processed:
                 processed.append(index)
                 processed.sort()
-            used = list(manifest.get("used_slugs", []))
+            chunks_data = dict(manifest.get("chunks_data", {}))
+            previous_slugs = set((chunks_data.get(str(index)) or {}).get("slugs", []))
+            used = [slug for slug in manifest.get("used_slugs", []) if slug not in previous_slugs]
             slugs = self._allocate_slugs(concepts, used)
             used.extend(slugs)
             chunk_file = f"chunk_{index:02d}.json"
             write_json_atomic(self.dir / chunk_file, [c.model_dump() for c in concepts])
-            chunks_data = dict(manifest.get("chunks_data", {}))
             info = {"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs}
             if degradation:
                 info["degradation"] = degradation
             if provenance:
                 info["provenance"] = provenance
+            info["global_tags"] = list(global_tags if global_tags is not None else manifest.get("global_tags", []))
             chunks_data[str(index)] = info
             manifest.update(
                 {

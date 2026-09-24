@@ -52,6 +52,8 @@ class DocumentOut(BaseModel):
     total_chunks: int = 0
     processed_chunks: int = 0
     current_chunk: int | None = None
+    # Zero-based indices recoverable from retained generation checkpoints.
+    partial_chunks: list[int] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     uploaded_by: str | None = None
     created_at: datetime

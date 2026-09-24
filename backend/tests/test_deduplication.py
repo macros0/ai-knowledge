@@ -116,6 +116,56 @@ class TestFindDuplicates:
         assert count == 24
 
 
+class TestDuplicateBadges:
+    def _twins(self, count=2):
+        reg = get_registry()
+        ids = [letter * 16 for letter in "abc"[:count]]
+        for did in ids:
+            reg.create(did, f"{did}.docx", "x", 10)
+            index_document(did, TEXT_A)
+        return reg, ids
+
+    def test_index_marks_both_documents(self):
+        reg, ids = self._twins()
+        assert all(reg.get(did)["has_duplicates"] for did in ids)
+
+    def test_delete_last_twin_clears_badge(self):
+        reg, (a, b) = self._twins()
+        # Reproduce persisted flags created by the old pipeline.
+        for did in (a, b):
+            reg.update(did, has_duplicates=True)
+        reg.soft_delete(b, "editor")
+        assert not reg.get(a)["has_duplicates"]
+        assert not reg.get(b)["has_duplicates"]
+
+    def test_delete_keeps_badges_while_another_twin_remains(self):
+        reg, (a, b, c) = self._twins(3)
+        for did in (a, b, c):
+            reg.update(did, has_duplicates=True)
+        reg.soft_delete(c, "editor")
+        assert reg.get(a)["has_duplicates"]
+        assert reg.get(b)["has_duplicates"]
+        reg.soft_delete(b, "editor")
+        assert not reg.get(a)["has_duplicates"]
+
+    def test_restore_recomputes_both_badges(self):
+        reg, (a, b) = self._twins()
+        reg.soft_delete(b, "editor")
+        for did in (a, b):
+            reg.update(did, has_duplicates=False)
+        reg.restore(b)
+        assert reg.get(a)["has_duplicates"]
+        assert reg.get(b)["has_duplicates"]
+
+    def test_reindex_clears_former_twin_badges(self):
+        reg, (a, b) = self._twins()
+        for did in (a, b):
+            reg.update(did, has_duplicates=True)
+        index_document(b, TEXT_B)
+        assert not reg.get(a)["has_duplicates"]
+        assert not reg.get(b)["has_duplicates"]
+
+
 class TestDuplicateSummarySerialization:
     def test_file_hash_exists_returns_json_serializable(self):
         """Регрессия: datetime в summary ломал JSONResponse 409 на дубле (500)."""
