@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { approveJob, cancelJob, deleteExportArtifacts, friendlyApiError, listJobs } from "@/lib/api";
+import { ApiError, approveJob, cancelJob, deleteExportArtifacts, friendlyApiError, listJobs } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import { useChat } from "@/context/ChatContext";
@@ -97,7 +97,7 @@ export default function AdminPanel() {
                 #{job.id} · {job.created_by ?? "—"} · {fmtTime(job.created_at)}
                 {job.approved_by ? ` · ${t("admin.approvedBy", { name: job.approved_by })}` : ""}
               </div>
-              {job.error && <div className="job-error">{job.result?.error_code ? t(`apiError.${job.result.error_code}`) : job.error}</div>}
+              {job.error && <div className="job-error">{friendlyApiError(new ApiError("", { code: job.result?.error_code }), t)}</div>}
               {job.result?.errors?.length > 0 && (
                 <div className="job-error">
                   {t("admin.errorsByDocs", {

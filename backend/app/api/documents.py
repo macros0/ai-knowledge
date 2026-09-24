@@ -830,7 +830,7 @@ def regenerate_document(
             code=errors.DOCUMENT_NOT_FOUND,
             detail="Документ не найден",
         )
-    if doc.get("status") in ("uploaded", "processing", "splitting", "indexing"):
+    if doc.get("status") in ("uploaded", "queued", "processing", "splitting", "indexing"):
         raise ApiError(
             status_code=409,
             code=errors.ALREADY_PROCESSING,

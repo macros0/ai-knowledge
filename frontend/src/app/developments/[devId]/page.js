@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { friendlyApiError, getDevelopment, listDevelopmentDocuments } from "@/lib/api";
+import { ApiError, friendlyApiError, getDevelopment, listDevelopmentDocuments } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import SearchableSelect from "@/components/SearchableSelect";
@@ -26,6 +26,7 @@ export default function DevelopmentCardPage() {
 
   const STATUS_LABELS = {
     uploaded: t("status.uploaded"),
+    queued: t("status.queued"),
     processing: t("status.processing"),
     splitting: t("status.splitting"),
     indexing: t("status.indexing"),
@@ -122,7 +123,7 @@ export default function DevelopmentCardPage() {
               <div>
                 <strong>{doc.filename}</strong>
                 <div className="meta">
-                  {doc.error ? t("docs.errorText", { message: doc.error }) : t("docs.metaFile", { size: (doc.size / 1024).toFixed(1), count: doc.okf_concept_count })}
+                  {doc.error || doc.error_code ? friendlyApiError(new ApiError("", { code: doc.error_code }), t) : t("docs.metaFile", { size: (doc.size / 1024).toFixed(1), count: doc.okf_concept_count })}
                   {doc.uploaded_by && (
                     <>
                       <br />

@@ -770,7 +770,7 @@ class ExportQueue:
             )
         for job_id in running:
             self._retire_artifacts(job_id)
-            self._finish_failed(job_id, codes.INTERNAL_ERROR, total=0)
+            self._finish_failed(job_id, codes.JOB_INTERRUPTED, total=0)
         for job_id in queued:
             self._queue.put(job_id)
         self.run_maintenance_once()

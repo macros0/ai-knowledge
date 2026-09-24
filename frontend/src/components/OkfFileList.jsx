@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/i18n/LocaleContext";
 import { PaperclipIcon } from "./icons";
+import { friendlyApiError, getDocumentChunks } from "@/lib/api";
 
-const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
+const BUSY_STATUSES = ["uploaded", "queued", "processing", "splitting", "indexing", "paused"];
 
 export default function OkfFileList({
   docId,
@@ -33,16 +34,15 @@ export default function OkfFileList({
   useEffect(() => {
     if (view !== "chunks" || chunks !== null) return;
     let cancelled = false;
-    fetch(`/api/documents/${docId}/chunks`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
+    getDocumentChunks(docId)
       .then((data) => {
-        if (!cancelled) setChunks(data);
+        if (!cancelled) {
+          setChunks(data);
+          setChunkError(null);
+        }
       })
       .catch((e) => {
-        if (!cancelled) setChunkError(String(e.message || e));
+        if (!cancelled) setChunkError(e);
       });
     return () => {
       cancelled = true;
@@ -77,9 +77,10 @@ export default function OkfFileList({
 
       if (viewRef.current === "chunks") {
         try {
-          const chunksResp = await fetch(`/api/documents/${docId}/chunks`);
-          if (!cancelled && chunksResp.ok) {
-            setChunks(await chunksResp.json());
+          const nextChunks = await getDocumentChunks(docId);
+          if (!cancelled) {
+            setChunks(nextChunks);
+            setChunkError(null);
           }
         } catch {
           // best-effort refetch
@@ -183,7 +184,7 @@ export default function OkfFileList({
           </ul>
         )
       ) : chunkError ? (
-        <p className="okf-empty okf-error">{t("okf.chunksError", { error: chunkError })}</p>
+        <p className="okf-empty okf-error">{t("okf.chunksError", { error: friendlyApiError(chunkError, t) })}</p>
       ) : chunks === null ? (
         <p className="okf-empty">{t("okf.loadingChunks")}</p>
       ) : chunks.length === 0 ? (

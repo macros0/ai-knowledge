@@ -18,7 +18,7 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 import app.services.vector_store as vs_module
 from app.config import Settings
 from app.models.schemas import OkfDocument
-from app.services.errors import VectorStoreError
+from app.services.errors import VectorStoreError, processing_error_code
 from app.services.vector_store import VectorStore, concept_point_id
 
 
@@ -63,6 +63,44 @@ def store(tmp_path, monkeypatch):
 
 
 class TestUpsertBatching:
+    @pytest.mark.parametrize("mode", ["concept", "chunk"])
+    @pytest.mark.parametrize("statuses, expected", [
+        ([422], "internal_error"),
+        ([503], "processing_unavailable"),
+        ([0], "processing_unavailable"),
+        ([422, 503], "internal_error"),
+        ([503, 422], "internal_error"),
+    ])
+    def test_aggregate_preserves_failure_classification(self, store, monkeypatch, caplog, mode, statuses, expected):
+        store.settings.qdrant_upsert_batch_size = 1
+        originals = []
+        failures = {}
+
+        def upsert(*, collection_name, points):
+            point_id = str(points[0].id)
+            if point_id not in failures:
+                status = statuses[len(failures)]
+                exc = UnexpectedResponse(status, "test failure", b"x" * 600 + b"TAIL_DIAGNOSTIC", httpx.Headers()) if status else httpx.ConnectError("private connection diagnostic")
+                failures[point_id] = exc
+                originals.append(exc)
+            raise failures[point_id]
+
+        monkeypatch.setattr(store, "client", type("Client", (), {"upsert": staticmethod(upsert)})())
+        with pytest.raises(VectorStoreError) as caught:
+            vectors = [[0.1] * 8 for _ in statuses]
+            if mode == "concept":
+                store.index_concepts("a1b2c3d4e5f60718", _okf_docs(len(statuses)), vectors)
+            else:
+                store.index_chunks("a1b2c3d4e5f60718", "file.docx", ["text"] * len(statuses), [], vectors)
+
+        assert processing_error_code(caught.value) == expected
+        assert caught.value.__cause__ is not None
+        assert caught.value.__cause__.__cause__ in originals
+        assert len(failures) == len(statuses), "a failed batch must not skip the remaining batches"
+        assert any(record.exc_info for record in caplog.records)
+        if any(statuses):
+            assert "TAIL_DIAGNOSTIC" in caplog.text
+
     def test_large_set_split_into_batches(self, store, monkeypatch):
         fake = _FakeQdrant()
         monkeypatch.setattr(store, "client", fake)

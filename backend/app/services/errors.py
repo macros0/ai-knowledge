@@ -11,7 +11,50 @@ Centralized handler в main.py перехватывает DependencyUnavailableE
 """
 from __future__ import annotations
 
+import grpc
+import httpx
+
 from app import error_codes as codes
+
+
+def public_error_code(exc: Exception) -> str:
+    """Classify known recoverable failures by type/status, never by provider text."""
+    current = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, DomainError):
+            return current.code
+        if isinstance(current, (TimeoutError, httpx.TimeoutException)):
+            return codes.TIMEOUT
+        if isinstance(current, grpc.RpcError) and callable(getattr(current, "code", None)):
+            return {
+                grpc.StatusCode.UNAVAILABLE: codes.DEPENDENCY_UNAVAILABLE,
+                grpc.StatusCode.DEADLINE_EXCEEDED: codes.TIMEOUT,
+            }.get(current.code(), codes.INTERNAL_ERROR)
+        status = getattr(current, "status_code", None)
+        if status == 408:
+            return codes.TIMEOUT
+        if status == 429:
+            return codes.RATE_LIMITED
+        if isinstance(current, (ConnectionError, httpx.NetworkError, httpx.RemoteProtocolError)) or status in (500, 502, 503, 504):
+            return codes.DEPENDENCY_UNAVAILABLE
+        if isinstance(status, int) and 400 <= status < 500:
+            return codes.INTERNAL_ERROR
+        current = current.__cause__ or current.__context__
+    if isinstance(exc, DependencyUnavailableError) and exc.__cause__ is None and exc.__context__ is None:
+        return codes.DEPENDENCY_UNAVAILABLE
+    return codes.INTERNAL_ERROR
+
+
+def processing_error_code(exc: Exception) -> str:
+    """Paused documents need a resume instruction, unlike an interactive request."""
+    code = public_error_code(exc)
+    return {
+        codes.TIMEOUT: codes.GENERATION_TIMEOUT,
+        codes.RATE_LIMITED: codes.GENERATION_RATE_LIMITED,
+        codes.DEPENDENCY_UNAVAILABLE: codes.PROCESSING_UNAVAILABLE,
+    }.get(code, code)
 
 
 class DependencyUnavailableError(Exception):

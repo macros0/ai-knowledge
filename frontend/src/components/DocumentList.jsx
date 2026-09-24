@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createBulkExport, deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
+import { ApiError, createBulkExport, deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
 import { buildCompactDocumentMeta, countActiveDocumentFilters, resetDocumentFilters } from "@/lib/documentLayout.mjs";
@@ -23,7 +23,7 @@ import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import TagManagerModal from "./TagManagerModal";
 import SearchableSelect from "./SearchableSelect";
 
-const BUSY_STATUSES = ["uploaded", "processing", "splitting", "indexing", "paused"];
+const BUSY_STATUSES = ["uploaded", "queued", "processing", "splitting", "indexing", "paused"];
 
 // Фильтр по статусу OKF-генерации (Этап 5): на бэкенд уходит либо пустая строка
 // (без фильтра), либо список статусов через запятую. Детальные пункты
@@ -36,6 +36,7 @@ const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
 function progressText(doc, t) {
+  if (doc.status === "queued") return t("docs.progressQueued");
   if (doc.status === "splitting" && doc.total_chunks > 0) {
     const active = doc.current_chunk ?? doc.processed_chunks;
     return t("docs.progressChunk", { active, total: doc.total_chunks });
@@ -100,7 +101,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const { mode, hasRole, loading, user } = useAuth();
   const { settings } = useChat();
   const { showToast } = useToast();
-  const { t, tc, locale, fmtDate } = useI18n();
+  const { t, tc, locale, fmtDate, fmtDateTime } = useI18n();
   const [tagLocales, setTagLocales] = useState({});
   const [docs, setDocs] = useState([]);
   const [total, setTotal] = useState(0);
@@ -161,6 +162,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
 
   const STATUS_LABELS = {
     uploaded: t("status.uploaded"),
+    queued: t("status.queued"),
     processing: t("status.processing"),
     splitting: t("status.splitting"),
     indexing: t("status.indexing"),
@@ -177,8 +179,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     { value: "splitting", label: t("status.splitting") },
     { value: "indexing", label: t("status.indexing") },
     { value: "uploaded", label: t("status.uploaded") },
+    { value: "queued", label: t("status.queued") },
     { value: "paused", label: t("status.paused") },
-    { value: "uploaded,processing,splitting,indexing,paused", label: t("docs.statusFilterProcessing") },
+    { value: "uploaded,queued,processing,splitting,indexing,paused", label: t("docs.statusFilterProcessing") },
     { value: "failed,error", label: t("status.failed") },
   ];
 
@@ -361,7 +364,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   };
 
   const remove = async (doc) => {
-    const isActive = doc.status === "splitting" || doc.status === "processing" || doc.status === "indexing";
+    const isActive = doc.status === "queued" || doc.status === "splitting" || doc.status === "processing" || doc.status === "indexing";
     if (isActive && !window.confirm(t("docs.confirmRemoveActive", { name: doc.filename }))) {
       return;
     }
@@ -628,10 +631,13 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       !doc.development_id &&
       !doc.development_suggestion;
     const progress = progressText(doc, t);
-    const fallbackMeta = t("docs.metaFile", {
+    const fileMeta = t("docs.metaFile", {
       size: (doc.size / 1024).toFixed(1),
       count: doc.okf_concept_count,
     });
+    const fallbackMeta = doc.concepts_generated_at
+      ? `${fileMeta} · ${t("docs.conceptsGeneratedAt", { date: fmtDateTime(doc.concepts_generated_at) })}`
+      : fileMeta;
     const displayTags = (doc.tags || []).map(tagDisplay);
     const compactMeta = buildCompactDocumentMeta({
       tags: displayTags,
@@ -659,7 +665,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           <div className="doc-primary">
             <strong title={doc.filename}>{doc.filename}</strong>
             <span className="meta doc-primary-meta">
-              {doc.error_code ? t(`apiError.${doc.error_code}`) : doc.error ? t("docs.errorText", { message: doc.error }) : (progress || fallbackMeta)}
+              {doc.error_code || doc.error ? friendlyApiError(new ApiError("", { code: doc.error_code }), t) : (progress || fallbackMeta)}
             </span>
           </div>
           <div className="doc-meta-line">
@@ -803,7 +809,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           </a>
           {canEdit && (
             <span className="danger-group">
-              {!["uploaded", "processing", "splitting", "indexing"].includes(doc.status) && (
+              {!["uploaded", "queued", "processing", "splitting", "indexing"].includes(doc.status) && (
                 <button
                   className="icon-btn"
                   onClick={() => regenerate(doc)}

@@ -61,7 +61,7 @@ _interactive_semaphore: threading.BoundedSemaphore | None = None
 _semaphore_lock = threading.Lock()
 
 
-class LLMTimeoutError(Exception):
+class LLMTimeoutError(TimeoutError):
     """LLM-вызов превысил LLM_TIMEOUT_SECONDS."""
 
 

@@ -194,6 +194,21 @@ class TestRestartRecovery:
         job = q.get(running_id)
         assert job["status"] == STATUS_FAILED
         assert "перезапущен" in (job["result"] or {}).get("error", "")
+        assert job["result"]["error_code"] == "job_interrupted"
+        assert job["error"]
+
+    def test_legacy_restart_result_is_visible_with_actionable_code(self):
+        q = JobQueue(start_worker=False)
+        job_id = self._insert_job(STATUS_FAILED)
+        from app.db.models import Job
+        from app.db.session import session_scope
+
+        with session_scope() as s:
+            job = s.get(Job, job_id)
+            job.result = {"error": "Процесс сервера перезапущен во время выполнения"}
+        public = q.get(job_id)
+        assert public["error"]
+        assert public["result"]["error_code"] == "job_interrupted"
 
 
 class TestQueueOwnership:

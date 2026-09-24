@@ -83,6 +83,7 @@ class TestPipelineLLMChaos:
             calls["n"] += 1
             if calls["n"] == 1:
                 raise LLMTimeoutError("LLM вызов превысил 0.05s")
+            assert reg.get(doc_id)["error_code"] == "generation_retrying"
             return [_concept()]
 
         pipeline = Pipeline()
@@ -99,6 +100,7 @@ class TestPipelineLLMChaos:
         assert doc["status"] == "done", f"status={doc['status']} error={doc.get('error')}"
         assert calls["n"] == 2
         assert doc["error"] is None
+        assert doc["error_code"] is None
 
     def test_chunk_retry_exhausted_pauses_document(self, isolated_env, monkeypatch):
         reg, src = isolated_env
@@ -118,6 +120,7 @@ class TestPipelineLLMChaos:
         doc = reg.get(doc_id)
         assert doc["status"] == "paused"
         assert doc["error"]
+        assert doc["error_code"] == "generation_timeout"
 
 
 def test_finalize_keeps_staging_when_done_status_cannot_be_persisted(isolated_env, monkeypatch):
@@ -922,6 +925,8 @@ class TestConcurrentStart:
         from app.services.pipeline import Pipeline
 
         p = Pipeline.__new__(Pipeline)  # без Embedder/VectorStore — нужен только _start
+        p.registry = DocumentRegistry()
+        p.registry.create("doc1", "x.docx", "docx", 10)
         p._abort_events = {}
         p._threads = {}
         p._start_lock = threading.Lock()
@@ -1039,6 +1044,12 @@ class TestSharedPipelineInstance:
                 pass
 
         class _FakeRegistry:
+            def get(self, doc_id):
+                return {"status": "uploaded"}
+
+            def update(self, doc_id, **fields):
+                pass
+
             def soft_delete(self, doc_id, deleted_by=None):
                 pass
 

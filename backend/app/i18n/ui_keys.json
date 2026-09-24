@@ -321,6 +321,9 @@
   "apiError.file_not_found": [],
   "apiError.file_too_large": [],
   "apiError.forbidden": [],
+  "apiError.generation_rate_limited": [],
+  "apiError.generation_retrying": [],
+  "apiError.generation_timeout": [],
   "apiError.glossary_alias_conflict": [],
   "apiError.glossary_alias_not_found": [],
   "apiError.glossary_canonical_conflict": [],
@@ -344,6 +347,7 @@
   ],
   "apiError.internal_error": [],
   "apiError.invalid_request": [],
+  "apiError.job_interrupted": [],
   "apiError.job_not_awaiting_approval": [],
   "apiError.job_not_cancellable": [],
   "apiError.job_not_found": [],
@@ -351,12 +355,15 @@
   "apiError.no_role": [],
   "apiError.not_in_trash": [],
   "apiError.not_resumable": [],
+  "apiError.operator_rollback": [],
   "apiError.override_not_found": [],
+  "apiError.processing_unavailable": [],
   "apiError.queue_overloaded": [],
   "apiError.rate_limited": [],
   "apiError.regenerate_failed": [],
   "apiError.regenerate_timeout": [],
   "apiError.self_approval": [],
+  "apiError.server_restarted": [],
   "apiError.service.llm": [],
   "apiError.service.ollama": [],
   "apiError.service.qdrant": [],
@@ -638,6 +645,9 @@
   ],
   "docs.collapseLocaleAria": [],
   "docs.collapseTagsAria": [],
+  "docs.conceptsGeneratedAt": [
+    "date"
+  ],
   "docs.confirmRegenerate": [
     "name"
   ],
@@ -709,6 +719,7 @@
     "processed",
     "total"
   ],
+  "docs.progressQueued": [],
   "docs.quickSelect": [],
   "docs.regenerateError": [
     "message"
@@ -1024,6 +1035,7 @@
   "status.indexing": [],
   "status.paused": [],
   "status.processing": [],
+  "status.queued": [],
   "status.splitting": [],
   "status.uploaded": [],
   "tags.combobox.noMatch": [],

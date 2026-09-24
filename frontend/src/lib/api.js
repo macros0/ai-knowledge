@@ -35,8 +35,7 @@ export class ApiError extends Error {
 // Ключ словаря и параметры для ошибки API — чистая функция, тестируется без DOM.
 //
 // Приоритет: стабильный code из тела ответа -> сервис недоступной зависимости
-// -> статус. Если код неизвестен клиенту (бэкенд новее фронтенда), возвращаем
-// null и вызывающий показывает detail — диагностику как есть, лучше чем ничего.
+// -> статус. Неизвестные ошибки получают безопасное общее сообщение.
 export function apiErrorKey(err) {
   if (!(err instanceof ApiError)) return null;
   if (err.isDependencyUnavailable) {
@@ -49,27 +48,30 @@ export function apiErrorKey(err) {
   }
   if (err.status === 404) return { key: "apiError.endpointMissing", params: {} };
   if (err.status === 0) return { key: "apiError.backendUnreachable", params: {} };
-  // Кода нет — общая формулировка по статусу потеряла бы смысл сообщения
-  // ("Тег используется документами" информативнее, чем "Ошибка (HTTP 409)").
+  const statusCode = {
+    400: "invalid_request", 408: "timeout", 409: "conflict",
+    413: "file_too_large", 422: "invalid_request", 429: "rate_limited",
+    502: "dependency_unavailable", 503: "dependency_unavailable", 504: "timeout",
+  }[err.status];
+  if (statusCode) return { key: `apiError.${statusCode}`, params: {} };
   return null;
 }
 
 // Человекочитаемое сообщение об ошибке API на языке интерфейса: тосты в админ-UI
 // не должны показывать «Not Found» / «Internal Server Error» без контекста.
-// t — переводчик из useI18n(); detail с бэкенда остаётся фолбэком для кодов,
-// которых нет в словаре клиента.
+// В UX допускаются только тексты из словаря: detail/message могут содержать
+// ответы провайдера, идентификаторы, SQL и трассировки исключений.
 export function friendlyApiError(err, t) {
   const tr = t || ((k) => k);
   const picked = apiErrorKey(err);
   if (picked) {
     const text = tr(picked.key, picked.params);
-    // text === key означает, что ключа нет в словаре клиента (бэкенд новее) —
-    // тогда лучше показать detail, чем сам ключ.
-    if (text !== picked.key) return text;
+    if (text && text !== picked.key) return text;
   }
-  if (err && err.message) return err.message;
-  const status = err && err.status;
-  return status ? tr("apiError.http", { status }) : tr("apiError.unknown");
+  const fallback = tr("apiError.internal_error");
+  return fallback && fallback !== "apiError.internal_error"
+    ? fallback
+    : "Внутренняя ошибка. Обратитесь в техническую поддержку.";
 }
 
 // Единственная точка вызова fetch в модуле: URL берётся как есть, разбор
@@ -379,6 +381,10 @@ export function unblockUser(externalId) {
 
 export function listOkfFiles(docId) {
   return request(`/documents/${docId}/okf`);
+}
+
+export function getDocumentChunks(docId) {
+  return request(`/documents/${docId}/chunks`);
 }
 
 export function getOkfContent(docId, filename) {

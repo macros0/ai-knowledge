@@ -29,6 +29,7 @@ from app.services.dev_detector import attach_development, detect
 from app.services.development_registry import get_development_registry
 from app.services.embedder import Embedder
 from app import error_codes as codes
+from app.services.errors import processing_error_code
 from app.services.errors import (
     ConflictError,
     DependencyUnavailableError,
@@ -244,17 +245,29 @@ class Pipeline:
                     code=codes.QUEUE_OVERLOADED,
                 )
             self._abort_events[doc_id] = threading.Event()
+            previous_state = None
             try:
+                doc = self.registry.get(doc_id)
+                if doc:
+                    previous_state = {key: doc.get(key) for key in ("status", "error", "error_code")}
+                # Publish admission before submit: a busy executor may not start
+                # this document for minutes, and resume must stop showing paused.
+                self.registry.update(doc_id, status="queued", error=None, error_code=None)
                 task = self._executor.submit(
                     self._run, doc_id, filepath, filename, user_tags, resume
                 )
             except Exception:
                 self._abort_events.pop(doc_id, None)
                 self._pipeline_slots.release()
+                if previous_state is not None:
+                    self.registry.update(doc_id, **previous_state)
                 raise
             self._threads[doc_id] = task
 
     def _run(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
+        # Wait until _start registers the Future before processing/cleanup.
+        with self._start_lock:
+            pass
         try:
             self._process(doc_id, filepath, filename, user_tags, resume=resume)
         except Exception as exc:
@@ -262,7 +275,7 @@ class Pipeline:
             if is_storage_full(exc):
                 self._record_storage_full(doc_id)
             else:
-                self.registry.update(doc_id, status="error", error=str(exc), error_code=None)
+                self.registry.update(doc_id, status="error", error=str(exc), error_code=processing_error_code(exc))
         finally:
             self._abort_events.pop(doc_id, None)
             self._threads.pop(doc_id, None)
@@ -331,6 +344,9 @@ class Pipeline:
                 self._threads.pop(doc_id, None)
                 self._abort_events.pop(doc_id, None)
                 self._pipeline_slots.release()
+                # A cancelled queued task has no worker to persist a pause.
+                # Keep it resumable if the user restores it from the trash.
+                self.registry.update(doc_id, status="paused", error=None, error_code=None)
                 return
             try:
                 task.result(timeout=2.0)
@@ -432,7 +448,7 @@ class Pipeline:
                         if self._abort_events.get(doc_id, threading.Event()).is_set():
                             logger.info("Генерация %s прервана после чанка %d", doc_id, i + 1)
                             return
-                        self.registry.update(doc_id, error=None)
+                        self.registry.update(doc_id, error=None, error_code=None)
                         break
                     except Exception as exc:
                         if (
@@ -440,7 +456,7 @@ class Pipeline:
                             or is_fatal_error(exc)
                             or chunk_attempt == max_chunk_retries
                         ):
-                            self.registry.update(doc_id, error=str(exc))
+                            self.registry.update(doc_id, error=str(exc), error_code=processing_error_code(exc))
                             raise
                         delay = chunk_backoff * chunk_attempt
                         msg = (
@@ -448,7 +464,7 @@ class Pipeline:
                             f"Повтор {chunk_attempt}/{max_chunk_retries} через {int(delay)}с..."
                         )
                         logger.warning("Чанк %d/%d: %s", i + 1, total, msg)
-                        self.registry.update(doc_id, error=msg)
+                        self.registry.update(doc_id, error=msg, error_code=codes.GENERATION_RETRYING)
                         if self._abort_events.get(doc_id, threading.Event()).wait(timeout=delay):
                             return
 
@@ -467,7 +483,7 @@ class Pipeline:
                     staging.append_chunk(i, concepts, degradation=degradation, provenance=provenance)
                 self.registry.update(doc_id, processed_chunks=len(staging.processed_chunks), current_chunk=None)
         except Exception as exc:
-            logger.warning("Генерация OKF прервана на документе %s: %s", doc_id, exc)
+            logger.warning("Генерация OKF прервана на документе %s: %s", doc_id, exc, exc_info=True)
             if is_storage_full(exc):
                 self._record_storage_full(doc_id, processed_chunks=len(staging.processed_chunks))
             else:
@@ -475,7 +491,7 @@ class Pipeline:
                     doc_id,
                     status="paused",
                     error=str(exc),
-                    error_code=None,
+                    error_code=processing_error_code(exc),
                     processed_chunks=len(staging.processed_chunks),
                 )
             return
@@ -487,11 +503,12 @@ class Pipeline:
             # Staging не удаляем: чекпоинты всех чанков сохраняются, чтобы
             # повторный resume повторил только финализацию (embed+index),
             # не перегенерируя концепты через LLM.
-            logger.warning("Финализация документа %s прервана (зависимость недоступна): %s", doc_id, exc.user_message)
+            logger.warning("Финализация документа %s прервана (зависимость недоступна): %s", doc_id, exc.user_message, exc_info=True)
             self.registry.update(
                 doc_id,
                 status="paused",
                 error=exc.user_message,
+                error_code=processing_error_code(exc),
             )
             return
         except Exception as exc:
@@ -502,7 +519,7 @@ class Pipeline:
             if is_storage_full(exc):
                 self._record_storage_full(doc_id)
             else:
-                self.registry.update(doc_id, status="failed", error=str(exc), error_code=None)
+                self.registry.update(doc_id, status="failed", error=str(exc), error_code=processing_error_code(exc))
             return
 
     def _finalize(

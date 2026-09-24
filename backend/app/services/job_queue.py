@@ -65,6 +65,10 @@ def _utcnow() -> datetime:
 
 
 def _to_dict(job: Job) -> dict:
+    result = dict(job.result or {})
+    # Exact legacy message from our restart recovery, never arbitrary error text.
+    if not result.get("error_code") and result.get("error") == "Процесс сервера перезапущен во время выполнения":
+        result["error_code"] = codes.JOB_INTERRUPTED
     return {
         "id": job.id,
         "job_type": job.job_type,
@@ -77,8 +81,8 @@ def _to_dict(job: Job) -> dict:
         "approved_by": job.approved_by,
         "approved_at": job.approved_at,
         "params": job.params,
-        "result": job.result,
-        "error": job.error,
+        "result": result if job.result is not None else None,
+        "error": job.error or result.get("error"),
     }
 
 
@@ -130,10 +134,12 @@ class JobQueue:
                     continue
                 job.status = STATUS_FAILED
                 job.finished_at = _utcnow()
+                job.error = "Процесс сервера перезапущен во время выполнения"
                 job.result = {
                     "processed": 0,
                     "errors": [],
                     "error": "Процесс сервера перезапущен во время выполнения",
+                    "error_code": codes.JOB_INTERRUPTED,
                 }
         for job_id in queued:
             self._queue.put(job_id)
@@ -348,7 +354,7 @@ class JobQueue:
                     )
                 results.append({"doc_id": doc_id, "ok": True})
             except Exception as exc:
-                logger.warning("Массовая операция: документ %s пропущен: %s", doc_id, exc)
+                logger.warning("Массовая операция: документ %s пропущен: %s", doc_id, exc, exc_info=True)
                 errors.append({"doc_id": doc_id, "error": str(exc)})
 
         self._finish(job_id, results, errors)

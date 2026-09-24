@@ -38,7 +38,7 @@ from app.auth.api import router as auth_router
 from app.auth.service import require_user
 from app.config import get_settings
 from app.prompts.store import get_store
-from app.services.errors import DependencyUnavailableError
+from app.services.errors import DependencyUnavailableError, public_error_code
 from app.services.health import get_health
 from app.services.storage import is_storage_full
 from app.services.vector_store import VectorStore
@@ -46,6 +46,7 @@ from docparser import PdfProviderUnavailable, get_pdf_provider_metadata
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+INTERNAL_ERROR_MESSAGE = "Внутренняя ошибка. Обратитесь в техническую поддержку."
 
 
 def _validate_runtime_dependencies() -> None:
@@ -83,7 +84,7 @@ class CatchAllErrorsMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=500,
                 content={
-                    "detail": "Внутренняя ошибка сервера. Обратитесь к администратору.",
+                    "detail": INTERNAL_ERROR_MESSAGE,
                     "code": "internal_error",
                 },
             )
@@ -328,7 +329,7 @@ def create_app() -> FastAPI:
     async def api_error_handler(request: Request, exc: ApiError):
         """Плоское тело ошибки: {detail, code, ...}.
 
-        detail — диагностика (русская, для логов), code — стабильный контракт,
+        detail для серверных сбоев безопасен; code — стабильный контракт,
         по которому клиент берёт текст из своего словаря и показывает его на
         языке интерфейса (см. app/api/errors.py).
 
@@ -336,14 +337,16 @@ def create_app() -> FastAPI:
         штатный http_exception_handler FastAPI, который делал это сам, — без
         этого Retry-After (429) и WWW-Authenticate (401) до клиента не дойдут.
         """
+        logger.warning("Ошибка API %s %s: %s", request.method, request.url.path, exc.detail, exc_info=exc)
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.detail, "code": exc.code, **exc.extra},
+            content={**exc.extra, "detail": INTERNAL_ERROR_MESSAGE if exc.status_code >= 500 else exc.detail, "code": exc.code},
             headers=exc.headers,
         )
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error_handler(request: Request, exc: StarletteHTTPException):
+        logger.warning("Ошибка HTTP %s %s: %s", request.method, request.url.path, exc.detail, exc_info=exc)
         # Multipart parser сохраняет UploadFile во временный файл ещё до
         # входа в documents.upload_document. FastAPI превращает ENOSPC там в
         # HTTP 400, но клиенту всё равно нужен единый контракт storage_full.
@@ -352,7 +355,11 @@ def create_app() -> FastAPI:
                 status_code=507,
                 content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
             )
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+        content = (
+            {"detail": INTERNAL_ERROR_MESSAGE, "code": error_codes.INTERNAL_ERROR}
+            if exc.status_code >= 500 else {"detail": exc.detail}
+        )
+        return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(request: Request, exc: RequestValidationError):
@@ -379,16 +386,23 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(DependencyUnavailableError)
     async def dependency_error_handler(request: Request, exc: DependencyUnavailableError):
+        logger.error("Сбой зависимости %s: %s", exc.service, exc, exc_info=exc)
         if is_storage_full(exc):
             return JSONResponse(
                 status_code=507,
                 content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
             )
+        code = public_error_code(exc)
+        detail = {
+            error_codes.TIMEOUT: "Сервис не ответил вовремя. Повторите попытку позже.",
+            error_codes.RATE_LIMITED: "Слишком много запросов. Повторите попытку позже.",
+            error_codes.DEPENDENCY_UNAVAILABLE: "Сервис временно недоступен. Повторите попытку позже.",
+        }.get(code, INTERNAL_ERROR_MESSAGE)
         return JSONResponse(
             status_code=503,
             content={
-                "detail": exc.user_message,
-                "code": error_codes.DEPENDENCY_UNAVAILABLE,
+                "detail": detail,
+                "code": code,
                 "service": exc.service,
             },
         )

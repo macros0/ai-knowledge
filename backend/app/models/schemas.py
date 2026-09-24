@@ -47,6 +47,8 @@ class DocumentOut(BaseModel):
     # Человекочитаемое объяснение problem-кода — вычисляется из кода.
     problem_message: str | None = None
     okf_concept_count: int = 0
+    # Latest actual generation timestamp among this document's saved concepts.
+    concepts_generated_at: datetime | None = None
     total_chunks: int = 0
     processed_chunks: int = 0
     current_chunk: int | None = None

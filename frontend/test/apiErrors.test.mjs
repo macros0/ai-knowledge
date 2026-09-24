@@ -12,6 +12,7 @@ import {
   serviceMessageKey,
 } from "../src/lib/api.js";
 import { csrfTokenFromDocument } from "../src/lib/api.js";
+import * as api from "../src/lib/api.js";
 
 test("csrf cookie helper is safe in SSR without document", () => {
   assert.equal(csrfTokenFromDocument(), null);
@@ -35,12 +36,12 @@ test("friendlyApiError: 401/403 — сессия/права", () => {
 
 test("friendlyApiError: 404 — раздел на старой версии backend", () => {
   const msg = friendlyApiError(new ApiError("Not Found", { status: 404 }), t);
-  assert.match(msg, /backend/i);
+  assert.match(msg, /Обновите страницу/);
 });
 
 test("friendlyApiError: status 0 (сеть) — недоступен", () => {
   const msg = friendlyApiError(new ApiError("timeout", { status: 0 }), t);
-  assert.match(msg, /недоступен/i);
+  assert.match(msg, /связи/i);
 });
 
 // fetch кидает TypeError, когда backend не поднят. Без обёртки наружу уходило
@@ -97,9 +98,9 @@ test("в api.js нет сырого fetch мимо общей обёртки", (
   assert.match(calls[0], /fetch\(url,/);
 });
 
-test("friendlyApiError: обычная строка-сообщение сохраняется", () => {
+test("friendlyApiError: конфликт без кода объясняется по HTTP-статусу", () => {
   const msg = friendlyApiError(new ApiError("Тег используется документами", { status: 409 }), t);
-  assert.equal(msg, "Тег используется документами");
+  assert.equal(msg, ru["apiError.conflict"]);
 });
 
 test("friendlyApiError: не-ApiError (TypeError/строка) не падает", () => {
@@ -139,9 +140,80 @@ test("англоязычный интерфейс получает англий�
   assert.equal(friendlyApiError(err, t), "Недостаточно прав для выполнения операции");
 });
 
-test("неизвестный клиенту код — показываем detail с бэкенда как диагностику", () => {
+test("неизвестный клиенту код — безопасное локализованное сообщение", () => {
   const err = new ApiError("Что-то новое сломалось", { status: 400, code: "brand_new_code" });
-  assert.equal(friendlyApiError(err, createTranslator("en").t), "Что-то новое сломалось");
+  assert.equal(friendlyApiError(err, createTranslator("en").t), en["apiError.internal_error"]);
+});
+
+test("chunk loading preserves network failures for actionable UI messages", async () => {
+  await withDeadNetwork(() => assert.rejects(api.getDocumentChunks("doc-1"), assertBackendUnreachable));
+});
+
+test("chunk loading preserves HTTP status and server codes without rendering diagnostics", async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const [status, body, key] of [
+      [503, "private gateway diagnostic", "dependency_unavailable"],
+      [429, JSON.stringify({ detail: "private provider diagnostic", code: "rate_limited" }), "rate_limited"],
+      [500, JSON.stringify({ detail: "private provider diagnostic", code: "internal_error" }), "internal_error"],
+    ]) {
+      globalThis.fetch = async (url) => {
+        assert.equal(url, "/api/documents/doc-1/chunks");
+        return new Response(body, { status });
+      };
+      await assert.rejects(api.getDocumentChunks("doc-1"), (err) => {
+        assert.ok(err instanceof ApiError);
+        assert.equal(err.status, status);
+        assert.equal(friendlyApiError(err, t), t(`apiError.${key}`));
+        return true;
+      });
+    }
+    globalThis.fetch = async () => Response.json([{ chunk_index: 0, title: "Chunk" }]);
+    assert.deepEqual(await api.getDocumentChunks("doc-1"), [{ chunk_index: 0, title: "Chunk" }]);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("provider exceptions and legacy stored errors never reach user messages", () => {
+  const raw = 'litellm.BadRequestError: OpenrouterException {"provider_name":"DeepInfra","code":"context_length_exceeded","user_id":"private-user"}';
+  for (const locale of ["ru", "en"]) {
+    const translate = createTranslator(locale).t;
+    for (const err of [new Error(raw), new ApiError(raw, { status: 500 }),
+      new ApiError(raw, { status: 400, code: "future_code" }),
+      new ApiError(raw), null]) {
+      assert.equal(friendlyApiError(err, translate), translate("apiError.internal_error"));
+    }
+    assert.equal(friendlyApiError(new ApiError(raw, { code: "storage_full" }), translate), translate("apiError.storage_full"));
+  }
+});
+
+test("recoverable errors explain the next action without sending users to support", () => {
+  for (const locale of ["ru", "en"]) {
+    const translate = createTranslator(locale).t;
+    for (const code of ["server_restarted", "job_interrupted", "generation_retrying",
+      "generation_timeout", "generation_rate_limited", "processing_unavailable",
+      "dependency_unavailable", "timeout", "rate_limited", "operator_rollback"]) {
+      const text = friendlyApiError(new ApiError("private provider diagnostic", { code }), translate);
+      assert.equal(text, translate(`apiError.${code}`));
+      assert.doesNotMatch(text, /технич|support|private|apiError\./i);
+    }
+    for (const service of ["llm", "ollama", "qdrant"]) {
+      const text = friendlyApiError(new ApiError("private provider diagnostic", { code: "dependency_unavailable", service }), translate);
+      assert.equal(text, translate(`apiError.service.${service}`));
+      assert.doesNotMatch(text, /технич|support|private/i);
+    }
+  }
+  assert.match(friendlyApiError(new ApiError("", { code: "server_restarted" }), t), /Возобновить/);
+  assert.match(friendlyApiError(new ApiError("", { code: "generation_retrying" }), t), /автоматически/);
+});
+
+test("HTTP failures without a code keep actionable messages and hide raw details", () => {
+  for (const [status, code] of [[400, "invalid_request"], [409, "conflict"],
+    [413, "file_too_large"], [422, "invalid_request"], [429, "rate_limited"],
+    [408, "timeout"], [504, "timeout"], [502, "dependency_unavailable"], [503, "dependency_unavailable"]]) {
+    assert.equal(friendlyApiError(new ApiError("private gateway diagnostic", { status }), t), t(`apiError.${code}`));
+  }
 });
 
 test("все apiError-ключи переведены на оба языка", () => {

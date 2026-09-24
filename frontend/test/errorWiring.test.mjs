@@ -13,10 +13,10 @@ import { fileURLToPath } from "node:url";
 
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
 
-// Ошибки не из api.js: у них нет стабильного `code`, и friendlyApiError им
-// ничего не добавит. Держим списком, чтобы новый файл не проскочил молча.
+// Исключение — диагностика JSON, который администратор сам ввёл в редактор:
+// она помогает исправить ввод и не содержит ответа провайдера или сервера.
+// Держим списком, чтобы новый файл не проскочил молча.
 const ALLOWED = new Map([
-  ["components/OkfFileList.jsx", "сырой fetch без обёртки api.js — кода в ответе нет"],
   ["components/UiDictionaryEditor.jsx", "диагностика JSON.parse из браузера, не ответ API"],
 ]);
 

@@ -412,6 +412,7 @@ def test_recovery_requeues_only_export_queued_and_retires_export_running(queue):
 
     assert service._queue.get_nowait() == queued["id"]
     assert service.get(running_id)["status"] == "failed"
+    assert service.get(running_id)["result"]["error_code"] == "job_interrupted"
     assert not stale_ready.exists()
 
 

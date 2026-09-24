@@ -48,9 +48,47 @@ class TestDocumentRegistry:
     def test_reset_stale_statuses(self):
         reg = DocumentRegistry()
         reg.create("doc1", "a.docx", "doc", 10)
-        reg.update("doc1", status="processing")
+        reg.update("doc1", status="processing", error_code="generation_retrying")
         reg.reset_stale_statuses()
         assert reg.get("doc1")["status"] == "paused"
+        assert reg.get("doc1")["error_code"] == "server_restarted"
+
+    def test_legacy_restart_message_has_safe_code(self):
+        reg = DocumentRegistry()
+        reg.create("doc1", "a.docx", "doc", 10)
+        reg.update("doc1", status="paused", error="Сервер был перезапущен. Нажмите «Возобновить»", error_code=None)
+        assert reg.get("doc1")["error_code"] == "server_restarted"
+        reg.update("doc1", error="litellm.BadRequestError private-provider-data")
+        assert reg.get("doc1")["error_code"] is None
+
+    def test_concepts_generated_at_uses_latest_provenance_not_document_updates(self):
+        from datetime import datetime, timezone
+
+        from app.models.schemas import DocumentOut
+
+        reg = DocumentRegistry()
+        reg.create("generated", "a.docx", "doc", 10)
+        reg.create("legacy", "b.docx", "doc", 10)
+        earlier = datetime(2026, 9, 24, 20, 10, tzinfo=timezone.utc)
+        latest = datetime(2026, 9, 24, 21, 15, tzinfo=timezone.utc)
+        with session_scope() as s:
+            s.add_all([
+                OkfConcept(doc_id="generated", slug="a", generated_at=earlier),
+                OkfConcept(doc_id="generated", slug="b", generated_at=latest),
+                OkfConcept(doc_id="generated", slug="unknown"),
+                OkfConcept(doc_id="legacy", slug="old"),
+            ])
+        reg.update("generated", tags=["edited"], status="done")
+        assert reg.get("generated")["concepts_generated_at"] == latest
+        assert reg.get("legacy")["concepts_generated_at"] is None
+        assert DocumentOut(**reg.get("generated")).concepts_generated_at == latest
+        listed = {doc["id"]: doc for doc in reg.list()}
+        assert listed["generated"]["concepts_generated_at"] == latest
+        assert listed["legacy"]["concepts_generated_at"] is None
+        assert reg.get_many(["generated"])["generated"]["concepts_generated_at"] == latest
+        reg.soft_delete("generated")
+        docs, _ = reg.list_trash()
+        assert docs[0]["concepts_generated_at"] == latest
 
 
 def test_session_scope_initializes_engine_without_deadlock(monkeypatch, tmp_path):

@@ -18,6 +18,7 @@ import time
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TypedDict
 from urllib.parse import urlparse
 
 from qdrant_client import QdrantClient
@@ -25,13 +26,23 @@ from qdrant_client.http import models as qm
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from app.config import get_settings
+from app import error_codes as codes
 from app.models.schemas import OkfDocument
-from app.services.errors import VectorStoreError
+from app.services.errors import VectorStoreError, public_error_code
 from app.services.fusion import Hit
 from app.services.sparse import to_sparse_vector
 from app.services.storage import StorageFullError, is_storage_full_text
 
 logger = logging.getLogger(__name__)
+
+
+class _UpsertStats(TypedDict):
+    attempted_batches: int
+    successful_batches: int
+    failed_batches: int
+    attempted_points: int
+    indexed_points: int
+    failure: VectorStoreError | None
 
 
 def _qdrant_call(func, *args, **kwargs):
@@ -336,7 +347,7 @@ class VectorStore:
         doc_id: str,
         mode: str,
         retry_attempts: int = 3,
-    ) -> dict[str, int]:
+    ) -> _UpsertStats:
         """Upsert точек батчами фиксированного размера (инцидент 03.09.2026).
 
         Один upsert на 5667 концептов давал ~120 МБ JSON против серверного
@@ -352,12 +363,13 @@ class VectorStore:
         в лог не пишется (данные документов).
         """
         total = len(points)
-        stats = {
+        stats: _UpsertStats = {
             "attempted_batches": 0,
             "successful_batches": 0,
             "failed_batches": 0,
             "attempted_points": 0,
             "indexed_points": 0,
+            "failure": None,
         }
         if not points:
             return stats
@@ -391,9 +403,18 @@ class VectorStore:
                     # оптимизации Qdrant) — ретраится с бэкоффом.
                     retryable = status is None or status >= 500 or status == 429
                     if not retryable or attempt == retry_attempts:
+                        # A permanent failure must not be hidden by a later
+                        # network outage: retrying cannot repair invalid points.
+                        if stats["failure"] is None or public_error_code(exc) == codes.INTERNAL_ERROR:
+                            stats["failure"] = exc
+                        diagnostic = (
+                            cause.content.decode("utf-8", errors="replace")
+                            if isinstance(cause, UnexpectedResponse) else exc.user_message
+                        )
                         logger.error(
                             "[%s] Upsert %s: батч %d/%d (%d точек) не прошёл: %s",
-                            doc_id, mode, batch_no, n_batches, len(batch), exc.user_message,
+                            doc_id, mode, batch_no, n_batches, len(batch), diagnostic,
+                            exc_info=True,
                         )
                         stats["failed_batches"] += 1
                         break
@@ -451,9 +472,8 @@ class VectorStore:
                     f"Qdrant: проиндексировано {stats['indexed_points']} из "
                     f"{stats['attempted_points']} концептов "
                     f"({stats['failed_batches']} батчей упали). "
-                    "Документ переведён в paused — повторный resume доотправит "
-                    "остаток (upsert идемпотентен)."
-                )
+                    "Не удалось завершить индексацию."
+                ) from stats["failure"]
         return point_ids
 
     def index_chunks(
@@ -515,9 +535,8 @@ class VectorStore:
                     f"Qdrant: проиндексировано {stats['indexed_points']} из "
                     f"{stats['attempted_points']} чанков "
                     f"({stats['failed_batches']} батчей упали). "
-                    "Документ переведён в paused — повторный resume доотправит "
-                    "остаток (upsert идемпотентен)."
-                )
+                    "Не удалось завершить индексацию."
+                ) from stats["failure"]
         return point_ids
 
     def delete_document(self, doc_id: str) -> None:

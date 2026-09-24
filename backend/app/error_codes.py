@@ -55,6 +55,13 @@ DEPENDENCY_UNAVAILABLE = "dependency_unavailable"
 INTERNAL_ERROR = "internal_error"
 RATE_LIMITED = "rate_limited"
 STORAGE_FULL = "storage_full"
+TIMEOUT = "timeout"
+SERVER_RESTARTED = "server_restarted"
+JOB_INTERRUPTED = "job_interrupted"
+GENERATION_RETRYING = "generation_retrying"
+GENERATION_TIMEOUT = "generation_timeout"
+GENERATION_RATE_LIMITED = "generation_rate_limited"
+PROCESSING_UNAVAILABLE = "processing_unavailable"
 
 # --- Доменные правила (коды для DomainError сервисного слоя) ---
 NOT_IN_TRASH = "not_in_trash"

@@ -518,6 +518,7 @@ main {
 .status.error { background: rgba(255, 92, 92, 0.15); color: var(--danger); }
 .status.processing,
 .status.uploaded,
+.status.queued,
 .status.splitting,
 .status.indexing { background: rgba(79, 140, 255, 0.15); color: var(--accent); }
 

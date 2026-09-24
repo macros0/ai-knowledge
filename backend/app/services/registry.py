@@ -35,7 +35,8 @@ from app.services.storage import (
 
 # Статусы, которые на старте считаются «зависшими» (сервер перезапустили посреди
 # обработки) и сбрасываются в paused для ручного возобновления.
-STALE_STATUSES = {"splitting", "processing", "indexing", "uploaded"}
+STALE_STATUSES = {"splitting", "processing", "indexing", "uploaded", "queued"}
+SERVER_RESTARTED_MESSAGE = "Сервер был перезапущен. Нажмите «Возобновить»"
 
 # Статусы «остановившихся» документов — попали в объединённый фильтр «Проблемные».
 # paused — генерация OKF остановлена (кнопка «Возобновить»), failed/error — ошибка.
@@ -117,7 +118,7 @@ def _search_conditions(search: str | None) -> list:
     return conditions
 
 
-def _to_dict(doc: Document) -> dict:
+def _to_dict(doc: Document, concepts_generated_at: datetime | None = None) -> dict:
     dev = doc.development
     result = {
         "id": doc.id,
@@ -126,9 +127,13 @@ def _to_dict(doc: Document) -> dict:
         "size": doc.size,
         "status": doc.status,
         "error": doc.error,
-        "error_code": doc.error_code,
+        "error_code": doc.error_code or (
+            codes.SERVER_RESTARTED
+            if doc.status == "paused" and doc.error == SERVER_RESTARTED_MESSAGE else None
+        ),
         "problem": doc.problem,
         "okf_concept_count": doc.okf_concept_count,
+        "concepts_generated_at": concepts_generated_at,
         "total_chunks": doc.total_chunks,
         "processed_chunks": doc.processed_chunks,
         "current_chunk": doc.current_chunk,
@@ -154,6 +159,25 @@ def _to_dict(doc: Document) -> dict:
     # вечное «обрабатывается» из старой строки.
     if transient := transient_storage_failure(doc.id):
         result.update(transient)
+    return result
+
+
+def _document_dicts(session, docs: list[Document]) -> list[dict]:
+    """Read generation provenance in one batch for the selected documents only."""
+    if not docs:
+        return []
+    generated = dict(session.execute(
+        select(OkfConcept.doc_id, func.max(OkfConcept.generated_at))
+        .where(OkfConcept.doc_id.in_([doc.id for doc in docs]))
+        .group_by(OkfConcept.doc_id)
+    ).all())
+    result = []
+    for doc in docs:
+        timestamp = generated.get(doc.id)
+        # SQLite drops timezone info; provenance is written in UTC.
+        if timestamp is not None and timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        result.append(_to_dict(doc, timestamp))
     return result
 
 
@@ -186,7 +210,7 @@ class DocumentRegistry:
     def get(self, doc_id: str) -> dict | None:
         with session_scope() as s:
             doc = s.get(Document, doc_id)
-            return _to_dict(doc) if doc else None
+            return _document_dicts(s, [doc])[0] if doc else None
 
     def get_many(self, doc_ids: Iterable[str]) -> dict[str, dict | None]:
         """Load document visibility metadata in one session/query batch."""
@@ -202,7 +226,7 @@ class DocumentRegistry:
                     selectinload(Document.tags_rel).selectinload(DocumentTag.tag_rel),
                 )
             ).scalars().all()
-        values = {doc.id: _to_dict(doc) for doc in rows}
+            values = {doc["id"]: doc for doc in _document_dicts(s, rows)}
         return {doc_id: values.get(doc_id) for doc_id in ids}
 
     def get_visibility_many(self, doc_ids: Iterable[str]) -> dict[str, dict | None]:
@@ -423,7 +447,7 @@ class DocumentRegistry:
             if limit is not None:
                 stmt = stmt.limit(limit)
             docs = s.execute(stmt).scalars().all()
-            return [_to_dict(d) for d in docs], total
+            return _document_dicts(s, docs), total
 
     def source_locale_facets(self, uploaded_by: str | None = None) -> list[dict]:
         """Счётчики языков документа для фасетов (Этап 7 фаза D, фильтр).
@@ -592,7 +616,7 @@ class DocumentRegistry:
             if limit is not None:
                 stmt = stmt.limit(limit)
             docs = s.execute(stmt).scalars().all()
-            return [_to_dict(d) for d in docs], total
+            return _document_dicts(s, docs), total
 
     def purge_expired(self, cutoff: datetime) -> list[str]:
         """Возвращает doc_id документов, чей срок корзины истёк (deleted_at <= cutoff).
@@ -618,7 +642,8 @@ class DocumentRegistry:
             )
             for d in docs:
                 d.status = "paused"
-                d.error = "Сервер был перезапущен. Нажмите «Возобновить»"
+                d.error = SERVER_RESTARTED_MESSAGE
+                d.error_code = codes.SERVER_RESTARTED
 
 
 _INSTANCE: DocumentRegistry | None = None
