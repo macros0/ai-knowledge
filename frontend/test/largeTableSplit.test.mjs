@@ -14,7 +14,7 @@ function table(cols, dataRows) {
 
 test("без таблиц — одна markdown-часть", () => {
   const md = "Привет\n\nВторой абзац";
-  assert.deepEqual(splitLargeTables(md, 3), [{ type: "md", text: md }]);
+  assert.deepEqual(splitLargeTables(md, 3), [{ type: "md", text: md, lineMap: [1, 2, 3] }]);
 });
 
 test("маленькая таблица (строк <= cap) не режется", () => {
@@ -49,6 +49,8 @@ test("гигантская таблица режется до шапки + cap �
   assert.doesNotMatch(kept, /v40/);
 
   const rem = parts[2];
+  assert.deepEqual(parts[1].lineMap, [3, 4, 5, 6, 7]);
+  assert.deepEqual(rem.chunkLineMaps, [[3, 4, 8, 9]]);
   assert.equal(rem.shownRows, 3);
   assert.equal(rem.remainingRows, 2);
   assert.equal(rem.totalRows, 5);
@@ -82,6 +84,10 @@ test("хвост нарезается на чанки по cap с повторё
   assert.equal(rem.shownRows, 3);
   assert.equal(rem.remainingRows, 4);
   assert.equal(rem.chunks.length, 2);
+  assert.deepEqual(rem.chunkLineMaps, [
+    [1, 2, 6, 7, 8],
+    [1, 2, 9],
+  ]);
 
   // чанк 0: шапка + разделитель + строки v30..v50
   const c0 = rem.chunks[0].split("\n");

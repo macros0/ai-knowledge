@@ -301,6 +301,31 @@ class ChatAdminUserListOut(BaseModel):
     users: list[ChatAdminUserOut]
 
 
+class SourceSpan(BaseModel):
+    """Verified source range within the canonical text of one document chunk."""
+
+    start: int = Field(ge=0)
+    end: int = Field(gt=0)
+    chunk_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class SourceLocationSpanOut(BaseModel):
+    start: int
+    end: int
+    quote: str
+
+
+class SourceLocationOut(BaseModel):
+    status: Literal["exact", "recovered", "chunk", "unavailable"]
+    chunk_index: int | None = None
+    spans: list[SourceLocationSpanOut] = Field(default_factory=list)
+
+
+class DocumentTextChunkOut(BaseModel):
+    chunk_index: int
+    content: str
+
+
 class Concept(BaseModel):
     id: str = ""
     title: str
@@ -308,6 +333,8 @@ class Concept(BaseModel):
     tags: list[str] = Field(default_factory=list)
     content: str
     relations: list[str] = Field(default_factory=list)
+    source_spans: list[SourceSpan] = Field(default_factory=list)
+    source_quotes: list[str] = Field(default_factory=list)
 
 
 class OkfDocument(BaseModel):

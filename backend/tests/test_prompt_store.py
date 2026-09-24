@@ -177,3 +177,9 @@ class TestDefaultsSync:
                 f"prompt '{key}': дефолт в prompts/okf.py разошёлся с {key}.md — "
                 "перенесите правку файла в код-дефолт"
             )
+
+    def test_okf_prompt_requires_exact_source_quotes_when_supported(self):
+        prompt = PROMPT_DEFAULTS["okf_system"]
+
+        assert "MUST include at least one item in `source_quotes`" in prompt
+        assert "Optionally add `source_quotes`" not in prompt

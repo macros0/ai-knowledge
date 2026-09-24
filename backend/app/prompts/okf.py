@@ -55,6 +55,7 @@ Only if this check passes, apply the splitting rules below.
 19. Return the answer ONLY as a JSON array, with no explanations or Markdown wrapper.
 20. In the content field, write Markdown: headings, lists, tables, code blocks ```...```.
 21. Before returning, verify the JSON is valid: brackets and quotes are closed, every element is complete, and there is no cutoff in the middle of the last concept.
+22. **Source evidence.** If any exact, consecutive fragment from the input directly supports this concept, you MUST include at least one item in `source_quotes` (up to three short quotes). Choose the most specific supporting sentence or phrase. Copy it verbatim, preserving punctuation and spelling; never paraphrase, normalize, or quote text that is not present in the input. Return an empty array only when no exact supporting fragment exists. This field is navigation metadata; do not include it in the concept's `content`.
 
 ## Section structure preservation rules
 
@@ -78,6 +79,7 @@ Only if this check passes, apply the splitting rules below.
   "type": "concept | procedure | reference | example | note | table",
   "tags": ["tag1", "tag2"],
   "content": "markdown text of the concept",
+  "source_quotes": ["exact source text"],
   "relations": [
     { "id": "id-of-another-concept", "type": "depends_on | part_of | example_of | duplicate_of | reference_to | continues" }
   ]

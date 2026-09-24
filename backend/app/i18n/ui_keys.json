@@ -1029,6 +1029,28 @@
   "sort.label": [],
   "sort.newFirst": [],
   "sort.oldFirst": [],
+  "sourceLocation.chunkOnly": [
+    "index"
+  ],
+  "sourceLocation.exact": [
+    "index"
+  ],
+  "sourceLocation.navigation": [],
+  "sourceLocation.next": [],
+  "sourceLocation.openInChunk": [
+    "index"
+  ],
+  "sourceLocation.openInDocument": [],
+  "sourceLocation.position": [
+    "index",
+    "total"
+  ],
+  "sourceLocation.previous": [],
+  "sourceLocation.recovered": [
+    "index"
+  ],
+  "sourceLocation.title": [],
+  "sourceLocation.unavailable": [],
   "status.done": [],
   "status.error": [],
   "status.failed": [],

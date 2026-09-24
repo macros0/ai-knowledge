@@ -14,6 +14,7 @@ from app.services.comment_concepts import extract_comment_concepts
 from app.services.field_table import extract_table_concepts
 from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMClient, LLMTruncationError
+from app.services.source_evidence import chunk_digest, locate_unique_quote
 
 logger = logging.getLogger(__name__)
 
@@ -138,19 +139,45 @@ class OKFGenerator:
              (okf_salvage_truncated): частичный результат сохраняется с WARNING,
              документ не застревает.
         """
-        # Комментарии — ДО таблиц: экстракция на сыром чанке, где блок-цитаты
-        # гарантированно целы (см. docstring выше).
+        source_chunk = chunk
+        # Удаляем комментарии до разбора таблиц. Маска сохраняет смещения и
+        # номера строк, поэтому табличные диапазоны остаются в координатах
+        # исходного чанка даже рядом с незакрытой строкой таблицы.
         comment_concepts: list[Concept] = []
         if self.settings.okf_comment_concepts_enabled:
-            comment_concepts, chunk = extract_comment_concepts(chunk, chunk_index=index)
+            comment_concepts, _ = extract_comment_concepts(source_chunk, chunk_index=index)
+        table_input = source_chunk
+        if comment_concepts:
+            masked = list(source_chunk)
+            for concept in comment_concepts:
+                for span in concept.source_spans:
+                    for offset in range(span.start, span.end):
+                        if masked[offset] not in "\r\n":
+                            masked[offset] = " "
+            table_input = "".join(masked)
         table_concepts, remainder = extract_table_concepts(
-            chunk,
+            table_input,
             chunk_index=index,
             llm=self.llm,
             use_llm_classify=self.settings.okf_table_llm_classify,
             doc_id=doc_id,
         )
+        if table_input != source_chunk:
+            digest = chunk_digest(source_chunk)
+            for concept in table_concepts:
+                for span in concept.source_spans:
+                    span.chunk_hash = digest
+            remainder += f"\n[Комментарии извлечены программно: {len(comment_concepts)}]"
         llm_concepts = self._generate_chunk_recursive(remainder, filename, index, total, doc_id, depth=0)
+        for concept in llm_concepts:
+            spans = []
+            seen = set()
+            for quote in concept.source_quotes[:3]:
+                span = locate_unique_quote(source_chunk, quote)
+                if span and (span.start, span.end) not in seen:
+                    spans.append(span)
+                    seen.add((span.start, span.end))
+            concept.source_spans = spans
         return comment_concepts + table_concepts + llm_concepts
 
     def _generate_chunk_recursive(
@@ -242,6 +269,7 @@ class OKFGenerator:
                 "global_tags": global_tags,
                 "source_document": {"filename": filename, "doc_id": doc_id},
                 "relations": concept.relations,
+                "source_spans": [span.model_dump() for span in concept.source_spans],
                 "attachments": attachments or [],
                 "chunk_index": chunk_index,
             }
@@ -341,6 +369,9 @@ def _normalize(raw: list | dict) -> list[Concept]:
     for item in items:
         if not isinstance(item, dict):
             continue
+        raw_quotes = item.get("source_quotes", [])
+        if not isinstance(raw_quotes, list):
+            raw_quotes = []
         content = str(item.get("content", "")).strip()
         if not content:
             continue
@@ -355,6 +386,11 @@ def _normalize(raw: list | dict) -> list[Concept]:
                 tags=[str(t).strip() for t in item.get("tags", []) if str(t).strip()],
                 content=content,
                 relations=[_parse_relation(str(r)) for r in item.get("relations", []) if str(r).strip()],
+                source_quotes=[
+                    str(quote)
+                    for quote in raw_quotes
+                    if isinstance(quote, str) and quote.strip()
+                ][:3],
             )
         )
     return concepts

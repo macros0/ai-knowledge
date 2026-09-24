@@ -26,6 +26,7 @@ import logging
 import re
 
 from app.models.schemas import Concept
+from app.services.source_evidence import span_for_lines
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,8 @@ def extract_comment_concepts(chunk: str, chunk_index: int | None = None) -> tupl
     """
     concepts: list[Concept] = []
     lines = chunk.split("\n")
+    replacements: list[tuple[int, int, str]] = []
     i = 0
-    # длина lines меняется после замены run на заглушку — считаем на каждой итерации
     while i < len(lines):
         if not lines[i].startswith(">"):
             i += 1
@@ -73,12 +74,19 @@ def extract_comment_concepts(chunk: str, chunk_index: int | None = None) -> tupl
         threads = _parse_quote_run(lines[start:i])
         if not threads:
             continue  # обычная цитата — оставляем LLM/чанкам как есть
+        source_span = span_for_lines(chunk, start, i)
         entries_total = 0
         for thread in threads:
-            concepts.append(_build_concept(thread))
+            concept = _build_concept(thread)
+            if source_span:
+                concept.source_spans = [source_span]
+            concepts.append(concept)
             entries_total += len(thread["entries"])
-        lines[start:i] = [_STUB_FMT.format(n=entries_total)]
-        i = start + 1  # список сжался после замены run на заглушку
+        replacements.append((start, i, _STUB_FMT.format(n=entries_total)))
+    # Исходные номера строк нужны для source_spans. Подменяем блоки лишь после
+    # прохода и с конца, чтобы не сдвигать ещё не обработанные комментарии.
+    for start, end, stub in reversed(replacements):
+        lines[start:end] = [stub]
     if concepts:
         logger.info(
             "Чанк %s: программно извлечено %d концептов-комментариев",

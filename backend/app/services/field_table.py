@@ -25,7 +25,8 @@ from pathlib import Path
 from typing import Protocol
 
 from app.config import get_settings
-from app.models.schemas import Concept
+from app.models.schemas import Concept, SourceSpan
+from app.services.source_evidence import span_for_lines
 from app.services.sparse import TOKEN_EXTRA_LETTERS, TOKEN_EXTRA_LETTERS_UPPER
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,7 @@ class TableBlock:
     end: int  # индекс строки после конца таблицы (exclusive)
     header: list[str]
     rows: list[FieldRow]
+    row_ranges: list[tuple[int, int]] = field(default_factory=list)
 
 
 def detect_field_tables(text: str) -> list[TableBlock]:
@@ -131,6 +133,8 @@ def detect_field_tables(text: str) -> list[TableBlock]:
                 # если строка не закрыта "|", склеиваем продолжение
                 while i < n and not merged.rstrip().endswith("|"):
                     nxt = lines[i]
+                    if not nxt.strip():
+                        break
                     if nxt.strip().startswith("|") and nxt.strip() != "|":
                         # встретили новую строку-данных — текущая была незакрыта,
                         # но продолжать некуда; выходим, оставляя merged как есть
@@ -151,11 +155,19 @@ def detect_field_tables(text: str) -> list[TableBlock]:
         # проверим, таблица ли это полей
         if not _is_field_table(header, raw_rows):
             continue
-        rows = [_parse_field_row(_parse_row_cells(r), header) for r in raw_rows]
-        rows = [r for r in rows if r and r.name]
+        rows: list[FieldRow] = []
+        row_ranges: list[tuple[int, int]] = []
+        row_line = start + 2
+        for raw_row in raw_rows:
+            next_line = row_line + raw_row.count("\n") + 1
+            parsed_row = _parse_field_row(_parse_row_cells(raw_row), header)
+            if parsed_row and parsed_row.name:
+                rows.append(parsed_row)
+                row_ranges.append((row_line, next_line))
+            row_line = next_line
         if len(rows) < min_rows:
             continue
-        blocks.append(TableBlock(start=start, end=i, header=header, rows=rows))
+        blocks.append(TableBlock(start=start, end=i, header=header, rows=rows, row_ranges=row_ranges))
     return blocks
 
 
@@ -279,7 +291,11 @@ def _find_col(header: list[str], keys: tuple[str, ...]) -> int:
     return -1
 
 
-def build_field_concepts(rows: list[FieldRow], code: str | None) -> list[Concept]:
+def build_field_concepts(
+    rows: list[FieldRow],
+    code: str | None,
+    source_spans: list[SourceSpan | None] | None = None,
+) -> list[Concept]:
     """Создать по одному концепту на каждое поле таблицы.
 
     title: «Атрибут {name} — {description[:80]}» (первая строка описания).
@@ -287,7 +303,7 @@ def build_field_concepts(rows: list[FieldRow], code: str | None) -> list[Concept
     """
     concepts: list[Concept] = []
     code_tag = code or "xml"
-    for r in rows:
+    for i, r in enumerate(rows):
         desc_first = _first_line(r.description).strip()
         title_desc = desc_first[:80] if desc_first else r.name
         title = f"Атрибут {r.name} — {title_desc}" if title_desc else f"Атрибут {r.name}"
@@ -300,6 +316,7 @@ def build_field_concepts(rows: list[FieldRow], code: str | None) -> list[Concept
                 tags=["field", "xml", code_tag],
                 content=content,
                 relations=[],
+                source_spans=[source_spans[i]] if source_spans and i < len(source_spans) and source_spans[i] else [],
             )
         )
     return concepts
@@ -322,7 +339,9 @@ def _build_field_content(r: FieldRow) -> str:
     return "\n".join(rows_md)
 
 
-def build_overview_concept(rows: list[FieldRow], code: str | None) -> Concept | None:
+def build_overview_concept(
+    rows: list[FieldRow], code: str | None, source_spans: list[SourceSpan | None] | None = None
+) -> Concept | None:
     """Создать обзорный концепт с перечислением всех полей сообщения.
 
     title: «Поля сообщения {code}» (или «Поля сообщения XML» если code=None).
@@ -352,6 +371,7 @@ def build_overview_concept(rows: list[FieldRow], code: str | None) -> Concept | 
         tags=["fields-overview", "xml"] + ([code] if code else []),
         content=content,
         relations=[],
+        source_spans=[span for span in source_spans or [] if span],
     )
 
 
@@ -382,8 +402,10 @@ def extract_field_table_concepts(
     # порядке — уже обработанных) блоков не сдвигаются.
     for bi, b in enumerate(blocks):
         code = codes[bi]
-        field_concepts = build_field_concepts(b.rows, code)
-        overview = build_overview_concept(b.rows, code)
+        row_spans = [span_for_lines(chunk, start, end) for start, end in b.row_ranges]
+        table_span = span_for_lines(chunk, b.start, b.end)
+        field_concepts = build_field_concepts(b.rows, code, row_spans)
+        overview = build_overview_concept(b.rows, code, [table_span])
         concepts.extend(field_concepts)
         if overview:
             concepts.append(overview)
@@ -501,6 +523,8 @@ def detect_tables(text: str) -> list[RawTableBlock]:
                 i += 1
                 while i < n and not merged.rstrip().endswith("|"):
                     nxt = lines[i]
+                    if not nxt.strip():
+                        break
                     if nxt.strip().startswith("|") and nxt.strip() != "|":
                         break
                     merged = merged + "\n" + nxt
@@ -683,12 +707,22 @@ def build_row_concepts(
                 tags=[tag, "table-whole"],
                 content=content,
                 relations=[],
+                source_spans=(
+                    [span_for_lines("\n".join(lines), block.start, block.end)]
+                    if lines and span_for_lines("\n".join(lines), block.start, block.end)
+                    else []
+                ),
             )
         ]
 
     # per_row: концепт на каждую строку + обзорный
     concepts: list[Concept] = []
+    source_text = "\n".join(lines) if lines is not None else None
+    row_line = block.start + 2
     for raw in block.raw_rows:
+        next_line = row_line + raw.count("\n") + 1
+        row_span = span_for_lines(source_text, row_line, next_line) if source_text is not None else None
+        row_line = next_line
         cells = _parse_row_cells(raw)
         if not cells:
             continue
@@ -707,6 +741,7 @@ def build_row_concepts(
                 tags=[tag, "table-row"],
                 content=content,
                 relations=[],
+                source_spans=[row_span] if row_span else [],
             )
         )
     # обзорный концепт — title из заголовка над таблицей
@@ -728,6 +763,11 @@ def build_row_concepts(
             tags=[tag, "table-overview"],
             content="\n".join(overview_lines),
             relations=[],
+            source_spans=(
+                [span_for_lines(source_text, block.start, block.end)]
+                if source_text is not None and span_for_lines(source_text, block.start, block.end)
+                else []
+            ),
         )
     )
     return concepts
@@ -823,15 +863,23 @@ def _extract_with_llm_classify(
             )
             # fallback: проверить как таблицу полей XML
             if _is_field_table(b.header, b.raw_rows):
-                rows = [_parse_field_row(_parse_row_cells(r), b.header) for r in b.raw_rows]
-                rows = [r for r in rows if r and r.name]
+                rows: list[FieldRow] = []
+                row_spans: list[SourceSpan | None] = []
+                row_line = b.start + 2
+                for raw_row in b.raw_rows:
+                    next_line = row_line + raw_row.count("\n") + 1
+                    row = _parse_field_row(_parse_row_cells(raw_row), b.header)
+                    if row and row.name:
+                        rows.append(row)
+                        row_spans.append(span_for_lines(chunk, row_line, next_line))
+                    row_line = next_line
                 if len(rows) >= _min_rows():
-                    for c in build_field_concepts(rows, code):
+                    for c in build_field_concepts(rows, code, row_spans):
                         key = _dedup_key(c)
                         if key not in seen_keys:
                             seen_keys.add(key)
                             concepts.append(c)
-                    ov = build_overview_concept(rows, code)
+                    ov = build_overview_concept(rows, code, [span_for_lines(chunk, b.start, b.end)])
                     if ov:
                         concepts.append(ov)
                     extracted_blocks.append((b, f"[Таблица полей извлечена программно: {len(rows)} полей]"))

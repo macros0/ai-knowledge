@@ -39,17 +39,19 @@ function chunkRows(header, sep, rows, chunkSize) {
 
 export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
   const text = markdown == null ? "" : String(markdown);
-  const cap = Number.isFinite(maxRows) && maxRows >= 0 ? maxRows : LARGE_TABLE_MAX_ROWS;
+  const cap = Number.isFinite(maxRows) && maxRows >= 0 ? Math.max(1, Math.floor(maxRows)) : LARGE_TABLE_MAX_ROWS;
   const lines = text.split("\n");
 
   const parts = [];
   let buffer = [];
+  let bufferLines = [];
   let fence = null; // null | { char: "`" | "~", len: number }
 
   const flush = () => {
     if (buffer.length) {
-      parts.push({ type: "md", text: buffer.join("\n") });
+      parts.push({ type: "md", text: buffer.join("\n"), lineMap: bufferLines });
       buffer = [];
+      bufferLines = [];
     }
   };
 
@@ -58,30 +60,35 @@ export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
     return m ? { char: m[1][0], len: m[1].length } : null;
   };
 
-  const applyTable = (block) => {
+  const applyTable = (block, blockLines) => {
     // GFM-таблица обязана иметь шапку + строку-разделитель (block[1]). Одиночная
     // pipe-строка или набор строк без разделителя — не таблица, оставляем как
     // обычный текст (remark-парсер дешёв на таких данных).
     if (block.length < 2 || !SEP_RE.test(block[1])) {
       buffer.push(...block);
+      bufferLines.push(...blockLines);
       return;
     }
     const dataRows = block.length - 2;
     if (dataRows <= cap) {
       buffer.push(...block);
+      bufferLines.push(...blockLines);
       return;
     }
     flush();
     // `tablePreview: true` помечает превью-таблицу: рендерится с ограниченной
     // высотой (внутренний скролл), чтобы кнопка «показать остальные» оставалась
     // рядом, а не уходила за тысячи строк превью.
-    parts.push({ type: "md", text: block.slice(0, 2 + cap).join("\n"), tablePreview: true });
+    parts.push({ type: "md", text: block.slice(0, 2 + cap).join("\n"), lineMap: blockLines.slice(0, 2 + cap), tablePreview: true });
     const header = block[0];
     const sep = block[1];
     const remainder = block.slice(2 + cap);
     parts.push({
       type: "tableRemainder",
       chunks: chunkRows(header, sep, remainder, cap),
+      chunkLineMaps: Array.from({ length: Math.ceil(remainder.length / cap) }, (_, partIndex) => [
+        blockLines[0], blockLines[1], ...blockLines.slice(2 + cap + partIndex * cap, 2 + cap + (partIndex + 1) * cap),
+      ]),
       shownRows: cap,
       // remainingRows выводится из фактического хвоста — число в кнопке всегда
       // совпадает с количеством строк в chunks (минус повторённые шапки).
@@ -99,6 +106,7 @@ export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
       const closing = fenceOf(line);
       if (closing && closing.char === fence.char && closing.len >= fence.len) fence = null;
       buffer.push(line);
+      bufferLines.push(i + 1);
       i += 1;
       continue;
     }
@@ -107,6 +115,7 @@ export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
     if (opening) {
       fence = opening;
       buffer.push(line);
+      bufferLines.push(i + 1);
       i += 1;
       continue;
     }
@@ -114,11 +123,12 @@ export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
     if (PIPE_RE.test(line)) {
       const start = i;
       while (i < lines.length && PIPE_RE.test(lines[i])) i += 1;
-      applyTable(lines.slice(start, i));
+      applyTable(lines.slice(start, i), Array.from({ length: i - start }, (_, offset) => start + offset + 1));
       continue;
     }
 
     buffer.push(line);
+    bufferLines.push(i + 1);
     i += 1;
   }
 

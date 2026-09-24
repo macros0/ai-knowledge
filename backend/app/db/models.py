@@ -348,6 +348,8 @@ class OkfConcept(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     relations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     chunk_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Проверенные диапазоны в исходном DocumentChunk.content; null для старых концептов.
+    source_spans: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     # Провенанс генерации (Этап 2b, PostgreSQL SSOT): отличает момент/модель/промпт
     # создания конкретной версии концепта от времени SQL INSERT (`created_at`).

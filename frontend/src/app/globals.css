@@ -1266,6 +1266,99 @@ main {
   flex: none;
 }
 
+.source-highlight {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 3px;
+  scroll-margin-block: 42vh;
+}
+
+.source-highlight-mark {
+  color: inherit;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 2px;
+}
+
+.source-location-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 8px 24px 0;
+}
+
+.source-location-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.source-location-header span,
+.source-location-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.source-location-navigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.source-location-navigation button {
+  color: var(--accent);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+.source-location-navigation button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: .55;
+}
+
+.source-location-quotes {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  background: var(--panel);
+}
+
+.source-location-quotes p { margin: 4px 0; }
+.source-location-chunk { scroll-margin-block: 40vh; }
+.source-chunk-heading { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+.source-evidence-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  padding: 8px 12px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  background: var(--panel);
+  border-left: 3px solid var(--accent);
+  font-size: 13px;
+}
+.source-evidence-summary strong { color: var(--text); }
+.source-evidence-summary blockquote { flex-basis: 100%; margin: 0; color: var(--text); }
+.source-fulltext-viewer .source-location-view .content-viewer-body { flex: none; min-height: auto; overflow: visible; }
+.source-fulltext-viewer .source-location-view .content-viewer { flex: none; }
+.source-chunk-viewer .source-location-view .content-viewer { min-height: 50vh; }
+
 /* Превью гигантской таблицы — ограниченная высота с внутренним скроллом, чтобы
    кнопка «показать остальные» не уходила за тысячи строк превью. */
 .okf-table-preview {

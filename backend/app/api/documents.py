@@ -34,8 +34,10 @@ from app.models.schemas import (
     DocumentStatsOut,
     SourceLocaleFacetsOut,
     DocumentTagsUpdate,
+    DocumentTextChunkOut,
     ReferenceLocale,
     OkfFileOut,
+    SourceLocationOut,
     TrashListOut,
     UploaderListOut,
 )
@@ -60,6 +62,7 @@ from app.services.registry import get_registry
 from app.services.locale_service import request_locale
 from app.services.source_locale import is_valid_source_locale, normalize_source_locale
 from app.services.source_locale_sync import reindex_document_source_locale, schedule_source_locale_sync
+from app.services.source_location import get_document_text_chunks, get_source_location
 from app.services.staging import StagingStore
 from app.services.tag_registry import TagRegistry, normalize_tags
 from app.services.trash import RestoreConflictError, bulk_restore, restore_document
@@ -1226,6 +1229,54 @@ def get_chunk(doc_id: str, chunk_index: int):
             code=errors.CHUNK_NOT_FOUND,
             detail="Чанк не найден",
         )
+
+
+@router.get("/{doc_id}/concepts/{slug}/source-location", response_model=SourceLocationOut)
+def get_concept_source_location(doc_id: str, slug: str):
+    if not _valid_doc_id(doc_id) or not slug or len(slug) > 255:
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Источник концепта не найден",
+        )
+    location = get_source_location(doc_id, slug)
+    if location is None:
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Источник концепта не найден",
+        )
+    return location
+
+
+@router.get("/{doc_id}/fulltext/chunks", response_model=list[DocumentTextChunkOut])
+def get_document_text_chunks_endpoint(doc_id: str):
+    if not _valid_doc_id(doc_id):
+        raise ApiError(
+            status_code=404,
+            code=errors.DOCUMENT_NOT_FOUND,
+            detail="Документ не найден",
+        )
+    chunks = get_document_text_chunks(doc_id)
+    if not chunks:
+        try:
+            get_pipeline().ensure_chunks(doc_id)
+        except DomainError as exc:
+            raise errors.domain_error(exc, 400) from exc
+        except ValueError as exc:
+            raise ApiError(
+                status_code=400,
+                code=errors.INVALID_REQUEST,
+                detail=str(exc),
+            ) from exc
+        chunks = get_document_text_chunks(doc_id)
+    if not chunks:
+        raise ApiError(
+            status_code=404,
+            code=errors.TEXT_NOT_FOUND,
+            detail="Текст документа не найден",
+        )
+    return chunks
 
 
 @router.get("/{doc_id}/fulltext")

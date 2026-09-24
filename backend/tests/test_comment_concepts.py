@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 """Тесты программного извлечения концептов из комментариев рецензентов."""
+import hashlib
+
 from app.config import get_settings
 from app.services.comment_concepts import extract_comment_concepts
 from app.services.field_table import extract_field_table_concepts
@@ -72,6 +74,24 @@ class TestExtractCommentConcepts:
         assert "Второй ответ" in concepts[1].content
         assert remainder.count("[Комментарии извлечены программно:") == 2
         assert "Промежуточный абзац." in remainder
+
+    def test_second_comment_span_uses_original_chunk_lines(self):
+        chunk = (
+            "> **Комментарий рецензента (А):** Первый вопрос\n"
+            "> **Ответ (Б):** Первый ответ\n\n"
+            "текст\n\n"
+            "> **Комментарий рецензента (В):** Второй вопрос\n"
+            "> **Ответ (Г):** Второй ответ"
+        )
+
+        concepts, _ = extract_comment_concepts(chunk)
+
+        assert len(concepts) == 2
+        second = concepts[1].source_spans[0]
+        assert chunk[second.start:second.end] == (
+            "> **Комментарий рецензента (В):** Второй вопрос\n"
+            "> **Ответ (Г):** Второй ответ"
+        )
 
     def test_no_comments_passthrough(self):
         chunk = "# Заголовок\n\nАбзац.\n\n| a | b |\n|---|---|\n| 1 | 2 |"
@@ -195,6 +215,29 @@ class TestExtractorOrderVsFieldTables:
 
 
 class TestGenerateChunkHook:
+    def test_table_after_open_row_excludes_comment_and_keeps_original_span(self, monkeypatch):
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(s, "okf_table_llm_classify", False)
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: s)
+        gen = OKFGenerator(llm=_FakeLLM())
+        gen.settings = s
+
+        concepts = gen.generate_chunk(
+            TestExtractorOrderVsFieldTables.WORST_CASE,
+            "doc.docx", 0, 1, doc_id="test",
+        )
+
+        comments = [c for c in concepts if "review" in c.tags]
+        tables = [c for c in concepts if "field" in c.tags]
+        assert len(comments) == 1
+        assert tables
+        assert all("Проверить длину ИНН" not in c.content for c in tables)
+        inn = next(c for c in tables if "innPerson" in c.title)
+        span = inn.source_spans[0]
+        assert TestExtractorOrderVsFieldTables.WORST_CASE[span.start:span.end].startswith("| innPerson |")
+        assert span.chunk_hash == hashlib.sha256(TestExtractorOrderVsFieldTables.WORST_CASE.encode("utf-8")).hexdigest()
+
     def test_comment_concepts_extracted_before_llm(self, monkeypatch):
         """generate_chunk: концепты-комментарии идут ДО LLM-концептов,
         заглушка не доходит до LLM."""

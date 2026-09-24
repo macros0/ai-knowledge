@@ -20,6 +20,8 @@ export default function MarkdownViewer({
   className = "okf-markdown",
   components = {},
   remarkPlugins = [],
+  lineMap = null,
+  highlightedLines = [],
 }) {
   const { t } = useI18n();
   const [lightbox, setLightbox] = useState(null);
@@ -56,6 +58,19 @@ export default function MarkdownViewer({
   if (stripFrontmatter) {
     body = body.replace(/^---[\s\S]*?---\s*/, "");
   }
+
+  const highlightedSpanIndices = (node) => {
+    if (!node?.position || !lineMap?.length || !highlightedLines.length) return [];
+    const start = lineMap[node.position.start.line - 1];
+    const end = lineMap[node.position.end.line - 1];
+    if (start == null || end == null) return [];
+    return highlightedLines.flatMap(([from, to], index) => from <= end && to >= start ? [index] : []);
+  };
+  const highlightedProps = (node, props) => {
+    const indices = highlightedSpanIndices(node);
+    const classes = [props.className, indices.length ? "source-highlight" : ""].filter(Boolean).join(" ");
+    return { ...props, className: classes || undefined, "data-source-span-indices": indices.length ? indices.join(" ") : undefined };
+  };
 
   const defaultComponents = {
     img({ src, alt, ...props }) {
@@ -110,8 +125,16 @@ export default function MarkdownViewer({
       if (kids.length === 1 && kids[0].tagName === "img") {
         return <>{children}</>;
       }
-      return <p {...props}>{children}</p>;
+      return <p {...highlightedProps(node, props)}>{children}</p>;
     },
+    h1({ node, children, ...props }) { return <h1 {...highlightedProps(node, props)}>{children}</h1>; },
+    h2({ node, children, ...props }) { return <h2 {...highlightedProps(node, props)}>{children}</h2>; },
+    h3({ node, children, ...props }) { return <h3 {...highlightedProps(node, props)}>{children}</h3>; },
+    h4({ node, children, ...props }) { return <h4 {...highlightedProps(node, props)}>{children}</h4>; },
+    li({ node, children, ...props }) { return <li {...highlightedProps(node, props)}>{children}</li>; },
+    blockquote({ node, children, ...props }) { return <blockquote {...highlightedProps(node, props)}>{children}</blockquote>; },
+    pre({ node, children, ...props }) { return <pre {...highlightedProps(node, props)}>{children}</pre>; },
+    tr({ node, children, ...props }) { return <tr {...highlightedProps(node, props)}>{children}</tr>; },
     ...components,
   };
 

@@ -26,10 +26,12 @@ export default async function OkfFilePage({ params }) {
   const { docId, filename } = await params;
   const decodedPath = filename.map(decodeSegment);
   const filePath = decodedPath.map(encodeURIComponent).join("/");
+  const conceptSlug = decodedPath.at(-1)?.replace(/\.md$/i, "");
 
-  const [docResp, resp] = await Promise.all([
+  const [docResp, resp, sourceResp] = await Promise.all([
     backendFetch(`/api/documents/${docId}`),
     backendFetch(`/api/documents/${docId}/okf/${filePath}`),
+    backendFetch(`/api/documents/${docId}/concepts/${encodeURIComponent(conceptSlug)}/source-location`),
   ]);
 
   if (!docResp.ok) notFound();
@@ -37,9 +39,11 @@ export default async function OkfFilePage({ params }) {
   const doc = await docResp.json();
 
   const text = await resp.text();
+  const sourceLocation = sourceResp.ok ? await sourceResp.json() : null;
 
   const chunkMatch = text.match(/^chunk_index:\s*(\d+)/m);
   const chunkIndex = chunkMatch ? Number(chunkMatch[1]) : null;
+  const conceptQuery = `?concept=${encodeURIComponent(conceptSlug)}`;
 
   return (
     <div className="okf-viewer">
@@ -49,8 +53,8 @@ export default async function OkfFilePage({ params }) {
       <div className="okf-doc-bar">
         <span className="okf-doc-name">{doc.filename}</span>
         <div className="okf-doc-actions">
-          <Link className="okf-doc-open" href={`/documents/${docId}/fulltext`}>
-            {t("okf.page.openFulltext")} →
+          <Link className="okf-doc-open" href={`/documents/${docId}/fulltext${conceptQuery}`}>
+            {t("sourceLocation.openInDocument")} →
           </Link>
           <a
             className="download-btn"
@@ -63,12 +67,25 @@ export default async function OkfFilePage({ params }) {
         </div>
       </div>
       <h1>{decodedPath.join("/")}</h1>
+      <aside className="source-evidence-summary">
+        <strong>{t("sourceLocation.title")}</strong>
+        {(sourceLocation?.status === "exact" || sourceLocation?.status === "recovered") && sourceLocation.spans?.length ? (
+          <>
+            <span>{t(sourceLocation.status === "recovered" ? "sourceLocation.recovered" : "sourceLocation.exact", { index: (sourceLocation.chunk_index ?? chunkIndex ?? 0) + 1 })}</span>
+            <blockquote>{sourceLocation.spans[0].quote}</blockquote>
+          </>
+        ) : sourceLocation?.status === "chunk" && sourceLocation.chunk_index != null ? (
+          <span>{t("sourceLocation.chunkOnly", { index: sourceLocation.chunk_index + 1 })}</span>
+        ) : (
+          <span>{t("sourceLocation.unavailable")}</span>
+        )}
+      </aside>
       {chunkIndex != null && (
         <Link
           className="okf-chunk-link"
-          href={`/documents/${docId}/chunks/${chunkIndex}`}
+          href={`/documents/${docId}/chunks/${chunkIndex}${conceptQuery}`}
         >
-          {t("okf.page.linkedChunk", { index: chunkIndex + 1 })}
+          {t("sourceLocation.openInChunk", { index: chunkIndex + 1 })}
         </Link>
       )}
       <ContentViewer text={text} docId={docId} stripFrontmatter />
