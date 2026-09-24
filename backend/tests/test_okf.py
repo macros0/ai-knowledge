@@ -9,6 +9,60 @@ from app.services.llm_client import LLMTruncationError
 from app.services.okf_generator import _chunk_text, _normalize, _parse_relation, _slugify
 
 
+def test_generation_recovers_evidence_when_llm_omits_source_quotes():
+    from app.services.okf_generator import OKFGenerator
+    from app.db.models import Document, DocumentChunk
+    from app.db.session import session_scope
+    from app.services.concept_store import replace_concepts
+    from app.services.source_location import get_source_location
+
+    class ParaphraseLLM:
+        def chat_json(self, *args, **kwargs):
+            return [{"title": "Infotype mapping for Location", "content":
+                     "If the Take from field is mapped to Infotype, the system takes "
+                     "the value directly from the Infotype table P0002-PERIOD."}]
+
+    chunk = ("In case of Infotype, system will take the value directly from the "
+             "Infotype table P0002-PERIOD and the Or directly is the dollar routine.")
+    generator = OKFGenerator(llm=ParaphraseLLM())
+    concepts = generator.generate_chunk(chunk, "source.pdf", 1, 1)
+    assert len(concepts[0].source_spans) == 1
+    span = concepts[0].source_spans[0]
+    assert chunk[span.start:span.end] == "the value directly from the Infotype table P0002-PERIOD"
+    docs, _ = generator.build_okf_docs(
+        "generated-evidence", "source.pdf", concepts,
+        chunk_of_slug={"infotype-mapping-for-location": 0},
+    )
+    with session_scope() as session:
+        session.add(Document(id="generated-evidence", filename="source.pdf"))
+        session.add(DocumentChunk(doc_id="generated-evidence", chunk_index=0, content=chunk))
+        replace_concepts(session, "generated-evidence", docs)
+    saved = get_source_location("generated-evidence", "infotype-mapping-for-location")
+    assert saved.status == "exact"
+    assert saved.spans[0].quote == "the value directly from the Infotype table P0002-PERIOD"
+
+
+@pytest.mark.parametrize("embedded", [False, True])
+def test_generation_saves_source_spans_from_pdf_quotes(embedded):
+    from app.services.okf_generator import OKFGenerator
+
+    quote = "The PW parameter defines taxable wages."
+    class QuoteLLM:
+        def chat_json(self, *args, **kwargs):
+            return [{
+                "title": "Low Use Data",
+                "content": 'Summary.\n\n**Source Quotes:**\n- "' + quote + '"' if embedded else "Summary.",
+                "source_quotes": [] if embedded else [quote],
+            }]
+
+    chunk = "Prefix. The PW parameter defines\n taxable wages. End."
+    concepts = OKFGenerator(llm=QuoteLLM()).generate_chunk(chunk, "source.pdf", 1, 1)
+    assert len(concepts) == 1
+    assert len(concepts[0].source_spans) == 1
+    span = concepts[0].source_spans[0]
+    assert chunk[span.start:span.end] == "The PW parameter defines\n taxable wages."
+
+
 class TestSlugify:
     def test_cyrillic_transliterated(self):
         # транслитерация кириллицы → латиница (ГОСТ-стиль, й→y)

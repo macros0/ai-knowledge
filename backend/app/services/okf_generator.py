@@ -14,7 +14,7 @@ from app.services.comment_concepts import extract_comment_concepts
 from app.services.field_table import extract_table_concepts
 from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMClient, LLMTruncationError
-from app.services.source_evidence import chunk_digest, locate_unique_quote
+from app.services.source_evidence import chunk_digest, embedded_source_quotes, resolve_source_spans
 
 logger = logging.getLogger(__name__)
 
@@ -170,14 +170,9 @@ class OKFGenerator:
             remainder += f"\n[Комментарии извлечены программно: {len(comment_concepts)}]"
         llm_concepts = self._generate_chunk_recursive(remainder, filename, index, total, doc_id, depth=0)
         for concept in llm_concepts:
-            spans = []
-            seen = set()
-            for quote in concept.source_quotes[:3]:
-                span = locate_unique_quote(source_chunk, quote)
-                if span and (span.start, span.end) not in seen:
-                    spans.append(span)
-                    seen.add((span.start, span.end))
-            concept.source_spans = spans
+            concept.source_spans = resolve_source_spans(
+                source_chunk, concept.content, concept.source_quotes,
+            )
         return comment_concepts + table_concepts + llm_concepts
 
     def _generate_chunk_recursive(
@@ -375,6 +370,9 @@ def _normalize(raw: list | dict) -> list[Concept]:
         content = str(item.get("content", "")).strip()
         if not content:
             continue
+        raw_quotes = [quote for quote in raw_quotes if isinstance(quote, str) and quote.strip()]
+        if not raw_quotes:
+            raw_quotes = embedded_source_quotes(content)
         ctype = str(item.get("type", "concept")).lower()
         if ctype not in VALID_TYPES:
             ctype = "concept"

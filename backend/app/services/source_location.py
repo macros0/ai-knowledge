@@ -9,10 +9,7 @@ from sqlalchemy import select
 from app.db.models import DocumentChunk, OkfConcept
 from app.db.session import session_scope
 from app.models.schemas import DocumentTextChunkOut, SourceLocationOut, SourceLocationSpanOut
-from app.services.source_evidence import locate_unique_quote
-
-
-_MIN_LEGACY_QUOTE_CHARS = 24
+from app.services.source_evidence import resolve_source_spans
 
 
 def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
@@ -71,18 +68,15 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
         )
     recovered = False
     if not valid and stored_spans is None:
-        legacy_quote = (concept_content or "").strip()
-        if len(legacy_quote) >= _MIN_LEGACY_QUOTE_CHARS:
-            recovered = locate_unique_quote(content, legacy_quote)
-            if recovered is not None:
-                valid.append(
-                    SourceLocationSpanOut(
-                        start=recovered.start,
-                        end=recovered.end,
-                        quote=content[recovered.start : recovered.end][:240],
-                    )
+        for span in resolve_source_spans(content, concept_content or ""):
+            valid.append(
+                SourceLocationSpanOut(
+                    start=span.start,
+                    end=span.end,
+                    quote=content[span.start : span.end][:240],
                 )
-                recovered = True
+            )
+            recovered = True
     valid.sort(key=lambda item: (item.start, item.end))
     return SourceLocationOut(
         status="recovered" if recovered else "exact" if valid else "chunk",

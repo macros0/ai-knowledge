@@ -5,28 +5,28 @@ import { applyTheme, readStored, resolveTheme, setStored } from "@/lib/theme";
 
 const ThemeContext = createContext(null);
 
-function storedMode() {
-  // На сервере (SSR) window нет — возвращаем дефолт; боевой режим
-  // до гидратации выставляет bootScript, поэтому мигания нет.
-  if (typeof window === "undefined") return "auto";
-  return readStored(window) || "auto";
-}
-
 export function ThemeProvider({ children }) {
-  const [mode, setMode] = useState(storedMode);
-  const [resolvedTheme, setResolvedTheme] = useState(() =>
-    resolveTheme(storedMode(), typeof window !== "undefined" ? window : undefined)
-  );
+  // SSR и первый клиентский рендер должны показывать одинаковый переключатель.
+  // null означает «настройки ещё не прочитаны»: эффекты не должны затереть
+  // тему, которую bootScript уже применил до первой отрисовки страницы.
+  const [mode, setMode] = useState(null);
+  const [resolvedTheme, setResolvedTheme] = useState(null);
+
+  useEffect(() => {
+    const initialMode = readStored(window) || "auto";
+    setMode(initialMode);
+    setResolvedTheme(resolveTheme(initialMode, window));
+  }, []);
 
   // Конкретная тема синхронизируется с атрибутом data-theme на <html>.
   // Это единственное место применения — гонок «initial vs stored» нет.
   useEffect(() => {
-    applyTheme(resolvedTheme, window);
+    if (resolvedTheme !== null) applyTheme(resolvedTheme, window);
   }, [resolvedTheme]);
 
   // Не-auto: выбранная тема = фактическая.
   useEffect(() => {
-    if (mode !== "auto") setResolvedTheme(mode);
+    if (mode !== null && mode !== "auto") setResolvedTheme(mode);
   }, [mode]);
 
   // Auto: следим за сменой системной темы (live-переключение).
@@ -46,7 +46,7 @@ export function ThemeProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ mode, resolvedTheme, setMode: changeMode }),
+    () => ({ mode: mode ?? "auto", resolvedTheme: resolvedTheme ?? "dark", setMode: changeMode }),
     [mode, resolvedTheme, changeMode]
   );
 
