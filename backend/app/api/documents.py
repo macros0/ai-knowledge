@@ -7,10 +7,12 @@ import mimetypes
 import re
 from datetime import date, datetime, time, timezone
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
+
+from sqlalchemy import func, or_, select
 
 from app.api import errors
-from app.services.errors import DomainError
+from app.services.errors import ConflictError, DomainError
 from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, Form, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -18,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.auth.models import User
 from app.auth.service import require_role, require_user
 from app.config import get_settings
-from app.db.models import DocumentChunk, OkfAttachment, OkfConcept
+from app.db.models import Document, DocumentChunk, OkfAttachment, OkfConcept
 from app.db.session import session_scope
 from app.models.schemas import (
     BulkOperationRequest,
@@ -53,12 +55,13 @@ from app.services.dev_detector import attach_development, detect
 from app.services.dev_sync import reindex_document_dev_tags, schedule_document_dev_tags_sync
 from app.services.development_registry import get_development_registry
 from app.services.document_tag_service import bulk_update_tags, update_document_tags
-from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, QueueOverloadedError, get_job_queue
+from app.services.job_queue import BULK_DELETE, BULK_REGENERATE, BULK_RESUME, QueueOverloadedError, get_job_queue
+from app.services.bulk_generation import generation_skip_code, reserved_generation_doc_ids
 from app.services.export_queue import ExportAdmissionError, ExportAuditUnavailableError, get_export_queue
 from app.services.okf_generator import _build_markdown
 from app.services.pipeline import get_pipeline, save_upload_stream
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
-from app.services.registry import get_registry
+from app.services.registry import SERVER_RESTARTED_MESSAGE, get_registry
 from app.services.locale_service import request_locale
 from app.services.source_locale import is_valid_source_locale, normalize_source_locale
 from app.services.source_locale_sync import reindex_document_source_locale, schedule_source_locale_sync
@@ -869,11 +872,16 @@ def regenerate_document(
 def bulk_preview(
     body: BulkOperationRequest,
     user: User = Depends(require_role("admin")),
+    operation: Literal["regenerate", "resume"] | None = Query(default=None),
 ):
     """Предпросмотр масштаба массовой операции без её выполнения."""
     doc_ids = list(dict.fromkeys(body.doc_ids))
     documents = []
     missing = []
+    eligible = []
+    skipped = []
+    with session_scope() as session:
+        reserved = reserved_generation_doc_ids(session) if operation == "resume" else set()
     for doc_id in doc_ids:
         doc = _registry.get(doc_id)
         if doc is None:
@@ -882,6 +890,14 @@ def bulk_preview(
             documents.append(
                 {"id": doc["id"], "filename": doc["filename"], "status": doc["status"]}
             )
+        if operation:
+            skip_code = generation_skip_code(doc, resume=operation == "resume")
+            if not skip_code and doc_id in reserved:
+                skip_code = errors.ALREADY_PROCESSING
+            if skip_code:
+                skipped.append({"doc_id": doc_id, "error_code": skip_code})
+            else:
+                eligible.append(doc_id)
     estimated = len(documents) * get_settings().bulk_regenerate_est_minutes_per_doc
     return BulkPreviewOut(
         requested=len(doc_ids),
@@ -889,7 +905,59 @@ def bulk_preview(
         missing=missing,
         documents=documents,
         estimated_minutes=estimated,
+        eligible_doc_ids=eligible if operation else None,
+        skipped=skipped,
+        max_docs=(get_settings().bulk_resume_max_docs if operation == "resume" else get_settings().bulk_regenerate_max_docs),
     )
+
+
+@router.get("/bulk-resume/interrupted")
+def preview_interrupted_documents(user: User = Depends(require_role("admin"))):
+    """Snapshot across all uploaders/filters, capped without silently losing count."""
+    limit = get_settings().bulk_resume_max_docs
+    conditions = (
+        Document.deleted_at.is_(None),
+        Document.status == "paused",
+        or_(Document.error_code == errors.SERVER_RESTARTED,
+            (Document.error_code.is_(None)) & (Document.error == SERVER_RESTARTED_MESSAGE)),
+    )
+    with session_scope() as session:
+        conditions += (Document.id.not_in(reserved_generation_doc_ids(session)),)
+        total = session.scalar(select(func.count()).select_from(Document).where(*conditions))
+        rows = session.execute(
+            select(Document.id, Document.filename, Document.status)
+            .where(*conditions).order_by(Document.id).limit(limit)
+        ).all()
+    documents = [dict(row._mapping) for row in rows]
+    return {"requested": total, "matched": len(documents), "documents": documents,
+            "eligible_doc_ids": [d["id"] for d in documents], "skipped": [], "max_docs": limit}
+
+
+@router.post("/bulk-resume")
+def bulk_resume(
+    body: BulkOperationRequest,
+    request: Request,
+    user: User = Depends(require_role("admin")),
+):
+    """Resume selected documents through the queue, preserving saved checkpoints."""
+    settings = get_settings()
+    # Missing/deleted documents are reported individually by the worker.
+    doc_ids = list(dict.fromkeys(body.doc_ids))
+    if not doc_ids:
+        raise ApiError(status_code=400, code=errors.EMPTY_DOCUMENT_LIST, detail="Список документов пуст")
+    if len(doc_ids) > settings.bulk_resume_max_docs:
+        raise ApiError(status_code=400, code=errors.DOCUMENT_LIMIT_EXCEEDED, detail="Превышен лимит документов")
+    try:
+        get_rate_limiter().check_action(user.user_id, BULK_RESUME,
+            max_requests=settings.bulk_resume_max_ops_per_hour, window_seconds=3600)
+        return get_job_queue().submit(BULK_RESUME, doc_ids, user, ip_address=_client_ip(request))
+    except RateLimitExceeded as exc:
+        raise ApiError(status_code=429, code=errors.RATE_LIMITED, detail=str(exc),
+                       headers={"Retry-After": str(max(1, int(exc.retry_after)))}) from exc
+    except QueueOverloadedError as exc:
+        raise ApiError(status_code=503, code=errors.QUEUE_OVERLOADED, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise errors.domain_error(exc, 409) from exc
 
 
 @router.post("/bulk-delete")

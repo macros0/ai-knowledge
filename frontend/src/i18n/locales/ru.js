@@ -2,6 +2,22 @@
 // Добавление нового языка: копия этого файла + строка в locales/index.js.
 
 export default {
+  "bulkGeneration.regenerate": "Перегенерировать выбранные",
+  "bulkGeneration.backendUpdate": "Работающий сервер ещё не поддерживает эту операцию. После завершения текущей обработки перезапустите backend с обновлённым кодом.",
+  "bulkGeneration.resume": "Возобновить выбранные",
+  "bulkGeneration.interrupted": "Возобновить прерванные перезапуском",
+  "bulkGeneration.regenerateHelp": "Концепты и сохранённый прогресс выбранных документов будут удалены. Генерация начнётся заново. Для 15 и более документов по умолчанию требуется одобрение второго администратора.",
+  "bulkGeneration.resumeHelp": "Обработка продолжится с сохранённых этапов. Уже завершённые, обрабатываемые и удалённые документы будут пропущены. Результат появится в разделе «Администрирование».",
+  "bulkGeneration.interruptedHelp": "Документы всех пользователей, прерванные перезапуском сервера. Фильтры списка не применяются; документы, приостановленные вручную, не включаются.",
+  "bulkGeneration.start": "Запустить: {count}",
+  "bulkGeneration.counts": "Доступно: {eligible} · Будет пропущено: {skipped}",
+  "bulkGeneration.limit": "За одну операцию можно обработать не более {max} документов. Уменьшите выбор.",
+  "bulkGeneration.batch": "Всего прервано: {total}. В эту операцию войдут первые {count}; остальные можно возобновить следующей операцией.",
+  "bulkGeneration.skipped": "Причины пропуска",
+  "bulkGeneration.details": "Ошибки и пропущенные документы",
+  "bulkGeneration.progress": "Завершено: {processed} из {total} · Ошибок: {errors} · Пропущено: {skipped}",
+  "admin.jobType.bulk_resume": "Массовое возобновление",
+  "security.action.document_bulk_resume": "Массовое возобновление генерации",
   "reference.originalLanguage": "Язык оригинала",
   "reference.editLanguage": "Изменить язык оригинала",
   "reference.collapseLanguage": "Свернуть редактирование языка оригинала",

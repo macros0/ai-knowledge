@@ -461,6 +461,9 @@ class BulkPreviewOut(BaseModel):
     missing: list[str] = Field(default_factory=list)
     documents: list[dict[str, Any]] = Field(default_factory=list)
     estimated_minutes: float = 0.0
+    eligible_doc_ids: list[str] | None = None
+    skipped: list[dict[str, Any]] = Field(default_factory=list)
+    max_docs: int | None = None
 
 
 class AuditQueryParams(BaseModel):

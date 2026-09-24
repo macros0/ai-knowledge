@@ -1,11 +1,12 @@
 """Очередь массовых (системных) операций администратора.
 
-Массовые удаление/перегенерация (bulk) выполняются фоновым worker-потоком, а не
+Массовые удаление/перегенерация/возобновление выполняются фоновым worker-потоком, а не
 синхронно в запросе — обычные запросы (чат) не блокируются массовой перегенерацией.
 
 Ключевые правила (Этап 2а roadmap):
   - four-eyes: операция с числом документов >= approval_threshold_docs_<type>
-    переходит в awaiting_approval и требует одобрения вторым администратором;
+    удаления/перегенерации переходит в awaiting_approval и требует одобрения
+    вторым администратором; возобновление сохраняет чекпоинты и не требует одобрения;
   - circuit breaker: если число ожидающих задач >= job_queue_max_pending, новые
     массовые операции отклоняются до освобождения очереди;
   - аудит массовой операции пишется ПО ДОКУМЕНТУ (по записи на каждый doc_id),
@@ -27,12 +28,14 @@ from app.db.session import session_scope
 from app.services import audit as audit_mod
 from app import error_codes as codes
 from app.services.errors import ConflictError, DomainError, NotFoundError
+from app.services.bulk_generation import generation_skip_code, reserved_generation_doc_ids
 
 logger = logging.getLogger(__name__)
 
 BULK_DELETE = "bulk_delete"
 BULK_REGENERATE = "bulk_regenerate"
-JOB_TYPES = frozenset({BULK_DELETE, BULK_REGENERATE})
+BULK_RESUME = "bulk_resume"
+JOB_TYPES = frozenset({BULK_DELETE, BULK_REGENERATE, BULK_RESUME})
 
 STATUS_QUEUED = "queued"
 STATUS_RUNNING = "running"
@@ -89,6 +92,7 @@ def _to_dict(job: Job) -> dict:
 class JobQueue:
     def __init__(self, *, start_worker: bool = True):
         self._queue: queue.Queue[int] = queue.Queue()
+        self._admission_lock = threading.Lock()
         self._worker: threading.Thread | None = None
         if start_worker:
             self._start_worker()
@@ -138,6 +142,7 @@ class JobQueue:
                 job.result = {
                     "processed": 0,
                     "errors": [],
+                    **(job.result or {}),
                     "error": "Процесс сервера перезапущен во время выполнения",
                     "error_code": codes.JOB_INTERRUPTED,
                 }
@@ -160,6 +165,12 @@ class JobQueue:
         *,
         ip_address: str | None = None,
     ) -> dict:
+        # This application runs one backend process. Serialize reservations and
+        # admission so concurrent clicks cannot enqueue the same resume twice.
+        with self._admission_lock:
+            return self._submit(job_type, doc_ids, user, ip_address=ip_address)
+
+    def _submit(self, job_type: str, doc_ids: list[str], user, *, ip_address: str | None) -> dict:
         """Создаёт задачу и ставит её в очередь (или в awaiting_approval).
 
         user — доменная модель User (user_id/username). doc_ids — список ID
@@ -184,10 +195,12 @@ class JobQueue:
             if job_type == BULK_DELETE
             else settings.approval_threshold_docs_regenerate
         )
-        needs_approval = len(doc_ids) >= threshold
+        needs_approval = job_type != BULK_RESUME and len(doc_ids) >= threshold
         status = STATUS_AWAITING_APPROVAL if needs_approval else STATUS_QUEUED
 
         with session_scope() as s:
+            if job_type == BULK_RESUME and set(doc_ids) & reserved_generation_doc_ids(s):
+                raise ConflictError("Документы уже ожидают обработки", code=codes.ALREADY_PROCESSING)
             job = Job(
                 job_type=job_type,
                 status=status,
@@ -324,6 +337,7 @@ class JobQueue:
         doc_ids = params.get("doc_ids") or []
         results: list[dict] = []
         errors: list[dict] = []
+        skipped: list[dict] = []
 
         from app.services.pipeline import get_pipeline
 
@@ -344,35 +358,47 @@ class JobQueue:
                         ip_address=params.get("ip_address"),
                     )
                 else:
-                    self._regenerate_one(pipeline, doc_id)
+                    skip_code = generation_skip_code(
+                        pipeline.registry.get(doc_id), resume=job["job_type"] == BULK_RESUME
+                    )
+                    if skip_code:
+                        skipped.append({"doc_id": doc_id, "error_code": skip_code})
+                        continue
                     audit_mod.record(
                         _JobUser(job),
-                        audit_mod.DOCUMENT_BULK_REGENERATE,
+                        audit_mod.DOCUMENT_BULK_RESUME if job["job_type"] == BULK_RESUME else audit_mod.DOCUMENT_BULK_REGENERATE,
                         audit_mod.TARGET_DOCUMENT,
                         target_id=doc_id,
                         ip_address=params.get("ip_address"),
+                        new_value={"job_id": job_id, "phase": "requested"},
                     )
+                    self._regenerate_one(pipeline, doc_id, resume=job["job_type"] == BULK_RESUME)
                 results.append({"doc_id": doc_id, "ok": True})
             except Exception as exc:
                 logger.warning("Массовая операция: документ %s пропущен: %s", doc_id, exc, exc_info=True)
-                errors.append({"doc_id": doc_id, "error": str(exc)})
+                errors.append({"doc_id": doc_id, "error": str(exc), "error_code": getattr(exc, "code", codes.INTERNAL_ERROR)})
+            finally:
+                self._set_status(job_id, STATUS_RUNNING, result={
+                    "processed": len(results), "total": len(doc_ids),
+                    "results": list(results), "errors": list(errors), "skipped": list(skipped),
+                })
 
-        self._finish(job_id, results, errors)
+        self._finish(job_id, results, errors, skipped=skipped)
 
-    def _regenerate_one(self, pipeline, doc_id: str) -> None:
-        """Перегенерация одного документа с ожиданием завершения его пайплайна."""
+    def _regenerate_one(self, pipeline, doc_id: str, *, resume: bool = False) -> None:
+        """Generate or resume one document, waiting before starting the next."""
         settings = get_settings()
-        pipeline.regenerate(doc_id)
-        deadline = time.time() + settings.job_doc_timeout_seconds
-        while time.time() < deadline:
+        (pipeline.resume if resume else pipeline.regenerate)(doc_id)
+        deadline = time.monotonic() + settings.job_doc_timeout_seconds
+        while time.monotonic() < deadline:
             doc = pipeline.registry.get(doc_id)
             if doc is None:
                 raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
             if doc.get("status") in _DOC_TERMINAL:
-                if doc.get("status") in ("failed", "error"):
+                if doc.get("status") != "done":
                     raise DomainError(
                         doc.get("error") or "Перегенерация завершилась ошибкой",
-                        code=codes.REGENERATE_FAILED,
+                        code=doc.get("error_code") or codes.REGENERATE_FAILED,
                     )
                 return
             time.sleep(1.0)
@@ -397,17 +423,22 @@ class JobQueue:
         errors: list[dict],
         *,
         error: str | None = None,
+        skipped: list[dict] | None = None,
     ) -> None:
         with session_scope() as s:
             job = s.get(Job, job_id)
             if job is None:
                 return
             total = len((job.params or {}).get("doc_ids") or [])
-            failed = bool(error) or (total > 0 and len(errors) == total)
+            failed = bool(error) or (bool(errors) and not results)
             job.status = STATUS_FAILED if failed else STATUS_COMPLETED
             job.finished_at = _utcnow()
             job.result = {
+                **(job.result or {}),
                 "processed": len(results),
+                "total": total,
+                "results": results,
+                "skipped": skipped or [],
                 "errors": errors,
                 "error": error,
             }

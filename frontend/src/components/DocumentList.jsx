@@ -15,6 +15,7 @@ import { useChat } from "@/context/ChatContext";
 import { selectionLimit } from "@/lib/documentBulkLimits.mjs";
 import SelectionBar from "./SelectionBar";
 import PreviewModal from "./PreviewModal";
+import BulkGenerationModal from "./BulkGenerationModal";
 import DevelopmentFilter from "./DevelopmentFilter";
 import DevelopmentPicker from "./DevelopmentPicker";
 import DuplicateModal from "./DuplicateModal";
@@ -111,6 +112,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   // чтобы отличать «включено» (✓) от частично снятого вручную (◐).
   const [filterSelectedIds, setFilterSelectedIds] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [generationAction, setGenerationAction] = useState(null);
   // Поиск теперь серверный: searchInput — что ввёл пользователь (без задержки),
   // search — дебаунснутое значение, уходящее в запрос.
   const [searchInput, setSearchInput] = useState(() => initialParam(searchParams, "q", ""));
@@ -849,6 +851,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           onToggleAllByFilter={toggleAllByFilter}
           onSelectPage={selectPage}
           onOpenPreview={() => setShowPreview(true)}
+          onGeneration={(operation) => setGenerationAction({ operation, docIds: selectedIds })}
           onExport={exportSelected}
           onDone={(result) => {
             const n = result?.updated?.length ?? 0;
@@ -868,6 +871,17 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           }}
         />
       )}
+      {isAdmin && generationAction && <BulkGenerationModal
+        operation={generationAction.operation}
+        docIds={generationAction.docIds}
+        onClose={() => setGenerationAction(null)}
+        onDone={() => {
+          setGenerationAction(null);
+          setSelected({});
+          setFilterSelectedIds([]);
+          load();
+        }}
+      />}
       {dupDoc && (
         <DuplicateModal
           doc={dupDoc}

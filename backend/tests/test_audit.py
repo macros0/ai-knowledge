@@ -25,6 +25,7 @@ EXPECTED_ACTION_TYPES = {
     "document_regenerate",
     "document_bulk_regenerate",
     "document_resume",
+    "document_bulk_resume",
     "document_development_set",
     "document_tags_update",
     "document_bulk_tags_update",

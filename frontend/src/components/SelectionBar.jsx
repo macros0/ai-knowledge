@@ -39,6 +39,7 @@ export default function SelectionBar({
   onToggleAllByFilter,
   onSelectPage,
   onOpenPreview,
+  onGeneration,
   onExport,
   onDone,
 }) {
@@ -129,6 +130,17 @@ export default function SelectionBar({
               {t("selection.export")}
             </button>
           )}
+          {canDelete && <>
+            <button type="button" className="bulk-tag-btn" disabled={busy || !hasSelection} onClick={() => onGeneration("regenerate")}>
+              {t("bulkGeneration.regenerate")}
+            </button>
+            <button type="button" className="bulk-tag-btn" disabled={busy || !hasSelection} onClick={() => onGeneration("resume")}>
+              {t("bulkGeneration.resume")}
+            </button>
+            <button type="button" className="bulk-tag-btn" disabled={busy} onClick={() => onGeneration("interrupted")}>
+              {t("bulkGeneration.interrupted")}
+            </button>
+          </>}
           <ReferenceLocaleSelect value={tagLocale} onChange={setTagLocale} disabled={busy} />
           <TagCombobox
             value={addTag}

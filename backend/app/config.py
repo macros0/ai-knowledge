@@ -245,6 +245,9 @@ class Settings(BaseSettings):
     # Soft-лимит числа документов на одну массовую операцию.
     bulk_delete_max_docs: int = 50
     bulk_regenerate_max_docs: int = 20
+    # Resume keeps checkpoints and runs serially through the existing worker.
+    bulk_resume_max_docs: int = Field(default=1000, ge=1, le=10_000)
+    bulk_resume_max_ops_per_hour: int = Field(default=3, ge=1)
     # Выгрузка исходных документов: отдельная очередь/worker (не JobQueue).
     # Размеры задаются в MiB и переводятся в байты только в export-сервисе.
     bulk_export_enabled: bool = True

@@ -305,12 +305,12 @@ export function regenerateDocument(docId) {
   return request(`/documents/${docId}/regenerate`, { method: "POST" });
 }
 
-export function bulkPreview(docIds) {
-  return request("/documents/bulk-preview", {
+export function bulkPreview(docIds, operation) {
+  return request(`/documents/bulk-preview${operation ? `?operation=${encodeURIComponent(operation)}` : ""}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ doc_ids: docIds }),
-  });
+  }).then((data) => operation ? generationPreview(data) : data);
 }
 
 export function bulkDelete(docIds) {
@@ -381,6 +381,25 @@ export function unblockUser(externalId) {
 
 export function listOkfFiles(docId) {
   return request(`/documents/${docId}/okf`);
+}
+
+export function bulkResume(docIds) {
+  return request("/documents/bulk-resume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_ids: docIds }),
+  });
+}
+
+function generationPreview(data) {
+  if (!Array.isArray(data?.eligible_doc_ids) || !Array.isArray(data?.skipped) || !Array.isArray(data?.documents) || !Number.isInteger(data?.max_docs)) {
+    throw new ApiError("Generation preview requires an updated backend", { status: 404 });
+  }
+  return data;
+}
+
+export function previewInterruptedDocuments() {
+  return request("/documents/bulk-resume/interrupted").then(generationPreview);
 }
 
 export function getDocumentChunks(docId) {

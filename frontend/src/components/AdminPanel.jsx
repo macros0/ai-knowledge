@@ -33,6 +33,7 @@ export default function AdminPanel() {
   const JOB_TYPE_LABELS = {
     bulk_delete: t("admin.jobType.bulk_delete"),
     bulk_regenerate: t("admin.jobType.bulk_regenerate"),
+    bulk_resume: t("admin.jobType.bulk_resume"),
     bulk_export: t("admin.jobType.bulk_export"),
   };
 
@@ -105,6 +106,15 @@ export default function AdminPanel() {
                   })}
                 </div>
               )}
+              {["bulk_regenerate", "bulk_resume"].includes(job.job_type) && job.result && <div className="job-meta">
+                {t("bulkGeneration.progress", { processed: job.result.processed ?? 0, total: job.result.total ?? job.params?.doc_ids?.length ?? 0, errors: job.result.errors?.length ?? 0, skipped: job.result.skipped?.length ?? 0 })}
+                {(job.result.errors?.length > 0 || job.result.skipped?.length > 0) && <details>
+                  <summary>{t("bulkGeneration.details")}</summary>
+                  <ul>{[...(job.result.errors ?? []), ...(job.result.skipped ?? [])].map((item) => <li key={item.doc_id}>
+                    {item.doc_id}: {friendlyApiError(new ApiError("", { code: item.error_code }), t)}
+                  </li>)}</ul>
+                </details>}
+              </div>}
               {job.job_type === "bulk_export" && job.result && (
                 <div className="job-meta">
                   {t("admin.exportProgress", { processed: job.result.processed ?? 0, total: job.result.total ?? 0 })}

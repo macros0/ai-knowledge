@@ -163,6 +163,7 @@
   "admin.jobType.bulk_delete": [],
   "admin.jobType.bulk_export": [],
   "admin.jobType.bulk_regenerate": [],
+  "admin.jobType.bulk_resume": [],
   "admin.languages.actError": [
     "message"
   ],
@@ -395,6 +396,32 @@
   "auth.ssoMode": [],
   "authError.sessionExpired": [],
   "authError.unavailable": [],
+  "bulkGeneration.backendUpdate": [],
+  "bulkGeneration.batch": [
+    "total"
+  ],
+  "bulkGeneration.counts": [
+    "eligible",
+    "skipped"
+  ],
+  "bulkGeneration.details": [],
+  "bulkGeneration.interrupted": [],
+  "bulkGeneration.interruptedHelp": [],
+  "bulkGeneration.limit": [
+    "max"
+  ],
+  "bulkGeneration.progress": [
+    "errors",
+    "processed",
+    "skipped",
+    "total"
+  ],
+  "bulkGeneration.regenerate": [],
+  "bulkGeneration.regenerateHelp": [],
+  "bulkGeneration.resume": [],
+  "bulkGeneration.resumeHelp": [],
+  "bulkGeneration.skipped": [],
+  "bulkGeneration.start": [],
   "chat.adminHint": [],
   "chat.askFirst": [],
   "chat.assistant": [],
@@ -939,6 +966,7 @@
   "security.action.document_bulk_delete": [],
   "security.action.document_bulk_regenerate": [],
   "security.action.document_bulk_restore": [],
+  "security.action.document_bulk_resume": [],
   "security.action.document_bulk_tags_update": [],
   "security.action.document_delete": [],
   "security.action.document_development_set": [],

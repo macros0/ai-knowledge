@@ -25,6 +25,7 @@ DOCUMENT_BULK_DELETE = "document_bulk_delete"
 DOCUMENT_REGENERATE = "document_regenerate"
 DOCUMENT_BULK_REGENERATE = "document_bulk_regenerate"
 DOCUMENT_RESUME = "document_resume"
+DOCUMENT_BULK_RESUME = "document_bulk_resume"
 DOCUMENT_DEVELOPMENT_SET = "document_development_set"
 DOCUMENT_TAGS_UPDATE = "document_tags_update"
 DOCUMENT_BULK_TAGS_UPDATE = "document_bulk_tags_update"
@@ -87,6 +88,7 @@ ACTION_TYPES = frozenset(
         DOCUMENT_REGENERATE,
         DOCUMENT_BULK_REGENERATE,
         DOCUMENT_RESUME,
+        DOCUMENT_BULK_RESUME,
         DOCUMENT_DEVELOPMENT_SET,
         DOCUMENT_TAGS_UPDATE,
         DOCUMENT_BULK_TAGS_UPDATE,
