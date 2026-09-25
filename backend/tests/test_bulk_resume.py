@@ -7,8 +7,11 @@ from app import error_codes as codes
 from app.services.audit import AuditService
 from app.services.job_queue import JobQueue
 from app.services.registry import DocumentRegistry, SERVER_RESTARTED_MESSAGE
-from tests.test_bulk_ops import client, login, make_docs  # noqa: F401
-from tests.test_pipeline_integration import isolated_env, TestPartialGenerationRecovery as _RecoverySetup  # noqa: F401
+from tests.test_bulk_ops import client as client, login, make_docs
+from tests.test_pipeline_integration import (
+    isolated_env as isolated_env,
+    TestPartialGenerationRecovery as _RecoverySetup,
+)
 
 
 def test_resume_is_admin_only(client):
