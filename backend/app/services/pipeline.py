@@ -374,11 +374,14 @@ class Pipeline:
         blocks = parse_document(filepath, filename, attachments_dir=attachments_dir)
         markdown, attach_spans = markdown_attachment_spans(blocks)
         attachments = _collect_attachments(blocks, doc_root)
+        # Only skip generation when there is no text at all. The diagnostic
+        # threshold of 200 chars is not safe here: short text can be meaningful.
+        has_text = bool(_IMAGE_LINK_RE.sub("", markdown).strip())
 
         # Автоопределение номера разработки: только на «свежем» проходе и если
         # regex по имени файла (на этапе upload) ничего не нашёл. Non-fatal —
         # ошибка LLM/справочника не прерывает обработку документа.
-        if not resume and self.settings.dev_detection_enabled:
+        if has_text and not resume and self.settings.dev_detection_enabled:
             doc = self.registry.get(doc_id)
             if doc and not doc.get("development_id"):
                 detection = detect(markdown, filename, doc_id)
@@ -458,7 +461,10 @@ class Pipeline:
                     try:
                         gen_quality.drain()
                         self.registry.update(doc_id, current_chunk=i + 1)
-                        concepts = self.okf_generator.generate_chunk(chunk, filename, i + 1, total, doc_id=doc_id)
+                        concepts = (
+                            self.okf_generator.generate_chunk(chunk, filename, i + 1, total, doc_id=doc_id)
+                            if has_text else []
+                        )
                         # Телеметрия деградации этого чанка (salvage JSON,
                         # fallback классификатора) — до любых других вызовов.
                         degradation = gen_quality.drain()

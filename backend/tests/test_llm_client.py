@@ -515,6 +515,22 @@ class TestAbandonedCallCleanup:
 
 
 class TestParseJson:
+    @pytest.mark.parametrize("raw", [
+        "Only images; no concepts.\n\n```json\n[]\n```",
+        "No concepts: []\nNothing to extract.",
+    ])
+    def test_empty_array_with_explanation_is_valid(self, raw):
+        assert llm_module._parse_json(raw) == []
+
+    @pytest.mark.parametrize("raw,reason", [
+        ('No concepts: [] [{"id":"extra"}]', None),
+        ('No concepts: [] {"id":', None),
+        ('No concepts: []', 'length'),
+    ])
+    def test_empty_array_does_not_hide_truncation(self, raw, reason):
+        with pytest.raises(LLMTruncationError):
+            llm_module._parse_json(raw, finish_reason=reason)
+
     def test_truncated_array_raises_truncation_error(self):
         from app.services.llm_client import _parse_json
 

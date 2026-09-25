@@ -72,6 +72,46 @@ def _concept() -> Concept:
 
 
 class TestPartialGenerationRecovery:
+    @pytest.mark.parametrize("resume", [False, True])
+    def test_scan_without_text_finishes_without_llm(self, isolated_env, monkeypatch, resume):
+        reg, src = isolated_env
+        reg.create("scan", "scan.pdf", "application/pdf", 100)
+        pipeline = self.setup_pipeline(monkeypatch)
+        pipeline.settings.dev_detection_enabled = True
+        chunks = ["![Page 1](attachments/1.png)", "![Page 2](attachments/2.png)"]
+        monkeypatch.setattr("app.services.pipeline.markdown_attachment_spans", lambda b: ("\n\n".join(chunks), []))
+        pipeline.okf_generator.chunk_text = lambda text: chunks
+
+        def unexpected_llm(*args, **kwargs):
+            raise AssertionError("Image-only documents must not call the LLM")
+
+        monkeypatch.setattr("app.services.pipeline.detect", unexpected_llm)
+        pipeline.okf_generator.generate_chunk = unexpected_llm
+        if resume:
+            StagingStore("scan").create(2)
+            reg.update("scan", status="paused", error="JSON failure", error_code="internal_error")
+        pipeline._process("scan", src, "scan.pdf", [], resume=resume)
+        doc = reg.get("scan")
+        assert doc["status"] == "done"
+        assert doc["problem"] == "no_text_layer"
+        assert doc["error"] is None
+        assert doc["error_code"] is None
+        assert doc["processed_chunks"] == doc["total_chunks"] == 2
+        assert doc["okf_concept_count"] == 0
+        assert not StagingStore("scan").exists()
+
+    def test_short_text_with_image_still_generates_concepts(self, isolated_env, monkeypatch):
+        reg, src = isolated_env
+        reg.create("short", "short.pdf", "application/pdf", 100)
+        pipeline = self.setup_pipeline(monkeypatch)
+        markdown = "![Page](attachments/1.png)\nRest between sets: 60 seconds."
+        monkeypatch.setattr("app.services.pipeline.markdown_attachment_spans", lambda b: (markdown, []))
+        pipeline.okf_generator.chunk_text = lambda text: [text]
+        pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
+        pipeline._process("short", src, "short.pdf", [], resume=False)
+        assert reg.get("short")["okf_concept_count"] == 1
+        assert reg.get("short")["problem"] is None
+
     def setup_pipeline(self, monkeypatch):
         pipeline = Pipeline()
         pipeline.settings.dedup_enabled = False

@@ -617,7 +617,7 @@ def _parse_json(
     if closed != -1:
         prefix = fragment[: closed + 1].strip()
         recovered = _try_load(prefix)
-        if recovered is not None and recovered:
+        if recovered is not None:
             tail = fragment[closed + 1 :].strip()
             if _tail_has_json_structure(tail):
                 if not salvage_truncated:
