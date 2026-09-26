@@ -30,6 +30,7 @@ from app.db.models import (
 )
 from app.db.session import session_scope
 from app.services.generation_store import lock_document_write
+from app.services.problem_codes import ATTACHMENT_PARTIAL_RESULT
 from app import error_codes as codes
 from app.services.storage import (
     clear_transient_storage_failure,
@@ -382,7 +383,13 @@ class DocumentRegistry:
                     Document.has_duplicates.is_(True),
                     # Диагностический problem-код при зелёном done (инцидент
                     # 03.09.2026): неполнота без исключения — тоже «Проблемные».
-                    Document.problem.isnot(None),
+                    # Старый attachment_partial_result — предупреждение дерева
+                    # источников; его сохраняем для совместимости, но не считаем
+                    # проблемой документа.
+                    and_(
+                        Document.problem.isnot(None),
+                        Document.problem != ATTACHMENT_PARTIAL_RESULT,
+                    ),
                     # Готовый документ без привязанной разработки — «черновик,
                     # требует разметки» (без suggestion) либо «требует уточнения»
                     # (с development_suggestion). Оба — «не размечен», в «Проблемные».

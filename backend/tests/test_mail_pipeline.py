@@ -152,7 +152,7 @@ def test_mail_pipeline_keeps_nested_mail_chunks_concepts_and_sources_together(
                 if unsupported_attachment else [])
     assert document["parse_warnings"] == warnings
     assert document["status"] == "done"
-    assert document["problem"] == ("attachment_partial_result" if unsupported_attachment else None)
+    assert document["problem"] is None
 
     with session_scope() as session:
         source_rows = session.query(DocumentSource).filter_by(doc_id=DOC_ID).order_by(DocumentSource.source_id).all()
@@ -320,7 +320,7 @@ def test_pipeline_reports_embedded_parse_warning_without_losing_searchable_sibli
 
     document = registry.get(doc_id)
     assert document["status"] == "done"
-    assert document["problem"] == "attachment_partial_result"
+    assert document["problem"] is None
     assert document["parse_warnings"] == [{"code": "mail_parse_failed", "source_id": "root/0"}]
 
     with session_scope() as session:
@@ -398,7 +398,7 @@ def test_disabled_embedded_mail_keeps_parent_searchable_and_original_downloadabl
 
     document = registry.get(doc_id)
     assert document["status"] == "done"
-    assert document["problem"] == ("attachment_partial_result" if with_parent_text else "no_text_layer")
+    assert document["problem"] == (None if with_parent_text else "no_text_layer")
     assert document["parser_version"].endswith("-mail-disabled")
     assert document["parse_warnings"] == [{"code": "mail_import_disabled", "source_id": "root/0"}]
     with session_scope() as session:

@@ -12,6 +12,7 @@ from app.config import Settings
 from app.main import create_app
 from app.services.attribute_registry import get_attribute_registry
 from app.services.development_registry import get_development_registry
+from app.services.problem_codes import ATTACHMENT_PARTIAL_RESULT
 from app.services.registry import DocumentRegistry
 
 ROLE_GROUPS = {
@@ -172,6 +173,21 @@ class TestProblemFilter:
         reg = DocumentRegistry()
         reg.create("e" * 16, "ok.docx", "doc", 10, uploaded_by="demo.editor")
         reg.update("e" * 16, status="done", has_duplicates=False, development_id=dev_id)
+        login(client, "demo.editor")
+        assert filenames(client.get("/api/documents?problem=true")) == set()
+
+    def test_problem_excludes_attachment_only_source_warning(self, client):
+        """A legacy attachment warning remains visible, but is not a document problem."""
+        dev_id = seed_dev("Пр_10", "Проактив", None)
+        reg = DocumentRegistry()
+        reg.create("f" * 16, "attachment-warning.docx", "doc", 10, uploaded_by="demo.editor")
+        reg.update(
+            "f" * 16,
+            status="done",
+            has_duplicates=False,
+            development_id=dev_id,
+            problem=ATTACHMENT_PARTIAL_RESULT,
+        )
         login(client, "demo.editor")
         assert filenames(client.get("/api/documents?problem=true")) == set()
 

@@ -10,6 +10,14 @@ test("partial generation action uses resume and only appears for recoverable com
   assert.match(source, /docs\.repairPartialBtn/);
 });
 
+test("attachment-only source warning uses a compact icon with a tooltip", async () => {
+  const source = await readFile(new URL("../src/components/DocumentList.jsx", import.meta.url), "utf8");
+  assert.match(source, /doc\.problem === "attachment_partial_result"/);
+  assert.match(source, /className="doc-source-warning-icon"/);
+  assert.match(source, /title=\{problemText\}/);
+  assert.match(source, /aria-label=\{problemText\}/);
+});
+
 test("compact document metadata omits empty optional fields", () => {
   const meta = buildCompactDocumentMeta({
     progress: "Генерация чанка 1 из 1",

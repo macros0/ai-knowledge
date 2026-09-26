@@ -479,7 +479,8 @@ def list_documents(
     DocumentRegistry.list_page): status — одно значение или через запятую
     (paused,failed,error); has_duplicates — булев флаг; development_id /
     development_number — по разработке; module — по модулю разработки;
-    problem=true — объединённое «Проблемные» (остановившиеся + дубликаты);
+    problem=true — объединённое «Проблемные» (остановившиеся + дубликаты +
+    неполнота генерации/индексации); предупреждения дерева вложений не входят;
     date_from/date_to — диапазон дат загрузки (ISO YYYY-MM-DD, включительно,
     date_to трактуется как конец дня в UTC).
 

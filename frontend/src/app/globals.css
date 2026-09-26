@@ -40,7 +40,8 @@
   --color-type-example: #8a3f86;
 }
 
-:root[data-theme="light"] .doc-problem-badge {
+:root[data-theme="light"] .doc-problem-badge,
+:root[data-theme="light"] .doc-source-warning-icon {
   color: #7a5000;
 }
 
@@ -484,6 +485,7 @@ main {
 }
 
 .doc-meta-line .doc-problem-badge,
+.doc-meta-line .doc-source-warning-icon,
 .doc-meta-line .dev-draft-badge,
 .doc-meta-line .dup-badge {
   margin: 0;
@@ -3701,6 +3703,18 @@ main {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+/* Предупреждение дерева источников: документ обработан, но часть вложения
+   не вошла из-за лимита или ошибки. Полный текст доступен по hover/focus. */
+.doc-source-warning-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #b8860b;
+  font-size: 15px;
+  line-height: 1;
+  cursor: help;
   vertical-align: middle;
 }
 

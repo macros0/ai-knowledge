@@ -10,7 +10,7 @@ from tests.test_generation_pipeline import pipeline_env as pipeline_env
 @pytest.mark.parametrize("case,problem,warning", [
     ("decode", "mail_text_partial_result", "mail_decode_recovered"),
     ("alternative", "mail_text_partial_result", "mail_alternative_mismatch"),
-    ("size", "attachment_partial_result", "attachment_size_exceeded"),
+    ("size", None, "attachment_size_exceeded"),
 ])
 def test_review_parser_warning_is_published_with_problem(pipeline_env, monkeypatch, case, problem, warning):
     pipeline, source, _write = pipeline_env

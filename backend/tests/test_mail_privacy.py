@@ -155,7 +155,7 @@ def test_private_headers_excluded_from_llm_index_context_and_logs(tmp_path, monk
     pipeline._process(doc_id, source, source.name, [], resume=resume)
     document = registry.get(doc_id)
     assert document["status"] == "done"
-    assert document["problem"] == ("attachment_partial_result" if partial else None)
+    assert document["problem"] is None
     assert len(llm_inputs) == 2 and all(CANONICAL_BODY in text for text in llm_inputs)
     assert {point.payload["point_type"] for point in points} == {"concept", "chunk"}
     with session_scope() as session:

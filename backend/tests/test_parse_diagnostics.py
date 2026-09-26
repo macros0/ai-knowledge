@@ -13,13 +13,13 @@ def test_index_problem_has_priority_over_llm_and_parse_warning():
     ) == "index_partial_failure"
 
 
-def test_parse_warning_is_reported_when_no_higher_problem_exists():
+def test_attachment_warning_stays_in_source_tree_without_marking_document_problematic():
     assert summarize_problems(
         [{"code": "mail_parse_failed", "source_id": "root/1"}],
         generation_problem=None,
         index_problem=None,
         text_problem=None,
-    ) == "attachment_partial_result"
+    ) is None
 
 
 def test_empty_parse_warnings_do_not_change_existing_text_problem():

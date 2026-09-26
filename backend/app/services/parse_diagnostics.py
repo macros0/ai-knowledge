@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from app.services.problem_codes import (
-    ATTACHMENT_PARTIAL_RESULT,
     ENCRYPTED_MAIL,
     INDEX_PARTIAL_FAILURE,
     LLM_CLASSIFIER_FALLBACK,
@@ -23,7 +22,7 @@ def summarize_problems(
     index_problem: str | None,
     text_problem: str | None,
 ) -> str | None:
-    """Return one stable UI summary without discarding detailed warnings."""
+    """Return a document-level problem while retaining source warnings separately."""
     candidates = {index_problem, generation_problem, text_problem}
     for code in (
         INDEX_PARTIAL_FAILURE,
@@ -43,8 +42,10 @@ def summarize_problems(
         return TEXT_PARTIAL_RESULT
     if warning_codes & {"mail_decode_recovered", "mail_alternative_mismatch"}:
         return MAIL_TEXT_PARTIAL_RESULT
-    if parse_warnings:
-        return ATTACHMENT_PARTIAL_RESULT
+    # Limits and failures below an attachment are source-level diagnostics: the
+    # parent document and all admitted siblings are searchable.  They remain in
+    # ``parse_warnings`` and the source tree, but must not turn a completed
+    # document into a problem or put it in the "Проблемные" filter.
     return next((code for code in (index_problem, generation_problem, text_problem) if code), None)
 
 

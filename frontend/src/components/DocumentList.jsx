@@ -631,6 +631,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     const problemKey = `docs.problem.${doc.problem}`;
     const problemTranslation = doc.problem ? t(problemKey) : null;
     const problemText = problemTranslation === problemKey ? t("docs.problem.unknown") : problemTranslation;
+    const sourceWarningOnly = doc.problem === "attachment_partial_result";
     const needsMarkup =
       !BUSY_STATUSES.includes(doc.status) &&
       !doc.development_id &&
@@ -772,11 +773,20 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                 </>
               )
             )}
-            {doc.problem && (
+            {doc.problem && (sourceWarningOnly ? (
+              <span
+                className="doc-source-warning-icon"
+                role="img"
+                aria-label={problemText}
+                title={problemText}
+              >
+                ⚠
+              </span>
+            ) : (
               <span className="doc-problem-badge" title={problemText}>
                 ⚠ {problemText}
               </span>
-            )}
+            ))}
             {needsMarkup && <span className="dev-draft-badge">{t("docs.draftBadge")}</span>}
             {doc.has_duplicates && (
               <button type="button" className="dup-badge" onClick={() => setDupDoc(doc)} title={t("docs.duplicateTitle")}>
