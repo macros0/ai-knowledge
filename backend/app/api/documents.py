@@ -1694,6 +1694,22 @@ def _document_head(doc_id: str, doc: dict) -> str:
     return ""
 
 
+def _concept_list_sort_key(chunk_index: int | None, source_spans: list | None, slug: str) -> tuple:
+    """Порядок списка концептов по документу, с честным fallback внутри чанка."""
+    if chunk_index is None:
+        return (1, 0, 1, 0, str(slug))
+
+    starts: list[int] = []
+    for span in source_spans or []:
+        start = span.get("start") if isinstance(span, dict) else getattr(span, "start", None)
+        end = span.get("end") if isinstance(span, dict) else getattr(span, "end", None)
+        if isinstance(start, int) and not isinstance(start, bool) and isinstance(end, int) and end > start >= 0:
+            starts.append(start)
+    if starts:
+        return (0, int(chunk_index), 0, min(starts), str(slug))
+    return (0, int(chunk_index), 1, 0, str(slug))
+
+
 def _okf_files_from_db(doc_id: str) -> list[OkfFileOut]:
     """OkfFileOut[] из okf_concepts (БД) — канонический список концептов документа."""
     okf_dir = get_settings().okf_dir / doc_id
@@ -1701,9 +1717,9 @@ def _okf_files_from_db(doc_id: str) -> list[OkfFileOut]:
         rows = (
             s.query(OkfConcept)
             .filter(OkfConcept.doc_id == doc_id)
-            .order_by(OkfConcept.slug)
             .all()
         )
+    rows.sort(key=lambda c: _concept_list_sort_key(c.chunk_index, c.source_spans, c.slug))
     return [
         OkfFileOut(
             filename=f"{c.slug}.md",
@@ -1820,7 +1836,11 @@ def _staging_to_okf_files(staging: StagingStore) -> list[OkfFileOut]:
             raw = json.loads(chunk_path.read_text(encoding="utf-8"))
         except Exception:
             continue
-        for pos, item in enumerate(raw):
+        for pos, item in sorted(enumerate(raw), key=lambda pair: _concept_list_sort_key(
+            index,
+            pair[1].get("source_spans") if isinstance(pair[1], dict) else None,
+            slugs[pair[0]] if pair[0] < len(slugs) else f"concept-{index}-{pair[0]}",
+        )):
             if not isinstance(item, dict):
                 continue
             slug = slugs[pos] if pos < len(slugs) else f"concept-{index}-{pos}"

@@ -8,9 +8,11 @@ import { serverTranslator } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function OkfListPage({ params }) {
+export default async function OkfListPage({ params, searchParams }) {
   const { t } = await serverTranslator();
   const { docId } = await params;
+  const query = await searchParams;
+  const focusedSourceId = typeof query?.source === "string" && query.source.length <= 255 ? query.source : null;
 
   const [docResp, filesResp] = await Promise.all([
     backendFetch(`/api/documents/${docId}`),
@@ -61,7 +63,7 @@ export default async function OkfListPage({ params }) {
         processedChunks={doc.processed_chunks}
         currentChunk={doc.current_chunk}
       />
-      <DocumentSources docId={docId} />
+      <DocumentSources key={focusedSourceId || "root"} docId={docId} focusedSourceId={focusedSourceId} />
     </div>
   );
 }

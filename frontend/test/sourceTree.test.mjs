@@ -9,6 +9,56 @@ test("source tree keeps the root and nested deterministic paths distinct", () =>
   assert.equal(sourceDepth("root/0/12"), 2);
 });
 
+test("nested attachments stay collapsed until their branch is opened or targeted", () => {
+  assert.equal(typeof sourceTree.sourceAncestors, "function");
+  assert.equal(typeof sourceTree.visibleSourceIds, "function");
+  const sources = [
+    { source_id: "root", parent_source_id: null },
+    { source_id: "root/0", parent_source_id: "root" },
+    { source_id: "root/0/0", parent_source_id: "root/0" },
+    { source_id: "root/0/0/0", parent_source_id: "root/0/0" },
+    { source_id: "root/1", parent_source_id: "root" },
+  ];
+
+  assert.deepEqual(sourceTree.visibleSourceIds(sources), ["root", "root/0", "root/1"]);
+  assert.deepEqual(sourceTree.sourceAncestors(sources, "root/0/0/0"), ["root", "root/0", "root/0/0"]);
+  assert.deepEqual(
+    sourceTree.visibleSourceIds(sources, sourceTree.sourceAncestors(sources, "root/0/0/0")),
+    ["root", "root/0", "root/0/0", "root/0/0/0", "root/1"],
+  );
+});
+
+test("an attachment embedded in a Word table follows the same collapsible source branch", () => {
+  const sources = [
+    { source_id: "root", parent_source_id: null },
+    { source_id: "root/0", parent_source_id: "root", metadata: { document_location: "table" } },
+    { source_id: "root/0/0", parent_source_id: "root/0" },
+  ];
+
+  assert.deepEqual(sourceTree.visibleSourceIds(sources), ["root", "root/0"]);
+  assert.deepEqual(sourceTree.sourceAncestors(sources, "root/0/0"), ["root", "root/0"]);
+  assert.deepEqual(
+    sourceTree.visibleSourceIds(sources, sourceTree.sourceAncestors(sources, "root/0/0")),
+    ["root", "root/0", "root/0/0"],
+  );
+});
+
+test("embedded source content stays hidden until that source is opened", () => {
+  assert.equal(typeof sourceTree.visibleSourceContentIds, "function");
+  const sources = [
+    { source_id: "root", parent_source_id: null },
+    { source_id: "root/0", parent_source_id: "root", metadata: { document_location: "table" } },
+    { source_id: "root/0/0", parent_source_id: "root/0" },
+  ];
+
+  assert.deepEqual(sourceTree.visibleSourceContentIds(sources), ["root"]);
+  assert.deepEqual(sourceTree.visibleSourceContentIds(sources, new Set(["root/0"])), ["root", "root/0"]);
+  assert.deepEqual(
+    sourceTree.visibleSourceContentIds(sources, new Set(["root/0", "root/0/0"])),
+    ["root", "root/0", "root/0/0"],
+  );
+});
+
 test("source location labels preserve known Word positions without inventing legacy metadata", () => {
   assert.equal(typeof sourceTree.sourceLocationKey, "function");
   const { sourceLocationKey } = sourceTree;

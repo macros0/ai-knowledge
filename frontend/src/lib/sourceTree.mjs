@@ -3,6 +3,42 @@ export function sourceDepth(sourceId) {
   return sourceId.split("/").length - 1;
 }
 
+export function sourceAncestors(sources, sourceId) {
+  const byId = new Map((sources || []).map((source) => [source.source_id, source]));
+  const ancestors = [];
+  const seen = new Set();
+  let current = byId.get(sourceId);
+  while (current?.parent_source_id && !seen.has(current.parent_source_id)) {
+    const parentId = current.parent_source_id;
+    const parent = byId.get(parentId);
+    if (!parent) break;
+    ancestors.unshift(parentId);
+    seen.add(parentId);
+    current = parent;
+  }
+  return ancestors;
+}
+
+export function sourceHasChildren(sources, sourceId) {
+  return (sources || []).some((source) => source.parent_source_id === sourceId);
+}
+
+export function visibleSourceIds(sources, expandedSourceIds = []) {
+  const expanded = expandedSourceIds instanceof Set ? expandedSourceIds : new Set(expandedSourceIds);
+  return (sources || []).filter((source) => sourceAncestors(sources, source.source_id).every(
+    (ancestorId) => ancestorId === "root" || expanded.has(ancestorId),
+  )).map((source) => source.source_id);
+}
+
+export function visibleSourceContentIds(sources, expandedSourceIds = []) {
+  const expanded = expandedSourceIds instanceof Set ? expandedSourceIds : new Set(expandedSourceIds);
+  return (sources || []).filter((source) => source.source_id === "root" || (
+    expanded.has(source.source_id) && sourceAncestors(sources, source.source_id).every(
+      (ancestorId) => ancestorId === "root" || expanded.has(ancestorId),
+    )
+  )).map((source) => source.source_id);
+}
+
 export function sourceDownloadUrl(docId, sourceId) {
   return `/api/documents/${encodeURIComponent(docId)}/sources/download?source_id=${encodeURIComponent(sourceId)}`;
 }

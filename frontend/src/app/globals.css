@@ -1371,6 +1371,40 @@ main {
   margin-top: 12px;
 }
 
+.source-content-viewer {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+}
+
+.source-content-section {
+  min-width: 0;
+}
+
+.source-content-toggle {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 10px;
+}
+
+.source-content-toggle:hover,
+.source-content-toggle:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---------- search settings spoiler ---------- */
 .search-settings {
   margin-bottom: 12px;
@@ -1978,6 +2012,35 @@ main {
   margin-bottom: 6px;
 }
 
+.document-sources-entry {
+  align-items: stretch;
+  display: flex;
+  gap: 4px;
+}
+
+.document-sources-toggle,
+.document-sources-toggle-spacer {
+  flex: 0 0 20px;
+  width: 20px;
+}
+
+.document-sources-toggle {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 0;
+}
+
+.document-sources-toggle:hover,
+.document-sources-toggle:focus-visible {
+  color: var(--accent);
+}
+
 .document-sources-row {
   align-items: center;
   background: var(--panel);
@@ -1987,6 +2050,7 @@ main {
   gap: 12px;
   justify-content: space-between;
   padding: 8px 10px;
+  flex: 1;
 }
 
 .document-sources-row strong,

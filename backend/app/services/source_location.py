@@ -153,8 +153,8 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
 def get_document_text_chunks(doc_id: str) -> list[DocumentTextChunkOut]:
     with session_scope() as session:
         rows = session.execute(
-            select(DocumentChunk.chunk_index, DocumentChunk.content)
+            select(DocumentChunk.chunk_index, DocumentChunk.source_id, DocumentChunk.content)
             .where(DocumentChunk.doc_id == doc_id)
             .order_by(DocumentChunk.chunk_index)
         ).all()
-    return [DocumentTextChunkOut(chunk_index=index, content=content or "") for index, content in rows]
+    return [DocumentTextChunkOut(chunk_index=index, source_id=source_id, content=content or "") for index, source_id, content in rows]

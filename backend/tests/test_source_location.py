@@ -491,14 +491,14 @@ def test_document_text_chunks_are_returned_in_source_order():
         session.add(Document(id="source4", filename="source4.docx"))
         session.add_all(
             [
-                DocumentChunk(doc_id="source4", chunk_index=2, content="Второй"),
-                DocumentChunk(doc_id="source4", chunk_index=0, content="Первый"),
+                DocumentChunk(doc_id="source4", chunk_index=2, source_id="root/0", content="Второй"),
+                DocumentChunk(doc_id="source4", chunk_index=0, source_id="root", content="Первый"),
             ]
         )
 
     chunks = get_document_text_chunks("source4")
 
-    assert [(chunk.chunk_index, chunk.content) for chunk in chunks] == [
-        (0, "Первый"),
-        (2, "Второй"),
+    assert [(chunk.chunk_index, chunk.source_id, chunk.content) for chunk in chunks] == [
+        (0, "root", "Первый"),
+        (2, "root/0", "Второй"),
     ]

@@ -1118,8 +1118,14 @@
     "name"
   ],
   "sources.empty": [],
+  "sources.expand": [
+    "name"
+  ],
   "sources.loadError": [
     "error"
+  ],
+  "sources.collapse": [
+    "name"
   ],
   "sources.loading": [],
   "sources.location.body": [],

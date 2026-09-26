@@ -44,10 +44,13 @@ export default async function OkfFilePage({ params }) {
   const chunkMatch = text.match(/^chunk_index:\s*(\d+)/m);
   const chunkIndex = chunkMatch ? Number(chunkMatch[1]) : null;
   const conceptQuery = `?concept=${encodeURIComponent(conceptSlug)}`;
+  const sourceListHref = sourceLocation?.source_id
+    ? `/documents/${docId}/okf?source=${encodeURIComponent(sourceLocation.source_id)}`
+    : `/documents/${docId}/okf`;
 
   return (
     <div className="okf-viewer">
-      <Link className="back-link" href={`/documents/${docId}/okf`}>
+      <Link className="back-link" href={sourceListHref}>
         {t("okf.page.backToList")}
       </Link>
       <div className="okf-doc-bar">

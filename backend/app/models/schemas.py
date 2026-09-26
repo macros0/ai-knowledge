@@ -353,6 +353,7 @@ class SourceLocationOut(BaseModel):
 
 class DocumentTextChunkOut(BaseModel):
     chunk_index: int
+    source_id: str | None = None
     content: str
 
 

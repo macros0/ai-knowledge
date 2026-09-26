@@ -375,6 +375,8 @@ export default {
   "sources.loading": "Загрузка источников…",
   "sources.empty": "Дерево источников пока недоступно",
   "sources.loadError": "Не удалось загрузить источники: {error}",
+  "sources.expand": "Раскрыть вложения: {name}",
+  "sources.collapse": "Свернуть вложения: {name}",
   "sources.download": "Скачать",
   "sources.downloadContainer": "Скачать контейнер",
   "sources.downloadNamed": "Скачать: {name}",

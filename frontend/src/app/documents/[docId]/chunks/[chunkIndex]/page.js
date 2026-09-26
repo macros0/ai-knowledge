@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import ContentViewer from "@/components/ContentViewer";
+import SourceContentViewer from "@/components/SourceContentViewer";
 import { backendFetch } from "@/lib/backendFetch";
 import { serverTranslator } from "@/i18n/server";
 import SourceLocationView from "@/components/SourceLocationView";
@@ -27,7 +27,7 @@ export default async function ChunkPage({ params, searchParams }) {
         const text = await resp.text();
         return (
           <div className="okf-viewer source-chunk-viewer">
-            <Link className="back-link" href={`/documents/${docId}/okf`}>{t("okf.page.backToList")}</Link>
+            <Link className="back-link" href={`/documents/${docId}/okf?source=${encodeURIComponent(location.source_id || "root")}`}>{t("okf.page.backToList")}</Link>
             <h1>{t("okf.page.chunkH1", { index: index + 1 })}</h1>
             <SourceLocationView docId={docId} chunks={[{ chunk_index: index, content: text }]} location={location} />
           </div>
@@ -37,11 +37,17 @@ export default async function ChunkPage({ params, searchParams }) {
     sourceUnavailable = true;
   }
 
-  const resp = await backendFetch(`/api/documents/${docId}/chunks/${index}`);
+  const [chunksResp, sourcesResp] = await Promise.all([
+    backendFetch(`/api/documents/${docId}/fulltext/chunks`),
+    backendFetch(`/api/documents/${docId}/sources`),
+  ]);
 
-  if (!resp.ok) notFound();
+  if (!chunksResp.ok || !sourcesResp.ok) notFound();
 
-  const text = await resp.text();
+  const [chunks, sourceData] = await Promise.all([chunksResp.json(), sourcesResp.json()]);
+  const chunk = chunks.find(({ chunk_index }) => chunk_index === index);
+
+  if (!chunk) notFound();
 
   return (
     <div className="okf-viewer">
@@ -50,7 +56,7 @@ export default async function ChunkPage({ params, searchParams }) {
       </Link>
       <h1>{t("okf.page.chunkH1", { index: index + 1 })}</h1>
       {sourceUnavailable && <p className="source-location-note">{t("sourceLocation.unavailable")}</p>}
-      <ContentViewer text={text} docId={docId} />
+      <SourceContentViewer docId={docId} chunks={[chunk]} sources={sourceData.sources || []} />
     </div>
   );
 }

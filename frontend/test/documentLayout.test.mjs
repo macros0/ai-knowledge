@@ -18,6 +18,29 @@ test("attachment-only source warning uses a compact icon with a tooltip", async 
   assert.match(source, /aria-label=\{problemText\}/);
 });
 
+test("document source tree receives a highlighted source to expand its ancestors", async () => {
+  const listPage = await readFile(new URL("../src/app/documents/[docId]/okf/page.js", import.meta.url), "utf8");
+  const sources = await readFile(new URL("../src/components/DocumentSources.jsx", import.meta.url), "utf8");
+  assert.match(listPage, /focusedSourceId=\{focusedSourceId\}/);
+  assert.match(sources, /sourceAncestors\(loadedSources, focusedSourceId\)/);
+  assert.match(sources, /visibleSourceIds\(sources, expandedSourceIds\)/);
+});
+
+test("full document keeps one scrollable area around collapsible source content", async () => {
+  const fulltext = await readFile(new URL("../src/app/documents/[docId]/fulltext/page.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../src/app/globals.css", import.meta.url), "utf8");
+  assert.match(fulltext, /<SourceContentViewer/);
+  assert.match(styles, /\.source-content-viewer\s*\{[^}]*flex:\s*1;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/);
+});
+
+test("plain chunk view uses the collapsible source content viewer", async () => {
+  const chunkPage = await readFile(new URL("../src/app/documents/[docId]/chunks/[chunkIndex]/page.js", import.meta.url), "utf8");
+  assert.match(chunkPage, /import SourceContentViewer from "@\/components\/SourceContentViewer"/);
+  assert.match(chunkPage, /\/fulltext\/chunks/);
+  assert.match(chunkPage, /\/sources/);
+  assert.match(chunkPage, /<SourceContentViewer[\s\S]*chunks=\{\[chunk\]\}/);
+});
+
 test("compact document metadata omits empty optional fields", () => {
   const meta = buildCompactDocumentMeta({
     progress: "Генерация чанка 1 из 1",

@@ -375,6 +375,8 @@ export default {
   "sources.loading": "Loading sources…",
   "sources.empty": "The source tree is not available yet",
   "sources.loadError": "Failed to load sources: {error}",
+  "sources.expand": "Expand attachments: {name}",
+  "sources.collapse": "Collapse attachments: {name}",
   "sources.download": "Download",
   "sources.downloadContainer": "Download container",
   "sources.downloadNamed": "Download: {name}",
