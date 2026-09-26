@@ -5,6 +5,7 @@
 import json
 import mimetypes
 import re
+from tempfile import TemporaryDirectory
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Annotated, Literal
@@ -13,14 +14,18 @@ from sqlalchemy import func, or_, select
 
 from app.api import errors
 from app.services.errors import ConflictError, DomainError
+from app.services.artifact_response import OpenedFileResponse
+from app.services.generation_store import lock_generation_read
 from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, Form, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from docparser import markdown_attachment_spans, parse_document, portable_name
+from docparser.source_model import ParseContext
 
 from app.auth.models import User
 from app.auth.service import require_role, require_user
 from app.config import get_settings
-from app.db.models import Document, DocumentChunk, OkfAttachment, OkfConcept
+from app.db.models import Document, DocumentChunk, DocumentGenerationState, DocumentSource, OkfAttachment, OkfConcept
 from app.db.session import session_scope
 from app.models.schemas import (
     BulkOperationRequest,
@@ -34,6 +39,8 @@ from app.models.schemas import (
     DocumentOut,
     DocumentSourceLocaleUpdate,
     DocumentStatsOut,
+    DocumentSourceOut,
+    DocumentSourcesOut,
     SourceLocaleFacetsOut,
     DocumentTagsUpdate,
     DocumentTextChunkOut,
@@ -48,8 +55,15 @@ from app.services.deduplication import (
     file_hash_exists,
     file_hash_in_trash,
     find_duplicates_for_document,
+    find_duplicates_for_text,
+    index_document,
+    refresh_duplicate_flags,
+    upload_admission_lock,
     set_file_hash,
     sha256_file,
+)
+from app.services.parser_supervisor import (
+    ParserBusyError, ParserIsolationError, ParserMemoryLimitError, ParserTimeoutError, parse_document_supervised,
 )
 from app.services.dev_detector import attach_development, detect
 from app.services.dev_sync import reindex_document_dev_tags, schedule_document_dev_tags_sync
@@ -142,6 +156,7 @@ def upload_document(
     tags: Annotated[list[str] | None, Form()] = None,
     development_id: Annotated[int | None, Form()] = None,
     canonical_locale: Annotated[ReferenceLocale | None, Form()] = None,
+    allow_similar: Annotated[bool, Form()] = False,
     user: User = Depends(require_role("editor", "admin")),
 ):
     """Загрузка документа.
@@ -151,6 +166,13 @@ def upload_document(
     max_upload_mb (проверка по факту дочитывания + по объявленному content-length).
     """
     settings = get_settings()
+    extension = Path(file.filename or "").suffix.lower()
+    if extension in {".eml", ".msg"} and not settings.mail_import_enabled:
+        raise ApiError(
+            status_code=503,
+            code=errors.MAIL_IMPORT_DISABLED,
+            detail="Импорт писем временно отключён до завершения приёмки",
+        )
     # Валидация development_id ДО каких-либо побочных эффектов (файл, хеш,
     # строка БД, пул тегов): раньше 422 при невалидном id возникал после
     # сохранения файла и _registry.create — документ-«призрак» навсегда
@@ -196,6 +218,8 @@ def upload_document(
     # Дедупликация, уровень 1: точное совпадение байтов (SHA-256 файла).
     settings = get_settings()
     file_hash = None
+    preview_markdown = None
+    preview_mail_fingerprint = None
     trash_twin: dict | None = None
     if settings.dedup_enabled:
         try:
@@ -217,6 +241,128 @@ def upload_document(
         # Близнец в корзине НЕ блокирует загрузку (осознанное решение,
         # см. deduplication.file_hash_exists) — информационно для тоста.
         trash_twin = file_hash_in_trash(file_hash)
+
+    # Root mail validation is a format/admission check, not a dedup feature.
+    # Disabling duplicate detection must not admit corrupt or unreadable mail.
+    if settings.dedup_enabled or extension in {".eml", ".msg"}:
+        # Extract with the same parser as the pipeline, but keep attachments
+        # temporary. No document, tags, LLM calls or search index until consent.
+        try:
+            with TemporaryDirectory(prefix="upload-check-", dir=settings.uploads_dir) as preview_dir:
+                parse_context = ParseContext(
+                    file.filename or "unknown", mail_enabled=settings.mail_import_enabled,
+                )
+                if settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
+                    blocks, parse_context.sources = parse_document_supervised(
+                        _dest,
+                        file.filename or "unknown",
+                        attachments_dir=Path(preview_dir),
+                        timeout_seconds=settings.parser_timeout_seconds,
+                        max_memory_mb=settings.parser_max_memory_mb,
+                        max_concurrent=settings.parser_max_concurrent,
+                        mail_enabled=settings.mail_import_enabled,
+                    )
+                else:
+                    blocks = parse_document(
+                        _dest, file.filename, attachments_dir=Path(preview_dir), context=parse_context
+                    )
+                if extension in {".eml", ".msg"}:
+                    root_warnings = {
+                        warning.get("code")
+                        for source in parse_context.sources if source.source_id == "root"
+                        for warning in source.warnings
+                    }
+                    for warning_codes, error_code, detail in (
+                        ({"encrypted_mail", "protected_mail"}, errors.MAIL_PROTECTED, "Защищённое письмо не прочитано"),
+                        ({"unsupported_mail_class"}, errors.MAIL_OBJECT_UNSUPPORTED, "Тип объекта Outlook не поддерживается"),
+                        ({"unsupported_rtf_body"}, errors.MAIL_RTF_UNSUPPORTED, "RTF-only тело письма не поддерживается"),
+                    ):
+                        if root_warnings & warning_codes:
+                            raise ApiError(status_code=422, code=error_code, detail=detail)
+                if settings.dedup_enabled:
+                    preview_markdown, _ = markdown_attachment_spans(blocks)
+                    from app.services.mail_identity import mail_fingerprint_from_parse
+
+                    preview_mail_fingerprint = mail_fingerprint_from_parse(
+                        parse_context.sources, blocks, Path(preview_dir)
+                    )
+        except ParserBusyError as exc:
+            _dest.unlink(missing_ok=True)
+            raise ApiError(
+                status_code=429,
+                code=errors.RATE_LIMITED,
+                detail="Все процессы разбора документов заняты",
+                headers={"Retry-After": "1"},
+            ) from exc
+        except ParserIsolationError as exc:
+            _dest.unlink(missing_ok=True)
+            raise ApiError(
+                status_code=503,
+                code=errors.PARSER_ISOLATION_UNAVAILABLE,
+                detail="Защищённый разбор документов недоступен",
+            ) from exc
+        except (ParserTimeoutError, ParserMemoryLimitError) as exc:
+            _dest.unlink(missing_ok=True)
+            raise ApiError(
+                status_code=422,
+                code=errors.PARSER_TIMEOUT if isinstance(exc, ParserTimeoutError) else errors.PARSER_RESOURCE_LIMIT,
+                detail="Разбор документа превысил защитный лимит",
+            ) from exc
+        except ApiError:
+            _dest.unlink(missing_ok=True)
+            raise
+        except Exception as exc:
+            _dest.unlink(missing_ok=True)
+            from app.services.storage import is_storage_full
+
+            if is_storage_full(exc):
+                raise ApiError(status_code=507, code=errors.STORAGE_FULL,
+                               detail="Недостаточно места для проверки документа") from exc
+            raise ApiError(status_code=422,
+                           code=errors.MAIL_PARSE_FAILED if extension in {".eml", ".msg"} else errors.INVALID_REQUEST,
+                           detail="Не удалось извлечь текст для проверки документа") from exc
+
+    try:
+        with upload_admission_lock():
+            return _admit_upload(
+                file=file, request=request, tags=tags, development_id=development_id,
+                canonical_locale=canonical_locale, allow_similar=allow_similar, user=user,
+                doc_id=doc_id, dest=_dest, size=size, file_hash=file_hash,
+                preview_markdown=preview_markdown, preview_mail_fingerprint=preview_mail_fingerprint,
+                trash_twin=trash_twin,
+            )
+    finally:
+        if _registry.get(doc_id) is None:
+            _dest.unlink(missing_ok=True)
+
+
+def _admit_upload(*, file, request, tags, development_id, canonical_locale, allow_similar,
+                  user, doc_id, dest, size, file_hash, preview_markdown, preview_mail_fingerprint, trash_twin):
+    """Called under upload_admission_lock; publish signature before releasing it."""
+    duplicates = {"level2": [], "level3": []}
+    # Another upload may have finished parsing while this request was parsing.
+    if file_hash:
+        existing = file_hash_exists(file_hash)
+        if existing is not None:
+            return JSONResponse(status_code=409, content={
+                "detail": f"Файл уже загружен как «{existing['filename']}»",
+                "code": errors.DUPLICATE, "duplicate": existing,
+            })
+    if preview_markdown is not None:
+        try:
+            duplicates = find_duplicates_for_text(
+                preview_markdown, mail_fingerprint=preview_mail_fingerprint
+            )
+        except Exception:
+            dest.unlink(missing_ok=True)
+            raise
+        if not allow_similar and (duplicates["level2"] or duplicates["level3"]):
+            dest.unlink(missing_ok=True)
+            return JSONResponse(status_code=409, content={
+                "code": errors.SIMILAR_DOCUMENT,
+                "detail": "Найдены похожие документы. Подтвердите загрузку.",
+                "duplicates": duplicates,
+            })
 
     user_tags = normalize_tags(tags)
     origin_locale = canonical_locale or request_locale(request, fallback="und")
@@ -260,18 +406,26 @@ def upload_document(
             attach_development(doc_id, detection)
             doc = _registry.get(doc_id) or doc
     try:
+        if preview_markdown is not None:
+            index_document(doc_id, preview_markdown, preview_mail_fingerprint)
+            doc = _registry.get(doc_id) or doc
         get_pipeline().ingest(
             doc_id,
             get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}",
             doc["filename"],
             user_tags=user_tags,
         )
-    except DomainError as exc:
-        # Admission can fail after the DB row/file were created. Roll back the
-        # provisional document so a rejected upload cannot leave an orphan.
-        get_pipeline().remove(doc_id)
-        status = 503 if exc.code == errors.QUEUE_OVERLOADED else 400
-        raise errors.domain_error(exc, status) from exc
+    except Exception as exc:
+        # Admission has not started a worker, so there are no vectors to delete.
+        # Also undo badges already published by index_document on its neighbors.
+        _registry.delete(doc_id)
+        dest.unlink(missing_ok=True)
+        neighbor_ids = {item["doc"]["id"] for group in duplicates.values() for item in group}
+        refresh_duplicate_flags(doc_id, neighbor_ids)
+        if isinstance(exc, DomainError):
+            status = 503 if exc.code == errors.QUEUE_OVERLOADED else 400
+            raise errors.domain_error(exc, status) from exc
+        raise
     audit_value = {"filename": doc.get("filename"), "size": size}
     if bound_development_id is not None:
         audit_value["development_id"] = bound_development_id
@@ -423,6 +577,60 @@ def source_locale_facets(
     Объявлен ДО `/{doc_id}` (иначе «source-locale-facets» попало бы в doc_id).
     """
     return SourceLocaleFacetsOut(items=_registry.source_locale_facets(uploaded_by=uploader))
+
+
+@router.get("/{doc_id}/sources", response_model=DocumentSourcesOut)
+def get_document_sources(doc_id: str, user: User = Depends(require_user)):
+    """Возвращает зарегистрированное дерево исходников без абсолютных путей."""
+    _require_active_document(doc_id)
+    with session_scope() as session:
+        rows = session.query(DocumentSource).filter(DocumentSource.doc_id == doc_id).all()
+    sources = [
+        DocumentSourceOut(
+            source_id=row.source_id,
+            parent_source_id=row.parent_source_id,
+            ordinal=row.ordinal,
+            kind=row.kind,
+            display_name=row.display_name,
+            metadata=row.metadata_json or {},
+            saved_path=row.saved_path,
+            extraction_status=row.extraction_status,
+            artifact_kind=row.artifact_kind,
+            container_source_id=row.container_source_id,
+            container_locator=row.container_locator,
+            parser_version=row.parser_version,
+            warnings=row.warnings or [],
+        )
+        for row in sorted(rows, key=_source_sort_key)
+    ]
+    return DocumentSourcesOut(sources=sources)
+
+
+@router.get("/{doc_id}/sources/download")
+def download_document_source(
+    doc_id: str,
+    source_id: str = Query(min_length=1, max_length=255),
+    user: User = Depends(require_user),
+):
+    """Скачивает только зарегистрированный байтовый артефакт источника."""
+    doc = _require_active_document(doc_id)
+    with session_scope() as session:
+        lock_generation_read(session, [doc_id])
+        doc = session.get(Document, doc_id)
+        if doc is None or doc.deleted_at is not None:
+            raise ApiError(status_code=404, code=errors.DOCUMENT_NOT_FOUND, detail="Документ не найден")
+        source = session.get(DocumentSource, {"doc_id": doc_id, "source_id": source_id})
+        if source is None:
+            raise ApiError(status_code=404, code=errors.DOCUMENT_NOT_FOUND, detail="Источник не найден")
+        target, download_name = _source_download_path(session, doc, source)
+        if target is None or not target.is_file():
+            raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл источника не найден")
+        return OpenedFileResponse(
+            target,
+            filename=download_name or doc.filename,
+            media_type="application/octet-stream",
+            headers={"X-Content-Type-Options": "nosniff"},
+        )
 
 
 @router.get("/{doc_id}", response_model=DocumentOut)
@@ -1038,20 +1246,15 @@ def bulk_tags(
 
 
 @router.get("/{doc_id}/download")
-def download_document(doc_id: str):
+def download_document(doc_id: str, user: User = Depends(require_user)):
+    """Скачивает активный root-файл по тем же правилам, что source download."""
     if not _valid_doc_id(doc_id):
         raise ApiError(
             status_code=404,
             code=errors.DOCUMENT_NOT_FOUND,
             detail="Документ не найден",
         )
-    doc = _registry.get(doc_id)
-    if not doc:
-        raise ApiError(
-            status_code=404,
-            code=errors.DOCUMENT_NOT_FOUND,
-            detail="Документ не найден",
-        )
+    doc = _require_active_document(doc_id)
     matches = sorted(get_settings().uploads_dir.glob(f"{doc_id}.*"))
     if not matches:
         raise ApiError(
@@ -1062,7 +1265,8 @@ def download_document(doc_id: str):
     return FileResponse(
         matches[0],
         media_type="application/octet-stream",
-        filename=doc.get("filename") or matches[0].name,
+        filename=doc.filename or matches[0].name,
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 
@@ -1223,7 +1427,7 @@ def get_okf_file(doc_id: str, filename: str):
 
 @router.get("/{doc_id}/okf/attachments/{filename}")
 def get_okf_attachment(doc_id: str, filename: str):
-    if not _valid_doc_id(doc_id):
+    if not _valid_doc_id(doc_id) or portable_name(filename) != filename or filename in {".", ".."}:
         raise ApiError(
             status_code=404,
             code=errors.FILE_NOT_FOUND,
@@ -1232,27 +1436,30 @@ def get_okf_attachment(doc_id: str, filename: str):
     # Этап 2b: бинарники вложений — в uploads/<doc_id>/attachments/ (байты-источники
     # в FS, описанные в okf_attachments), а не в производном бандле.
     attach_dir = (get_settings().uploads_dir / doc_id / "attachments").resolve()
-    filepath = (attach_dir / filename).resolve()
-    if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
-        raise ApiError(
-            status_code=404,
-            code=errors.FILE_NOT_FOUND,
-            detail="Файл не найден",
+    with session_scope() as session:
+        lock_generation_read(session, [doc_id])
+        state = session.get(DocumentGenerationState, doc_id)
+        active_id = state.active_generation_id if state else None
+        if active_id:
+            from app.services.generation_files import generation_paths
+
+            document = session.get(Document, doc_id)
+            saved_path = f"generations/{active_id}/attachments/{filename}"
+            registered = session.scalar(select(OkfAttachment.id).where(
+                OkfAttachment.doc_id == doc_id, OkfAttachment.saved_path == saved_path,
+            ))
+            if registered is None or document is None or document.deleted_at is not None:
+                raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл не найден")
+            attach_dir = generation_paths(get_settings(), doc_id, active_id).attachments.resolve()
+        filepath = (attach_dir / filename).resolve()
+        if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
+            raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл не найден")
+        media_type = mimetypes.guess_type(filepath.name)[0] or "application/octet-stream"
+        return OpenedFileResponse(
+            filepath,
+            media_type=media_type,
+            headers={"Content-Disposition": "attachment", "X-Content-Type-Options": "nosniff"},
         )
-    media_type = mimetypes.guess_type(filepath.name)[0] or "application/octet-stream"
-    return FileResponse(
-        filepath,
-        media_type=media_type,
-        headers={
-            # Вложения (в т.ч. .svg/.html с расширением из имени вложенного
-            # объекта) никогда не рендерятся inline при прямой навигации — только
-            # скачиваются: защита от stored XSS с сессией пользователя. Рендер во
-            # фронтенде идёт как <img>-subresource, для которого
-            # Content-Disposition не влияет на загрузку.
-            "Content-Disposition": "attachment",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
 
 
 @router.get("/{doc_id}/chunks", response_model=list[ChunkOut])
@@ -1381,6 +1588,51 @@ def get_document_fulltext(doc_id: str):
             detail="Текст документа не найден",
         )
     return Response(content="\n\n".join(parts), media_type="text/plain; charset=utf-8")
+
+
+def _require_active_document(doc_id: str) -> Document:
+    if not _valid_doc_id(doc_id):
+        raise ApiError(status_code=404, code=errors.DOCUMENT_NOT_FOUND, detail="Документ не найден")
+    with session_scope() as session:
+        document = session.get(Document, doc_id)
+        if document is None or document.deleted_at is not None:
+            raise ApiError(status_code=404, code=errors.DOCUMENT_NOT_FOUND, detail="Документ не найден")
+        return document
+
+
+def _source_sort_key(row: DocumentSource) -> tuple:
+    def segment(value: str) -> tuple[int, int | str]:
+        return (0, int(value)) if value.isdigit() else (1, value)
+
+    return tuple(segment(value) for value in row.source_id.split("/"))
+
+
+def _source_download_path(
+    session, document: Document, source: DocumentSource
+) -> tuple[Path | None, str | None]:
+    """Разрешает зарегистрированный файл и его честное имя контейнера."""
+    seen: set[str] = set()
+    current = source
+    document_root = (get_settings().uploads_dir / document.id).resolve()
+    while current is not None and current.source_id not in seen:
+        seen.add(current.source_id)
+        if current.source_id == "root":
+            suffix = Path(document.filename).suffix.lower()
+            return get_settings().uploads_dir / f"{document.id}{suffix}", document.filename
+        if current.saved_path:
+            candidate = (document_root / current.saved_path).resolve()
+            try:
+                candidate.relative_to(document_root)
+            except ValueError:
+                return None, None
+            return candidate, current.display_name
+        if not current.container_source_id:
+            return None, None
+        current = session.get(
+            DocumentSource,
+            {"doc_id": document.id, "source_id": current.container_source_id},
+        )
+    return None, None
 
 
 def _client_ip(request: Request) -> str | None:

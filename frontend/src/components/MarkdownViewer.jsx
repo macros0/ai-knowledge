@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "@/i18n/LocaleContext";
+import { resolveDocumentImage } from "@/lib/markdownImage.mjs";
 
 function resolveAttachment(src, docId) {
   const clean = String(src || "").replace(/^\.?\//, "");
@@ -26,9 +27,14 @@ export default function MarkdownViewer({
   const { t } = useI18n();
   const [lightbox, setLightbox] = useState(null);
   const lastFocusRef = useRef(null);
+  const viewerRef = useRef(null);
+  const lightboxRef = useRef(null);
+  const closeButtonRef = useRef(null);
 
-  const openLightbox = useCallback((src, alt) => {
-    lastFocusRef.current = document.activeElement;
+  const openLightbox = useCallback((src, alt, trigger) => {
+    const matching = Array.from(viewerRef.current?.querySelectorAll(".okf-image-button") || [])
+      .filter((button) => button.dataset.imageSrc === src);
+    lastFocusRef.current = { element: trigger, index: matching.indexOf(trigger) };
     setLightbox({ src, alt });
   }, []);
 
@@ -38,19 +44,41 @@ export default function MarkdownViewer({
 
   useEffect(() => {
     if (!lightbox) return;
+    const isTopmost = () => {
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      return dialogs[dialogs.length - 1] === lightboxRef.current;
+    };
     const onKey = (e) => {
-      if (e.key === "Escape") closeLightbox();
+      if (!isTopmost()) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeLightbox();
+      } else if (e.key === "Tab") {
+        e.preventDefault();
+        closeButtonRef.current?.focus();
+      }
+    };
+    const onFocus = (e) => {
+      if (isTopmost() && !lightboxRef.current?.contains(e.target)) {
+        closeButtonRef.current?.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
+    document.addEventListener("focusin", onFocus);
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const focusTarget = document.getElementById("okf-lightbox");
-    if (focusTarget) focusTarget.focus();
+    closeButtonRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-      const prev = lastFocusRef.current;
-      if (prev && typeof prev.focus === "function") prev.focus();
-      lastFocusRef.current = null;
+      document.removeEventListener("focusin", onFocus);
+      document.body.style.overflow = previousOverflow;
+      const previous = lastFocusRef.current;
+      // Markdown renderer callbacks can replace the trigger during state updates.
+      const matching = Array.from(viewerRef.current?.querySelectorAll(".okf-image-button") || [])
+        .filter((button) => button.dataset.imageSrc === lightbox.src);
+      const target = previous?.element?.isConnected ? previous.element : matching[previous?.index];
+      target?.focus();
     };
   }, [lightbox, closeLightbox]);
 
@@ -74,18 +102,26 @@ export default function MarkdownViewer({
 
   const defaultComponents = {
     img({ src, alt, ...props }) {
-      const resolved = resolveAttachment(src, docId);
+      const resolved = resolveDocumentImage(src, docId);
       const label = alt || t("markdown.image");
+      if (!resolved) return <span>{label}</span>;
       return (
         <figure className="okf-figure">
-          <img
-            className="okf-image"
-            src={resolved}
-            alt={label}
-            loading="lazy"
-            onClick={() => openLightbox(resolved, label)}
-            {...props}
-          />
+          <button
+            type="button"
+            className="okf-image-button"
+            data-image-src={resolved}
+            aria-label={`${t("markdown.viewImage")}: ${label}`}
+            onClick={(event) => openLightbox(resolved, label, event.currentTarget)}
+          >
+            <img
+              className="okf-image"
+              src={resolved}
+              alt={label}
+              loading="lazy"
+              {...props}
+            />
+          </button>
           <figcaption className="okf-figure-caption">
             <span className="okf-figure-badge" aria-hidden="true">🖼</span>
             {label}
@@ -139,25 +175,24 @@ export default function MarkdownViewer({
   };
 
   return (
-    <div className={className}>
+    <div ref={viewerRef} className={className}>
       <ReactMarkdown remarkPlugins={[remarkGfm, ...remarkPlugins]} components={defaultComponents}>
         {body}
       </ReactMarkdown>
       {lightbox && (
         <div
+          ref={lightboxRef}
           className="okf-lightbox"
           role="dialog"
           aria-modal="true"
           aria-label={lightbox.alt || t("markdown.viewImage")}
           onClick={closeLightbox}
         >
-          <button className="okf-lightbox-close" aria-label={t("markdown.close")} onClick={closeLightbox}>
+          <button ref={closeButtonRef} type="button" className="okf-lightbox-close" aria-label={t("markdown.close")} onClick={closeLightbox}>
             ✕
           </button>
           <div
-            id="okf-lightbox"
             className="okf-lightbox-content"
-            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
           >
             <img src={lightbox.src} alt={lightbox.alt || ""} />

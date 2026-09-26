@@ -339,19 +339,30 @@ class TestUploadWithDedup:
     корзине — нет (осознанное решение 2026-09-01) + информационное поле."""
 
     def _upload(self, tmp_path, monkeypatch, *, twin_in_trash):
+        from io import BytesIO
+        from pypdf import PdfWriter
         from app.api import documents as docs
         from app.services.deduplication import sha256_bytes
 
         client = make_client(tmp_path, monkeypatch, dedup_enabled=True)
+        from app import main
+        settings = main.get_settings()
+        monkeypatch.setattr(docs, "get_settings", lambda: settings)
+        settings.uploads_dir.mkdir(parents=True, exist_ok=True)
         login(client)
+        stream = BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=72, height=72)
+        writer.write(stream)
+        pdf = stream.getvalue()
         reg = DocumentRegistry()
         reg.create("1111111111111111", "old.pdf", "application/pdf", 10)
-        reg.update("1111111111111111", file_hash=sha256_bytes(b"%PDF-1.4"))
+        reg.update("1111111111111111", file_hash=sha256_bytes(pdf))
         if twin_in_trash:
             reg.soft_delete("1111111111111111", "demo.admin")
 
         dest = tmp_path / "0123456789abcdef.pdf"
-        dest.write_bytes(b"%PDF-1.4")
+        dest.write_bytes(pdf)
         monkeypatch.setattr(
             docs, "save_upload_stream", lambda *a, **k: ("0123456789abcdef", dest, 8)
         )

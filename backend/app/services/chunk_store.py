@@ -12,6 +12,7 @@ import logging
 from sqlalchemy import select, tuple_
 
 from app.db.models import DocumentChunk
+from app.services.source_store import validate_source_references
 from app.db.session import session_scope
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ def replace_chunks(session, doc_id: str, rows: list[dict]) -> None:
     Commit выполняет вызывающий — финализация собирает чанки + концепты +
     вложения в одну транзакцию (session_scope), затем идёт Qdrant.
     """
+    source_ids = {str(row["source_id"]) for row in rows if row.get("source_id")}
+    validate_source_references(session, doc_id, source_ids)
     session.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).delete(
         synchronize_session=False
     )
@@ -34,6 +37,7 @@ def replace_chunks(session, doc_id: str, rows: list[dict]) -> None:
         session.add(
             DocumentChunk(
                 doc_id=doc_id,
+                source_id=r.get("source_id"),
                 chunk_index=int(r["chunk_index"]),
                 section_title=r.get("section_title"),
                 content=r.get("content") or "",

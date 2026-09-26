@@ -18,7 +18,7 @@ from tests.fixtures import (
 
 class TestDispatch:
     def test_supported_extensions(self):
-        assert SUPPORTED_EXTENSIONS == {".docx", ".xlsx", ".pdf"}
+        assert SUPPORTED_EXTENSIONS == {".docx", ".xlsx", ".pdf", ".eml", ".msg"}
 
     def test_unknown_extension_raises(self, tmp_path: Path):
         f = tmp_path / "doc.txt"

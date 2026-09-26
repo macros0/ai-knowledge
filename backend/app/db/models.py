@@ -19,9 +19,11 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -171,6 +173,13 @@ class Document(Base):
     # Дедупликация (Этап 4.2): SHA-256 байтов файла и нормализованного текста.
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Канонический отпечаток standalone EML/MSG, только при полном извлечении
+    # вложений. Нужен для similar-review, не является hard duplicate.
+    mail_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Версия parser contract и подробные предупреждения частичного извлечения.
+    # Nullable сохраняет совместимость старого корпуса до явного regenerate.
+    parser_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parse_warnings: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # MinHash-подпись (k=128) документа, список uint32.
     minhash: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Есть ли почти-дубликаты (уровень 2/3): выставляется пайплайном после
@@ -348,6 +357,9 @@ class OkfConcept(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     relations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     chunk_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # NULL сохраняет legacy-концепты, source_id связывает новые концепты с
+    # конкретным письмом/вложением, а не только с корневым документом.
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     # Проверенные диапазоны в исходном DocumentChunk.content; null для старых концептов.
     source_spans: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -376,6 +388,7 @@ class OkfAttachment(Base):
     doc_id: Mapped[str] = mapped_column(
         ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(512), default="")
     kind: Mapped[str] = mapped_column(String(64), default="other")
     caption: Mapped[str] = mapped_column(Text, default="")
@@ -400,6 +413,42 @@ class OkfAttachment(Base):
     )
 
 
+class DocumentGenerationState(Base):
+    """Publication pointers; absent row means a legacy unversioned document."""
+
+    __tablename__ = "document_generation_states"
+
+    doc_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True,
+    )
+    active_generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    candidate_generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class DocumentGeneration(Base):
+    """Durable publication lifecycle, independent from the user-visible job status."""
+
+    __tablename__ = "document_generations"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    base_generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    phase: Mapped[str] = mapped_column(String(16), nullable=False, default="preparing")
+    legacy_cleanup_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    publication_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "phase IN ('preparing', 'ready', 'active', 'retired', 'abandoned')",
+            name="ck_document_generations_phase",
+        ),
+    )
+
+
 class DocumentChunk(Base):
     """Финальный чанк документа (Этап 2b: PostgreSQL — единственный источник текста).
 
@@ -415,6 +464,8 @@ class DocumentChunk(Base):
     doc_id: Mapped[str] = mapped_column(
         ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # NULL сохраняет совместимость с историческими плоскими чанками.
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     section_title: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     content: Mapped[str] = mapped_column(Text, default="")
@@ -424,6 +475,46 @@ class DocumentChunk(Base):
 
     __table_args__ = (
         UniqueConstraint("doc_id", "chunk_index", name="uq_document_chunks_doc_index"),
+    )
+
+
+class DocumentSource(Base):
+    """Дерево корневого файла и вложенных артефактов документа.
+
+    Идентификатор стабилен только внутри одного Document и имеет форму пути
+    ``root/0/1``. У источника может не быть самостоятельного файла: тогда
+    ``artifact_kind=container_only`` указывает на container_source_id.
+    """
+
+    __tablename__ = "document_sources"
+
+    doc_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    source_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    parent_source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False, default="document")
+    display_name: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
+    saved_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    extraction_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    artifact_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="original")
+    container_source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    container_locator: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    content_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    warnings: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["doc_id", "parent_source_id"],
+            ["document_sources.doc_id", "document_sources.source_id"],
+            name="fk_document_sources_parent",
+            ondelete="CASCADE",
+        ),
+        Index("ix_document_sources_doc_parent", "doc_id", "parent_source_id"),
     )
 
 
@@ -438,6 +529,9 @@ class DocumentStaging(Base):
     used_slugs: Mapped[list | None] = mapped_column(JSON, nullable=True)
     global_tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
     chunks_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="in_progress")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow

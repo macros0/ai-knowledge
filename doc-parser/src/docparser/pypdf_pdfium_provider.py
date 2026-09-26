@@ -5,16 +5,28 @@ from __future__ import annotations
 import io
 import logging
 import threading
+import zlib
+from collections.abc import Iterator
 from importlib.metadata import version
 from pathlib import Path
 
 import pypdfium2 as pdfium
 from PIL import Image
 from pypdf import PdfReader
+from pypdf.errors import PyPdfError
 
-from .pdf_provider import PdfAttachment, PdfDocument, PdfImage, PdfParseError
+from .pdf_provider import (
+    PdfAttachment,
+    PdfAttachmentRef,
+    PdfDocument,
+    PdfImage,
+    PdfParseError,
+)
 
 logger = logging.getLogger(__name__)
+
+_ATTACHMENT_READ_ERRORS = (PyPdfError, ValueError, KeyError, TypeError, AttributeError,
+                           IndexError, NotImplementedError, zlib.error)
 
 _PDFIUM_LOCK = threading.RLock()
 _FORMAT_EXTENSIONS = {
@@ -121,17 +133,24 @@ class PypdfPdfiumDocument:
             raise PdfParseError(f"Unable to render page {page_index + 1}: {exc}") from exc
 
     def attachments(self) -> list[PdfAttachment]:
-        try:
-            attachments = self._reader.attachments
-        except Exception as exc:
-            logger.debug("Unable to enumerate PDF attachments: %s", exc)
-            return []
+        return [PdfAttachment(ref.name, ref.read_bytes()) for ref in self.iter_attachments()]
 
-        results: list[PdfAttachment] = []
-        for name, item in attachments.items():
-            for data in _attachment_bytes(item):
-                results.append(PdfAttachment(name=str(name), data=data))
-        return results
+    def iter_attachments(self) -> Iterator[PdfAttachmentRef]:
+        # attachment_list yields file specifications without decoding streams.
+        # The old mapping materialized every payload before caller admission.
+        try:
+            for attachment in self._reader.attachment_list:
+                try:
+                    size = attachment.size
+                except _ATTACHMENT_READ_ERRORS:
+                    size = None  # A broken optional hint must not hide later files.
+                yield PdfAttachmentRef(
+                    name=str(attachment.name),
+                    read_bytes=lambda attachment=attachment: _read_attachment_bytes(attachment),
+                    declared_size=size if isinstance(size, int) and not isinstance(size, bool) and size >= 0 else None,
+                )
+        except _ATTACHMENT_READ_ERRORS as exc:
+            raise PdfParseError("Unable to enumerate PDF attachments") from exc
 
     def close(self) -> None:
         with _PDFIUM_LOCK:
@@ -151,11 +170,9 @@ def _extension_for_image(data: bytes) -> str:
         return ""
 
 
-def _attachment_bytes(item: object) -> list[bytes]:
-    if isinstance(item, dict):
-        item = item.get("data", [])
-    if isinstance(item, bytes):
-        return [item] if item else []
-    if isinstance(item, list):
-        return [data for data in item if isinstance(data, bytes) and data]
-    return []
+def _read_attachment_bytes(attachment) -> bytes:
+    try:
+        return attachment.content
+    except _ATTACHMENT_READ_ERRORS as exc:
+        # Do not expose the parser's raw file dictionary or swallow OS/memory errors.
+        raise PdfParseError("Unable to read PDF attachment") from exc

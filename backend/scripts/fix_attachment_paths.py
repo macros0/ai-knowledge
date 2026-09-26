@@ -8,42 +8,40 @@ meta['saved_path'] «как есть», а парсеры кладут туда 
 обработки (C:\\Users\\<user>\\...\\uploads\\<doc_id>\\attachments\\<файл>). Путь
 утекал в текст чанков, в концепты (LLM копировал маркер) и в индекс Qdrant.
 
-Скрипт идемпотентен:
-  1. переписывает сегмент «(файл: <абсолютный путь>)» в document_chunks.content и
-     okf_concepts.content на переносимое «(файл: attachments/<имя>)» — меняются
-     ТОЛЬКО маркер-строки с абсолютным путём (относительные не трогаются);
-  2. то же для второго варианта утечки — markdown-ссылки вида
-     «[Вложение: …](file:<абсолютный путь>)» из доканноновой эры бандлов
-     (цель ссылки становится «attachments/<имя>»);
-  3. пересчитывает content_hash правленых чанков;
-  4. удаляет затронутые chunk-точки Qdrant и пере-эмбеддит их из БД штатным
-     VectorStore.backfill_chunks — единая каноническая формула dense/sparse,
-     без третьей копии логики в скрипте (инвариант «пайплайн = reindex = rebuild»).
-
-Concept-точки Qdrant НЕ трогаются: slim-payload не хранит content концептов, он
-гидрируется из okf_concepts при чтении. chunk-точки, наоборот, несут content в
-payload (и вектор посчитан по старому тексту) — поэтому их пересобираем.
+Каждый документ ремонтируется через новое поколение: SQL snapshot → private
+bundle/attachments → concept+chunk embeddings → проверенная SQL-публикация.
+До commit старые данные остаются доступны; сбой сохраняет прежнюю версию.
+Меняются только абсолютные пути в известных маркерах и file-ссылках.
+Проверенные source_spans сдвигаются по точным заменам; неоднозначные частичные
+пересечения с заменяемым маркером отбрасываются. hash/char_count пересчитываются.
+Повторный запуск без изменений не создаёт новую версию. Для bulk maintenance
+остановите application writers; документы с незаконченной генерацией отклоняются.
 
 Пример:
-    python scripts/fix_attachment_paths.py            # правка БД + resync Qdrant
+    python scripts/fix_attachment_paths.py            # публикация исправленных версий
     python scripts/fix_attachment_paths.py --dry-run  # только показать изменения
 
 Требует доступные Qdrant и embedding-сервер (или EMBEDDING_PROVIDER=fake).
 """
 import argparse
-import hashlib
 import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.db.models import DocumentChunk, OkfConcept
+from sqlalchemy import or_, select
+
+from app.config import get_settings
+from app.db.models import Document, DocumentChunk, OkfConcept
+from app.models.schemas import SourceSpan
 from app.db.session import session_scope
-from qdrant_client.http import models as qm
 
 from app.services.embedder import Embedder
-from app.services.vector_store import VectorStore, chunk_point_id
+from app.services.vector_store import VectorStore
+from app.services.okf_generator import OKFGenerator
+from app.services.canonical_repair import repair_published_document
+from app.services.source_evidence import chunk_digest, span_from_offsets
 
 # Абсолютный путь: Windows-диск (C:\) или корень (/ или \\ в начале).
 _ABS_PATH = re.compile(r"^[A-Za-z]:[\\/]|^[\\/]")
@@ -89,95 +87,118 @@ def _relativize_file_links(text: str) -> tuple[str, bool]:
     return new, new != source
 
 
-def fix_rows(dry_run: bool) -> dict:
-    """Правит document_chunks.content и okf_concepts.content в БД.
+def _rewrite_with_spans(text: str, stored_spans: list | None = None) -> tuple[str, list[dict]]:
+    ranges = []
+    for raw in stored_spans or []:
+        try:
+            span = SourceSpan.model_validate(raw, strict=True)
+        except ValueError:
+            continue
+        if span.chunk_hash == chunk_digest(text) and 0 <= span.start < span.end <= len(text):
+            ranges.append((span.start, span.end))
+    for pattern, render in (
+        (_MARKER, lambda value: f"(файл: {value})"),
+        (_FILE_LINK, lambda value: f"]({value})"),
+    ):
+        edits = []
 
-    Возвращает {chunks: [(doc_id, chunk_index), ...], concepts: [(doc_id, id), ...]}.
-    """
-    updated_chunks: list[tuple[str, int]] = []
-    updated_concepts: list[tuple[str, int]] = []
-    with session_scope() as s:
-        for c in s.query(DocumentChunk).filter(DocumentChunk.content.like("%файл: %")).all():
-            new, changed = _relativize_marker(c.content)
-            if not changed:
+        def replace(match):
+            relative = _relativize_abs_path(match.group(1).strip())
+            if not relative:
+                return match.group(0)
+            replacement = render(relative)
+            edits.append((match.start(), match.end(), len(replacement) - len(match.group(0))))
+            return replacement
+
+        text = pattern.sub(replace, text)
+        shifted = []
+        for start, end in ranges:
+            if any(left < start < right or left < end < right for left, right, _delta in edits):
                 continue
-            updated_chunks.append((c.doc_id, c.chunk_index))
-            if not dry_run:
-                c.content = new
-                c.content_hash = hashlib.sha256(new.encode("utf-8")).hexdigest()
-        for c in s.query(DocumentChunk).filter(DocumentChunk.content.like("%](file:%")).all():
-            new, changed = _relativize_file_links(c.content)
-            if not changed:
-                continue
-            updated_chunks.append((c.doc_id, c.chunk_index))
-            if not dry_run:
-                c.content = new
-                c.content_hash = hashlib.sha256(new.encode("utf-8")).hexdigest()
-        for c in s.query(OkfConcept).filter(OkfConcept.content.like("%файл: %")).all():
-            new, changed = _relativize_marker(c.content)
-            if not changed:
-                continue
-            updated_concepts.append((c.doc_id, c.id))
-            if not dry_run:
-                c.content = new
-        for c in s.query(OkfConcept).filter(OkfConcept.content.like("%](file:%")).all():
-            new, changed = _relativize_file_links(c.content)
-            if not changed:
-                continue
-            updated_concepts.append((c.doc_id, c.id))
-            if not dry_run:
-                c.content = new
-    return {"chunks": updated_chunks, "concepts": updated_concepts}
+            shifted.append((start + sum(delta for _left, right, delta in edits if right <= start),
+                            end + sum(delta for _left, right, delta in edits if right <= end)))
+        ranges = shifted
+    return text, [span.model_dump() for start, end in ranges if (span := span_from_offsets(text, start, end))]
 
 
-def resync_chunks(affected: list[tuple[str, int]]) -> int:
-    """Удаляет затронутые chunk-точки и пере-эмбеддит их из БД через backfill_chunks."""
-    vs = VectorStore()
-    vs.ensure_collection()
-    ids = [chunk_point_id(doc_id, ci) for doc_id, ci in affected]
-    # str point_id — допустимый ExtendedPointId в рантайме; стабы qdrant-client
-    # слишком узки (тот же приём, что в vector_store.delete_orphaned_points).
-    vs.client.delete(
-        collection_name=vs.collection,
-        points_selector=qm.PointIdsList(points=ids),  # type: ignore[arg-type]
-    )
-    print(f"Удалено chunk-точек из Qdrant: {len(ids)}")
-    return vs.backfill_chunks(Embedder())
+def _repair_snapshot(snapshot: dict, changed_chunks: list[int], changed_concepts: list[str]) -> None:
+    old_chunks = {row["chunk_index"]: dict(row) for row in snapshot["chunks"]}
+    for row in snapshot["chunks"]:
+        new, _ = _rewrite_with_spans(row["content"] or "")
+        if new != row["content"]:
+            changed_chunks.append(row["chunk_index"])
+            row["content"] = new
+    for row in snapshot["concepts"]:
+        new, _ = _rewrite_with_spans(row["content"] or "")
+        changed = new != row["content"]
+        row["content"] = new
+        if row["chunk_index"] in changed_chunks and row.get("source_spans"):
+            chunk = old_chunks[row["chunk_index"]]
+            if (row.get("source_id") or "root") == (chunk.get("source_id") or "root"):
+                _, spans = _rewrite_with_spans(chunk["content"], row["source_spans"])
+            else:
+                spans = []
+            row["source_spans"] = spans or None
+            changed = True
+        if changed:
+            changed_concepts.append(row["slug"])
+
+
+def fix_rows(dry_run: bool, *, doc_id=None, settings=None, generator=None, embedder=None, vector_store=None) -> dict:
+    """Publish path repairs per document; failed documents remain unchanged."""
+    settings = settings or get_settings()
+    with session_scope() as session:
+        candidates = []
+        for model in (DocumentChunk, OkfConcept):
+            candidates.append(select(model.doc_id).where(
+                model.doc_id == Document.id,
+                or_(model.content.like("%файл:%"), model.content.like("%](file:%")),
+            ).exists())
+        query = select(Document.id).where(Document.deleted_at.is_(None), or_(*candidates)).order_by(Document.id)
+        if doc_id:
+            query = query.where(Document.id == doc_id)
+        doc_ids = list(session.scalars(query))
+    if not dry_run and doc_ids:
+        generator = generator or OKFGenerator()
+        embedder = embedder or Embedder()
+        vector_store = vector_store or VectorStore()
+    result = {"chunks": [], "concepts": [], "errors": [], "generations": {}}
+    for current_id in doc_ids:
+        chunks, concepts = [], []
+        try:
+            outcome = repair_published_document(
+                current_id, settings, generator, embedder, vector_store,
+                lambda snapshot: _repair_snapshot(snapshot, chunks, concepts), dry_run=dry_run,
+            )
+        except Exception as exc:
+            result["errors"].append({"doc_id": current_id, "detail": str(exc)})
+            continue
+        result["chunks"].extend((current_id, index) for index in chunks)
+        result["concepts"].extend((current_id, slug) for slug in concepts)
+        if outcome["generation_id"]:
+            result["generations"][current_id] = outcome["generation_id"]
+    return result
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Чистка абсолютных локальных путей из маркер-блоков вложений."
-    )
+    parser = argparse.ArgumentParser(description="Ремонт путей вложений через новую версию документа.")
     parser.add_argument("--dry-run", action="store_true", help="Показать изменения без записи")
+    parser.add_argument("--doc-id", help="Обработать только выбранный документ")
     args = parser.parse_args()
-
-    stats = fix_rows(dry_run=args.dry_run)
-    # Ряд мог попасть в список из двух проходов (маркер + file-ссылка) — дедуп.
-    chunks = list(dict.fromkeys(stats["chunks"]))
-    concepts = list(dict.fromkeys(stats["concepts"]))
-    if not chunks and not concepts:
-        print("Абсолютных путей в маркер-блоках не найдено — ничего не менять.")
-        return
-
-    print(f"Маркер-строк с абсолютным путём: чанков {len(chunks)}, концептов {len(concepts)}")
-    for doc_id, ci in chunks:
-        print(f"  chunk   [{doc_id}] #{ci}")
-    for doc_id, cid in concepts:
-        print(f"  concept [{doc_id}] #{cid}")
-
+    stats = fix_rows(dry_run=args.dry_run, doc_id=args.doc_id)
+    print(f"Изменений: чанков {len(stats['chunks'])}, концептов {len(stats['concepts'])}")
+    for doc_id, index in stats["chunks"]:
+        print(f"  chunk [{doc_id}] #{index}")
+    for doc_id, slug in stats["concepts"]:
+        print(f"  concept [{doc_id}] {slug}")
+    for error in stats["errors"]:
+        print(f"ОШИБКА [{error['doc_id']}]: {error['detail']}")
     if args.dry_run:
-        print("dry-run: БД и Qdrant не изменены.")
-        return
-
-    # Правка концептов закоммичена выше (session_scope). Qdrant не хранит их
-    # content — исправленное значение подхватится при гидрации, точки не трогаем.
-    if chunks:
-        indexed = resync_chunks(chunks)
-        print(f"Resync чанков: пере-эмбедждено точек {indexed} (ожидалось {len(chunks)})")
-        if indexed != len(chunks):
-            print("ВНИМАНИЕ: число пере-эмбеджденных точек не совпало с ожидаемым —")
-            print("проверьте логи backfill (часть точек может не дойти до Qdrant).")
+        print("dry-run: БД, файлы и Qdrant не изменены.")
+    else:
+        print(f"Опубликовано ремонтных версий: {len(stats['generations'])}")
+    if stats["errors"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

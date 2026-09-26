@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.db.models import Document, DocumentChunk, OkfConcept
+from app.db.models import Document, DocumentChunk, DocumentSource, OkfConcept
 from app.db.session import session_scope
 from app.services.fusion import Hit
 from app.services.retrieval_hydration import (
@@ -86,6 +86,31 @@ def test_enrich_retrieval_hits_hydrates_concepts_and_chunks_together():
     assert hits[0].payload["filepath"] == "doc-hydrate/concept-one.md"
     assert hits[1].payload["content"] == "Full chunk content"
     assert hits[1].payload["section_title"] == "Section one"
+
+
+def test_enrich_retrieval_hits_uses_canonical_source_id_when_qdrant_payload_is_legacy():
+    with session_scope() as session:
+        session.add(Document(id="mail-hydrate", filename="archive.docx"))
+        session.add_all([
+            DocumentSource(
+                doc_id="mail-hydrate", source_id="root", ordinal=0, kind="document",
+                display_name="archive.docx", artifact_kind="original",
+            ),
+            DocumentSource(
+                doc_id="mail-hydrate", source_id="root/0", parent_source_id="root", ordinal=0,
+                kind="mail", display_name="decision.eml", artifact_kind="original",
+            ),
+            OkfConcept(doc_id="mail-hydrate", slug="decision", title="Решение", content="Лимит 12 дней.", chunk_index=0, source_id="root/0"),
+            DocumentChunk(doc_id="mail-hydrate", chunk_index=0, content="Лимит 12 дней.", char_count=15, source_id="root/0"),
+        ])
+    hits = [
+        Hit("concept", 1.0, {"point_type": "concept", "doc_id": "mail-hydrate", "slug": "decision", "chunk_index": 0}),
+        Hit("chunk", 0.9, {"point_type": "chunk", "doc_id": "mail-hydrate", "chunk_index": 0}),
+    ]
+
+    enrich_retrieval_hits(hits)
+
+    assert [hit.payload["source_id"] for hit in hits] == ["root/0", "root/0"]
 
 
 def test_enrich_retrieval_hits_skips_chunk_content_for_multitopic_group(caplog):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -28,6 +29,15 @@ class PdfAttachment:
     data: bytes
 
 
+@dataclass(frozen=True)
+class PdfAttachmentRef:
+    """Metadata whose payload is read only after caller admission."""
+
+    name: str
+    read_bytes: Callable[[], bytes]
+    declared_size: int | None = None
+
+
 class PdfDocument(Protocol):
     def page_count(self) -> int: ...
 
@@ -38,6 +48,8 @@ class PdfDocument(Protocol):
     def render_page_jpeg(self, page_index: int, *, dpi: int, quality: int) -> bytes: ...
 
     def attachments(self) -> list[PdfAttachment]: ...
+
+    def iter_attachments(self) -> Iterator[PdfAttachmentRef]: ...
 
     def close(self) -> None: ...
 

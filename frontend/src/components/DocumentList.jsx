@@ -628,6 +628,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       : 0;
 
   const renderDoc = (doc) => {
+    const problemKey = `docs.problem.${doc.problem}`;
+    const problemTranslation = doc.problem ? t(problemKey) : null;
+    const problemText = problemTranslation === problemKey ? t("docs.problem.unknown") : problemTranslation;
     const needsMarkup =
       !BUSY_STATUSES.includes(doc.status) &&
       !doc.development_id &&
@@ -770,8 +773,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               )
             )}
             {doc.problem && (
-              <span className="doc-problem-badge" title={doc.problem_message || doc.problem}>
-                ⚠ {doc.problem_message || doc.problem}
+              <span className="doc-problem-badge" title={problemText}>
+                ⚠ {problemText}
               </span>
             )}
             {needsMarkup && <span className="dev-draft-badge">{t("docs.draftBadge")}</span>}

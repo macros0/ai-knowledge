@@ -25,10 +25,9 @@ import threading
 
 from sqlalchemy import select
 
-from app.db.models import Document
+from app.db.models import Development, Document
 from app.db.session import session_scope
-from app.services.development_registry import get_development_registry
-from app.services.registry import get_registry
+from app.services.generation_store import lock_document_write
 from app.services.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -44,9 +43,21 @@ def document_ids_for_development(dev_id: int) -> list[str]:
 
 
 def reindex_document_dev_tags(doc_id: str, dev_tags: list[str]) -> bool:
-    """Синхронный реиндекс dev_tags документа. Возвращает False, если Qdrant недоступен."""
+    """Project the current DB development, ignoring a stale triggering value.
+
+    False means the document is absent/deleted or synchronization failed.
+    """
     try:
-        VectorStore().reindex_document_dev_tags(doc_id, dev_tags)
+        with session_scope() as session:
+            if not lock_document_write(session, doc_id, allow_deleted=False):
+                return False
+            document = session.get(Document, doc_id)
+            dev = session.get(Development, document.development_id) if document.development_id else None
+            current_tags = [dev.number, dev.name, *([dev.module] if dev.module else [])] if dev else []
+            # Serialize projection writers as well as publication. A development
+            # rename may commit meanwhile, but its scheduled sync runs after this
+            # one and rereads the latest values instead of replaying stale tags.
+            VectorStore().reindex_document_dev_tags(doc_id, current_tags)
         return True
     except Exception:
         logger.warning(
@@ -63,10 +74,7 @@ def reindex_document_dev_tags_from_db(doc_id: str) -> None:
     Читает состояние в момент выполнения (а не из замыкания на момент постановки),
     чтобы при дублирующих потоках итог всегда соответствовал текущей привязке.
     """
-    doc = get_registry().get(doc_id)
-    dev_id = doc.get("development_id") if doc else None
-    dev_tags = get_development_registry().dev_tags(dev_id) if dev_id else []
-    reindex_document_dev_tags(doc_id, dev_tags)
+    reindex_document_dev_tags(doc_id, [])
 
 
 def schedule_document_dev_tags_sync(doc_id: str) -> None:
@@ -83,10 +91,8 @@ def schedule_document_dev_tags_sync(doc_id: str) -> None:
 
 
 def reindex_development_documents(dev_id: int) -> None:
-    dev_reg = get_development_registry()
-    dev_tags = dev_reg.dev_tags(dev_id)
     for doc_id in document_ids_for_development(dev_id):
-        reindex_document_dev_tags(doc_id, dev_tags)
+        reindex_document_dev_tags_from_db(doc_id)
 
 
 def schedule_dev_sync(dev_id: int) -> None:

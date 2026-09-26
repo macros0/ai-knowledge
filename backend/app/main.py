@@ -261,9 +261,21 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logging.warning("Автоочистка истории чата не запущена: %s", exc)
 
+    from app.services.generation_cleanup import run_cleanup_loop
+    from app.services.pipeline import get_pipeline
+
+    generation_cleanup_stop = threading.Event()
+    generation_cleanup_thread = threading.Thread(
+        target=run_cleanup_loop,
+        args=(generation_cleanup_stop, lambda: get_pipeline().cleanup_inactive_generations()),
+        name="generation-cleanup", daemon=True,
+    )
+    generation_cleanup_thread.start()
     try:
         yield
     finally:
+        generation_cleanup_stop.set()
+        generation_cleanup_thread.join(timeout=2)
         # Функция не создаёт singleton, поэтому teardown не поднимет worker при
         # неудачном старте приложения.
         from app.services.export_queue import shutdown_export_queue_if_started

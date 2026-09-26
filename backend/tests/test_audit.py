@@ -158,7 +158,7 @@ def make_client(tmp_path: Path, monkeypatch, **overrides) -> TestClient:
     }
     defaults.update(overrides)
     settings = Settings(**defaults)
-    for module in ("app.config", "app.main", "app.auth.api"):
+    for module in ("app.config", "app.main", "app.auth.api", "app.api.documents", "app.services.pipeline"):
         monkeypatch.setattr(f"{module}.get_settings", lambda: settings)
     return TestClient(create_app())
 

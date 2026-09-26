@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DownloadIcon, FileTextIcon } from "@/components/icons";
 import OkfFileList from "@/components/OkfFileList";
+import DocumentSources from "@/components/DocumentSources";
 import { backendFetch } from "@/lib/backendFetch";
 import { serverTranslator } from "@/i18n/server";
 
@@ -60,6 +61,7 @@ export default async function OkfListPage({ params }) {
         processedChunks={doc.processed_chunks}
         currentChunk={doc.current_chunk}
       />
+      <DocumentSources docId={docId} />
     </div>
   );
 }

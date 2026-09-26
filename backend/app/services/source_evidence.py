@@ -94,11 +94,150 @@ def resolve_source_spans(
         span = locate_unique_quote(text, content)
         if span:
             return [span]
-    span = _locate_retained_excerpt(text, content)
-    return [span] if span else []
+    return _locate_retained_excerpts(text, content)
 
 
-def _locate_retained_excerpt(text: str, content: str) -> SourceSpan | None:
+def resolve_paragraph_span(text: str, title: str, content: str) -> SourceSpan | None:
+    """Return a possible navigation target for a uniquely matched paragraph.
+
+    Use only multi-paragraph inputs: a one-paragraph non-mail document is too
+    broad to suggest a location. This is not verified quote evidence.
+    """
+    paragraphs = _mail_paragraph_ranges(text)
+    if len(paragraphs) < 2:
+        return None
+    return _unique_paragraph_span(text, paragraphs, title, content)
+
+
+def mail_summary_items(content: str) -> list[str]:
+    """Separate a multi-item summary's claims from its introductory metadata."""
+    content = re.split(
+        r"(?im)^\s*(?:#{1,6}\s+)?\*{0,2}Source Quotes(?::\*{0,2}|\*{0,2}:?)\s*$", content,
+    )[0]
+    items = re.findall(r"(?ms)^[-*+]\s+(.+?)(?=^[-*+]\s+|\Z)", content)
+    return items if len(items) >= 2 else []
+
+
+def resolve_mail_source_spans(
+    text: str, content: str, quotes: list[str] | None = None,
+) -> list[SourceSpan]:
+    """For list summaries, require evidence about an item, not just the subject.
+
+    This conservative lexical admission check is not a semantic verifier.
+    Accepted quotes still must occur uniquely and verbatim in canonical text.
+    If none qualify, recover literal excerpts from individual claims only.
+    """
+    items = mail_summary_items(content)
+    if not items:
+        return resolve_source_spans(text, content, quotes)
+    preamble = re.split(r"(?m)^[-*+]\s+", content, maxsplit=1)[0]
+    introductory_terms = _evidence_tokens(preamble)
+    supported_quotes = []
+    for quote in (quotes or [])[:3] + embedded_source_quotes(content):
+        quote_terms = _evidence_tokens(quote) - introductory_terms
+        for item in items:
+            if _has_negation(quote) != _has_negation(item):
+                continue
+            shared = quote_terms & _evidence_tokens(item)
+            if len(shared) >= 2 or any(any(char.isdigit() for char in term) for term in shared):
+                supported_quotes.append(quote)
+                break
+    if supported_quotes:
+        spans = resolve_source_spans(text, "", supported_quotes)
+        if spans:
+            return spans
+    spans = {(span.start, span.end): span for item in items
+             for span in resolve_source_spans(text, item)}
+    return sorted(spans.values(), key=lambda span: (span.start, span.end))[:3]
+
+
+def resolve_mail_paragraph_span(text: str, title: str, content: str) -> SourceSpan | None:
+    """Return a conservative paragraph anchor for a mail concept without a quote.
+
+    This is only a possible navigation target, never verified quote evidence.
+    A sole body paragraph still needs support from the concept body, and
+    conflicting negation rules out the guess.
+    """
+    paragraphs = _mail_paragraph_ranges(text)
+    if len(paragraphs) == 1:
+        start, end = paragraphs[0]
+        if not _paragraph_match_score(text[start:end], title, content):
+            return None
+        return span_from_offsets(text, start, end)
+    if len(paragraphs) < 2:
+        return None
+    return _unique_paragraph_span(text, paragraphs, title, content)
+
+
+def _unique_paragraph_span(
+    text: str, paragraphs: list[tuple[int, int]], title: str, content: str,
+) -> SourceSpan | None:
+    scored = [
+        (_paragraph_match_score(text[start:end], title, content), index)
+        for index, (start, end) in enumerate(paragraphs)
+    ]
+
+    best_score, best_index = max(scored)
+    second_score = max(score for score, index in scored if index != best_index)
+    if not best_score or best_score <= second_score:
+        return None
+    start, end = paragraphs[best_index]
+    return span_from_offsets(text, start, end)
+
+
+def _mail_paragraph_ranges(text: str) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    for match in re.finditer(r"(?:^|\n[ \t]*\n)(.*?)(?=\n[ \t]*\n|\Z)", text, flags=re.DOTALL):
+        raw = match.group(1)
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        start = match.start(1) + len(raw) - len(raw.lstrip())
+        end = start + len(stripped)
+        ranges.append((start, end))
+    return ranges
+
+
+def is_whole_paragraph_span(text: str, start: int, end: int) -> bool:
+    """Recognize old lexical mail spans that were stored as exact ranges."""
+    return (start, end) in _mail_paragraph_ranges(text)
+
+
+def _paragraph_match_score(paragraph: str, title: str, content: str) -> int:
+    """Require concept-body evidence; title can only break a supported tie."""
+    if _has_negation(paragraph) != _has_negation(content):
+        return 0
+    source_terms = _evidence_tokens(paragraph)
+    shared_body = source_terms & _evidence_tokens(content)
+    identifiers = {term for term in shared_body if any(char.isdigit() for char in term)}
+    if len(shared_body) < 2 and not identifiers:
+        return 0
+    return 2 * len(shared_body) + len(source_terms & _evidence_tokens(title))
+
+
+def _has_negation(value: str) -> bool:
+    return bool(re.search(r"(?<!\w)(?:не|нет|без|not|no)(?!\w)", value, flags=re.IGNORECASE))
+
+
+def _evidence_tokens(value: str) -> set[str]:
+    return {
+        token.casefold()
+        for token in re.findall(r"\w+", value, flags=re.UNICODE)
+        if (len(token) >= 4 or any(char.isdigit() for char in token))
+        and token.casefold() not in _EVIDENCE_STOPWORDS
+    }
+
+
+_EVIDENCE_STOPWORDS = {
+    "этот", "этого", "этой", "этим", "этими", "для", "при", "как",
+    "что", "или", "also", "with", "from", "that", "this", "they",
+    "about", "into", "using", "used", "настройте", "используется",
+    "сообщение", "сообщения", "сообщении", "сообщений", "письмо", "письма",
+    "документ", "документа", "document", "message", "email",
+}
+
+
+def _locate_retained_excerpts(text: str, content: str) -> list[SourceSpan]:
     # Keep identifiers (P0002-PERIOD, V_T5UX9) intact. Sentence punctuation
     # outside the excerpt may change; punctuation inside it still must match.
     token_re = r"\w+(?:[-']\w+)*"
@@ -135,8 +274,19 @@ def _locate_retained_excerpt(text: str, content: str) -> SourceSpan | None:
         if span:
             best[(span.start, span.end)] = span
             best_size = size
-    # Equal-strength fragments in different locations are not a unique anchor.
-    return next(iter(best.values())) if len(best) == 1 else None
+    # Each candidate was matched through locate_unique_quote(), so the same
+    # quoted words at several source locations were already rejected.  Several
+    # *different* equal-length fragments are valid evidence for a concept that
+    # compresses intervening prose.  Keep non-overlapping positions in document
+    # order; overlapping token windows are alternate descriptions of one fact.
+    result: list[SourceSpan] = []
+    for span in sorted(best.values(), key=lambda item: (item.start, item.end)):
+        if result and span.start < result[-1].end:
+            continue
+        result.append(span)
+        if len(result) == 3:
+            break
+    return result
 
 
 def line_offset(text: str, line_index: int) -> int | None:

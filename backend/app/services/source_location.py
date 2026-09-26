@@ -3,21 +3,32 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 from sqlalchemy import select
 
-from app.db.models import DocumentChunk, OkfConcept
+from app.db.models import Document, DocumentChunk, DocumentSource, OkfConcept
 from app.db.session import session_scope
 from app.models.schemas import DocumentTextChunkOut, SourceLocationOut, SourceLocationSpanOut
-from app.services.source_evidence import resolve_source_spans
+from app.services.generation_store import lock_generation_read
+from app.services.source_evidence import (
+    is_whole_paragraph_span,
+    mail_summary_items,
+    resolve_mail_paragraph_span,
+    resolve_mail_source_spans,
+    resolve_paragraph_span,
+    resolve_source_spans,
+)
 
 
 def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
     with session_scope() as session:
+        lock_generation_read(session, [doc_id])
         concept = session.execute(
             select(
                 OkfConcept.chunk_index,
                 OkfConcept.source_spans,
+                OkfConcept.title,
                 OkfConcept.content,
             ).where(
                 OkfConcept.doc_id == doc_id,
@@ -26,20 +37,35 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
         ).first()
         if concept is None:
             return None
-        chunk_index, stored_spans, concept_content = concept
+        chunk_index, stored_spans, concept_title, concept_content = concept
         if chunk_index is None:
             return SourceLocationOut(status="unavailable")
         chunk = session.execute(
-            select(DocumentChunk.content).where(
+            select(DocumentChunk.content, DocumentChunk.source_id).where(
                 DocumentChunk.doc_id == doc_id,
                 DocumentChunk.chunk_index == chunk_index,
             )
         ).first()
         if chunk is None:
             return SourceLocationOut(status="unavailable", chunk_index=chunk_index)
-        content = chunk[0] or ""
+        content, source_id = chunk
+        content = content or ""
         if not content:
             return SourceLocationOut(status="unavailable", chunk_index=chunk_index)
+        filename = session.scalar(select(Document.filename).where(Document.id == doc_id)) or ""
+        source = session.execute(
+            select(DocumentSource.kind, DocumentSource.metadata_json).where(
+                DocumentSource.doc_id == doc_id,
+                DocumentSource.source_id == source_id,
+            )
+        ).first() if source_id else None
+
+    source_metadata = source.metadata_json if source and isinstance(source.metadata_json, dict) else {}
+    is_mail = (
+        (source_id == "root" and Path(filename).suffix.lower() in {".eml", ".msg"})
+        or bool(source and source.kind == "mail")
+        or bool(source_metadata.get("mail"))
+    )
 
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     valid: list[SourceLocationSpanOut] = []
@@ -67,8 +93,34 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
             )
         )
     recovered = False
+    inferred = False
+    summary = is_mail and bool(mail_summary_items(concept_content or ""))
+    if summary and valid:
+        previous_positions = {(span.start, span.end) for span in valid}
+        evidence = resolve_mail_source_spans(
+            content, concept_content or "", [content[span.start:span.end] for span in valid],
+        )
+        valid = [SourceLocationSpanOut(start=span.start, end=span.end,
+                                       quote=content[span.start:span.end][:240]) for span in evidence]
+        recovered = any((span.start, span.end) not in previous_positions for span in evidence)
+    elif is_mail and valid:
+        verbatim = {(span.start, span.end) for span in resolve_source_spans(content, concept_content or "")}
+        guess = resolve_mail_paragraph_span(content, concept_title or "", concept_content or "")
+        kept: list[SourceLocationSpanOut] = []
+        for span in valid:
+            position = (span.start, span.end)
+            if is_whole_paragraph_span(content, *position) and position not in verbatim:
+                # Old mail generations stored lexical whole-paragraph guesses
+                # as exact spans. Valid offsets alone do not prove the claim.
+                if guess and position == (guess.start, guess.end):
+                    inferred = True
+                    kept.append(span)
+                continue
+            kept.append(span)
+        valid = kept
     if not valid and stored_spans is None:
-        for span in resolve_source_spans(content, concept_content or ""):
+        evidence_resolver = resolve_mail_source_spans if is_mail else resolve_source_spans
+        for span in evidence_resolver(content, concept_content or ""):
             valid.append(
                 SourceLocationSpanOut(
                     start=span.start,
@@ -77,10 +129,23 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
                 )
             )
             recovered = True
+        if not valid and not summary:
+            resolver = resolve_mail_paragraph_span if is_mail else resolve_paragraph_span
+            paragraph_span = resolver(content, concept_title or "", concept_content or "")
+            if paragraph_span:
+                valid.append(
+                    SourceLocationSpanOut(
+                        start=paragraph_span.start,
+                        end=paragraph_span.end,
+                        quote=content[paragraph_span.start : paragraph_span.end][:240],
+                    )
+                )
+                inferred = True
     valid.sort(key=lambda item: (item.start, item.end))
     return SourceLocationOut(
-        status="recovered" if recovered else "exact" if valid else "chunk",
+        status="inferred" if inferred else "recovered" if recovered else "exact" if valid else "chunk",
         chunk_index=chunk_index,
+        source_id=source_id,
         spans=valid,
     )
 

@@ -46,6 +46,8 @@ class DocumentOut(BaseModel):
     problem: str | None = None
     # Человекочитаемое объяснение problem-кода — вычисляется из кода.
     problem_message: str | None = None
+    parser_version: str | None = None
+    parse_warnings: list[Any] = Field(default_factory=list)
     okf_concept_count: int = 0
     # Latest actual generation timestamp among this document's saved concepts.
     concepts_generated_at: datetime | None = None
@@ -120,6 +122,27 @@ class DocumentStatsOut(BaseModel):
     with_development: int = 0
 
 
+class DocumentSourceOut(BaseModel):
+    source_id: str
+    parent_source_id: str | None = None
+    ordinal: int = 0
+    kind: str
+    display_name: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    saved_path: str | None = None
+    extraction_status: str | None = None
+    artifact_kind: str
+    container_source_id: str | None = None
+    container_locator: str | None = None
+    parser_version: str | None = None
+    warnings: list[Any] = Field(default_factory=list)
+
+
+class DocumentSourcesOut(BaseModel):
+    schema_version: int = 1
+    sources: list[DocumentSourceOut] = Field(default_factory=list)
+
+
 class SourceLocaleFacetItem(BaseModel):
     code: str | None = None
     count: int = 0
@@ -179,6 +202,8 @@ class SearchHit(BaseModel):
     snippet: str
     chunk_index: int | None = None
     source_filename: str = ""
+    source_id: str | None = None
+    source_path: list[dict[str, Any]] | None = None
 
 
 class SearchResponse(BaseModel):
@@ -244,6 +269,8 @@ class ChatSource(BaseModel):
     snippet: str = ""
     point_type: str = "concept"
     chunk_index: int | None = None
+    source_id: str | None = None
+    source_path: list[dict[str, Any]] | None = None
     # Бейджи модуль/разработка в источниках (Этап 5.1).
     development_number: str | None = None
     development_name: str | None = None
@@ -318,8 +345,9 @@ class SourceLocationSpanOut(BaseModel):
 
 
 class SourceLocationOut(BaseModel):
-    status: Literal["exact", "recovered", "chunk", "unavailable"]
+    status: Literal["exact", "recovered", "inferred", "chunk", "unavailable"]
     chunk_index: int | None = None
+    source_id: str | None = None
     spans: list[SourceLocationSpanOut] = Field(default_factory=list)
 
 

@@ -5,6 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.db.models import DocumentSource
+from app.db.session import session_scope
 from app.main import create_app
 from app.services.registry import DocumentRegistry
 
@@ -32,7 +34,7 @@ def make_client(tmp_path: Path, monkeypatch, **overrides) -> TestClient:
     }
     defaults.update(overrides)
     settings = Settings(**defaults)
-    for module in ("app.config", "app.main", "app.auth.api"):
+    for module in ("app.config", "app.main", "app.auth.api", "app.api.documents"):
         monkeypatch.setattr(f"{module}.get_settings", lambda: settings)
     return TestClient(create_app())
 
@@ -109,6 +111,42 @@ class TestUploadRoleGate:
             files={"file": ("a.txt", b"hello", "text/plain")},
         )
         assert resp.status_code == expected
+
+
+def test_document_source_and_legacy_download_require_authenticated_root_access(client, new_doc, tmp_path):
+    """Source download must not be bypassed through the legacy root download route."""
+    doc_id = new_doc("aabbccddeeff0011")
+    with session_scope() as session:
+        session.add(
+            DocumentSource(
+                doc_id=doc_id,
+                source_id="root",
+                ordinal=0,
+                kind="mail",
+                display_name="forward.eml",
+                artifact_kind="original",
+            )
+        )
+    uploaded = tmp_path / "uploads" / f"{doc_id}.docx"
+    uploaded.parent.mkdir(parents=True, exist_ok=True)
+    uploaded.write_bytes(b"From: sender@example.test\n\nbody")
+
+    assert client.get(f"/api/documents/{doc_id}/sources").status_code == 401
+    assert client.get(f"/api/documents/{doc_id}/sources/download", params={"source_id": "root"}).status_code == 401
+    assert client.get(f"/api/documents/{doc_id}/download").status_code == 401
+
+    for username in ("demo.user", "demo.editor", "demo.admin", "demo.security"):
+        login(client, username)
+        assert client.get(f"/api/documents/{doc_id}/sources").status_code == 200
+        assert client.get(f"/api/documents/{doc_id}/sources/download", params={"source_id": "root"}).status_code == 200
+        legacy = client.get(f"/api/documents/{doc_id}/download")
+        assert legacy.status_code == 200
+        assert legacy.headers["x-content-type-options"] == "nosniff"
+
+    assert DocumentRegistry().soft_delete(doc_id, "demo.admin") is True
+    assert client.get(f"/api/documents/{doc_id}/sources").status_code == 404
+    assert client.get(f"/api/documents/{doc_id}/sources/download", params={"source_id": "root"}).status_code == 404
+    assert client.get(f"/api/documents/{doc_id}/download").status_code == 404
 
 
 class TestResumeRoleGate:

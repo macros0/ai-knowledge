@@ -3,9 +3,10 @@ import logging
 import re
 import unicodedata
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Protocol
 import yaml
+from docparser import portable_name
 
 from app.config import get_settings
 from app.models.schemas import Concept, OkfDocument
@@ -14,7 +15,12 @@ from app.services.comment_concepts import extract_comment_concepts
 from app.services.field_table import extract_table_concepts
 from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMClient, LLMTruncationError
-from app.services.source_evidence import chunk_digest, embedded_source_quotes, resolve_source_spans
+from app.services.source_evidence import (
+    chunk_digest,
+    embedded_source_quotes,
+    resolve_source_spans,
+    resolve_mail_source_spans,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +119,15 @@ class OKFGenerator:
             digest.update(b"\x00")
         return digest.hexdigest()[:12]
 
-    def generate_chunk(self, chunk: str, filename: str, index: int, total: int, doc_id: str = "unknown") -> list[Concept]:
+    def generate_chunk(
+        self,
+        chunk: str,
+        filename: str,
+        index: int,
+        total: int,
+        doc_id: str = "unknown",
+        source_is_mail: bool = False,
+    ) -> list[Concept]:
         """Генерация OKF-концептов для одного чанка (индекс — 1-based).
 
         Таблицы полей XML-сообщений (колонки: поле | тип | длина | кратность |
@@ -169,10 +183,17 @@ class OKFGenerator:
                     span.chunk_hash = digest
             remainder += f"\n[Комментарии извлечены программно: {len(comment_concepts)}]"
         llm_concepts = self._generate_chunk_recursive(remainder, filename, index, total, doc_id, depth=0)
+        evidence_resolver = (
+            resolve_mail_source_spans
+            if source_is_mail or Path(filename).suffix.lower() in {".eml", ".msg"}
+            else resolve_source_spans
+        )
         for concept in llm_concepts:
-            concept.source_spans = resolve_source_spans(
+            concept.source_spans = evidence_resolver(
                 source_chunk, concept.content, concept.source_quotes,
             )
+            # A lexical paragraph guess is navigation only. Never persist it
+            # as a verified source span, including for mail chunks.
         return comment_concepts + table_concepts + llm_concepts
 
     def _generate_chunk_recursive(
@@ -224,6 +245,7 @@ class OKFGenerator:
         global_tags: list[str] | None = None,
         slugs: list[str] | None = None,
         chunk_of_slug: dict[str, int] | None = None,
+        source_ids: list[str | None] | None = None,
         bundle_dir: Path | None = None,
     ) -> tuple[list[OkfDocument], list[dict]]:
         """Строит OkfDocument[] + manifest БЕЗ записи файлов (Этап 2b).
@@ -249,6 +271,7 @@ class OKFGenerator:
             seen.add(slug)
             filepath = bundle_dir / f"{slug}.md" if bundle_dir is not None else Path(f"{slug}.md")
             chunk_index = (chunk_of_slug or {}).get(slug)
+            source_id = source_ids[i] if source_ids is not None and i < len(source_ids) else None
             markdown = _build_markdown(
                 concept,
                 filename,
@@ -256,6 +279,7 @@ class OKFGenerator:
                 attachments=attachments,
                 global_tags=global_tags,
                 chunk_index=chunk_index,
+                source_id=source_id,
             )
             metadata = {
                 "type": concept.type,
@@ -267,6 +291,7 @@ class OKFGenerator:
                 "source_spans": [span.model_dump() for span in concept.source_spans],
                 "attachments": attachments or [],
                 "chunk_index": chunk_index,
+                "source_id": source_id,
             }
             okf_docs.append(
                 OkfDocument(filepath=str(filepath), metadata=metadata, content=concept.content, markdown=markdown)
@@ -279,6 +304,7 @@ class OKFGenerator:
                     "tags": concept.tags,
                     "size": len(markdown.encode("utf-8")),
                     "chunk_index": chunk_index,
+                    "source_id": source_id,
                 }
             )
         return okf_docs, manifest
@@ -292,6 +318,8 @@ class OKFGenerator:
         global_tags: list[str] | None = None,
         slugs: list[str] | None = None,
         chunk_of_slug: dict[str, int] | None = None,
+        source_ids: list[str | None] | None = None,
+        sources: list[dict] | None = None,
         bundle_root: Path | None = None,
     ) -> list[OkfDocument]:
         bundle_dir = bundle_root or self.bundle_root or self.settings.okf_dir / doc_id
@@ -304,12 +332,47 @@ class OKFGenerator:
             global_tags=global_tags,
             slugs=slugs,
             chunk_of_slug=chunk_of_slug,
+            source_ids=source_ids,
             bundle_dir=bundle_dir,
         )
         for doc in okf_docs:
             Path(doc.filepath).write_text(doc.markdown, encoding="utf-8")
         write_json_atomic(bundle_dir / "_files.json", manifest)
+        if sources is not None:
+            write_json_atomic(bundle_dir / "sources.json", _source_manifest(sources))
         return okf_docs
+
+
+
+
+def _source_manifest(rows: list[dict]) -> dict:
+    """Serialize source provenance for a portable OKF bundle."""
+    fields = (
+        "source_id", "parent_source_id", "ordinal", "kind", "display_name",
+        "metadata", "extraction_status", "artifact_kind", "container_source_id",
+        "container_locator", "content_fingerprint", "parser_version", "warnings",
+    )
+    sources: list[dict] = []
+    for row in sorted(rows, key=lambda item: (str(item.get("source_id", "")).count("/"), str(item.get("source_id", "")))):
+        item = {field: row.get(field) for field in fields if row.get(field) is not None}
+        relative_path = _portable_relative_path(row.get("saved_path"))
+        item["saved_path"] = f"attachments/{portable_name(relative_path)}" if relative_path else None
+        sources.append(item)
+    return {"schema_version": 1, "sources": sources}
+
+
+def _portable_relative_path(value: object) -> str | None:
+    """Keep only paths portable across Windows and POSIX restore targets."""
+    if not isinstance(value, str) or not value or "\x00" in value:
+        return None
+    windows = PureWindowsPath(value)
+    posix = PurePosixPath(value.replace("\\", "/"))
+    if windows.is_absolute() or windows.drive or posix.is_absolute():
+        return None
+    parts = posix.parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        return None
+    return "/".join(parts)
 
 
 def _build_markdown(
@@ -319,6 +382,7 @@ def _build_markdown(
     attachments: list[dict] | None = None,
     global_tags: list[str] | None = None,
     chunk_index: int | None = None,
+    source_id: str | None = None,
     generated_at: str | None = None,
 ) -> str:
     meta = {
@@ -333,6 +397,8 @@ def _build_markdown(
     }
     if chunk_index is not None:
         meta["chunk_index"] = chunk_index
+    if source_id:
+        meta["source_id"] = source_id
     frontmatter = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, default_flow_style=False)
     body = _truncate_content(concept.content, get_settings().okf_max_concept_chars)
     return f"---\n{frontmatter}---\n\n# {concept.title}\n\n{body}\n"

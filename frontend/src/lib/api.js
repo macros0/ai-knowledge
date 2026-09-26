@@ -159,9 +159,10 @@ function jsonRequest(path, method, data, timeoutMs) {
   }, timeoutMs);
 }
 
-export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale } = {}) {
+export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale, allowSimilar = false } = {}) {
   const form = new FormData();
   form.append("file", file);
+  if (allowSimilar) form.append("allow_similar", "true");
   if (canonicalLocale) form.append("canonical_locale", canonicalLocale);
   for (const tag of tags) {
     form.append("tags", tag);
@@ -381,6 +382,10 @@ export function unblockUser(externalId) {
 
 export function listOkfFiles(docId) {
   return request(`/documents/${docId}/okf`);
+}
+
+export function getDocumentSources(docId) {
+  return request(`/documents/${encodeURIComponent(docId)}/sources`);
 }
 
 export function bulkResume(docIds) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   detectBrowserLocale,
   DEFAULT_LOCALE,
@@ -35,6 +35,7 @@ function initialLocale(ssrLocale) {
 
 export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}, children }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [locale, setLocaleState] = useState(() => initialLocale(ssrLocale));
   // Runtime-override UI-словарей: { locale: dict }. Слой поверх versioned-словаря
   // релиза (Этап 7 фаза C). SSR передаёт override текущей локали; прочие локали
@@ -63,11 +64,13 @@ export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}
     const code = normalizeLocale(next);
     setLocaleState(code);
     setStored(code, window);
+    // RSC-заголовки читают язык из cookie; обновляем их после его записи.
+    router.refresh();
     // display-имена тегов локализуются бэкендом по cookie okf.locale — общий
     // справочник (tagDictionary) сбрасываем, чтобы пикеры/фильтры перечитали его
     // на новом языке (иначе держат словарь языка до переключения).
     bumpTagVersion();
-  }, []);
+  }, [router]);
 
   const { t, tc } = useMemo(
     () => createTranslator(effective, overrides),

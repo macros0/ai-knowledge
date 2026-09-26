@@ -353,12 +353,22 @@
   "apiError.job_not_cancellable": [],
   "apiError.job_not_found": [],
   "apiError.locale_not_found": [],
+  "apiError.mail_import_disabled": [],
+  "apiError.mail_object_unsupported": [],
+  "apiError.mail_parse_failed": [],
+  "apiError.mail_protected": [],
+  "apiError.mail_rtf_unsupported": [],
   "apiError.no_role": [],
   "apiError.not_in_trash": [],
   "apiError.not_resumable": [],
   "apiError.operator_rollback": [],
   "apiError.override_not_found": [],
+  "apiError.parser_isolation_unavailable": [],
+  "apiError.parser_resource_limit": [],
+  "apiError.parser_timeout": [],
+  "apiError.parser_version_mismatch": [],
   "apiError.partial_regeneration_unavailable": [],
+  "apiError.processing_stopping": [],
   "apiError.processing_unavailable": [],
   "apiError.queue_overloaded": [],
   "apiError.rate_limited": [],
@@ -371,6 +381,7 @@
   "apiError.service.qdrant": [],
   "apiError.sessionExpired": [],
   "apiError.session_not_found": [],
+  "apiError.similar_document": [],
   "apiError.source_locale_invalid": [],
   "apiError.storage_full": [],
   "apiError.tag_in_use": [],
@@ -737,6 +748,19 @@
   "docs.myDocuments": [],
   "docs.openTrash": [],
   "docs.optionSearchPlaceholder": [],
+  "docs.problem.attachment_partial_result": [],
+  "docs.problem.encrypted_mail": [],
+  "docs.problem.index_partial_failure": [],
+  "docs.problem.llm_classifier_fallback": [],
+  "docs.problem.llm_partial_result": [],
+  "docs.problem.mail_text_partial_result": [],
+  "docs.problem.no_concepts": [],
+  "docs.problem.no_text_layer": [],
+  "docs.problem.protected_mail": [],
+  "docs.problem.text_partial_result": [],
+  "docs.problem.unknown": [],
+  "docs.problem.unsupported_mail_class": [],
+  "docs.problem.unsupported_rtf_body": [],
   "docs.problemOnly": [],
   "docs.problemOnlyAria": [],
   "docs.progressChunk": [
@@ -1065,6 +1089,9 @@
   "sourceLocation.exact": [
     "index"
   ],
+  "sourceLocation.inferred": [
+    "index"
+  ],
   "sourceLocation.navigation": [],
   "sourceLocation.next": [],
   "sourceLocation.openInChunk": [
@@ -1081,6 +1108,54 @@
   ],
   "sourceLocation.title": [],
   "sourceLocation.unavailable": [],
+  "sources.dateUnknown": [],
+  "sources.download": [],
+  "sources.downloadContainer": [],
+  "sources.downloadContainerNamed": [
+    "name"
+  ],
+  "sources.downloadNamed": [
+    "name"
+  ],
+  "sources.empty": [],
+  "sources.loadError": [
+    "error"
+  ],
+  "sources.loading": [],
+  "sources.location.body": [],
+  "sources.location.footer": [],
+  "sources.location.header": [],
+  "sources.location.table": [],
+  "sources.location.textbox": [],
+  "sources.status.encrypted": [],
+  "sources.status.parsed": [],
+  "sources.status.protected": [],
+  "sources.status.saved": [],
+  "sources.status.skipped_count": [],
+  "sources.status.skipped_depth": [],
+  "sources.status.skipped_disabled": [],
+  "sources.status.skipped_parse": [],
+  "sources.status.skipped_size": [],
+  "sources.status.skipped_storage": [],
+  "sources.status.unsupported": [],
+  "sources.title": [],
+  "sources.warning.alternative": [],
+  "sources.warning.cid": [],
+  "sources.warning.count": [],
+  "sources.warning.decode": [],
+  "sources.warning.depth": [],
+  "sources.warning.disabled": [],
+  "sources.warning.external": [],
+  "sources.warning.format": [],
+  "sources.warning.parseFailed": [],
+  "sources.warning.protected": [],
+  "sources.warning.rtf": [],
+  "sources.warning.size": [],
+  "sources.warning.storage": [],
+  "sources.warning.textLimit": [],
+  "sources.warning.unavailable": [],
+  "sources.warning.unknown": [],
+  "sources.warning.unsupported": [],
   "status.done": [],
   "status.error": [],
   "status.failed": [],
@@ -1194,6 +1269,7 @@
   ],
   "trash.selected": [],
   "upload.busy": [],
+  "upload.confirmSimilar": [],
   "upload.dropHint": [],
   "upload.dupCancel": [],
   "upload.dupRejected": [],
@@ -1208,8 +1284,21 @@
   "upload.failed": [
     "names"
   ],
+  "upload.failedReason": [
+    "file",
+    "reason"
+  ],
   "upload.noSupported": [
     "exts"
+  ],
+  "upload.openExisting": [],
+  "upload.similarHint": [],
+  "upload.similarText": [
+    "file"
+  ],
+  "upload.similarTitle": [],
+  "upload.similarity": [
+    "percent"
   ],
   "upload.skipped": [
     "names"

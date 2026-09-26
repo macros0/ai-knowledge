@@ -221,7 +221,7 @@ def test_parse_pdf_closes_provider_document_on_save_failure(monkeypatch, tmp_pat
         def render_page_jpeg(self, page_index, *, dpi, quality):
             raise AssertionError("rendering must not be reached when an image exists")
 
-        def attachments(self):
+        def iter_attachments(self):
             return []
 
         def close(self):

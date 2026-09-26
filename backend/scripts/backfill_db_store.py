@@ -18,8 +18,10 @@ canonical-таблицы (document_chunks / okf_attachments / okf_concepts.*prov
 Источники чанков по приоритету: бандл chunks/*.md → Qdrant chunk-payload
 (контент обрезан до okf_max_chunk_index_chars) → re-parse исходника без LLM.
 
-Идемпотентен: документы с уже заполненными таблицами пропускаются (--force
-перезаписывает). Per-doc устойчив: сбой одного документа логируется и не
+Только для legacy-документов без active/candidate generation и дерева источников.
+Проверка состояния и запись идут под Document write lock. --force относится
+только к этому историческому корпусу; новые версии требуют regenerate.
+Идемпотентен: документы с уже заполненными таблицами пропускаются. Per-doc устойчив: сбой одного документа логируется и не
 останавливает остальные.
 
 Запуск (из backend/, стек поднят):
@@ -35,6 +37,8 @@ import hashlib
 import logging
 import shutil
 import sys
+import tempfile
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -43,15 +47,38 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.db.models import Document, DocumentChunk, OkfAttachment, OkfConcept
+from app.db.models import Document, DocumentChunk, DocumentGenerationState, DocumentSource, OkfAttachment, OkfConcept
 from app.db.session import session_scope
 from app.services.attachment_store import replace_attachments
 from app.services.bundle import parse_okf_file
 from app.services.chunk_store import replace_chunks
-from app.services.pipeline import _extract_section_title
+from app.services.generation_store import lock_document_write
+from app.services.generation_files import _reject_links, merge_legacy_backfill_files
+from app.services.pipeline import _collect_attachments, _extract_section_title, _rebase_attachment_paths, _source_rows
+from app.services.source_chunking import chunk_blocks_by_source
+from app.services.source_store import replace_sources
 from docparser import portable_name
 
 logger = logging.getLogger("backfill_db_store")
+
+
+def _is_legacy_document(session, doc_id: str) -> bool:
+    document = session.get(Document, doc_id)
+    state = session.get(DocumentGenerationState, doc_id)
+    return bool(
+        document is not None and document.deleted_at is None and document.status == "done"
+        and not (state and (state.active_generation_id or state.candidate_generation_id))
+        and session.query(DocumentSource).filter_by(doc_id=doc_id).first() is None
+    )
+
+
+@contextmanager
+def _legacy_session(doc_id: str):
+    with session_scope() as session:
+        if not lock_document_write(session, doc_id, allow_deleted=False) or not _is_legacy_document(session, doc_id):
+            yield None
+        else:
+            yield session
 
 
 def iter_done_docs(doc_id: str | None = None) -> list[tuple[str, str]]:
@@ -96,6 +123,7 @@ def _read_qdrant_chunks(doc_id: str, vector_store) -> list[tuple[int, str]]:
         must=[
             qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id)),
             qm.FieldCondition(key="point_type", match=qm.MatchValue(value="chunk")),
+            qm.IsEmptyCondition(is_empty=qm.PayloadField(key="generation_id")),
         ]
     )
     while True:
@@ -118,60 +146,80 @@ def _read_qdrant_chunks(doc_id: str, vector_store) -> list[tuple[int, str]]:
     return rows
 
 
-def _reparse_chunks(doc_id: str, filename: str, settings) -> list[tuple[int, str]]:
-    """Fallback последней надежды: re-parse исходника без LLM."""
+def _reparse_rows(session, doc_id: str, filename: str, settings, *, dry_run: bool) -> list[dict]:
+    """Parse privately and preserve source ownership; caller holds the writer lock."""
     ext = Path(filename).suffix.lower()
     src = settings.uploads_dir / f"{doc_id}{ext}"
     if not src.is_file():
         return []
-    from docparser import blocks_to_markdown, parse_document
+    from docparser import ParseContext, parse_document
 
     from app.services.okf_generator import OKFGenerator
+    from app.services.parser_supervisor import parse_document_supervised
 
-    blocks = parse_document(src)
-    markdown = blocks_to_markdown(blocks)
-    chunks = OKFGenerator().chunk_text(markdown)
-    return list(enumerate(chunks))
+    settings.staging_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="legacy-migration-", dir=settings.staging_dir) as temporary:
+        attempt = Path(temporary)
+        context = ParseContext(filename, mail_enabled=settings.mail_import_enabled)
+        if settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
+            result = parse_document_supervised(
+                src, filename, attachments_dir=attempt,
+                timeout_seconds=settings.parser_timeout_seconds,
+                max_memory_mb=settings.parser_max_memory_mb,
+                max_concurrent=settings.parser_max_concurrent,
+                mail_enabled=settings.mail_import_enabled,
+            )
+            blocks, context.sources = result
+            context.parser_version = result.parser_version
+        else:
+            blocks = parse_document(src, filename, attachments_dir=attempt, context=context)
+        generator = OKFGenerator()
+        generator.settings = settings
+        chunks = chunk_blocks_by_source(blocks, generator)
+        rows = [_chunk_row(index, chunk["content"], chunk["source_id"]) for index, chunk in enumerate(chunks)]
+        if rows and not dry_run:
+            destination = merge_legacy_backfill_files(settings, doc_id, attempt)
+            _rebase_attachment_paths(blocks, attempt, destination)
+            root = settings.uploads_dir / doc_id
+            replace_sources(session, doc_id, _source_rows(context.sources, blocks, root, context.parser_version))
+            replace_attachments(session, doc_id, _collect_attachments(blocks, root), storage_root=root)
+        return rows
+
+
+def _chunk_row(index: int, content: str, source_id: str | None = None) -> dict:
+    text = content.replace("\r\n", "\n").replace("\r", "\n")
+    return {
+        "chunk_index": index, "section_title": _extract_section_title(text), "content": text,
+        "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "char_count": len(text), "source_id": source_id,
+    }
 
 
 def backfill_chunks(
     doc_id: str, filename: str, settings, force: bool = False, dry_run: bool = False
 ) -> int:
     """Переносит чанки документа в document_chunks. Возвращает число строк (0 = скип)."""
-    chunk_count, _ = _row_counts(doc_id)
-    if chunk_count and not force:
-        return 0
-    chunks = _read_bundle_chunks(settings.okf_dir / doc_id)
-    if not chunks:
-        try:
-            from app.services.vector_store import VectorStore
+    with _legacy_session(doc_id) as session:
+        if session is None:
+            return 0
+        if session.query(DocumentChunk).filter_by(doc_id=doc_id).count() and not force:
+            return 0
+        chunks = _read_bundle_chunks(settings.okf_dir / doc_id)
+        if not chunks:
+            try:
+                from app.services.vector_store import VectorStore
 
-            chunks = _read_qdrant_chunks(doc_id, VectorStore())
-            if chunks:
-                logger.info("[%s] чанки восстановлены из Qdrant payload (обрезка до лимита)", doc_id)
-        except Exception as exc:
-            logger.warning("[%s] Qdrant-fallback чанков не удался: %s", doc_id, exc)
-    if not chunks:
-        chunks = _reparse_chunks(doc_id, filename, settings)
-        if chunks:
-            logger.info("[%s] чанки перестроены из исходника (без LLM)", doc_id)
-    if not chunks:
-        return 0
-    if dry_run:
-        return len(chunks)
-    rows = [
-        {
-            "chunk_index": idx,
-            "section_title": _extract_section_title(text),
-            "content": text,
-            "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-            "char_count": len(text),
-        }
-        for idx, text in chunks
-    ]
-    with session_scope() as s:
-        replace_chunks(s, doc_id, rows)
-    return len(rows)
+                chunks = _read_qdrant_chunks(doc_id, VectorStore())
+                if chunks:
+                    logger.info("[%s] чанки восстановлены из legacy Qdrant payload (обрезка до лимита)", doc_id)
+            except Exception as exc:
+                logger.warning("[%s] Qdrant-fallback чанков не удался: %s", doc_id, exc)
+        rows = [_chunk_row(index, text) for index, text in chunks] if chunks else _reparse_rows(
+            session, doc_id, session.get(Document, doc_id).filename, settings, dry_run=dry_run,
+        )
+        if rows and not dry_run:
+            replace_chunks(session, doc_id, rows)
+        return len(rows)
 
 
 # --- Вложения ---------------------------------------------------------------
@@ -226,38 +274,31 @@ def backfill_attachments(
     doc_id: str, settings, force: bool = False, dry_run: bool = False
 ) -> int:
     """Переносит вложения в okf_attachments (+ бинарники в uploads). 0 = скип."""
-    _, att_count = _row_counts(doc_id)
-    if att_count and not force:
-        return 0
-    bundle_dir = settings.okf_dir / doc_id
-    if not bundle_dir.is_dir():
-        return 0
-    raw = [
-        p
-        for p in (_normalize_attachment(a, bundle_dir) for a in _read_legacy_attachments(bundle_dir))
-        if p
-    ]
-    missing = [p[1]["saved_path"] for p in raw if not p[0].is_file()]
-    if missing:
-        logger.warning(
-            "[%s] бинарники вложений отсутствуют в бандле, пропущены: %s",
-            doc_id, ", ".join(missing),
-        )
-    pairs = [p for p in raw if p[0].is_file()]
-    if not pairs:
-        return 0
-    if dry_run:
-        return len(pairs)
-    # Бинарники копируем в uploads (copy2, не move) — бандлы остаются read-only архивом.
-    for src, row in pairs:
-        dst = settings.uploads_dir / doc_id / row["saved_path"]
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if not dst.is_file():
-            shutil.copy2(src, dst)
-    rows = [row for _, row in pairs]
-    with session_scope() as s:
-        replace_attachments(s, doc_id, rows, storage_root=settings.uploads_dir / doc_id)
-    return len(rows)
+    with _legacy_session(doc_id) as session:
+        if session is None:
+            return 0
+        if session.query(OkfAttachment).filter_by(doc_id=doc_id).count() and not force:
+            return 0
+        bundle_dir = settings.okf_dir / doc_id
+        if not bundle_dir.is_dir():
+            return 0
+        raw = [p for p in (_normalize_attachment(a, bundle_dir) for a in _read_legacy_attachments(bundle_dir)) if p]
+        missing = [p[1]["saved_path"] for p in raw if not p[0].is_file()]
+        if missing:
+            logger.warning("[%s] бинарники вложений отсутствуют в бандле, пропущены: %s", doc_id, ", ".join(missing))
+        pairs = [p for p in raw if p[0].is_file()]
+        if not pairs or dry_run:
+            return len(pairs)
+        settings.staging_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="legacy-attachments-", dir=settings.staging_dir) as temporary:
+            attempt = Path(temporary)
+            for src, row in pairs:
+                _reject_links(src)
+                shutil.copy2(src, attempt / Path(row["saved_path"]).name)
+            merge_legacy_backfill_files(settings, doc_id, attempt)
+        rows = [row for _, row in pairs]
+        replace_attachments(session, doc_id, rows, storage_root=settings.uploads_dir / doc_id)
+        return len(rows)
 
 
 # --- Provеnance -------------------------------------------------------------
@@ -278,18 +319,18 @@ def _parse_created_at(value: object) -> datetime | None:
 
 def backfill_generated_at(doc_id: str, settings, force: bool = False, dry_run: bool = False) -> int:
     """Проставляет okf_concepts.generated_at из frontmatter created_at (где NULL)."""
-    bundle_dir = settings.okf_dir / doc_id
-    if not bundle_dir.is_dir():
-        return 0
-    created_map: dict[str, datetime] = {}
-    for md in sorted(bundle_dir.glob("*.md")):
-        meta, _ = parse_okf_file(md)
-        dt = _parse_created_at(meta.get("created_at"))
-        if dt is not None:
-            created_map[md.stem] = dt
-    if not created_map:
-        return 0
-    with session_scope() as s:
+    with _legacy_session(doc_id) as s:
+        if s is None:
+            return 0
+        bundle_dir = settings.okf_dir / doc_id
+        if not bundle_dir.is_dir():
+            return 0
+        created_map: dict[str, datetime] = {}
+        for md in sorted(bundle_dir.glob("*.md")):
+            meta, _ = parse_okf_file(md)
+            dt = _parse_created_at(meta.get("created_at"))
+            if dt is not None:
+                created_map[md.stem] = dt
         rows = s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).all()
         updated = 0
         for row in rows:
@@ -311,6 +352,10 @@ def backfill_generated_at(doc_id: str, settings, force: bool = False, dry_run: b
 def process_doc(doc_id: str, filename: str, settings, force: bool = False, dry_run: bool = False) -> dict:
     result = {"chunks": 0, "attachments": 0, "generated_at": 0, "skipped": [], "error": None}
     try:
+        with session_scope() as session:
+            if not _is_legacy_document(session, doc_id):
+                result["skipped"].append("not_legacy")
+                return result
         chunk_count, att_count = _row_counts(doc_id)
         if chunk_count == 0 or force:
             result["chunks"] = backfill_chunks(doc_id, filename, settings, force=force, dry_run=dry_run)

@@ -7,12 +7,12 @@
      LSH-strict с Jaccard >= порога).
   3. Ревизии/похожие (LSH-loose, Jaccard в [loose, strict)).
 
-Уровни 2/3 на момент загрузки не проверяются: подпись документа считается в
-пайплайне после парсинга (index_document), флаг has_duplicates ставится по
-наличию кандидатов. Всплывающего окна при загрузке похожего файла НЕТ — UI
-показывает бейдж «Дубликат» на карточке документа и список группы через
-GET /documents/{id}/duplicates (DuplicateModal). Документы в корзине в поиск
-кандидатов не попадают.
+Уровни 2/3 проверяются по предварительно извлечённому тексту до создания
+документа и запуска LLM. При совпадениях upload требует allow_similar=true.
+Принятый документ сразу получает подпись, чтобы следующий файл в очереди
+сравнивался и с ним. Пайплайн обновляет её после парсинга; has_duplicates
+и GET /documents/{id}/duplicates показывают актуальную группу совпадений.
+Документы в корзине в поиск кандидатов не попадают.
 
 MinHash: word n-граммы, k=128 хешей (mmh3, стабильный и детерминированный),
 двойная banding (strict 8×16, loose 16×8) над одной подписью. Бакеты — таблица
@@ -24,17 +24,38 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 import mmh3
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.config import get_settings
 from app.db.models import Document, DocumentLshBucket
-from app.db.session import session_scope
+from app.db.session import get_engine, session_scope
 from app.services.sparse import TOKEN_RE, normalize_for_tokens
 
 logger = logging.getLogger(__name__)
+_upload_lock = threading.Lock()
+
+
+@contextmanager
+def upload_admission_lock():
+    """Serialize check + signature publication across upload workers.
+
+    Parsing stays outside the lock. SQLite is the single-process dev mode;
+    PostgreSQL's transaction lock also coordinates separate server processes.
+    The local lock keeps waiting threads from exhausting the connection pool.
+    """
+    with _upload_lock:
+        engine = get_engine()
+        if engine.dialect.name == "postgresql":
+            with engine.begin() as connection:
+                connection.execute(text("SELECT pg_advisory_xact_lock(1869309557)"))
+                yield
+        else:
+            yield
 
 
 # --- Чистые функции (тестируются без БД) ---
@@ -161,37 +182,43 @@ def set_file_hash(doc_id: str, file_hash: str) -> None:
             doc.file_hash = file_hash
 
 
-def index_document(doc_id: str, markdown: str) -> None:
+def index_document(doc_id: str, markdown: str, mail_fingerprint: str | None = None) -> None:
     """Вычисляет content_hash + MinHash-подпись и заполняет LSH-бакеты документа."""
     previous_ids = _duplicate_ids(find_duplicates_for_document(doc_id))
+    signature = prepare_document_signature(markdown, mail_fingerprint)
+    with session_scope() as s:
+        apply_document_signature(s, doc_id, signature)
+    refresh_duplicate_flags(doc_id, previous_ids)
+
+
+def prepare_document_signature(markdown: str, mail_fingerprint: str | None = None) -> dict:
+    """Compute a candidate signature without publishing any document state."""
     settings = get_settings()
     ch = content_hash(markdown)
     sig = minhash_signature(markdown)
     if len(sig) < settings.dedup_minhash_k:
         sig = None
-    with session_scope() as s:
-        doc = s.get(Document, doc_id)
-        if doc is None:
-            return
-        doc.content_hash = ch
-        doc.minhash = sig if sig else None
-        s.query(DocumentLshBucket).filter(DocumentLshBucket.doc_id == doc_id).delete(
-            synchronize_session=False
-        )
-        if sig:
-            for scheme in banding_schemes():
-                variant = scheme["variant"]
-                rows = scheme["rows"]
-                for band_index in range(scheme["bands"]):
-                    s.add(
-                        DocumentLshBucket(
-                            doc_id=doc_id,
-                            variant=variant,
-                            band_index=band_index,
-                            bucket_hash=bucket_hash(sig, band_index, rows),
-                        )
-                    )
-    refresh_duplicate_flags(doc_id, previous_ids)
+    buckets = []
+    if sig:
+        for scheme in banding_schemes():
+            for band_index in range(scheme["bands"]):
+                buckets.append({
+                    "variant": scheme["variant"], "band_index": band_index,
+                    "bucket_hash": bucket_hash(sig, band_index, scheme["rows"]),
+                })
+    return {"content_hash": ch, "mail_fingerprint": mail_fingerprint, "minhash": sig, "buckets": buckets}
+
+
+def apply_document_signature(session, doc_id: str, signature: dict) -> None:
+    """Publish the precomputed signature inside the caller's SQL transaction."""
+    doc = session.get(Document, doc_id)
+    if doc is None:
+        return
+    for name in ("content_hash", "mail_fingerprint", "minhash"):
+        setattr(doc, name, signature[name])
+    session.query(DocumentLshBucket).filter(DocumentLshBucket.doc_id == doc_id).delete(synchronize_session=False)
+    for bucket in signature["buckets"]:
+        session.add(DocumentLshBucket(doc_id=doc_id, **bucket))
 
 
 def _duplicate_ids(result: dict) -> set[str]:
@@ -239,9 +266,8 @@ def find_duplicates_for_document(doc_id: str) -> dict:
       level3 — ревизии/похожие (LSH-loose, Jaccard в [loose, strict)).
     Каждый элемент: {"doc": {...}, "jaccard": float}.
     """
-    settings = get_settings()
     result: dict[str, list[dict]] = {"level2": [], "level3": []}
-    if not settings.dedup_enabled:
+    if not get_settings().dedup_enabled:
         return result
 
     with session_scope() as s:
@@ -250,6 +276,48 @@ def find_duplicates_for_document(doc_id: str) -> dict:
             return result
         ch = doc.content_hash
         sig = [int(x) for x in doc.minhash] if doc.minhash else None
+        mail_fp = doc.mail_fingerprint
+    return _merge_duplicates(_find_duplicates(ch, sig, doc_id), _find_mail_duplicates(mail_fp, doc_id))
+
+
+def find_duplicates_for_text(markdown: str, *, mail_fingerprint: str | None = None) -> dict:
+    """Read-only upload preflight; does not create a provisional document."""
+    if not get_settings().dedup_enabled:
+        return {"level2": [], "level3": []}
+    return _merge_duplicates(
+        _find_duplicates(content_hash(markdown), minhash_signature(markdown)),
+        _find_mail_duplicates(mail_fingerprint),
+    )
+
+
+def _find_mail_duplicates(mail_fingerprint: str | None, doc_id: str | None = None) -> dict:
+    result: dict[str, list[dict]] = {"level2": [], "level3": []}
+    if not mail_fingerprint:
+        return result
+    with session_scope() as s:
+        rows = s.execute(
+            select(Document).where(
+                Document.mail_fingerprint == mail_fingerprint,
+                Document.id != doc_id,
+                Document.deleted_at.is_(None),
+            )
+        ).scalars().all()
+    result["level2"] = [
+        {"doc": _summarize(doc), "jaccard": 1.0, "match_kind": "mail_semantic"} for doc in rows
+    ]
+    return result
+
+
+def _merge_duplicates(first: dict, second: dict) -> dict:
+    return {
+        "level2": _dedupe_by_id([*first["level2"], *second["level2"]]),
+        "level3": _dedupe_by_id([*first["level3"], *second["level3"]]),
+    }
+
+
+def _find_duplicates(ch: str, sig: list[int] | None, doc_id: str | None = None) -> dict:
+    settings = get_settings()
+    result: dict[str, list[dict]] = {"level2": [], "level3": []}
     if not sig:
         return result
 

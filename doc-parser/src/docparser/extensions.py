@@ -1,1 +1,1 @@
-SUPPORTED_EXTENSIONS = {".docx", ".xlsx", ".pdf"}
+SUPPORTED_EXTENSIONS = {".docx", ".xlsx", ".pdf", ".eml", ".msg"}

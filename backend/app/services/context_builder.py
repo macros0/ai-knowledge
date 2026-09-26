@@ -4,6 +4,7 @@ Merge/collapse: группировка по (doc_id, chunk_index), слияни�
 XML-формат контекста для LLM.
 """
 import html
+import json
 import re
 
 from app.config import Settings, get_settings
@@ -158,6 +159,9 @@ def merge_and_format(
             # замечания не представляют группу в цитатах [N]
             sibling_concepts = review_concepts
 
+        source_hit = primary_concept or (chunks_in_group[0] if chunks_in_group else None)
+        source_id = source_hit.payload.get("source_id") if source_hit is not None else None
+
         # filepath: из payload primary-концепта или конструируется
         filepath = primary_concept.payload.get("filepath", "") if primary_concept else ""
         if not filepath and chunk_idx is not None:
@@ -230,6 +234,9 @@ def merge_and_format(
                 "point_type": point_type,
                 "kind": kind,
                 "chunk_index": chunk_idx,
+                "source_id": source_id,
+                "source_path": source_hit.payload.get("source_path") if source_hit else None,
+                "mail_fragment": source_hit.payload.get("mail_fragment") if source_hit else None,
             }
         )
 
@@ -258,6 +265,9 @@ def merge_and_format(
                     "point_type": CONCEPT_TYPE,
                     "kind": REVIEW_KIND if _is_review_hit(concept) else "concept",
                     "chunk_index": chunk_idx,
+                    "source_id": concept.payload.get("source_id"),
+                    "source_path": concept.payload.get("source_path"),
+                    "mail_fragment": concept.payload.get("mail_fragment"),
                 }
             )
 
@@ -586,6 +596,7 @@ def format_context(
     термины вопроса, найденные в блоке (помощь LLM в выборе релевантных блоков).
     """
     parts = []
+    mail_fragments = {}
     for i, item in enumerate(merged, start=1):
         tags_str = ", ".join(item.get("tags", []))
         source = item.get("source_filename", "")
@@ -595,10 +606,79 @@ def format_context(
         domain_terms = matched_domain_terms(item, match_groups, cache=domain_cache)
         title_domain_terms = title_matched_domain_terms(item, match_groups, cache=domain_cache)
         title_markers = [*title_terms, *title_domain_terms]
+        provenance = ""
+        if item.get("source_path"):
+            provenance = (
+                "  <source_path>"
+                + _metadata_text(json.dumps(item["source_path"], ensure_ascii=False))
+                + "</source_path>\n"
+            )
+        fragment = item.get("mail_fragment")
+        if fragment:
+            key = (item["doc_id"], item.get("source_id"), fragment["chunk_index"])
+            if key not in mail_fragments:
+                mail_fragments[key] = i
+                provenance += (
+                    '  <mail_fragment role="original text for attribution; may be truncated">\n'
+                    + _metadata_text(fragment["content"])
+                    + '\n  </mail_fragment>\n'
+                )
+            else:
+                provenance += f'  <mail_fragment_ref block="{mail_fragments[key]}"/>\n'
         parts.append(
             f'<context_block id="{i}">\n'
             f'  <metadata>Title: {_metadata_text(item["title"])} | Type: {_metadata_text(kind)} | Tags: [{_metadata_text(tags_str)}] | Source: {_metadata_text(source)} | Title match: [{_metadata_text(", ".join(title_markers))}] | Matched terms: [{_metadata_text(", ".join(terms))}] | Matched domain terms: [{_metadata_text(", ".join(domain_terms))}]</metadata>\n'
+            f'{provenance}'
             f'  <content>\n{item["content"]}\n  </content>\n'
             f'</context_block>'
         )
     return "\n\n".join(parts) or "Контекст пуст."
+
+
+def limit_context(
+    merged: list[dict],
+    max_chars: int,
+    query: str | None = None,
+    *,
+    match_groups: tuple[MatchGroup, ...] = (),
+    domain_cache: DomainMatchCache | None = None,
+    lexical_cache: LexicalMatchCache | None = None,
+) -> list[dict]:
+    """Bound provenance context after filtering, with actual markers and refs.
+
+    Legacy blocks retain their existing merge-time content budget. For new
+    provenance, measure precisely what will reach the model, including escaping.
+    """
+    if not any(item.get("source_path") or item.get("mail_fragment") for item in merged):
+        return merged
+
+    def size(blocks):
+        return len(format_context(
+            blocks, query, match_groups=match_groups, domain_cache=domain_cache,
+            lexical_cache=lexical_cache,
+        ))
+
+    limited = []
+    for block in merged:
+        if size([*limited, block]) <= max_chars:
+            limited.append(block)
+            continue
+        fragment = block.get("mail_fragment")
+        if not limited and fragment:
+            # Retain a prefix of original text, never a partial ancestry or
+            # escaped entity. The renderer labels this fragment as truncatable.
+            def prefix(end):
+                return {**block, "mail_fragment": {**fragment, "content": fragment["content"][:end]}}
+
+            if size([prefix(0)]) > max_chars:
+                break
+            low, high = 0, len(fragment["content"])
+            while low < high:
+                middle = (low + high + 1) // 2
+                if size([prefix(middle)]) <= max_chars:
+                    low = middle
+                else:
+                    high = middle - 1
+            limited.append(prefix(low))
+        break
+    return limited

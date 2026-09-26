@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.db.models import OkfAttachment
+from app.services.source_store import validate_source_references
 
 _STREAM_CHUNK = 1024 * 1024
 
@@ -57,6 +58,11 @@ def replace_attachments(
         sp = a.get("saved_path")
         if sp:
             by_path[sp] = a
+    validate_source_references(
+        session,
+        doc_id,
+        {str(attachment["source_id"]) for attachment in by_path.values() if attachment.get("source_id")},
+    )
     now = datetime.now(timezone.utc)
     for saved_path, a in by_path.items():
         size, sha = _file_stats(storage_root / saved_path)
@@ -64,6 +70,7 @@ def replace_attachments(
         session.add(
             OkfAttachment(
                 doc_id=doc_id,
+                source_id=a.get("source_id"),
                 name=a.get("name", ""),
                 kind=a.get("kind", "other"),
                 caption=a.get("caption", ""),

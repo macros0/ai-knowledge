@@ -127,8 +127,10 @@ def test_metrics_count_fulltext_before_exact_filter_and_exclude_fixture_indexing
     corpus.search("PA30")  # warm the revision snapshot outside timed operations
     baseline = measure(corpus, "PA30", False)
     after = measure(corpus, "PA30", True)
-    assert baseline["sql_selects"] == 3  # visibility, concepts, chunks
-    assert after["sql_selects"] == 4  # same batched reads plus glossary revision
+    # Active-generation lookup is one batch for all hits. It must follow the
+    # visibility lock so publication cannot mix old points with new SQL text.
+    assert baseline["sql_selects"] == 4  # visibility, generations, concepts, chunks
+    assert after["sql_selects"] == 5  # same batched reads plus glossary revision
     assert baseline["hydration_bytes"] == sum(
         2 * len(content[:300].encode("utf-8")) for content in corpus.records.values()
     )

@@ -211,19 +211,29 @@ def _comments_extended_xml(comments: list[dict]) -> bytes:
     return _dump(root)
 
 
-def make_docx_with_embedded_xlsx(path: Path, payload: bytes, prog_id: str = "Excel.Sheet.12") -> Path:
+def make_docx_with_embedded_xlsx(
+    path: Path,
+    payload: bytes,
+    prog_id: str = "Excel.Sheet.12",
+    filename: str = "embedded.xlsx",
+    in_table: bool = False,
+) -> Path:
     from docx import Document
 
     doc = Document()
     doc.add_paragraph("Перед встроенной таблицей")
+    if in_table:
+        doc.add_table(rows=1, cols=1).cell(0, 0).text = "Вложение в ячейке"
     doc.save(str(path))
 
     entries = _read_zip(path)
-    entries["word/embeddings/embedded.xlsx"] = payload
+    entries[f"word/embeddings/{filename}"] = payload
 
     docxml = _xml(entries["word/document.xml"])
     body = docxml.find(f"{{{W}}}body")
-    w_p = etree.SubElement(body, f"{{{W}}}p")
+    w_p = body.find(f".//{{{W}}}tc/{{{W}}}p") if in_table else None
+    if w_p is None:
+        w_p = etree.SubElement(body, f"{{{W}}}p")
     w_r = etree.SubElement(w_p, f"{{{W}}}r")
     w_obj = etree.SubElement(w_r, f"{{{W}}}object")
     docpr = etree.SubElement(w_obj, f"{{{W}}}docPr")
@@ -241,12 +251,12 @@ def make_docx_with_embedded_xlsx(path: Path, payload: bytes, prog_id: str = "Exc
         "word/_rels/document.xml.rels",
         "rIdEmbed99",
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
-        "embeddings/embedded.xlsx",
+        f"embeddings/{filename}",
     )
     _add_content_type(
         entries,
-        "/word/embeddings/embedded.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        f"/word/embeddings/{filename}",
+        "message/rfc822" if filename.endswith(".eml") else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     _write_zip(path, entries)
     return path

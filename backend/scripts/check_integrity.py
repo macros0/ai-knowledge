@@ -3,7 +3,7 @@
 
 """Проверка целостности корпуса между БД, FS и Qdrant (Этап 2b, Фаза 2).
 
-Read-only. Для каждого активного done-документа сверяет:
+Read-only. Для каждого документа с опубликованным содержимым сверяет:
   - document_chunks: число строк vs documents.total_chunks vs точек Qdrant (chunk);
   - okf_concepts: число строк vs documents.okf_concept_count vs точек Qdrant (concept);
   - okf_attachments: каждая строка ↔ файл в uploads/<id>/attachments/ (обоюдно);
@@ -31,8 +31,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.db.models import Document, DocumentChunk, OkfAttachment, OkfConcept
+from app.db.models import Document, DocumentChunk, DocumentSource, OkfAttachment, OkfConcept
 from app.db.session import session_scope
+from app.services.canonical_reindex import published_document_ids
+from app.services.generation_files import generation_paths
+from app.services.generation_store import lock_generation_read
 
 
 def _sha256_file(path: Path) -> str:
@@ -117,21 +120,22 @@ def strict_issues(
 
 
 def iter_done_docs(doc_id: str | None = None) -> list[tuple[str, str, int, int]]:
-    """(doc_id, filename, total_chunks, okf_concept_count) активных done-доков."""
+    """Published documents, including an unsuccessful newer processing attempt."""
+    published_ids = published_document_ids()
     with session_scope() as s:
         q = select(
             Document.id,
             Document.filename,
             Document.total_chunks,
             Document.okf_concept_count,
-        ).where(Document.deleted_at.is_(None), Document.status == "done")
+        ).where(Document.id.in_(published_ids), Document.deleted_at.is_(None))
         if doc_id:
             q = q.where(Document.id == doc_id)
         rows = s.execute(q).all()
     return [(r.id, r.filename, r.total_chunks, r.okf_concept_count) for r in rows]
 
 
-def _qdrant_count(vector_store, doc_id: str, point_type: str) -> int | None:
+def _qdrant_count(vector_store, doc_id: str, point_type: str, generation_id: str | None = None) -> int | None:
     """Число точек Qdrant с фильтром (doc_id, point_type); None — Qdrant недоступен."""
     from qdrant_client.http import models as qm
 
@@ -139,6 +143,9 @@ def _qdrant_count(vector_store, doc_id: str, point_type: str) -> int | None:
         must=[
             qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id)),
             qm.FieldCondition(key="point_type", match=qm.MatchValue(value=point_type)),
+            (qm.IsEmptyCondition(is_empty=qm.PayloadField(key="generation_id"))
+             if generation_id is None else
+             qm.FieldCondition(key="generation_id", match=qm.MatchValue(value=generation_id))),
         ]
     )
     res = vector_store.client.count(
@@ -160,9 +167,18 @@ def check_doc(
     qdrant_points: int | None = None
 
     with session_scope() as s:
+        generation_id = lock_generation_read(s, [doc_id]).get(doc_id)
+        document = s.get(Document, doc_id)
+        if document and document.status != "done":
+            # These counters describe the new processing attempt while canonical
+            # rows and generation files still describe the published version.
+            total_chunks = okf_concept_count = 0
+        elif document:
+            total_chunks, okf_concept_count = document.total_chunks, document.okf_concept_count
         db_chunks = s.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).count()
         db_concepts = s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).count()
         att_rows = s.query(OkfAttachment).filter(OkfAttachment.doc_id == doc_id).all()
+        source_rows = s.query(DocumentSource).filter(DocumentSource.doc_id == doc_id).all()
         chunk_rows = (
             s.query(DocumentChunk.chunk_index, DocumentChunk.content)
             .filter(DocumentChunk.doc_id == doc_id)
@@ -170,62 +186,68 @@ def check_doc(
             .all()
         )
 
-    # БД vs метаданные документа
-    if total_chunks and db_chunks != total_chunks:
-        issues.append(f"document_chunks={db_chunks} != documents.total_chunks={total_chunks}")
-    if okf_concept_count and db_concepts != okf_concept_count:
-        issues.append(f"okf_concepts={db_concepts} != documents.okf_concept_count={okf_concept_count}")
+        # БД vs метаданные документа
+        if total_chunks and db_chunks != total_chunks:
+            issues.append(f"document_chunks={db_chunks} != documents.total_chunks={total_chunks}")
+        if okf_concept_count and db_concepts != okf_concept_count:
+            issues.append(f"okf_concepts={db_concepts} != documents.okf_concept_count={okf_concept_count}")
 
-    # Qdrant
-    if vector_store is not None:
-        try:
-            q_chunks = _qdrant_count(vector_store, doc_id, "chunk")
-            qdrant_points = q_chunks
-            if db_chunks != q_chunks:
-                issues.append(f"document_chunks={db_chunks} != Qdrant chunk-точек={q_chunks}")
-        except Exception:
-            qdrant_unavailable = True
-        try:
-            q_concepts = _qdrant_count(vector_store, doc_id, "concept")
-            qdrant_points = (qdrant_points or 0) + q_concepts
-            if db_concepts != q_concepts:
-                issues.append(f"okf_concepts={db_concepts} != Qdrant concept-точек={q_concepts}")
-        except Exception:
-            qdrant_unavailable = True
+        # Qdrant
+        if vector_store is not None:
+            try:
+                q_chunks = _qdrant_count(vector_store, doc_id, "chunk", generation_id)
+                qdrant_points = q_chunks
+                if db_chunks != q_chunks:
+                    issues.append(f"document_chunks={db_chunks} != Qdrant chunk-точек={q_chunks}")
+            except Exception:
+                qdrant_unavailable = True
+            try:
+                q_concepts = _qdrant_count(vector_store, doc_id, "concept", generation_id)
+                qdrant_points = (qdrant_points or 0) + q_concepts
+                if db_concepts != q_concepts:
+                    issues.append(f"okf_concepts={db_concepts} != Qdrant concept-точек={q_concepts}")
+            except Exception:
+                qdrant_unavailable = True
 
-    # Вложения: строка ↔ файл (обоюдно)
-    storage_root = settings.uploads_dir / doc_id
-    att_dir = storage_root / "attachments"
-    row_paths: set[str] = set()
-    for a in att_rows:
-        sp = a.saved_path or ""
-        row_paths.add(sp)
-        if not sp or not (storage_root / sp).is_file():
-            issues.append(f"okf_attachments.saved_path={sp!r}: файл отсутствует")
-    if att_dir.is_dir():
-        for f in att_dir.iterdir():
-            if f.is_file():
-                rel = f"attachments/{f.name}"
-                if rel not in row_paths:
-                    issues.append(f"файл {rel!r} без строки okf_attachments")
+        # Вложения: строка ↔ файл (обоюдно)
+        storage_root = settings.uploads_dir / doc_id
+        paths = generation_paths(settings, doc_id, generation_id) if generation_id else None
+        att_dir = paths.attachments if paths else storage_root / "attachments"
+        row_paths: set[str] = set()
+        for a in att_rows:
+            sp = a.saved_path or ""
+            row_paths.add(sp)
+            if not sp or not (storage_root / sp).is_file():
+                issues.append(f"okf_attachments.saved_path={sp!r}: файл отсутствует")
+        for source in source_rows:
+            if source.saved_path:
+                row_paths.add(source.saved_path)
+                if not (storage_root / source.saved_path).is_file():
+                    issues.append(f"document_sources.saved_path={source.saved_path!r}: файл отсутствует")
+        if att_dir.is_dir():
+            for f in att_dir.rglob("*"):
+                if f.is_file():
+                    rel = f.relative_to(storage_root).as_posix()
+                    if rel not in row_paths:
+                        issues.append(f"файл {rel!r} без строки okf_attachments")
 
-    # Контент чанков vs бандл (пока бандлы живы)
-    if verify_content:
-        chunks_dir = settings.okf_dir / doc_id / "chunks"
-        for chunk_index, content in chunk_rows:
-            p = chunks_dir / f"chunk_{chunk_index:02d}.md"
-            if p.is_file() and p.read_text(encoding="utf-8") != content:
-                issues.append(f"chunk_{chunk_index:02d}.md расходится с document_chunks.content")
+        # Контент чанков vs бандл (пока бандлы живы)
+        if verify_content:
+            chunks_dir = (paths.bundle if paths else settings.okf_dir / doc_id) / "chunks"
+            for chunk_index, content in chunk_rows:
+                p = chunks_dir / f"chunk_{chunk_index:02d}.md"
+                if p.is_file() and p.read_text(encoding="utf-8") != content:
+                    issues.append(f"chunk_{chunk_index:02d}.md расходится с document_chunks.content")
 
-    return {
-        "doc_id": doc_id,
-        "issues": issues,
-        "ok": not issues,
-        "qdrant_unavailable": qdrant_unavailable,
-        "db_chunks": db_chunks,
-        "db_concepts": db_concepts,
-        "qdrant_points": qdrant_points,
-    }
+        return {
+            "doc_id": doc_id,
+            "issues": issues,
+            "ok": not issues,
+            "qdrant_unavailable": qdrant_unavailable,
+            "db_chunks": db_chunks,
+            "db_concepts": db_concepts,
+            "qdrant_points": qdrant_points,
+        }
 
 
 def main() -> None:
@@ -257,7 +279,7 @@ def main() -> None:
 
     docs = iter_done_docs(args.doc_id)
     if args.doc_id and not docs:
-        print(f"Документ {args.doc_id} не найден (или не done/в корзине)")
+        print(f"Документ {args.doc_id} не найден (или без опубликованного содержимого/в корзине)")
         sys.exit(1)
 
     results = []

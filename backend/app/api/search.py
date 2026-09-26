@@ -125,6 +125,8 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
                 snippet=exact_excerpt(m["content"], 300, exact_groups),
                 chunk_index=m["chunk_index"],
                 source_filename=m["source_filename"],
+                source_id=m.get("source_id"),
+                source_path=m.get("source_path"),
             )
         )
     used_in = [branch for branch in ("dense", "bm25") if branch in branches]

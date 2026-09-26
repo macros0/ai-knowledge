@@ -60,7 +60,14 @@ class StagingStore:
     def exists(self) -> bool:
         return self.load() is not None
 
-    def create(self, total_chunks: int, global_tags: list[str] | None = None) -> dict:
+    def create(
+        self,
+        total_chunks: int,
+        global_tags: list[str] | None = None,
+        parser_version: str | None = None,
+        source_file_hash: str | None = None,
+        generation_id: str | None = None,
+    ) -> dict:
         self.dir.mkdir(parents=True, exist_ok=True)
         manifest = {
             "task_id": self.doc_id,
@@ -71,6 +78,9 @@ class StagingStore:
             "used_slugs": [],
             "global_tags": global_tags or [],
             "chunks_data": {},
+            "parser_version": parser_version,
+            "source_file_hash": source_file_hash,
+            "generation_id": generation_id,
         }
         self._write(manifest)
         return manifest
@@ -89,6 +99,9 @@ class StagingStore:
                 "used_slugs": list(row.used_slugs or []),
                 "global_tags": list(row.global_tags or []),
                 "chunks_data": dict(row.chunks_data or {}),
+                "parser_version": row.parser_version,
+                "source_file_hash": row.source_file_hash,
+                "generation_id": row.generation_id,
             }
 
     def _write(self, manifest: dict) -> None:
@@ -102,6 +115,9 @@ class StagingStore:
             row.used_slugs = list(manifest.get("used_slugs", []))
             row.global_tags = list(manifest.get("global_tags", []))
             row.chunks_data = dict(manifest.get("chunks_data", {}))
+            row.parser_version = manifest.get("parser_version")
+            row.source_file_hash = manifest.get("source_file_hash")
+            row.generation_id = manifest.get("generation_id")
             row.status = manifest.get("status", "in_progress")
 
     @property
@@ -110,6 +126,14 @@ class StagingStore:
         if not manifest:
             return []
         return sorted(manifest.get("processed_chunks", []))
+
+    def bind_generation(self, generation_id: str) -> None:
+        with self._lock:
+            manifest = self.load()
+            if manifest is None:
+                raise ValueError("Cannot bind a generation without staging")
+            manifest["generation_id"] = generation_id
+            self._write(manifest)
 
     def has_chunk(self, index: int) -> bool:
         return index in self.processed_chunks
@@ -125,7 +149,21 @@ class StagingStore:
         Идемпотентно: повторная запись перезаписывает тот же текст.
         """
         self.dir.mkdir(parents=True, exist_ok=True)
-        (self.dir / f"chunk_{index:02d}.md").write_text(text, encoding="utf-8")
+        # Checkpoints are platform-neutral Markdown. Without an explicit
+        # newline policy Windows expands an already-CRLF source to CRCRLF.
+        with (self.dir / f"chunk_{index:02d}.md").open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+
+    def set_chunk_source(self, index: int, source_id: str) -> None:
+        """Сохраняет происхождение чанка до первого LLM-вызова."""
+        with self._lock:
+            manifest = self.load() or self.create(index + 1, global_tags=[])
+            chunks_data = dict(manifest.get("chunks_data", {}))
+            info = dict(chunks_data.get(str(index)) or {})
+            info["source_id"] = source_id
+            chunks_data[str(index)] = info
+            manifest["chunks_data"] = chunks_data
+            self._write(manifest)
 
     def append_chunk(
         self,
@@ -162,7 +200,11 @@ class StagingStore:
             used.extend(slugs)
             chunk_file = f"chunk_{index:02d}.json"
             write_json_atomic(self.dir / chunk_file, [c.model_dump() for c in concepts])
-            info = {"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs}
+            previous_info = chunks_data.get(str(index)) or {}
+            info = {}
+            if previous_info.get("source_id"):
+                info["source_id"] = previous_info["source_id"]
+            info.update({"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs})
             if degradation:
                 info["degradation"] = degradation
             if provenance:
@@ -187,6 +229,8 @@ class StagingStore:
         result: list[Concept] = []
         for index in sorted(int(k) for k in manifest.get("chunks_data", {})):
             info = manifest["chunks_data"][str(index)]
+            if not info.get("file"):
+                continue
             path = self.dir / info["file"]
             if not path.is_file():
                 continue
@@ -206,7 +250,9 @@ class StagingStore:
         manifest = self.load() or {}
         slugs: list[str] = []
         for index in sorted(int(k) for k in manifest.get("chunks_data", {})):
-            slugs.extend(manifest["chunks_data"][str(index)].get("slugs", []))
+            info = manifest["chunks_data"][str(index)]
+            if info.get("file"):
+                slugs.extend(info.get("slugs", []))
         return slugs
 
     def remove(self) -> None:

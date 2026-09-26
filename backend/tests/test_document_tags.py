@@ -52,6 +52,52 @@ def qdrant_ok(monkeypatch):
 
 
 class TestUpdateDocumentTags:
+    def test_concept_write_failure_rolls_back_document_tags(self, settings, qdrant_ok):
+        from sqlalchemy import event
+        from app.db.models import OkfConcept
+        from app.db.session import get_engine, session_scope
+
+        reg = get_registry()
+        reg.create(DOC_ID, "a.docx", "x", 10, tags=["old"])
+        with session_scope() as session:
+            session.add(OkfConcept(doc_id=DOC_ID, slug="one", tags=["specific", "old"]))
+
+        def fail_concept_write(_conn, _cursor, statement, _parameters, _context, _many):
+            if statement.startswith("UPDATE okf_concepts"):
+                raise RuntimeError("concept write failed")
+
+        engine = get_engine()
+        event.listen(engine, "before_cursor_execute", fail_concept_write)
+        try:
+            with pytest.raises(RuntimeError, match="concept write failed"):
+                dts.update_document_tags(DOC_ID, ["new"], _User())
+        finally:
+            event.remove(engine, "before_cursor_execute", fail_concept_write)
+        assert reg.get(DOC_ID)["tags"] == ["old"]
+        with session_scope() as session:
+            assert session.query(OkfConcept).filter_by(doc_id=DOC_ID).one().tags == ["specific", "old"]
+
+    def test_later_tag_edit_cannot_be_undone_by_earlier_concept_delta(self, settings, qdrant_ok, monkeypatch):
+        from app.db.models import OkfConcept
+        from app.db.session import session_scope
+
+        reg = get_registry()
+        reg.create(DOC_ID, "a.docx", "x", 10, tags=["old"])
+        with session_scope() as session:
+            session.add(OkfConcept(doc_id=DOC_ID, slug="one", tags=["specific", "old"]))
+        original = dts._registry.update
+
+        def update_then_edit(doc_id, **fields):
+            original(doc_id, **fields)
+            if fields.get("tags") == ["first"]:
+                dts.update_document_tags(DOC_ID, ["second"], _User())
+
+        monkeypatch.setattr(dts._registry, "update", update_then_edit)
+        dts.update_document_tags(DOC_ID, ["first"], _User())
+        assert reg.get(DOC_ID)["tags"] == ["second"]
+        with session_scope() as session:
+            assert session.query(OkfConcept).filter_by(doc_id=DOC_ID).one().tags == ["specific", "second"]
+
     def test_replaces_tags_and_registers_names(self, settings, qdrant_ok):
         # Регистрация начальных тегов — как при upload (upload вызывает TagRegistry.add).
         TagRegistry().add(["proxmox", "network"])

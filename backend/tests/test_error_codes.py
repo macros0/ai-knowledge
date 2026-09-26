@@ -34,6 +34,7 @@ def _client(tmp_path, monkeypatch) -> TestClient:
         _env_file=None,
         data_dir=tmp_path,
         auth_provider="simulation",
+        mail_import_enabled=False,
         auth_role_groups=ROLE_GROUPS,
         auth_default_role="viewer",
         auth_sim_users=[
@@ -42,7 +43,7 @@ def _client(tmp_path, monkeypatch) -> TestClient:
             {"user_id": "u2", "username": "demo.admin", "email": "a@d.local", "groups": ["KB_Admin"]},
         ],
     )
-    for module in ("app.config", "app.main", "app.auth.api"):
+    for module in ("app.config", "app.main", "app.auth.api", "app.api.documents"):
         monkeypatch.setattr(f"{module}.get_settings", lambda: settings)
     return TestClient(create_app())
 
@@ -316,6 +317,17 @@ class TestUploadStatusFromCode:
         )
         assert resp.status_code == 400, resp.text
         assert resp.json()["code"] == errors.UNSUPPORTED_FILE_TYPE
+
+    @pytest.mark.parametrize("filename", ["message.eml", "message.msg"])
+    def test_disabled_mail_import_rejects_before_any_file_is_written(self, tmp_path, monkeypatch, filename):
+        client = self._client_with_login(tmp_path, monkeypatch)
+        response = client.post(
+            "/api/documents", files={"file": (filename, b"mail bytes", "application/octet-stream")}
+        )
+        assert response.status_code == 503, response.text
+        assert response.json()["code"] == errors.MAIL_IMPORT_DISABLED
+        uploads = tmp_path / "uploads"
+        assert not uploads.exists() or not list(uploads.iterdir())
 
     def test_oversized_is_413(self, tmp_path, monkeypatch):
         client = self._client_with_login(tmp_path, monkeypatch)

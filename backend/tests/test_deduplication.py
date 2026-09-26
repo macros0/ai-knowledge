@@ -6,6 +6,7 @@ from app.services.deduplication import (
     file_hash_exists,
     file_hash_in_trash,
     find_duplicates_for_document,
+    find_duplicates_for_text,
     index_document,
     jaccard,
     minhash_signature,
@@ -114,6 +115,30 @@ class TestFindDuplicates:
             count = s.query(DocumentLshBucket).filter(DocumentLshBucket.doc_id == "aaaaaaaaaaaaaaaa").count()
         # strict 8 + loose 16 = 24 бакета (повторная индексация не плодит дубли).
         assert count == 24
+
+    def test_complete_mail_fingerprint_requires_review_even_with_different_text(self):
+        reg = get_registry()
+        reg.create("aaaaaaaaaaaaaaaa", "a.eml", "message/rfc822", 10, tags=[])
+        reg.create("bbbbbbbbbbbbbbbb", "b.msg", "application/vnd.ms-outlook", 10, tags=[])
+        fingerprint = "a" * 64
+        index_document("aaaaaaaaaaaaaaaa", "Первый рендер письма", mail_fingerprint=fingerprint)
+        index_document("bbbbbbbbbbbbbbbb", "Другой рендер того же письма", mail_fingerprint=fingerprint)
+
+        result = find_duplicates_for_document("aaaaaaaaaaaaaaaa")
+        match = next(item for item in result["level2"] if item["doc"]["id"] == "bbbbbbbbbbbbbbbb")
+        assert match["match_kind"] == "mail_semantic"
+        assert get_registry().get("aaaaaaaaaaaaaaaa")["has_duplicates"]
+        assert get_registry().get("bbbbbbbbbbbbbbbb")["has_duplicates"]
+
+    def test_mail_preflight_ignores_trash_and_does_not_need_text_match(self):
+        reg = get_registry()
+        reg.create("aaaaaaaaaaaaaaaa", "a.eml", "message/rfc822", 10, tags=[])
+        index_document("aaaaaaaaaaaaaaaa", "старый текст", mail_fingerprint="b" * 64)
+        assert find_duplicates_for_text("совсем другой", mail_fingerprint="b" * 64)["level2"]
+        reg.soft_delete("aaaaaaaaaaaaaaaa", "editor")
+        assert find_duplicates_for_text("совсем другой", mail_fingerprint="b" * 64) == {
+            "level2": [], "level3": []
+        }
 
 
 class TestDuplicateBadges:

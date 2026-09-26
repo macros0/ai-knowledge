@@ -30,6 +30,8 @@ from app import error_codes as codes
 from app.models.schemas import OkfDocument
 from app.services.errors import VectorStoreError, public_error_code
 from app.services.fusion import Hit
+from app.services.generation_search import generation_exclusions
+from app.services.generation_store import lock_generation_read
 from app.services.sparse import to_sparse_vector
 from app.services.storage import StorageFullError, is_storage_full_text
 
@@ -115,6 +117,7 @@ CHUNK_POINT_TYPE = "chunk"
 PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "point_type": "keyword",
     "doc_id": "keyword",
+    "generation_id": "keyword",
     "chunk_index": "integer",
     "slug": "keyword",
     "type": "keyword",
@@ -133,6 +136,7 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
 RETRIEVAL_PAYLOAD_FIELDS = (
     "point_type",
     "doc_id",
+    "generation_id",
     "chunk_index",
     "slug",
     "filepath",
@@ -162,7 +166,7 @@ def _sparse_text(title: str, content: str) -> str:
     return f"{title}\n{content}" if title else content
 
 
-def concept_point_id(doc_id: str, slug: str) -> str:
+def concept_point_id(doc_id: str, slug: str, *, generation_id: str | None = None) -> str:
     """Детерминированный point_id концепта (uuid5 от логического ключа).
 
     Фаза 4: логический ключ `okf:concept:{doc_id}:{slug}` без привязки к
@@ -170,16 +174,22 @@ def concept_point_id(doc_id: str, slug: str) -> str:
     index_concepts, backfill_sparse/relations, document_tag_service и
     backfill_comment_concepts обязаны идти через этот хелпер.
     """
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"okf:concept:{doc_id}:{slug}"))
+    key = f"okf:concept:{doc_id}:{slug}"
+    if generation_id is not None:
+        key = f"okf:generation:{generation_id}:concept:{doc_id}:{slug}"
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 
-def chunk_point_id(doc_id: str, chunk_index: int) -> str:
+def chunk_point_id(doc_id: str, chunk_index: int, *, generation_id: str | None = None) -> str:
     """Детерминированный point_id чанка (логический ключ, Фаза 4).
 
     Единственная точка вычисления id чанка (index_chunks, backfill_chunks,
     backfill_comment_concepts).
     """
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"okf:chunk:{doc_id}:{chunk_index}"))
+    key = f"okf:chunk:{doc_id}:{chunk_index}"
+    if generation_id is not None:
+        key = f"okf:generation:{generation_id}:chunk:{doc_id}:{chunk_index}"
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 def _not_deleted() -> qm.Filter:
     """Фильтр-обёртка, исключающий мягко удалённые точки (Этап 4a.2 корзина).
@@ -428,6 +438,8 @@ class VectorStore:
         vectors: list[list[float]],
         dev_tags: list[str] | None = None,
         source_locale: str | None = None,
+        *,
+        generation_id: str | None = None,
     ) -> set[str]:
         """Индексирует концепты в Qdrant. Возвращает set point_id для последующей очистки орфанов."""
         cap = self.settings.okf_max_concept_chars
@@ -437,7 +449,7 @@ class VectorStore:
         for okf_doc, vector in zip(okf_docs, vectors):
             meta = okf_doc.metadata
             slug = Path(okf_doc.filepath).stem
-            point_id = concept_point_id(doc_id, slug)
+            point_id = concept_point_id(doc_id, slug, generation_id=generation_id)
             point_ids.add(point_id)
             title = meta.get("title", "")
             capped_content = okf_doc.content[:cap]
@@ -453,6 +465,7 @@ class VectorStore:
                     },
                     payload={
                         "point_type": CONCEPT_POINT_TYPE,
+                        "generation_id": generation_id,
                         "doc_id": doc_id,
                         "slug": slug,
                         "title": title,
@@ -460,6 +473,7 @@ class VectorStore:
                         "tags": meta.get("tags", []),
                         "relations": meta.get("relations", []),
                         "chunk_index": meta.get("chunk_index"),
+                        "source_id": meta.get("source_id"),
                         "dev_tags": dev_tags,
                         "source_locale": source_locale,
                     },
@@ -486,6 +500,10 @@ class VectorStore:
         section_titles: list[str] | None = None,
         dev_tags: list[str] | None = None,
         source_locale: str | None = None,
+        source_ids: list[str | None] | None = None,
+        *,
+        generation_id: str | None = None,
+        chunk_indices: list[int] | None = None,
     ) -> set[str]:
         """Индексирует сырые чанки как отдельные точки Qdrant (point_type="chunk").
 
@@ -502,12 +520,18 @@ class VectorStore:
         Возвращает set point_id для последующей очистки орфанов.
         """
         section_titles = section_titles or [""] * len(chunk_texts)
+        source_ids = source_ids or [None] * len(chunk_texts)
+        chunk_indices = list(range(len(chunk_texts))) if chunk_indices is None else chunk_indices
+        if len(chunk_indices) != len(chunk_texts) or len(set(chunk_indices)) != len(chunk_indices) or any(
+            isinstance(index, bool) or not isinstance(index, int) or index < 0 for index in chunk_indices
+        ):
+            raise ValueError("Chunk indices must be unique non-negative integers matching the text count")
         dev_tags = dev_tags or []
         cap = self.settings.okf_max_chunk_index_chars
         points = []
         point_ids: set[str] = set()
-        for i, (text, vector, section_title) in enumerate(zip(chunk_texts, vectors, section_titles)):
-            point_id = chunk_point_id(doc_id, i)
+        for i, text, vector, section_title, source_id in zip(chunk_indices, chunk_texts, vectors, section_titles, source_ids):
+            point_id = chunk_point_id(doc_id, i, generation_id=generation_id)
             point_ids.add(point_id)
             capped = text[:cap]
             sparse_text = _sparse_text(section_title, capped)
@@ -520,8 +544,10 @@ class VectorStore:
                     },
                     payload={
                         "point_type": CHUNK_POINT_TYPE,
+                        "generation_id": generation_id,
                         "doc_id": doc_id,
                         "chunk_index": i,
+                        "source_id": source_id,
                         "tags": global_tags or [],
                         "dev_tags": dev_tags,
                         "source_locale": source_locale,
@@ -539,6 +565,63 @@ class VectorStore:
                 ) from stats["failure"]
         return point_ids
 
+    def update_generation_metadata(
+        self, doc_id: str, generation_id: str, *, global_tags: list[str],
+        source_locale: str | None, dev_tags: list[str], concept_tags: dict[str, list[str]],
+    ) -> None:
+        """Reconcile user edits on a candidate without touching active points."""
+        scope = [
+            qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id)),
+            qm.FieldCondition(key="generation_id", match=qm.MatchValue(value=generation_id)),
+        ]
+        _qdrant_call(
+            self.client.set_payload, collection_name=self.collection,
+            payload={"source_locale": source_locale, "dev_tags": dev_tags},
+            points=qm.FilterSelector(filter=qm.Filter(must=scope)),
+        )
+        _qdrant_call(
+            self.client.set_payload, collection_name=self.collection, payload={"tags": global_tags},
+            points=qm.FilterSelector(filter=qm.Filter(must=[
+                *scope, qm.FieldCondition(key="point_type", match=qm.MatchValue(value=CHUNK_POINT_TYPE)),
+            ])),
+        )
+        groups: dict[tuple[str, ...], list[str]] = {}
+        for slug, tags in concept_tags.items():
+            groups.setdefault(tuple(tags), []).append(concept_point_id(doc_id, slug, generation_id=generation_id))
+        for tags, ids in groups.items():
+            _qdrant_call(self.client.set_payload, collection_name=self.collection, payload={"tags": list(tags)}, points=ids)
+
+    def verify_generation_points(self, doc_id: str, generation_id: str, point_ids: list[str]) -> None:
+        """A ready checkpoint cannot publish a missing or foreign search point."""
+        from app.services.generation_artifacts import GenerationIntegrityError
+
+        for offset in range(0, len(point_ids), UPSERT_BATCH_SIZE):
+            expected = set(point_ids[offset:offset + UPSERT_BATCH_SIZE])
+            points = _qdrant_call(
+                self.client.retrieve, collection_name=self.collection, ids=list(expected),
+                with_payload=["doc_id", "generation_id"], with_vectors=False,
+            )
+            if {str(point.id) for point in points} != expected or any(
+                (point.payload or {}).get("doc_id") != doc_id
+                or (point.payload or {}).get("generation_id") != generation_id
+                for point in points
+            ):
+                raise GenerationIntegrityError()
+
+    def delete_generation_points(self, doc_id: str, generation_id: str | None) -> None:
+        """Delete one generation; explicit None selects only legacy points."""
+        generation_filter = (
+            qm.IsEmptyCondition(is_empty=qm.PayloadField(key="generation_id"))
+            if generation_id is None else
+            qm.FieldCondition(key="generation_id", match=qm.MatchValue(value=generation_id))
+        )
+        _qdrant_call(
+            self.client.delete, collection_name=self.collection, wait=True,
+            points_selector=qm.FilterSelector(filter=qm.Filter(must=[
+                qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id)), generation_filter,
+            ])),
+        )
+
     def delete_document(self, doc_id: str) -> None:
         _qdrant_call(
             self.client.delete,
@@ -548,7 +631,9 @@ class VectorStore:
             ),
         )
 
-    def delete_orphaned_points(self, doc_id: str, keep_point_ids: set[str]) -> None:
+    def delete_orphaned_points(
+        self, doc_id: str, keep_point_ids: set[str], *, generation_id: str | None = None,
+    ) -> None:
         """Удаляет точки документа, которых нет в keep_point_ids (осиротевшие старые версии).
 
         Используется после upsert новых концептов/чанков для безопасной очистки:
@@ -560,6 +645,10 @@ class VectorStore:
         doc_filter = qm.Filter(
             must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))]
         )
+        if generation_id is not None:
+            doc_filter.must.append(
+                qm.FieldCondition(key="generation_id", match=qm.MatchValue(value=generation_id))
+            )
         while True:
             batch, next_offset = _qdrant_call(
                 self.client.scroll,
@@ -809,7 +898,7 @@ class VectorStore:
             return []
         slug_filter = qm.Filter(
             must=[qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))],
-            must_not=_not_deleted().must_not,
+            must_not=self._build_search_filter(None).must_not,
         )
         records, _ = _qdrant_call(
             self.client.scroll,
@@ -892,7 +981,7 @@ class VectorStore:
         deleted` (Этап 4a.2) — единая обёртка, чтобы удалённые точки не попадали
         в поиск из любого нового сценария.
         """
-        must_not = _not_deleted().must_not
+        must_not = [*(_not_deleted().must_not or []), *generation_exclusions()]
         must: list = []
         if tags:
             must.append(_tag_match_filter(tags))
@@ -992,12 +1081,13 @@ class VectorStore:
 
         cap = self.settings.okf_max_concept_chars
         with session_scope() as s:
+            active_generations = lock_generation_read(s)
             rows = s.execute(
                 select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.title, OkfConcept.content)
                 .join(Document, OkfConcept.doc_id == Document.id)
             ).all()
         for doc_id, slug, title, content in rows:
-            point_id = concept_point_id(doc_id, slug)
+            point_id = concept_point_id(doc_id, slug, generation_id=active_generations.get(doc_id))
             # Точки нет в выборке — либо её нет в Qdrant, либо sparse уже
             # построен (фильтр отсеял). В обоих случаях трогать нечего.
             if point_id not in target_ids:
@@ -1012,6 +1102,7 @@ class VectorStore:
         if include_chunks:
             cap_chunk = self.settings.okf_max_chunk_index_chars
             with session_scope() as s:
+                active_generations = lock_generation_read(s)
                 chunk_rows = s.execute(
                     select(
                         DocumentChunk.doc_id,
@@ -1021,7 +1112,7 @@ class VectorStore:
                     ).join(Document, DocumentChunk.doc_id == Document.id)
                 ).all()
             for doc_id, chunk_index, section_title, content in chunk_rows:
-                point_id = chunk_point_id(doc_id, chunk_index)
+                point_id = chunk_point_id(doc_id, chunk_index, generation_id=active_generations.get(doc_id))
                 # Точки нет в выборке — либо её нет в Qdrant, либо sparse уже
                 # построен (фильтр отсеял). В обоих случаях трогать нечего.
                 if point_id not in target_ids:
@@ -1070,6 +1161,7 @@ class VectorStore:
         # долгих LLM-эмбеддингов).
         docs_data: list[dict] = []
         with session_scope() as s:
+            active_generations = lock_generation_read(s)
             docs = s.execute(
                 select(Document.id, Document.filename, Document.development_id).where(
                     # Не в корзине/не удалён. Статус не фильтруем: paused-документ
@@ -1092,6 +1184,7 @@ class VectorStore:
                 docs_data.append(
                     {
                         "doc_id": doc_id,
+                        "generation_id": active_generations.get(doc_id),
                         "filename": filename,
                         "dev_id": dev_id,
                         "global_tags": global_tags,
@@ -1107,7 +1200,7 @@ class VectorStore:
         cap = self.settings.okf_max_chunk_index_chars
         for d in docs_data:
             doc_id = d["doc_id"]
-            point_ids = [chunk_point_id(doc_id, ci) for ci, _, _ in d["chunks"]]
+            point_ids = [chunk_point_id(doc_id, ci, generation_id=d["generation_id"]) for ci, _, _ in d["chunks"]]
             if all(pid in existing_ids for pid in point_ids):
                 continue  # весь документ уже проиндексирован — эмбеддинг не нужен
             embed_positions = [i for i, pid in enumerate(point_ids) if pid not in existing_ids]
@@ -1132,6 +1225,7 @@ class VectorStore:
                         },
                         payload={
                             "point_type": CHUNK_POINT_TYPE,
+                            "generation_id": d["generation_id"],
                             "doc_id": doc_id,
                             "chunk_index": ci,
                             "tags": d["global_tags"],
@@ -1201,6 +1295,7 @@ class VectorStore:
         from app.db.session import session_scope
 
         with session_scope() as s:
+            active_generations = lock_generation_read(s)
             rows = s.execute(
                 select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.relations)
                 .join(Document, OkfConcept.doc_id == Document.id)
@@ -1209,7 +1304,7 @@ class VectorStore:
 
         db_relations: dict[str, list[str]] = {}
         for doc_id, slug, relations in rows:
-            point_id = concept_point_id(doc_id, slug)
+            point_id = concept_point_id(doc_id, slug, generation_id=active_generations.get(doc_id))
             db_relations[point_id] = list(relations or [])
 
         if not db_relations:

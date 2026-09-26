@@ -1589,6 +1589,20 @@ main {
   color: var(--accent);
 }
 
+.okf-image-button {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.okf-image-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .okf-markdown img.okf-image {
   max-width: 100%;
   height: auto;
@@ -1728,7 +1742,20 @@ main {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* The source tree can exceed the viewport. Keep both tab lists at their
+   natural height instead of shrinking them to zero beside that tree. */
+.okf-list-page > * {
+  flex-shrink: 0;
+}
+
+.okf-list-page .okf-list {
+  flex: none;
+  overflow-y: visible;
 }
 
 .okf-list-page .back-link {
@@ -1913,6 +1940,87 @@ main {
 .okf-error {
   color: var(--danger);
 }
+
+.upload-zone:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+
+.source-location-view.is-inferred .source-highlight,
+.source-location-view.is-inferred .source-highlight-mark {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: 2px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: none;
+}
+
+.document-sources {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.document-sources h2 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+.document-sources-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.document-sources-item {
+  margin-left: calc(var(--source-depth) * 16px);
+  border-left: 2px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.document-sources-row {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.document-sources-row strong,
+.document-sources-filename,
+.document-sources-meta {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.document-sources-filename,
+.document-sources-meta,
+.document-sources-empty {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.document-sources-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.document-sources-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.document-sources-download {
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.document-sources-error { color: var(--danger); }
 
 .okf-chunk-concepts {
   color: var(--muted);

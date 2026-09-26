@@ -18,7 +18,10 @@ from app.db.models import (
     Development,
     Document,
     DocumentChunk,
+    DocumentGeneration,
+    DocumentGenerationState,
     DocumentLshBucket,
+    DocumentSource,
     DocumentStaging,
     DocumentTag,
     OkfAttachment,
@@ -26,6 +29,7 @@ from app.db.models import (
     Tag,
 )
 from app.db.session import session_scope
+from app.services.generation_store import lock_document_write
 from app import error_codes as codes
 from app.services.storage import (
     clear_transient_storage_failure,
@@ -132,6 +136,8 @@ def _to_dict(doc: Document, concepts_generated_at: datetime | None = None) -> di
             if doc.status == "paused" and doc.error == SERVER_RESTARTED_MESSAGE else None
         ),
         "problem": doc.problem,
+        "parser_version": doc.parser_version,
+        "parse_warnings": doc.parse_warnings or [],
         "okf_concept_count": doc.okf_concept_count,
         "concepts_generated_at": concepts_generated_at,
         "total_chunks": doc.total_chunks,
@@ -521,16 +527,28 @@ class DocumentRegistry:
                 return
             tag_ids = None
             if tags is not None:
-                from app.services.tag_registry import TagRegistry
+                from app.services.tag_registry import TagRegistry, normalize_tags
 
+                tags = normalize_tags(tags)
                 tag_ids = TagRegistry().get_or_create_ids(tags, canonical_locale=canonical_locale)
             with session_scope() as s:
+                if not lock_document_write(s, doc_id):
+                    return
                 doc = s.get(Document, doc_id)
                 if doc is None:
                     return
                 for key, value in fields.items():
                     setattr(doc, key, value)
                 if tag_ids is not None:
+                    # Compute the delta only after the publication lock. The
+                    # document and every canonical concept change together;
+                    # a delayed caller cannot replay an old per-concept delta.
+                    previous_tags = {item.tag_rel.canonical_text for item in doc.tags_rel}
+                    removed = previous_tags - set(tags)
+                    for concept in s.query(OkfConcept).filter_by(doc_id=doc_id).all():
+                        merged = [tag for tag in (concept.tags or []) if tag not in removed]
+                        merged.extend(tag for tag in tags if tag not in merged)
+                        concept.tags = merged
                     doc.tags_rel.clear()
                     for tid in tag_ids:
                         doc.tags_rel.append(DocumentTag(tag_id=tid))
@@ -541,7 +559,8 @@ class DocumentRegistry:
 
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
-            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentStaging, DocumentTag, DocumentLshBucket):
+            lock_document_write(s, doc_id)
+            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             doc = s.get(Document, doc_id)
             if doc is None:
@@ -552,20 +571,19 @@ class DocumentRegistry:
     def delete_if_deleted(self, doc_id: str) -> bool:
         """Физически удаляет документ из БД ТОЛЬКО если он в корзине.
 
-        Атомарная защита restore-vs-purge (Этап 4a.2): строка лочится
-        (FOR UPDATE на Postgres) и проверяется внутри той же транзакции,
+        Атомарная защита restore-vs-purge (Этап 4a.2): UPDATE блокирует строку
+        до чтения состояния и проверяет его внутри той же транзакции,
         поэтому восстановление, случившееся между `purge_expired()` и этим
         вызовом, детектится здесь — документ переживает очистку (возврат
-        False). На SQLite FOR UPDATE нет, но пишет она сериализованно.
+        False). Такой порядок сериализует запись также на SQLite.
         """
         with session_scope() as s:
-            stmt = select(Document).where(Document.id == doc_id)
-            if s.bind.dialect.name == "postgresql":
-                stmt = stmt.with_for_update()
-            doc = s.execute(stmt).scalar_one_or_none()
+            if not lock_document_write(s, doc_id):
+                return False
+            doc = s.get(Document, doc_id)
             if doc is None or doc.deleted_at is None:
                 return False
-            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentStaging, DocumentTag, DocumentLshBucket):
+            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             s.delete(doc)
             return True
@@ -573,6 +591,8 @@ class DocumentRegistry:
     def soft_delete(self, doc_id: str, deleted_by: str | None = None) -> bool:
         """Помечает документ удалённым (корзина, Этап 4a.2), не удаляя данные."""
         with session_scope() as s:
+            if not lock_document_write(s, doc_id):
+                return False
             doc = s.get(Document, doc_id)
             if doc is None:
                 return False
@@ -586,6 +606,8 @@ class DocumentRegistry:
     def restore(self, doc_id: str) -> bool:
         """Снимает флаг удаления (восстановление из корзины)."""
         with session_scope() as s:
+            if not lock_document_write(s, doc_id):
+                return False
             doc = s.get(Document, doc_id)
             if doc is None:
                 return False

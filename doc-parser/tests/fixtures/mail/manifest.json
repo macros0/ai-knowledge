@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "purpose": "Публичные и синтетические бинарные MSG-образцы для проверок без Outlook.",
+  "pinned_fixtures": [
+    {
+      "id": "msg_plain_mapi",
+      "file": "outlook-sample.msg",
+      "sha256": "028d84ffe67e1865009669d13d4c12682943b32eccf7f84a8da1899db63b0131",
+      "origin": "Microsoft MarkItDown test data",
+      "license": "MIT",
+      "expected_source_ids": [
+        "root"
+      ],
+      "coverage": [
+        "CFB/MAPI",
+        "subject",
+        "plain_body"
+      ]
+    },
+    {
+      "id": "msg_rtf_ansi",
+      "file": "rtf-simple-sent.msg",
+      "sha256": "8adf5c3c77b46d9fa5910c3bb6ba54930160c4a9292348669f11c4d17cac8421",
+      "origin": "outlook-message-parser fixture",
+      "license": "Apache-2.0",
+      "expected_source_ids": [
+        "root"
+      ],
+      "coverage": [
+        "CFB/MAPI",
+        "ANSI_plain_body_with_RTF_alternative"
+      ]
+    },
+    {
+      "id": "msg_embedded_substorage",
+      "file": "nested-rtf.msg",
+      "sha256": "ee87b46667a0f262b3f119967a5854610bd197508067c51b53fb7ff0abfb8962",
+      "origin": "outlook-message-parser fixture",
+      "license": "Apache-2.0",
+      "expected_source_ids": [
+        "root",
+        "root/0"
+      ],
+      "coverage": [
+        "CFB/MAPI",
+        "embedded_message_substorage",
+        "distinct_child_plain_body"
+      ]
+    },
+    {
+      "id": "synthetic_unicode_xlsx_attachment",
+      "file": "synthetic-unicode-attachment.msg",
+      "sha256": "2fa5cdebfe6526c943c788e2613c02e24fc855fae072a4fcfd50ed8dbc044229",
+      "origin": "Project-generated synthetic CFB, tests/mail_fixtures.py, no Outlook or private input",
+      "license": "MIT",
+      "expected_source_ids": [
+        "root",
+        "root/0"
+      ],
+      "coverage": [
+        "Unicode_subject",
+        "binary_XLSX_attachment",
+        "DOCX_MSG_XLSX",
+        "DOCX_table_MSG"
+      ]
+    },
+    {
+      "id": "synthetic_rtf_only_compressed",
+      "file": "synthetic-rtf-only-compressed.msg",
+      "sha256": "1c279732030c2208f8a7d879b419a0f828510d52d93c8cd96b544b7cea313553",
+      "origin": "Project-generated synthetic CFB, tests/mail_fixtures.py; compressed-rtf MIT encoder, no private input",
+      "license": "MIT",
+      "expected_source_ids": [
+        "root",
+        "root/0"
+      ],
+      "coverage": [
+        "RTF_only_no_plain_HTML",
+        "explicit_unsupported_without_RTF_read",
+        "original_attachment_preserved"
+      ]
+    },
+    {
+      "id": "synthetic_rtf_only_uncompressed",
+      "file": "synthetic-rtf-only-uncompressed.msg",
+      "sha256": "7562a73a675d8a4c18253688f3fce284763caa837dd1c927072e8238872fb1cf",
+      "origin": "Project-generated synthetic CFB, tests/mail_fixtures.py; compressed-rtf MIT encoder, no private input",
+      "license": "MIT",
+      "expected_source_ids": [
+        "root",
+        "root/0"
+      ],
+      "coverage": [
+        "RTF_only_no_plain_HTML",
+        "explicit_unsupported_without_RTF_read",
+        "original_attachment_preserved"
+      ]
+    }
+  ],
+  "outlook_export_acceptance": {
+    "status": "local_private_fixture_passed_mail_sources_v21",
+    "producer_provenance": "User confirmed direct Outlook Save As MSG on 2026-09-26",
+    "evidence": "docs/superpowers/reports/2026-09-26-mail-outlook-export-verification.md",
+    "private_fixture_in_git": false
+  },
+  "release_gate_unverified": [
+    "non-fixture RTF code pages",
+    "IRM, encrypted and signed MSG",
+    "full Windows and Linux fixture matrix"
+  ]
+}

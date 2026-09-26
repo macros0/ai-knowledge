@@ -1,12 +1,20 @@
 """Разбор XLSX: листы → Markdown-таблицы + встроенные объекты (xl/embeddings)."""
 import zipfile
+import zlib
 from pathlib import Path
 
 from openpyxl import load_workbook
 
 from docparser.archive_guard import validate_member, validate_zip
 from docparser.blocks import Block
-from docparser.embedded import process_embedded
+from docparser.embedded import (
+    MAX_ATTACHMENT_PAYLOAD,
+    AttachmentBudget,
+    attachment_count_marker,
+    attachment_parse_marker,
+    attachment_size_marker,
+    process_embedded,
+)
 
 
 def parse_xlsx(
@@ -14,9 +22,12 @@ def parse_xlsx(
     attachments_dir: str | Path | None = None,
     depth: int = 0,
     budget=None,
+    context=None,
+    source_id: str = "root",
 ) -> list[Block]:
     # Validate the central directory before openpyxl starts reading XML parts.
     validate_zip(path)
+    budget = budget or AttachmentBudget()
     wb = load_workbook(str(path), read_only=True, data_only=True)
     blocks: list[Block] = []
     try:
@@ -28,8 +39,27 @@ def parse_xlsx(
     finally:
         wb.close()
 
-    for idx, (name, data) in enumerate(_embedded_files(path)):
-        blocks.extend(process_embedded(data, name, "", "", attachments_dir, idx, depth=depth + 1, budget=budget))
+    with zipfile.ZipFile(str(path)) as archive:
+        members = (info for info in archive.infolist()
+                   if info.filename.startswith("xl/embeddings/") and not info.is_dir())
+        for index, member in enumerate(members):
+            if not budget.reserve_node():
+                blocks.append(attachment_count_marker(context, source_id))
+                break
+            if member.file_size > min(MAX_ATTACHMENT_PAYLOAD, budget.remaining):
+                blocks.append(attachment_size_marker(Path(member.filename).name, context, source_id))
+                continue
+            validate_member(member)
+            try:
+                payload = archive.read(member)
+            except (zipfile.BadZipFile, EOFError, zlib.error):
+                blocks.append(attachment_parse_marker(Path(member.filename).name, context, source_id))
+                continue
+            blocks.extend(process_embedded(
+                payload, Path(member.filename).name, "", "", attachments_dir, index,
+                depth=depth + 1, budget=budget, context=context, parent_source_id=source_id,
+                _node_reserved=True,
+            ))
 
     return blocks
 
@@ -54,16 +84,3 @@ def _sheet_to_markdown(ws) -> str:
     for r in rows[1:]:
         lines.append("| " + " | ".join(r) + " |")
     return "\n".join(lines)
-
-
-def _embedded_files(path: str | Path) -> list[tuple[str, bytes]]:
-    results: list[tuple[str, bytes]] = []
-    try:
-        with zipfile.ZipFile(str(path)) as zf:
-            for name in zf.namelist():
-                if name.startswith("xl/embeddings/") and name.endswith(".bin"):
-                    validate_member(zf.getinfo(name))
-                    results.append((Path(name).name, zf.read(name)))
-    except Exception:
-        pass
-    return results

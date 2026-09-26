@@ -12,12 +12,12 @@ from pathlib import Path
 from sqlalchemy import func
 
 from app.config import get_settings
-from app.db.models import DocumentChunk, OkfAttachment, OkfConcept
+from app.db.models import Document, DocumentChunk, DocumentSource, OkfAttachment, OkfConcept
 from app.db.session import session_scope
 from app.models.schemas import Concept
 from app.services.json_atomic import write_json_atomic
-from app.services.okf_generator import OKFGenerator
-from app.services.registry import get_registry
+from app.services.okf_generator import OKFGenerator, _source_manifest
+from app.services.generation_store import lock_generation_read
 from app import error_codes as codes
 from app.services.errors import NotFoundError
 from docparser import portable_name
@@ -31,13 +31,13 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
     """
     settings = get_settings()
     generator = OKFGenerator()
-    doc = get_registry().get(doc_id)
-    if doc is None:
-        raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
-    filename = doc.get("filename", "")
-    global_tags = list(doc.get("tags") or [])
-
     with session_scope() as s:
+        lock_generation_read(s, [doc_id])
+        doc = s.get(Document, doc_id)
+        if doc is None:
+            raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
+        filename = doc.filename or ""
+        global_tags = [item.tag_rel.canonical_text for item in doc.tags_rel]
         concept_rows = (
             s.query(OkfConcept)
             .filter(OkfConcept.doc_id == doc_id)
@@ -51,6 +51,12 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
             .all()
         )
         att_rows = s.query(OkfAttachment).filter(OkfAttachment.doc_id == doc_id).all()
+        source_rows = (
+            s.query(DocumentSource)
+            .filter(DocumentSource.doc_id == doc_id)
+            .order_by(DocumentSource.source_id)
+            .all()
+        )
         concept_counts = dict(
             s.query(OkfConcept.chunk_index, func.count())
             .filter(OkfConcept.doc_id == doc_id, OkfConcept.chunk_index.isnot(None))
@@ -58,32 +64,33 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
             .all()
         )
 
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    files: list[str] = []
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        files: list[str] = []
 
-    # Вложения: бинарники копируются из uploads/<doc_id>/attachments/.
-    attachments_meta: list[dict] = []
-    if att_rows:
-        att_dir = dest_dir / "attachments"
-        att_dir.mkdir(parents=True, exist_ok=True)
-        for a in att_rows:
-            saved = a.saved_path or ""
-            src = settings.uploads_dir / doc_id / saved
-            if src.is_file():
-                dst = att_dir / portable_name(saved)
-                shutil.copy2(src, dst)
-                files.append(f"attachments/{dst.name}")
-            attachments_meta.append(
-                {
-                    "name": a.name,
-                    "kind": a.kind,
-                    "caption": a.caption,
-                    # portable_name, а не Path().name: в легаси-строках БД
-                    # saved_path может быть windows-путём, и на Linux
-                    # Path().name вернул бы его целиком (инцидент 2026-09-07).
-                    "saved_path": portable_name(saved) if saved else None,
-                }
-            )
+        # Вложения: бинарники копируются из uploads/<doc_id>/attachments/.
+        attachments_meta: list[dict] = []
+        if att_rows:
+            att_dir = dest_dir / "attachments"
+            att_dir.mkdir(parents=True, exist_ok=True)
+            for a in att_rows:
+                saved = a.saved_path or ""
+                src = settings.uploads_dir / doc_id / saved
+                if src.is_file():
+                    dst = att_dir / portable_name(saved)
+                    shutil.copy2(src, dst)
+                    files.append(f"attachments/{dst.name}")
+                attachments_meta.append(
+                    {
+                        "name": a.name,
+                        "kind": a.kind,
+                        "caption": a.caption,
+                        # portable_name, а не Path().name: в легаси-строках БД
+                        # saved_path может быть windows-путём, и на Linux
+                        # Path().name вернул бы его целиком (инцидент 2026-09-07).
+                        "saved_path": portable_name(saved) if saved else None,
+                        "source_id": a.source_id,
+                    }
+                )
 
     # Чанки.
     if chunk_rows:
@@ -98,11 +105,35 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
                     "index": c.chunk_index,
                     "size": len((c.content or "").encode("utf-8")),
                     "concepts_count": concept_counts.get(c.chunk_index, 0),
+                    "source_id": c.source_id,
                 }
             )
             files.append(f"chunks/{f.name}")
         write_json_atomic(chunks_dir / "manifest.json", chunks_manifest)
         files.append("chunks/manifest.json")
+
+    if source_rows:
+        serialized_sources = [
+            {
+                "source_id": row.source_id,
+                "parent_source_id": row.parent_source_id,
+                "ordinal": row.ordinal,
+                "kind": row.kind,
+                "display_name": row.display_name,
+                "metadata": row.metadata_json,
+                "saved_path": row.saved_path,
+                "extraction_status": row.extraction_status,
+                "artifact_kind": row.artifact_kind,
+                "container_source_id": row.container_source_id,
+                "container_locator": row.container_locator,
+                "content_fingerprint": row.content_fingerprint,
+                "parser_version": row.parser_version,
+                "warnings": row.warnings,
+            }
+            for row in source_rows
+        ]
+        write_json_atomic(dest_dir / "sources.json", _source_manifest(serialized_sources))
+        files.append("sources.json")
 
     # Концепты (.md) + _files.json.
     concepts = [
@@ -117,6 +148,7 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
         for c in concept_rows
     ]
     slugs = [c.slug for c in concept_rows]
+    source_ids = [c.source_id for c in concept_rows]
     chunk_of_slug = {c.slug: c.chunk_index for c in concept_rows if c.chunk_index is not None}
     okf_docs, manifest = generator.build_okf_docs(
         doc_id,
@@ -126,6 +158,7 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
         global_tags=global_tags,
         slugs=slugs,
         chunk_of_slug=chunk_of_slug,
+        source_ids=source_ids,
         bundle_dir=dest_dir,
     )
     for d in okf_docs:

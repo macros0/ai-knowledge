@@ -19,6 +19,7 @@ from pathlib import Path
 from app.config import Settings
 from app.services.concept_store import fetch_contents
 from app.services.registry import get_registry
+from app.services.generation_files import active_bundle_path
 
 _SPEC = importlib.util.spec_from_file_location(
     "backfill_comment_concepts",
@@ -36,31 +37,48 @@ class _Rec:
 
 
 class FakeQdrant:
-    def __init__(self, records):
-        self.records = records
+    def __init__(self, records, collection):
+        from qdrant_client import QdrantClient
+        from qdrant_client.http import models as qm
+
+        self.collection = collection
+        self.client = QdrantClient(":memory:")
+        self.client.create_collection(
+            collection, vectors_config=qm.VectorParams(size=8, distance=qm.Distance.COSINE),
+            sparse_vectors_config={"sparse": qm.SparseVectorParams(modifier=qm.Modifier.IDF)},
+        )
         self.upserted: list = []
         self.deleted: list = []
+        self.records = records
 
-    def scroll(self, *, collection_name, limit, with_payload, with_vectors, scroll_filter=None, offset=None):
-        # фильтр по doc_id (как реальный scroll_filter)
-        doc_id = None
-        try:
-            cond = scroll_filter.must[0]
-            doc_id = cond.match.value
-        except Exception:
-            pass
-        recs = [r for r in self.records if doc_id is None or r.payload.get("doc_id") == doc_id]
-        return recs, None
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+    @property
+    def records(self):
+        return self.client.scroll(self.collection, limit=100)[0]
+
+    @records.setter
+    def records(self, records):
+        from qdrant_client.http import models as qm
+
+        if records:
+            self.client.upsert(self.collection, [qm.PointStruct(id=row.id, payload=row.payload, vector=[0.0] * 8)
+                                                 for row in records])
 
     def upsert(self, *, collection_name, points):
         self.upserted.extend(points)
-        for p in points:
-            self.records = [r for r in self.records if r.id != p.id] + [_Rec(p.id, p.payload)]
+        return self.client.upsert(collection_name=collection_name, points=points)
 
-    def delete(self, *, collection_name, points_selector):
-        ids = [str(x) for x in points_selector.points]
+    def delete(self, *, collection_name, points_selector, wait=True):
+        from qdrant_client.http import models as qm
+
+        if isinstance(points_selector, qm.FilterSelector):
+            ids = [str(row.id) for row in self.client.scroll(collection_name, scroll_filter=points_selector.filter, limit=100)[0]]
+        else:
+            ids = [str(x) for x in points_selector.points]
         self.deleted.extend(ids)
-        self.records = [r for r in self.records if str(r.id) not in ids]
+        return self.client.delete(collection_name=collection_name, points_selector=points_selector, wait=wait)
 
 
 class FakeEmbedder:
@@ -205,6 +223,15 @@ def _setup_doc(tmp_path: Path) -> tuple[Settings, Path]:
     _make_thread_docx(settings.uploads_dir / f"{DOC_ID}.docx")
     get_registry().create(DOC_ID, "doc.docx", "application/vnd.openxmlformats.openxmlformats-officedocument.wordprocessingml.document", 1)
     get_registry().update(DOC_ID, status="done", okf_concept_count=2)
+    from app.db.session import session_scope
+    from app.services.bundle import load_bundle
+    from app.services.concept_store import replace_concepts
+    from app.services.chunk_store import replace_chunks
+
+    with session_scope() as session:
+        replace_concepts(session, DOC_ID, load_bundle(bundle))
+        replace_chunks(session, DOC_ID, [{"chunk_index": 0,
+                                        "content": (chunks / "chunk_00.md").read_text(encoding="utf-8")}])
     return settings, bundle
 
 
@@ -213,7 +240,8 @@ def _fake_services(settings, monkeypatch):
 
     monkeypatch.setattr("app.services.vector_store.get_settings", lambda: settings)
     vs = VectorStore()
-    fake_q = FakeQdrant([])
+    vs.client.close()
+    fake_q = FakeQdrant([], vs.collection)
     monkeypatch.setattr(vs, "client", fake_q)
     monkeypatch.setattr(vs, "ensure_collection", lambda: None)
     return FakeEmbedder(), vs, fake_q
@@ -231,6 +259,7 @@ class TestProcessDoc:
         assert result["skipped"] == [] and result["error"] is None
         assert result["threads"] == 1
         assert result["removed"] == 1  # старый LLM-концепт-комментарий
+        bundle = active_bundle_path(settings, DOC_ID)
 
         # бандл: обычный концепт сохранён, старый комментарий удалён, тред добавлен
         names = sorted(p.stem for p in bundle.glob("*.md"))
@@ -247,9 +276,10 @@ class TestProcessDoc:
         assert "Содержимое обычного концепта." in contents[(DOC_ID, "obychnoy-koncept")]
         assert ANSWER in contents[(DOC_ID, thread_md[0].stem)]
 
-        # Qdrant: апсертнут только новый концепт
-        assert len(fake_q.upserted) == 1
-        payload = fake_q.upserted[0].payload
+        # Новое поколение содержит все концепты и прежний canonical chunk.
+        assert len(fake_q.upserted) == 3
+        payload = next(point.payload for point in fake_q.upserted
+                       if point.payload["point_type"] == "concept" and "review" in point.payload["tags"])
         assert payload["point_type"] == "concept"
         assert "review" in payload["tags"]
         assert payload["chunk_index"] == 0
@@ -264,6 +294,7 @@ class TestProcessDoc:
         gen = OKFGenerator()
         r1 = backfill.process_doc(DOC_ID, "doc.docx", settings, gen, embedder, vs)
         assert r1["threads"] == 1
+        bundle = active_bundle_path(settings, DOC_ID)
         files_after_first = sorted(p.name for p in bundle.glob("*.md"))
         upserts_first = len(fake_q.upserted)
 
@@ -271,11 +302,12 @@ class TestProcessDoc:
         r2 = backfill.process_doc(DOC_ID, "doc.docx", settings, gen, embedder, vs)
         assert r2["error"] is None
         assert r2["threads"] == 1
-        # фильтр 'review' убирает и треды прошлого прогона, пересоздавая их
-        # детерминированно — итоговый НАБОР стабилен (идемпотентность по результату)
+        # Содержимое и provenance совпадают: повтор не публикует новую версию.
         files_after_second = sorted(p.name for p in bundle.glob("*.md"))
         assert files_after_first == files_after_second  # тот же набор файлов
-        assert len(fake_q.upserted) == upserts_first + 1  # тот же концепт переапсертнут
+        assert len(fake_q.upserted) == upserts_first
+        assert r2["changed"] is False
+        assert active_bundle_path(settings, DOC_ID) == bundle
         assert get_registry().get(DOC_ID)["okf_concept_count"] == 2
 
     def test_dry_run_no_writes(self, tmp_path, monkeypatch):
@@ -298,6 +330,11 @@ class TestProcessDoc:
         import shutil
 
         shutil.rmtree(bundle / "chunks")
+        from app.db.models import DocumentChunk
+        from app.db.session import session_scope
+
+        with session_scope() as session:
+            session.query(DocumentChunk).filter_by(doc_id=DOC_ID).delete()
         embedder, vs, fake_q = _fake_services(settings, monkeypatch)
         from app.services.okf_generator import OKFGenerator
 
@@ -307,7 +344,7 @@ class TestProcessDoc:
 
     def test_old_comment_point_orphaned(self, tmp_path, monkeypatch):
         """Точка старого LLM-концепта-комментария удаляется как осиротевшая;
-        chunk-точки не трогаются."""
+        канонические чанки переиздаются с ID нового поколения."""
         settings, bundle = _setup_doc(tmp_path)
         old_md = bundle / "kommentariy-retsenzenta-llm.md"
         from app.services.vector_store import chunk_point_id, concept_point_id
@@ -326,4 +363,7 @@ class TestProcessDoc:
 
         backfill.process_doc(DOC_ID, "doc.docx", settings, OKFGenerator(), embedder, vs)
         assert old_pid in fake_q.deleted
-        assert chunk_pid not in fake_q.deleted
+        assert chunk_pid in fake_q.deleted
+        chunks = [record for record in fake_q.records if record.payload["point_type"] == "chunk"]
+        assert len(chunks) == 1 and chunks[0].payload["chunk_index"] == 0
+        assert chunks[0].payload["generation_id"]

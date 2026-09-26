@@ -20,16 +20,27 @@ from __future__ import annotations
 import logging
 import threading
 
-from app.services.registry import get_registry
+from app.db.models import Document
+from app.db.session import session_scope
+from app.services.generation_store import lock_document_write
 from app.services.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
 
 def reindex_document_source_locale(doc_id: str, source_locale: str | None) -> bool:
-    """Синхронное обновление payload source_locale. False, если Qdrant недоступен."""
+    """Project the current DB locale; the supplied edit value may be stale.
+
+    False means the document is absent/deleted or synchronization failed.
+    """
     try:
-        VectorStore().set_document_source_locale_payload(doc_id, source_locale)
+        with session_scope() as session:
+            if not lock_document_write(session, doc_id, allow_deleted=False):
+                return False
+            # The caller's value identifies the triggering edit, not the latest
+            # state. Keep publication and competing syncs out until payload ack.
+            document = session.get(Document, doc_id)
+            VectorStore().set_document_source_locale_payload(doc_id, document.source_locale)
         return True
     except Exception:
         logger.warning(
@@ -46,9 +57,7 @@ def reindex_document_source_locale_from_db(doc_id: str) -> None:
     Читает состояние в момент выполнения (а не из замыкания на момент постановки),
     чтобы при дублирующих потоках итог всегда соответствовал текущей метке.
     """
-    doc = get_registry().get(doc_id)
-    source_locale = doc.get("source_locale") if doc else None
-    reindex_document_source_locale(doc_id, source_locale)
+    reindex_document_source_locale(doc_id, None)
 
 
 def schedule_source_locale_sync(doc_id: str) -> None:

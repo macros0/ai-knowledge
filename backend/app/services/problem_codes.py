@@ -22,6 +22,20 @@ LLM_PARTIAL_RESULT = "llm_partial_result"
 # LLM-классификатор таблиц не дал валидного решения, поэтому применена
 # резервная XML-эвристика; это не означает salvage ответа генератора концептов.
 LLM_CLASSIFIER_FALLBACK = "llm_classifier_fallback"
+# Частичное извлечение вложенного потенциально текстового источника. Документ
+# завершён с доступными siblings, но дерево и RAG могут быть неполными.
+ATTACHMENT_PARTIAL_RESULT = "attachment_partial_result"
+# Канонический текст достиг защитного лимита. Обработанные префиксы доступны,
+# но поиск не покрывает хвост документа.
+TEXT_PARTIAL_RESULT = "text_partial_result"
+MAIL_TEXT_PARTIAL_RESULT = "mail_text_partial_result"
+# S/MIME-encrypted message: original bytes remain downloadable, but the
+# application does not decrypt and index its body.
+ENCRYPTED_MAIL = "encrypted_mail"
+# Protected MSG may contain an opaque signature or IRM; encryption is not assumed.
+PROTECTED_MAIL = "protected_mail"
+UNSUPPORTED_MAIL_CLASS = "unsupported_mail_class"
+UNSUPPORTED_RTF_BODY = "unsupported_rtf_body"
 # Индексация чанк-точек пропущена (файлы чанков не найдены в бандле) —
 # поиск по сырым фрагментам для этого документа недоступен.
 INDEX_PARTIAL_FAILURE = "index_partial_failure"
@@ -43,9 +57,37 @@ PROBLEM_MESSAGES: dict[str, str] = {
         "Классификатор таблиц использовал резервную эвристику — индекс создан, "
         "но часть табличных концептов может быть менее точной или отсутствовать."
     ),
+    ATTACHMENT_PARTIAL_RESULT: (
+        "Не удалось полностью извлечь одно или несколько вложений: "
+        "доступные источники обработаны, проверьте дерево вложений и перегенерируйте документ."
+    ),
     INDEX_PARTIAL_FAILURE: (
         "Индексация чанков пропущена (нет файлов чанков в бандле) — "
         "поиск по сырым фрагментам недоступен."
+    ),
+    TEXT_PARTIAL_RESULT: (
+        "Извлечённый текст превысил защитный лимит: доступен только начальный фрагмент, "
+        "поиск не покрывает хвост документа. Разделите исходный файл и перегенерируйте."
+    ),
+    MAIL_TEXT_PARTIAL_RESULT: (
+        "Текст письма извлечён с предупреждениями о кодировке или различиях "
+        "текстовой и HTML-версий. Проверьте числа и формулировки по оригиналу."
+    ),
+    ENCRYPTED_MAIL: (
+        "Письмо зашифровано S/MIME: исходный файл доступен, но текст не извлечён "
+        "и не проиндексирован."
+    ),
+    PROTECTED_MAIL: (
+        "Защищённое письмо S/MIME или IRM не разобрано: скачайте исходный файл "
+        "и откройте его в совместимом почтовом приложении."
+    ),
+    UNSUPPORTED_MAIL_CLASS: (
+        "Тип объекта Outlook не поддерживается как письмо: исходный файл доступен "
+        "для скачивания, его содержимое не извлечено."
+    ),
+    UNSUPPORTED_RTF_BODY: (
+        "Тело письма доступно только в RTF и не извлечено. Скачайте исходный файл "
+        "и сохраните письмо с текстовым или HTML-телом; доступные вложения обработаны отдельно."
     ),
 }
 

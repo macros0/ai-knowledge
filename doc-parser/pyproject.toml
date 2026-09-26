@@ -15,6 +15,8 @@ dependencies = [
     "Pillow>=10.0",
     "defusedxml>=0.7.1",
     "olefile>=0.47",
+    "msg_parser>=1.2,<2",
+    "compressed-rtf>=1.0.6,<2",
 ]
 
 [project.optional-dependencies]

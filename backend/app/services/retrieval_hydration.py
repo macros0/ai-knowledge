@@ -7,10 +7,11 @@ from time import perf_counter
 
 from sqlalchemy import func, select, tuple_
 
-from app.db.models import Document, DocumentChunk, OkfConcept
+from app.db.models import Document, DocumentChunk, DocumentGenerationState, OkfConcept
 from app.db.session import session_scope
 from app.services.glossary.matching import group_form_matches
 from app.services.glossary.types import MatchGroup
+from app.services.source_store import fetch_source_paths
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,10 @@ def _enrich_retrieval_hits_in_session(
     chunk_pairs: list[tuple[str, int]] = []
     for hit in hits:
         payload = hit.payload
+        # Provenance is canonical SQL data, never a claim in an index payload.
+        payload.pop("source_path", None)
+        payload.pop("mail_fragment", None)
+        payload.pop("source_id", None)
         point_type = payload.get("point_type")
         doc_id = payload.get("doc_id", "")
         if point_type == "concept":
@@ -118,11 +123,20 @@ def _enrich_retrieval_hits_in_session(
                 OkfConcept.doc_id,
                 OkfConcept.slug,
                 OkfConcept.content if full_text else func.substr(OkfConcept.content, 1, max_concept_chars),
+                OkfConcept.source_id,
+                OkfConcept.chunk_index,
             ).where(tuple_(OkfConcept.doc_id, OkfConcept.slug).in_(concept_pairs))
         ).all()
         concept_contents = {
-            (doc_id, slug): content for doc_id, slug, content in rows
+            (doc_id, slug): content for doc_id, slug, content, _source_id, _chunk_index in rows
         }
+        concept_source_ids = {
+            (doc_id, slug): source_id for doc_id, slug, _content, source_id, _chunk_index in rows
+        }
+        concept_chunk_indices = {(doc_id, slug): index for doc_id, slug, _, _, index in rows}
+    else:
+        concept_source_ids = {}
+        concept_chunk_indices = {}
     needed_chunk_pairs = chunk_pairs if full_text else _chunk_pairs_needed_for_merge(
         hits, concept_contents, chunk_pairs
     )
@@ -134,6 +148,7 @@ def _enrich_retrieval_hits_in_session(
                 DocumentChunk.chunk_index,
                 DocumentChunk.content if full_text else func.substr(DocumentChunk.content, 1, max_chunk_chars),
                 DocumentChunk.section_title,
+                DocumentChunk.source_id,
             ).where(
                 tuple_(DocumentChunk.doc_id, DocumentChunk.chunk_index).in_(
                     needed_chunk_pairs
@@ -144,8 +159,9 @@ def _enrich_retrieval_hits_in_session(
             (doc_id, int(chunk_index)): {
                 "content": content,
                 "section_title": section_title or "",
+                "source_id": source_id,
             }
-            for doc_id, chunk_index, content, section_title in rows
+            for doc_id, chunk_index, content, section_title, source_id in rows
         }
 
     for hit in hits:
@@ -157,6 +173,8 @@ def _enrich_retrieval_hits_in_session(
             key = (doc_id, slug)
             if key in concept_contents:
                 payload["content"] = concept_contents[key]
+            if key in concept_source_ids:
+                payload["source_id"] = concept_source_ids[key]
             if not payload.get("filepath"):
                 payload["filepath"] = f"{doc_id}/{slug}.md"
         elif point_type == "chunk":
@@ -165,6 +183,7 @@ def _enrich_retrieval_hits_in_session(
             if key in chunk_contents:
                 payload["content"] = chunk_contents[key]["content"]
                 payload["section_title"] = chunk_contents[key]["section_title"]
+                payload["source_id"] = chunk_contents[key]["source_id"]
             elif key in skipped_chunk_pairs:
                 continue
             else:
@@ -173,27 +192,45 @@ def _enrich_retrieval_hits_in_session(
                     doc_id,
                     chunk_index,
                 )
+    paths = fetch_source_paths(session, {
+        (hit.payload["doc_id"], hit.payload["source_id"])
+        for hit in hits if hit.payload.get("doc_id") and hit.payload.get("source_id")
+    })
+    for hit in hits:
+        key = (hit.payload.get("doc_id"), hit.payload.get("source_id"))
+        if key in paths:
+            hit.payload["source_path"] = paths[key]
+    # Concept digests may remove quote markers and merge speaker turns. Read
+    # bounded original mail text in this same snapshot, even for concept-only hits.
+    mail_keys = {}
+    for hit in hits:
+        payload = hit.payload
+        path = payload.get("source_path") or []
+        if not path or not path[-1].get("mail"):
+            continue
+        doc_id = payload.get("doc_id")
+        index = (concept_chunk_indices.get((doc_id, _concept_slug(hit)))
+                 if payload.get("point_type") == "concept" else payload.get("chunk_index"))
+        if index is not None:
+            mail_keys[hit.point_id] = (doc_id, index, payload["source_id"])
+    if mail_keys:
+        rows = session.execute(select(
+            DocumentChunk.doc_id, DocumentChunk.chunk_index, DocumentChunk.source_id,
+            func.substr(DocumentChunk.content, 1, max_chunk_chars),
+        ).where(tuple_(DocumentChunk.doc_id, DocumentChunk.chunk_index, DocumentChunk.source_id)
+                .in_(set(mail_keys.values())))).all()
+        fragments = {(doc_id, index, source_id): content for doc_id, index, source_id, content in rows}
+        for hit in hits:
+            key = mail_keys.get(hit.point_id)
+            if key in fragments:
+                hit.payload["mail_fragment"] = {"chunk_index": key[1], "content": fragments[key]}
     return hits
 
 
 def enrich_retrieval_hits(hits: list) -> list:
-    """Hydrate concept and chunk hits in one read-only DB session.
-
-    Qdrant remains the source of ranking and payload metadata; PostgreSQL is
-    still the canonical source of full text. The function mutates the supplied
-    hit payloads exactly like the former two hydrators, while avoiding a second
-    session/connection setup when a result contains both point types.
-    """
-    from app.config import get_settings
-
-    settings = get_settings()
-    with session_scope() as session:
-        _enrich_retrieval_hits_in_session(
-            hits,
-            session,
-            max_concept_chars=max(1, int(settings.chat_concept_max_chars)),
-            max_chunk_chars=max(1, int(settings.chat_chunk_max_chars)),
-        )
+    """Filter stale hits and hydrate canonical text, preserving list identity."""
+    visible, _lookup = load_visible_retrieval_hits(hits)
+    hits[:] = visible
     return hits
 
 
@@ -219,13 +256,11 @@ def load_visible_retrieval_hits(
     max_chunk_chars: int | None = None,
     exact_groups: tuple[MatchGroup, ...] = (),
 ) -> tuple[list, dict]:
-    """Filter visibility and hydrate retrieval hits inside one DB session.
+    """Read visibility, active generation and canonical text consistently.
 
-    The search and chat paths previously opened one session for the visibility
-    lookup and a second one for canonical text hydration. Keeping both reads in
-    one read-only request transaction removes that repeated session/transaction
-    setup while preserving the same deleted/orphan filtering and hydration
-    semantics.
+    SQLite uses a read snapshot; PostgreSQL holds shared Document row locks
+    until hydration finishes. A publication racing with Qdrant retrieval may
+    remove stale hits, but cannot pair their metadata with a new version's text.
     """
     if not hits:
         return [], {}
@@ -253,11 +288,25 @@ def load_visible_retrieval_hits(
     doc_ids.discard("")
     with session_scope() as session:
         started = perf_counter()
-        rows = session.execute(
-            select(Document.id, Document.filename, Document.deleted_at).where(
-                Document.id.in_(doc_ids)
-            )
-        ).all()
+        connection = session.connection()
+        # SQLite's legacy driver does not BEGIN on SELECT. An explicit read
+        # transaction keeps the pointer and canonical text in one snapshot.
+        if connection.dialect.name == "sqlite":
+            if not connection.connection.driver_connection.in_transaction:
+                connection.exec_driver_sql("BEGIN")
+        statement = select(Document.id, Document.filename, Document.deleted_at).where(
+            Document.id.in_(doc_ids)
+        ).order_by(Document.id)
+        if connection.dialect.name == "postgresql":
+            # Publication takes a writer lock on these same rows. Lock them
+            # BEFORE reading the pointer so a waited-for writer cannot leave
+            # us with a stale joined pointer and freshly published text.
+            statement = statement.with_for_update(read=True)
+        rows = session.execute(statement).all()
+        active_generations = dict(session.execute(
+            select(DocumentGenerationState.doc_id, DocumentGenerationState.active_generation_id)
+            .where(DocumentGenerationState.doc_id.in_(doc_ids))
+        ).all())
         values = {
             doc_id: {
                 "id": doc_id,
@@ -272,6 +321,7 @@ def load_visible_retrieval_hits(
             for hit in hits
             if (doc := doc_lookup.get(hit.payload.get("doc_id", ""))) is not None
             and not doc.get("deleted_at")
+            and hit.payload.get("generation_id") == active_generations.get(doc["id"])
         ]
         if timings is not None:
             timings["visibility_ms"] = round((perf_counter() - started) * 1000, 3)

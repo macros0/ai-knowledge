@@ -24,6 +24,8 @@ class TestReindexReturnsBool:
     def test_failure_returns_false(self, monkeypatch):
         from app.services.dev_sync import reindex_document_dev_tags
 
+        get_registry().create("doc1", "a.docx", "x", 10)
+
         def boom(*a, **k):
             raise RuntimeError("qdrant down")
 
@@ -32,6 +34,8 @@ class TestReindexReturnsBool:
 
     def test_success_returns_true(self, monkeypatch):
         from app.services.dev_sync import reindex_document_dev_tags
+
+        get_registry().create("doc1", "a.docx", "x", 10)
 
         monkeypatch.setattr(VectorStore, "reindex_document_dev_tags", lambda *a, **k: None)
         assert reindex_document_dev_tags("doc1", ["111"]) is True

@@ -1,14 +1,21 @@
 """Разбор DOCX: абзацы, заголовки, таблицы, комментарии рецензентов и встроенные объекты (OLE)."""
 import re
 import zipfile
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from docparser.archive_guard import validate_zip
 from defusedxml import ElementTree as ET
 
+from docparser.archive_guard import validate_zip
 from docparser.blocks import Block
-from docparser.embedded import Attachment, process_embedded, save_image_file
+from docparser.embedded import (
+    Attachment,
+    AttachmentBudget,
+    marker_block,
+    process_embedded,
+    save_image_file,
+)
 
 W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 W14_NS = "{http://schemas.microsoft.com/office/word/2010/wordml}"
@@ -50,6 +57,8 @@ def parse_docx(
     attachments_dir: str | Path | None = None,
     depth: int = 0,
     budget=None,
+    context=None,
+    source_id: str = "root",
 ) -> list[Block]:
     from docx import Document
     from docx.oxml.ns import qn
@@ -71,6 +80,66 @@ def parse_docx(
     blocks: list[Block] = []
     code_lines: list[str] | None = None
     image_count = 0
+    budget = budget or AttachmentBudget()
+    seen_ole = set()
+    ole_count = 0
+    ole_exhausted = False
+
+    def emit_ole(element, part, location: str) -> None:
+        nonlocal ole_count, ole_exhausted
+        if ole_exhausted:
+            return
+        for ole in _find_ole_objects(element):
+            # An outer cell/paragraph may also contain nested table/textbox
+            # paragraphs. Deduplicate XML occurrences, never relationship IDs:
+            # two actual objects may intentionally reference the same file.
+            occurrence = ole["element"]
+            if occurrence in seen_ole:
+                continue
+            seen_ole.add(occurrence)
+            object_location = (
+                "textbox" if any(p.tag == qn("w:txbxContent") for p in occurrence.iterancestors())
+                else location
+            )
+            # Admit before resolving the relationship or reading its blob.
+            # One remainder node bounds the manifest across all document parts.
+            if not budget.reserve_node():
+                ole_exhausted = True
+                att = Attachment("Остальные вложения", "", "", b"")
+                if context is not None:
+                    att.source_id = context.add_child(source_id, att.name, "attachment")
+                    context.warn(att.source_id, "attachment_count_exceeded")
+                emitted = [marker_block(att, note="превышен лимит количества вложений",
+                                        extraction_status="skipped_count")]
+            else:
+                att = _resolve_ole_attachment(part, ole)
+            if not ole_exhausted and att is None:
+                rel = part.rels.get(ole.get("r_id"))
+                external = rel is not None and rel.is_external
+                att = Attachment("Связанный объект" if external else "Недоступное вложение",
+                                 ole.get("prog_id", ""), ole.get("caption", ""), b"")
+                if context is not None:
+                    att.source_id = context.add_child(source_id, att.name, "attachment")
+                    context.warn(att.source_id, "external_attachment" if external else "attachment_unavailable")
+                emitted = [marker_block(att, note="внешняя ссылка" if external else "байты вложения недоступны",
+                                        extraction_status="unsupported")]
+            elif not ole_exhausted:
+                emitted = process_embedded(
+                    att.data, att.name, att.prog_id, att.caption,
+                    attachments_dir, ole_count, depth=depth + 1, budget=budget,
+                    context=context, parent_source_id=source_id,
+                    _node_reserved=True,
+                )
+            ole_count += 1
+            if emitted:
+                emitted[0].meta["document_location"] = object_location
+                child_id = emitted[0].meta.get("source_id")
+                if context is not None and child_id:
+                    node = next(node for node in context.sources if node.source_id == child_id)
+                    context.update_metadata(child_id, {**node.metadata, "document_location": object_location})
+            blocks.extend(emitted)
+            if ole_exhausted:
+                return
 
     def flush_code() -> None:
         nonlocal code_lines
@@ -121,15 +190,7 @@ def parse_docx(
 
             emit_comment_threads(cids, context=text[:_CONTEXT_MAX_CHARS])
 
-            for idx, ole in enumerate(_find_ole_objects(child)):
-                att = _resolve_ole_attachment(doc, ole)
-                if att is not None:
-                    blocks.extend(
-                        process_embedded(
-                            att.data, att.name, att.prog_id, att.caption,
-                            attachments_dir, idx, depth=depth + 1, budget=budget,
-                        )
-                    )
+            emit_ole(child, doc.part, "body")
 
             image_count = _emit_inline_images(blocks, doc, child, attachments_dir, image_count)
 
@@ -139,15 +200,35 @@ def parse_docx(
             if md:
                 blocks.append(Block("table", md))
             cell_cids: set[str] = set()
-            for cell in child.iter(qn("w:tc")):
-                for cell_p in cell.iter(qn("w:p")):
-                    cell_cids |= _comment_ids(cell_p)
-                    image_count = _emit_inline_images(blocks, doc, cell_p, attachments_dir, image_count)
+            for cell_p in child.iter(qn("w:p")):
+                cell_cids |= _comment_ids(cell_p)
+                emit_ole(cell_p, doc.part, "table")
+                image_count = _emit_inline_images(blocks, doc, cell_p, attachments_dir, image_count)
             # комментарии из ячеек таблицы — сразу после таблицы
             # (раньше сваливались в конец документа)
             emit_comment_threads(cell_cids, context="")
 
     flush_code()
+
+    # Include objects hidden in content-control wrappers. Already visited
+    # body occurrences are skipped; ordinary body rendering is unchanged.
+    emit_ole(doc.element.body, doc.part, "body")
+    # Append each referenced story part once in section/reference XML order.
+    # Do not instantiate inherited headers: python-docx would create parts.
+    seen_parts = set()
+    for reference in doc.element.body.iter():
+        if reference.tag not in {qn("w:headerReference"), qn("w:footerReference")}:
+            continue
+        rel = doc.part.rels.get(reference.get(qn("r:id")))
+        if rel is None or rel.is_external:
+            continue
+        part = rel.target_part
+        if part.partname in seen_parts:
+            continue
+        seen_parts.add(part.partname)
+        element = getattr(part, "element", None)
+        if element is not None:
+            emit_ole(element, part, "header" if reference.tag == qn("w:headerReference") else "footer")
 
     # комментарии, чьи якоря не найдены в теле (маркеры удалены ревизиями и т.п.)
     for ti, t in enumerate(threads):
@@ -335,30 +416,27 @@ def _is_code_paragraph(para) -> bool:
 
 
 # ---------------------------------------------------------------- OLE objects
-def _find_ole_objects(p_el) -> list[dict]:
+def _find_ole_objects(p_el) -> Iterator[dict]:
     """Ищет w:object → o:OLEObject в абзаце и возвращает r_id/prog_id/подпись."""
-    results: list[dict] = []
     for wobj in p_el.iter(f"{W_NS}object"):
         caption = ""
         docpr = wobj.find(f"{W_NS}docPr")
         if docpr is not None:
             caption = docpr.get("name", "")
         for ole in wobj.iter(f"{O_NS}OLEObject"):
-            results.append(
-                {
-                    "r_id": ole.get(f"{R_NS}id"),
-                    "prog_id": ole.get("ProgID", ""),
-                    "caption": caption,
-                }
-            )
-    return results
+            yield {
+                "r_id": ole.get(f"{R_NS}id"),
+                "prog_id": ole.get("ProgID", ""),
+                "caption": caption,
+                "element": ole,
+            }
 
 
-def _resolve_ole_attachment(doc, ole: dict) -> Attachment | None:
+def _resolve_ole_attachment(part, ole: dict) -> Attachment | None:
     r_id = ole.get("r_id")
     if not r_id:
         return None
-    rel = doc.part.rels.get(r_id)
+    rel = part.rels.get(r_id)
     if rel is None:
         return None
     try:

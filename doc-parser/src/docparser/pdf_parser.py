@@ -11,7 +11,15 @@ from pathlib import Path
 from typing import Callable
 
 from docparser.blocks import Block
-from docparser.embedded import process_embedded, save_image_file
+from docparser.embedded import (
+    MAX_ATTACHMENT_PAYLOAD,
+    AttachmentBudget,
+    attachment_count_marker,
+    attachment_parse_marker,
+    attachment_size_marker,
+    process_embedded,
+    save_image_file,
+)
 from docparser.pdf_provider import PdfParseError, PdfProvider, get_pdf_provider
 
 logger = logging.getLogger(__name__)
@@ -26,10 +34,13 @@ def parse_pdf(
     attachments_dir: str | Path | None = None,
     depth: int = 0,
     budget=None,
+    context=None,
+    source_id: str = "root",
     *,
     provider_factory: Callable[[], PdfProvider] = get_pdf_provider,
 ) -> list[Block]:
     """Extract stable blocks through the configured PDF provider."""
+    budget = budget or AttachmentBudget()
     try:
         provider = provider_factory()
         document = provider.open(path)
@@ -118,22 +129,37 @@ def parse_pdf(
             blocks.append(Block("image", "", meta=meta))
 
         try:
-            attachments = document.attachments()
+            for index, attachment in enumerate(document.iter_attachments()):
+                if not budget.reserve_node():
+                    blocks.append(attachment_count_marker(context, source_id))
+                    break
+                if ((budget.remaining <= 0 and attachment.declared_size != 0)
+                        or (attachment.declared_size is not None
+                            and attachment.declared_size > min(MAX_ATTACHMENT_PAYLOAD, budget.remaining))):
+                    blocks.append(attachment_size_marker(attachment.name, context, source_id))
+                    continue
+                try:
+                    payload = attachment.read_bytes()
+                except PdfParseError:
+                    blocks.append(attachment_parse_marker(attachment.name, context, source_id))
+                    continue
+                blocks.extend(
+                    process_embedded(
+                        payload,
+                        attachment.name,
+                        "",
+                        "",
+                        attachments_dir,
+                        index,
+                        depth=depth + 1,
+                        budget=budget,
+                        context=context,
+                        parent_source_id=source_id,
+                        _node_reserved=True,
+                    )
+                )
         except PdfParseError as exc:
             raise _parse_error(path, "read attachments", exc) from exc
-        for index, attachment in enumerate(attachments):
-            blocks.extend(
-                process_embedded(
-                    attachment.data,
-                    attachment.name,
-                    "",
-                    "",
-                    attachments_dir,
-                    index,
-                    depth=depth + 1,
-                    budget=budget,
-                )
-            )
         return blocks
     finally:
         document.close()

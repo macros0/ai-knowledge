@@ -69,9 +69,9 @@ export default async function OkfFilePage({ params }) {
       <h1>{decodedPath.join("/")}</h1>
       <aside className="source-evidence-summary">
         <strong>{t("sourceLocation.title")}</strong>
-        {(sourceLocation?.status === "exact" || sourceLocation?.status === "recovered") && sourceLocation.spans?.length ? (
+        {(["exact", "recovered", "inferred"].includes(sourceLocation?.status)) && sourceLocation.spans?.length ? (
           <>
-            <span>{t(sourceLocation.status === "recovered" ? "sourceLocation.recovered" : "sourceLocation.exact", { index: (sourceLocation.chunk_index ?? chunkIndex ?? 0) + 1 })}</span>
+            <span>{t(`sourceLocation.${sourceLocation.status}`, { index: (sourceLocation.chunk_index ?? chunkIndex ?? 0) + 1 })}</span>
             <blockquote>{sourceLocation.spans[0].quote}</blockquote>
           </>
         ) : sourceLocation?.status === "chunk" && sourceLocation.chunk_index != null ? (

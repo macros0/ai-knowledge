@@ -10,6 +10,10 @@ version inventory for a particular build.
 | pypdf | Python distribution metadata (currently `pypdf 6.18.1`) | BSD-3-Clause | Preserve the upstream BSD-3-Clause license and copyright notices: https://github.com/py-pdf/pypdf/blob/main/LICENSE |
 | pypdfium2 | Python distribution metadata (currently `pypdfium2 5.13.0`) | Apache-2.0 OR BSD-3-Clause | The distributor may choose either offered license; preserve the selected license text and upstream notices: https://github.com/pypdfium2-team/pypdfium2/tree/main/LICENSES |
 | PDFium binary bundled by pypdfium2 | The `pypdfium2` wheel's platform binary | BSD-style, plus notices for included PDFium dependencies | Preserve the PDFium `LICENSE` and all notices referenced by pypdfium2's `BUILD_LICENSES/pdfium-binaries.txt`: https://github.com/pypdfium2-team/pypdfium2/blob/main/BUILD_LICENSES/pdfium-binaries.txt |
+| msg_parser | Python distribution metadata (1.2.x) | BSD-2-Clause | Preserve the upstream BSD-2-Clause license and copyright notice: https://github.com/vikramarsid/msg_parser/blob/master/LICENSE |
+| compressed-rtf | Python distribution metadata (1.0.6+) | MIT | Preserve the upstream MIT license and copyright notice: https://github.com/delimitry/compressed_rtf/blob/master/LICENSE |
+| rtf-simple-sent.msg test fixture | outlook-message-parser test resources | Apache-2.0 | Source: https://github.com/bbottema/outlook-message-parser/tree/master/src/test/resources/test-messages ; preserve Apache-2.0 notice. SHA-256: 8adf5c3c77b46d9fa5910c3bb6ba54930160c4a9292348669f11c4d17cac8421 |
+| nested-rtf.msg test fixture | outlook-message-parser test resources | Apache-2.0 | Source: https://github.com/bbottema/outlook-message-parser/tree/master/src/test/resources/test-messages ; preserve Apache-2.0 notice. SHA-256: ee87b46667a0f262b3f119967a5854610bd197508067c51b53fb7ff0abfb8962 |
 
 Before distributing a new image, regenerate the SBOM and compare the pypdf and
 pypdfium2 versions above. If the pypdfium2 wheel changes, obtain and include the

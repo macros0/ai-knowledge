@@ -7,10 +7,12 @@ staging-каталог (data/staging/{doc_id}/) с manifest.json. При сбо�
 атомарный перенос, затем концепты индексируются в Qdrant.
 """
 import hashlib
+import json
 import logging
 import os
 import re
 import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -22,10 +24,9 @@ from typing import BinaryIO
 
 from app.config import get_settings
 from app.db.session import session_scope
-from app.services.attachment_store import replace_attachments
+from app.db.models import DocumentChunk, DocumentGeneration, DocumentGenerationState
 from app.services.chunk_store import replace_chunks
-from app.services.concept_store import replace_concepts
-from app.services.dev_detector import attach_development, detect
+from app.services.dev_detector import detect
 from app.services.development_registry import get_development_registry
 from app.services.embedder import Embedder
 from app import error_codes as codes
@@ -37,12 +38,22 @@ from app.services.errors import (
     NotFoundError,
 )
 from app.services import gen_quality
+from app.services.generation_files import generation_paths, merge_legacy_backfill_files, prepare_generation_paths
+from app.services.generation_artifacts import artifact_manifest, file_digest
+from app.services.generation_publication import _merge_tags, publish_prepared_document
+from app.services.generation_store import (
+    lock_document_write, mark_generation_ready, prepare_generation_attempt,
+)
 from app.services.json_atomic import write_json_atomic
 from app.services.language import detect_language
 from app.services.llm_client import LLMTruncationError, is_fatal_error
 from app.services.okf_generator import ATTACHMENT_TAG, OKFGenerator
 from app.services import problem_codes
 from app.services.registry import get_registry
+from app.services.source_chunking import attachment_shares_by_source, chunk_blocks_by_source, indexable_blocks
+from app.services.source_store import replace_sources
+from app.services.parser_supervisor import parse_document_supervised
+from app.services.parse_diagnostics import source_extraction_status, summarize_problems
 from app.services.staging import StagingStore
 from app.services.storage import (
     StorageFullError,
@@ -59,6 +70,8 @@ from docparser import (
     markdown_attachment_spans,
     parse_document,
     portable_name,
+    ParseContext,
+    PARSER_VERSION,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,8 +80,37 @@ logger = logging.getLogger(__name__)
 # на картинки) короче — считаем документ без текстового слоя (скан без OCR).
 MIN_TEXT_LAYER_CHARS = 200
 
+
+def validate_resume_parser_version(manifest: dict, parser_version: str) -> None:
+    """Reject only versioned checkpoints created by a different parser."""
+    checkpoint_version = manifest.get("parser_version")
+    if checkpoint_version is not None and checkpoint_version != parser_version:
+        raise DomainError(
+            "Версия извлечения изменилась; запустите полную перегенерацию",
+            code=codes.PARSER_VERSION_MISMATCH,
+        )
+
+
+def validate_resume_source_file_hash(manifest: dict, source_file_hash: str) -> None:
+    """Reject a versioned checkpoint when its root file bytes changed."""
+    checkpoint_hash = manifest.get("source_file_hash")
+    if checkpoint_hash is not None and checkpoint_hash != source_file_hash:
+        raise DomainError(
+            "Изменился исходный файл; запустите полную перегенерацию",
+            code=codes.PARTIAL_REGENERATION_UNAVAILABLE,
+        )
+
+
+def _sha256_file(filepath: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(filepath).open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 # Markdown-картинки/вложения: ![alt](path) — не текст.
-_IMAGE_LINK_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_IMAGE_LINK_RE = re.compile(r"(?<!\\)!\[(?:\\.|[^\\\]])*\]\((?:\\.|[^\\)])*\)")
 
 
 def _generation_problem(chunks_data: dict) -> str | None:
@@ -172,10 +214,10 @@ class Pipeline:
     def regenerate(self, doc_id: str) -> None:
         """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
 
-        Удаляет производные данные (векторы, OKF-бандл, staging) и запускает
-        полный пайплайн: parse -> чанки -> LLM (с текущими промптами) -> индекс.
-        Статус переводится в "processing" синхронно, чтобы клиент сразу видел
-        активную обработку и включил поллинг прогресса.
+        Сбрасывает staging и запускает новую версию. Опубликованные данные
+        остаются доступны до успешной финализации новой попытки.
+        После допуска в очередь статус меняется синхронно. Отклонённый запуск
+        не удаляет checkpoints и не меняет состояние документа.
         """
         doc = self.registry.get(doc_id)
         if not doc:
@@ -187,32 +229,7 @@ class Pipeline:
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
 
-        try:
-            self.vector_store.delete_document(doc_id)
-        except Exception as exc:
-            logger.warning("Не удалось удалить векторы документа %s: %s", doc_id, exc)
-        target = self.settings.okf_dir / doc_id
-        if target.exists():
-            if target.is_dir():
-                shutil.rmtree(target, ignore_errors=True)
-            else:
-                target.unlink(missing_ok=True)
-        # Вложения (бинарники) парсер пишет в uploads/<doc_id>/attachments/ — при
-        # регенерации чистим их, иначе stale-файлы прежнего парсинга остаются.
-        att_dir = self.settings.uploads_dir / doc_id / "attachments"
-        if att_dir.is_dir():
-            shutil.rmtree(att_dir, ignore_errors=True)
-        StagingStore(doc_id).remove()
-        with session_scope() as s:
-            replace_chunks(s, doc_id, [])
-            replace_concepts(s, doc_id, [])
-        # Сброс кэша классификации таблиц: пользователь явно хочет пересчитать
-        # концепты с нуля (возможно, после правки промпта/логики классификатора).
-        table_cache = self.settings.cache_dir / "table_classify"
-        if table_cache.is_dir():
-            shutil.rmtree(table_cache, ignore_errors=True)
-        self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
-        self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False)
+        self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False, reset_staging=True)
 
     def wait_for(self, doc_id: str, timeout: float = 3600) -> dict:
         """Блокирующее ожидание терминального статуса документа.
@@ -239,7 +256,10 @@ class Pipeline:
                 return doc or {}
             time.sleep(2)
 
-    def _start(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
+    def _start(
+        self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
+        *, reset_staging: bool = False,
+    ) -> None:
         with self._start_lock:
             self._ensure_not_running(doc_id)
             # Keep lightweight Pipeline.__new__ test doubles compatible with the
@@ -257,8 +277,16 @@ class Pipeline:
             previous_state = None
             try:
                 doc = self.registry.get(doc_id)
-                if doc:
-                    previous_state = {key: doc.get(key) for key in ("status", "error", "error_code")}
+                if doc is None or doc.get("deleted_at") is not None:
+                    raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
+                previous_state = {key: doc.get(key) for key in ("status", "error", "error_code")}
+                if reset_staging:
+                    # Admission and destructive checkpoint reset share the same
+                    # lock: a second regenerate must not erase a running worker.
+                    StagingStore(doc_id).remove()
+                    table_cache = self.settings.cache_dir / "table_classify"
+                    if table_cache.is_dir():
+                        shutil.rmtree(table_cache, ignore_errors=True)
                 # Publish admission before submit: a busy executor may not start
                 # this document for minutes, and resume must stop showing paused.
                 self.registry.update(doc_id, status="queued", error=None, error_code=None)
@@ -286,9 +314,42 @@ class Pipeline:
             else:
                 self.registry.update(doc_id, status="error", error=str(exc), error_code=processing_error_code(exc))
         finally:
+            aborted = self._abort_events.get(doc_id)
+            if aborted and aborted.is_set():
+                try:
+                    doc = self.registry.get(doc_id)
+                    if doc and doc.get("status") in {"queued", "processing", "splitting", "indexing"}:
+                        self.registry.update(doc_id, status="paused", error=None, error_code=None)
+                except Exception:
+                    logger.warning("[%s] Не удалось сохранить остановку обработки", doc_id, exc_info=True)
+            self._cleanup_document_generations(doc_id)
             self._abort_events.pop(doc_id, None)
             self._threads.pop(doc_id, None)
             self._pipeline_slots.release()
+
+    def _cleanup_document_generations(self, doc_id: str) -> None:
+        from app.services.generation_cleanup import cleanup_document_generations
+
+        try:
+            cleanup_document_generations(self.settings, self.vector_store, doc_id)
+        except Exception:
+            # Cleanup cannot change the already committed publication/status.
+            # Generation rows remain in the DB for the periodic retry.
+            logger.warning("[%s] Очистка старых версий будет повторена", doc_id, exc_info=True)
+
+    def cleanup_inactive_generations(self) -> None:
+        from sqlalchemy import or_, select
+
+        with session_scope() as session:
+            doc_ids = list(session.scalars(select(DocumentGeneration.doc_id).where(or_(
+                DocumentGeneration.phase.in_(["retired", "abandoned"]),
+                DocumentGeneration.legacy_cleanup_pending.is_(True),
+            )).distinct()))
+        with self._start_lock:
+            running = {doc_id for doc_id, task in self._threads.items() if not task.done()}
+        for doc_id in doc_ids:
+            if doc_id not in running:
+                self._cleanup_document_generations(doc_id)
 
     def _record_storage_full(self, doc_id: str, *, processed_chunks: int | None = None) -> None:
         """Ставит pause и сохраняет его после освобождения места в БД.
@@ -343,7 +404,12 @@ class Pipeline:
         threading.Thread(target=retry, name=f"storage-status-{doc_id}", daemon=True).start()
 
     def _stop_task(self, doc_id: str) -> None:
-        """Signal a task and wait briefly without blocking deletion indefinitely."""
+        """Signal cancellation, but never authorize deletion while work is alive.
+
+        Caller holds _start_lock through the subsequent delete/trash mutation.
+        On timeout ownership and the abort signal remain for the worker; a later
+        retry can delete once it has actually finished.
+        """
         event = self._abort_events.get(doc_id)
         if event:
             event.set()
@@ -360,84 +426,210 @@ class Pipeline:
             try:
                 task.result(timeout=2.0)
             except FutureTimeoutError:
-                logger.warning("Пайплайн %s не завершился за 2 секунды", doc_id)
+                if not task.done():
+                    raise ConflictError(
+                        "Обработка останавливается. Повторите удаление после её завершения",
+                        code=codes.PROCESSING_STOPPING,
+                    ) from None
             except Exception:
                 pass
 
     def _process(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
         self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
+        source_file_hash = _sha256_file(filepath)
+        staging = StagingStore(doc_id)
+        with session_scope() as session:
+            generation = prepare_generation_attempt(session, doc_id, resume=resume)
+            generation_id, phase = generation.id, generation.phase
+            if phase == "preparing":
+                paths = prepare_generation_paths(session, self.settings, doc_id, generation_id)
+            else:
+                paths = generation_paths(self.settings, doc_id, generation_id)
+        if phase == "ready":
+            checkpoint = staging.load() or {}
+            validate_resume_parser_version(
+                checkpoint, ParseContext(filename, mail_enabled=self.settings.mail_import_enabled).parser_version,
+            )
+            validate_resume_source_file_hash(checkpoint, source_file_hash)
+            self._publish_prepared_generation(doc_id, generation_id, staging)
+            return
         # Вложения (бинарники) пишутся парсером в uploads/<doc_id>/attachments/ —
         # рядом с оригиналом, а не в будущий бандл (Этап 2b: бандл — производная
         # проекция, вложения — байты-источники в FS, описанные в okf_attachments).
         doc_root = self.settings.uploads_dir / doc_id
-        attachments_dir = doc_root / "attachments"
-        blocks = parse_document(filepath, filename, attachments_dir=attachments_dir)
-        markdown, attach_spans = markdown_attachment_spans(blocks)
-        attachments = _collect_attachments(blocks, doc_root)
-        # Only skip generation when there is no text at all. The diagnostic
-        # threshold of 200 chars is not safe here: short text can be meaningful.
-        has_text = bool(_IMAGE_LINK_RE.sub("", markdown).strip())
-
-        # Автоопределение номера разработки: только на «свежем» проходе и если
-        # regex по имени файла (на этапе upload) ничего не нашёл. Non-fatal —
-        # ошибка LLM/справочника не прерывает обработку документа.
-        if has_text and not resume and self.settings.dev_detection_enabled:
-            doc = self.registry.get(doc_id)
-            if doc and not doc.get("development_id"):
-                detection = detect(markdown, filename, doc_id)
-                if detection.confidence is not None:
-                    attach_development(doc_id, detection)
-
-        # Дедупликация (Этап 4.2): content_hash + MinHash/LSH-бакеты. Non-fatal —
-        # сбой сигнатуры не прерывает обработку, документ просто не участвует в
-        # поиске дублей до следующего реиндекса.
-        if self.settings.dedup_enabled:
-            try:
-                from app.services.deduplication import index_document
-
-                index_document(doc_id, markdown)
-            except Exception:
-                logger.warning(
-                    "[%s] Индексация сигнатуры дедупликации не удалась", doc_id, exc_info=True
+        attachments_dir = paths.attachments
+        # This scope owns a new private directory, including parser errors and
+        # rejected checkpoints. A successful publish moves it out of this scope.
+        with tempfile.TemporaryDirectory(prefix=".attachments-attempt-", dir=paths.uploads_root) as attempt:
+            parse_attachments_dir = Path(attempt)
+            parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled)
+            if self.settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
+                supervised = parse_document_supervised(
+                    filepath,
+                    filename,
+                    attachments_dir=parse_attachments_dir,
+                    timeout_seconds=self.settings.parser_timeout_seconds,
+                    max_memory_mb=self.settings.parser_max_memory_mb,
+                    max_concurrent=self.settings.parser_max_concurrent,
+                    mail_enabled=self.settings.mail_import_enabled,
                 )
+                blocks, parse_context.sources = supervised
+                parse_warnings = list(supervised.warnings)
+                parser_version = supervised.parser_version
+            else:
+                blocks = parse_document(
+                    filepath,
+                    filename,
+                    attachments_dir=parse_attachments_dir,
+                    context=parse_context,
+                )
+                parse_warnings = list(parse_context.warnings)
+                parser_version = parse_context.parser_version
+            markdown, attach_spans = markdown_attachment_spans(blocks)
+            # Keep the existing canonical markdown contract for ordinary files and
+            # test/legacy parser adapters. Rebuild when disabled mail or administrative
+            # attachment markers must be removed from generation and search input.
+            filtered_blocks = indexable_blocks(blocks)
+            indexable_markdown = (
+                markdown if len(filtered_blocks) == len(blocks)
+                else blocks_to_markdown(filtered_blocks)
+            )
+            # Only skip generation when there is no text at all. The diagnostic
+            # threshold of 200 chars is not safe here: short text can be meaningful.
+            text_source_ids = {
+                (block.meta or {}).get("source_id") or "root"
+                for block in filtered_blocks
+                if not (block.type == "heading" and (block.meta or {}).get("mail"))
+                and _IMAGE_LINK_RE.sub("", blocks_to_markdown([block])).strip()
+            }
+            # Keep mail subjects in canonical text for display/search and stable
+            # evidence offsets, but metadata alone must never trigger generation.
+            has_text = bool(text_source_ids) if blocks else bool(_IMAGE_LINK_RE.sub("", indexable_markdown).strip())
 
-        chunks = self.okf_generator.chunk_text(markdown)
-        total = len(chunks)
-        # Доля символов вложения в каждом чанке (программный тег «attachment»,
-        # post-LLM; [] когда вложений нет — быстрый путь без накладных расходов).
-        attachment_shares: list[float] = []
-        if self.settings.okf_attachment_tag_enabled and attach_spans:
-            attachment_shares = self.okf_generator.attachment_shares(markdown, attach_spans)
-        staging = StagingStore(doc_id)
-        # Сброс residue телеметрии: события от dev-детекции и пр. не должны
-        # приписываться первому чанку.
-        gen_quality.drain()
-        if resume and staging.exists():
-            manifest = staging.load()
-            if staging.partial_chunks:
-                # Never mix previous concept checkpoints with a new chunk layout.
-                # Changes to parser/chunk settings require full regeneration.
-                if total != manifest.get("total_chunks") or any(
-                    not (staging.dir / f"chunk_{i:02d}.md").is_file()
-                    or (staging.dir / f"chunk_{i:02d}.md").read_text(encoding="utf-8") != chunk
-                    for i, chunk in enumerate(chunks)
+            # Автоопределение номера разработки: только на «свежем» проходе и если
+            # regex по имени файла (на этапе upload) ничего не нашёл. Non-fatal —
+            # ошибка LLM/справочника не прерывает обработку документа.
+            effects_path = paths.uploads_root / "parse-effects.json"
+            parse_effects = json.loads(effects_path.read_text(encoding="utf-8")) if resume and effects_path.is_file() else {}
+            if has_text and not resume and self.settings.dev_detection_enabled:
+                doc = self.registry.get(doc_id)
+                if doc and not doc.get("development_id"):
+                    detection = detect(markdown, filename, doc_id)
+                    if detection.confidence is not None:
+                        parse_effects["development"] = {
+                            "development_confidence": detection.confidence,
+                            "development_suggestion": detection.suggestion,
+                            **({"development_id": detection.development_id} if detection.development_id is not None else {}),
+                        }
+                        parse_effects["development_base"] = {
+                            key: doc.get(key) for key in (
+                                "development_id", "development_confirmed_by",
+                                "development_confidence", "development_suggestion",
+                            )
+                        }
+
+            # Дедупликация (Этап 4.2): content_hash + MinHash/LSH-бакеты. Non-fatal —
+            # сбой сигнатуры не прерывает обработку, документ просто не участвует в
+            # поиске дублей до следующего реиндекса.
+            if self.settings.dedup_enabled:
+                try:
+                    from app.services.deduplication import prepare_document_signature
+                    from app.services.mail_identity import mail_fingerprint_from_parse
+
+                    parse_effects["signature"] = prepare_document_signature(
+                        markdown,
+                        mail_fingerprint_from_parse(parse_context.sources, blocks, parse_attachments_dir),
+                    )
+                except Exception:
+                    logger.warning(
+                        "[%s] Индексация сигнатуры дедупликации не удалась", doc_id, exc_info=True
+                    )
+            write_json_atomic(effects_path, parse_effects)
+
+            source_chunks = chunk_blocks_by_source(blocks, self.okf_generator)
+            # Preview/test adapters can supply canonical markdown independently of
+            # parser blocks. Such legacy callers retain the old root-only contract.
+            if not source_chunks and indexable_markdown:
+                source_chunks = [
+                    {"source_id": "root", "content": chunk}
+                    for chunk in self.okf_generator.chunk_text(indexable_markdown)
+                    if chunk
+                ]
+            # Source offsets and their SHA-256 are persisted against staging text.
+            # Canonicalize here, before both LLM evidence resolution and file write:
+            # otherwise MSG bodies with CRLF get a span hash for one string and a
+            # DocumentChunk hash for a different LF-normalized string on Windows.
+            chunks = [_normalize_newlines(item["content"]) for item in source_chunks]
+            chunk_source_ids = [item["source_id"] for item in source_chunks]
+            mail_source_ids = {
+                node.source_id
+                for node in parse_context.sources
+                if node.kind == "mail" or bool((node.metadata or {}).get("mail"))
+            }
+            total = len(chunks)
+            # Доля символов вложения в каждом чанке (программный тег «attachment»,
+            # post-LLM; [] когда вложений нет — быстрый путь без накладных расходов).
+            attachment_shares: list[float] = []
+            if self.settings.okf_attachment_tag_enabled:
+                attachment_shares = attachment_shares_by_source(blocks, self.okf_generator)
+                if len(attachment_shares) != total:
+                    # Legacy preview/test adapters supply markdown without blocks.
+                    attachment_shares = self.okf_generator.attachment_shares(markdown, attach_spans)
+            # Сброс residue телеметрии: события от dev-детекции и пр. не должны
+            # приписываться первому чанку.
+            gen_quality.drain()
+            if resume and staging.exists():
+                manifest = staging.load()
+                validate_resume_parser_version(manifest, parser_version)
+                validate_resume_source_file_hash(manifest, source_file_hash)
+                # Never mix a reusable checkpoint with a new chunk layout. An
+                # empty checkpoint has no chunk text or concepts to preserve and
+                # can safely start from this fresh layout.
+                has_reusable_checkpoint = bool(manifest.get("processed_chunks")) or any(
+                    staging.dir.glob("chunk_*.md")
+                )
+                if has_reusable_checkpoint and (
+                    total != manifest.get("total_chunks") or any(
+                        not (staging.dir / f"chunk_{i:02d}.md").is_file()
+                        or not _same_checkpoint_chunk(staging.dir / f"chunk_{i:02d}.md", chunk)
+                        or (
+                            (manifest.get("chunks_data", {}).get(str(i)) or {}).get("source_id", "root")
+                            != chunk_source_ids[i]
+                        )
+                        for i, chunk in enumerate(chunks)
+                    )
                 ):
                     raise DomainError("Изменилась разбивка документа на чанки", code=codes.PARTIAL_REGENERATION_UNAVAILABLE)
-            done = len(manifest.get("processed_chunks", [])) if manifest else 0
-            logger.info("Resume документа %s: продолжено с %d/%d чанков", doc_id, done, total)
-        else:
-            if resume:
-                logger.warning(
-                    "[%s] Возобновление без чекпоинтов: staging отсутствует, генерация начнётся с 0",
-                    doc_id,
+                done = len(manifest.get("processed_chunks", [])) if manifest else 0
+                logger.info("Resume документа %s: продолжено с %d/%d чанков", doc_id, done, total)
+            else:
+                if resume:
+                    logger.warning(
+                        "[%s] Возобновление без чекпоинтов: staging отсутствует, генерация начнётся с 0",
+                        doc_id,
+                    )
+                if staging.exists():
+                    staging.remove()
+                staging.create(
+                    total, global_tags=user_tags, parser_version=parser_version,
+                    source_file_hash=source_file_hash, generation_id=generation_id,
                 )
-            if staging.exists():
-                staging.remove()
-            staging.create(total, global_tags=user_tags)
+            staging.bind_generation(generation_id)
+
+            # A parser attempt remains private until it is known to be compatible
+            # with an existing checkpoint. Publishing earlier could delete accepted
+            # attachment bytes when resume is rejected. Rebase the parser's absolute
+            # paths after the directory move so DB rows point at durable files.
+            if parse_attachments_dir != attachments_dir:
+                _publish_attachment_attempt(parse_attachments_dir, attachments_dir)
+                _rebase_attachment_paths(blocks, parse_attachments_dir, attachments_dir)
+        source_rows = _source_rows(parse_context.sources, blocks, doc_root, parser_version=parser_version)
+        attachments = _collect_attachments(blocks, doc_root)
         self.registry.update(doc_id, status="splitting", total_chunks=total, processed_chunks=len(staging.processed_chunks))
 
         for i, chunk in enumerate(chunks):
             staging.save_chunk_text(i, chunk)
+            staging.set_chunk_source(i, chunk_source_ids[i])
 
         max_chunk_retries = max(1, self.settings.llm_chunk_retry_attempts)
         chunk_backoff = self.settings.llm_chunk_retry_backoff_seconds
@@ -461,10 +653,14 @@ class Pipeline:
                     try:
                         gen_quality.drain()
                         self.registry.update(doc_id, current_chunk=i + 1)
-                        concepts = (
-                            self.okf_generator.generate_chunk(chunk, filename, i + 1, total, doc_id=doc_id)
-                            if has_text else []
-                        )
+                        if not has_text or (blocks and chunk_source_ids[i] not in text_source_ids):
+                            concepts = []
+                        elif chunk_source_ids[i] in mail_source_ids:
+                            concepts = self.okf_generator.generate_chunk(
+                                chunk, filename, i + 1, total, doc_id=doc_id, source_is_mail=True,
+                            )
+                        else:
+                            concepts = self.okf_generator.generate_chunk(chunk, filename, i + 1, total, doc_id=doc_id)
                         # Телеметрия деградации этого чанка (salvage JSON,
                         # fallback классификатора) — до любых других вызовов.
                         degradation = gen_quality.drain()
@@ -532,7 +728,17 @@ class Pipeline:
 
         self.registry.update(doc_id, status="indexing")
         try:
-            self._finalize(doc_id, filename, staging, attachments=attachments, global_tags=user_tags)
+            self._finalize(
+                doc_id,
+                filename,
+                staging,
+                attachments=attachments,
+                global_tags=user_tags,
+                source_rows=source_rows,
+                parser_version=parser_version,
+                parse_warnings=parse_warnings,
+                has_text=has_text,
+            )
         except DependencyUnavailableError as exc:
             # Staging не удаляем: чекпоинты всех чанков сохраняются, чтобы
             # повторный resume повторил только финализацию (embed+index),
@@ -563,7 +769,18 @@ class Pipeline:
         staging: StagingStore,
         attachments: list[dict],
         global_tags: list[str],
+        source_rows: list[dict] | None = None,
+        parser_version: str | None = None,
+        parse_warnings: list[dict] | None = None,
+        has_text: bool | None = None,
     ) -> None:
+        checkpoint = staging.load() or {}
+        generation_id = checkpoint.get("generation_id")
+        with session_scope() as session:
+            if generation_id is None:
+                generation_id = prepare_generation_attempt(session, doc_id, resume=True).id
+            paths = prepare_generation_paths(session, self.settings, doc_id, generation_id)
+        staging.bind_generation(generation_id)
         # Денормализованная проекция разработки (номер/название/модуль) в payload
         # Qdrant `dev_tags` — отдельное поле, не смешивается с `tags`.
         dev_tags: list[str] = []
@@ -596,6 +813,10 @@ class Pipeline:
                     provenance_of_chunk[int(idx_str)] = prov
                 except (TypeError, ValueError):
                     pass
+        concept_source_ids = [
+            (chunks_data.get(str(chunk_of_slug.get(slug))) or {}).get("source_id")
+            for slug in slugs
+        ]
 
         # Retained checkpoints can outlive edits to document tags. Reconcile
         # each checkpoint's original user tags, preserving generated tags and
@@ -609,7 +830,7 @@ class Pipeline:
         chunks_meta: list[dict] = []
         chunk_rows: list[dict] = []
         chunk_files: list[tuple[Path, int, str]] = []
-        for chunk_file in sorted(staging.dir.glob("chunk_*.md")):
+        for chunk_file in sorted(staging.dir.glob("chunk_*.md"), key=lambda path: int(path.stem.split("_")[-1])):
             idx = int(chunk_file.stem.split("_")[-1])
             info = chunks_data.get(str(idx)) or {}
             text = chunk_file.read_text(encoding="utf-8")
@@ -628,6 +849,7 @@ class Pipeline:
                     "content": text,
                     "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
                     "char_count": len(text),
+                    "source_id": info.get("source_id"),
                 }
             )
 
@@ -635,13 +857,13 @@ class Pipeline:
         # okf_write_bundles=false — okf_docs строятся в памяти (БД — canonical),
         # файлы .md не пишутся. При true (dual-write) — как раньше: tmp + atomic move.
         if self.settings.okf_write_bundles:
-            target = self.settings.okf_dir / doc_id
-            tmp_dir = self.settings.okf_dir / f".tmp-{doc_id}"
+            target = paths.bundle
+            tmp_dir = paths.bundle.parent / f".tmp-{generation_id}"
             if tmp_dir.exists():
                 shutil.rmtree(tmp_dir, ignore_errors=True)
             tmp_dir.mkdir(parents=True, exist_ok=True)
 
-            attach_src = self.settings.uploads_dir / doc_id / "attachments"
+            attach_src = paths.attachments
             if attach_src.is_dir():
                 shutil.copytree(attach_src, tmp_dir / "attachments")
 
@@ -660,6 +882,8 @@ class Pipeline:
                 bundle_root=tmp_dir,
                 slugs=slugs,
                 chunk_of_slug=chunk_of_slug,
+                source_ids=concept_source_ids,
+                sources=source_rows or [],
             )
             _atomic_move(tmp_dir, target)
             for doc in okf_docs:
@@ -673,33 +897,22 @@ class Pipeline:
                 global_tags=global_tags,
                 slugs=slugs,
                 chunk_of_slug=chunk_of_slug,
+                source_ids=concept_source_ids,
             )
 
         # Провенанс генерации (Этап 2b): per-chunk generated_at/model_id/prompt
         # из staging chunks_data — в metadata концептов, откуда replace_concepts
         # пишет их в okf_concepts. Не путать с created_at (время SQL INSERT).
+        chunk_rows_by_index = {row["chunk_index"]: row for row in chunk_rows}
         for doc in okf_docs:
             ci = doc.metadata.get("chunk_index")
             prov = provenance_of_chunk.get(ci) if ci is not None else None
+            if ci in chunk_rows_by_index:
+                doc.metadata["source_id"] = chunk_rows_by_index[ci].get("source_id")
             if prov:
                 doc.metadata["generated_at"] = prov.get("generated_at")
                 doc.metadata["model_id"] = prov.get("model_id")
                 doc.metadata["prompt_version"] = prov.get("prompt_version")
-
-        # Единая транзакция финализации БД: чанки + концепты (+prov) + вложения.
-        # Commit — на выходе из session_scope; Qdrant вызывается строго ПОСЛЕ
-        # успешного commit (он пересобираемая проекция БД). Падение Qdrant после
-        # commit оставляет документ paused — resume идемпотентно повторяет
-        # replace_* + upsert векторов.
-        with session_scope() as session:
-            replace_chunks(session, doc_id, chunk_rows)
-            replace_concepts(session, doc_id, okf_docs)
-            replace_attachments(
-                session,
-                doc_id,
-                attachments,
-                storage_root=self.settings.uploads_dir / doc_id,
-            )
 
         # Problem-коды (инцидент 03.09.2026: done ≠ «документ полон»).
         # Приоритет: no_text_layer/no_concepts (0 концептов) >
@@ -709,9 +922,12 @@ class Pipeline:
         # документ может быть неполон или неищем.
         problem: str | None = None
         if not okf_docs:
+            lacks_text = not has_text if has_text is not None else (
+                sum(len(_IMAGE_LINK_RE.sub("", row["content"]).strip()) for row in chunk_rows) < MIN_TEXT_LAYER_CHARS
+            )
             problem = (
                 problem_codes.NO_TEXT_LAYER
-                if self._chunks_lack_text(doc_id)
+                if lacks_text
                 else problem_codes.NO_CONCEPTS
             )
             logger.warning(
@@ -753,6 +969,7 @@ class Pipeline:
             # Если Qdrant отвалится между upsert и cleanup, новые точки уже на месте.
             concept_point_ids = self.vector_store.index_concepts(
                 doc_id, okf_docs, vectors, dev_tags=dev_tags, source_locale=effective_locale,
+                generation_id=generation_id,
             )
             keep_point_ids = set(concept_point_ids)
 
@@ -774,6 +991,8 @@ class Pipeline:
                     doc_id, filename, chunk_texts, global_tags, chunk_vectors,
                     section_titles=chunk_section_titles, dev_tags=dev_tags,
                     source_locale=effective_locale,
+                    source_ids=[row.get("source_id") for row in chunk_rows],
+                    generation_id=generation_id,
                 )
                 keep_point_ids |= chunk_point_ids
                 logger.info("[%s] Проиндексировано %d чанков", doc_id, len(chunk_texts))
@@ -784,27 +1003,52 @@ class Pipeline:
         # Удаляются только точки doc_id, чьи point_id не вошли в новый набор.
         # Для документа без концептов и чанков удаляет ВСЕ старые точки —
         # регенерация в пустоту не оставляет устаревших векторов в поиске.
-        self.vector_store.delete_orphaned_points(doc_id, keep_point_ids)
+        self.vector_store.delete_orphaned_points(doc_id, keep_point_ids, generation_id=generation_id)
 
         total_chunks = manifest.get("total_chunks", 0) if manifest else 0
-        self.registry.update(
-            doc_id,
+        problem = summarize_problems(parse_warnings, problem, None, None)
+        document_fields = dict(
             status="done",
             okf_concept_count=len(okf_docs),
             error=None,
             error_code=None,
             problem=problem,
+            parser_version=parser_version,
+            parse_warnings=parse_warnings or [],
             **locale_fields,
         )
-        # Keep incomplete generation checkpoints for selective recovery, even
-        # after successful indexing. Clean runs release them after the DB update.
-        if not staging.partial_chunks:
-            staging.remove()
+        prepared = {
+            "doc_id": doc_id, "generation_id": generation_id,
+            "concepts": [item.model_dump(mode="json") for item in okf_docs],
+            "chunks": chunk_rows, "sources": source_rows, "attachments": attachments,
+            "document_fields": document_fields,
+            "index_metadata": {"global_tags": global_tags, "source_locale": effective_locale, "dev_tags": dev_tags},
+            "parse_effects": json.loads((paths.uploads_root / "parse-effects.json").read_text(encoding="utf-8"))
+            if (paths.uploads_root / "parse-effects.json").is_file() else {},
+            "artifacts": artifact_manifest(self.settings, doc_id, generation_id),
+            "point_ids": sorted(keep_point_ids),
+        }
+        publication_path = paths.uploads_root / "publication.json"
+        write_json_atomic(publication_path, prepared)
+        with session_scope() as session:
+            mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication_path))
+        self._publish_prepared_generation(doc_id, generation_id, staging)
         logger.info(
             "Документ %s обработан: %d OKF-концептов, %d чанков%s",
             filename, len(okf_docs), total_chunks,
             f" (problem={problem})" if problem else "",
         )
+
+    def _publish_prepared_generation(self, doc_id: str, generation_id: str, staging: StagingStore) -> None:
+        if not publish_prepared_document(self.settings, self.vector_store, doc_id, generation_id):
+            return
+        # Keep incomplete generation checkpoints for selective recovery, even
+        # after successful indexing. Clean runs release them after the DB update.
+        try:
+            if not staging.partial_chunks:
+                staging.remove()
+        except Exception:
+            logger.warning("[%s] Опубликовано; очистка staging будет повторена позже", doc_id, exc_info=True)
 
     @staticmethod
     def _chunks_lack_text(doc_id: str) -> bool:
@@ -834,27 +1078,29 @@ class Pipeline:
         Delete Points) и `deleted_at` в БД. Векторы/файлы/концепты остаются на
         месте — восстановление не требует пере-эмбеддинга.
         """
-        self._stop_task(doc_id)
-        try:
-            self.vector_store.set_document_deleted(doc_id, True)
-        except Exception as exc:
-            logger.warning(
-                "Не удалось пометить документ %s удалённым в Qdrant: %s", doc_id, exc
-            )
-        self.registry.soft_delete(doc_id, deleted_by)
+        with self._start_lock:
+            self._stop_task(doc_id)
+            try:
+                self.vector_store.set_document_deleted(doc_id, True)
+            except Exception as exc:
+                logger.warning(
+                    "Не удалось пометить документ %s удалённым в Qdrant: %s", doc_id, exc
+                )
+            self.registry.soft_delete(doc_id, deleted_by)
 
     def restore(self, doc_id: str) -> None:
         """Восстановление из корзины: снимает флаг deleted в Qdrant и БД.
 
         Точки физически не удалялись — эмбеддинги не пересчитываются.
         """
-        try:
-            self.vector_store.set_document_deleted(doc_id, False)
-        except Exception as exc:
-            logger.warning(
-                "Не удалось снять флаг удаления документа %s в Qdrant: %s", doc_id, exc
-            )
-        self.registry.restore(doc_id)
+        with self._start_lock:
+            try:
+                self.vector_store.set_document_deleted(doc_id, False)
+            except Exception as exc:
+                logger.warning(
+                    "Не удалось снять флаг удаления документа %s в Qdrant: %s", doc_id, exc
+                )
+            self.registry.restore(doc_id)
 
     def _physical_cleanup(self, doc_id: str) -> None:
         """Удаляет точки Qdrant, файлы и staging (без строки БД)."""
@@ -874,9 +1120,10 @@ class Pipeline:
             f.unlink(missing_ok=True)
 
     def remove(self, doc_id: str) -> None:
-        self._stop_task(doc_id)
-        self._physical_cleanup(doc_id)
-        self.registry.delete(doc_id)
+        with self._start_lock:
+            self._stop_task(doc_id)
+            self.registry.delete(doc_id)
+            self._physical_cleanup(doc_id)
 
     def remove_if_deleted(self, doc_id: str) -> bool:
         """Физическое удаление с precondition «документ в корзине» (для purge).
@@ -887,11 +1134,12 @@ class Pipeline:
         отсекает хиты с doc_id, отсутствующим в БД (services/search_filter.py),
         поэтому между удалением строки и физической чисткой утекать нечему.
         """
-        self._stop_task(doc_id)
-        if not self.registry.delete_if_deleted(doc_id):
-            return False
-        self._physical_cleanup(doc_id)
-        return True
+        with self._start_lock:
+            self._stop_task(doc_id)
+            if not self.registry.delete_if_deleted(doc_id):
+                return False
+            self._physical_cleanup(doc_id)
+            return True
 
     @contextmanager
     def _chunk_lock(self, doc_id: str):
@@ -933,6 +1181,12 @@ class Pipeline:
         if meta:
             return meta
 
+        with session_scope() as session:
+            state = session.get(DocumentGenerationState, doc_id)
+            if state and state.active_generation_id:
+                # Zero canonical chunks is also a published result. A read
+                # must not replace it by parsing the upload outside publication.
+                return []
         staging = StagingStore(doc_id)
         if staging.exists():
             return _chunks_meta_from_dir(staging.dir, staging.load())
@@ -949,6 +1203,9 @@ class Pipeline:
 
         Этап 2b: чанки — канонически в БД; FS-бандл больше не кэш для этого пути.
         """
+        with session_scope() as session:
+            if not _can_backfill_legacy_chunks(session, doc_id):
+                return
         doc = self.registry.get(doc_id)
         if not doc:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
@@ -957,25 +1214,62 @@ class Pipeline:
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
-        blocks = parse_document(
-            filepath, filename,
-            attachments_dir=self.settings.uploads_dir / doc_id / "attachments",
-        )
-        markdown = blocks_to_markdown(blocks)
-        chunks = self.okf_generator.chunk_text(markdown)
-        rows = [
-            {
-                "chunk_index": i,
-                "section_title": _extract_section_title(chunk),
-                "content": chunk,
-                "content_hash": hashlib.sha256(chunk.encode("utf-8")).hexdigest(),
-                "char_count": len(chunk),
-            }
-            for i, chunk in enumerate(chunks)
-        ]
-        with session_scope() as s:
-            replace_chunks(s, doc_id, rows)
-        logger.info("Backfill чанков %s: %d", doc_id, len(chunks))
+        self.settings.staging_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="chunk-backfill-", dir=self.settings.staging_dir) as temporary:
+            attempt = Path(temporary)
+            parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled)
+            if self.settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
+                supervised = parse_document_supervised(
+                    filepath, filename, attachments_dir=attempt,
+                    timeout_seconds=self.settings.parser_timeout_seconds,
+                    max_memory_mb=self.settings.parser_max_memory_mb,
+                    max_concurrent=self.settings.parser_max_concurrent,
+                    mail_enabled=self.settings.mail_import_enabled,
+                )
+                blocks, parse_context.sources = supervised
+                parse_context.parser_version = supervised.parser_version
+            else:
+                blocks = parse_document(filepath, filename, attachments_dir=attempt, context=parse_context)
+            source_chunks = chunk_blocks_by_source(blocks, self.okf_generator)
+            if not source_chunks:
+                # Preserve the root-only contract of legacy parser adapters.
+                source_chunks = [
+                    {"source_id": "root", "content": chunk}
+                    for chunk in self.okf_generator.chunk_text(blocks_to_markdown(indexable_blocks(blocks)))
+                    if chunk
+                ]
+            rows = [
+                {
+                    "chunk_index": i,
+                    "section_title": _extract_section_title(chunk["content"]),
+                    "content": chunk["content"],
+                    "content_hash": hashlib.sha256(chunk["content"].encode("utf-8")).hexdigest(),
+                    "char_count": len(chunk["content"]),
+                    "source_id": chunk["source_id"],
+                }
+                for i, chunk in enumerate(source_chunks)
+            ]
+            with session_scope() as session:
+                if not lock_document_write(session, doc_id, allow_deleted=False):
+                    return
+                if not _can_backfill_legacy_chunks(session, doc_id):
+                    return
+                destination = merge_legacy_backfill_files(self.settings, doc_id, attempt)
+                _rebase_attachment_paths(blocks, attempt, destination)
+                replace_sources(
+                    session, doc_id,
+                    _source_rows(parse_context.sources, blocks, self.settings.uploads_dir / doc_id,
+                                 parser_version=parse_context.parser_version),
+                )
+                replace_chunks(session, doc_id, rows)
+        logger.info("Backfill чанков %s: %d", doc_id, len(rows))
+
+
+def _can_backfill_legacy_chunks(session, doc_id: str) -> bool:
+    state = session.get(DocumentGenerationState, doc_id)
+    if state and (state.active_generation_id or state.candidate_generation_id):
+        return False
+    return session.query(DocumentChunk.doc_id).filter_by(doc_id=doc_id).first() is None
 
 
 def _chunks_meta_from_db(doc_id: str) -> list[dict]:
@@ -1091,15 +1385,54 @@ def _atomic_move(src: Path, dst: Path) -> None:
         shutil.move(str(src), str(dst))
 
 
-def _merge_tags(base: list[str], extra: list[str]) -> list[str]:
-    seen = set(base)
-    merged = list(base)
-    for tag in extra:
-        tag = tag.strip()
-        if tag and tag not in seen:
-            seen.add(tag)
-            merged.append(tag)
-    return merged
+
+def _publish_attachment_attempt(attempt_dir: Path, destination_dir: Path) -> None:
+    """Replace document attachments only after the supervised parse succeeded."""
+    backup_dir = destination_dir.parent / f".attachments-previous-{uuid.uuid4().hex}"
+    moved_previous = False
+    try:
+        if destination_dir.exists():
+            destination_dir.replace(backup_dir)
+            moved_previous = True
+        attempt_dir.replace(destination_dir)
+    except Exception:
+        if moved_previous and backup_dir.exists() and not destination_dir.exists():
+            backup_dir.replace(destination_dir)
+        raise
+    finally:
+        if destination_dir.exists() and backup_dir.exists():
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+
+def _rebase_attachment_paths(blocks, attempt_dir: Path, destination_dir: Path) -> None:
+    """Point parser block metadata to files after an attempt directory move."""
+    old_root = Path(attempt_dir).resolve()
+    new_root = Path(destination_dir).resolve()
+    for block in blocks:
+        meta = getattr(block, "meta", None)
+        if not isinstance(meta, dict) or not meta.get("saved_path"):
+            continue
+        try:
+            relative = Path(meta["saved_path"]).resolve().relative_to(old_root)
+        except (OSError, TypeError, ValueError):
+            continue
+        meta["saved_path"] = str(new_root / relative)
+
+
+def _same_checkpoint_chunk(path: Path, current: str) -> bool:
+    """Compare Markdown logically, independent of platform newline translation."""
+    try:
+        saved = path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    return _normalize_newlines(saved) == _normalize_newlines(current)
+
+
+def _normalize_newlines(value: str) -> str:
+    # Earlier Windows checkpoints were written with the default text-mode
+    # translation, which expands a source CRLF into CRCRLF. Treat it as the
+    # original single logical line break so those checkpoints remain resumable.
+    return value.replace("\r\r\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
@@ -1129,17 +1462,7 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
                 # каноническому виду, что и остальные: attachments/<файл>.
                 relative = f"attachments/{portable_name(saved)}"
         parsed = bool(meta.get("parsed"))
-        note = meta.get("note", "")
-        if parsed:
-            status = "parsed"
-        elif note and "глубина" in note:
-            status = "skipped_depth"
-        elif note and "лимит" in note:
-            status = "skipped_size"
-        elif saved:
-            status = "saved"
-        else:
-            status = "unsupported"
+        status = meta.get("extraction_status") or ("parsed" if parsed else "unsupported")
         attachments.append(
             {
                 "name": meta.get("name", ""),
@@ -1148,9 +1471,60 @@ def _collect_attachments(blocks, base_dir: Path) -> list[dict]:
                 "saved_path": relative,
                 "is_processable": parsed,
                 "extraction_status": status,
+                "source_id": meta.get("source_id"),
             }
         )
     return attachments
+
+
+def _source_rows(sources, blocks, base_dir: Path, parser_version: str = PARSER_VERSION) -> list[dict]:
+    """Обогащает parser source tree статусом и относительным путём артефакта."""
+    base = Path(base_dir).resolve()
+    saved_by_source: dict[str, str] = {}
+    status_by_source: dict[str, str] = {}
+    for block in blocks:
+        # Extracted page/inline images belong to the source's content. Only
+        # its attachment marker identifies the original downloadable file.
+        if getattr(block, "type", None) != "attachment":
+            continue
+        meta = getattr(block, "meta", {}) or {}
+        source_id = meta.get("source_id")
+        if not source_id:
+            continue
+        if meta.get("extraction_status"):
+            status_by_source[source_id] = meta["extraction_status"]
+        saved = meta.get("saved_path")
+        if saved:
+            try:
+                saved_by_source[source_id] = Path(saved).resolve().relative_to(base).as_posix()
+            except ValueError:
+                saved_by_source[source_id] = f"attachments/{portable_name(saved)}"
+
+    rows: list[dict] = []
+    for node in sources:
+        saved_path = saved_by_source.get(node.source_id)
+        is_root = node.source_id == "root"
+        artifact_kind = "original" if is_root or saved_path else "container_only"
+        rows.append(
+            {
+                "source_id": node.source_id,
+                "parent_source_id": node.parent_source_id,
+                "ordinal": node.ordinal,
+                "kind": node.kind,
+                "display_name": node.display_name,
+                "metadata": node.metadata,
+                "saved_path": saved_path,
+                "extraction_status": source_extraction_status(
+                    node.warnings,
+                    status_by_source.get(node.source_id, "parsed" if is_root else "unsupported"),
+                ),
+                "artifact_kind": artifact_kind,
+                "container_source_id": node.parent_source_id if artifact_kind == "container_only" else None,
+                "parser_version": parser_version,
+                "warnings": node.warnings,
+            }
+        )
+    return rows
 
 
 _INSTANCE: Pipeline | None = None

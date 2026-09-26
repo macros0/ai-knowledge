@@ -36,6 +36,8 @@ next-env.d.ts
 /data/app.db*
 /data/*.bak
 /data/debug/*
+/data/backups/
+/data/.diagnostic-attachments/
 /data/cache/*
 !/data/uploads/.gitkeep
 !/data/okf_bundles/.gitkeep
@@ -81,6 +83,9 @@ tests/tmp/
 tests/artifacts/stage8/*
 !tests/artifacts/stage8/stage8-manifest*.json
 !tests/artifacts/stage8/glossary-stage8-benchmark*.json
+!tests/artifacts/mail/
+tests/artifacts/mail/*
+!tests/artifacts/mail/README.md
 # Full raw-export benchmark output is local acceptance evidence, never a fixture.
 tests/artifacts/bulk-export/
 

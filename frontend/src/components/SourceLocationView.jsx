@@ -37,11 +37,11 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
   if (!targetChunk) return <p className="source-location-note">{t("sourceLocation.unavailable")}</p>;
 
   return (
-    <section className="source-location-view" aria-label={t("sourceLocation.title")}>
+    <section className={`source-location-view${location.status === "inferred" ? " is-inferred" : ""}`} aria-label={t("sourceLocation.title")}>
       <header className="source-location-header">
         <strong>{heading || t("sourceLocation.title")}</strong>
-        {location.status === "exact" || location.status === "recovered" ? (
-          <span>{t(location.status === "recovered" ? "sourceLocation.recovered" : "sourceLocation.exact", { index: location.chunk_index + 1 })}</span>
+        {location.status === "exact" || location.status === "recovered" || location.status === "inferred" ? (
+          <span>{t(`sourceLocation.${location.status}`, { index: location.chunk_index + 1 })}</span>
         ) : (
           <span>{t("sourceLocation.chunkOnly", { index: location.chunk_index + 1 })}</span>
         )}

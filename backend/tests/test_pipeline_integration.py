@@ -17,9 +17,10 @@ from app.config import Settings
 from app.models.schemas import Concept
 from app.services.errors import VectorStoreError
 from app.services.llm_client import LLMTimeoutError
-from app.services.pipeline import Pipeline
+from app.services.pipeline import Pipeline, _collect_attachments
 from app.services.registry import DocumentRegistry
 from app.services.staging import StagingStore
+from app.services.generation_files import active_bundle_path
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -421,17 +422,19 @@ def test_finalize_keeps_staging_when_done_status_cannot_be_persisted(isolated_en
     pipeline.vector_store.ensure_collection = lambda: None
     pipeline.vector_store.delete_orphaned_points = lambda *_args, **_kwargs: None
     monkeypatch.setattr(pipeline, "_chunks_lack_text", lambda *_args: False)
-    original_update = reg.update
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+    from app.db.models import Document
 
-    def full_on_done(doc, **fields):
-        if fields.get("status") == "done":
+    def full_on_done(session, _context, _instances):
+        if any(isinstance(row, Document) and row.id == doc_id and row.status == "done" for row in session.dirty):
             raise OSError(errno.ENOSPC, "No space left on device")
-        return original_update(doc, **fields)
-
-    monkeypatch.setattr(reg, "update", full_on_done)
-
-    with pytest.raises(OSError):
-        pipeline._finalize(doc_id, "test.doc", staging, attachments=[], global_tags=[])
+    event.listen(Session, "before_flush", full_on_done)
+    try:
+        with pytest.raises(OSError):
+            pipeline._finalize(doc_id, "test.doc", staging, attachments=[], global_tags=[])
+    finally:
+        event.remove(Session, "before_flush", full_on_done)
 
     assert staging.exists()
 
@@ -764,13 +767,48 @@ class TestPipelineNoConcepts:
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
-        md_files = list((pipeline.settings.okf_dir / doc_id).glob("*.md"))
+        md_files = list(active_bundle_path(pipeline.settings, doc_id).glob("*.md"))
         assert md_files, "концепт должен быть записан в бандл"
         assert "chunk_index: 0" in md_files[0].read_text(encoding="utf-8")
 
 
 class TestAttachmentTag:
     """Программный тег «attachment»: чанк с долей вложения ≥ порога → все концепты с тегом."""
+
+    def test_equal_chunk_counts_do_not_mix_attachment_coverage(self, isolated_env, monkeypatch):
+        from docparser import markdown_attachment_spans
+        from docparser.blocks import Block
+        from app.db.models import OkfConcept
+        from app.db.session import session_scope
+        import app.services.pipeline as pm
+
+        reg, src = isolated_env
+        doc_id = "attach-boundaries"
+        reg.create(doc_id, "test.doc", "doc", 100)
+
+        def parse(*_args, context, **_kwargs):
+            child = context.add_child("root", "child.txt", "document")
+            return [
+                Block("paragraph", "a" * 60, meta={"source_id": "root"}),
+                Block("paragraph", "b" * 900, meta={"source_id": child, "from_attachment": True}),
+                Block("paragraph", "c" * 80, meta={"source_id": child, "from_attachment": True}),
+                Block("paragraph", "d" * 990, meta={"source_id": "root"}),
+            ]
+
+        monkeypatch.setattr(pm, "parse_document", parse)
+        monkeypatch.setattr(pm, "markdown_attachment_spans", markdown_attachment_spans)
+        pipeline = Pipeline()
+        pipeline.okf_generator.settings.okf_max_chunk_chars = 1000
+        pipeline.okf_generator.generate_chunk = lambda *args, **kwargs: [_concept()]
+        pipeline.vector_store.ensure_collection = lambda: None
+        pipeline.vector_store.delete_orphaned_points = lambda *args, **kwargs: None
+        pipeline.vector_store.index_concepts = lambda *args, **kwargs: set()
+        pipeline.vector_store.index_chunks = lambda *args, **kwargs: set()
+        pipeline._process(doc_id, src, "test.doc", [], resume=False)
+        with session_scope() as session:
+            rows = session.query(OkfConcept).filter_by(doc_id=doc_id).order_by(OkfConcept.chunk_index).all()
+            assert len(rows) == 3
+            assert ["attachment" in (row.tags or []) for row in rows] == [False, True, False]
 
     def _run(self, reg, src, doc_id, monkeypatch, markdown, spans):
         import app.services.pipeline as pm
@@ -890,7 +928,8 @@ class TestPipelineRegenerate:
         reg.update(doc_id, status="done", okf_concept_count=1)
         return bundle
 
-    def test_regenerate_resets_state_synchronously(self, isolated_env):
+    def test_regenerate_resets_state_synchronously(self, isolated_env, monkeypatch):
+        from concurrent.futures import Future
         reg, _ = isolated_env
         doc_id = "regen-sync"
         pipeline = Pipeline()
@@ -899,15 +938,19 @@ class TestPipelineRegenerate:
         delete_calls = {"n": 0}
         started = {"n": 0}
         pipeline.vector_store.delete_document = lambda *a, **k: delete_calls.__setitem__("n", delete_calls["n"] + 1)
-        pipeline._start = lambda *a, **k: started.__setitem__("n", started["n"] + 1)
+        def queued(*_args, **_kwargs):
+            started["n"] += 1
+            return Future()
+
+        monkeypatch.setattr(pipeline._executor, "submit", queued)
 
         pipeline.regenerate(doc_id)
 
         doc = reg.get(doc_id)
-        assert doc["status"] == "processing", "статус должен стать processing сразу"
+        assert doc["status"] == "queued", "допущенный запуск должен сразу отображаться в очереди"
         assert doc["error"] is None
-        assert delete_calls["n"] == 1, "старые векторы должны удаляться"
-        assert not (bundle / "old_concept.md").exists(), "старый бандл должен быть удалён"
+        assert delete_calls["n"] == 0, "старые векторы нужны до публикации"
+        assert (bundle / "old_concept.md").exists(), "старый бандл сохраняется до публикации"
         assert not pipeline.settings.staging_dir.joinpath(doc_id).exists(), "staging должен очищаться"
         assert started["n"] == 1, "должен запускаться новый прогон"
 
@@ -939,8 +982,9 @@ class TestPipelineRegenerate:
 
         assert result["status"] == "done", f"status={result['status']} error={result.get('error')}"
         assert llm_calls["n"] >= 1, "LLM должен перегенерировать концепты с нуля"
-        assert delete_calls["n"] >= 1, "векторы должны пересоздаваться"
-        assert not (bundle / "old_concept.md").exists(), "старый бандл должен быть удалён"
+        assert delete_calls["n"] == 0, "новая версия не удаляет документ целиком"
+        bundle = active_bundle_path(pipeline.settings, doc_id)
+        assert not (bundle / "old_concept.md").exists(), "активный бандл содержит только новые концепты"
         assert (bundle / "chunks").is_dir(), "новый бандл должен пересоздаваться"
         assert len(list(bundle.glob("*.md"))) == 1
 
@@ -1107,8 +1151,7 @@ class TestPipelineDbStore:
 
     def test_finalize_writes_attachments(self, isolated_env, monkeypatch):
         import hashlib
-
-        from app.config import get_settings
+        from docparser import Block
         from app.db.models import OkfAttachment
         from app.db.session import session_scope
 
@@ -1116,34 +1159,32 @@ class TestPipelineDbStore:
         doc_id = "att-doc"
         reg.create(doc_id, "test.doc", "doc", 100)
 
-        settings = get_settings()
-        att_dir = settings.uploads_dir / doc_id / "attachments"
-        att_dir.mkdir(parents=True, exist_ok=True)
         payload = b"\x89PNG\r\n\x1a\nfakepngdata"
-        (att_dir / "diagram.png").write_bytes(payload)
 
-        attachment = {
-            "name": "diagram.png",
-            "kind": "image",
-            "caption": "",
-            "saved_path": "attachments/diagram.png",
-            "is_processable": False,
-            "extraction_status": "saved",
-        }
-        self._run_done(reg, src, doc_id, monkeypatch, attachments=[attachment])
+        def parse(_path, _filename, *, attachments_dir, **_kwargs):
+            saved = attachments_dir / "diagram.png"
+            saved.write_bytes(payload)
+            return [Block("image", "", meta={
+                "name": "diagram.png", "kind": "image", "saved_path": str(saved), "extraction_status": "saved",
+            })]
+
+        monkeypatch.setattr("app.services.pipeline.parse_document", parse)
+        monkeypatch.setattr("app.services.pipeline._collect_attachments", _collect_attachments)
+        self._run_done(reg, src, doc_id, monkeypatch)
 
         with session_scope() as s:
             rows = s.query(OkfAttachment).filter(OkfAttachment.doc_id == doc_id).all()
             assert len(rows) == 1
             a = rows[0]
-            assert a.saved_path == "attachments/diagram.png"
+            assert a.saved_path.startswith("generations/")
+            assert a.saved_path.endswith("/attachments/diagram.png")
             assert a.kind == "image"
             assert a.is_processable is False
             assert a.extraction_status == "saved"
             assert a.size == len(payload)
             assert a.sha256 == hashlib.sha256(payload).hexdigest()
 
-    def test_regenerate_wipes_chunks(self, isolated_env, monkeypatch):
+    def test_regenerate_preserves_chunks_until_publication(self, isolated_env, monkeypatch):
         from app.config import get_settings
         from app.db.models import DocumentChunk
         from app.db.session import session_scope
@@ -1165,7 +1206,7 @@ class TestPipelineDbStore:
         pipeline.regenerate(doc_id)
 
         with session_scope() as s:
-            assert s.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).count() == 0
+            assert s.query(DocumentChunk).filter(DocumentChunk.doc_id == doc_id).count() == 1
 
 
 class TestCollectAttachmentsPortability:

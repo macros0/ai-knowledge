@@ -29,7 +29,7 @@ import os
 import threading
 
 from app.config import get_settings
-from app.db.models import OkfConcept
+from app.db.models import Document, DocumentGenerationState, OkfConcept
 from app.db.session import session_scope
 from app.services import audit
 from app.services.dev_sync import (
@@ -38,6 +38,8 @@ from app.services.dev_sync import (
 )
 from app.services.development_registry import get_development_registry
 from app.services.registry import get_registry
+from app.services.generation_files import generation_paths
+from app.services.generation_store import lock_document_write, lock_generation_read
 from app.services.tag_registry import normalize_tags
 from app import error_codes as codes
 from app.services.errors import NotFoundError
@@ -98,13 +100,6 @@ def _merge_concept_tags(current: list[str], removed: set[str], added: list[str])
     return result
 
 
-def _update_concept_tags_in_db(doc_id: str, removed: set[str], added: list[str]) -> None:
-    """Обновляет user-часть тегов в okf_concepts.tags (canonical per-concept)."""
-    with session_scope() as s:
-        for concept in s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).all():
-            concept.tags = _merge_concept_tags(list(concept.tags or []), removed, added)
-
-
 def _rewrite_bundle_frontmatter(
     doc_id: str, new_tags: list[str], removed: set[str], added: list[str]
 ) -> None:
@@ -115,34 +110,52 @@ def _rewrite_bundle_frontmatter(
     """
     import yaml
 
-    bundle_dir = get_settings().okf_dir / doc_id
-    if not bundle_dir.is_dir():
-        return
-    for md in sorted(bundle_dir.glob("*.md")):
-        if md.parent.name == "chunks":
-            continue
-        try:
-            text = md.read_text(encoding="utf-8")
-            if not text.startswith("---"):
-                continue
-            end = text.find("\n---", 4)
-            if end == -1:
-                continue
-            meta = yaml.safe_load(text[4:end])
-            if not isinstance(meta, dict):
-                continue
-            current = [str(t) for t in (meta.get("tags") or [])]
-            meta["tags"] = _merge_concept_tags(current, removed, added)
-            meta["global_tags"] = list(new_tags)
-            frontmatter = yaml.safe_dump(
-                meta, allow_unicode=True, sort_keys=False, default_flow_style=False
-            )
-            body = text[end + 4 :]
-            tmp = md.with_name(f".{md.name}.tmp")
-            tmp.write_text(f"---\n{frontmatter}---{body}", encoding="utf-8")
-            os.replace(tmp, md)
-        except Exception:
-            logger.warning("[%s] Не удалось обновить frontmatter %s", doc_id, md.name, exc_info=True)
+    # Parameters describe the triggering edit and can already be stale. Project
+    # the current canonical rows instead, serialized with publication/cleanup
+    # and other file writers through the Document write lock.
+    settings = get_settings()
+    with session_scope() as session:
+        if not lock_document_write(session, doc_id, allow_deleted=False):
+            return
+        doc = session.get(Document, doc_id)
+        current_tags = [item.tag_rel.canonical_text for item in doc.tags_rel]
+        concepts = {row.slug: list(row.tags or []) for row in
+                    session.query(OkfConcept).filter_by(doc_id=doc_id).all()}
+        state = session.get(DocumentGenerationState, doc_id)
+        bundle_dir = (
+            generation_paths(settings, doc_id, state.active_generation_id).bundle
+            if state and state.active_generation_id else settings.okf_dir / doc_id
+        )
+        if not bundle_dir.is_dir():
+            return
+        for md in sorted(bundle_dir.glob("*.md")):
+            try:
+                text = md.read_bytes().decode("utf-8")
+                if not text.startswith("---"):
+                    continue
+                end = text.find("\n---", 4)
+                if end == -1:
+                    continue
+                meta = yaml.safe_load(text[4:end])
+                if not isinstance(meta, dict):
+                    continue
+                if md.stem in concepts:
+                    meta["tags"] = concepts[md.stem]
+                else:
+                    meta["tags"] = _merge_concept_tags(
+                        [str(t) for t in (meta.get("tags") or [])],
+                        set(meta.get("global_tags") or []), current_tags,
+                    )
+                meta["global_tags"] = current_tags
+                frontmatter = yaml.safe_dump(
+                    meta, allow_unicode=True, sort_keys=False, default_flow_style=False
+                )
+                body = text[end + 4 :]
+                tmp = md.with_name(f".{md.name}.tmp")
+                tmp.write_bytes(f"---\n{frontmatter}---{body}".encode("utf-8"))
+                os.replace(tmp, md)
+            except Exception:
+                logger.warning("[%s] Не удалось обновить frontmatter %s", doc_id, md.name, exc_info=True)
 
 
 def _sync_qdrant_tags(doc_id: str) -> bool:
@@ -154,28 +167,27 @@ def _sync_qdrant_tags(doc_id: str) -> bool:
     Идемпотентно: приводит Qdrant к состоянию БД, порядок правок не важен.
     """
 
-    from app.db.models import OkfConcept
+    from app.db.models import Document, OkfConcept
     from app.db.session import session_scope
     from app.services.vector_store import VectorStore, concept_point_id
 
-    doc = _registry.get(doc_id)
-    if doc is None:
-        return False
-    global_tags = list(doc.get("tags") or [])
-    concept_points: list[tuple[str, list[str]]] = []
-    with session_scope() as s:
-        rows = (
-            s.query(OkfConcept)
-            .filter(OkfConcept.doc_id == doc_id)
-            .all()
-        )
-        for c in rows:
-            point_id = concept_point_id(doc_id, c.slug)
-            concept_points.append((point_id, list(c.tags or [])))
     try:
-        VectorStore().set_document_tags_payload(
-            doc_id, global_tags, concept_points=concept_points
-        )
+        with session_scope() as s:
+            active_generations = lock_generation_read(s, [doc_id])
+            doc = s.get(Document, doc_id)
+            if doc is None or doc.deleted_at is not None:
+                return False
+            global_tags = [item.tag_rel.canonical_text for item in doc.tags_rel]
+            concept_points: list[tuple[str, list[str]]] = []
+            rows = s.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).all()
+            for c in rows:
+                point_id = concept_point_id(doc_id, c.slug, generation_id=active_generations.get(doc_id))
+                concept_points.append((point_id, list(c.tags or [])))
+            # Keep the read lock until the projection is written. Otherwise a
+            # stale worker can overwrite chunks from a newer publication/edit.
+            VectorStore().set_document_tags_payload(
+                doc_id, global_tags, concept_points=concept_points,
+            )
         return True
     except Exception:
         logger.warning(
@@ -287,7 +299,7 @@ def update_document_tags(
 
     if removed or added:
         removed_set = set(removed)
-        _update_concept_tags_in_db(doc_id, removed_set, added)
+        # DocumentRegistry updated canonical concept tags in the same transaction.
         # Фаза 5: frontmatter .md-бандлов — экспорт, не рабочее состояние. При
         # okf_write_bundles=false файлов нет/они read-only, перезаписывать нечего;
         # бандл для экспорта генерируется из БД (export_okf), не из этих файлов.

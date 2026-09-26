@@ -6,6 +6,8 @@ from app.db.models import Document, DocumentChunk, OkfConcept
 from app.db.session import session_scope
 from app.services.source_evidence import (
     locate_unique_quote,
+    resolve_mail_paragraph_span,
+    resolve_mail_source_spans,
     span_for_lines,
     span_from_offsets,
 )
@@ -49,6 +51,39 @@ def test_quote_matches_pdf_whitespace_with_original_offsets():
     assert span.chunk_hash == hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+@pytest.mark.parametrize("source,title,concept", [
+    ("Получено сообщение от заказчика.", "Новое сообщение", "Сообщение требует подтверждения."),
+    ("Срок оплаты счёта семь дней.", "Срок оплаты", "Предоставлен доступ к базе данных."),
+    ("Продление лицензии не согласовано.", "Продление лицензии", "Продление лицензии согласовано."),
+])
+def test_mail_paragraph_guess_rejects_generic_title_only_and_opposite_claims(source, title, concept):
+    assert resolve_mail_paragraph_span(source, title, concept) is None
+
+
+@pytest.mark.parametrize("source,title,concept", [
+    ("Получено сообщение от заказчика.", "Новое сообщение", "Сообщение требует подтверждения."),
+    ("Срок оплаты счёта семь дней.", "Срок оплаты", "Предоставлен доступ к базе данных."),
+    ("Продление лицензии не согласовано.", "Продление лицензии", "Продление лицензии согласовано."),
+])
+def test_docx_location_rejects_generic_title_only_and_opposite_claims(source, title, concept):
+    _insert_source_fixture(
+        "docx-false-paragraph", f"{source}\n\nУстановка клиентского приложения.", None,
+        concept_text=concept, concept_title=title, filename="instruction.docx",
+    )
+
+    result = get_source_location("docx-false-paragraph", "source-concept")
+
+    assert result.status == "chunk"
+    assert result.spans == []
+
+
+def test_mail_paragraph_guess_uses_content_terms_without_title():
+    source = "Оплата счёта должна поступить в течение семи дней."
+    span = resolve_mail_paragraph_span(source, "Другая тема", "Оплата счёта в течение семи дней.")
+    assert span is not None
+    assert source[span.start:span.end] == source
+
+
 @pytest.mark.parametrize("text,quote", [
     ("taxable wages; taxable\nwages", "taxable wages"),
     ("a a a", "a a"),
@@ -66,17 +101,20 @@ def _insert_source_fixture(
     content: str,
     spans: list | None,
     concept_text: str = "Описание",
+    source_id: str | None = None,
+    concept_title: str = "Связанный концепт",
+    filename: str | None = None,
 ):
     with session_scope() as session:
-        session.add(Document(id=doc_id, filename=f"{doc_id}.docx"))
+        session.add(Document(id=doc_id, filename=filename or f"{doc_id}.docx"))
         session.add(
-            DocumentChunk(doc_id=doc_id, chunk_index=4, content=content)
+            DocumentChunk(doc_id=doc_id, chunk_index=4, content=content, source_id=source_id)
         )
         session.add(
             OkfConcept(
                 doc_id=doc_id,
                 slug="source-concept",
-                title="Связанный концепт",
+                title=concept_title,
                 content=concept_text,
                 chunk_index=4,
                 source_spans=spans,
@@ -112,6 +150,23 @@ def test_source_location_returns_verified_excerpt_and_sorted_unique_spans():
     ]
 
 
+def test_source_location_returns_the_chunk_source_id_when_available():
+    content = "Решение: лимит 12 дней."
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    start = content.index("лимит")
+    _insert_source_fixture(
+        "mail-source",
+        content,
+        [{"start": start, "end": start + len("лимит 12 дней"), "chunk_hash": digest}],
+        source_id="root/0",
+    )
+
+    result = get_source_location("mail-source", "source-concept")
+
+    assert result is not None
+    assert result.source_id == "root/0"
+
+
 def test_source_location_marks_unique_legacy_text_as_recovered():
     quote = (
         "Необходимо реализовать форму PDF и XML-файл «ЕФС-1» в системе SAP HCM "
@@ -128,6 +183,142 @@ def test_source_location_marks_unique_legacy_text_as_recovered():
     span = result.spans[0]
     assert content[span.start : span.end] == quote
     assert span.quote == quote
+
+
+def test_source_location_recovers_unique_matching_paragraph_without_a_quote():
+    content = (
+        "Первый абзац описывает установку клиентского приложения.\n\n"
+        "Во втором абзаце используется сертификат Keycloak для входа."
+    )
+    _insert_source_fixture(
+        "paragraph-recovery",
+        content,
+        None,
+        concept_title="Настройка Keycloak",
+        concept_text="Для входа используется сертификат Keycloak.",
+    )
+
+    result = get_source_location("paragraph-recovery", "source-concept")
+
+    assert result is not None
+    assert result.status == "inferred"
+    assert [(span.start, span.quote) for span in result.spans] == [
+        (content.index("Во втором"), "Во втором абзаце используется сертификат Keycloak для входа."),
+    ]
+
+
+def test_mail_location_labels_lexical_paragraph_as_inferred_not_exact():
+    source = "Оплата счёта должна поступить в течение семи дней."
+    _insert_source_fixture(
+        "mail-inferred", source, None,
+        concept_title="Оплата", concept_text="Оплата счёта в течение семи дней.",
+        filename="mail.eml", source_id="root",
+    )
+
+    result = get_source_location("mail-inferred", "source-concept")
+
+    assert result.status == "inferred"
+    assert result.spans[0].quote == source
+
+
+def test_legacy_full_mail_paragraph_span_is_not_presented_as_exact():
+    source = "Оплата счёта должна поступить в течение семи дней."
+    _insert_source_fixture(
+        "mail-legacy-paragraph", source,
+        [{"start": 0, "end": len(source), "chunk_hash": hashlib.sha256(source.encode()).hexdigest()}],
+        concept_title="Оплата", concept_text="Оплата счёта в течение семи дней.",
+        filename="mail.eml", source_id="root",
+    )
+
+    result = get_source_location("mail-legacy-paragraph", "source-concept")
+
+    assert result.status == "inferred"
+
+
+@pytest.mark.parametrize("stored", [False, True])
+def test_mail_summary_does_not_anchor_to_intro_or_list_heading(stored):
+    intro = "высылаем обновление системы СЭДО 09.2026."
+    heading = "Что вошло в обновление системы СЭДО 09.2026:"
+    source = f"Коллеги, {intro}\n\n{heading}\n\nЗапрос ускорен.\n\nСхемы обновлены."
+    spans = [span_from_offsets(source, source.index(q), source.index(q) + len(q)).model_dump()
+             for q in (intro, heading)] if stored else None
+    _insert_source_fixture(
+        "summary-intro", source, spans,
+        concept_text="Обновление системы СЭДО 09.2026 включает:\n\n- Запрос работает быстрее.\n- Схемы актуализированы.",
+        filename="update.msg", source_id="root",
+    )
+    result = get_source_location("summary-intro", "source-concept")
+    assert result.status == "chunk"
+    assert result.spans == []
+
+
+def test_mail_summary_preserves_specific_evidence_and_recovers_individual_items():
+    first = "Первый уникальный фрагмент описывает подготовку сертификата для подключения к сервису."
+    second = "Второй уникальный фрагмент фиксирует обязательную проверку доступа перед запуском системы."
+    source = f"Коллеги, высылаем обновление.\n\n{first}\n\n{second}"
+    concept = f"Высылаем обновление.\n\n- {first}\n- {second}"
+    spans = resolve_mail_source_spans(source, concept, ["высылаем обновление."])
+    assert len(spans) == 2
+    assert [source[s.start:s.end] for s in spans] == [first, second]
+    quote = "подготовку сертификата для подключения к сервису"
+    spans = resolve_mail_source_spans(source, concept, [quote])
+    assert [source[s.start:s.end] for s in spans] == [quote]
+
+
+def test_mail_summary_rejects_quote_with_opposite_claim():
+    source = "Продление лицензии не согласовано."
+    concept = "Обновление:\n\n- Продление лицензии согласовано.\n- Запрос работает быстрее."
+    assert resolve_mail_source_spans(source, concept, [source]) == []
+
+
+def test_mail_summary_does_not_treat_embedded_evidence_as_claims():
+    source = "Посторонняя цитата подтверждает удаление архивных файлов базы данных."
+    concept = ('Обновление системы СЭДО 09.2026:\n\n- Запрос работает быстрее.\n- Схемы актуализированы.\n\n'
+               f'**Source Quotes:**\n- "{source}"\n- "Что вошло в обновление:"')
+    assert resolve_mail_source_spans(source, concept) == []
+
+
+def test_mail_summary_stale_spans_still_fall_back_to_chunk():
+    quote = "Первый уникальный фрагмент описывает подготовку сертификата для подключения к сервису."
+    source = f"{quote}\n\nДругая секция."
+    _insert_source_fixture(
+        "summary-stale", source, [{"start": 0, "end": len(quote), "chunk_hash": "0" * 64}],
+        concept_text=f"Обновление:\n\n- {quote}\n- Обновлены схемы.", filename="update.msg", source_id="root",
+    )
+    assert get_source_location("summary-stale", "source-concept").status == "chunk"
+
+
+@pytest.mark.parametrize("doc_id,source,title,concept", [
+    ("mail-legacy-generic", "Получено сообщение от заказчика.", "Новое сообщение", "Сообщение требует подтверждения."),
+    ("mail-legacy-title", "Срок оплаты счёта семь дней.", "Срок оплаты", "Предоставлен доступ к базе данных."),
+    ("mail-legacy-negated", "Продление лицензии не согласовано.", "Продление лицензии", "Продление лицензии согласовано."),
+])
+def test_legacy_false_mail_paragraph_span_falls_back_to_chunk(doc_id, source, title, concept):
+    _insert_source_fixture(
+        doc_id, source,
+        [{"start": 0, "end": len(source), "chunk_hash": hashlib.sha256(source.encode()).hexdigest()}],
+        concept_title=title, concept_text=concept,
+        filename="mail.eml", source_id="root",
+    )
+
+    result = get_source_location(doc_id, "source-concept")
+
+    assert result.status == "chunk"
+    assert result.spans == []
+
+
+def test_source_location_recovers_multiple_unique_non_overlapping_excerpts():
+    first = "Первый уникальный фрагмент описывает подготовку сертификата для подключения к сервису."
+    second = "Второй уникальный фрагмент фиксирует обязательную проверку доступа перед запуском системы."
+    content = f"{first} Концепт пропускает пояснение. {second}"
+    source = f"Введение. {first} Промежуточный текст источника. {second} Заключение."
+    _insert_source_fixture("multiple-excerpts", source, None, concept_text=content)
+
+    result = get_source_location("multiple-excerpts", "source-concept")
+
+    assert result is not None
+    assert result.status == "recovered"
+    assert [span.quote for span in result.spans] == [first.rstrip("."), second.rstrip(".")]
 
 
 def test_source_location_does_not_guess_when_legacy_text_is_ambiguous():
@@ -253,13 +444,20 @@ def test_paraphrase_recovery_rejects_weak_or_ambiguous_evidence(source, concept)
     assert get_source_location("weak-paraphrase", "source-concept").status == "chunk"
 
 
-def test_paraphrase_recovery_does_not_choose_between_equal_fragments():
+def test_paraphrase_recovery_keeps_distinct_equal_length_fragments():
     source = ("the value directly from the Infotype table P0002-PERIOD. Other text. "
               "the value directly from the Infotype table P0002-OTHER.")
     concept = ("Mapping reads the value directly from the Infotype table P0002-PERIOD "
                "and the value directly from the Infotype table P0002-OTHER.")
     _insert_source_fixture("equal-fragments", source, None, concept_text=concept)
-    assert get_source_location("equal-fragments", "source-concept").status == "chunk"
+
+    result = get_source_location("equal-fragments", "source-concept")
+
+    assert result.status == "recovered"
+    assert [span.quote for span in result.spans] == [
+        "the value directly from the Infotype table P0002-PERIOD",
+        "the value directly from the Infotype table P0002-OTHER",
+    ]
 
 
 def test_source_location_handles_missing_concept_chunk_and_unlinked_concept():

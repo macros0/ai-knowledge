@@ -15,6 +15,7 @@ from sqlalchemy import select, tuple_
 
 from app.db.models import OkfConcept
 from app.db.session import session_scope
+from app.services.source_store import validate_source_references
 
 
 def _parse_iso(value: object) -> datetime | None:
@@ -37,6 +38,12 @@ def replace_concepts(session, doc_id: str, okf_docs: list) -> None:
     полем slug в payload Qdrant. Provenance (generated_at/model_id/prompt_version)
     читается из metadata, куда финализация кладёт её из staging chunks_data.
     """
+    source_ids = {
+        str((d.metadata or {}).get("source_id"))
+        for d in okf_docs
+        if (d.metadata or {}).get("source_id")
+    }
+    validate_source_references(session, doc_id, source_ids)
     session.query(OkfConcept).filter(OkfConcept.doc_id == doc_id).delete(synchronize_session=False)
     for d in okf_docs:
         meta = d.metadata or {}
@@ -50,6 +57,7 @@ def replace_concepts(session, doc_id: str, okf_docs: list) -> None:
                 content=d.content or "",
                 relations=list(meta.get("relations", []) or []),
                 chunk_index=meta.get("chunk_index"),
+                source_id=meta.get("source_id"),
                 source_spans=list(meta.get("source_spans") or []) or None,
                 generated_at=_parse_iso(meta.get("generated_at")),
                 model_id=meta.get("model_id"),

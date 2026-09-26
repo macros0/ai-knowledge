@@ -18,11 +18,13 @@ from app.models.schemas import ChatRequest, ChatResponse, ChatSource
 from app.prompts.store import get_store
 from app.services import chat_history
 from app.services.citation import normalize_citations
+from app.services.authorship_evidence import answer_authorship, is_authorship_query
 from app.services.retrieval_hydration import load_visible_retrieval_hits
 from app.services.context_builder import (
     drop_partial_title_matches,
     drop_unmatched_blocks,
     format_context,
+    limit_context,
     merge_and_format,
     resolve_branches,
 )
@@ -184,6 +186,14 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             match_groups=exact_groups,
             domain_cache=domain_cache,
         )
+        merged = limit_context(
+            merged,
+            settings.chat_max_context_chars,
+            query=req.query,
+            match_groups=exact_groups,
+            domain_cache=domain_cache,
+            lexical_cache=lexical_cache,
+        )
         context = format_context(
             merged,
             query=req.query,
@@ -207,6 +217,8 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
                     snippet=exact_excerpt(m["content"], 200, exact_groups),
                     point_type=m["point_type"],
                     chunk_index=m["chunk_index"],
+                    source_id=m.get("source_id"),
+                    source_path=m.get("source_path"),
                     development_number=src_doc.get("development_number"),
                     development_name=src_doc.get("development_name"),
                     development_module=src_doc.get("development_module"),
@@ -219,11 +231,18 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             system = get_store().format("chat_system", locale=req.locale)
             prompt_user = get_store().format("chat_user", context=context, query=req.query)
             try:
-                answer = _get_llm().chat(system, prompt_user)
+                if is_authorship_query(req.query):
+                    answer = answer_authorship(
+                        req.query, merged, _get_llm(), locale=req.locale,
+                        max_chars=settings.chat_max_context_chars,
+                    )
+                else:
+                    answer = _get_llm().chat(system, prompt_user)
             except Exception as exc:
                 raise LLMError(cause=exc) from exc
             # Normalize citations only after an answer was produced from sources.
-            answer = normalize_citations(answer, max_index=len(merged))
+            if not is_authorship_query(req.query):
+                answer = normalize_citations(answer, max_index=len(merged))
 
     used_in = [branch for branch in ("dense", "bm25") if branch in branches]
     applied_terms = [

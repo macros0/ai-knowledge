@@ -9,8 +9,8 @@
   1. file_hash (уровень 1) — SHA-256 исходного файла из uploads_dir; пропуск с
      WARNING, если исходника нет.
   2. content_hash + minhash + LSH-бакеты (уровни 2/3) — из текста документа,
-     с приоритетом готовых чанков (ensure_chunks: бандл → staging → ленивый
-     backfill из исходника). Пустой текст пропускается (иначе все «пустые»
+     из канонических SQL-чанков после ensure_chunks. Сохранённый отпечаток
+     письма остаётся неизменным. Пустой текст пропускается (иначе все «пустые»
      документы совпали бы по content_hash="").
 
 Второе назначение — ПАРНЫЙ прогон к `rebuild_sparse.py` при смене алфавита или
@@ -19,8 +19,8 @@
 старые minhash-подписи несравнимы с новыми. Пересчёт возвращает LSH-таблицу в
 согласованное с индексом состояние.
 
-Идемпотентен: set_file_hash/index_document перезаписывают значения; index_document
-в одной транзакции очищает и пересоздаёт LSH-бакеты — повторный запуск безопасен.
+Под блокировкой документа читает опубликованный текст и в одной транзакции
+обновляет отпечатки и LSH-бакеты. Удалённые документы пропускаются.
 
 Запуск (из backend/):
     python scripts/backfill_dedup.py            # все документы
@@ -38,9 +38,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.db.models import Document
+from app.db.models import Document, DocumentChunk
 from app.db.session import session_scope
-from app.services.deduplication import index_document, set_file_hash, sha256_file
+from app.services.deduplication import (
+    _duplicate_ids,
+    apply_document_signature,
+    find_duplicates_for_document,
+    prepare_document_signature,
+    refresh_duplicate_flags,
+    sha256_file,
+)
+from app.services.generation_store import lock_document_write
 from app.services.pipeline import Pipeline
 
 logger = logging.getLogger("backfill_dedup")
@@ -48,44 +56,50 @@ logger = logging.getLogger("backfill_dedup")
 
 def _all_docs() -> list[tuple[str, str]]:
     with session_scope() as s:
-        return [(row.id, row.filename) for row in s.execute(select(Document.id, Document.filename)).all()]
+        return [(row.id, row.filename) for row in s.execute(
+            select(Document.id, Document.filename).where(Document.deleted_at.is_(None))
+        ).all()]
 
 
 def _one_doc(doc_id: str) -> tuple[str, str] | None:
     with session_scope() as s:
         row = s.execute(
-            select(Document.id, Document.filename).where(Document.id == doc_id)
+            select(Document.id, Document.filename).where(Document.id == doc_id, Document.deleted_at.is_(None))
         ).first()
         return (row.id, row.filename) if row else None
-
-
-def _chunk_markdown(chunks_dir: Path) -> str:
-    files = sorted(
-        chunks_dir.glob("chunk_*.md"),
-        key=lambda p: int(p.stem.split("_")[-1]),
-    )
-    return "\n\n".join(f.read_text(encoding="utf-8") for f in files)
 
 
 def process_doc(doc_id: str, filename: str, pipeline: Pipeline, settings) -> dict:
     result: dict = {"file_hash": False, "content": False, "skipped": [], "error": None}
 
-    ext = Path(filename).suffix.lower()
-    src = settings.uploads_dir / f"{doc_id}{ext}"
-    if src.is_file():
-        set_file_hash(doc_id, sha256_file(src))
-        result["file_hash"] = True
-    else:
-        result["skipped"].append("no_source_file")
-
     try:
         pipeline.ensure_chunks(doc_id)
-        markdown = _chunk_markdown(settings.okf_dir / doc_id / "chunks")
-        if markdown.strip():
-            index_document(doc_id, markdown)
-            result["content"] = True
-        else:
-            result["skipped"].append("empty_markdown")
+        with session_scope() as session:
+            if not lock_document_write(session, doc_id, allow_deleted=False):
+                result["skipped"].append("missing_or_deleted")
+                return result
+            document = session.get(Document, doc_id)
+            previous_ids = _duplicate_ids(find_duplicates_for_document(doc_id))
+            src = settings.uploads_dir / f"{doc_id}{Path(document.filename).suffix.lower()}"
+            has_source = src.is_file()
+            if has_source:
+                document.file_hash = sha256_file(src)
+            else:
+                result["skipped"].append("no_source_file")
+            markdown = "\n\n".join(session.scalars(
+                select(DocumentChunk.content).where(DocumentChunk.doc_id == doc_id)
+                .order_by(DocumentChunk.chunk_index)
+            ).all())
+            has_text = bool(markdown.strip())
+            if has_text:
+                signature = prepare_document_signature(markdown, document.mail_fingerprint)
+                apply_document_signature(session, doc_id, signature)
+            else:
+                result["skipped"].append("empty_markdown")
+        result["file_hash"] = has_source
+        result["content"] = has_text
+        if has_text:
+            refresh_duplicate_flags(doc_id, previous_ids)
     except Exception as exc:
         result["error"] = str(exc)
 

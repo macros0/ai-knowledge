@@ -200,6 +200,9 @@ class Settings(BaseSettings):
     # content-length, и по факту дочитывания — защита от блокировки event loop
     # гигантской загрузкой и от переполнения диска.
     max_upload_mb: int = 100
+    # Новые standalone EML/MSG сначала держим за feature flag: выключение
+    # прекращает только новые почтовые импорты, не чтение уже сохранённых данных.
+    mail_import_enabled: bool = False
     okf_split_on_truncation: bool = True
     okf_split_max_depth: int = 2
     okf_salvage_truncated: bool = True
@@ -282,6 +285,13 @@ class Settings(BaseSettings):
     # and waiting work; they are per backend process until a shared queue exists.
     pipeline_max_workers: int = Field(default=2, ge=1, le=32)
     pipeline_max_pending: int = Field(default=8, ge=0, le=256)
+    # Недоверенный document parser запускается в отдельном killable process.
+    # Лимит памяти применяется через RSS monitoring на Windows и RLIMIT_AS на
+    # POSIX; лимит времени включает ожидание всей рекурсивной распаковки.
+    parser_supervisor_enabled: bool = True
+    parser_timeout_seconds: float = Field(default=120.0, ge=1.0, le=3600.0)
+    parser_max_memory_mb: int = Field(default=1024, ge=64, le=8192)
+    parser_max_concurrent: int = Field(default=2, ge=1, le=32)
     # Per-user limits for expensive interactive endpoints (in-memory per process).
     search_rate_limit_per_minute: int = Field(default=120, ge=1, le=10_000)
     chat_rate_limit_per_minute: int = Field(default=60, ge=1, le=10_000)

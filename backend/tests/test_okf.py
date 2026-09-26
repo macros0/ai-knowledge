@@ -63,6 +63,119 @@ def test_generation_saves_source_spans_from_pdf_quotes(embedded):
     assert chunk[span.start:span.end] == "The PW parameter defines\n taxable wages."
 
 
+def test_generation_does_not_store_inferred_mail_paragraph_as_exact_span():
+    from app.services.okf_generator import OKFGenerator
+
+    class NoQuoteLLM:
+        def chat_json(self, *args, **kwargs):
+            return [{
+                "title": "Настройка Keycloak",
+                "content": "Для входа используется сертификат Keycloak.",
+            }]
+
+    chunk = (
+        "# Тема письма\n\n"
+        "Первый абзац описывает установку клиентского приложения.\n\n"
+        "Во втором абзаце используется сертификат Keycloak для входа."
+    )
+
+    concepts = OKFGenerator(llm=NoQuoteLLM()).generate_chunk(
+        chunk, "mail.eml", 1, 1, source_is_mail=True,
+    )
+
+    assert len(concepts) == 1
+    assert concepts[0].source_spans == []
+
+
+@pytest.mark.parametrize("filename,mail_source", [("update.msg", False), ("container.docx", True)])
+def test_mail_summary_generation_ignores_intro_and_heading_quotes(filename, mail_source):
+    from app.services.okf_generator import OKFGenerator
+
+    intro = "высылаем обновление системы СЭДО 09.2026."
+    heading = "Что вошло в обновление системы СЭДО 09.2026:"
+    class SummaryLLM:
+        def chat_json(self, *args, **kwargs):
+            return [{"title": "Обновление системы СЭДО 09.2026",
+                     "content": "Обновление системы СЭДО 09.2026 включает:\n\n- Запрос работает быстрее.\n- Схемы актуализированы.",
+                     "source_quotes": [intro, heading]}]
+
+    source = f"Коллеги, {intro}\n\n{heading}\n\nЗапрос ускорен.\n\nСхемы обновлены."
+    concepts = OKFGenerator(llm=SummaryLLM()).generate_chunk(
+        source, filename, 1, 1, source_is_mail=mail_source,
+    )
+    assert concepts[0].source_spans == []
+
+
+def test_generation_does_not_mark_unrelated_sole_mail_paragraph_as_exact_evidence():
+    from app.services.okf_generator import OKFGenerator
+
+    class HallucinatedLLM:
+        def chat_json(self, *args, **kwargs):
+            return [{
+                "title": "Продление лицензии",
+                "content": "Лицензия продлена на следующий год.",
+            }]
+
+    chunk = "Направьте бухгалтерии счёт на оплату обслуживания."
+    concepts = OKFGenerator(llm=HallucinatedLLM()).generate_chunk(
+        chunk, "mail.eml", 1, 1, source_is_mail=True,
+    )
+
+    assert concepts[0].source_spans == []
+
+
+def test_generation_anchors_related_sole_mail_paragraph_without_a_quote():
+    from app.services.okf_generator import OKFGenerator
+
+    class NoQuoteLLM:
+        def chat_json(self, *args, **kwargs):
+            return [{"title": "Срок оплаты", "content": "Оплатить в течение недели."}]
+
+    chunk = "Срок оплаты счёта составляет семь календарных дней."
+    concepts = OKFGenerator(llm=NoQuoteLLM()).generate_chunk(
+        chunk, "mail.eml", 1, 1, source_is_mail=True,
+    )
+
+    assert concepts[0].source_spans == []
+
+
+def test_generation_saves_multiple_unique_retained_excerpts_when_quote_is_missing():
+    from app.services.okf_generator import OKFGenerator
+
+    first = "Первый уникальный фрагмент описывает подготовку сертификата для подключения к сервису."
+    second = "Второй уникальный фрагмент фиксирует обязательную проверку доступа перед запуском системы."
+
+    class NoQuoteLLM:
+        def chat_json(self, *args, **kwargs):
+            return [{
+                "title": "Подключение к сервису",
+                "content": f"{first} Концепт пропускает пояснение. {second}",
+            }]
+
+    chunk = f"Введение. {first} Промежуточный текст источника. {second} Заключение."
+    concepts = OKFGenerator(llm=NoQuoteLLM()).generate_chunk(chunk, "source.docx", 1, 1)
+
+    assert [chunk[span.start:span.end] for span in concepts[0].source_spans] == [
+        first.rstrip("."), second.rstrip("."),
+    ]
+
+
+def test_generation_does_not_guess_between_ambiguous_mail_paragraphs():
+    from app.services.okf_generator import OKFGenerator
+
+    class NoQuoteLLM:
+        def chat_json(self, *args, **kwargs):
+            return [{"title": "Сертификат", "content": "Настройте сертификат."}]
+
+    chunk = "Первый сертификат.\n\nВторой сертификат."
+
+    concepts = OKFGenerator(llm=NoQuoteLLM()).generate_chunk(
+        chunk, "mail.eml", 1, 1, source_is_mail=True,
+    )
+
+    assert concepts[0].source_spans == []
+
+
 class TestSlugify:
     def test_cyrillic_transliterated(self):
         # транслитерация кириллицы → латиница (ГОСТ-стиль, й→y)
@@ -604,3 +717,45 @@ class TestParseRelation:
                 "relations": ["{'id': 'target', 'type': 'part_of'}", "plain.md"]}]
         concepts = _normalize(raw)
         assert concepts[0].relations == ["target", "plain.md"]
+
+
+def test_save_bundle_writes_source_manifest_with_relative_paths_only(tmp_path):
+    import json
+
+    from app.services.okf_generator import OKFGenerator
+
+    generator = OKFGenerator(llm=object(), bundle_root=tmp_path / "bundle")
+    generator.save_bundle(
+        "mailbundle000001",
+        "forward.eml",
+        [Concept(id="c", title="Решение", content="Срок: 12 дней.")],
+        sources=[
+            {
+                "source_id": "root",
+                "parent_source_id": None,
+                "ordinal": 0,
+                "kind": "mail",
+                "display_name": "forward.eml",
+                "saved_path": "C:\\host\\secret\\forward.eml",
+                "extraction_status": "parsed",
+                "artifact_kind": "original",
+                "parser_version": "mail-sources-v1",
+            },
+            {
+                "source_id": "root/0",
+                "parent_source_id": "root",
+                "ordinal": 0,
+                "kind": "attachment",
+                "display_name": "таблица.xlsx",
+                "saved_path": "attachments/source-root-0.xlsx",
+                "extraction_status": "parsed",
+                "artifact_kind": "extracted_original",
+            },
+        ],
+    )
+
+    manifest = json.loads((tmp_path / "bundle" / "sources.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 1
+    assert manifest["sources"][0]["saved_path"] is None
+    assert manifest["sources"][1]["saved_path"] == "attachments/source-root-0.xlsx"
+    assert "C:\\host" not in json.dumps(manifest, ensure_ascii=False)
