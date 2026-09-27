@@ -107,7 +107,7 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
             _copy_artifacts(settings, doc_id, base_id, generation_id, paths, proposal)
             docs = _write_bundle(generator, doc_id, filename, paths, proposal)
             point_ids = _index_candidate(settings, vector_store, embedder, doc_id, filename,
-                                         generation_id, docs, proposal["chunks"], metadata)
+                                         generation_id, docs, proposal["chunks"], metadata, sources=proposal["sources"])
             vector_store.verify_generation_points(doc_id, generation_id, sorted(point_ids))
             effects = {}
             if proposal["chunks"] != before["chunks"]:
@@ -226,7 +226,13 @@ def _write_bundle(generator, doc_id, filename, paths, proposal):
     return docs
 
 
-def _index_candidate(settings, store, embedder, doc_id, filename, generation_id, docs, chunks, metadata):
+def _index_candidate(settings, store, embedder, doc_id, filename, generation_id, docs, chunks, metadata,
+                     *, sources=None):
+    from app.services.mail_scope import build_record_mail_scopes
+
+    concept_scopes, chunk_scopes = build_record_mail_scopes(
+        sources or [], [doc.metadata for doc in docs], chunks,
+    )
     store.ensure_collection()
     expected = set()
     if docs:
@@ -234,7 +240,8 @@ def _index_candidate(settings, store, embedder, doc_id, filename, generation_id,
             f"{doc.metadata['title']}\n{doc.content[:settings.okf_max_concept_chars]}" for doc in docs
         ])
         store.index_concepts(doc_id, docs, vectors, dev_tags=metadata["dev_tags"],
-                             source_locale=metadata["source_locale"], generation_id=generation_id)
+                             source_locale=metadata["source_locale"], generation_id=generation_id,
+                             mail_scopes=concept_scopes)
         expected.update(concept_point_id(doc_id, Path(doc.filepath).stem, generation_id=generation_id) for doc in docs)
     if chunks and settings.search_index_chunks_enabled:
         texts = [row["content"] for row in chunks]
@@ -246,6 +253,7 @@ def _index_candidate(settings, store, embedder, doc_id, filename, generation_id,
         store.index_chunks(doc_id, filename, texts, metadata["global_tags"], vectors,
                            section_titles=titles, dev_tags=metadata["dev_tags"], source_locale=metadata["source_locale"],
                            source_ids=[row["source_id"] for row in chunks],
-                           chunk_indices=[row["chunk_index"] for row in chunks], generation_id=generation_id)
+                           chunk_indices=[row["chunk_index"] for row in chunks], generation_id=generation_id,
+                           mail_scopes=chunk_scopes)
         expected.update(chunk_point_id(doc_id, row["chunk_index"], generation_id=generation_id) for row in chunks)
     return expected

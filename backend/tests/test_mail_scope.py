@@ -109,3 +109,118 @@ def test_batch_adapter_uses_caller_snapshot_and_doc_key():
         assert classify_mail_scope('root', trees['doc']) == 'document'
         assert classify_mail_scope('root', trees['mail']) == 'mail'
         assert trees['mail'][0]['metadata']['subject'] == 'private'
+
+
+@pytest.fixture
+def scope_store():
+    from types import SimpleNamespace
+    from qdrant_client import QdrantClient
+    from app.services.vector_store import VectorStore
+    store = VectorStore.__new__(VectorStore)
+    store.settings = SimpleNamespace(qdrant_collection='mail-scope', embedding_dimensions=2,
+                                     qdrant_upsert_batch_size=256, okf_max_concept_chars=4000, okf_max_chunk_index_chars=8000)
+    store.client = QdrantClient(':memory:')
+    store.ensure_collection()
+    yield store
+    store.client.close()
+
+
+def concept(source='root', chunk=0):
+    from app.models.schemas import OkfDocument
+    return OkfDocument(filepath='test.md', content='shared evidence', markdown='',
+                       metadata={'source_id': source, 'chunk_index': chunk,
+                                 'mail_scope': 'forged', 'title': 'Topic'})
+
+
+@pytest.mark.parametrize('provided,expected', [(None, 'unknown'), (['mail'], 'mail'),
+                                              (['document'], 'document')])
+def test_indexed_concept_and_chunk_scope(scope_store, provided, expected):
+    kwargs = {} if provided is None else {'mail_scopes': provided}
+    cids = scope_store.index_concepts('doc', [concept()], [[1, 0]], **kwargs)
+    hids = scope_store.index_chunks('doc', 'a', ['evidence'], [], [[1, 0]],
+                                  source_ids=['root'], chunk_indices=[44], **kwargs)
+    rows = scope_store.client.retrieve(scope_store.collection, list(cids | hids))
+    assert len(rows) == 2
+    for row in rows:
+        assert row.payload['mail_scope'] == expected
+        assert row.payload['mail_scope_version'] == 1
+    assert next(row for row in rows if row.payload['point_type'] == 'chunk').payload['chunk_index'] == 44
+
+
+@pytest.mark.parametrize('scopes', [[], ['mail', 'document'], ['invalid'], [None], [True]])
+@pytest.mark.parametrize('kind', ['concept', 'chunk'])
+def test_invalid_scope_list_rejected_before_any_upsert(scope_store, scopes, kind):
+    with pytest.raises(ValueError):
+        if kind == 'concept':
+            scope_store.index_concepts('doc', [concept()], [[1, 0]], mail_scopes=scopes)
+        else:
+            scope_store.index_chunks('doc', 'a', ['evidence'], [], [[1, 0]], mail_scopes=scopes)
+    assert scope_store.client.count(scope_store.collection).count == 0
+
+
+def test_empty_writers_and_noncontiguous_indices(scope_store):
+    assert scope_store.index_concepts('doc', [], [], mail_scopes=[]) == set()
+    assert scope_store.index_chunks('doc', 'a', [], [], [], mail_scopes=[]) == set()
+    ids = scope_store.index_chunks('doc', 'a', ['one', 'two'], [], [[1, 0], [0, 1]],
+                                  chunk_indices=[99, 2], mail_scopes=['mail', 'document'])
+    rows = scope_store.client.retrieve(scope_store.collection, list(ids))
+    assert {r.payload['chunk_index']: r.payload['mail_scope'] for r in rows} == {99: 'mail', 2: 'document'}
+
+
+def test_patch_is_idempotent_and_preserves_vectors_and_other_payload(scope_store, monkeypatch):
+    ids = scope_store.index_concepts('doc', [concept()], [[1, 0]])
+    pid = next(iter(ids))
+    before = scope_store.client.retrieve(scope_store.collection, [pid], with_vectors=True)[0]
+    assert scope_store.patch_mail_scopes({pid: 'mail'}) == 1
+    after = scope_store.client.retrieve(scope_store.collection, [pid], with_vectors=True)[0]
+    assert after.vector == before.vector
+    assert {k: v for k, v in after.payload.items() if not k.startswith('mail_scope')} == {
+        k: v for k, v in before.payload.items() if not k.startswith('mail_scope')}
+    def unexpected(**kwargs):
+        pytest.fail('unchanged patch must not write')
+    monkeypatch.setattr(scope_store.client, 'set_payload', unexpected)
+    assert scope_store.patch_mail_scopes({pid: 'mail'}) == 0
+
+
+@pytest.mark.parametrize('failure', ['missing', 'mismatch'])
+def test_patch_readback_failure_is_not_silenced(scope_store, monkeypatch, failure):
+    from app.services.errors import VectorStoreError
+    pid = next(iter(scope_store.index_concepts('doc', [concept()], [[1, 0]])))
+    original = scope_store.client.retrieve
+    calls = 0
+    def retrieve(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        rows = original(*args, **kwargs)
+        if calls == 2:
+            if failure == 'missing':
+                return []
+            rows[0].payload['mail_scope'] = 'document'
+        return rows
+    monkeypatch.setattr(scope_store.client, 'retrieve', retrieve)
+    with pytest.raises(VectorStoreError):
+        scope_store.patch_mail_scopes({pid: 'mail'})
+
+
+def test_strict_index_check_reads_actual_schema_and_rejects_wrong_type():
+    from types import SimpleNamespace
+    from app.services.vector_store import VectorStore
+    from app.services.errors import VectorStoreError
+    store = VectorStore.__new__(VectorStore)
+    store.settings = SimpleNamespace(qdrant_collection='test')
+    schema = {}
+    reads = []
+    def get_collection(*args, **kwargs):
+        reads.append(1)
+        return SimpleNamespace(payload_schema=dict(schema))
+    def create(**kwargs):
+        assert kwargs['wait'] is True
+        schema[kwargs['field_name']] = SimpleNamespace(data_type=kwargs['field_schema'])
+    store.client = SimpleNamespace(get_collection=get_collection, create_payload_index=create)
+    store.ensure_mail_scope_indexes()
+    assert len(reads) >= 2
+    assert str(schema['mail_scope'].data_type) == 'keyword'
+    assert str(schema['mail_scope_version'].data_type) == 'integer'
+    schema['mail_scope_version'] = SimpleNamespace(data_type='keyword')
+    with pytest.raises(VectorStoreError):
+        store.ensure_mail_scope_indexes()

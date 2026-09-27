@@ -331,3 +331,15 @@ def test_empty_published_generation_is_not_reparsed_during_read(pipeline_env, mo
 
     monkeypatch.setattr("app.services.pipeline.parse_document", forbidden)
     assert pipeline.ensure_chunks(DOC_ID) == []
+
+
+def test_pipeline_mail_scopes_use_candidate_tree(pipeline_env):
+    pipeline, source, write = pipeline_env
+    write('Regenerated mail evidence')
+    pipeline._process(DOC_ID, source, 'decision.eml', [], resume=False)
+    active = _published_snapshot(pipeline)[0]
+    rows, _ = pipeline.vector_store.client.scroll(pipeline.vector_store.collection, limit=100)
+    rows = [row for row in rows if row.payload['generation_id'] == active]
+    assert rows
+    assert {row.payload['mail_scope'] for row in rows} == {'mail'}
+    assert all(row.payload['mail_scope_version'] == 1 for row in rows)
