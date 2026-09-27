@@ -411,3 +411,130 @@ def test_visible_retrieval_hits_accept_search_specific_text_bounds():
 
     assert len(visible[0].payload["content"]) == 7
     assert len(visible[1].payload["content"]) == 11
+
+
+import pytest
+
+
+def _mail_filter_records(chunk_source='mail', concept_source='mail', *, chunk_exists=True):
+    with session_scope() as session:
+        session.add(Document(id='scope-doc', filename='archive.docx'))
+        session.add_all([
+            DocumentSource(doc_id='scope-doc', source_id='root', kind='document', display_name='archive.docx'),
+            DocumentSource(doc_id='scope-doc', source_id='mail', parent_source_id='root',
+                           kind='mail', display_name='letter.eml', metadata_json={'subject': 'PRIVATE_PARENT'}),
+            DocumentSource(doc_id='scope-doc', source_id='attachment', parent_source_id='mail',
+                           kind='document', display_name='attached.docx'),
+        ])
+        for slug in ('one', 'two'):
+            session.add(OkfConcept(doc_id='scope-doc', slug=slug, title='Shared topic',
+                                  content='CANONICAL_DIGEST', source_id=concept_source, chunk_index=7))
+        if chunk_exists:
+            session.add(DocumentChunk(doc_id='scope-doc', chunk_index=7, source_id=chunk_source,
+                                      content='CANONICAL_FRAGMENT', section_title='Shared topic'))
+    return [Hit(slug, 1.0, dict(point_type='concept', doc_id='scope-doc', slug=slug,
+             title='Shared topic', chunk_index=7, mail_scope='document', mail_scope_version=1,
+             source_id='forged', source_path=[{'subject': 'FORGED_PATH'}],
+             mail_fragment={'content': 'FORGED_FRAGMENT'}, _canonical_verified=True,
+             _mail_components=[{'mail_scope': 'document'}], content='FORGED_CONTENT'))
+            for slug in ('one', 'two')]
+
+
+def test_payload_document_sql_mail_is_excluded_and_logged_without_private_data(caplog):
+    import logging
+    hits = _mail_filter_records()
+    with caplog.at_level(logging.INFO):
+        kept, _ = load_visible_retrieval_hits(hits, mail_mode='exclude')
+    assert kept == []
+    assert 'chat_mail_scope_filter' in caplog.text
+    assert 'payload_mismatch' in caplog.text
+    assert all(secret not in caplog.text for secret in ('PRIVATE_PARENT', 'CANONICAL', 'FORGED'))
+
+
+def test_canonical_identity_replaces_forged_provenance_and_chunk_index():
+    hits = _mail_filter_records()
+    hits[0].payload['chunk_index'] = 99
+    kept, _ = load_visible_retrieval_hits(hits, mail_mode='only')
+    assert len(kept) == 2
+    for hit in kept:
+        assert hit.payload['source_id'] == 'mail'
+        assert hit.payload['chunk_index'] == 7
+        assert hit.payload['mail_scope'] == 'mail'
+        assert hit.payload['_canonical_verified'] is True
+        assert hit.payload['generation_id'] is None
+        assert hit.payload['content'] == 'CANONICAL_DIGEST'
+        assert hit.payload['mail_fragment']['content'] == 'CANONICAL_FRAGMENT'
+        assert 'FORGED' not in str(hit.payload)
+
+
+def test_only_attachment_does_not_load_parent_mail_fragment():
+    hits = _mail_filter_records(chunk_source='attachment', concept_source='attachment')
+    kept, _ = load_visible_retrieval_hits(hits, mail_mode='only')
+    assert kept
+    for hit in kept:
+        assert hit.payload['content'] == 'CANONICAL_DIGEST'
+        assert hit.payload['source_id'] == 'attachment'
+        assert not hit.payload.get('mail_fragment')
+        assert [node['source_id'] for node in hit.payload['source_path']] == ['root', 'mail', 'attachment']
+
+
+@pytest.mark.parametrize('chunk_source,chunk_exists,expected', [('root', True, ['one', 'two', 'chunk']),
+                                                               ('mail', True, []),
+                                                               (None, True, ['one', 'two']),
+                                                               ('root', False, ['one', 'two'])])
+def test_skipped_chunk_text_still_checks_identity_and_scope(chunk_source, chunk_exists, expected):
+    hits = _mail_filter_records(chunk_source=chunk_source, concept_source='root', chunk_exists=chunk_exists)
+    hits.append(Hit('chunk', .9, dict(point_type='chunk', doc_id='scope-doc', chunk_index=7,
+                                    mail_scope='document', _canonical_verified=True)))
+    kept, _ = load_visible_retrieval_hits(hits, mail_mode='exclude')
+    assert [hit.point_id for hit in kept] == expected
+    for hit in kept:
+        assert hit.payload['source_id'] == 'root'
+        assert hit.payload['_canonical_verified'] is True
+        assert not hit.payload.get('mail_fragment')
+    if 'chunk' in expected:
+        assert 'content' not in kept[-1].payload
+
+
+def test_missing_concept_does_not_inherit_chunk_and_unknown_is_strictly_rejected():
+    hits = _mail_filter_records(chunk_source='root', concept_source=None)
+    hits.append(Hit('missing', 1, dict(point_type='concept', doc_id='scope-doc', slug='missing',
+                                     content='FORGED_CONTENT', source_id='root', mail_scope='document',
+                                     _canonical_verified=True)))
+    kept, _ = load_visible_retrieval_hits(hits, mail_mode='exclude')
+    assert kept == []
+
+
+def test_mail_hydration_batch_query_count_does_not_grow_per_hit():
+    from copy import deepcopy
+    from sqlalchemy import event
+    from app.db.session import get_engine
+    hits = _mail_filter_records(chunk_source='root', concept_source='root')
+    counts = []
+    for count in (1, 100):
+        statements = []
+        def observe(*args):
+            statements.append(args[2])
+        event.listen(get_engine(), 'before_cursor_execute', observe)
+        try:
+            kept, _ = load_visible_retrieval_hits([deepcopy(hits[0]) for _ in range(count)], mail_mode='exclude')
+            assert len(kept) == count
+        finally:
+            event.remove(get_engine(), 'before_cursor_execute', observe)
+        counts.append(len(statements))
+    assert counts[1] == counts[0]
+    assert counts[0] <= 10
+
+
+def test_strict_database_failure_never_falls_back_to_payload(monkeypatch):
+    from app.services import retrieval_hydration
+    def fail():
+        raise RuntimeError('database unavailable')
+    monkeypatch.setattr(retrieval_hydration, 'session_scope', fail)
+    with pytest.raises(RuntimeError, match='database unavailable'):
+        load_visible_retrieval_hits([Hit('x', 1, dict(doc_id='doc', mail_scope='document'))], mail_mode='exclude')
+
+
+def test_invalid_mail_mode_is_rejected_with_zero_hits():
+    with pytest.raises(ValueError):
+        load_visible_retrieval_hits([], mail_mode='INVALID')
