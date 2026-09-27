@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ApiError, createBulkExport, deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
+import { ApiError, cancelDocumentUpdate, createBulkExport, deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
+import { documentUpdateView } from "@/lib/documentUpdate.mjs";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
 import { buildCompactDocumentMeta, countActiveDocumentFilters, resetDocumentFilters } from "@/lib/documentLayout.mjs";
@@ -15,6 +16,7 @@ import { useChat } from "@/context/ChatContext";
 import { selectionLimit } from "@/lib/documentBulkLimits.mjs";
 import SelectionBar from "./SelectionBar";
 import PreviewModal from "./PreviewModal";
+import Modal from "./Modal";
 import BulkGenerationModal from "./BulkGenerationModal";
 import DevelopmentFilter from "./DevelopmentFilter";
 import DevelopmentPicker from "./DevelopmentPicker";
@@ -107,6 +109,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const [docs, setDocs] = useState([]);
   const [total, setTotal] = useState(0);
   const [regenerating, setRegenerating] = useState({});
+  const [cancelingUpdates, setCancelingUpdates] = useState({});
+  const [cancelUpdateDoc, setCancelUpdateDoc] = useState(null);
   const [selected, setSelected] = useState({});
   // Id документов, которые выделил toggle «Выделить все» (по фильтру). Нужны,
   // чтобы отличать «включено» (✓) от частично снятого вручную (◐).
@@ -250,7 +254,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       if (seq !== loadSeq.current || !mounted.current) return;
       setDocs(result.documents);
       setTotal(result.total);
-      const busy = result.documents.some((d) => BUSY_STATUSES.includes(d.status));
+      const busy = result.documents.some((d) => BUSY_STATUSES.includes(d.status) || d.update_cancelling);
       if (busy && mounted.current) {
         timer.current = setTimeout(load, 1500);
       }
@@ -431,6 +435,21 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       loadStats();
     } catch (err) {
       showToast(t("docs.changeDevError", { message: friendlyApiError(err, t) }), { type: "error" });
+    }
+  };
+
+  const cancelUpdate = async (doc) => {
+    if (cancelingUpdates[doc.id] || doc.update_cancelling) return;
+    setCancelUpdateDoc(null);
+    setCancelingUpdates((s) => ({ ...s, [doc.id]: true }));
+    try {
+      const result = await cancelDocumentUpdate(doc.id, doc.update_id);
+      showToast(t(result.update_cancelling ? "docs.updateCancelling" : "docs.previousVersionKept"), { type: "success" });
+    } catch (err) {
+      showToast(t("docs.cancelUpdateError", { message: friendlyApiError(err, t) }), { type: "error" });
+    } finally {
+      setCancelingUpdates((s) => ({ ...s, [doc.id]: false }));
+      load();
     }
   };
 
@@ -656,6 +675,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       date: doc.created_at ? fmtDate(doc.created_at) : null,
     });
     const metaValue = (key) => compactMeta.find((item) => item.key === key)?.value;
+    const updateView = documentUpdateView(doc);
     return (
       <li key={doc.id} className={`document-item ${selected[doc.id] ? "selected" : ""}`}>
         {canEdit && (
@@ -672,6 +692,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             <strong title={doc.filename}>{doc.filename}</strong>
             <span className="meta doc-primary-meta">
               {doc.error_code || doc.error ? friendlyApiError(new ApiError("", { code: doc.error_code }), t) : (progress || fallbackMeta)}
+              {updateView.noticeKey && <span className="doc-update-notice" role="status">{t(updateView.noticeKey)}</span>}
             </span>
           </div>
           <div className="doc-meta-line">
@@ -811,7 +832,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           </div>
         </div>
         <div className="doc-actions">
-          <span className={`status ${doc.status}`}>{STATUS_LABELS[doc.status] ?? doc.status}</span>
+          <span className={`status ${doc.status}`}>{updateView.statusKey ? t(updateView.statusKey) : STATUS_LABELS[doc.status] ?? doc.status}</span>
           <button className="icon-btn" onClick={() => openOkf(doc)} title={t("docs.viewConceptsTitle")}>
             <EyeIcon />
           </button>
@@ -825,7 +846,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           </a>
           {canEdit && (
             <span className="danger-group">
-              {!["uploaded", "queued", "processing", "splitting", "indexing"].includes(doc.status) && (
+              {!["uploaded", "queued", "processing", "splitting", "indexing"].includes(doc.status) && !doc.update_cancelling && (
                 <button
                   className="icon-btn"
                   onClick={() => regenerate(doc)}
@@ -835,9 +856,15 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                   <RefreshIcon className={regenerating[doc.id] ? "spin" : undefined} />
                 </button>
               )}
-              {(doc.status === "paused" || doc.status === "failed" || (doc.status === "done" && doc.partial_chunks?.length > 0)) && (
+              {!doc.update_cancelling && (doc.status === "paused" || doc.status === "failed" || (doc.status === "done" && doc.partial_chunks?.length > 0)) && (
                 <button className="delete-btn" onClick={() => resume(doc)}>
                   {t(doc.status === "done" ? "docs.repairPartialBtn" : "docs.resumeBtn")}
+                </button>
+              )}
+              {updateView.actionKey && (
+                <button className="delete-btn" onClick={() => setCancelUpdateDoc(doc)}
+                  disabled={updateView.disabled || cancelingUpdates[doc.id]}>
+                  {t(updateView.disabled || cancelingUpdates[doc.id] ? "docs.updateCancelling" : updateView.actionKey)}
                 </button>
               )}
               <button className="delete-btn" onClick={() => remove(doc)} title={t("docs.deleteTitle")}>
@@ -852,6 +879,18 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
 
   return (
     <>
+      {cancelUpdateDoc && (
+        <Modal
+          title={t("docs.keepPreviousVersion")}
+          onClose={() => setCancelUpdateDoc(null)}
+          footer={<>
+            <button className="modal-btn" onClick={() => setCancelUpdateDoc(null)}>{t("common.cancel")}</button>
+            <button className="modal-btn" onClick={() => cancelUpdate(cancelUpdateDoc)}>{t("docs.keepPreviousVersion")}</button>
+          </>}
+        >
+          <p style={{ whiteSpace: "pre-line" }}>{t("docs.confirmCancelUpdate", { name: cancelUpdateDoc.filename })}</p>
+        </Modal>
+      )}
       {canEdit && (
         <SelectionBar
           selectedIds={selectedIds}

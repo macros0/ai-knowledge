@@ -449,6 +449,20 @@ class DocumentGeneration(Base):
     )
 
 
+class DocumentUpdateAttempt(Base):
+    """Published state retained until an update is committed or explicitly canceled."""
+
+    __tablename__ = "document_update_attempts"
+
+    doc_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True,
+    )
+    id: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    base_generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    previous_fields: Mapped[dict] = mapped_column(JSON, nullable=False)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
 class DocumentChunk(Base):
     """Финальный чанк документа (Этап 2b: PostgreSQL — единственный источник текста).
 

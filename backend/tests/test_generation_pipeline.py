@@ -74,6 +74,36 @@ def _published_snapshot(pipeline):
     }
 
 
+def test_local_unfinished_concept_finishes_with_partial_warning_and_resumable_checkpoint(pipeline_env, monkeypatch):
+    from app.services.llm_client import LLMClient
+    from app.services.okf_generator import OKFGenerator
+
+    pipeline, source, write = pipeline_env
+    settings = pipeline.settings
+    settings.llm_profile = 'local_qwen'
+    settings.llm_model = 'openai/local'
+    settings.llm_base_url = 'http://127.0.0.1:8080/v1'
+    settings.llm_truncation_retry_attempts = 0
+    settings.llm_chunk_retry_attempts = 1
+    settings.okf_table_llm_classify = False
+    client = LLMClient(interactive=True)
+    raw = '[{"id":"table","title":"Table","type":"table","tags":[],"content":"unfinished'
+    monkeypatch.setattr(client, '_complete_with_retries', lambda *_a, **_k: (raw, 'length'))
+    pipeline.okf_generator.llm = client
+    pipeline.okf_generator.generate_chunk = OKFGenerator.generate_chunk.__get__(pipeline.okf_generator)
+    write('Updated source evidence that does not fit the generated response.')
+    pipeline._process(DOC_ID, source, 'decision.eml', [], resume=False)
+
+    document = pipeline.registry.get(DOC_ID)
+    assert document['status'] == 'done'
+    # Zero concepts keeps the existing stronger warning; salvage remains in
+    # checkpoints, so the failed chunk can still be regenerated selectively.
+    assert document['problem'] == 'no_concepts'
+    assert document['error_code'] is None
+    assert document['partial_chunks'] == [0]
+    assert StagingStore(DOC_ID).has_chunk(0)
+
+
 def test_regenerate_does_not_delete_published_data_before_worker_starts(pipeline_env, monkeypatch):
     pipeline, _source, _write = pipeline_env
     before = _published_snapshot(pipeline)
@@ -155,6 +185,213 @@ def test_index_failure_preserves_old_text_and_attachment_bytes(pipeline_env, mon
     assert pipeline.registry.get(DOC_ID)["status"] != "done"
     assert _published_snapshot(pipeline) == before
     assert StagingStore(DOC_ID).exists()
+
+
+def test_cancel_failed_update_restores_published_state_and_manual_edits(pipeline_env, monkeypatch):
+    pipeline, source, write = pipeline_env
+    before = _published_snapshot(pipeline)
+    previous = pipeline.registry.get(DOC_ID)
+    write("New decision that cannot be indexed.")
+    monkeypatch.setattr(pipeline.vector_store, "index_chunks", lambda *_a, **_k: (_ for _ in ()).throw(
+        VectorStoreError("Unavailable index"),
+    ))
+    pipeline._process(DOC_ID, source, "decision.eml", [], resume=False)
+    pipeline.registry.update(DOC_ID, tags=["manual"], source_locale="de", source_locale_source="manual")
+
+    pipeline.cancel_update(DOC_ID)
+
+    restored = pipeline.registry.get(DOC_ID)
+    assert restored["status"] == "done"
+    assert restored["error"] is None and restored["error_code"] is None
+    assert restored["total_chunks"] == previous["total_chunks"]
+    assert restored["processed_chunks"] == previous["processed_chunks"]
+    assert restored["tags"] == ["manual"] and restored["source_locale"] == "de"
+    assert _published_snapshot(pipeline) == before
+    assert not StagingStore(DOC_ID).exists()
+    with session_scope() as session:
+        assert session.get(DocumentGenerationState, DOC_ID).candidate_generation_id is None
+
+
+def test_cancel_during_indexing_prevents_late_publication(pipeline_env, monkeypatch):
+    from threading import Event
+
+    pipeline, _source, write = pipeline_env
+    before = _published_snapshot(pipeline)
+    entered, release = Event(), Event()
+    original = pipeline.vector_store.index_chunks
+
+    def blocking_index(*args, **kwargs):
+        entered.set()
+        assert release.wait(10)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline.vector_store, "index_chunks", blocking_index)
+    write("Update canceled during indexing.")
+    pipeline.regenerate(DOC_ID)
+    assert entered.wait(10)
+    task = pipeline._threads[DOC_ID]
+    try:
+        pipeline.cancel_update(DOC_ID)
+        assert pipeline.registry.get(DOC_ID)["update_cancelling"] is True
+        pipeline.cancel_update(DOC_ID)  # Repeated requests cannot abandon live files.
+        assert _published_snapshot(pipeline) == before
+    finally:
+        release.set()
+        task.result(timeout=15)
+    assert pipeline.registry.get(DOC_ID)["status"] == "done"
+    assert pipeline.registry.get(DOC_ID)["update_cancelling"] is False
+    assert _published_snapshot(pipeline) == before
+    records, _ = pipeline.vector_store.client.scroll(pipeline.vector_store.collection, limit=100)
+    assert all(row.payload["generation_id"] == before[0] for row in records)
+
+
+def test_cancel_queued_update_preserves_old_partial_warning(pipeline_env, monkeypatch):
+    from concurrent.futures import Future
+
+    pipeline, _source, _write = pipeline_env
+    before = _published_snapshot(pipeline)
+    pipeline.registry.update(DOC_ID, problem="llm_partial_result")
+    monkeypatch.setattr(pipeline._executor, "submit", lambda *_a: Future())
+    pipeline.regenerate(DOC_ID)
+    pipeline.cancel_update(DOC_ID)
+    restored = pipeline.registry.get(DOC_ID)
+    assert restored["status"] == "done" and restored["problem"] == "llm_partial_result"
+    assert _published_snapshot(pipeline) == before
+    assert not restored["can_cancel_update"]
+
+
+def test_cancel_update_without_previous_publication_is_rejected(pipeline_env):
+    from app.services.errors import ConflictError
+
+    pipeline, _source, _write = pipeline_env
+    pipeline.registry.create("first-upload", "new.eml", "message/rfc822", 0)
+    with pytest.raises(ConflictError):
+        pipeline.cancel_update("first-upload")
+    assert pipeline.registry.get("first-upload")["status"] == "uploaded"
+
+
+def test_cancel_cannot_revert_successfully_published_update(pipeline_env):
+    from app.services.errors import ConflictError
+
+    pipeline, source, write = pipeline_env
+    write("Successfully published replacement.")
+    pipeline._process(DOC_ID, source, "decision.eml", [], resume=False)
+    current = _published_snapshot(pipeline)
+    with pytest.raises(ConflictError):
+        pipeline.cancel_update(DOC_ID)
+    assert _published_snapshot(pipeline) == current
+
+
+def test_cancel_request_survives_restart_before_worker_finishes(pipeline_env, monkeypatch):
+    from concurrent.futures import Future
+
+    pipeline, _source, _write = pipeline_env
+    before = _published_snapshot(pipeline)
+    running = Future()
+    running.set_running_or_notify_cancel()
+    monkeypatch.setattr(pipeline._executor, "submit", lambda *_a: running)
+    pipeline.regenerate(DOC_ID)
+    pipeline.cancel_update(DOC_ID)
+    pipeline.registry.reset_stale_statuses()
+    assert pipeline.registry.get(DOC_ID)["status"] == "done"
+    assert not pipeline.registry.get(DOC_ID)["update_cancelling"]
+    assert _published_snapshot(pipeline) == before
+
+
+def test_cancel_recovers_update_interrupted_before_snapshot_support(pipeline_env, monkeypatch):
+    from app.db.models import DocumentUpdateAttempt
+
+    pipeline, source, write = pipeline_env
+    before = _published_snapshot(pipeline)
+    write("Historical update interrupted during indexing.")
+    monkeypatch.setattr(pipeline.vector_store, "index_chunks", lambda *_a, **_k: (_ for _ in ()).throw(
+        VectorStoreError("Unavailable index"),
+    ))
+    pipeline._process(DOC_ID, source, "decision.eml", [], resume=False)
+    with session_scope() as session:
+        session.delete(session.get(DocumentUpdateAttempt, DOC_ID))
+    doc = pipeline.registry.get(DOC_ID)
+    assert doc["can_cancel_update"] and doc["update_id"] == before[0]
+    pipeline.cancel_update(DOC_ID, doc["update_id"])
+    assert pipeline.registry.get(DOC_ID)["status"] == "done"
+    assert _published_snapshot(pipeline) == before
+
+
+def test_cancel_legacy_update_keeps_canonical_rows(pipeline_env, monkeypatch):
+    from concurrent.futures import Future
+    from app.db.models import DocumentChunk
+
+    pipeline, _source, _write = pipeline_env
+    pipeline.registry.create("legacy", "old.eml", "message/rfc822", 0)
+    with session_scope() as session:
+        session.add(DocumentChunk(doc_id="legacy", chunk_index=0, content="Legacy published text"))
+    pipeline.registry.update("legacy", status="done", total_chunks=1, processed_chunks=1)
+    (pipeline.settings.uploads_dir / "legacy.eml").write_bytes(b"Legacy source")
+    monkeypatch.setattr(pipeline._executor, "submit", lambda *_a: Future())
+    pipeline.regenerate("legacy")
+    pipeline.cancel_update("legacy")
+    assert pipeline.registry.get("legacy")["status"] == "done"
+    with session_scope() as session:
+        assert session.query(DocumentChunk).filter_by(doc_id="legacy").one().content == "Legacy published text"
+
+
+def test_fresh_regeneration_rotates_token_but_resume_keeps_it(pipeline_env, monkeypatch):
+    from concurrent.futures import Future
+    from app.services.errors import ConflictError
+
+    pipeline, source, write = pipeline_env
+    write("Failed update that will be replaced by a fresh attempt.")
+    monkeypatch.setattr(pipeline.vector_store, "index_chunks", lambda *_a, **_k: (_ for _ in ()).throw(
+        VectorStoreError("Unavailable index"),
+    ))
+    pipeline._process(DOC_ID, source, "decision.eml", [], resume=False)
+    old_id = pipeline.registry.get(DOC_ID)["update_id"]
+    monkeypatch.setattr(pipeline._executor, "submit", lambda *_a: Future())
+    pipeline.resume(DOC_ID)
+    assert pipeline.registry.get(DOC_ID)["update_id"] == old_id
+    # Simulate completion with a resumable failure before a fresh explicit start.
+    pipeline._threads.pop(DOC_ID).cancel()
+    pipeline._pipeline_slots.release()
+    pipeline.registry.update(DOC_ID, status="paused")
+    pipeline.regenerate(DOC_ID)
+    new_id = pipeline.registry.get(DOC_ID)["update_id"]
+    assert new_id != old_id
+    with pytest.raises(ConflictError):
+        pipeline.cancel_update(DOC_ID, old_id)
+    assert pipeline.registry.get(DOC_ID)["status"] == "queued"
+    pipeline.cancel_update(DOC_ID, new_id)
+
+
+def test_publication_that_wins_lock_cannot_be_undone_by_late_cancel(pipeline_env, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from app.services.errors import ConflictError
+    import app.services.generation_publication as publication
+
+    pipeline, _source, write = pipeline_env
+    before = _published_snapshot(pipeline)
+    entered, release = Event(), Event()
+    original = publication.publish_generation
+
+    def locked_publication(*args, **kwargs):
+        result = original(*args, **kwargs)
+        entered.set()
+        assert release.wait(10)
+        return result
+
+    monkeypatch.setattr(publication, "publish_generation", locked_publication)
+    write("Update committed before cancellation can acquire the writer lock.")
+    pipeline.regenerate(DOC_ID)
+    assert entered.wait(10)
+    task = pipeline._threads[DOC_ID]
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        late_cancel = pool.submit(pipeline.cancel_update, DOC_ID)
+        release.set()
+        with pytest.raises(ConflictError):
+            late_cancel.result(timeout=15)
+    task.result(timeout=15)
+    assert pipeline.registry.get(DOC_ID)["status"] == "done"
+    assert _published_snapshot(pipeline)[0] != before[0]
 
 
 def test_success_publishes_new_generation_and_uses_distinct_attachment_paths(pipeline_env):

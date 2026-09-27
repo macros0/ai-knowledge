@@ -101,7 +101,7 @@ rejecting `disabled`/`simulation` (`ValueError` before uvicorn starts), as well 
 | Role | Rights |
 |---|---|
 | `viewer` | read-only: list/search/chat, viewing documents, developments, tags, attributes (`require_user`) |
-| `editor` | + content changes: document upload/delete, resume/regenerate, development assignment, tag edits, bulk tag editing, removing unused tags from the registry, creating/updating/deleting developments and attribute values (`require_role("editor","admin")`) |
+| `editor` | + content changes: document upload/delete, resume/regenerate/cancel-update, development assignment, tag edits, bulk tag editing, removing unused tags from the registry, creating/updating/deleting developments and attribute values (`require_role("editor","admin")`) |
 | `admin` | + bulk/destructive operations and jobs: bulk-delete, bulk-regenerate, approve/cancel job (`require_role("admin")`) |
 | `security` | blocking/unblocking users (`users.py`) and read-only security audit log (`audit.py`, `require_role("security")`) |
 
@@ -969,6 +969,20 @@ added only on explicit assignment (the `new_value` form without assignment is un
 No new action_type was introduced; permissions are the previous
 `require_role("editor","admin")`. No impact on trust boundaries/network topology.
 
+### 2026-09-27 — Cancel document update while preserving its published version
+
+`POST /documents/{id}/cancel-update` is restricted to editor/admin and active
+documents. The request identifies the exact attempt shown in the UI; stale
+attempts return 409. A durable cancellation flag and the `document_update_cancel`
+audit event commit together under the same Document writer lock as publication.
+If auditing fails, the update remains resumable. A canceled worker cannot publish;
+its files/points retire only after it stops. Restart recovery completes requested
+cancellations. The previous published text, attachments, warnings and counters
+are preserved; manual tag/locale edits are retained. This adds no version-history
+retention or rollback after successful publication. Verified by role, stale-token,
+audit-failure, worker/indexing, restart and publication-lock tests in
+`test_document_update_api.py` and `test_generation_pipeline.py`.
+
 ### 2026-08-31 — Open network surface in production
 Found: `AUTH_PROVIDER=disabled/simulation` were not forbidden in production
 (`app/config.py` — the validator checked only the secret and the HTTPS cookie, not the
@@ -978,3 +992,17 @@ Fixed: the fail-fast validator forbids `disabled`/`simulation` in production; ho
 publication of backend/Qdrant removed (only frontend outward); CORS reduced to the empty
 allow-list `CORS_ALLOWED_ORIGINS` (the browser reaches the backend only through the
 frontend's server-side rewrites); the backend binds `127.0.0.1` in the local script.
+
+## Local generation salvage (2026-09-27)
+
+Local OKF salvage is permitted only after a truncated response (output length,
+an open JSON structure, or a structured tail after a closed value). It decodes
+completed array elements and applies the unchanged strict GeneratedConcept
+schema; incomplete/invalid records and duplicate IDs are discarded without
+inventing required fields. Every such result records llm_salvage, including an
+empty result. Complete invalid responses remain rejected; classification,
+translation, and standard-provider contracts are unchanged. Regression coverage:
+test_local_llm.py checks unfinished objects, long truncated tails, schema-invalid
+records, duplicate IDs, and rejection of complete invalid output;
+test_generation_pipeline.py checks problem/checkpoint persistence. Table splitting
+preserves whole source rows and headers, without rewriting canonical chunks.

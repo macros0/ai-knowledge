@@ -313,6 +313,7 @@
   "apiError.dict_version_not_found": [],
   "apiError.document_limit_exceeded": [],
   "apiError.document_not_found": [],
+  "apiError.document_update_conflict": [],
   "apiError.duplicate": [],
   "apiError.duplicate_number": [],
   "apiError.empty_document_list": [],
@@ -684,6 +685,10 @@
   "docs.allModules": [],
   "docs.allTags": [],
   "docs.allUploaders": [],
+  "docs.cancelUpdate": [],
+  "docs.cancelUpdateError": [
+    "message"
+  ],
   "docs.changeDevError": [
     "message"
   ],
@@ -697,6 +702,9 @@
   "docs.collapseTagsAria": [],
   "docs.conceptsGeneratedAt": [
     "date"
+  ],
+  "docs.confirmCancelUpdate": [
+    "name"
   ],
   "docs.confirmRegenerate": [
     "name"
@@ -731,6 +739,7 @@
   "docs.filtersButton": [],
   "docs.group.noDevelopment": [],
   "docs.group.noTag": [],
+  "docs.keepPreviousVersion": [],
   "docs.loadError": [
     "message"
   ],
@@ -759,6 +768,8 @@
   "docs.myDocuments": [],
   "docs.openTrash": [],
   "docs.optionSearchPlaceholder": [],
+  "docs.previousVersionAvailable": [],
+  "docs.previousVersionKept": [],
   "docs.problem.attachment_partial_result": [],
   "docs.problem.encrypted_mail": [],
   "docs.problem.index_partial_failure": [],
@@ -825,6 +836,9 @@
   "docs.tagsSyncPending": [],
   "docs.tagsUnchanged": [],
   "docs.tagsUpdated": [],
+  "docs.updateCancelling": [],
+  "docs.updateFailedPreviousSaved": [],
+  "docs.updateRunning": [],
   "docs.uploadAria": [],
   "docs.uploadDevLabel": [],
   "docs.uploadModuleHint": [
@@ -1009,6 +1023,7 @@
   "security.action.document_restore": [],
   "security.action.document_resume": [],
   "security.action.document_tags_update": [],
+  "security.action.document_update_cancel": [],
   "security.action.document_upload": [],
   "security.action.job_approve": [],
   "security.action.job_cancel": [],

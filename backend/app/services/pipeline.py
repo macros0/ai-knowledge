@@ -45,6 +45,9 @@ from app.services.generation_publication import _merge_tags, publish_prepared_do
 from app.services.generation_store import (
     lock_document_write, mark_generation_ready, prepare_generation_attempt,
 )
+from app.services.document_update import (
+    DocumentUpdateCancelled, capture_published_update, request_update_cancel, restore_canceled_update,
+)
 from app.services.json_atomic import write_json_atomic
 from app.services.language import detect_language
 from app.services.llm_client import LLMTruncationError, is_fatal_error
@@ -303,6 +306,62 @@ class Pipeline:
                 return doc or {}
             time.sleep(2)
 
+    def cancel_update(
+        self, doc_id: str, expected_update_id: str | None = None, *, user=None, ip_address=None,
+    ) -> None:
+        """Prevent publication durably; let a running worker stop before cleanup."""
+        with self._start_lock:
+            with session_scope() as session:
+                from app.db.models import Document, DocumentGenerationState, DocumentUpdateAttempt
+
+                if not lock_document_write(session, doc_id, allow_deleted=False):
+                    raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
+                attempt = session.get(DocumentUpdateAttempt, doc_id, populate_existing=True)
+                if attempt is None:
+                    document = session.get(Document, doc_id, populate_existing=True)
+                    state = session.get(DocumentGenerationState, doc_id, populate_existing=True)
+                    if (document.status == "done" or not state or not state.active_generation_id
+                            or (expected_update_id and expected_update_id != state.active_generation_id)):
+                        raise ConflictError("Нет текущего обновления для отмены", code=codes.DOCUMENT_UPDATE_CONFLICT)
+                    capture_published_update(session, doc_id, self.settings)
+                    session.flush()
+                    attempt = session.get(DocumentUpdateAttempt, doc_id)
+                    expected_update_id = attempt.id
+                already_requested = attempt.cancel_requested
+                request_update_cancel(session, doc_id, expected_update_id)
+                if user is not None and not already_requested:
+                    from app.services import audit
+
+                    audit.record_in_session(
+                        session, action_type=audit.DOCUMENT_UPDATE_CANCEL,
+                        user_id=user.user_id, username=user.username, target_type=audit.TARGET_DOCUMENT,
+                        target_id=doc_id, ip_address=ip_address,
+                        new_value={"update_id": attempt.id, "previous_version_preserved": True},
+                    )
+            event = self._abort_events.get(doc_id)
+            if event:
+                event.set()
+            task = self._threads.get(doc_id)
+            if task and not task.done():
+                if not task.cancel():
+                    return  # The worker owns all its files until it exits.
+                self._threads.pop(doc_id, None)
+                self._abort_events.pop(doc_id, None)
+                self._pipeline_slots.release()
+            self._finish_canceled_update(doc_id)
+            self._cleanup_document_generations(doc_id)
+
+    def _finish_canceled_update(self, doc_id: str) -> None:
+        with storage_failure_lock():
+            with session_scope() as session:
+                restored = restore_canceled_update(session, doc_id)
+            if restored:
+                clear_transient_storage_failure(doc_id)
+                try:
+                    StagingStore(doc_id).remove()
+                except Exception:
+                    logger.warning("[%s] Не удалось очистить отменённые checkpoints", doc_id, exc_info=True)
+
     def _start(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
         *, reset_staging: bool = False,
@@ -322,11 +381,16 @@ class Pipeline:
                 )
             self._abort_events[doc_id] = threading.Event()
             previous_state = None
+            captured_update = False
+            previous_update_id = None
             try:
                 doc = self.registry.get(doc_id)
                 if doc is None or doc.get("deleted_at") is not None:
                     raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
                 previous_state = {key: doc.get(key) for key in ("status", "error", "error_code")}
+                previous_update_id = doc.get("update_id")
+                with session_scope() as session:
+                    captured_update = capture_published_update(session, doc_id, self.settings, fresh=not resume)
                 if reset_staging:
                     # Admission and destructive checkpoint reset share the same
                     # lock: a second regenerate must not erase a running worker.
@@ -344,6 +408,16 @@ class Pipeline:
                 self._pipeline_slots.release()
                 if previous_state is not None:
                     self.registry.update(doc_id, **previous_state)
+                if captured_update or previous_update_id:
+                    from app.db.models import DocumentUpdateAttempt
+
+                    with session_scope() as session:
+                        attempt = session.get(DocumentUpdateAttempt, doc_id)
+                        if attempt:
+                            if captured_update:
+                                session.delete(attempt)
+                            else:
+                                attempt.id = previous_update_id
                 raise
             self._threads[doc_id] = task
 
@@ -359,6 +433,8 @@ class Pipeline:
                 doc_id, filepath, filename, user_tags, resume=resume,
                 fresh_table_cache=fresh_table_cache,
             )
+        except DocumentUpdateCancelled:
+            logger.info("[%s] Обновление отменено", doc_id)
         except Exception as exc:
             logger.exception("Ошибка обработки документа %s", filename)
             if is_storage_full(exc):
@@ -377,6 +453,10 @@ class Pipeline:
                         self.registry.update(doc_id, status="paused", error=None, error_code=None)
                 except Exception:
                     logger.warning("[%s] Не удалось сохранить остановку обработки", doc_id, exc_info=True)
+            try:
+                self._finish_canceled_update(doc_id)
+            except Exception:
+                logger.exception("[%s] Возврат опубликованной версии будет повторён при старте", doc_id)
             self._cleanup_document_generations(doc_id)
             self._abort_events.pop(doc_id, None)
             self._threads.pop(doc_id, None)
@@ -394,15 +474,25 @@ class Pipeline:
 
     def cleanup_inactive_generations(self) -> None:
         from sqlalchemy import or_, select
+        from app.db.models import DocumentUpdateAttempt
 
         with session_scope() as session:
             doc_ids = list(session.scalars(select(DocumentGeneration.doc_id).where(or_(
                 DocumentGeneration.phase.in_(["retired", "abandoned"]),
                 DocumentGeneration.legacy_cleanup_pending.is_(True),
             )).distinct()))
+            canceled = list(session.scalars(select(DocumentUpdateAttempt.doc_id).where(
+                DocumentUpdateAttempt.cancel_requested.is_(True),
+            )))
         with self._start_lock:
             running = {doc_id for doc_id, task in self._threads.items() if not task.done()}
-        for doc_id in doc_ids:
+            for doc_id in canceled:
+                if doc_id not in running:
+                    try:
+                        self._finish_canceled_update(doc_id)
+                    except Exception:
+                        logger.warning("[%s] Возврат опубликованной версии будет повторён", doc_id, exc_info=True)
+        for doc_id in set(doc_ids) | set(canceled):
             if doc_id not in running:
                 self._cleanup_document_generations(doc_id)
 
@@ -493,6 +583,8 @@ class Pipeline:
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
         *, fresh_table_cache: bool = False,
     ) -> None:
+        with session_scope() as session:
+            capture_published_update(session, doc_id, self.settings)
         self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
         source_file_hash = _sha256_file(filepath)
         staging = StagingStore(doc_id)
@@ -798,6 +890,8 @@ class Pipeline:
                 parse_warnings=parse_warnings,
                 has_text=has_text,
             )
+        except DocumentUpdateCancelled:
+            return
         except DependencyUnavailableError as exc:
             # Staging не удаляем: чекпоинты всех чанков сохраняются, чтобы
             # повторный resume повторил только финализацию (embed+index),

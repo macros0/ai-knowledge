@@ -533,6 +533,27 @@ class TestGenerateChunk:
 
 
 class TestSplitInHalf:
+    def test_wide_table_splits_rows_without_losing_cells_or_header(self):
+        from app.services.okf_generator import _split_in_half
+
+        header = '| ' + ' | '.join(f'Field {i}' for i in range(148)) + ' |'
+        separator = '|' + '---|' * 148
+        rows = ['| ' + ' | '.join(f'row{r} cell{c}' for c in range(148)) + ' |' for r in range(18)]
+        text = '\n'.join([header, separator, *rows])
+        parts = _split_in_half(text)
+        assert len(parts) == 2
+        assert all(0 < len(part) < len(text) for part in parts)
+        assert all(part.splitlines()[:2] == [header, separator] for part in parts)
+        assert [row for part in parts for row in part.splitlines()[2:]] == rows
+
+    def test_single_table_row_and_fenced_table_are_not_split(self):
+        from app.services.okf_generator import _split_in_half
+
+        table = '| Field | Value |\n|---|---|\n| a | one |'
+        assert _split_in_half(table) == [table]
+        fenced = '```markdown\n' + table + '\n| b | two |\n```'
+        assert _split_in_half(fenced) == [fenced]
+
     def test_splits_roughly_in_half(self):
         from app.services.okf_generator import _split_in_half
 

@@ -556,6 +556,17 @@ class LLMClient:
             text, finish_reason = self._complete_with_retries(
                 system, user, max_tokens=max_tokens, **({"task": task} if self.local else {}))
             try:
+                if self.local and task == "generation" and salvage_truncated:
+                    fragment = _response_json_fragment(text)
+                    closed = _top_level_close_pos(fragment)
+                    if (finish_reason == "length" or _is_truncated(fragment)
+                            or (closed >= 0 and _tail_has_json_structure(fragment[closed + 1:]))):
+                        result = llm_profiles.validate_salvaged_generation(_complete_array_items(fragment))
+                        gen_quality.record(gen_quality.LLM_SALVAGE,
+                                           f"chunk {chunk_idx}: retained {len(result)} complete validated concepts")
+                        logger.warning("[%s] Чанк %s: сохранено %d полных концептов, неполный ответ отброшен",
+                                       doc_id, chunk_idx, len(result))
+                        return result
                 result = _parse_json(
                     text,
                     finish_reason=finish_reason,
@@ -576,6 +587,39 @@ class LLMClient:
                     max_tokens,
                 )
         raise LLMTruncationError(f"Чанк {chunk_idx}: не удалось получить полный JSON")
+
+
+def _response_json_fragment(text: str) -> str:
+    cleaned = re.sub(r"^```(?:json)?\s*", "", text.strip())
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+    start = min((cleaned.find(c) if c in cleaned else len(cleaned)) for c in "[{")
+    return cleaned[start:]
+
+
+def _complete_array_items(fragment: str) -> list:
+    """Read completed array elements; do not repair an unfinished final object."""
+    fragment = _sanitize_control_chars(fragment).strip()
+    if not fragment.startswith("["):
+        return []
+    decoder = json.JSONDecoder()
+    items = []
+    position = 1
+    while position < len(fragment):
+        while position < len(fragment) and fragment[position].isspace():
+            position += 1
+        if position == len(fragment) or fragment[position] == "]":
+            break
+        try:
+            item, position = decoder.raw_decode(fragment, position)
+        except json.JSONDecodeError:
+            break
+        items.append(item)
+        while position < len(fragment) and fragment[position].isspace():
+            position += 1
+        if position == len(fragment) or fragment[position] != ",":
+            break
+        position += 1
+    return items
 
 
 def _stream_delta(chunk) -> str:

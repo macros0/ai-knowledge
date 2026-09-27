@@ -567,3 +567,55 @@ scoped diff check проходят; MAIL_IMPORT_ENABLED=true сохранён.
 flat-bundle test fixtures нужно перевести на canonical SQL и active bundle path,
 не ослабляя проверки полноты. Full backend coverage/frontend build/live PG+Qdrant/
 Linux/backup/load gates открыты. Live data/schema/restart/commit/push не выполнялись.
+
+## 2026-09-27: UX отмены обновления и сохранения опубликованной версии
+
+Пользователь одобрил два действия: «Отменить обновление» во время regeneration
+и «Оставить предыдущую версию» после её сбоя. Для первой загрузки действия нет.
+После успешной публикации возврат к более ранней версии не предусмотрен.
+
+DocumentUpdateAttempt хранит снимок опубликованных счётчиков/предупреждений и
+durable cancel_requested. Отмена и публикация используют общий Document writer
+lock: победившая отмена запрещает позднюю публикацию. Каждая новая regeneration
+получает новый update_id; resume сохраняет его. Старый диалог не может отменить
+новую попытку. editor/admin API и аудит записывают отмену одной транзакцией.
+Worker сначала останавливается, затем восстанавливаются status=done и прежние
+поля, удаляются candidate/checkpoints; опубликованные файлы, SQL-концепты и
+поисковые точки остаются доступны. Startup и periodic cleanup повторяют
+незавершённое восстановление. Ручные изменения тегов/языка не откатываются.
+
+Список показывает «Обновляется», доступность прежней версии и нужную кнопку;
+после запроса — «Отменяем обновление…». Подтверждение использует обычный Modal.
+Страница концептов продолжает polling отмены даже после failed/error. Тексты
+обычной и массовой regeneration больше не утверждают, что старая версия удаляется.
+Старое предупреждение неполноты сохраняется; checkpoints выборочной догенерации
+старой версии не восстанавливаются, для её исправления может понадобиться полная
+regeneration.
+
+Browser acceptance на изолированном SQLite/Qdrant-stub стенде: отмена в ходе
+индексации и отказ от failed update вернули «Готов»; исходный Published decision
+остался доступен на реальной странице концептов. Скриншоты:
+tests/tmp/cancel-update-running.png, cancel-update-failed.png,
+cancel-update-restored.png. Frontend: 216 tests passed, production build passed;
+backend: 86 generation/API/audit tests и 9 queue/schema tests passed; Ruff passed.
+Регрессии проверяют позднюю публикацию, queued cancellation,
+restart recovery, audit rollback, stale tokens, старые interrupted generations,
+сохранность published data и manual metadata. Повторный review двух исправлений
+(token rotation и detail polling) существенных оставшихся замечаний не выявил.
+
+Рабочий backend не перезапущен: на момент проверки один документ генерировался,
+ещё четыре стояли в очереди. Новые API/table будут доступны после безопасного
+перезапуска backend; development create_all создаёт новую таблицу, production
+использует additive Alembic migration 020b1c2d3e4f. Live data/schema не менялись,
+commit/push не выполнялись.
+
+Финальный общий backend run: 2346 passed, 23 skipped, 2 failed
+(tests/tmp/cancel-update-backend-full.log). Оба падения — старые Pipeline.__new__
+test doubles без settings/SQL registry. Fixtures дополнены реальными settings и
+изолированным DocumentRegistry; проверки конкуренции/abort не ослаблены.
+Повтор всего test_pipeline_integration.py: 50 passed
+(tests/tmp/cancel-update-integration-green.log). Общий suite после этой правки
+только тестовых fixtures не запускался повторно; runtime правки дополнительно
+проверены указанными выше 95 tests. Все запущенные проверки завершены;
+изолированные acceptance backend/frontend остановлены. ESLint: 0 errors,
+36 прежних warnings. Финальные Ruff и git diff --check прошли.

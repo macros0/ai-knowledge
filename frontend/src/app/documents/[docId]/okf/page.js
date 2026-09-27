@@ -62,6 +62,7 @@ export default async function OkfListPage({ params, searchParams }) {
         totalChunks={doc.total_chunks}
         processedChunks={doc.processed_chunks}
         currentChunk={doc.current_chunk}
+        documentState={doc}
       />
       <DocumentSources key={focusedSourceId || "root"} docId={docId} focusedSourceId={focusedSourceId} />
     </div>

@@ -308,6 +308,14 @@ export function regenerateDocument(docId) {
   return request(`/documents/${docId}/regenerate`, { method: "POST" });
 }
 
+export function cancelDocumentUpdate(docId, updateId) {
+  return request(`/documents/${docId}/cancel-update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ update_id: updateId }),
+  });
+}
+
 export function bulkPreview(docIds, operation) {
   return request(`/documents/bulk-preview${operation ? `?operation=${encodeURIComponent(operation)}` : ""}`, {
     method: "POST",

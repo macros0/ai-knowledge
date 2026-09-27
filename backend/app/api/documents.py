@@ -37,6 +37,7 @@ from app.models.schemas import (
     DocumentDevelopmentSet,
     DocumentListOut,
     DocumentOut,
+    DocumentUpdateCancel,
     DocumentSourceLocaleUpdate,
     DocumentStatsOut,
     DocumentSourceOut,
@@ -1035,10 +1036,7 @@ def regenerate_document(
     request: Request,
     user: User = Depends(require_role("editor", "admin")),
 ):
-    """Полная перегенерация концептов документа через LLM (с текущими промптами).
-
-    Удаляет старый OKF-бандл, staging и векторы, затем запускает пайплайн с нуля.
-    """
+    """Готовит новое поколение через LLM, сохраняя опубликованный результат."""
     doc = _registry.get(doc_id)
     if not doc:
         raise ApiError(
@@ -1071,6 +1069,25 @@ def regenerate_document(
         old_value={"filename": doc.get("filename")},
         ip_address=_client_ip(request),
     )
+    return _registry.get(doc_id)
+
+
+@router.post("/{doc_id}/cancel-update", response_model=DocumentOut)
+def cancel_document_update(
+    doc_id: str,
+    body: DocumentUpdateCancel,
+    request: Request,
+    user: User = Depends(require_role("editor", "admin")),
+):
+    """Abandon the exact update displayed by the UI and retain its published base."""
+    try:
+        get_pipeline().cancel_update(
+            doc_id, body.update_id, user=user, ip_address=_client_ip(request),
+        )
+    except ConflictError as exc:
+        raise errors.domain_error(exc, 409) from exc
+    except DomainError as exc:
+        raise errors.domain_error(exc, 404 if exc.code == errors.DOCUMENT_NOT_FOUND else 400) from exc
     return _registry.get(doc_id)
 
 

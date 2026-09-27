@@ -12,7 +12,7 @@ import uuid
 
 from sqlalchemy import select, update
 
-from app.db.models import Document, DocumentGeneration, DocumentGenerationState
+from app.db.models import Document, DocumentGeneration, DocumentGenerationState, DocumentUpdateAttempt
 
 
 class GenerationConflict(ValueError):
@@ -119,6 +119,11 @@ def mark_generation_ready(session, doc_id: str, generation_id: str, *, publicati
 
 def publish_generation(session, doc_id: str, generation_id: str) -> bool:
     state = _locked_state(session, doc_id)
+    attempt = session.get(DocumentUpdateAttempt, doc_id, populate_existing=True)
+    if attempt and attempt.cancel_requested:
+        from app.services.document_update import DocumentUpdateCancelled
+
+        raise DocumentUpdateCancelled("Document update was canceled")
     generation = _generation(session, doc_id, generation_id)
     if state.active_generation_id == generation_id and generation.phase == "active":
         return False  # The caller must not replay canonical writes either.

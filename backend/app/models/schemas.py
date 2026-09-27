@@ -40,6 +40,10 @@ class DocumentOut(BaseModel):
     content_type: str
     size: int
     status: str
+    has_published_version: bool = False
+    update_id: str | None = None
+    can_cancel_update: bool = False
+    update_cancelling: bool = False
     error: str | None = None
     error_code: str | None = None
     # Диагностический код неполноты при зелёном done (services/problem_codes.py).
@@ -93,6 +97,10 @@ class DocumentOut(BaseModel):
         if self.problem and not self.problem_message:
             self.problem_message = problem_message(self.problem)
         return self
+
+
+class DocumentUpdateCancel(BaseModel):
+    update_id: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
 class TrashItemOut(DocumentOut):

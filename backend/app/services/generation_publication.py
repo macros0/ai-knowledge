@@ -2,7 +2,7 @@
 import logging
 from pathlib import Path
 
-from app.db.models import Development, Document, DocumentGeneration
+from app.db.models import Development, Document, DocumentGeneration, DocumentUpdateAttempt
 from app.db.session import session_scope
 from app.models.schemas import OkfDocument
 from app.services.attachment_store import replace_attachments
@@ -116,6 +116,9 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
             apply_document_signature(session, doc_id, effects["signature"])
         for key, value in fields.items():
             setattr(document, key, value)
+        attempt = session.get(DocumentUpdateAttempt, doc_id)
+        if attempt:
+            session.delete(attempt)
     if effects.get("signature"):
         from app.services.deduplication import refresh_duplicate_flags
 

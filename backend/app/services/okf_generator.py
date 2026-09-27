@@ -516,11 +516,13 @@ def _split_in_half(text: str) -> list[str]:
     половины; единица, которая перевалит за середину, уходит во вторую половину
     целиком (никогда не разрывается). Возвращает либо [first, second] (обе части
     непустые и строго меньше исходного текста), либо [text] — когда текст
-    неделим (одна атомарная единица) и резать нечего.
+    неделим (одна атомарная единица) и резать нечего. Единственную markdown-
+    таблицу после обрезания ответа можно делить по целым строкам данных,
+    повторяя заголовок. Канонические чанки и кодовые блоки не меняются.
     """
     units = _split_units(text.strip())
     if len(units) < 2:
-        return [text]
+        return _split_table_rows(text)
     target = len(text) // 2
     first: list[str] = []
     size = 0
@@ -533,6 +535,31 @@ def _split_in_half(text: str) -> list[str]:
     if not rest:
         return [text]
     return ["\n\n".join(first), "\n\n".join(rest)]
+
+
+def _split_table_rows(text: str) -> list[str]:
+    """Split an isolated table, preserving complete rows and both header lines."""
+    from app.services.field_table import _is_separator_row, _is_table_row
+
+    lines = text.strip().splitlines()
+    if (len(lines) < 4 or not all(_is_table_row(line) for line in lines)
+            or not _is_separator_row(lines[1])):
+        return [text]
+    # Multiple headers in one block are not one table; keep that block intact.
+    if any(_is_separator_row(line) for line in lines[2:]):
+        return [text]
+    rows = lines[2:]
+    target = sum(len(row) + 1 for row in rows) / 2
+    size = 0
+    cut = 1
+    for index, row in enumerate(rows[:-1], 1):
+        size += len(row) + 1
+        cut = index
+        if size >= target:
+            break
+    header = lines[:2]
+    parts = ["\n".join(header + rows[:cut]), "\n".join(header + rows[cut:])]
+    return parts if all(0 < len(part) < len(text) for part in parts) else [text]
 
 
 def _split_units(text: str) -> list[str]:

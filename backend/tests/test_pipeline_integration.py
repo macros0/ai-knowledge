@@ -1228,9 +1228,11 @@ class TestConcurrentStart:
     """
 
     def _pipeline(self, monkeypatch, started):
+        from app.config import get_settings
         from app.services.pipeline import Pipeline
 
         p = Pipeline.__new__(Pipeline)  # без Embedder/VectorStore — нужен только _start
+        p.settings = get_settings()
         p.registry = DocumentRegistry()
         p.registry.create("doc1", "x.docx", "docx", 10)
         p._abort_events = {}
@@ -1336,9 +1338,11 @@ class TestSharedPipelineInstance:
 
     def _stub_singleton(self, monkeypatch):
         """Инстанс без Embedder/VectorStore, подставленный как синглгон."""
+        from app.config import get_settings
         from app.services import pipeline as pipeline_mod
 
         p = pipeline_mod.Pipeline.__new__(pipeline_mod.Pipeline)
+        p.settings = get_settings()
         p._abort_events = {}
         p._threads = {}
         p._start_lock = threading.Lock()
@@ -1349,18 +1353,9 @@ class TestSharedPipelineInstance:
             def set_document_deleted(self, doc_id, flag):
                 pass
 
-        class _FakeRegistry:
-            def get(self, doc_id):
-                return {"status": "uploaded"}
-
-            def update(self, doc_id, **fields):
-                pass
-
-            def soft_delete(self, doc_id, deleted_by=None):
-                pass
-
         p.vector_store = _FakeVectorStore()
-        p.registry = _FakeRegistry()
+        p.registry = DocumentRegistry()
+        p.registry.create("doc1", "x.docx", "docx", 10)
         monkeypatch.setattr(pipeline_mod, "_INSTANCE", p)
         return p
 

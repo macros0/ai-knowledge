@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useI18n } from "@/i18n/LocaleContext";
 import { PaperclipIcon } from "./icons";
 import { friendlyApiError, getDocumentChunks } from "@/lib/api";
-
-const BUSY_STATUSES = ["uploaded", "queued", "processing", "splitting", "indexing", "paused"];
+import { documentUpdateView, shouldPollOkfDocument } from "@/lib/documentUpdate.mjs";
 
 export default function OkfFileList({
   docId,
@@ -15,11 +14,14 @@ export default function OkfFileList({
   totalChunks = 0,
   processedChunks = 0,
   currentChunk = null,
+  documentState = {},
 }) {
   const { t } = useI18n();
   const [view, setView] = useState("concepts");
   const [fileList, setFileList] = useState(files);
   const [status, setStatus] = useState(docStatus);
+  const [updateState, setUpdateState] = useState(documentState);
+  const cancellationRequested = Boolean(updateState.update_cancelling);
   const [progress, setProgress] = useState({
     total: totalChunks,
     processed: processedChunks,
@@ -51,7 +53,7 @@ export default function OkfFileList({
 
   useEffect(() => {
     let cancelled = false;
-    if (!BUSY_STATUSES.includes(status)) return;
+    if (!shouldPollOkfDocument({ status, update_cancelling: cancellationRequested })) return;
 
     const tick = async () => {
       const [docResp, okfResp] = await Promise.all([
@@ -61,10 +63,13 @@ export default function OkfFileList({
       if (cancelled) return;
 
       let nextStatus = status;
+      let nextCancellationRequested = cancellationRequested;
       if (docResp.ok) {
         const d = await docResp.json();
         nextStatus = d.status;
+        nextCancellationRequested = d.update_cancelling;
         setStatus(d.status);
+        setUpdateState(d);
         setProgress({
           total: d.total_chunks,
           processed: d.processed_chunks,
@@ -87,7 +92,7 @@ export default function OkfFileList({
         }
       }
 
-      if (!cancelled && BUSY_STATUSES.includes(nextStatus)) {
+      if (!cancelled && shouldPollOkfDocument({ status: nextStatus, update_cancelling: nextCancellationRequested })) {
         timer.current = setTimeout(tick, 1500);
       }
     };
@@ -97,9 +102,9 @@ export default function OkfFileList({
       cancelled = true;
       clearTimeout(timer.current);
     };
-  }, [docId, status]);
+  }, [docId, status, cancellationRequested]);
 
-  const isBusy = BUSY_STATUSES.includes(status);
+  const isBusy = shouldPollOkfDocument({ status, update_cancelling: cancellationRequested });
   const activeChunk = progress.current ?? progress.processed;
   const VIEWS = [
     { id: "concepts", label: t("okf.view.concepts") },
@@ -108,6 +113,11 @@ export default function OkfFileList({
 
   return (
     <>
+      {documentUpdateView({ ...updateState, status }).noticeKey && (
+        <p className="okf-live-progress" role="status">
+          {t(documentUpdateView({ ...updateState, status }).noticeKey)}
+        </p>
+      )}
       {isBusy && progress.total > 0 && (
         <div className="okf-live-progress">
           <span className="live-dot" />

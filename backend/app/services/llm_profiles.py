@@ -3,7 +3,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 from typing import Literal
 
 from app.services.llm_scheduler import LLMCancelled
@@ -131,3 +131,20 @@ def validate_result(task, value):
             item["relations"] = [r for r in item["relations"]
                                  if r["id"] in known and r["id"] != item["id"]]
     return value
+
+
+def validate_salvaged_generation(items):
+    """Keep only complete, schema-valid concepts; never invent missing fields."""
+    kept = []
+    known = set()
+    for item in items:
+        try:
+            concept = GeneratedConcept.model_validate(item, strict=True)
+        except ValidationError:
+            continue
+        if (not concept.id.strip() or concept.id in known
+                or not concept.title.strip() or not concept.content.strip()):
+            continue
+        kept.append(item)
+        known.add(concept.id)
+    return validate_result('generation', kept)

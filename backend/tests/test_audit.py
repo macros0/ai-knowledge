@@ -23,6 +23,7 @@ EXPECTED_ACTION_TYPES = {
     "document_delete",
     "document_bulk_delete",
     "document_regenerate",
+    "document_update_cancel",
     "document_bulk_regenerate",
     "document_resume",
     "document_bulk_resume",

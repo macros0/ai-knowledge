@@ -23,6 +23,7 @@ DOCUMENT_UPLOAD = "document_upload"
 DOCUMENT_DELETE = "document_delete"
 DOCUMENT_BULK_DELETE = "document_bulk_delete"
 DOCUMENT_REGENERATE = "document_regenerate"
+DOCUMENT_UPDATE_CANCEL = "document_update_cancel"
 DOCUMENT_BULK_REGENERATE = "document_bulk_regenerate"
 DOCUMENT_RESUME = "document_resume"
 DOCUMENT_BULK_RESUME = "document_bulk_resume"
@@ -86,6 +87,7 @@ ACTION_TYPES = frozenset(
         DOCUMENT_DELETE,
         DOCUMENT_BULK_DELETE,
         DOCUMENT_REGENERATE,
+        DOCUMENT_UPDATE_CANCEL,
         DOCUMENT_BULK_REGENERATE,
         DOCUMENT_RESUME,
         DOCUMENT_BULK_RESUME,

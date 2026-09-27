@@ -20,6 +20,7 @@ from app.db.models import (
     DocumentChunk,
     DocumentGeneration,
     DocumentGenerationState,
+    DocumentUpdateAttempt,
     DocumentLshBucket,
     DocumentSource,
     DocumentStaging,
@@ -188,6 +189,13 @@ def _document_dicts(session, docs: list[Document]) -> list[dict]:
         ).all()
     }
     result = []
+    doc_ids = [doc.id for doc in docs]
+    active = dict(session.execute(select(
+        DocumentGenerationState.doc_id, DocumentGenerationState.active_generation_id,
+    ).where(DocumentGenerationState.doc_id.in_(doc_ids))).all())
+    attempts = {row.doc_id: row for row in session.scalars(select(DocumentUpdateAttempt).where(
+        DocumentUpdateAttempt.doc_id.in_(doc_ids),
+    ))}
     for doc in docs:
         timestamp = generated.get(doc.id)
         # SQLite drops timezone info; provenance is written in UTC.
@@ -195,6 +203,12 @@ def _document_dicts(session, docs: list[Document]) -> list[dict]:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
         item = _to_dict(doc, timestamp)
         item["partial_chunks"] = partial.get(doc.id, [])
+        attempt = attempts.get(doc.id)
+        item["has_published_version"] = bool(active.get(doc.id) or attempt or doc.status == "done")
+        recoverable = bool(active.get(doc.id) and doc.status != "done")
+        item["update_id"] = attempt.id if attempt else active.get(doc.id) if recoverable else None
+        item["update_cancelling"] = bool(attempt and attempt.cancel_requested)
+        item["can_cancel_update"] = bool((attempt or recoverable) and doc.status != "done" and doc.deleted_at is None)
         result.append(item)
     return result
 
@@ -567,7 +581,7 @@ class DocumentRegistry:
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
             lock_document_write(s, doc_id)
-            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentGeneration, DocumentGenerationState):
+            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             doc = s.get(Document, doc_id)
             if doc is None:
@@ -590,7 +604,7 @@ class DocumentRegistry:
             doc = s.get(Document, doc_id)
             if doc is None or doc.deleted_at is None:
                 return False
-            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentGeneration, DocumentGenerationState):
+            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             s.delete(doc)
             return True
@@ -680,7 +694,17 @@ class DocumentRegistry:
 
     def reset_stale_statuses(self) -> None:
         """Переводит зависшие статусы в paused (вызывается на старте сервера)."""
+        from app.services.document_update import restore_canceled_update
+        from app.services.staging import StagingStore
+
+        restored = []
         with session_scope() as s:
+            canceled = list(s.scalars(select(DocumentUpdateAttempt.doc_id).where(
+                DocumentUpdateAttempt.cancel_requested.is_(True),
+            ).order_by(DocumentUpdateAttempt.doc_id)))
+            for doc_id in canceled:
+                if restore_canceled_update(s, doc_id):
+                    restored.append(doc_id)
             docs = (
                 s.query(Document)
                 .filter(Document.status.in_(STALE_STATUSES), Document.deleted_at.is_(None))
@@ -690,6 +714,15 @@ class DocumentRegistry:
                 d.status = "paused"
                 d.error = SERVER_RESTARTED_MESSAGE
                 d.error_code = codes.SERVER_RESTARTED
+        for doc_id in restored:
+            clear_transient_storage_failure(doc_id)
+            try:
+                StagingStore(doc_id).remove()
+            except Exception:
+                # Completed restoration must not prevent startup for a failed FS cleanup.
+                import logging
+
+                logging.getLogger(__name__).warning("[%s] Отменённые checkpoints не очищены", doc_id, exc_info=True)
 
 
 _INSTANCE: DocumentRegistry | None = None

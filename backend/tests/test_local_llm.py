@@ -1,3 +1,4 @@
+import json
 import threading
 import time
 from types import SimpleNamespace
@@ -24,6 +25,57 @@ def local_client(monkeypatch, **overrides):
 def test_reasoning_only_length_is_truncation():
     with pytest.raises(module.LLMTruncationError):
         module._parse_json('', finish_reason='length')
+
+
+def _valid_concept(identifier='valid'):
+    return {'id': identifier, 'title': 'Decision', 'type': 'concept', 'tags': [],
+            'content': 'Complete decision.', 'source_quotes': ['Complete decision.'], 'relations': []}
+
+
+@pytest.mark.parametrize('reason', ['length', 'stop'])
+def test_local_salvage_discards_unfinished_concept_without_inventing_fields(monkeypatch, reason):
+    from app.services import gen_quality
+
+    client = local_client(monkeypatch)
+    raw = '[{"id":"table","title":"Table","type":"table","tags":[],"content":"' + 'x' * 2000
+    monkeypatch.setattr(client, '_complete_with_retries', lambda *_a, **_k: (raw, reason))
+    gen_quality.drain()
+    assert client.chat_json('s', 'u', salvage_truncated=True) == []
+    assert gen_quality.has_salvage(gen_quality.drain())
+
+
+def test_local_salvage_preserves_complete_prefix_before_long_unfinished_tail(monkeypatch):
+    from app.services import gen_quality
+
+    client = local_client(monkeypatch)
+    valid = _valid_concept()
+    raw = '[' + json.dumps(valid) + ',{"id":"broken","content":"' + 'x' * 3000
+    monkeypatch.setattr(client, '_complete_with_retries', lambda *_a, **_k: (raw, 'length'))
+    gen_quality.drain()
+    assert client.chat_json('s', 'u', salvage_truncated=True) == [valid]
+    assert gen_quality.has_salvage(gen_quality.drain())
+
+
+def test_local_salvage_keeps_valid_records_without_duplicate_ids(monkeypatch):
+    from app.services import gen_quality
+
+    client = local_client(monkeypatch)
+    valid = _valid_concept()
+    invalid = {'id': 'missing-fields', 'title': 'Broken'}
+    raw = json.dumps([invalid, valid, valid, _valid_concept('other')])[:-1]
+    monkeypatch.setattr(client, '_complete_with_retries', lambda *_a, **_k: (raw, 'length'))
+    gen_quality.drain()
+    result = client.chat_json('s', 'u', salvage_truncated=True)
+    assert [item['id'] for item in result] == ['valid', 'other']
+    assert gen_quality.has_salvage(gen_quality.drain())
+
+
+def test_local_complete_invalid_response_is_still_rejected_in_salvage_mode(monkeypatch):
+    client = local_client(monkeypatch)
+    raw = json.dumps([{'id': 'bad', 'title': 'Missing required fields'}])
+    monkeypatch.setattr(client, '_complete_with_retries', lambda *_a, **_k: (raw, 'stop'))
+    with pytest.raises(ValueError):
+        client.chat_json('s', 'u', salvage_truncated=True)
 
 
 def test_local_profile_disables_thinking_and_limits_chat(monkeypatch):
