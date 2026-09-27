@@ -6,6 +6,7 @@ import {
   ApiError,
   apiErrorKey,
   friendlyApiError,
+  friendlyDocumentError,
   getHealth,
   getOkfContent,
   listTags,
@@ -25,6 +26,33 @@ import { createTranslator } from "../src/i18n/core.js";
 // friendlyApiError теперь принимает переводчик: тексты живут в словарях, иначе
 // англоязычный пользователь получал бы русские литералы из api.js.
 const t = createTranslator("ru").t;
+
+test("legacy and current parser memory errors include safe support details", () => {
+  const doc = {
+    id: "f48f01e6814f4418", error_code: "internal_error",
+    error: "Разбор файла превысил лимит 1024 MiB",
+    updated_at: "2026-09-28T00:45:06+03:00",
+  };
+  for (const code of ["internal_error", "parser_resource_limit"]) {
+    const message = friendlyDocumentError({ ...doc, error_code: code }, t);
+    assert.match(message, /памят/i);
+    assert.match(message, /1024/);
+    assert.match(message, /f48f01e6814f4418/);
+    assert.match(message, /2026-09-28/);
+    assert.match(message, /parser_resource_limit/);
+    assert.doesNotMatch(message, /apiError\./);
+  }
+});
+
+test("unknown document error keeps support id but never exposes raw exception", () => {
+  const message = friendlyDocumentError({
+    id: "f48f01e6814f4418", error_code: "internal_error",
+    error: "private SQL credentials and traceback",
+    updated_at: "2026-09-28T00:45:06+03:00",
+  }, t);
+  assert.match(message, /f48f01e6814f4418/);
+  assert.doesNotMatch(message, /credentials|traceback/i);
+});
 
 test("friendlyApiError: 401/403 — сессия/права", () => {
   for (const st of [401, 403]) {

@@ -364,6 +364,8 @@
   "apiError.not_resumable": [],
   "apiError.operator_rollback": [],
   "apiError.override_not_found": [],
+  "apiError.parser_busy": [],
+  "apiError.parser_failed": [],
   "apiError.parser_isolation_unavailable": [],
   "apiError.parser_resource_limit": [],
   "apiError.parser_timeout": [],
@@ -385,6 +387,18 @@
   "apiError.similar_document": [],
   "apiError.source_locale_invalid": [],
   "apiError.storage_full": [],
+  "apiError.supportCode": [
+    "code"
+  ],
+  "apiError.supportDocument": [
+    "id"
+  ],
+  "apiError.supportMemory": [
+    "limit"
+  ],
+  "apiError.supportTime": [
+    "time"
+  ],
   "apiError.tag_in_use": [],
   "apiError.tag_not_found": [],
   "apiError.text_not_found": [],

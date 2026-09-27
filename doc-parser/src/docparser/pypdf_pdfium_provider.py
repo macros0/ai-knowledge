@@ -14,6 +14,7 @@ import pypdfium2 as pdfium
 from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
+from pypdf.generic import EncodedStreamObject
 
 from .pdf_provider import (
     PdfAttachment,
@@ -86,6 +87,7 @@ class PypdfPdfiumDocument:
             keys = list(page.images.keys())
         except Exception as exc:
             logger.debug("Unable to enumerate images on PDF page %s: %s", page_index + 1, exc)
+            self._release_decoded_streams()
             return []
 
         images: list[PdfImage] = []
@@ -101,7 +103,16 @@ class PypdfPdfiumDocument:
                 )
             except Exception as exc:
                 logger.debug("Unable to extract PDF image %s on page %s: %s", key, page_index + 1, exc)
+        self._release_decoded_streams()
         return images
+
+    def _release_decoded_streams(self) -> None:
+        # pypdf keeps every decoded page/image stream in resolved_objects.
+        # The parser has already copied the current page's text and image bytes;
+        # later pages can decode shared XObjects again from their encoded data.
+        for obj in self._reader.resolved_objects.values():
+            if isinstance(obj, EncodedStreamObject):
+                obj.decoded_self = None
 
     def render_page_jpeg(self, page_index: int, *, dpi: int, quality: int) -> bytes:
         with _PDFIUM_LOCK:

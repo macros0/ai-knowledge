@@ -19,10 +19,25 @@ from app import error_codes as codes
 
 def public_error_code(exc: Exception) -> str:
     """Classify known recoverable failures by type/status, never by provider text."""
+    from app.services.parser_supervisor import (
+        ParserBusyError, ParserIsolationError, ParserMemoryLimitError,
+        ParserTimeoutError, ParserWorkerError,
+    )
+
     current = exc
     seen: set[int] = set()
     while current is not None and id(current) not in seen:
         seen.add(id(current))
+        if isinstance(current, ParserMemoryLimitError):
+            return codes.PARSER_RESOURCE_LIMIT
+        if isinstance(current, ParserTimeoutError):
+            return codes.PARSER_TIMEOUT
+        if isinstance(current, ParserIsolationError):
+            return codes.PARSER_ISOLATION_UNAVAILABLE
+        if isinstance(current, ParserBusyError):
+            return codes.PARSER_BUSY
+        if isinstance(current, ParserWorkerError):
+            return codes.PARSER_FAILED
         if isinstance(current, DomainError):
             return current.code
         if isinstance(current, (TimeoutError, httpx.TimeoutException)):

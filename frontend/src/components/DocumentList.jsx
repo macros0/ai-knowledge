@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ApiError, cancelDocumentUpdate, createBulkExport, deleteDocument, friendlyApiError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
+import { ApiError, cancelDocumentUpdate, createBulkExport, deleteDocument, friendlyApiError, friendlyDocumentError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
 import { documentUpdateView } from "@/lib/documentUpdate.mjs";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
@@ -691,7 +691,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           <div className="doc-primary">
             <strong title={doc.filename}>{doc.filename}</strong>
             <span className="meta doc-primary-meta">
-              {doc.error_code || doc.error ? friendlyApiError(new ApiError("", { code: doc.error_code }), t) : (progress || fallbackMeta)}
+              {doc.error_code || doc.error ? friendlyDocumentError(doc, t) : (progress || fallbackMeta)}
               {updateView.noticeKey && <span className="doc-update-notice" role="status">{t(updateView.noticeKey)}</span>}
             </span>
           </div>

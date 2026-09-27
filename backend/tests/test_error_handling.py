@@ -17,6 +17,21 @@ def test_error_classes_inherit_base():
     assert issubclass(VectorStoreError, DependencyUnavailableError)
 
 
+@pytest.mark.parametrize("exception, expected", [
+    ("ParserMemoryLimitError", "parser_resource_limit"),
+    ("ParserTimeoutError", "parser_timeout"),
+    ("ParserIsolationError", "parser_isolation_unavailable"),
+    ("ParserBusyError", "parser_busy"),
+    ("ParserWorkerError", "parser_failed"),
+])
+def test_background_parser_failures_keep_their_specific_code(exception, expected):
+    from app.services import parser_supervisor
+    from app.services.errors import processing_error_code
+
+    failure = getattr(parser_supervisor, exception)("diagnostic")
+    assert processing_error_code(failure) == expected
+
+
 def test_error_service_identifiers():
     assert LLMError().service == "llm"
     assert EmbedderError().service == "ollama"

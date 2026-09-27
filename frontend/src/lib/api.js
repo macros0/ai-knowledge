@@ -75,6 +75,30 @@ export function friendlyApiError(err, t) {
     : "Внутренняя ошибка. Обратитесь в техническую поддержку.";
 }
 
+// Document errors have a stable ID and timestamp even when the underlying
+// exception is intentionally hidden. Only a narrow legacy parser message is
+// inspected for its numeric limit; arbitrary doc.error is never rendered.
+export function friendlyDocumentError(doc, t) {
+  const legacyMemory = /^Разбор файла превысил лимит (\d{1,5}) MiB$/.exec(doc?.error || "");
+  const code = doc?.error_code === "internal_error" && legacyMemory
+    ? "parser_resource_limit" : doc?.error_code;
+  const message = friendlyApiError(new ApiError("", { code }), t);
+  const details = [];
+  if (/^[a-z][a-z0-9_]{0,63}$/.test(code || "")) {
+    details.push(t("apiError.supportCode", { code }));
+  }
+  if (legacyMemory && Number(legacyMemory[1]) > 0) {
+    details.push(t("apiError.supportMemory", { limit: Number(legacyMemory[1]) }));
+  }
+  if (/^[0-9a-f]{16}$/.test(doc?.id || "")) {
+    details.push(t("apiError.supportDocument", { id: doc.id }));
+  }
+  if (/^\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d/.test(doc?.updated_at || "")) {
+    details.push(t("apiError.supportTime", { time: doc.updated_at }));
+  }
+  return details.length ? `${message} ${details.join("; ")}` : message;
+}
+
 // Единственная точка вызова fetch в модуле: URL берётся как есть, разбор
 // успешного ответа задаёт вызывающий. Нормализация ошибок (таймаут, сетевой
 // сбой, не-2xx с кодом из тела) живёт только здесь — сырой fetch мимо этой

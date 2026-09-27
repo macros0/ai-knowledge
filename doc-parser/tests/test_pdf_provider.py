@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from PIL import Image
 from pypdf import PdfWriter
+from pypdf.generic import EncodedStreamObject
 
 import docparser.pdf_parser as pdf_parser
 from docparser import ParseError
@@ -85,6 +86,21 @@ def test_provider_extracts_embedded_image_with_detected_extension(tmp_path):
     assert len(images) == 1
     assert images[0].data
     assert images[0].extension == ".png"
+
+
+def test_provider_releases_decoded_stream_cache_after_page_without_changing_image(tmp_path):
+    source = make_pdf_with_image(tmp_path / "image.pdf")
+    document = PypdfPdfiumProvider().open(source)
+    try:
+        first_text = document.extract_text(0)
+        first_image = document.extract_images(0)[0].data
+        cached = [obj for obj in document._reader.resolved_objects.values()
+                  if isinstance(obj, EncodedStreamObject) and obj.decoded_self is not None]
+        assert cached == []
+        assert document.extract_text(0) == first_text
+        assert document.extract_images(0)[0].data == first_image
+    finally:
+        document.close()
 
 
 def test_provider_renders_scanned_page_as_jpeg(tmp_path):
