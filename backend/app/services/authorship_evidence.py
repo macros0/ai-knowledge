@@ -12,7 +12,11 @@ from pathlib import Path
 
 from sqlalchemy import func, select, tuple_
 
-from app.db.models import DocumentChunk, OkfConcept
+from app.db.models import Document, DocumentChunk, OkfConcept
+from app.services.mail_scope import MailMode, build_mail_scope_map, mail_scope_allowed
+from app.services.generation_store import lock_generation_read
+from app.services.source_store import fetch_source_trees
+from app.services.context_builder import filter_mail_scope_blocks
 from app.db.session import session_scope
 
 _AUTHOR_QUERY = re.compile(
@@ -38,12 +42,16 @@ def is_authorship_query(query: str) -> bool:
     return bool(_AUTHOR_QUERY.search(query))
 
 
-def load_authorship_evidence(merged: list[dict], max_chars: int) -> list[dict]:
+def load_authorship_evidence(merged: list[dict], max_chars: int, *, mail_mode: MailMode = "all") -> list[dict]:
     """Read only canonical chunks belonging to already-visible retrieved blocks.
 
     A concept's chunk and source identity are re-read from SQL. Missing/stale
     chunks and source mismatches fail closed. No ancestor content is substituted.
     """
+    mail_scope_allowed("unknown", mail_mode)
+    strict = mail_mode != "all"
+    accepted = {id(m) for m in filter_mail_scope_blocks(merged, mail_mode=mail_mode)}
+
     def is_concept(m):
         return bool(m.get("source_slug") or m.get("point_type") == "concept"
                     or m.get("kind") in {"concept", "concept+chunk", "review"})
@@ -57,6 +65,13 @@ def load_authorship_evidence(merged: list[dict], max_chars: int) -> list[dict]:
     slugs = [slug(m) for m in merged]
     pairs = {(m["doc_id"], value) for m, value in zip(merged, slugs) if value}
     with session_scope() as session:
+        if strict:
+            doc_ids = {m["doc_id"] for m in merged}
+            generations = lock_generation_read(session, sorted(doc_ids))
+            visible = set(session.scalars(select(Document.id).where(
+                Document.id.in_(doc_ids), Document.deleted_at.is_(None))))
+            trees = fetch_source_trees(session, doc_ids)
+            maps = {doc_id: build_mail_scope_map(tree) for doc_id, tree in trees.items()}
         concepts = {}
         if pairs:
             concepts = {
@@ -68,6 +83,11 @@ def load_authorship_evidence(merged: list[dict], max_chars: int) -> list[dict]:
         keys = []
         for m, value in zip(merged, slugs):
             key = concepts.get((m["doc_id"], value)) if is_concept(m) else (m.get("chunk_index"), m.get("source_id"))
+            if strict and (id(m) not in accepted or m["doc_id"] not in visible
+                    or m.get("generation_id") != generations.get(m["doc_id"])
+                    or not key or key != (m.get("chunk_index"), m.get("source_id"))
+                    or not mail_scope_allowed(maps.get(m["doc_id"], {}).get(key[1], "unknown"), mail_mode)):
+                key = None
             keys.append((m["doc_id"], *key) if key and key[0] is not None else None)
         chunk_pairs = {(key[0], key[1]) for key in keys if key}
         chunks = {}
@@ -178,8 +198,10 @@ def build_authorship_answer(evidence: list[dict], response: str, *, locale: str)
     return answer
 
 
-def answer_authorship(query: str, merged: list[dict], llm, *, locale: str, max_chars: int) -> str:
-    evidence = load_authorship_evidence(merged, max_chars)
+def answer_authorship(query: str, merged: list[dict], llm, *, locale: str, max_chars: int,
+                      mail_mode: MailMode = "all") -> str:
+    mail_scope_allowed("unknown", mail_mode)
+    evidence = load_authorship_evidence(merged, max_chars, **({"mail_mode": mail_mode} if mail_mode != "all" else {}))
     response = "{}"
     if evidence:
         system = (

@@ -214,6 +214,7 @@ class SearchResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    mail_mode: Literal["all", "exclude", "only"] = "all"
     query: QueryText
     # Язык ответа при неопределимом языке короткого запроса; UI передаёт
     # текущую локаль, прямые API-вызовы получают русский fallback.

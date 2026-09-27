@@ -26,6 +26,7 @@ from app.services.context_builder import (
     format_context,
     limit_context,
     merge_and_format,
+    filter_mail_scope_blocks,
     resolve_branches,
 )
 from app.services.embedder import Embedder
@@ -137,6 +138,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         branches=branches,
         source_locales=req.source_locales or None,
         include_unknown_source_locale=req.include_unknown_source_locale,
+        mail_mode=req.mail_mode,
         # Берём широкий набор точек (per_branch_top_k): итог режем по БЛОКАМ после
         # merge (группы (doc_id, chunk_index) + сиблинг-концепты). Срез по точкам
         # до группировки ронял концепты-сиблинги с более низким fused-рангом
@@ -148,12 +150,12 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
     # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
     # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
     # и orphan-точки (документа нет в БД — восстановлен во время purge или сбой).
-    hits, doc_lookup = load_visible_retrieval_hits(hits, **({"exact_groups": exact_groups} if exact_groups else {}))
+    hits, doc_lookup = load_visible_retrieval_hits(hits, mail_mode=req.mail_mode, **({"exact_groups": exact_groups} if exact_groups else {}))
     # Короткое замыкание (Этап 4a.1): при нуле хитов не зовём LLM — ответ
     # без источников формируется здесь, фронтенд по пустому `sources` покажет
     # переход «загрузить документ» при активном фильтре модуля/разработки.
     if not hits:
-        answer = localized_message('chat.noSources', req.locale, russian_fallback='Источники не найдены.')
+        answer = _no_sources_answer(req)
         sources: list[ChatSource] = []
     else:
         # Этап 2b: полный текст чанков — из document_chunks (natural key), а не
@@ -161,7 +163,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         # payload["content"]/["section_title"] чанк-точек.
 
         filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
-        merged = merge_and_format(hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups)
+        merged = merge_and_format(hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups, mail_mode=req.mail_mode)
         # top_k — число БЛОКОВ в контексте/источниках (группы с сиблингами), не точек.
         merged = merged[: req.top_k]
         domain_cache = {}
@@ -194,6 +196,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             domain_cache=domain_cache,
             lexical_cache=lexical_cache,
         )
+        merged = filter_mail_scope_blocks(merged, mail_mode=req.mail_mode)
         context = format_context(
             merged,
             query=req.query,
@@ -226,7 +229,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             )
 
         if not merged:
-            answer = localized_message('chat.noSources', req.locale, russian_fallback='Источники не найдены.')
+            answer = _no_sources_answer(req)
         else:
             system = get_store().format("chat_system", locale=req.locale)
             prompt_user = get_store().format("chat_user", context=context, query=req.query)
@@ -234,7 +237,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
                 if is_authorship_query(req.query):
                     answer = answer_authorship(
                         req.query, merged, _get_llm(), locale=req.locale,
-                        max_chars=settings.chat_max_context_chars,
+                        max_chars=settings.chat_max_context_chars, mail_mode=req.mail_mode,
                     )
                 else:
                     answer = _get_llm().chat(system, prompt_user)
@@ -251,6 +254,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
     ]
     retrieval_metadata = {
         "schema_version": 1,
+        "mail_mode": req.mail_mode,
         "expansion_status": plan.status,
         "applied_terms": applied_terms,
         "rules_version": plan.rules_version,
@@ -292,3 +296,12 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         expansion_status=plan.status,
         applied_terms=applied_terms,
     )
+
+
+def _no_sources_answer(req):
+    if req.mail_mode == "all":
+        return localized_message('chat.noSources', req.locale, russian_fallback='Источники не найдены.')
+    fallback = ('No sources match the selected filters. Change the filters and try again.'
+                if req.locale.lower().startswith('en') else
+                'Источники не найдены с учётом выбранных фильтров. Измените фильтры и повторите запрос.')
+    return localized_message('chat.noSourcesMailFilter', req.locale, russian_fallback=fallback)

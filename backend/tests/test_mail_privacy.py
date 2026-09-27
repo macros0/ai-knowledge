@@ -115,6 +115,20 @@ def test_private_headers_excluded_from_llm_index_context_and_logs(tmp_path, monk
         points.extend(batch)
         return {"failed_batches": 0}
 
+    def retrieve(*_args, **kwargs):
+        return [SimpleNamespace(id=point.id, payload=point.payload) for point in points
+                if str(point.id) in kwargs["ids"]]
+
+    def set_payload(**kwargs):
+        assert kwargs["wait"] is True
+        assert set(kwargs["payload"]) == {"mail_scope", "mail_scope_version"}
+        for point in points:
+            if str(point.id) in kwargs["points"]:
+                point.payload.update(kwargs["payload"])
+
+    monkeypatch.setattr(pipeline.vector_store.client, "retrieve", retrieve)
+    monkeypatch.setattr(pipeline.vector_store.client, "set_payload", set_payload)
+
     def verify(doc_id, generation_id, expected_ids):
         assert set(expected_ids) == {str(point.id) for point in points}
         assert all(point.payload["doc_id"] == doc_id and point.payload["generation_id"] == generation_id
