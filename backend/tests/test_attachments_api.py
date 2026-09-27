@@ -27,8 +27,16 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
     return TestClient(create_app())
 
 
+def register_document(doc_id: str = "a1b2c3d4e5f60718") -> None:
+    """Вложения отдаются только активному документу из БД (гейт корзины)."""
+    from app.services.registry import DocumentRegistry
+
+    DocumentRegistry().create(doc_id, "source.docx", "application/octet-stream", 1)
+
+
 class TestOkfAttachmentsEndpoint:
     def _make_bundle(self, settings: Settings, doc_id: str = "a1b2c3d4e5f60718") -> None:
+        register_document(doc_id)
         # Этап 2b: бинарники вложений — в uploads/<doc_id>/attachments/ (не в бандле).
         attach_dir = settings.uploads_dir / doc_id / "attachments"
         attach_dir.mkdir(parents=True, exist_ok=True)
@@ -61,6 +69,7 @@ class TestOkfAttachmentsEndpoint:
     def test_svg_attachment_served_as_download(self, tmp_path: Path, monkeypatch):
         """SVG-вложение (вектор stored XSS) не отдаётся inline даже с image/svg+xml."""
         settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
+        register_document()
         attach_dir = settings.uploads_dir / "a1b2c3d4e5f60718" / "attachments"
         attach_dir.mkdir(parents=True, exist_ok=True)
         (attach_dir / "schema.svg").write_text(
@@ -76,6 +85,19 @@ class TestOkfAttachmentsEndpoint:
         assert resp.headers["content-type"].startswith("image/svg+xml")
         assert resp.headers["content-disposition"] == "attachment"
         assert resp.headers["x-content-type-options"] == "nosniff"
+
+    def test_unregistered_document_attachment_returns_404(self, tmp_path: Path, monkeypatch):
+        """Байты в uploads/ без строки документа (purge в процессе, сирота) не раздаются."""
+        settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")
+        attach_dir = settings.uploads_dir / "a1b2c3d4e5f60718" / "attachments"
+        attach_dir.mkdir(parents=True, exist_ok=True)
+        (attach_dir / "image-0.png").write_bytes(PNG_MAGIC)
+        client = self._client(tmp_path, monkeypatch)
+
+        with client:
+            resp = client.get("/api/documents/a1b2c3d4e5f60718/okf/attachments/image-0.png")
+
+        assert resp.status_code == 404
 
     def test_missing_attachment_returns_404(self, tmp_path: Path, monkeypatch):
         settings = Settings(_env_file=None, data_dir=tmp_path, auth_provider="disabled")

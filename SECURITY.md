@@ -87,7 +87,11 @@ rejecting `disabled`/`simulation` (`ValueError` before uvicorn starts), as well 
   - role unrecognized and `AUTH_DEFAULT_ROLE` empty (fail-closed) → `403`;
   - user on an active blocklist → `403`.
 - The role is computed on every request via `GroupRoleAuthorizer` (`app/auth/authorizer.py`):
-  group → role mapping from `AUTH_ROLE_GROUPS`, priority `security > admin > editor > viewer`.
+  group → role mapping from `AUTH_ROLE_GROUPS`; the user receives every role of their groups
+  (`security > admin > editor > viewer` only orders them and picks the primary role shown in the
+  UI). Separation of duties is enforced by IdP group membership. With `keycloak_oidc` in
+  production, `KEYCLOAK_GROUP_PATH_MODE` must be set explicitly (`full_path` recommended): in
+  `leaf` mode a same-named group anywhere in the IdP tree grants the role.
 - All "business" routers are mounted under a single guard
   `APIRouter(dependencies=[Depends(require_user)])` in `app/main.py:137` — protection at
   the router level, plus explicit `Depends(require_user/require_role)` on endpoints.
@@ -162,6 +166,20 @@ history: `session_id` is validated on the backend and bound to the current `user
   ports **16333/16334** (not the default 6333/6334 — those fall into the Windows Hyper-V/WSL
   excluded range, see `AGENTS.md`); the isolation profile is unchanged: still loopback-only.
   The compose variant is isolated by publishing no host port (see above).
+- **macOS/Linux local startup** (`scripts/start-all.sh`): the same profile as the Windows
+  scripts — backend `127.0.0.1:18000`, Ollama `OLLAMA_HOST=127.0.0.1:<port>`, Qdrant binary
+  `QDRANT__SERVICE__HOST=127.0.0.1`. The Docker fallback for Qdrant publishes its ports on
+  `127.0.0.1` only (`-p 127.0.0.1:<port>:6333`): a bare `-p` binds all interfaces and on
+  Linux bypasses the host firewall. A PostgreSQL cluster the script starts with `pg_ctl`
+  keeps its own `listen_addresses` (Homebrew default: `localhost`). The Next dev server on
+  `:16300` listens on all interfaces, as with `start-all.ps1`. The `DATABASE_URL` password
+  reaches `psql` through `PGPASSWORD`, never the command line (visible to local users via `ps`).
+- **Unauthenticated health endpoints**: `/health` (dependency status for the UI banner,
+  published by the frontend's exact-path rewrite) and `/health/ready` (readiness of the
+  deployment's own storage for the container healthcheck; not part of the frontend
+  rewrite). Both return only per-dependency statuses: dependency error texts (which
+  can name internal hosts, ports and database users) and library versions are written
+  to the backend log when a dependency changes state, never to the response.
 - **CORS**: `allow_origins=settings.cors_allowed_origins` (`app/main.py`), default is an
   empty list (`CORS_ALLOWED_ORIGINS`). The browser does not call the backend directly
   (server-side rewrites), so cross-origin CORS is unnecessary, and a wildcard would be a
@@ -213,6 +231,12 @@ Invariants enforced by `validate_auth_provider` in `app/config.py` (production):
   drop hits whose document is marked deleted in the DB (closes the race between
   `deleted_at` and a not-yet-synced payload), as well as orphan hits whose document is
   absent from the DB entirely (recovered during physical purge, finalization failure).
+  Direct content reads apply the same boundary: every `/documents/{doc_id}` read route
+  (card, `/okf*`, `/chunks*`, `/fulltext*`, `/concepts/{slug}/source-location`,
+  `/duplicates`, `/download`, `/sources*`, `POST /export-okf`) returns `404` while
+  `deleted_at` is set, and attachment bytes are served only for an active document row.
+  The trash list (`GET /documents/trash`) is the only read surface for trashed documents
+  and exposes metadata, not content.
   Restore from trash clears both flags without re-embedding. Final physical deletion
   (Qdrant `Delete Points` + `DELETE` from the DB — including `document_chunks` and
   `okf_attachments` rows — + files) happens only in a background task after
@@ -357,6 +381,106 @@ does not corrupt data.
 
 ## 7. Security change log
 
+### 2026-09-27 — Local stack startup on macOS/Linux
+Change: `scripts/start-all.sh` / `stop-all.sh` start and stop the local development stack on
+macOS and Linux (previously only `start-all.ps1` for Windows). No new exposure: the binds
+match the Windows scripts (§3), and the new Docker fallback for Qdrant publishes on
+`127.0.0.1` only. The scripts never stop a process they did not start: services found running
+(Homebrew/systemd PostgreSQL, Ollama.app) are reused and left running, and a foreign process
+on a stack port fails the step instead of being killed.
+
+### 2026-09-27 — Roles, group paths, logout revocation and a frontend CSP
+- **Frontend CSP.** Next.js pages now carry a per-request nonce policy set by `src/proxy.js`
+  (`script-src 'self' 'nonce-…' 'strict-dynamic'`, no inline handlers, `img-src 'self' blob: data:`,
+  `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`,
+  `frame-ancestors 'none'`; `'unsafe-eval'` only in development). Next.js applies the nonce to its
+  own scripts; the theme/locale boot scripts get it from `layout.js`. Verified in a browser on the
+  production build: injected inline event handlers and external images are blocked, the app
+  hydrates without violations. `/api/*` keeps the backend policy (`default-src 'none'`).
+  `style-src` allows `'unsafe-inline'` because SSR emits `style` attributes, which nonces cannot
+  cover.
+- **Logout revokes the server-side session in every mode.** The base provider (simulation) only
+  cleared the cookie; a copy of the cookie taken before logout stayed valid until the TTL. It now
+  deletes the `auth_sessions` row like the Keycloak path.
+- **All group roles are granted.** A member of both `KB_Security` and `KB_Admin` silently lost
+  admin rights (one role per user). Roles are now the union; a group mapped to an unknown role
+  name still grants nothing (fail-closed as before).
+- **Explicit group path mode in production.** Production with `keycloak_oidc` refuses to start
+  without `KEYCLOAK_GROUP_PATH_MODE`; the templates in `deploy/production/` use `full_path` with
+  full-path `AUTH_ROLE_GROUPS`. The implicit `leaf` default let `/AnyDept/KB_Admin` grant admin.
+- **OIDC discovery is cached.** The authlib registry (with discovery metadata and JWKS) lives for
+  an hour instead of being rebuilt per login; unknown `kid` still refetches JWKS immediately.
+
+### 2026-09-27 — Parser isolation on macOS (development hosts)
+macOS does not support `RLIMIT_AS` (`setrlimit` raises `ValueError`), so the parser worker
+failed closed with `parser_isolation_unavailable` and every upload on a macOS development
+host returned `503`. On macOS the worker no longer sets `RLIMIT_AS`; the supervisor polls
+the worker's resident size through libproc (`proc_pidinfo`/`PROC_PIDTASKINFO`) and kills it
+above `PARSER_MAX_MEMORY_MB`, and it refuses to admit the worker when that monitor cannot
+read the process (still fail-closed). This is a polling limit, weaker than a hard OS limit:
+it is acceptable for development only; production runs in the Linux container, whose
+`RLIMIT_AS` path is unchanged. Also fixed: on macOS `killpg` answers `EPERM` when the only
+group member is the unreaped crashed worker, which masked the worker's real error; that
+case is ignored on macOS only (on Linux `EPERM` is still raised).
+
+### 2026-09-27 — Read endpoints can no longer drive the document parser
+`GET /documents/{id}/chunks`, `/fulltext` and `/fulltext/chunks` lazily rebuild missing
+chunks by re-parsing the source (up to `PARSER_TIMEOUT_SECONDS`, `PARSER_MAX_MEMORY_MB`).
+Any viewer could repeat this without limit: a failed or text-less parse (scan without
+OCR) was retried on every read, concurrent reads of the same document blocked request
+threads behind the running parse, and reads shared `PARSER_MAX_CONCURRENT` slots with
+uploads, so a viewer could make uploads fail with `429`. Reads now call
+`ensure_chunks(..., interactive=True)`: documents still being processed are never
+parsed by a read; at most one read-triggered parse runs per process and nobody waits for
+it (`429 rate_limited` + `Retry-After`); a failed or empty result is remembered for ten
+minutes, so repeated reads return the same answer (`422 parser_timeout` /
+`parser_resource_limit` / `text_not_found`, or an empty list) without parsing again.
+Operator scripts keep the blocking, uncached behavior.
+
+### 2026-09-27 — Health endpoints no longer disclose infrastructure details
+`/health` is public through the frontend rewrite and returned `str(exc)[:120]` for every
+failing dependency. psycopg and httpx messages include internal hostnames/IPs, ports and
+the database user; the PDF entry exposed exact pypdf/PDFium versions. Anonymous callers
+now receive only `{status}` per dependency (`public_view`); the full detail is logged
+once per status transition (`WARNING` on failure, `INFO` on recovery), so operators
+diagnose from `docker compose logs backend`. `/health/ready` follows the same rule.
+
+### 2026-09-27 — Trashed documents are no longer readable through content routes
+Only `/download` and `/sources` checked `deleted_at`; the card (`GET /documents/{id}`),
+`/okf`, `/okf/{file}`, `/chunks`, `/chunks/{n}`, `/fulltext`, `/fulltext/chunks`,
+`/concepts/{slug}/source-location`, `/duplicates` and `POST /export-okf` kept serving the
+full text of a trashed document for the whole retention window. Trashed document ids are
+visible to every viewer through `GET /documents/trash`, so "delete" did not revoke access.
+All these routes now share `_require_active_document` and return `404` for trashed
+documents; the check runs before `ensure_chunks`, so a read of a trashed document can no
+longer trigger a lazy re-parse of its source. `/okf/attachments/{file}` also requires an
+active document row on the legacy path (no active generation), so orphaned bytes in
+`uploads/` are not served. Restore makes the content readable again. Regression tests:
+`tests/test_trash.py::TestTrashReadAccess`.
+
+### 2026-09-27 — Container readiness no longer depends on the external LLM
+The backend healthcheck asserted `/health` `status == "ok"`, which required the external
+LLM provider to answer `GET /models`. An LLM outage or a rejected key at boot kept the
+backend unhealthy, so `up -d --wait` (systemd unit) failed and the frontend never started,
+although search and document access do not need the LLM; an Ollama LLM (no `/models`
+route) kept the backend permanently unhealthy. The healthcheck now uses
+`GET /health/ready` (PostgreSQL, Qdrant, PDF provider; `503` when not ready). `/health`
+keeps its informational role, probes Ollama via `/api/tags`, runs checks in parallel
+under a 6-second deadline and refreshes single-flight, so slow dependencies cannot pile
+up blocked request threads.
+
+### 2026-09-27 — Bounded chat admission (request-thread exhaustion)
+All API endpoints are synchronous and share one request thread pool (~40 threads). A chat
+waited for one of the `LLM_INTERACTIVE_CONCURRENCY` (2) slots for up to
+`LLM_MAX_TOTAL_TIMEOUT_SECONDS` (600 s) and retried the wait, while the frontend abandons
+the request after 90 s. About forty concurrent chats from any authenticated users could hold
+every pool thread and freeze the whole API, including `/health`. Now at most
+`CHAT_MAX_INFLIGHT` (8) chats run per process; excess requests receive `429 rate_limited`
+with `Retry-After` before any embedding/search/LLM work. An admitted chat waits for an LLM
+slot at most `LLM_INTERACTIVE_SLOT_WAIT_SECONDS` (30 s); on timeout it gets
+`429 rate_limited` without a retry. Background generation keeps its own semaphore
+and wait semantics. The per-user rate limit is unchanged and still applies first.
+
 ### 2026-09-11 — Domain glossary administration and query expansion
 The glossary administration surface is available to `editor`/`admin` for reads and
 preview, while only `admin` can mutate originals, aliases, enablement, or run machine
@@ -372,7 +496,8 @@ The backend now emits `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`
 API CSP (`default-src 'none'; frame-ancestors 'none'`), and `Referrer-Policy`. HSTS is emitted only
 when production HTTPS-only sessions are enabled, avoiding accidental HSTS lock-in for local HTTP.
 Next.js frontend responses additionally set `nosniff`, `DENY`, `Referrer-Policy`, and a restrictive
-`Permissions-Policy`; CSP remains backend/API-scoped until a nonce-based frontend policy is added.
+`Permissions-Policy`; CSP remains backend/API-scoped until a nonce-based frontend policy is added
+(added 2026-09-27, see above).
 Locale ETags now use SHA-256; MD5 remains only for non-security sparse/hash-bucket indexing and is
 explicitly marked `usedforsecurity=False`.
 DOCX XML metadata/comments are parsed with `defusedxml` rather than stdlib ElementTree to prevent

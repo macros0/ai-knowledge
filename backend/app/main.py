@@ -39,7 +39,7 @@ from app.auth.service import require_user
 from app.config import get_settings
 from app.prompts.store import get_store
 from app.services.errors import DependencyUnavailableError, public_error_code
-from app.services.health import get_health
+from app.services.health import get_health, get_readiness, public_view
 from app.services.storage import is_storage_full
 from app.services.vector_store import VectorStore
 from docparser import PdfProviderUnavailable, get_pdf_provider_metadata
@@ -281,6 +281,9 @@ async def lifespan(app: FastAPI):
         from app.services.export_queue import shutdown_export_queue_if_started
 
         shutdown_export_queue_if_started()
+        from app.services.vector_store import close_shared_qdrant_clients
+
+        close_shared_qdrant_clients()
 
 
 def create_app() -> FastAPI:
@@ -421,7 +424,16 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     def health() -> dict:
-        return get_health()
+        return public_view(get_health())
+
+    # Readiness для docker healthcheck: только собственное хранилище, без
+    # внешнего LLM (см. services/health.py). Rewrite Next.js публикует лишь
+    # точный путь /health; этот эндпоинт предназначен для healthcheck контейнера.
+    @app.get("/health/ready")
+    def health_ready() -> JSONResponse:
+        result = get_readiness()
+        status_code = 200 if result["status"] == "ready" else 503
+        return JSONResponse(status_code=status_code, content=public_view(result))
 
     return app
 

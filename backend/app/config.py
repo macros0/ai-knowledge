@@ -132,6 +132,9 @@ class Settings(BaseSettings):
     keycloak_field_mapping: dict[str, str] | None = None
     # Форма имён групп в claim: "leaf" — берём текст после последнего "/"
     # (KB_Viewer), "full_path" — оставляем как есть (/IDB/KB_Viewer).
+    # leaf отождествляет одноимённые группы из разных веток дерева IdP: любая
+    # группа ".../KB_Admin" даёт admin. Поэтому в production режим задаётся
+    # только явно (см. validate_auth_provider); рекомендуемый — full_path.
     keycloak_group_path_mode: str = "leaf"
     # Разделитель, если group-claim пришёл строкой, а не списком.
     keycloak_group_separator: str = ","
@@ -209,6 +212,11 @@ class Settings(BaseSettings):
     # на «Думаю...» при недоступности/лимите провайдера LLM.
     llm_interactive_retry_attempts: int = 2
     llm_interactive_stream_idle_timeout_seconds: float = 30.0
+    # Сколько чат ждёт свободный интерактивный слот LLM. Ожидание держит поток
+    # пула запросов; предел должен быть меньше CHAT_TIMEOUT_MS во фронтенде.
+    # Не дождался → 429 без повтора
+    # (повтор встал бы в конец той же очереди). 0 — не ждать вовсе.
+    llm_interactive_slot_wait_seconds: float = Field(default=30.0, ge=0.0, le=600.0)
 
     llm_stream_idle_timeout_seconds: float = 60.0
     llm_max_total_timeout_seconds: float = 600.0
@@ -317,6 +325,11 @@ class Settings(BaseSettings):
     # Per-user limits for expensive interactive endpoints (in-memory per process).
     search_rate_limit_per_minute: int = Field(default=120, ge=1, le=10_000)
     chat_rate_limit_per_minute: int = Field(default=60, ge=1, le=10_000)
+    # Одновременные запросы чата на процесс. Эндпоинты синхронные: каждый чат
+    # держит поток общего пула (~40) на время embed → поиск → ожидание слота →
+    # генерация. Без предела толпа чатов занимала весь пул, и замирал весь API,
+    # включая /health. Сверх предела — сразу 429 с Retry-After.
+    chat_max_inflight: int = Field(default=8, ge=1, le=256)
     # Максимальное время ожидания завершения обработки одного документа внутри
     # массовой задачи (сек). По истечении документ помечается ошибкой, job идёт дальше.
     job_doc_timeout_seconds: float = 3600.0
@@ -621,6 +634,17 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "AUTH_SESSION_HTTPS_ONLY=false недопустимо для production: "
                     "сессионная cookie должна передаваться только по HTTPS"
+                )
+            if (
+                self.auth_provider == "keycloak_oidc"
+                and "keycloak_group_path_mode" not in self.model_fields_set
+            ):
+                raise ValueError(
+                    "KEYCLOAK_GROUP_PATH_MODE должен быть задан явно для production. "
+                    "Рекомендуется full_path (AUTH_ROLE_GROUPS с полными путями групп, "
+                    'например {"/IDB/KB_Admin":"admin"}). Режим leaf (дефолт для '
+                    "разработки) даёт роль любой одноимённой группе в любой ветке "
+                    "дерева IdP; выбирайте его, только если имена групп уникальны."
                 )
         return self
 

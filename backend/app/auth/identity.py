@@ -124,11 +124,10 @@ class AuthenticatedIdentity(BaseModel):
         """
         from app.auth.models import User
 
-        role = authorizer.resolve_role(self.groups)
         return User(
             user_id=self.external_id,
             username=self.username,
             email=self.email,
             groups=self.groups,
-            roles=[role] if role else [],
+            roles=authorizer.resolve_roles(self.groups),
         )

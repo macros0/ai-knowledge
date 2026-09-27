@@ -1,7 +1,8 @@
 services:
   backend:
     # A restored CI project receives the fake LLM endpoint only through this
-    # override.  Start it with backend so the normal healthcheck is meaningful.
+    # override. The container healthcheck (/health/ready) does not need it, but
+    # the CI smoke steps assert the full /health status == "ok".
     depends_on:
       llm-health:
         condition: service_started

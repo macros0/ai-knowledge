@@ -128,19 +128,54 @@ docker compose --env-file "$OKF_RUNTIME_ENV_FILE" up -d --build
 
 ### Lokale Entwicklung (ohne Docker)
 
-```bash
-# 1. Backend
-cd backend
-python -m venv .venv
-.venv\Scripts\activate            # Windows
-pip install -e ../doc-parser      # Paket zum Parsen von Dokumenten (editable)
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 18000
+Unterstützt unter macOS, Linux und Windows; die Produktion läuft immer in Linux-Containern.
 
-# 2. Frontend (eigenes Terminal)
-cd frontend
-npm install
-npm run dev
+Einmalige Einrichtung (Python 3.12+, Node.js 20+):
+
+```bash
+cp .env.example .env                 # Modell-Endpoints, DATABASE_URL, QDRANT_URL
+python3 -m venv backend/.venv        # Windows: python -m venv backend\.venv
+backend/.venv/bin/pip install -e ./doc-parser -r backend/requirements.txt
+                                     # Windows: backend\.venv\Scripts\pip install ...
+(cd frontend && npm ci)
+```
+
+Gesamten Stack starten und stoppen – Qdrant, Ollama, PostgreSQL, Backend (:18000) und
+Frontend (:16300, UI unter http://localhost:16300):
+
+```bash
+./scripts/start-all.sh               # macOS / Linux
+./scripts/stop-all.sh
+```
+
+```powershell
+.\scripts\start-all.ps1              # Windows
+.\scripts\stop-all.ps1
+```
+
+Unter macOS/Linux übernimmt `start-all.sh` die Dienstadressen aus `.env` (dieselben
+Einstellungen, die das Backend liest) und wartet auf den Health-Check jedes Dienstes:
+
+- **Qdrant** – das Binary v1.19.0 (`QDRANT_BIN` oder `qdrant` im `PATH`); ohne Binary das
+  Docker-Image `qdrant/qdrant:v1.19.0`, nur auf 127.0.0.1 veröffentlicht. Daten:
+  `~/.local/share/okf-knowledge/qdrant`.
+- **PostgreSQL** – ein Server, der bereits auf dem Port aus `DATABASE_URL` lauscht, wird
+  wiederverwendet; andernfalls wird ein Homebrew-Cluster (oder `OKF_PG_DATA`) mit `pg_ctl`
+  gestartet. Unter Linux den Systemdienst selbst starten (`sudo systemctl start
+  postgresql`). Die Datenbank aus `DATABASE_URL` wird bei Bedarf angelegt; bei leerem
+  `DATABASE_URL` nutzt das Backend SQLite. Der Homebrew-Superuser ist der macOS-Login,
+  nicht `postgres`.
+- **Ollama** – wird nur gestartet, wenn Embeddings oder das LLM `ollama/*` auf einer lokalen
+  Adresse nutzen; eine laufende Ollama.app wird wiederverwendet.
+
+`stop-all.sh` stoppt nur, was `start-all.sh` gestartet hat; wiederverwendete Dienste laufen
+weiter. Logs und PID-Dateien: `~/.local/state/okf-knowledge`.
+
+Die beiden App-Prozesse stattdessen manuell starten:
+
+```bash
+cd backend && .venv/bin/python -m uvicorn app.main:app --reload --port 18000
+cd frontend && npm run dev -- -p 16300
 ```
 
 Modell-Endpoints und Authentifizierung werden in `.env` konfiguriert (siehe

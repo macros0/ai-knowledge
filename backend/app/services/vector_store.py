@@ -14,6 +14,7 @@ Tags — жёсткий pre-filter для dense и bm25 (MatchAny).
 встроенный Qdrant fusion. Каждая ветка отдаёт per_branch_top_k кандидатов.
 """
 import logging
+import threading
 import time
 import uuid
 from collections.abc import Iterator
@@ -279,20 +280,70 @@ def _source_locale_filter(codes: list[str], include_unknown: bool) -> qm.Filter:
     return qm.Filter(should=conditions)
 
 
+# Один QdrantClient на параметры подключения на процесс. VectorStore()
+# создаётся часто (health-опрос, синки payload, фоновые задачи), а каждый
+# QdrantClient — это свой пул соединений и проверка версии сервера сетевым
+# запросом в конструкторе; прежде такие клиенты никто не закрывал.
+_shared_clients: dict[tuple, QdrantClient] = {}
+_shared_clients_lock = threading.Lock()
+
+
+def _connection_key(settings) -> tuple:
+    grpc_port = getattr(settings, "qdrant_grpc_port", None)
+    if grpc_port is None:
+        grpc_port = (urlparse(settings.qdrant_url).port or 6333) + 1
+    return (
+        settings.qdrant_url,
+        settings.qdrant_api_key,
+        bool(getattr(settings, "qdrant_prefer_grpc", False)),
+        int(grpc_port),
+    )
+
+
+def _is_closed(client: QdrantClient) -> bool:
+    return bool(getattr(getattr(client, "_client", None), "closed", False))
+
+
+def shared_qdrant_client(settings) -> QdrantClient:
+    """Общий клиент для параметров подключения; закрытый пересоздаётся."""
+    key = _connection_key(settings)
+    with _shared_clients_lock:
+        client = _shared_clients.get(key)
+        if client is None or _is_closed(client):
+            url, api_key, prefer_grpc, grpc_port = key
+            client = QdrantClient(
+                url=url, api_key=api_key, timeout=10, prefer_grpc=prefer_grpc, grpc_port=grpc_port,
+            )
+            _shared_clients[key] = client
+        return client
+
+
+def close_shared_qdrant_clients() -> None:
+    """Закрывает общие клиенты (shutdown приложения)."""
+    with _shared_clients_lock:
+        clients = list(_shared_clients.values())
+        _shared_clients.clear()
+    for client in clients:
+        try:
+            client.close()
+        except Exception:
+            logger.debug("Не удалось закрыть клиент Qdrant", exc_info=True)
+
+
 class VectorStore:
     def __init__(self):
         self.settings = get_settings()
-        configured_grpc_port = getattr(self.settings, "qdrant_grpc_port", None)
-        if configured_grpc_port is None:
-            parsed_url = urlparse(self.settings.qdrant_url)
-            configured_grpc_port = (parsed_url.port or 6333) + 1
-        self.client = QdrantClient(
-            url=self.settings.qdrant_url,
-            api_key=self.settings.qdrant_api_key,
-            timeout=10,
-            prefer_grpc=bool(getattr(self.settings, "qdrant_prefer_grpc", False)),
-            grpc_port=int(configured_grpc_port),
-        )
+
+    @property
+    def client(self) -> QdrantClient:
+        # Явно назначенный клиент (скрипты с --qdrant-url, тесты с :memory:)
+        # важнее общего.
+        override = getattr(self, "_client", None)
+        return override if override is not None else shared_qdrant_client(self.settings)
+
+    @client.setter
+    def client(self, value: QdrantClient) -> None:
+        self._client = value
 
     @property
     def collection(self) -> str:

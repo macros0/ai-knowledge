@@ -9,6 +9,23 @@
 .\scripts\stop-all.ps1     # остановить всё
 ```
 
+```bash
+./scripts/start-all.sh     # то же на macOS/Linux
+./scripts/stop-all.sh      # останавливает только то, что запустил start-all.sh
+```
+
+**macOS/Linux (`start-all.sh`, общий код — `scripts/stack-common.sh`, совместим с bash 3.2
+macOS):** адреса Qdrant/Ollama/PostgreSQL берутся как у backend — env → корневой `.env` →
+дефолты `config.py` (без `.env`: Qdrant :6333, SQLite, Ollama :11434); backend/frontend — те
+же 18000/16300. Qdrant — бинарь (`QDRANT_BIN`/`PATH`), иначе Docker `qdrant/qdrant:v1.19.0`,
+опубликованный на 127.0.0.1; данные `~/.local/share/okf-knowledge/qdrant`. PostgreSQL:
+живой сервер переиспользуется, иначе `pg_ctl` по `OKF_PG_DATA`/кластеру Homebrew (на macOS с
+`LC_ALL=en_US.UTF-8`: без валидной локали postmaster падает с «postmaster became multithreaded
+during startup» — shell без `LANG`, запуск из IDE); на Linux системную службу скрипт не
+стартует. Логи/PID: `~/.local/state/okf-knowledge` (не `$TMPDIR`: macOS его чистит).
+Переиспользованные сервисы (brew services, systemd, Ollama.app) `stop-all.sh` не трогает;
+чужой процесс на порту стека — FAIL шага, а не kill.
+
 `start-all.ps1` сам запускает каждый сервис через глобальный хелпер `start-background.ps1`
 (если он недоступен, использует репозиторный fallback `scripts/start-background.ps1`),
 опирается на health-эндпоинты (не вслепую) и идемпотентен (старые инстансы убивает по PID/порту).
@@ -51,7 +68,11 @@ UI: http://localhost:16300
 - **npx/npm shims на этой машине сломаны** (`node_modules\npm\bin\npx-cli.js` отсутствует), а
   `cmd /c "npm run dev"` ломает кавычки в хелпере. Фронтенд запускать ТОЛЬКО через
   `node node_modules/next/dist/bin/next dev` (из `frontend/`).
-- LLM: `openrouter/mistralai/mistral-nemo` (OpenRouter, из `.env`). Интерактивному RAG-чату
+- LLM на этой машине: локальная `Qwen3.6-35B-A3B-UD-Q6_K_XL.gguf`,
+  `LLM_PROFILE=local_qwen`, OpenAI-совместимый API в CT101 (`LLM_BASE_URL` из `.env`).
+  Настройки, ограничения качества и откат: `docs/LOCAL_LLM.md` и
+  `docs/LOCAL_LLM_ACCEPTANCE_2026-09-27.md`. Общий профиль `standard` сохраняется.
+  Интерактивному RAG-чату
   можно задать модель посильнее через `LLM_CHAT_MODEL` (пусто → `LLM_MODEL`); OKF-генерация
   и batch-задачи всегда на `LLM_MODEL`. Эмбеддинги: `ollama/bge-m3` —
   модель должна быть загружена в Ollama (`ollama pull bge-m3`).
@@ -251,9 +272,13 @@ UI: http://localhost:16300
      дополнительно получил None-толерантность: «title_col»: null /
      «description_cols»: null раньше валили int(None) → TypeError →
      ненужный fallback на XML-эвристику. Кэш классификаций
-     (data/cache/table_classify) переживает рестарты, но НЕ regenerate
-     (стирается осознанно — «пересчитать с нуля»); ключ кэша включает хэш
-     промпта классификатора.
+     (data/cache/table_classify) переживает рестарты и общий для всех
+     документов (ключ — содержимое таблицы + хэш промпта + модель).
+     Regenerate «пересчитывает с нуля» только свой документ: записи старше
+     старта перегенерации (mtime) для него — промах, и граница переживает
+     resume той же попытки (`table-cache.json` в каталоге генерации). До
+     27.09.2026 regenerate стирал весь каталог кэша — и у параллельно
+     обрабатываемых документов тоже.
   **Инцидент ЗАКРЫТ 03.09.2026**, восстановление 03713ad7b0db416c (Регламент
   v8.9) тремя шагами: (1) resume — починка sparse/batching, 5667 концептов
   как были; (2) regenerate с парсером W6a — вскрыл дефект 5 (4573 концепта,

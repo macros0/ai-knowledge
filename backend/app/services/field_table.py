@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -581,9 +582,24 @@ def _cache_path(key: str) -> Path:
     return get_settings().cache_dir / "table_classify" / f"{key}.json"
 
 
+# Граница свежести кэша для текущего потока пайплайна. Перегенерация документа
+# («пересчитать с нуля») не должна брать классификации, сделанные до её старта,
+# но и не должна стирать общий кэш: он адресуется содержимым таблицы и общий
+# для всех документов, включая обрабатываемые параллельно.
+_fresh_since = threading.local()
+
+
+def set_cache_fresh_since(timestamp: float | None) -> None:
+    """Записи кэша старше timestamp (mtime) считаются промахом в этом потоке."""
+    _fresh_since.value = timestamp
+
+
 def _load_cached_classification(key: str) -> TableClassification | None:
     path = _cache_path(key)
     if not path.is_file():
+        return None
+    since = getattr(_fresh_since, "value", None)
+    if since is not None and path.stat().st_mtime < since:
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

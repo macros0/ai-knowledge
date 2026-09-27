@@ -9,7 +9,7 @@ class User(BaseModel):
     Поля выровнены под будущую схему БД (MIGRATION_PLAN.md): user_id = sub
     (стабильный SSO ID), username = preferred_username. groups — из claim'а
     `group`; roles — итоговые роли, вычисленные из маппинга AUTH_ROLE_GROUPS
-    (сейчас 0..1 элемент; в БД — связь через user_roles).
+    (все роли групп, старшая первой; в БД — связь через user_roles).
     """
 
     user_id: str = Field(default="anonymous", description="Стабильный ID (sub)")

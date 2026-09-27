@@ -13,6 +13,7 @@ import multiprocessing
 import os
 from pathlib import Path
 import struct
+import sys
 import threading
 import time
 import zipfile
@@ -27,7 +28,31 @@ from app.services.parser_supervisor import (
 )
 
 
+def _darwin_resources(pid):
+    """RSS и CPU-время через libproc: на macOS нет /proc."""
+    import ctypes
+    import ctypes.util
+
+    from app.services.parser_supervisor import _PROC_PIDTASKINFO, _DarwinTaskInfo
+
+    class Timebase(ctypes.Structure):
+        _fields_ = [("numer", ctypes.c_uint32), ("denom", ctypes.c_uint32)]
+
+    libproc = ctypes.CDLL(ctypes.util.find_library("proc") or "/usr/lib/libproc.dylib", use_errno=True)
+    libproc.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+    info = _DarwinTaskInfo()
+    if libproc.proc_pidinfo(pid, _PROC_PIDTASKINFO, 0, ctypes.byref(info), ctypes.sizeof(info)) != ctypes.sizeof(info):
+        return None
+    # CPU-время в единицах mach absolute time (на Apple Silicon это не наносекунды).
+    timebase = Timebase()
+    ctypes.CDLL(None).mach_timebase_info(ctypes.byref(timebase))
+    ticks = info.pti_total_user + info.pti_total_system
+    return info.pti_resident_size, ticks * timebase.numer / timebase.denom / 1e9
+
+
 def _resources(pid):
+    if sys.platform == "darwin":
+        return _darwin_resources(pid)
     if os.name != "nt":
         fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
         rss = int(fields[21]) * os.sysconf("SC_PAGE_SIZE")

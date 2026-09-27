@@ -44,9 +44,14 @@ class AuthProvider(ABC):
     async def logout(self, request: "Request") -> Response | None:
         """Очистка локальной сессии.
 
+        Удаляет и серверную запись auth_sessions, а не только cookie: иначе
+        скопированная до выхода cookie оставалась бы рабочей до конца TTL.
+
         Базовая реализация возвращает None (контракт: endpoint сам делает
         редирект на "/"). OIDC-провайдеры переопределяют метод и возвращают
         RedirectResponse на end_session_endpoint (RP-Initiated Logout).
         """
-        request.session.clear()
+        from app.auth.service import clear_identity
+
+        clear_identity(request)
         return None

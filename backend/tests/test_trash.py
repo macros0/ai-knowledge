@@ -114,6 +114,83 @@ class TestSoftDelete:
         assert resp.status_code == 409
 
 
+class TestTrashReadAccess:
+    """Корзина закрывает содержимое документа на всех эндпоинтах чтения, не только /download."""
+
+    DOC_ID = "0123456789abcdef"
+    READ_PATHS = (
+        "",
+        "/okf",
+        "/okf/secret-concept.md",
+        "/okf/attachments/scan.png",
+        "/chunks",
+        "/chunks/0",
+        "/fulltext",
+        "/fulltext/chunks",
+        "/duplicates",
+    )
+
+    def _seed(self, monkeypatch, data_dir):
+        from app.config import get_settings
+        from app.db.models import DocumentChunk, OkfConcept
+
+        settings = get_settings()
+        assert settings.data_dir == data_dir
+        monkeypatch.setattr("app.api.documents.get_settings", lambda: settings)
+        DocumentRegistry().create(self.DOC_ID, "secret.docx", "application/octet-stream", 123)
+        with session_scope() as s:
+            s.add(DocumentChunk(doc_id=self.DOC_ID, chunk_index=0, content="TOP SECRET", char_count=10))
+            s.add(OkfConcept(doc_id=self.DOC_ID, slug="secret-concept", title="Secret", content="TOP SECRET", chunk_index=0))
+        attachments = settings.uploads_dir / self.DOC_ID / "attachments"
+        attachments.mkdir(parents=True)
+        (attachments / "scan.png").write_bytes(b"\x89PNG")
+
+    def test_trashed_document_content_is_not_readable(self, client, tmp_path, monkeypatch):
+        login(client)
+        no_qdrant(monkeypatch)
+        self._seed(monkeypatch, tmp_path)
+        base = f"/api/documents/{self.DOC_ID}"
+        # Контроль: до удаления каждый эндпоинт отдаёт содержимое.
+        for path in self.READ_PATHS:
+            assert client.get(base + path).status_code == 200, path
+        assert client.post(base + "/export-okf").status_code == 200
+
+        assert client.delete(base).status_code == 200
+
+        for path in self.READ_PATHS:
+            resp = client.get(base + path)
+            assert resp.status_code == 404, (path, resp.text)
+            assert "TOP SECRET" not in resp.text
+        assert client.post(base + "/export-okf").status_code == 404
+        assert client.get(f"{base}/concepts/secret-concept/source-location").status_code == 404
+
+    def test_trashed_document_does_not_trigger_chunk_backfill(self, client, monkeypatch):
+        login(client)
+        no_qdrant(monkeypatch)
+        DocumentRegistry().create(self.DOC_ID, "secret.docx", "application/octet-stream", 123)
+        DocumentRegistry().soft_delete(self.DOC_ID, "demo.admin")
+
+        def fail_backfill(self, doc_id):
+            raise AssertionError("корзина не должна запускать пере-парсинг исходника")
+
+        monkeypatch.setattr("app.services.pipeline.Pipeline._backfill_chunks", fail_backfill)
+        for path in ("/chunks", "/fulltext", "/fulltext/chunks"):
+            assert client.get(f"/api/documents/{self.DOC_ID}{path}").status_code == 404
+
+    def test_restored_document_is_readable_again(self, client, tmp_path, monkeypatch):
+        login(client)
+        no_qdrant(monkeypatch)
+        self._seed(monkeypatch, tmp_path)
+        base = f"/api/documents/{self.DOC_ID}"
+        assert client.delete(base).status_code == 200
+        assert client.get(base + "/fulltext").status_code == 404
+
+        assert client.post(base + "/restore").status_code == 200
+        resp = client.get(base + "/fulltext")
+        assert resp.status_code == 200
+        assert resp.text == "TOP SECRET"
+
+
 class TestRestore:
     def test_restore_single(self, client, monkeypatch):
         login(client)

@@ -118,19 +118,53 @@ docker compose --env-file "$OKF_RUNTIME_ENV_FILE" up -d --build
 
 ### Local development (no Docker)
 
-```bash
-# 1. Backend
-cd backend
-python -m venv .venv
-.venv\Scripts\activate            # Windows
-pip install -e ../doc-parser      # document parsing package (editable)
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 18000
+Supported on macOS, Linux and Windows; production always runs in Linux containers.
 
-# 2. Frontend (separate terminal)
-cd frontend
-npm install
-npm run dev
+One-time setup (Python 3.12+, Node.js 20+):
+
+```bash
+cp .env.example .env                 # model endpoints, DATABASE_URL, QDRANT_URL
+python3 -m venv backend/.venv        # Windows: python -m venv backend\.venv
+backend/.venv/bin/pip install -e ./doc-parser -r backend/requirements.txt
+                                     # Windows: backend\.venv\Scripts\pip install ...
+(cd frontend && npm ci)
+```
+
+Start and stop the whole stack — Qdrant, Ollama, PostgreSQL, backend (:18000) and
+frontend (:16300, UI at http://localhost:16300):
+
+```bash
+./scripts/start-all.sh               # macOS / Linux
+./scripts/stop-all.sh
+```
+
+```powershell
+.\scripts\start-all.ps1              # Windows
+.\scripts\stop-all.ps1
+```
+
+On macOS/Linux `start-all.sh` takes service addresses from `.env` (the same settings the
+backend reads) and waits for each service's health check:
+
+- **Qdrant** — the v1.19.0 binary (`QDRANT_BIN` or `qdrant` on `PATH`); without it, the
+  `qdrant/qdrant:v1.19.0` Docker image, published on 127.0.0.1 only. Data:
+  `~/.local/share/okf-knowledge/qdrant`.
+- **PostgreSQL** — a server already listening on the `DATABASE_URL` port is reused;
+  otherwise a Homebrew cluster (or `OKF_PG_DATA`) is started with `pg_ctl`. On Linux,
+  start the system service yourself (`sudo systemctl start postgresql`). The database from
+  `DATABASE_URL` is created if missing; with `DATABASE_URL` empty the backend uses SQLite.
+  The Homebrew superuser is your macOS login, not `postgres`.
+- **Ollama** — started only when embeddings or the LLM use `ollama/*` on a local address;
+  a running Ollama.app is reused.
+
+`stop-all.sh` stops only what `start-all.sh` started; reused services keep running. Logs
+and PID files: `~/.local/state/okf-knowledge`.
+
+To run the two app processes by hand instead:
+
+```bash
+cd backend && .venv/bin/python -m uvicorn app.main:app --reload --port 18000
+cd frontend && npm run dev -- -p 16300
 ```
 
 Configure model endpoints and authentication in `.env` (see `.env.example` — all keys are

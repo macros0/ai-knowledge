@@ -33,6 +33,7 @@ def test_hsts_is_enabled_for_production_https(tmp_path, monkeypatch):
         keycloak_realm="realm",
         keycloak_client_id="id",
         keycloak_client_secret="secret",
+        keycloak_group_path_mode="full_path",
         app_secret_key="x" * 32,
         auth_session_https_only=True,
     )

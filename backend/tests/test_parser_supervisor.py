@@ -1,5 +1,6 @@
 from email.message import EmailMessage
 import os
+import sys
 import json
 from pathlib import Path
 import time
@@ -75,7 +76,7 @@ def test_supervisor_reads_result_sent_between_empty_poll_and_worker_exit(tmp_pat
         exit_codes.append(worker.exitcode)
         return None
 
-    monkeypatch.setattr(supervisor, "_windows_rss_bytes", finish_worker_after_empty_poll)
+    monkeypatch.setattr(supervisor, "_process_rss_bytes", finish_worker_after_empty_poll)
 
     def parse():
         return parse_document_supervised(
@@ -273,7 +274,10 @@ def test_supervised_parser_terminates_worker_over_windows_rss_limit(tmp_path: Pa
     assert not attachments.exists()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="RLIMIT_AS is a POSIX acceptance test")
+@pytest.mark.skipif(
+    os.name == "nt" or sys.platform == "darwin",
+    reason="RLIMIT_AS is a Linux acceptance test; macOS does not support it",
+)
 def test_supervised_parser_enforces_posix_address_space_limit(tmp_path: Path):
     attachments = tmp_path / "attachments"
     with pytest.raises(ParserWorkerError, match="MemoryError: RLIMIT_AS enforced"):
@@ -449,7 +453,10 @@ def test_windows_job_removes_descendants_on_every_exit(tmp_path, outcome):
             kernel.CloseHandle(child_handle)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX limit setup failure")
+@pytest.mark.skipif(
+    os.name == "nt" or sys.platform == "darwin",
+    reason="POSIX limit setup failure; macOS enforces memory by RSS polling",
+)
 def test_posix_limit_installation_failure_is_not_silently_ignored(monkeypatch):
     import resource
 
@@ -464,6 +471,38 @@ def test_posix_limit_installation_failure_is_not_silently_ignored(monkeypatch):
 def _started_marker_worker(send, path, filename, attachments_dir, max_memory_bytes):
     Path(path).write_text("input opened", encoding="ascii")
     _send_worker_message(send, {"ok": True, "blocks": [], "sources": []})
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS RSS monitor")
+def test_supervised_parser_terminates_worker_over_darwin_rss_limit(tmp_path: Path):
+    # RLIMIT_AS на macOS нет: без опроса RSS этот воркер занял бы 160 MiB.
+    attachments = tmp_path / "attachments"
+    with pytest.raises(ParserMemoryLimitError):
+        parse_document_supervised(
+            tmp_path / "unused.eml",
+            "unused.eml",
+            attachments_dir=attachments,
+            timeout_seconds=20,
+            max_memory_mb=64,
+            _worker_target=_memory_hog_worker,
+        )
+    assert not attachments.exists()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS RSS monitor setup failure")
+def test_darwin_without_rss_monitor_never_runs_worker_and_releases_slot(tmp_path, monkeypatch):
+    from app.services import parser_supervisor
+
+    monkeypatch.setattr(parser_supervisor, "_darwin_rss_bytes", lambda pid: None)
+    for attempt in range(2):
+        dest = tmp_path / f"attempt-{attempt}"
+        marker = tmp_path / f"opened-{attempt}"
+        with pytest.raises(parser_supervisor.ParserIsolationError, match="RSS monitor"):
+            parse_document_supervised(marker, "unused.eml", attachments_dir=dest,
+                                      timeout_seconds=10, max_memory_mb=256, max_concurrent=1,
+                                      _worker_target=_started_marker_worker)
+        assert not marker.exists()
+        assert not dest.exists()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows protection setup failures")

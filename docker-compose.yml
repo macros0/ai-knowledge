@@ -87,11 +87,15 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # Readiness checks only storage owned by this deployment (PostgreSQL,
+    # Qdrant, PDF provider). An external LLM outage must not keep the stack
+    # from starting: `up --wait` and frontend depends_on rely on this check.
+    # /health/ready answers 503 when not ready, so urlopen raises.
     healthcheck:
       test:
         - CMD-SHELL
         - >-
-          python -c 'import json, urllib.request; health = json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5)); assert health["status"] == "ok"'
+          python -c 'import json, urllib.request; health = json.load(urllib.request.urlopen("http://127.0.0.1:8000/health/ready", timeout=7)); assert health["status"] == "ready"'
       interval: 10s
       timeout: 8s
       retries: 12

@@ -7,6 +7,8 @@ authorize_redirect → callback → token → userinfo → AuthenticatedIdentity
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from urllib.parse import urlencode
 
 from fastapi import Request
@@ -19,6 +21,44 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
+# Реестр authlib кэширует discovery-документ (и JWKS) внутри себя, поэтому он
+# живёт между запросами: раньше каждый вход и callback заново скачивали
+# .well-known/openid-configuration. JWKS при ротации ключей authlib перечитывает
+# сам (неизвестный kid → fetch_jwk_set(force=True)); TTL подхватывает изменения
+# discovery без рестарта. HTTP-сессии authlib создаёт на вызов — к event loop
+# кэшированный объект не привязан.
+_OAUTH_TTL_SECONDS = 3600.0
+_oauth_cache: dict[tuple, tuple[float, OAuth]] = {}
+_oauth_lock = threading.Lock()
+
+
+def _cached_oauth(settings: Settings) -> OAuth:
+    key = (
+        settings.keycloak_url,
+        settings.keycloak_realm,
+        settings.keycloak_client_id,
+        settings.keycloak_client_secret,
+    )
+    now = time.monotonic()
+    with _oauth_lock:
+        cached = _oauth_cache.get(key)
+        if cached is not None and now - cached[0] < _OAUTH_TTL_SECONDS:
+            return cached[1]
+        oauth = OAuth()
+        oauth.register(
+            name="keycloak",
+            client_id=settings.keycloak_client_id,
+            client_secret=settings.keycloak_client_secret,
+            server_metadata_url=(
+                f"{settings.keycloak_url}/realms/{settings.keycloak_realm}"
+                "/.well-known/openid-configuration"
+            ),
+            client_kwargs={"scope": "openid profile email"},
+        )
+        _oauth_cache.clear()  # один актуальный набор настроек на процесс
+        _oauth_cache[key] = (now, oauth)
+        return oauth
+
 
 class KeycloakOidcProvider(AuthProvider):
     key = "keycloak_oidc"
@@ -28,18 +68,7 @@ class KeycloakOidcProvider(AuthProvider):
         self._settings = settings
 
     def _oauth(self) -> OAuth:
-        oauth = OAuth()
-        oauth.register(
-            name="keycloak",
-            client_id=self._settings.keycloak_client_id,
-            client_secret=self._settings.keycloak_client_secret,
-            server_metadata_url=(
-                f"{self._settings.keycloak_url}/realms/{self._settings.keycloak_realm}"
-                "/.well-known/openid-configuration"
-            ),
-            client_kwargs={"scope": "openid profile email"},
-        )
-        return oauth
+        return _cached_oauth(self._settings)
 
     def _redirect_uri(self, request: Request) -> str:
         return self._settings.sso_redirect_uri or str(request.url_for("auth_callback"))
@@ -52,10 +81,11 @@ class KeycloakOidcProvider(AuthProvider):
     async def handle_callback(self, request: Request) -> AuthenticatedIdentity:
         # authlib сам формирует redirect_uri для code-обмена из request
         # (Host: localhost:16300 сохраняется Next.js-прокси) — вручную не передаём.
-        token = await self._oauth().keycloak.authorize_access_token(request)
+        keycloak = self._oauth().keycloak
+        token = await keycloak.authorize_access_token(request)
         userinfo = token.get("userinfo") or {}
         if not userinfo:
-            userinfo = await self._oauth().keycloak.userinfo(token=token)
+            userinfo = await keycloak.userinfo(token=token)
 
         identity = AuthenticatedIdentity.from_mapping(
             userinfo,

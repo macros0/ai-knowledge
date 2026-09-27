@@ -67,6 +67,20 @@ class LLMTimeoutError(TimeoutError):
     """LLM-вызов превысил LLM_TIMEOUT_SECONDS."""
 
 
+class LLMBusyError(Exception):
+    """Интерактивный слот LLM не освободился за LLM_INTERACTIVE_SLOT_WAIT_SECONDS.
+
+    Это перегрузка своего пула, а не сбой провайдера: не ретраится (повтор
+    встал бы в конец той же очереди) и отдаётся клиенту как 429.
+    """
+
+    status_code = 429
+
+    def __init__(self, message: str, retry_after: float = 5.0):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 class LLMTruncationError(Exception):
     """Ответ LLM обрезан по лимиту токенов (finish_reason=length или незакрытая структура).
 
@@ -157,14 +171,29 @@ def _acquire_slot(interactive: bool, max_wait: float):
     Если не дождались, значит слот удерживает поток, который не удалось ни
     остановить, ни дождаться; лучше вернуть retryable-таймаут, чем повторить
     исходный инцидент, когда подвисший вызов блокировал все последующие.
+
+    Интерактивный вызов ждёт только max_wait = LLM_INTERACTIVE_SLOT_WAIT_SECONDS
+    (0 — не ждать) и при неудаче получает LLMBusyError: пока он ждёт, запрос
+    держит поток пула, а пользователь — открытый чат.
     """
     semaphore = _get_semaphore(interactive)
     if semaphore is None:
         return None
     if not semaphore.acquire(blocking=False):
         waited = time.monotonic()
-        got = semaphore.acquire(timeout=max_wait) if max_wait > 0 else semaphore.acquire()
+        if max_wait > 0:
+            got = semaphore.acquire(timeout=max_wait)
+        else:
+            # Нулевое ожидание: интерактивный вызов не ждёт, фоновый ждёт без предела.
+            got = False if interactive else semaphore.acquire()
         elapsed = time.monotonic() - waited
+        if not got and interactive:
+            logger.warning(
+                "Интерактивный слот LLM не освободился за %.0fs (живых запросов: %d) — чат отклонён",
+                max_wait,
+                _inflight_count(),
+            )
+            raise LLMBusyError(f"Все интерактивные слоты LLM заняты дольше {max_wait:.0f}s")
         if not got:
             logger.warning(
                 "Слот параллельности LLM не освободился за %.0fs — удерживается "
@@ -260,6 +289,8 @@ class LLMClient:
             try:
                 return self._complete_once(system, user, max_tokens=max_tokens, idle_timeout=idle_timeout,
                                            **({"task": task} if task else {}))
+            except LLMBusyError:
+                raise
             except LLMTimeoutError as exc:
                 last_exc = exc
                 logger.warning(
@@ -421,7 +452,12 @@ class LLMClient:
                 raise LLMTimeoutError(str(exc)) from exc
             concurrency = 1
         else:
-            release_slot = _acquire_slot(self.interactive, total)
+            slot_wait = (
+                max(0.0, self.settings.llm_interactive_slot_wait_seconds)
+                if self.interactive
+                else total
+            )
+            release_slot = _acquire_slot(self.interactive, slot_wait)
         if self.local and (time.monotonic() >= call_deadline or
                            (external_cancel is not None and external_cancel.is_set())):
             release_slot()

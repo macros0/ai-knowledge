@@ -1,6 +1,6 @@
 """Общие фикстуры для тестов бэкенда.
 
-Авторизация: убирает из окружения переменные auth/Keycloak перед каждым
+Настройки: убирает из окружения переменные auth/Keycloak и LLM/чата перед каждым
 тестом. Без этого pydantic-settings (читает env-переменные с приоритетом над
 dotenv) подхватывает AUTH_PROVIDER/KEYCLOAK из окружения pytest-процесса, и старые
 тесты, строящие Settings без явного auth_provider, случайно получают 'keycloak_oidc' → 401.
@@ -17,12 +17,15 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _flush_auth_env(monkeypatch):
-    auth_vars = [
+    # LiteLLM can load the development .env into os.environ during collection.
+    # Settings(_env_file=None) still reads environment variables: isolate LLM
+    # and chat defaults just as auth defaults, without changing the live .env.
+    runtime_vars = [
         k
         for k in os.environ
-        if k.startswith(("AUTH_", "KEYC", "SSO_"))
+        if k.startswith(("AUTH_", "KEYC", "SSO_", "LLM_", "CHAT_"))
     ]
-    for var in auth_vars:
+    for var in runtime_vars:
         monkeypatch.delenv(var, raising=False)
     # Явно development: fail-fast проверки config.Settings активны только в
     # production, тесты не должны зависеть от дефолта класса или env процесса.

@@ -643,7 +643,9 @@ def get_document(doc_id: str):
             detail="Документ не найден",
         )
     doc = _registry.get(doc_id)
-    if not doc:
+    # Корзина закрывает доступ к документу так же, как /download: карточка
+    # удалённого документа доступна только через GET /documents/trash.
+    if not doc or doc.get("deleted_at") is not None:
         raise ApiError(
             status_code=404,
             code=errors.DOCUMENT_NOT_FOUND,
@@ -873,12 +875,7 @@ def detect_document_development(
 @router.get("/{doc_id}/duplicates")
 def list_document_duplicates(doc_id: str, user: User = Depends(require_user)):
     """Кандидаты-дубликаты документа (Level 2 — почти идентичные, Level 3 — похожие)."""
-    if not _registry.get(doc_id):
-        raise ApiError(
-            status_code=404,
-            code=errors.DOCUMENT_NOT_FOUND,
-            detail="Документ не найден",
-        )
+    _require_active_document(doc_id)
     return find_duplicates_for_document(doc_id)
 
 
@@ -1289,19 +1286,7 @@ def export_okf_document(
     from app.services.export_okf import export_okf_bundle
     from starlette.background import BackgroundTask
 
-    if not _valid_doc_id(doc_id):
-        raise ApiError(
-            status_code=404,
-            code=errors.DOCUMENT_NOT_FOUND,
-            detail="Документ не найден",
-        )
-    doc = _registry.get(doc_id)
-    if not doc:
-        raise ApiError(
-            status_code=404,
-            code=errors.DOCUMENT_NOT_FOUND,
-            detail="Документ не найден",
-        )
+    _require_active_document(doc_id)
 
     tmp = Path(tempfile.mkdtemp(prefix=f"okf-export-{doc_id}-"))
     dest = tmp / "bundle"
@@ -1371,12 +1356,7 @@ def list_okf_files(doc_id: str):
     # DB-first (Этап 2b): список концептов — канонически в okf_concepts, файлы
     # бандла — производная проекция. Валидация формата обязательна до любого
     # доступа к ФС (staging-fallback использует doc_id как путь).
-    if not _valid_doc_id(doc_id):
-        raise ApiError(
-            status_code=404,
-            code=errors.DOCUMENT_NOT_FOUND,
-            detail="Документ не найден",
-        )
+    _require_active_document(doc_id)
     files = _okf_files_from_db(doc_id)
     if files:
         return files
@@ -1397,6 +1377,7 @@ def get_okf_file(doc_id: str, filename: str):
             code=errors.FILE_NOT_FOUND,
             detail="Файл не найден",
         )
+    _require_active_document(doc_id)
     slug = filename.removesuffix(".md")
     md = _concept_markdown_from_db(doc_id, slug)
     if md is not None:
@@ -1439,17 +1420,21 @@ def get_okf_attachment(doc_id: str, filename: str):
     attach_dir = (get_settings().uploads_dir / doc_id / "attachments").resolve()
     with session_scope() as session:
         lock_generation_read(session, [doc_id])
+        # Корзина закрывает и legacy-путь без активной генерации: байты вложений
+        # лежат в uploads/ до физической очистки.
+        document = session.get(Document, doc_id)
+        if document is None or document.deleted_at is not None:
+            raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл не найден")
         state = session.get(DocumentGenerationState, doc_id)
         active_id = state.active_generation_id if state else None
         if active_id:
             from app.services.generation_files import generation_paths
 
-            document = session.get(Document, doc_id)
             saved_path = f"generations/{active_id}/attachments/{filename}"
             registered = session.scalar(select(OkfAttachment.id).where(
                 OkfAttachment.doc_id == doc_id, OkfAttachment.saved_path == saved_path,
             ))
-            if registered is None or document is None or document.deleted_at is not None:
+            if registered is None:
                 raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл не найден")
             attach_dir = generation_paths(get_settings(), doc_id, active_id).attachments.resolve()
         filepath = (attach_dir / filename).resolve()
@@ -1465,24 +1450,10 @@ def get_okf_attachment(doc_id: str, filename: str):
 
 @router.get("/{doc_id}/chunks", response_model=list[ChunkOut])
 def list_chunks(doc_id: str):
-    # FS-first: ensure_chunks читает manifest по okf_dir/doc_id до registry-гейта.
-    if not _valid_doc_id(doc_id):
-        raise ApiError(
-            status_code=404,
-            code=errors.DOCUMENT_NOT_FOUND,
-            detail="Документ не найден",
-        )
-    try:
-        meta = get_pipeline().ensure_chunks(doc_id)
-    except DomainError as exc:
-        raise errors.domain_error(exc, 400) from exc
-    except ValueError as exc:
-        raise ApiError(
-            status_code=400,
-            code=errors.INVALID_REQUEST,
-            detail=str(exc),
-        ) from exc
-    return meta
+    # Гейт корзины до ensure_chunks: иначе удалённый документ не только читался
+    # бы, но и запускал ленивый пере-парсинг исходника.
+    _require_active_document(doc_id)
+    return _ensure_chunks_for_read(doc_id)
 
 
 @router.get("/{doc_id}/chunks/{chunk_index}")
@@ -1493,6 +1464,7 @@ def get_chunk(doc_id: str, chunk_index: int):
             code=errors.CHUNK_NOT_FOUND,
             detail="Чанк не найден",
         )
+    _require_active_document(doc_id)
     content = _chunk_content_from_db(doc_id, chunk_index)
     if content is not None:
         return Response(content=content, media_type="text/plain; charset=utf-8")
@@ -1519,6 +1491,7 @@ def get_concept_source_location(doc_id: str, slug: str):
             code=errors.DOCUMENT_NOT_FOUND,
             detail="Источник концепта не найден",
         )
+    _require_active_document(doc_id)
     location = get_source_location(doc_id, slug)
     if location is None:
         raise ApiError(
@@ -1531,24 +1504,10 @@ def get_concept_source_location(doc_id: str, slug: str):
 
 @router.get("/{doc_id}/fulltext/chunks", response_model=list[DocumentTextChunkOut])
 def get_document_text_chunks_endpoint(doc_id: str):
-    if not _valid_doc_id(doc_id):
-        raise ApiError(
-            status_code=404,
-            code=errors.DOCUMENT_NOT_FOUND,
-            detail="Документ не найден",
-        )
+    _require_active_document(doc_id)
     chunks = get_document_text_chunks(doc_id)
     if not chunks:
-        try:
-            get_pipeline().ensure_chunks(doc_id)
-        except DomainError as exc:
-            raise errors.domain_error(exc, 400) from exc
-        except ValueError as exc:
-            raise ApiError(
-                status_code=400,
-                code=errors.INVALID_REQUEST,
-                detail=str(exc),
-            ) from exc
+        _ensure_chunks_for_read(doc_id)
         chunks = get_document_text_chunks(doc_id)
     if not chunks:
         raise ApiError(
@@ -1563,24 +1522,10 @@ def get_document_text_chunks_endpoint(doc_id: str):
 def get_document_fulltext(doc_id: str):
     # Этап 2b: полный текст — конкатенация document_chunks (БД), а не чтение
     # chunk_XX.md из бандла.
-    if not _valid_doc_id(doc_id):
-        raise ApiError(
-            status_code=404,
-            code=errors.DOCUMENT_NOT_FOUND,
-            detail="Документ не найден",
-        )
+    _require_active_document(doc_id)
     parts = _fulltext_from_db(doc_id)
     if not parts:
-        try:
-            get_pipeline().ensure_chunks(doc_id)
-        except DomainError as exc:
-            raise errors.domain_error(exc, 400) from exc
-        except ValueError as exc:
-            raise ApiError(
-                status_code=400,
-                code=errors.INVALID_REQUEST,
-                detail=str(exc),
-            ) from exc
+        _ensure_chunks_for_read(doc_id)
         parts = _fulltext_from_db(doc_id)
     if not parts:
         raise ApiError(
@@ -1589,6 +1534,33 @@ def get_document_fulltext(doc_id: str):
             detail="Текст документа не найден",
         )
     return Response(content="\n\n".join(parts), media_type="text/plain; charset=utf-8")
+
+
+# Статусы ошибок ленивого построения текста при чтении. Прочие доменные коды
+# (например, file_not_found) сохраняют прежний контракт — 400.
+_CHUNK_READ_ERROR_STATUS = {
+    errors.RATE_LIMITED: 429,
+    errors.PARSER_TIMEOUT: 422,
+    errors.PARSER_RESOURCE_LIMIT: 422,
+    errors.TEXT_NOT_FOUND: 422,
+    errors.PARSER_ISOLATION_UNAVAILABLE: 503,
+}
+
+
+def _ensure_chunks_for_read(doc_id: str) -> list[dict]:
+    """Чанки для GET-эндпоинта: ленивый разбор без ожидания и без повторов."""
+    try:
+        return get_pipeline().ensure_chunks(doc_id, interactive=True)
+    except DomainError as exc:
+        status = _CHUNK_READ_ERROR_STATUS.get(exc.code, 400)
+        headers = {"Retry-After": "5"} if status == 429 else None
+        raise ApiError(status_code=status, code=exc.code, detail=str(exc), headers=headers) from exc
+    except ValueError as exc:
+        raise ApiError(
+            status_code=400,
+            code=errors.INVALID_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 def _require_active_document(doc_id: str) -> Document:
@@ -1685,7 +1657,7 @@ def _document_head(doc_id: str, doc: dict) -> str:
     content = _chunk_content_from_db(doc_id, 0)
     if content is None:
         try:
-            get_pipeline().ensure_chunks(doc_id)
+            get_pipeline().ensure_chunks(doc_id, interactive=True)
         except Exception:
             pass
         content = _chunk_content_from_db(doc_id, 0)

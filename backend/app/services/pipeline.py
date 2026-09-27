@@ -31,6 +31,7 @@ from app.services.development_registry import get_development_registry
 from app.services.embedder import Embedder
 from app import error_codes as codes
 from app.services.errors import processing_error_code
+from app.services.field_table import set_cache_fresh_since as set_table_cache_fresh_since
 from app.services.errors import (
     ConflictError,
     DependencyUnavailableError,
@@ -49,10 +50,17 @@ from app.services.language import detect_language
 from app.services.llm_client import LLMTruncationError, is_fatal_error
 from app.services.okf_generator import ATTACHMENT_TAG, OKFGenerator
 from app.services import problem_codes
-from app.services.registry import get_registry
+from app.services.registry import STALE_STATUSES, get_registry
 from app.services.source_chunking import attachment_shares_by_source, chunk_blocks_by_source, indexable_blocks
 from app.services.source_store import replace_sources
-from app.services.parser_supervisor import parse_document_supervised
+from app.services.parser_supervisor import (
+    ParserBusyError,
+    ParserIsolationError,
+    ParserMemoryLimitError,
+    ParserTimeoutError,
+    ParserWorkerError,
+    parse_document_supervised,
+)
 from app.services.parse_diagnostics import source_extraction_status, summarize_problems
 from app.services.staging import StagingStore
 from app.services.storage import (
@@ -99,6 +107,40 @@ def validate_resume_source_file_hash(manifest: dict, source_file_hash: str) -> N
             "Изменился исходный файл; запустите полную перегенерацию",
             code=codes.PARTIAL_REGENERATION_UNAVAILABLE,
         )
+
+
+_TABLE_CACHE_MARKER = "table-cache.json"
+
+# Ленивый backfill чанков из HTTP-чтения повторяется не чаще этого интервала
+# для документа, чей разбор упал или не дал текста (скан без OCR): иначе каждое
+# открытие страницы заново запускало бы разбор до PARSER_TIMEOUT_SECONDS.
+_INTERACTIVE_BACKFILL_RETRY_SECONDS = 600.0
+
+
+class ChunkBackfillBusyError(DomainError):
+    """Ленивый backfill уже идёт — этот документ или другой (лимит процесса)."""
+
+    code = codes.RATE_LIMITED
+
+
+def _table_cache_fresh_since(uploads_root: Path, fresh: bool, resume: bool) -> float | None:
+    """Граница свежести кэша классификатора таблиц для этой попытки генерации.
+
+    Перегенерация фиксирует момент старта в каталоге попытки, и resume той же
+    попытки продолжает игнорировать записи кэша, сделанные до перегенерации.
+    Обычная обработка использует общий кэш без ограничений (None).
+    """
+    marker = uploads_root / _TABLE_CACHE_MARKER
+    if fresh:
+        since = time.time()
+        write_json_atomic(marker, {"fresh_since": since})
+        return since
+    if resume and marker.is_file():
+        try:
+            return float(json.loads(marker.read_text(encoding="utf-8"))["fresh_since"])
+        except (OSError, ValueError, KeyError, TypeError):
+            logger.warning("Повреждённая отметка свежести кэша таблиц: %s", marker)
+    return None
 
 
 def _sha256_file(filepath: str | Path) -> str:
@@ -168,6 +210,11 @@ class Pipeline:
         # по выходу последнего и не растить словарь на каждый документ.
         self._chunk_locks: dict[str, list] = {}
         self._chunk_locks_guard = threading.Lock()
+        # Ленивый backfill из HTTP-чтения: один разбор на процесс, чтобы чтения
+        # не занимали слоты парсера, нужные загрузкам (общий PARSER_MAX_CONCURRENT).
+        self._interactive_backfill_slots = threading.BoundedSemaphore(1)
+        # doc_id -> (истекает, код ошибки или None — «текста нет», сообщение).
+        self._interactive_backfill_outcomes: dict[str, tuple[float, str | None, str]] = {}
         self._storage_failure_docs: set[tuple[str, int]] = set()
         self._storage_failure_docs_lock = threading.Lock()
 
@@ -283,15 +330,14 @@ class Pipeline:
                 if reset_staging:
                     # Admission and destructive checkpoint reset share the same
                     # lock: a second regenerate must not erase a running worker.
+                    # Общий кэш классификатора таблиц не трогаем: «с нуля» для
+                    # этого документа обеспечивает граница свежести в _process.
                     StagingStore(doc_id).remove()
-                    table_cache = self.settings.cache_dir / "table_classify"
-                    if table_cache.is_dir():
-                        shutil.rmtree(table_cache, ignore_errors=True)
                 # Publish admission before submit: a busy executor may not start
                 # this document for minutes, and resume must stop showing paused.
                 self.registry.update(doc_id, status="queued", error=None, error_code=None)
                 task = self._executor.submit(
-                    self._run, doc_id, filepath, filename, user_tags, resume
+                    self._run, doc_id, filepath, filename, user_tags, resume, reset_staging,
                 )
             except Exception:
                 self._abort_events.pop(doc_id, None)
@@ -301,12 +347,18 @@ class Pipeline:
                 raise
             self._threads[doc_id] = task
 
-    def _run(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
+    def _run(
+        self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
+        fresh_table_cache: bool = False,
+    ) -> None:
         # Wait until _start registers the Future before processing/cleanup.
         with self._start_lock:
             pass
         try:
-            self._process(doc_id, filepath, filename, user_tags, resume=resume)
+            self._process(
+                doc_id, filepath, filename, user_tags, resume=resume,
+                fresh_table_cache=fresh_table_cache,
+            )
         except Exception as exc:
             logger.exception("Ошибка обработки документа %s", filename)
             if is_storage_full(exc):
@@ -314,6 +366,9 @@ class Pipeline:
             else:
                 self.registry.update(doc_id, status="error", error=str(exc), error_code=processing_error_code(exc))
         finally:
+            # Поток executor переиспользуется: граница свежести кэша не должна
+            # перейти к следующему документу.
+            set_table_cache_fresh_since(None)
             aborted = self._abort_events.get(doc_id)
             if aborted and aborted.is_set():
                 try:
@@ -434,7 +489,10 @@ class Pipeline:
             except Exception:
                 pass
 
-    def _process(self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool) -> None:
+    def _process(
+        self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
+        *, fresh_table_cache: bool = False,
+    ) -> None:
         self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
         source_file_hash = _sha256_file(filepath)
         staging = StagingStore(doc_id)
@@ -445,6 +503,7 @@ class Pipeline:
                 paths = prepare_generation_paths(session, self.settings, doc_id, generation_id)
             else:
                 paths = generation_paths(self.settings, doc_id, generation_id)
+        set_table_cache_fresh_since(_table_cache_fresh_since(paths.uploads_root, fresh_table_cache, resume))
         if phase == "ready":
             checkpoint = staging.load() or {}
             validate_resume_parser_version(
@@ -1147,7 +1206,7 @@ class Pipeline:
             return True
 
     @contextmanager
-    def _chunk_lock(self, doc_id: str):
+    def _chunk_lock(self, doc_id: str, *, blocking: bool = True):
         """Лок на ленивый backfill чанков документа, живущий не дольше нужды.
 
         Раньше словарь только рос — по объекту на каждый документ, обработанный
@@ -1166,21 +1225,28 @@ class Pipeline:
             entry[1] += 1
             lock = entry[0]
         try:
-            with lock:
+            if not lock.acquire(blocking=blocking):
+                raise ChunkBackfillBusyError("Текст документа уже строится")
+            try:
                 yield
+            finally:
+                lock.release()
         finally:
             with self._chunk_locks_guard:
                 entry[1] -= 1
                 if entry[1] <= 0 and self._chunk_locks.get(doc_id) is entry:
                     del self._chunk_locks[doc_id]
 
-    def ensure_chunks(self, doc_id: str) -> list[dict]:
+    def ensure_chunks(self, doc_id: str, *, interactive: bool = False) -> list[dict]:
         """Возвращает мету чанков документа, при необходимости строя их из исходника.
 
         Источники по приоритету (Этап 2b — PostgreSQL SSOT):
           1. document_chunks (БД) — канонический источник текста чанков;
           2. staging (документ в процессе генерации) — живые чанки;
           3. ленивый backfill: пере-парсинг исходника (без LLM) в document_chunks.
+
+        interactive=True — вызов из HTTP-чтения (любой viewer): см.
+        _interactive_backfill. Скрипты backfill зовут без флага и ждут разбора.
         """
         meta = _chunks_meta_from_db(doc_id)
         if meta:
@@ -1196,12 +1262,85 @@ class Pipeline:
         if staging.exists():
             return _chunks_meta_from_dir(staging.dir, staging.load())
 
+        if interactive:
+            return self._interactive_backfill(doc_id)
         with self._chunk_lock(doc_id):
             meta = _chunks_meta_from_db(doc_id)
             if meta:
                 return meta
             self._backfill_chunks(doc_id)
             return _chunks_meta_from_db(doc_id)
+
+    def _interactive_backfill(self, doc_id: str) -> list[dict]:
+        """Ленивый backfill, который GET-запрос не может превратить в нагрузку.
+
+        - документ в обработке — чанки построит пайплайн, разбор не запускается;
+        - неудачный или пустой разбор запоминается на
+          _INTERACTIVE_BACKFILL_RETRY_SECONDS и не повторяется на каждом чтении;
+        - одновременно идёт не больше одного такого разбора на процесс, и никто
+          его не ждёт: занято — ChunkBackfillBusyError (429 с Retry-After),
+          а не поток пула запросов, заблокированный на время разбора.
+        """
+        doc = self.registry.get(doc_id)
+        if doc is not None and doc.get("status") in STALE_STATUSES:
+            return []
+        remembered = self._remembered_backfill_outcome(doc_id)
+        if remembered is not None:
+            code, message = remembered
+            if code is None:
+                return []
+            raise DomainError(message, code=code)
+        if not self._interactive_backfill_slots.acquire(blocking=False):
+            raise ChunkBackfillBusyError("Идёт построение текста другого документа")
+        try:
+            with self._chunk_lock(doc_id, blocking=False):
+                meta = _chunks_meta_from_db(doc_id)
+                if meta:
+                    return meta
+                try:
+                    self._backfill_chunks(doc_id)
+                except ParserBusyError as exc:
+                    raise ChunkBackfillBusyError("Все процессы разбора документов заняты") from exc
+                except ParserIsolationError as exc:
+                    # Проблема окружения, а не документа: не запоминаем.
+                    raise DomainError(
+                        "Защищённый разбор документов недоступен",
+                        code=codes.PARSER_ISOLATION_UNAVAILABLE,
+                    ) from exc
+                except (ParserTimeoutError, ParserMemoryLimitError, ParserWorkerError) as exc:
+                    code = (
+                        codes.PARSER_TIMEOUT if isinstance(exc, ParserTimeoutError)
+                        else codes.PARSER_RESOURCE_LIMIT if isinstance(exc, ParserMemoryLimitError)
+                        else codes.TEXT_NOT_FOUND
+                    )
+                    message = "Не удалось извлечь текст документа"
+                    self._remember_backfill_outcome(doc_id, code, message)
+                    raise DomainError(message, code=code) from exc
+                meta = _chunks_meta_from_db(doc_id)
+                if not meta:
+                    self._remember_backfill_outcome(doc_id, None, "")
+                return meta
+        finally:
+            self._interactive_backfill_slots.release()
+
+    def _remembered_backfill_outcome(self, doc_id: str) -> tuple[str | None, str] | None:
+        with self._chunk_locks_guard:
+            outcome = self._interactive_backfill_outcomes.get(doc_id)
+            if outcome is None:
+                return None
+            expires, code, message = outcome
+            if expires <= time.monotonic():
+                del self._interactive_backfill_outcomes[doc_id]
+                return None
+            return code, message
+
+    def _remember_backfill_outcome(self, doc_id: str, code: str | None, message: str) -> None:
+        now = time.monotonic()
+        with self._chunk_locks_guard:
+            outcomes = self._interactive_backfill_outcomes
+            for key in [key for key, value in outcomes.items() if value[0] <= now]:
+                del outcomes[key]
+            outcomes[doc_id] = (now + _INTERACTIVE_BACKFILL_RETRY_SECONDS, code, message)
 
     def _backfill_chunks(self, doc_id: str) -> None:
         """Строит чанки из исходного файла и пишет их в document_chunks (без LLM).

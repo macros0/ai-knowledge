@@ -333,6 +333,44 @@ def test_empty_published_generation_is_not_reparsed_during_read(pipeline_env, mo
     assert pipeline.ensure_chunks(DOC_ID) == []
 
 
+def test_regenerate_keeps_shared_table_cache_and_bounds_it_for_the_document(pipeline_env):
+    import time
+
+    from app.services import field_table
+
+    pipeline, _source, _write = pipeline_env
+    shared_entry = pipeline.settings.cache_dir / "table_classify" / "other-document-table.json"
+    shared_entry.parent.mkdir(parents=True, exist_ok=True)
+    shared_entry.write_text("{}", encoding="utf-8")
+    seen = []
+
+    def generate(text, *_args, **_kwargs):
+        seen.append(getattr(field_table._fresh_since, "value", None))
+        return [Concept(id="decision", title="Decision", content=text)]
+
+    pipeline.okf_generator.generate_chunk = generate
+    started = time.time()
+    pipeline.regenerate(DOC_ID)
+    assert pipeline.wait_for(DOC_ID, timeout=30)["status"] == "done"
+
+    # Общий кэш других документов не стирается (раньше — rmtree всего каталога).
+    assert shared_entry.is_file()
+    # Генерация этого документа шла с границей свежести = старт перегенерации.
+    assert seen and all(value is not None and value >= started for value in seen)
+
+
+def test_table_cache_bound_survives_resume_of_the_same_attempt(tmp_path):
+    from app.services.pipeline import _table_cache_fresh_since
+
+    assert _table_cache_fresh_since(tmp_path, fresh=False, resume=False) is None
+    since = _table_cache_fresh_since(tmp_path, fresh=True, resume=False)
+    assert since is not None
+    # Resume той же попытки перегенерации сохраняет границу.
+    assert _table_cache_fresh_since(tmp_path, fresh=False, resume=True) == since
+    # Обычная обработка пользуется общим кэшем без границы.
+    assert _table_cache_fresh_since(tmp_path, fresh=False, resume=False) is None
+
+
 def test_pipeline_mail_scopes_use_candidate_tree(pipeline_env):
     pipeline, source, write = pipeline_env
     write('Regenerated mail evidence')

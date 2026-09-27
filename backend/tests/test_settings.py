@@ -70,7 +70,11 @@ class TestSettingsEndpoint:
         monkeypatch.setattr("app.config.get_settings", lambda: settings)
         monkeypatch.setattr("app.main.get_settings", lambda: settings)
 
-        with TestClient(create_app()) as client:
+        from app.api.settings import get_settings as settings_dependency
+
+        app = create_app()
+        app.dependency_overrides[settings_dependency] = lambda: settings
+        with TestClient(app) as client:
             resp = client.get("/api/settings")
         assert resp.status_code == 200
         data = resp.json()
@@ -154,6 +158,31 @@ class TestProductionAuthGuard:
                 app_secret_key="x" * 32,
                 auth_session_https_only=True,
             )
+
+    _PROD_KEYCLOAK = dict(
+        _env_file=None,
+        environment="production",
+        auth_provider="keycloak_oidc",
+        keycloak_url="https://kc",
+        keycloak_realm="r",
+        keycloak_client_id="id",
+        keycloak_client_secret="secret",
+        app_secret_key="x" * 32,
+        auth_session_https_only=True,
+    )
+
+    def test_implicit_leaf_group_mode_rejected_in_production(self, monkeypatch):
+        monkeypatch.delenv("KEYCLOAK_GROUP_PATH_MODE", raising=False)
+        with pytest.raises(ValueError, match="KEYCLOAK_GROUP_PATH_MODE"):
+            Settings(**self._PROD_KEYCLOAK)
+
+    @pytest.mark.parametrize("mode", ["full_path", "leaf"])
+    def test_explicit_group_mode_accepted_in_production(self, mode):
+        assert Settings(**self._PROD_KEYCLOAK, keycloak_group_path_mode=mode).keycloak_group_path_mode == mode
+
+    def test_explicit_group_mode_from_environment(self, monkeypatch):
+        monkeypatch.setenv("KEYCLOAK_GROUP_PATH_MODE", "full_path")
+        assert Settings(**self._PROD_KEYCLOAK).keycloak_group_path_mode == "full_path"
 
     def test_disabled_allowed_in_development(self):
         s = Settings(_env_file=None, environment="development", auth_provider="disabled")

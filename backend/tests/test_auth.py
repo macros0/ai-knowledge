@@ -189,5 +189,49 @@ def test_logout_clears_session(client):
     assert client.get("/api/documents").status_code == 401
 
 
+def test_logout_revokes_server_side_session(tmp_path, monkeypatch):
+    """Cookie, скопированная до выхода, не должна открывать сессию после logout."""
+    from app.db.models import AuthSession
+    from app.db.session import session_scope
+
+    client = make_client(tmp_path, monkeypatch)
+    client.post("/api/auth/simulate", json={"username": "demo.user"})
+    stolen = client.cookies.get("session")
+    with session_scope() as db:
+        assert db.query(AuthSession).count() == 1
+
+    assert client.post("/api/auth/logout").status_code == 200
+
+    with session_scope() as db:
+        assert db.query(AuthSession).count() == 0
+    replay = make_client(tmp_path, monkeypatch)
+    replay.cookies.set("session", stolen)
+    assert replay.get("/api/documents").status_code == 401
+
+
+class TestMultipleRoles:
+    def test_all_group_roles_are_granted_primary_first(self):
+        a = GroupRoleAuthorizer(ROLE_GROUPS, None)
+        assert a.resolve_roles(["KB_Viewer", "KB_Admin", "KB_Security"]) == ["security", "admin", "viewer"]
+        assert a.resolve_role(["KB_Admin", "KB_Security"]) == "security"
+
+    def test_unknown_mapped_role_stays_fail_closed(self):
+        groups = {**ROLE_GROUPS, "KB_Typo": "auditor"}
+        assert GroupRoleAuthorizer(groups, None).resolve_roles(["KB_Typo"]) == []
+        assert GroupRoleAuthorizer(groups, "viewer").resolve_roles(["KB_Typo"]) == ["viewer"]
+
+    def test_security_admin_user_keeps_admin_rights(self, tmp_path, monkeypatch):
+        """Участник KB_Security и KB_Admin раньше молча терял права admin."""
+        client = make_client(tmp_path, monkeypatch, auth_sim_users=[
+            {"user_id": "both", "username": "sec.admin", "email": "b@d.local",
+             "groups": ["KB_Security", "KB_Admin"]},
+        ])
+        client.post("/api/auth/simulate", json={"username": "sec.admin"})
+
+        assert client.get("/api/auth/me").json()["user"]["roles"] == ["security", "admin"]
+        assert client.get("/api/jobs").status_code == 200  # admin
+        assert client.get("/api/audit").status_code == 200  # security
+
+
 def test_health_still_works(client):
     assert client.get("/health").status_code == 200
