@@ -190,3 +190,20 @@ def test_repair_index_uses_proposal_tree_not_active_sql_tree():
                      dict(dev_tags=[], global_tags=[], source_locale=None),
                      sources=[dict(source_id='root', kind='mail')])
     assert captured == {'concept': ['mail'], 'chunk': ['mail']}
+
+
+def test_scope_patch_failure_does_not_abandon_ready_repair(tmp_path, monkeypatch):
+    from app.services.errors import VectorStoreError
+    from app.services.generation_publication import publish_prepared_document
+    settings, _bundle = _canonical(tmp_path)
+    embedder, store, _qdrant = _fake_services(settings, monkeypatch)
+    original = store.patch_mail_scopes
+    monkeypatch.setattr(store, 'patch_mail_scopes', lambda *a, **kw: (_ for _ in ()).throw(VectorStoreError('patch failed')))
+    backfill.process_doc(DOC_ID, 'doc.docx', settings, OKFGenerator(), embedder, store)
+    with session_scope() as session:
+        state = session.get(DocumentGenerationState, DOC_ID)
+        candidate = state.candidate_generation_id
+        assert candidate is not None
+        assert session.get(DocumentGeneration, candidate).phase == 'ready'
+    monkeypatch.setattr(store, 'patch_mail_scopes', original)
+    assert publish_prepared_document(settings, store, DOC_ID, candidate)

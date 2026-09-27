@@ -136,7 +136,10 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
     except Exception:
         try:
             with session_scope() as session:
-                abandon_generation(session, doc_id, generation_id)
+                candidate = session.get(DocumentGeneration, generation_id)
+                # A verified ready manifest is retryable after index/readback failure.
+                if candidate is not None and candidate.phase != "ready":
+                    abandon_generation(session, doc_id, generation_id)
         except Exception:
             logger.warning("[%s] Не удалось отменить ремонтную версию %s", doc_id, generation_id, exc_info=True)
         raise
