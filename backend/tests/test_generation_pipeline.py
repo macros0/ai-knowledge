@@ -369,3 +369,15 @@ def test_table_cache_bound_survives_resume_of_the_same_attempt(tmp_path):
     assert _table_cache_fresh_since(tmp_path, fresh=False, resume=True) == since
     # Обычная обработка пользуется общим кэшем без границы.
     assert _table_cache_fresh_since(tmp_path, fresh=False, resume=False) is None
+
+
+def test_pipeline_mail_scopes_use_candidate_tree(pipeline_env):
+    pipeline, source, write = pipeline_env
+    write('Regenerated mail evidence')
+    pipeline._process(DOC_ID, source, 'decision.eml', [], resume=False)
+    active = _published_snapshot(pipeline)[0]
+    rows, _ = pipeline.vector_store.client.scroll(pipeline.vector_store.collection, limit=100)
+    rows = [row for row in rows if row.payload['generation_id'] == active]
+    assert rows
+    assert {row.payload['mail_scope'] for row in rows} == {'mail'}
+    assert all(row.payload['mail_scope_version'] == 1 for row in rows)
