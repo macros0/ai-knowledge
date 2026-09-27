@@ -550,6 +550,8 @@ export default {
   "dev.changeTitle": "Изменить разработку",
   "dev.changeAria": "Изменить разработку",
   "dev.assignTitle": "Присвоить разработку",
+  "dev.suggestionTitle": "Уточнить разработку",
+  "dev.suggestionTrigger": "⚠ {number} · уточнить",
   "dev.none": "— без разработки —",
   "dev.card.back": "← Справочник разработок",
   "dev.card.module": "Модуль: {module}",

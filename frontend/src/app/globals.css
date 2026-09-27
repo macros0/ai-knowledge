@@ -3350,6 +3350,15 @@ main {
   border-color: var(--accent);
 }
 
+.dev-picker-trigger-suggestion {
+  color: var(--color-amber);
+  border-color: color-mix(in srgb, var(--color-amber) 45%, var(--border));
+}
+
+.dev-picker-trigger-suggestion:hover {
+  border-color: var(--color-amber);
+}
+
 .dev-picker-assigned {
   display: inline-flex;
   align-items: center;

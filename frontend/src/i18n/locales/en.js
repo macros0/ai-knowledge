@@ -550,6 +550,8 @@ export default {
   "dev.changeTitle": "Change development",
   "dev.changeAria": "Change development",
   "dev.assignTitle": "Assign development",
+  "dev.suggestionTitle": "Clarify development",
+  "dev.suggestionTrigger": "⚠ {number} · clarify",
   "dev.none": "— no development —",
   "dev.card.back": "← Developments",
   "dev.card.module": "Module: {module}",

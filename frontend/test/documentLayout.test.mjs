@@ -18,6 +18,16 @@ test("attachment-only source warning uses a compact icon with a tooltip", async 
   assert.match(source, /aria-label=\{problemText\}/);
 });
 
+test("a detected development is an actionable clarification choice", async () => {
+  const list = await readFile(new URL("../src/components/DocumentList.jsx", import.meta.url), "utf8");
+  const picker = await readFile(new URL("../src/components/DevelopmentPicker.jsx", import.meta.url), "utf8");
+
+  assert.match(list, /suggestion=\{doc\.development_suggestion\}/);
+  assert.doesNotMatch(list, /doc\.development_suggestion && !doc\.development_id && \(\s*<span className="dev-suggestion">/);
+  assert.match(picker, /dev-picker-trigger\$\{suggestion \? " dev-picker-trigger-suggestion"/);
+  assert.match(picker, /setQuery\(suggestionNumber\)/);
+});
+
 test("document source tree receives a highlighted source to expand its ancestors", async () => {
   const listPage = await readFile(new URL("../src/app/documents/[docId]/okf/page.js", import.meta.url), "utf8");
   const sources = await readFile(new URL("../src/components/DocumentSources.jsx", import.meta.url), "utf8");

@@ -583,6 +583,10 @@
   "dev.none": [],
   "dev.notFound": [],
   "dev.searchPlaceholder": [],
+  "dev.suggestionTitle": [],
+  "dev.suggestionTrigger": [
+    "number"
+  ],
   "dev.title": [
     "name"
   ],

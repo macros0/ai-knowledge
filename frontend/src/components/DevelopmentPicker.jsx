@@ -17,7 +17,7 @@ import { useI18n } from "@/i18n/LocaleContext";
  * Поиск — строго по первым символам номера разработки (префикс).
  * onChange вызывается с id разработки (number) или null («без разработки»).
  */
-export default function DevelopmentPicker({ developments, value, onChange }) {
+export default function DevelopmentPicker({ developments, value, suggestion = null, onChange }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -26,9 +26,10 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
   const inputRef = useRef(null);
 
   const current = developments.find((d) => d.id === Number(value)) || null;
+  const suggestionNumber = String(suggestion?.number || "").trim();
 
   const openPopup = () => {
-    setQuery("");
+    setQuery(suggestionNumber);
     setOpen(true);
   };
 
@@ -94,11 +95,13 @@ export default function DevelopmentPicker({ developments, value, onChange }) {
       ) : (
         <button
           type="button"
-          className="dev-picker-trigger"
+          className={`dev-picker-trigger${suggestion ? " dev-picker-trigger-suggestion" : ""}`}
           onClick={openPopup}
-          title={t("dev.assignTitle")}
+          title={suggestion ? t("dev.suggestionTitle") : t("dev.assignTitle")}
         >
-          {t("dev.none")}
+          {suggestion
+            ? t("dev.suggestionTrigger", { number: suggestionNumber || suggestion.name || "—" })
+            : t("dev.none")}
         </button>
       )}
       {open &&

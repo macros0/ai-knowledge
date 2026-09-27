@@ -718,7 +718,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                 {metaValue("development")}
               </Link>
             )}
-            {doc.development_suggestion && !doc.development_id && (
+            {doc.development_suggestion && !doc.development_id && (!canEdit || developments.length === 0) && (
               <span className="dev-suggestion">
                 {t("docs.devSuggestion", {
                   name: doc.development_suggestion.number || doc.development_suggestion.name || "—",
@@ -797,6 +797,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               <DevelopmentPicker
                 developments={developments}
                 value={doc.development_id ?? null}
+                suggestion={doc.development_suggestion}
                 onChange={(devId) => changeDevelopment(doc, devId)}
               />
             )}
