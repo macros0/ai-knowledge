@@ -4520,3 +4520,9 @@ main {
   .doc-actions { flex-wrap: wrap; justify-content: flex-end; }
   .doc-filter-primary > .doc-filter-input { flex-basis: 100%; }
 }
+.chat-mail-hint {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
