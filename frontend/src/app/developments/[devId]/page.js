@@ -94,23 +94,25 @@ export default function DevelopmentCardPage() {
 
       <h3>{t("dev.card.docsTitle")}</h3>
       <div className="doc-filter-bar">
-        <input
-          type="text"
-          className="doc-filter-input"
-          placeholder={t("docs.searchPlaceholder")}
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          aria-label={t("dev.card.searchAria")}
-        />
-        <SearchableSelect
-          options={sortOptions}
-          triggerClassName="doc-filter-select"
-          value={sortKey}
-          onChange={setSortKey}
-          searchPlaceholder={t("sort.label")}
-          emptyLabel={t("docs.empty")}
-          ariaLabel={t("sort.label")}
-        />
+        <div className="doc-filter-primary">
+          <input
+            type="text"
+            className="doc-filter-input"
+            placeholder={t("docs.searchPlaceholder")}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            aria-label={t("dev.card.searchAria")}
+          />
+          <SearchableSelect
+            options={sortOptions}
+            triggerClassName="doc-filter-select"
+            value={sortKey}
+            onChange={setSortKey}
+            searchPlaceholder={t("sort.label")}
+            emptyLabel={t("docs.empty")}
+            ariaLabel={t("sort.label")}
+          />
+        </div>
       </div>
       {docs.length === 0 ? (
         <p className="muted">
