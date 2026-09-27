@@ -289,6 +289,52 @@ class TestStreamIdleTimeout:
         assert result == "abcde"
 
 
+class TestInteractiveSlotWait:
+    """Чат не ждёт слот дольше LLM_INTERACTIVE_SLOT_WAIT_SECONDS и не ретраит перегрузку."""
+
+    def _occupy_interactive_slots(self, monkeypatch, **overrides):
+        monkeypatch.setattr(llm_module, "get_settings", lambda: _settings(**overrides))
+        sem = llm_module._get_semaphore(interactive=True)
+        while sem.acquire(blocking=False):
+            pass
+        return sem
+
+    def test_busy_pool_fails_fast_without_retry(self, monkeypatch):
+        self._occupy_interactive_slots(
+            monkeypatch, llm_interactive_slot_wait_seconds=0.2, llm_retry_backoff_seconds=5,
+        )
+        calls = {"n": 0}
+
+        def completion(**kwargs):
+            calls["n"] += 1
+            return _stream_response("привет")
+
+        monkeypatch.setattr(litellm, "completion", completion)
+
+        started = time.monotonic()
+        with pytest.raises(llm_module.LLMBusyError) as caught:
+            LLMClient(interactive=True).chat("s", "u")
+
+        # Одно ожидание слота, без backoff и без второго круга ожидания.
+        assert time.monotonic() - started < 1.5
+        assert calls["n"] == 0
+        assert caught.value.status_code == 429
+
+    def test_zero_wait_rejects_immediately(self, monkeypatch):
+        self._occupy_interactive_slots(monkeypatch, llm_interactive_slot_wait_seconds=0)
+        started = time.monotonic()
+        with pytest.raises(llm_module.LLMBusyError):
+            LLMClient(interactive=True).chat("s", "u")
+        assert time.monotonic() - started < 0.5
+
+    def test_waiting_chat_gets_slot_released_within_wait(self, monkeypatch):
+        sem = self._occupy_interactive_slots(monkeypatch, llm_interactive_slot_wait_seconds=5)
+        monkeypatch.setattr(litellm, "completion", lambda **kwargs: _stream_response("привет"))
+        threading.Timer(0.2, sem.release).start()
+
+        assert LLMClient(interactive=True).chat("s", "u") == "привет"
+
+
 class TestChaosFailureInjection:
     """Chaos-тесты: зависание LLM при стабильной сети.
 

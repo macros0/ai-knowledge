@@ -38,3 +38,87 @@ class TestChatEmptyShortCircuit:
         assert data["sources"] == []
         assert "Источники не найдены" in data["answer"]
         assert called == []
+
+
+def _block():
+    return {
+        "title": "Концепт", "filepath": "doc/concept.md", "score": 1.0, "tags": [],
+        "doc_id": "0123456789abcdef", "content": "тест", "point_type": "concept", "chunk_index": 0,
+    }
+
+
+def _patch_retrieval(monkeypatch, chat_module, *, hits):
+    monkeypatch.setattr(chat_module._get_embedder(), "embed", lambda *a, **k: [0.0] * 10)
+    monkeypatch.setattr(chat_module._get_vector_store(), "search_composite", lambda **kw: hits)
+    if hits:
+        monkeypatch.setattr(chat_module, "load_visible_retrieval_hits", lambda h, **kw: (h, {}))
+        monkeypatch.setattr(chat_module, "merge_and_format", lambda *a, **kw: [_block()])
+        for name in ("drop_unmatched_blocks", "drop_partial_title_matches", "limit_context"):
+            monkeypatch.setattr(chat_module, name, lambda merged, *a, **kw: merged)
+        monkeypatch.setattr(chat_module, "format_context", lambda *a, **kw: "ctx")
+
+
+class TestChatAdmission:
+    """Чат держит поток пула до ответа LLM: лишние запросы отклоняются сразу, а не копятся."""
+
+    def _client(self, monkeypatch, **overrides):
+        from app.api import chat as chat_module
+
+        settings = Settings(_env_file=None, auth_provider="disabled", **overrides)
+        monkeypatch.setattr("app.api.chat.get_settings", lambda: settings)
+        monkeypatch.setattr(chat_module, "_inflight_by_limit", {})
+        return make_client(monkeypatch)
+
+    def test_request_over_inflight_limit_is_rejected_immediately(self, monkeypatch):
+        from app.api import chat as chat_module
+
+        client = self._client(monkeypatch, chat_max_inflight=1)
+        _patch_retrieval(monkeypatch, chat_module, hits=[])
+        held = chat_module._admit_chat(1)
+        try:
+            resp = client.post("/api/chat", json={"query": "тест"})
+        finally:
+            held.release()
+
+        assert resp.status_code == 429, resp.text
+        assert resp.json()["code"] == "rate_limited"
+        assert int(resp.headers["retry-after"]) >= 1
+        # Слот освободился — следующий запрос проходит.
+        assert client.post("/api/chat", json={"query": "тест"}).status_code == 200
+
+    def test_slot_is_released_when_request_fails(self, monkeypatch):
+        from app.api import chat as chat_module
+
+        client = self._client(monkeypatch, chat_max_inflight=1)
+        _patch_retrieval(monkeypatch, chat_module, hits=[])
+
+        def fail(*a, **k):
+            raise RuntimeError("embed failed")
+
+        monkeypatch.setattr(chat_module._get_embedder(), "embed", fail)
+        assert client.post("/api/chat", json={"query": "тест"}).status_code == 500
+
+        _patch_retrieval(monkeypatch, chat_module, hits=[])
+        assert client.post("/api/chat", json={"query": "тест"}).status_code == 200
+
+    def test_busy_llm_pool_returns_429_without_history(self, monkeypatch):
+        from app.api import chat as chat_module
+        from app.services import chat_history
+        from app.services.llm_client import LLMBusyError
+
+        client = self._client(monkeypatch)
+        _patch_retrieval(monkeypatch, chat_module, hits=[{"id": "p1"}])
+
+        def busy(*a, **k):
+            raise LLMBusyError("все слоты заняты", retry_after=7)
+
+        monkeypatch.setattr(chat_module._get_llm(), "chat", busy)
+        stored = []
+        monkeypatch.setattr(chat_history, "store_turn", lambda *a, **k: stored.append(a))
+
+        resp = client.post("/api/chat", json={"query": "тест"})
+
+        assert resp.status_code == 429, resp.text
+        assert resp.json()["code"] == "rate_limited"
+        assert resp.headers["retry-after"] == "7"
+        assert stored == []

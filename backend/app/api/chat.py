@@ -3,6 +3,7 @@
 
 """Роут чата: RAG — композитный поиск (dense/BM25 + чанки) + синтез ответа LLM."""
 import logging
+import threading
 from dataclasses import asdict
 from functools import lru_cache
 from pathlib import Path
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Depends
 
 from app.auth.models import User
 from app.auth.service import require_user
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.models.schemas import ChatRequest, ChatResponse, ChatSource
 from app.prompts.store import get_store
 from app.services import chat_history
@@ -30,7 +31,7 @@ from app.services.context_builder import (
 )
 from app.services.embedder import Embedder
 from app.services.errors import LLMError
-from app.services.llm_client import LLMClient
+from app.services.llm_client import LLMBusyError, LLMClient
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
@@ -65,6 +66,32 @@ def _get_vector_store() -> VectorStore:
 @lru_cache(maxsize=1)
 def _get_llm() -> LLMClient:
     return LLMClient(interactive=True)
+
+
+# Одновременные чаты процесса (CHAT_MAX_INFLIGHT). Семафор — по значению
+# лимита, как слоты парсера: смена настройки не требует рестарта модуля.
+_inflight_lock = threading.Lock()
+_inflight_by_limit: dict[int, threading.BoundedSemaphore] = {}
+_BUSY_RETRY_AFTER_SECONDS = 5
+
+
+def _busy(detail: str, retry_after: float = _BUSY_RETRY_AFTER_SECONDS) -> ApiError:
+    return ApiError(
+        status_code=429,
+        code=errors.RATE_LIMITED,
+        detail=detail,
+        headers={"Retry-After": str(max(1, int(retry_after)))},
+    )
+
+
+def _admit_chat(limit: int) -> threading.BoundedSemaphore:
+    """Неблокирующий допуск: лишний чат сразу получает 429, а не занимает поток пула."""
+    with _inflight_lock:
+        slots = _inflight_by_limit.setdefault(limit, threading.BoundedSemaphore(limit))
+    if not slots.acquire(blocking=False):
+        logger.warning("Чат отклонён: заняты все %d слотов CHAT_MAX_INFLIGHT", limit)
+        raise _busy("Сервис ответов перегружен. Повторите попытку позже.")
+    return slots
 
 
 @router.post("", response_model=ChatResponse)
@@ -107,6 +134,16 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             detail=str(exc),
         ) from exc
 
+    # Допуск после дешёвых проверок, до embed → поиск → LLM: всё это время
+    # запрос держит поток общего пула синхронных эндпоинтов.
+    slots = _admit_chat(settings.chat_max_inflight)
+    try:
+        return _answer(req, current_user, settings)
+    finally:
+        slots.release()
+
+
+def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatResponse:
     try:
         plan = prepare_query(
             req.query,
@@ -238,6 +275,8 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
                     )
                 else:
                     answer = _get_llm().chat(system, prompt_user)
+            except LLMBusyError as exc:
+                raise _busy("Все слоты генерации ответа заняты. Повторите попытку позже.", exc.retry_after) from exc
             except Exception as exc:
                 raise LLMError(cause=exc) from exc
             # Normalize citations only after an answer was produced from sources.

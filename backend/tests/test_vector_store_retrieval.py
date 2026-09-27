@@ -22,8 +22,9 @@ def test_vector_store_can_prefer_configured_qdrant_grpc_transport(monkeypatch):
     )
     monkeypatch.setattr(vector_store_module, "QdrantClient", _Client)
     monkeypatch.setattr(vector_store_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(vector_store_module, "_shared_clients", {})
 
-    VectorStore()
+    VectorStore().client  # клиент создаётся при первом обращении и общий для процесса
 
     assert captured["prefer_grpc"] is True
     assert captured["grpc_port"] == 16334
@@ -44,8 +45,9 @@ def test_vector_store_keeps_http_transport_when_grpc_is_not_configured(monkeypat
     )
     monkeypatch.setattr(vector_store_module, "QdrantClient", _Client)
     monkeypatch.setattr(vector_store_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(vector_store_module, "_shared_clients", {})
 
-    VectorStore()
+    VectorStore().client  # клиент создаётся при первом обращении и общий для процесса
 
     assert captured["prefer_grpc"] is False
     assert captured["grpc_port"] == 6334

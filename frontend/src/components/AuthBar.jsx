@@ -10,6 +10,12 @@ const ROLE_LABELS = {
   security: "Security",
 };
 
+// Пользователь получает все роли своих групп (старшая первой).
+function rolesLabel(roles) {
+  const labels = (roles ?? []).map((role) => ROLE_LABELS[role] ?? role);
+  return labels.length ? labels.join(" · ") : "—";
+}
+
 export default function AuthBar() {
   const { user, mode, simUsers, login, logout, loading } = useAuth();
   const { t } = useI18n();
@@ -26,7 +32,7 @@ export default function AuthBar() {
         <div className="auth-user">
           <span className="auth-username">{user.username}</span>
           <span className="auth-role">
-            {ROLE_LABELS[user.roles?.[0]] ?? user.roles?.[0] ?? "—"}
+            {rolesLabel(user.roles)}
           </span>
         </div>
         <button onClick={logout}>{t("common.logout")}</button>
@@ -59,7 +65,7 @@ export default function AuthBar() {
           </option>
           {(simUsers ?? []).map((u) => (
             <option key={u.username} value={u.username}>
-              {u.username} · {ROLE_LABELS[u.roles?.[0]] ?? "—"}
+              {u.username} · {rolesLabel(u.roles)}
             </option>
           ))}
         </select>
@@ -73,7 +79,7 @@ export default function AuthBar() {
       <div className="auth-user">
         <span className="auth-username">{user.username}</span>
         <span className="auth-role">
-          {ROLE_LABELS[user.roles?.[0]] ?? user.roles?.[0] ?? "—"}
+          {rolesLabel(user.roles)}
         </span>
       </div>
       <button onClick={logout}>{t("common.logout")}</button>

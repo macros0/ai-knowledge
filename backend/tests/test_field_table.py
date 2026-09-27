@@ -676,6 +676,41 @@ class TestLLMClassifier:
         extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=llm2, use_llm_classify=True)
         assert llm2.call_count == 1  # cache miss, LLM звался заново
 
+    def test_fresh_since_ignores_older_cache_entries_only(self, tmp_path, monkeypatch):
+        """Перегенерация не берёт классификации до своего старта, но и не стирает кэш."""
+        import time
+
+        from app.services import field_table
+
+        monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
+        s = get_settings()
+        monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
+        monkeypatch.setattr(s, "data_dir", tmp_path / "data")
+        answer = {
+            "concept_per_row": True, "title_col": 0,
+            "description_cols": [4], "concept_type": "reference", "extraction_mode": "per_row",
+        }
+        extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=FakeClassifierLLM([answer]), use_llm_classify=True)
+        cache_dir = tmp_path / "data" / "cache" / "table_classify"
+        (entry,) = cache_dir.glob("*.json")
+        try:
+            field_table.set_cache_fresh_since(time.time() + 60)
+            stale = FakeClassifierLLM([answer])
+            extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=stale, use_llm_classify=True)
+            assert stale.call_count == 1  # запись старше границы — промах
+            assert entry.is_file()  # и она не удаляется, а перезаписывается
+
+            field_table.set_cache_fresh_since(entry.stat().st_mtime)
+            fresh = FakeClassifierLLM([answer])
+            extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=fresh, use_llm_classify=True)
+            assert fresh.call_count == 0  # запись, сделанная после границы, используется
+        finally:
+            field_table.set_cache_fresh_since(None)
+
+        shared = FakeClassifierLLM([answer])
+        extract_table_concepts(FIELD_TABLE, chunk_index=1, llm=shared, use_llm_classify=True)
+        assert shared.call_count == 0
+
     def test_cache_persisted_to_disk(self, tmp_path, monkeypatch):
         monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
         s = get_settings()

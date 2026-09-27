@@ -65,6 +65,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => logoutAuth(), []);
 
+  // Основная (старшая) роль; права проверяет hasRole по всем ролям.
   const role = user?.roles?.[0] ?? null;
 
   const hasRole = useCallback(

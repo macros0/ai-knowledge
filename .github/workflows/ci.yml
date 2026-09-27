@@ -235,26 +235,75 @@ jobs:
             -f docker-compose.yml -f docker-compose.ci-runtime.yml run --rm --no-deps migrate alembic check
           docker compose --project-name okf-ci-bundled --env-file .env \
             -f docker-compose.yml -f docker-compose.ci-runtime.yml run --rm --no-deps migrate python scripts/seed_attribute_values.py
+          # Wait for the backend's own container healthcheck (/health/ready),
+          # the same gate production passes with `up -d --wait`.
+          if ! docker compose --project-name okf-ci-bundled --env-file .env \
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml \
+            up -d --wait --wait-timeout 180 --no-deps backend; then
+            docker compose --project-name okf-ci-bundled --env-file .env \
+              -f docker-compose.yml -f docker-compose.ci-runtime.yml logs backend
+            exit 1
+          fi
+          # With the fake LLM and embeddings every dependency reports ok.
           docker compose --project-name okf-ci-bundled --env-file .env \
-            -f docker-compose.yml -f docker-compose.ci-runtime.yml up -d backend
-          for attempt in $(seq 1 30); do
-            if docker compose --project-name okf-ci-bundled --env-file .env \
-              -f docker-compose.yml -f docker-compose.ci-runtime.yml exec -T backend \
-              python -c 'import json, urllib.request; assert json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5))["status"] == "ok"'; then
-              break
-            fi
-            if [ "$attempt" = 30 ]; then
-              docker compose --project-name okf-ci-bundled --env-file .env \
-                -f docker-compose.yml -f docker-compose.ci-runtime.yml logs backend
-              exit 1
-            fi
-            sleep 2
-          done
+            -f docker-compose.yml -f docker-compose.ci-runtime.yml exec -T backend \
+            python -c 'import json, urllib.request; health = json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=10)); assert health["status"] == "ok", health'
           if docker compose --project-name okf-ci-bundled --env-file .env \
             -f docker-compose.yml -f docker-compose.ci-runtime.yml ps --format json | grep -Eq '"PublishedPort":[1-9]'; then
             echo 'bundled database or backend unexpectedly published a host port' >&2
             exit 1
           fi
+
+      # The container healthcheck must not depend on the external LLM provider:
+      # otherwise a provider outage at boot keeps `up -d --wait` (systemd unit)
+      # and the frontend's depends_on from ever starting the stack.
+      - name: Readiness survives an LLM outage
+        run: |
+          compose() {
+            docker compose --project-name okf-ci-bundled --env-file .env \
+              -f docker-compose.yml -f docker-compose.ci-runtime.yml "$@"
+          }
+          compose stop llm-health
+          # Let the healthcheck (interval 10 s) run at least twice without the LLM.
+          sleep 25
+          state=$(docker inspect --format '{{.State.Health.Status}} {{.State.Health.FailingStreak}}' "$(compose ps -q backend)")
+          if [ "$state" != "healthy 0" ]; then
+            echo "backend healthcheck failed without the LLM provider: $state" >&2
+            compose logs backend
+            exit 1
+          fi
+          compose exec -T backend python - <<'PY'
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+
+
+          def get(path):
+              try:
+                  with urllib.request.urlopen(f"http://127.0.0.1:8000{path}", timeout=10) as response:
+                      return response.status, json.load(response)
+              except urllib.error.HTTPError as error:
+                  return error.code, json.load(error)
+
+
+          status, ready = get("/health/ready")
+          assert (status, ready["status"]) == (200, "ready"), (status, ready)
+          # /health caches its probe for 20 s: wait for one made without the LLM.
+          deadline = time.monotonic() + 45
+          while True:
+              status, health = get("/health")
+              if health["dependencies"]["llm"]["status"] == "down":
+                  break
+              assert time.monotonic() < deadline, health
+              time.sleep(3)
+          assert (status, health["status"]) == (200, "degraded"), (status, health)
+          # Anonymous health responses carry statuses only, never error details.
+          assert all(set(dep) == {"status"} for dep in health["dependencies"].values()), health
+          print("readiness without LLM:", ready["status"], "| health:", health["status"])
+          PY
+          # Later steps expect the original bundled project.
+          compose start llm-health
 
       - name: External topology boots without bundled storage
         env:
@@ -297,24 +346,19 @@ jobs:
             -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
             -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml \
             run --rm --no-deps migrate
+          if ! docker compose --project-name okf-ci-external --env-file .ci-external.env \
+            -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml \
+            up -d --wait --wait-timeout 180 --no-deps backend; then
+            docker compose --project-name okf-ci-external --env-file .ci-external.env \
+              -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
+              -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml logs backend
+            exit 1
+          fi
           docker compose --project-name okf-ci-external --env-file .ci-external.env \
             -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
-            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml up -d backend
-          for attempt in $(seq 1 30); do
-            if docker compose --project-name okf-ci-external --env-file .ci-external.env \
-              -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
-              -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml exec -T backend \
-              python -c 'import json, urllib.request; assert json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5))["status"] == "ok"'; then
-              break
-            fi
-            if [ "$attempt" = 30 ]; then
-              docker compose --project-name okf-ci-external --env-file .ci-external.env \
-                -f docker-compose.yml -f deploy/production/docker-compose.external.yml \
-                -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml logs backend
-              exit 1
-            fi
-            sleep 2
-          done
+            -f docker-compose.ci-runtime.yml -f docker-compose.ci-external.yml exec -T backend \
+            python -c 'import json, urllib.request; health = json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=10)); assert health["status"] == "ok", health'
 
       - name: Invalid mixed storage mode is rejected before migration
         env:

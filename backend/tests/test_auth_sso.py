@@ -283,3 +283,52 @@ def test_sso_logout_without_id_token_is_local_only(tmp_path, monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["redirect_url"] == "/"
     assert c.get("/api/auth/me").json()["user"]["user_id"] == "anonymous"
+
+
+class TestOAuthRegistryCache:
+    """Discovery-документ Keycloak не скачивается заново на каждый вход."""
+
+    def _provider(self, monkeypatch, **overrides):
+        from app.auth.providers import keycloak_oidc
+
+        monkeypatch.setattr(keycloak_oidc, "_oauth_cache", {})
+        return keycloak_oidc.KeycloakOidcProvider(Settings(**{**SSO_SETTINGS, **overrides}))
+
+    def test_registry_and_discovery_are_reused_between_logins(self, monkeypatch):
+        import asyncio
+        from contextlib import asynccontextmanager
+
+        provider = self._provider(monkeypatch)
+        fetches = []
+
+        class Session:
+            async def request(self, method, url, **kwargs):
+                fetches.append(url)
+                return httpx.Response(200, json={"issuer": "http://kc.example/realms/myrealm"},
+                                      request=httpx.Request(method, url))
+
+        @asynccontextmanager
+        async def session():
+            yield Session()
+
+        first = provider._oauth()
+        monkeypatch.setattr(first.keycloak, "_get_session", session)
+        for _ in range(3):
+            asyncio.run(provider._oauth().keycloak.load_server_metadata())
+
+        assert provider._oauth() is first
+        assert fetches == ["http://kc.example/realms/myrealm/.well-known/openid-configuration"]
+
+    def test_registry_expires_and_follows_settings(self, monkeypatch):
+        from app.auth.providers import keycloak_oidc
+
+        provider = self._provider(monkeypatch)
+        first = provider._oauth()
+        now = keycloak_oidc.time.monotonic()
+        monkeypatch.setattr(keycloak_oidc.time, "monotonic", lambda: now + keycloak_oidc._OAUTH_TTL_SECONDS + 1)
+        refreshed = provider._oauth()
+        assert refreshed is not first
+        assert provider._oauth() is refreshed
+
+        other = keycloak_oidc.KeycloakOidcProvider(Settings(**{**SSO_SETTINGS, "keycloak_realm": "other"}))
+        assert other._oauth() is not refreshed

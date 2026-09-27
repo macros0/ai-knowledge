@@ -72,6 +72,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 | `AUTH_SESSION_TTL_SECONDS` | по политике ИБ (дефолт `28800` = 8 ч) |
 | `AUTH_PROVIDER` | `keycloak_oidc` (или ваш корпоративный путь) |
 | `AUTH_ROLE_GROUPS` | JSON-маппинг прод-групп IDB → роли |
+| `KEYCLOAK_GROUP_PATH_MODE` | **обязателен явно** (иначе бэкенд не стартует): `full_path` (рекомендуется; ключи `AUTH_ROLE_GROUPS` — полные пути групп, например `/IDB/KB_Admin`) или `leaf` (только если имена групп уникальны во всём дереве IdP: в режиме `leaf` роль даёт любая одноимённая группа в любой ветке). Пользователь получает все роли своих групп |
 | `AUTH_DEFAULT_ROLE` | пусто = fail-closed (рекомендуется для контура ИБ) |
 | `KEYCLOAK_URL` / `KEYCLOAK_REALM` / `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | указывают на **IDB** (broker), не на AD/IDP |
 | `SSO_REDIRECT_URI` | `https://<host>/api/auth/callback` |
@@ -277,7 +278,9 @@ cron-сервис, инвалидацию кэшей — в pub/sub. Полов�
 - `AUTH_PROVIDER` равен `disabled` или `simulation` (оба дают доступ без внешней
   проверки; `simulation` выдаёт демо-админа через `/auth/simulate`);
 - `APP_SECRET_KEY` пуст / равен `dev-secret-change-me` / короче 32 символов;
-- `AUTH_SESSION_HTTPS_ONLY=false`.
+- `AUTH_SESSION_HTTPS_ONLY=false`;
+- `AUTH_PROVIDER=keycloak_oidc` без явного `KEYCLOAK_GROUP_PATH_MODE` (неявный
+  `leaf` отождествлял бы одноимённые группы из разных веток дерева IdP).
 
 ```powershell
 Set-Location backend                 # чтобы импортировался пакет app
@@ -302,7 +305,15 @@ $env:AUTH_PROVIDER="keycloak_oidc"
 
 ## 6. Пост-деплой smoke
 
-1. `GET /health` — 200.
+1. `GET /health` — 200 (информационный статус для UI: включает внешние LLM и
+   embeddings, поэтому при их недоступности отдаёт `degraded`, а не ошибку).
+   Готовность контура проверяет docker healthcheck по
+   `GET /health/ready` внутри контейнера backend: только PostgreSQL, Qdrant и
+   PDF-провайдер, `503` при неготовности. Недоступность LLM-провайдера не
+   мешает `up -d --wait` и старту frontend. Оба эндпоинта открыты без
+   авторизации и отдают только статусы; причину сбоя зависимости смотрите в
+   `docker compose logs backend` (строка `Зависимость <имя>: down (...)`
+   пишется при смене статуса).
 2. Открыть UI → логин-гейт → «Войти через корпоративный вход» → Keycloak → возврат
    в приложение с ролью.
 3. «Выйти» → Keycloak logout → возврат на `https://<host>/` (проверяет

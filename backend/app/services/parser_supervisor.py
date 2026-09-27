@@ -1,17 +1,25 @@
 """Изолированный и ограниченный по ресурсам запуск document parser.
 
 Парсер читает недоверенные ZIP/OLE/MIME/PDF. Он выполняется в дочернем
-``spawn``-процессе. POSIX использует RLIMIT_AS и отдельную группу процессов;
-Windows — Job Object с hard memory limit и KILL_ON_JOB_CLOSE. Отказ установки
-защиты прекращает разбор до открытия входного файла.
+``spawn``-процессе. Linux использует RLIMIT_AS и отдельную группу процессов;
+Windows — Job Object с hard memory limit и KILL_ON_JOB_CLOSE. macOS не
+поддерживает RLIMIT_AS (setrlimit отвечает ValueError), поэтому там лимит
+памяти — опрос RSS рабочего процесса супервизором (как запасной контур на
+Windows): мягче жёсткого лимита, но достаточно для dev-машины; production —
+Linux-контейнер. Отказ установки защиты прекращает разбор до открытия входного
+файла.
 """
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
+import functools
 import multiprocessing as mp
 from dataclasses import dataclass
 import json
 import os
 import shutil
+import sys
 import threading
 import time
 from pathlib import Path
@@ -76,7 +84,8 @@ def _acquire_parser_slot(max_concurrent: int) -> threading.BoundedSemaphore:
 
 
 def _set_posix_memory_limit(max_memory_bytes: int) -> None:
-    if os.name == "nt":
+    # macOS: RLIMIT_AS не поддерживается, лимит держит опрос RSS в супервизоре.
+    if os.name == "nt" or sys.platform == "darwin":
         return
     try:
         import resource
@@ -253,6 +262,53 @@ def _windows_rss_bytes(pid: int) -> int | None:
         kernel.CloseHandle(process)
 
 
+class _DarwinTaskInfo(ctypes.Structure):
+    """struct proc_taskinfo из <sys/proc_info.h> (PROC_PIDTASKINFO)."""
+
+    _fields_ = [
+        *((name, ctypes.c_uint64) for name in (
+            "pti_virtual_size", "pti_resident_size", "pti_total_user",
+            "pti_total_system", "pti_threads_user", "pti_threads_system",
+        )),
+        *((name, ctypes.c_int32) for name in (
+            "pti_policy", "pti_faults", "pti_pageins", "pti_cow_faults",
+            "pti_messages_sent", "pti_messages_received", "pti_syscalls_mach",
+            "pti_syscalls_unix", "pti_csw", "pti_threadnum", "pti_numrunning", "pti_priority",
+        )),
+    ]
+
+
+_PROC_PIDTASKINFO = 4
+
+
+@functools.lru_cache(maxsize=1)
+def _libproc():
+    libproc = ctypes.CDLL(ctypes.util.find_library("proc") or "/usr/lib/libproc.dylib", use_errno=True)
+    libproc.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+    libproc.proc_pidinfo.restype = ctypes.c_int
+    return libproc
+
+
+def _darwin_rss_bytes(pid: int) -> int | None:
+    """Resident size через libproc; None, если процесс недоступен или не macOS."""
+    if sys.platform != "darwin":
+        return None
+    info = _DarwinTaskInfo()
+    size = ctypes.sizeof(info)
+    try:
+        written = _libproc().proc_pidinfo(pid, _PROC_PIDTASKINFO, 0, ctypes.byref(info), size)
+    except OSError:
+        return None
+    return int(info.pti_resident_size) if written == size else None
+
+
+def _process_rss_bytes(pid: int) -> int | None:
+    """RSS рабочего процесса для опроса лимита памяти (Windows и macOS)."""
+    if os.name == "nt":
+        return _windows_rss_bytes(pid)
+    return _darwin_rss_bytes(pid)
+
+
 def _terminate(process) -> None:
     if process.is_alive():
         process.terminate()
@@ -313,6 +369,9 @@ def parse_document_supervised(
                 job.assign(process.pid)
             except OSError as exc:
                 raise ParserIsolationError("parser isolation unavailable (job assignment)") from exc
+        # macOS: лимит памяти держит только опрос RSS — без него разбор не начинается.
+        if sys.platform == "darwin" and _darwin_rss_bytes(process.pid) is None:
+            raise ParserIsolationError("parser isolation unavailable (RSS monitor)")
         admission.set()
         while True:
             if job is not None and job.memory_exceeded():
@@ -329,7 +388,7 @@ def parse_document_supervised(
                 return result
             if time.monotonic() >= deadline:
                 raise ParserTimeoutError(f"Разбор файла превысил лимит {timeout_seconds:g} с")
-            rss = _windows_rss_bytes(process.pid)
+            rss = _process_rss_bytes(process.pid)
             if rss is not None and rss > limit:
                 raise ParserMemoryLimitError(f"Разбор файла превысил лимит {max_memory_mb} MiB")
             if not process.is_alive():
@@ -353,6 +412,12 @@ def parse_document_supervised(
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+                except PermissionError:
+                    # macOS отвечает EPERM, когда в группе остался лишь
+                    # зомби-лидер (упавший worker ещё не reap'нут): живых
+                    # процессов для сигнала нет. На Linux EPERM — реальный сбой.
+                    if sys.platform != "darwin":
+                        raise
         finally:
             try:
                 if started:

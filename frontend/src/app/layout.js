@@ -35,9 +35,13 @@ export default async function RootLayout({ children }) {
   let ssrLocale = AUTO_FALLBACK_LOCALE;
   let lang = AUTO_FALLBACK_LOCALE;
   let initialOverrides = {};
+  // Nonce CSP этого ответа (src/proxy.js): без него инлайн-скрипты темы и
+  // языка заблокирует script-src.
+  let nonce;
   try {
     const cookieStore = await cookies();
     const headerStore = await headers();
+    nonce = headerStore.get("x-nonce") ?? undefined;
     const cookieLocale = cookieStore.get("okf.locale")?.value;
     const accept = headerStore.get("accept-language");
     ssrLocale = resolveServerLocale(cookieLocale, accept);
@@ -64,9 +68,9 @@ export default async function RootLayout({ children }) {
         {/* Применяет сохранённую/системную тему до первой отрисовки (без мигания).
             Hydration-safe inline script (text/javascript в SSR, text/plain на клиенте) —
             иначе React 19 ругается на <script> в дереве компонентов. */}
-        <InlineScript html={bootScript()} />
+        <InlineScript html={bootScript()} nonce={nonce} />
         {/* No-JS/edge фолбэк для <html lang> (SSR уже выставил его из cookie/заголовка). */}
-        <InlineScript html={localeBootScript()} />
+        <InlineScript html={localeBootScript()} nonce={nonce} />
         <LocaleProvider initialLocale={ssrLocale} initialOverrides={initialOverrides}>
           <ThemeProvider>
             <AuthProvider>

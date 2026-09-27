@@ -266,7 +266,10 @@ MSG и диагностика классов — в `mail-sources-v7`; корн�
   success/timeout/crash, аварийная смерть supervisor, ошибки создания/назначения
   job без запуска parser и без утечки concurrency slot. Уведомления memory limit
   учитываются даже при отказе во время загрузки интерпретатора.
-- На POSIX RLIMIT_AS устанавливается до parser; ошибка установки не игнорируется.
+- На Linux RLIMIT_AS устанавливается до parser; ошибка установки не игнорируется.
+  macOS RLIMIT_AS не поддерживает (setrlimit отвечает ValueError, раньше это
+  блокировало любую загрузку): там лимит держит опрос RSS worker через libproc,
+  а недоступность опроса прекращает разбор до допуска worker (fail closed).
   Worker получает свою process group; при обычном завершении вызова, timeout
   или crash группа уничтожается. Проверены реальный отказ allocation и cleanup
   потомков. Аварийная смерть Linux-supervisor отдельно не квалифицирована;

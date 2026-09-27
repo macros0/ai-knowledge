@@ -6,10 +6,14 @@
 // React 19 не предупреждал «Encountered a script tag while rendering React
 // component» и не пытался выполнить скрипт повторно. suppressHydrationWarning
 // гасит расхождение type между SSR и клиентом.
-export default function InlineScript({ html }) {
+// nonce — из CSP ответа (src/proxy.js). Браузер скрывает атрибут nonce после
+// разбора документа, расхождение при гидратации гасит тот же
+// suppressHydrationWarning.
+export default function InlineScript({ html, nonce }) {
   return (
     <script
       type={typeof window === "undefined" ? "text/javascript" : "text/plain"}
+      nonce={nonce}
       suppressHydrationWarning
       dangerouslySetInnerHTML={{ __html: html }}
     />
