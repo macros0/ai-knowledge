@@ -14,7 +14,7 @@ SQLite, а не Postgres: тест обязан быть герметичным 
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -82,6 +82,20 @@ def test_migrations_match_models(migrated_db_url):
         "Модели разъехались с миграциями — в production схему ведёт только "
         f"Alembic, и этих объектов там не будет: {drift}"
     )
+
+
+def test_document_update_attempt_key_matches_document_id_length(migrated_db_url):
+    """The update-attempt foreign key must accept exactly the document ID domain."""
+    engine = create_engine(migrated_db_url)
+    try:
+        columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns("document_update_attempts")
+        }
+    finally:
+        engine.dispose()
+
+    assert columns["doc_id"]["type"].length == 16
 from pathlib import Path
 
 
