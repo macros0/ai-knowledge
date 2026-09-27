@@ -9,6 +9,23 @@
 .\scripts\stop-all.ps1     # остановить всё
 ```
 
+```bash
+./scripts/start-all.sh     # то же на macOS/Linux
+./scripts/stop-all.sh      # останавливает только то, что запустил start-all.sh
+```
+
+**macOS/Linux (`start-all.sh`, общий код — `scripts/stack-common.sh`, совместим с bash 3.2
+macOS):** адреса Qdrant/Ollama/PostgreSQL берутся как у backend — env → корневой `.env` →
+дефолты `config.py` (без `.env`: Qdrant :6333, SQLite, Ollama :11434); backend/frontend — те
+же 18000/16300. Qdrant — бинарь (`QDRANT_BIN`/`PATH`), иначе Docker `qdrant/qdrant:v1.19.0`,
+опубликованный на 127.0.0.1; данные `~/.local/share/okf-knowledge/qdrant`. PostgreSQL:
+живой сервер переиспользуется, иначе `pg_ctl` по `OKF_PG_DATA`/кластеру Homebrew (на macOS с
+`LC_ALL=en_US.UTF-8`: без валидной локали postmaster падает с «postmaster became multithreaded
+during startup» — shell без `LANG`, запуск из IDE); на Linux системную службу скрипт не
+стартует. Логи/PID: `~/.local/state/okf-knowledge` (не `$TMPDIR`: macOS его чистит).
+Переиспользованные сервисы (brew services, systemd, Ollama.app) `stop-all.sh` не трогает;
+чужой процесс на порту стека — FAIL шага, а не kill.
+
 `start-all.ps1` сам запускает каждый сервис через глобальный хелпер `start-background.ps1`
 (если он недоступен, использует репозиторный fallback `scripts/start-background.ps1`),
 опирается на health-эндпоинты (не вслепую) и идемпотентен (старые инстансы убивает по PID/порту).

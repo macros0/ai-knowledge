@@ -147,6 +147,14 @@ history: `session_id` is validated on the backend and bound to the current `user
   ports **16333/16334** (not the default 6333/6334 — those fall into the Windows Hyper-V/WSL
   excluded range, see `AGENTS.md`); the isolation profile is unchanged: still loopback-only.
   The compose variant is isolated by publishing no host port (see above).
+- **macOS/Linux local startup** (`scripts/start-all.sh`): the same profile as the Windows
+  scripts — backend `127.0.0.1:18000`, Ollama `OLLAMA_HOST=127.0.0.1:<port>`, Qdrant binary
+  `QDRANT__SERVICE__HOST=127.0.0.1`. The Docker fallback for Qdrant publishes its ports on
+  `127.0.0.1` only (`-p 127.0.0.1:<port>:6333`): a bare `-p` binds all interfaces and on
+  Linux bypasses the host firewall. A PostgreSQL cluster the script starts with `pg_ctl`
+  keeps its own `listen_addresses` (Homebrew default: `localhost`). The Next dev server on
+  `:16300` listens on all interfaces, as with `start-all.ps1`. The `DATABASE_URL` password
+  reaches `psql` through `PGPASSWORD`, never the command line (visible to local users via `ps`).
 - **Unauthenticated health endpoints**: `/health` (dependency status for the UI banner,
   published by the frontend's exact-path rewrite) and `/health/ready` (readiness of the
   deployment's own storage for the container healthcheck; not part of the frontend
@@ -353,6 +361,14 @@ does not corrupt data.
   active tokens because encryption at rest is delegated to infrastructure.
 
 ## 7. Security change log
+
+### 2026-09-27 — Local stack startup on macOS/Linux
+Change: `scripts/start-all.sh` / `stop-all.sh` start and stop the local development stack on
+macOS and Linux (previously only `start-all.ps1` for Windows). No new exposure: the binds
+match the Windows scripts (§3), and the new Docker fallback for Qdrant publishes on
+`127.0.0.1` only. The scripts never stop a process they did not start: services found running
+(Homebrew/systemd PostgreSQL, Ollama.app) are reused and left running, and a foreign process
+on a stack port fails the step instead of being killed.
 
 ### 2026-09-27 — Roles, group paths, logout revocation and a frontend CSP
 - **Frontend CSP.** Next.js pages now carry a per-request nonce policy set by `src/proxy.js`
