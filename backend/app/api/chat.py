@@ -3,6 +3,7 @@
 
 """Роут чата: RAG — композитный поиск (dense/BM25 + чанки) + синтез ответа LLM."""
 import logging
+import re
 import threading
 from dataclasses import asdict
 from functools import lru_cache
@@ -96,6 +97,27 @@ def _admit_chat(limit: int) -> threading.BoundedSemaphore:
         logger.warning("Чат отклонён: заняты все %d слотов CHAT_MAX_INFLIGHT", limit)
         raise _busy("Сервис ответов перегружен. Повторите попытку позже.")
     return slots
+
+
+_LANGUAGE_NEUTRAL_QUERY = re.compile(r"[\s\d\W_А-ЯЁA-Z]+", re.UNICODE)
+_NEUTRAL_RESPONSE_LANGUAGE = {
+    "ru": "Язык ответа — русский. Запрос состоит только из кода или сокращения; "
+          "весь ответ, включая пояснения и подписи источников, пиши по-русски.",
+    "en": "Response language is English. The query contains only a code or abbreviation; "
+          "write the entire answer, including explanations and source labels, in English.",
+}
+
+
+def _chat_system_prompt(query: str, locale: str, settings: Settings) -> str:
+    """Build the final chat instruction, making neutral-code fallback explicit."""
+    system = get_store().format("chat_system", locale=locale)
+    if settings.llm_profile == "local_qwen" and settings.llm_local_chat_instructions:
+        system += "\n\nResponse style:\n" + settings.llm_local_chat_instructions
+    if _LANGUAGE_NEUTRAL_QUERY.fullmatch(query):
+        language = _NEUTRAL_RESPONSE_LANGUAGE.get(locale.lower().split("-", 1)[0])
+        if language:
+            system += "\n\n" + language
+    return system
 
 
 @router.post("", response_model=ChatResponse)
@@ -273,9 +295,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
         if not merged:
             answer = _no_sources_answer(req)
         else:
-            system = get_store().format("chat_system", locale=req.locale)
-            if settings.llm_profile == "local_qwen" and settings.llm_local_chat_instructions:
-                system += "\n\nResponse style:\n" + settings.llm_local_chat_instructions
+            system = _chat_system_prompt(req.query, req.locale, settings)
             prompt_user = get_store().format("chat_user", context=context, query=req.query)
             try:
                 if is_authorship_query(req.query):
