@@ -514,6 +514,7 @@ def drop_partial_title_matches(
     *,
     match_groups: tuple[MatchGroup, ...] = (),
     domain_cache: DomainMatchCache | None = None,
+    focus_named_objects: bool = False,
 ) -> list[dict]:
     """Фильтр запросов про точный объект: только блоки «про объект», контент — концепта.
 
@@ -536,6 +537,19 @@ def drop_partial_title_matches(
     """
     if not query or not merged:
         return merged
+
+    if focus_named_objects and len(match_groups) < 2:
+        identifiers = set(re.findall(r"\b[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+\b", query.lower(), re.I))
+        identifier = next(iter(identifiers)) if len(identifiers) == 1 else None
+        overview = identifier and re.fullmatch(
+            r"\s*(?:для чего используется|для чего нужен|что такое|как работает|назначение|опиши|расскажи о|what is|describe)\s+"
+            + re.escape(identifier) + r"\s*[?.!]*\s*", query, re.I,
+        )
+        if overview:
+            # Reuse the exact-name path for overview questions. Keep detail and
+            # comparison queries broad; they may need facts from other titles.
+            query = identifier
+            match_groups = ()
 
     if match_groups:
         # A comparison query must retain both thematic sides. Treating the
@@ -696,13 +710,14 @@ def limit_context(
     match_groups: tuple[MatchGroup, ...] = (),
     domain_cache: DomainMatchCache | None = None,
     lexical_cache: LexicalMatchCache | None = None,
+    strict: bool = False,
 ) -> list[dict]:
     """Bound provenance context after filtering, with actual markers and refs.
 
     Legacy blocks retain their existing merge-time content budget. For new
     provenance, measure precisely what will reach the model, including escaping.
     """
-    if not any(item.get("source_path") or item.get("mail_fragment") for item in merged):
+    if not strict and not any(item.get("source_path") or item.get("mail_fragment") for item in merged):
         return merged
 
     def size(blocks):
@@ -717,6 +732,19 @@ def limit_context(
             limited.append(block)
             continue
         fragment = block.get("mail_fragment")
+        if not limited and not fragment and strict:
+            def content_prefix(end):
+                return {**block, "content": block["content"][:end]}
+            if size([content_prefix(0)]) <= max_chars:
+                low, high = 0, len(block["content"])
+                while low < high:
+                    middle = (low + high + 1) // 2
+                    if size([content_prefix(middle)]) <= max_chars:
+                        low = middle
+                    else:
+                        high = middle - 1
+                if low:
+                    limited.append(content_prefix(low))
         if not limited and fragment:
             # Retain a prefix of original text, never a partial ancestry or
             # escaped entity. The renderer labels this fragment as truncatable.

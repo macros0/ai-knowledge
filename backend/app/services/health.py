@@ -23,7 +23,7 @@ _cache_ts: float = 0.0
 
 
 def _check_llm() -> dict:
-    """Пинг OpenRouter через бесплатный эндпоинт GET /api/v1/models."""
+    """Проверяет доступность API и загруженную модель локального профиля."""
     settings = get_settings()
     base = (settings.llm_base_url or "https://openrouter.ai/api/v1").rstrip("/")
     try:
@@ -33,6 +33,11 @@ def _check_llm() -> dict:
             headers={"Authorization": f"Bearer {settings.llm_api_key}"} if settings.llm_api_key else {},
         )
         if resp.status_code < 400:
+            if settings.llm_profile == "local_qwen":
+                expected = settings.llm_model.removeprefix("openai/")
+                available = {item.get("id") for item in resp.json().get("data", [])}
+                if expected not in available:
+                    return {"status": "down", "error": "configured model is not loaded"}
             return {"status": "ok"}
         if resp.status_code == 429:
             # Провайдер жив, но троттлит (общий пул) — это НЕ outage, не

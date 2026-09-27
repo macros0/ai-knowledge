@@ -63,7 +63,8 @@ class TestDetect:
         get_development_registry().create("12010", "СЭДО")
 
         class FakeLLM:
-            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False, task=None):
+                assert task == "development"
                 return {"dev_number": "12010", "dev_name": "СЭДО", "module": "PY"}
 
         monkeypatch.setattr("app.services.dev_detector.LLMClient", FakeLLM)

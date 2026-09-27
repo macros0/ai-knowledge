@@ -22,6 +22,8 @@ from json_repair import repair_json
 
 from app.config import get_settings
 from app.services import gen_quality
+from app.services import llm_profiles
+from app.services.llm_scheduler import LLMCancelled, local_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +221,7 @@ class LLMClient:
     def __init__(self, interactive: bool = False, *, model: str | None = None):
         self.settings = get_settings()
         self.interactive = interactive
+        self.local = self.settings.llm_profile == "local_qwen"
         # Интерактивному чату — своя модель (LLM_CHAT_MODEL), если задана;
         # bulk-пайплайн OKF-генерации всегда на llm_model.
         self.model = model or (
@@ -234,16 +237,29 @@ class LLMClient:
         # (_complete_once) — и освобождается по завершению его потока. Иначе
         # брошенный по таймауту вызов освобождал бы слот, продолжая занимать
         # соединение и квоту провайдера.
-        text, _ = self._complete_with_retries(system, user, max_tokens=max_tokens, attempts=attempts, idle_timeout=idle)
+        if self.local:
+            max_tokens = max_tokens or self.settings.llm_chat_max_tokens
+        visible_stream = self.interactive and bool(llm_profiles.request_state().get("on_text"))
+        if self.local or visible_stream:
+            # Never replay partially streamed prose. JSON generation has its own
+            # bounded retries, whereas a chat is one visible attempt.
+            attempts = 1
+        text, reason = self._complete_with_retries(system, user, max_tokens=max_tokens, attempts=attempts, idle_timeout=idle)
+        if (self.local or visible_stream) and reason == "length":
+            raise LLMTruncationError("LLM answer reached its output limit")
+        if (self.local or visible_stream) and not text.strip():
+            raise ValueError("LLM returned no final content")
         return text
 
-    def _complete_with_retries(self, system: str, user: str, max_tokens: int | None = None, attempts: int | None = None, idle_timeout: float | None = None) -> tuple[str, str | None]:
+    def _complete_with_retries(self, system: str, user: str, max_tokens: int | None = None, attempts: int | None = None, idle_timeout: float | None = None, task: str | None = None) -> tuple[str, str | None]:
         attempts = max(1, attempts if attempts is not None else self.settings.llm_retry_attempts)
         backoff = max(0.0, self.settings.llm_retry_backoff_seconds)
         last_exc: Exception | None = None
         for attempt in range(1, attempts + 1):
+            llm_profiles.remaining(self.settings.llm_max_total_timeout_seconds)
             try:
-                return self._complete_once(system, user, max_tokens=max_tokens, idle_timeout=idle_timeout)
+                return self._complete_once(system, user, max_tokens=max_tokens, idle_timeout=idle_timeout,
+                                           **({"task": task} if task else {}))
             except LLMTimeoutError as exc:
                 last_exc = exc
                 logger.warning(
@@ -254,7 +270,7 @@ class LLMClient:
                     backoff * (2 ** (attempt - 1)),
                 )
                 if attempt < attempts:
-                    time.sleep(backoff * (2 ** (attempt - 1)))
+                    time.sleep(llm_profiles.remaining(backoff * (2 ** (attempt - 1))))
                 continue
             except Exception as exc:
                 last_exc = exc
@@ -269,10 +285,10 @@ class LLMClient:
                     delay,
                 )
                 if attempt < attempts:
-                    time.sleep(delay)
+                    time.sleep(llm_profiles.remaining(delay))
         raise last_exc  # type: ignore[misc]
 
-    def _complete_once(self, system: str, user: str, max_tokens: int | None = None, idle_timeout: float | None = None) -> tuple[str, str | None]:
+    def _complete_once(self, system: str, user: str, max_tokens: int | None = None, idle_timeout: float | None = None, task: str | None = None) -> tuple[str, str | None]:
         """Один вызов LLM стримом в изолированном daemon-потоке.
 
         Таймаут считается по тишине между чанками (idle) — любой пришедший чанк
@@ -309,8 +325,16 @@ class LLMClient:
         }
         lock = threading.Lock()
         cancelled = threading.Event()
+        request = llm_profiles.request_state()
+        external_cancel = request.get("cancel")
+        emit = request.get("on_text") if self.interactive and task is None else None
         idle = max(0.0, idle_timeout if idle_timeout is not None else self.settings.llm_stream_idle_timeout_seconds)
         total = max(0.0, self.settings.llm_max_total_timeout_seconds)
+        if self.local and self.interactive:
+            total = min(total, self.settings.llm_chat_total_timeout_seconds)
+        total = llm_profiles.remaining(total)
+        first_timeout = self.settings.llm_first_token_timeout_seconds if self.local else idle
+        call_deadline = time.monotonic() + total
         limit = max_tokens or self.settings.llm_max_tokens
         concurrency = (
             self.settings.llm_interactive_concurrency
@@ -323,7 +347,7 @@ class LLMClient:
         # был предсказуем, и не выше LLM_TIMEOUT_SECONDS — жёсткого потолка на
         # один сетевой запрос (на него же ссылается докстринг LLMTimeoutError).
         hard_cap = max(0.0, self.settings.llm_timeout_seconds)
-        http_timeout = min(idle + _HTTP_TIMEOUT_GRACE_SECONDS, total) if idle else total
+        http_timeout = min(max(idle, first_timeout) + _HTTP_TIMEOUT_GRACE_SECONDS, total) if idle else total
         if hard_cap:
             http_timeout = min(http_timeout, hard_cap) if http_timeout else hard_cap
 
@@ -345,28 +369,39 @@ class LLMClient:
                     max_tokens=limit,
                     stream=True,
                     timeout=http_timeout or None,
+                    **(llm_profiles.completion_options(task, self.settings) if self.local else {}),
                 )
                 container["stream"] = stream
                 for chunk in stream:
                     # Вызывающий уже не ждёт ответ — дочитывать стрим незачем.
-                    if cancelled.is_set():
-                        break
+                    if cancelled.is_set() or (external_cancel is not None and external_cancel.is_set()):
+                        raise LLMCancelled()
                     # Жёсткий предел жизни самого потока. Сетевой таймаут спасает
                     # от молчащего провайдера, но не от «капающего»: тот шлёт по
                     # байту и держит соединение сколько угодно. Без этого предела
                     # такой поток удерживал бы слот параллельности бесконечно.
-                    if total and time.monotonic() - thread_start >= total:
-                        break
-                    with lock:
-                        container["last_activity"] = time.monotonic()
+                    if total and (time.monotonic() - thread_start >= total or
+                                  (self.local and time.monotonic() >= call_deadline)):
+                        raise LLMTimeoutError("LLM call deadline exceeded")
+                    if not self.local:
+                        with lock:
+                            container["last_activity"] = time.monotonic()
                     reason = _stream_finish_reason(chunk)
                     if reason:
                         with lock:
                             container["finish_reason"] = reason
                     text = _stream_delta(chunk)
+                    choices = getattr(chunk, "choices", [])
+                    delta = getattr(choices[0], "delta", None) if choices else None
+                    thinking = getattr(delta, "reasoning_content", None)
+                    if self.local and (text or thinking):
+                        with lock:
+                            container["last_activity"] = time.monotonic()
                     if text:
                         with lock:
                             container["parts"].append(text)
+                        if emit:
+                            emit(text)
             except BaseException as exc:
                 container["error"] = exc
             finally:
@@ -378,7 +413,21 @@ class LLMClient:
                     release_slot()
                 container["done"].set()
 
-        release_slot = _acquire_slot(self.interactive, total)
+        if self.local:
+            try:
+                release_slot = local_scheduler.acquire(
+                    self.interactive, min(total, self.settings.llm_queue_timeout_seconds), external_cancel)
+            except TimeoutError as exc:
+                raise LLMTimeoutError(str(exc)) from exc
+            concurrency = 1
+        else:
+            release_slot = _acquire_slot(self.interactive, total)
+        if self.local and (time.monotonic() >= call_deadline or
+                           (external_cancel is not None and external_cancel.is_set())):
+            release_slot()
+            if external_cancel is not None and external_cancel.is_set():
+                raise LLMCancelled()
+            raise LLMTimeoutError("LLM request budget exhausted in queue")
         thread = threading.Thread(target=run, daemon=True, name="llm-call")
         _inflight_enter(concurrency)
         try:
@@ -393,13 +442,17 @@ class LLMClient:
             while not container["done"].is_set():
                 with lock:
                     last = container["last_activity"] or start
+                    started = bool(container["last_activity"])
                 now = time.monotonic()
-                if now - last >= idle:
-                    raise LLMTimeoutError(f"Нет данных от LLM за {idle:.0f}s")
-                if now - start >= total:
+                if external_cancel is not None and external_cancel.is_set():
+                    raise LLMCancelled()
+                active_timeout = idle if started else first_timeout
+                if active_timeout and now - last >= active_timeout:
+                    raise LLMTimeoutError(f"Нет данных от LLM за {active_timeout:.0f}s")
+                if total and (now - start >= total or (self.local and now >= call_deadline)):
                     raise LLMTimeoutError(f"LLM вызов превысил {total:.0f}s")
                 container["done"].wait(timeout=0.1)
-        except LLMTimeoutError:
+        except (LLMTimeoutError, LLMCancelled):
             # Отказываемся ждать — но не бросаем поток «как есть»: помечаем
             # вызов отменённым и закрываем стрим, чтобы соединение и квота
             # провайдера освободились, а не удерживались до конца генерации.
@@ -427,10 +480,11 @@ class LLMClient:
         chunk_idx: int = 0,
         salvage_truncated: bool = False,
         single_object: bool = False,
+        task: str | None = None,
     ) -> list | dict:
         # Слот параллельности — на каждый запрос внутри (_complete_once), см. chat().
         return self._chat_json_with_truncation_retry(
-            system, user, doc_id, chunk_idx, salvage_truncated, single_object
+            system, user, doc_id, chunk_idx, salvage_truncated, single_object, task
         )
 
     def _chat_json_with_truncation_retry(
@@ -441,6 +495,7 @@ class LLMClient:
         chunk_idx: int,
         salvage_truncated: bool,
         single_object: bool,
+        task: str | None = None,
     ) -> list | dict:
         """chat_json + повтор при обрезании JSON (потеря данных).
 
@@ -455,13 +510,17 @@ class LLMClient:
         settings = self.settings
         max_attempts = max(1, settings.llm_truncation_retry_attempts + 1)
         base = max(1, settings.llm_max_tokens)
+        task = task or ("classification" if single_object else "generation")
+        if self.local:
+            base = llm_profiles.token_limit(settings, task)
         multiplier = max(1.0, settings.llm_truncation_max_tokens_multiplier)
-        cap = max(base, settings.llm_max_tokens_cap)
+        cap = max(base, settings.llm_max_tokens_cap) if task == "generation" or not self.local else base
         max_tokens = base
         for attempt in range(max_attempts):
-            text, finish_reason = self._complete_with_retries(system, user, max_tokens=max_tokens)
+            text, finish_reason = self._complete_with_retries(
+                system, user, max_tokens=max_tokens, **({"task": task} if self.local else {}))
             try:
-                return _parse_json(
+                result = _parse_json(
                     text,
                     finish_reason=finish_reason,
                     doc_id=doc_id,
@@ -469,8 +528,9 @@ class LLMClient:
                     salvage_truncated=salvage_truncated,
                     single_object=single_object,
                 )
+                return llm_profiles.validate_result(task, result) if self.local else result
             except LLMTruncationError:
-                if attempt == max_attempts - 1:
+                if attempt == max_attempts - 1 or (self.local and max_tokens >= cap):
                     raise
                 max_tokens = min(int(base * (multiplier ** (attempt + 1))), cap)
                 logger.warning(
@@ -544,6 +604,8 @@ def _parse_json(
     спасают последний валидный префикс, а неполнота фиксируется WARNING-логом.
     """
     if not text:
+        if finish_reason == "length":
+            raise LLMTruncationError("LLM used the token limit without final content")
         raise ValueError("LLM вернул пустой ответ")
     cleaned = text.strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)

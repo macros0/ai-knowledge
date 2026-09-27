@@ -39,6 +39,7 @@ async function proxy(request, context) {
     headers,
     redirect: "manual",
     cache: "no-store",
+    signal: request.signal,
   };
   if (request.method !== "GET" && request.method !== "HEAD") {
     // Keep uploads streaming; buffering request.arrayBuffer() here would

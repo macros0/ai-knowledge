@@ -10,6 +10,7 @@ from pathlib import Path
 from app.api import errors
 from app.api.errors import ApiError
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.auth.models import User
 from app.auth.service import require_user
@@ -32,6 +33,8 @@ from app.services.context_builder import (
 from app.services.embedder import Embedder
 from app.services.errors import LLMError
 from app.services.llm_client import LLMClient
+from app.services.llm_profiles import request_scope, remaining
+from app.services.chat_stream import stream_chat
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
@@ -187,6 +190,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             req.query,
             match_groups=exact_groups,
             domain_cache=domain_cache,
+            focus_named_objects=settings.chat_focus_named_objects,
         )
         merged = limit_context(
             merged,
@@ -195,6 +199,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             match_groups=exact_groups,
             domain_cache=domain_cache,
             lexical_cache=lexical_cache,
+            strict=settings.llm_profile == "local_qwen",
         )
         merged = filter_mail_scope_blocks(merged, mail_mode=req.mail_mode)
         context = format_context(
@@ -232,13 +237,17 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             answer = _no_sources_answer(req)
         else:
             system = get_store().format("chat_system", locale=req.locale)
+            if settings.llm_profile == "local_qwen" and settings.llm_local_chat_instructions:
+                system += "\n\nResponse style:\n" + settings.llm_local_chat_instructions
             prompt_user = get_store().format("chat_user", context=context, query=req.query)
             try:
                 if is_authorship_query(req.query):
-                    answer = answer_authorship(
-                        req.query, merged, _get_llm(), locale=req.locale,
-                        max_chars=settings.chat_max_context_chars, mail_mode=req.mail_mode,
-                    )
+                    # Internal extraction JSON is not a user-facing answer.
+                    with request_scope(on_text=None):
+                        answer = answer_authorship(
+                            req.query, merged, _get_llm(), locale=req.locale,
+                            max_chars=settings.chat_max_context_chars, mail_mode=req.mail_mode,
+                        )
                 else:
                     answer = _get_llm().chat(system, prompt_user)
             except Exception as exc:
@@ -264,6 +273,7 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
     # Персистентная история (Этап 6): запись не блокирует ответ — сбой БД не
     # роняет чат. session_id привязан к текущему пользователю на стороне сервиса.
     session_id = req.session_id
+    remaining(settings.llm_chat_total_timeout_seconds)
     try:
         session_id = chat_history.store_turn(
             req.session_id,
@@ -295,6 +305,15 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         session_id=session_id,
         expansion_status=plan.status,
         applied_terms=applied_terms,
+    )
+
+
+@router.post("/stream")
+def chat_stream(req: ChatRequest, current_user: User = Depends(require_user)):
+    return StreamingResponse(
+        stream_chat(lambda: chat(req, current_user)),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
 

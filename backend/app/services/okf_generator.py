@@ -15,6 +15,7 @@ from app.services.comment_concepts import extract_comment_concepts
 from app.services.field_table import extract_table_concepts
 from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMClient, LLMTruncationError
+from app.services.llm_profiles import generation_budget
 from app.services.source_evidence import (
     chunk_digest,
     embedded_source_quotes,
@@ -24,7 +25,7 @@ from app.services.source_evidence import (
 
 logger = logging.getLogger(__name__)
 
-VALID_TYPES = {"concept", "procedure", "reference", "example", "note"}
+VALID_TYPES = {"concept", "procedure", "reference", "example", "note", "table"}
 
 # Тег концептов, порождённых блоками распарсованных вложений (UX-обходной путь
 # до Этапа 2c provenance; детерминированно проставляется post-LLM в pipeline).
@@ -119,7 +120,11 @@ class OKFGenerator:
             digest.update(b"\x00")
         return digest.hexdigest()[:12]
 
-    def generate_chunk(
+    def generate_chunk(self, *args, **kwargs) -> list[Concept]:
+        with generation_budget(self.settings):
+            return self._generate_chunk(*args, **kwargs)
+
+    def _generate_chunk(
         self,
         chunk: str,
         filename: str,

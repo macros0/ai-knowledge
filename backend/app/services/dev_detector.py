@@ -67,7 +67,7 @@ def _extract_from_llm(text: str, filename: str, doc_id: str) -> dict | None:
         store = get_store()
         system = store.get("dev_number_system")
         user = store.format("dev_number_user", filename=filename, content=text)
-        result = LLMClient().chat_json(system, user, doc_id=doc_id, chunk_idx=0)
+        result = LLMClient().chat_json(system, user, doc_id=doc_id, chunk_idx=0, task="development")
         if isinstance(result, list):
             result = result[0] if result else {}
         if not isinstance(result, dict):

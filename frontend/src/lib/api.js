@@ -1,7 +1,8 @@
 import { detectLocale, readStored } from "../i18n/core.js";
+import { readChatStream } from "./chatStream.mjs";
 
 const BASE = "/api";
-const CHAT_TIMEOUT_MS = 90_000;
+const CHAT_TIMEOUT_MS = 210_000;
 
 function currentUiLocale() {
   if (typeof window === "undefined") return "ru";
@@ -103,7 +104,7 @@ async function fetchApi(url, { init, timeoutMs, parse = (resp) => resp.json() } 
       }
       throw new ApiError(message, { status: resp.status, code, service, data });
     }
-    return parse(resp);
+    return await parse(resp);
   } catch (err) {
     if (err.name === "AbortError") {
       // message — фолбэк-диагностика; текст для пользователя берётся по коду.
@@ -138,7 +139,7 @@ export function csrfTokenFromDocument(doc = typeof document !== "undefined" ? do
   }
 }
 
-function request(path, init, timeoutMs) {
+function request(path, init, timeoutMs, parse) {
   const method = (init?.method || "GET").toUpperCase();
   const headers = new Headers(init?.headers || {});
   if (!["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
@@ -148,6 +149,7 @@ function request(path, init, timeoutMs) {
   return fetchApi(`${BASE}${path}`, {
     init: { ...init, headers },
     timeoutMs,
+    parse,
   });
 }
 
@@ -427,7 +429,7 @@ export function search(query, tags = [], topK = 5, mode = "hybrid", useGlossary 
   });
 }
 
-export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true, mailMode = "all") {
+export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true, mailMode = "all", onText = null) {
   const body = { query, locale: currentUiLocale(), tags, top_k: topK, mode, use_glossary: useGlossary, mail_mode: mailMode };
   if (sessionId) body.session_id = sessionId;
   // Фильтр по языку документа (Этап 7 фаза D): не отправляем поле при «Все языки».
@@ -438,13 +440,21 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
     body.include_unknown_source_locale = false;
   }
   return request(
-    "/chat",
+    onText ? "/chat/stream" : "/chat",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     },
-    CHAT_TIMEOUT_MS
+    CHAT_TIMEOUT_MS,
+    onText ? async (response) => {
+      try {
+        return await readChatStream(response, onText);
+      } catch (err) {
+        if (err.name === "AbortError") throw err;
+        throw new ApiError("Chat stream failed", { code: err.code || "dependency_unavailable", status: err.status || 503 });
+      }
+    } : undefined
   );
 }
 

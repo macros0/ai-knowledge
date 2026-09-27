@@ -8,6 +8,7 @@ test("API proxy preserves repeated Set-Cookie headers", async () => {
   globalThis.fetch = async (url, init) => {
     assert.equal(String(url), "http://127.0.0.1:18001/api/auth/me?next=%2F");
     assert.equal(init.method, "GET");
+    assert.ok(init.signal instanceof AbortSignal);
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: [

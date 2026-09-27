@@ -1,5 +1,24 @@
 # SECURITY.md — security model
 
+## Local Qwen deployment (2026-09-27)
+
+The optional `LLM_PROFILE=local_qwen` sends generation, chat, classification and
+translation requests to the configured OpenAI-compatible endpoint. This local
+installation uses CT101 at `http://10.10.1.24:8080/v1`; cloud model overrides
+are cleared in its runtime env. No cloud fallback is implemented.
+This endpoint remains plaintext HTTP without server-side API authentication on
+the existing trusted LAN. The placeholder client key is not an access control.
+Do not expose it to an untrusted network; TLS and authentication or a private
+network boundary are required for such a deployment. The migration changes no
+router/firewall/port publication and makes no claim of network isolation.
+
+The new `POST /api/chat/stream` uses the same authenticated chat handler,
+authorization, rate limiting and CSRF middleware as `POST /api/chat`.
+Responses are no-store; transport errors expose stable codes, not provider text.
+Only completed answers are passed to history storage; cancellation before that
+step prevents storing a partial answer. JSON schema constrains output shape,
+not factual truth or resistance to prompt injection. See `docs/LOCAL_LLM.md`.
+
 Reference document describing how the service's security is designed and which trust
 boundaries are deliberately chosen. It does not paraphrase the implementation — it points
 to the code by file/function name. It is kept up to date together with changes (the rule

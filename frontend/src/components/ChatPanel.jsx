@@ -165,6 +165,21 @@ export default function ChatPanel() {
     localeOptions.push({ value: sourceLocale, label: sourceLocale, searchText: sourceLocale });
   }
 
+  const streamIntoLastAnswer = () => {
+    let text = "";
+    return (delta) => {
+      text += delta;
+      const snapshot = text;
+      setMessages((items) => {
+        const copy = [...items];
+        if (copy.at(-1)?.role === "assistant") {
+          copy[copy.length - 1] = { ...copy.at(-1), text: snapshot };
+        }
+        return copy;
+      });
+    };
+  };
+
   const send = async (e) => {
     e.preventDefault();
     const q = query.trim();
@@ -176,7 +191,7 @@ export default function ChatPanel() {
     setPending(true);
     setMessages((m) => [...m, { role: "assistant", text: t("chat.thinking"), sources: [], ...requestOptions }]);
     try {
-      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale, useGlossary, requestOptions.requestMailMode);
+      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale, useGlossary, requestOptions.requestMailMode, streamIntoLastAnswer());
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((m) => {
         const copy = [...m];
@@ -210,7 +225,7 @@ export default function ChatPanel() {
     setPending(true);
     setMessages((items) => [...items, { role: "assistant", text: t("chat.thinking"), sources: [], ...requestOptions }]);
     try {
-      const resp = await chat(q, requestOptions.requestTags, requestOptions.requestTopK, requestOptions.requestMode, sessionId, requestOptions.requestSourceLocale, false, requestOptions.requestMailMode);
+      const resp = await chat(q, requestOptions.requestTags, requestOptions.requestTopK, requestOptions.requestMode, sessionId, requestOptions.requestSourceLocale, false, requestOptions.requestMailMode, streamIntoLastAnswer());
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((items) => {
         const copy = [...items];

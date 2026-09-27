@@ -63,7 +63,7 @@ def translate_texts_batch(
     source = source_locale if source_locale != "und" else "its original language (identify it from the input)"
     system = _SYSTEM_PROMPT.format(source=source, target=target_locale)
     user = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(texts))
-    result = client.chat_json(system, user, doc_id="translation", chunk_idx=0)
+    result = client.chat_json(system, user, doc_id="translation", chunk_idx=0, task="translation")
     if not isinstance(result, list):
         raise ValueError("LLM-переводчик вернул не массив")
     if strict and any(not isinstance(x, str) for x in result):

@@ -5,7 +5,7 @@ from functools import lru_cache
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -163,6 +163,28 @@ class Settings(BaseSettings):
     embedding_retry_backoff_seconds: float = 2.0
 
     llm_model: str = "ollama/qwen2.5:14b"
+    llm_profile: Literal["standard", "local_qwen"] = "standard"
+    llm_local_enable_thinking: bool = False
+    llm_local_top_p: float = Field(default=0.8, gt=0, le=1)
+    llm_local_top_k: int = Field(default=20, ge=0)
+    llm_local_min_p: float = Field(default=0, ge=0, le=1)
+    llm_local_repeat_penalty: float = Field(default=1, gt=0)
+    llm_local_presence_penalty: float = Field(default=0, ge=-2, le=2)
+    llm_local_cache_prompt: bool = True
+    llm_local_chat_instructions: str = (
+        "Answer concisely by default: a direct answer and only the necessary supporting facts. "
+        "Do not enumerate fields, statuses or adjacent topics unless the question asks for them. "
+        "For an overview, aim for at most 200 words; preserve complete lists or code when explicitly requested. "
+        "Keep proposed requirements distinct from implemented behavior. "
+        "Use inline [N] citations; do not repeat a source list or a concluding summary."
+    )
+    llm_first_token_timeout_seconds: float = Field(default=120, gt=0)
+    llm_chat_max_tokens: int = Field(default=1536, ge=1)
+    llm_classification_max_tokens: int = Field(default=512, ge=1)
+    llm_translation_max_tokens: int = Field(default=2048, ge=1)
+    llm_chat_total_timeout_seconds: float = Field(default=180, gt=0)
+    llm_chunk_budget_seconds: float = Field(default=600, gt=0)
+    llm_queue_timeout_seconds: float = Field(default=180, gt=0)
     # Модель интерактивного RAG-чата. Пусто → llm_model (единая модель, не
     # ломает существующие установки). Чат отвечает пользователю напрямую —
     # здесь важнее следование инструкциям промпта и синтез нескольких
@@ -356,6 +378,7 @@ class Settings(BaseSettings):
     # --- Контекст LLM (форматирование после merge/collapse) ---
     # Жёсткий лимит на суммарный объём контекста, передаваемого в LLM.
     chat_max_context_chars: int = 32000
+    chat_focus_named_objects: bool = False
     # Обрезка отдельного блока в контексте (концепт vs чанк).
     chat_concept_max_chars: int = 4000
     chat_chunk_max_chars: int = 6000
