@@ -62,7 +62,7 @@ def _page_scopes(records, report):
         concept_keys, chunk_keys = set(), set()
         for point in records:
             p = point.payload or {}
-            if p.get('doc_id') not in documents or p.get('generation_id') != generations.get(p.get('doc_id')):
+            if not isinstance(p.get('doc_id'), str) or p.get('doc_id') not in documents or p.get('generation_id') != generations.get(p.get('doc_id')):
                 continue
             if p.get('point_type') == 'concept' and isinstance(p.get('slug'), str) and p['slug']:
                 concept_keys.add((p['doc_id'], p['slug']))
@@ -88,7 +88,7 @@ def _page_scopes(records, report):
             p = point.payload or {}
             kind = _kind(p)
             _increment(report, kind, 'scanned')
-            doc_id = p.get('doc_id')
+            doc_id = p.get('doc_id') if isinstance(p.get('doc_id'), str) else None
             if doc_id in documents and p.get('generation_id') != generations.get(doc_id):
                 _increment(report, kind, 'skipped_nonactive')
                 continue

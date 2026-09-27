@@ -538,3 +538,13 @@ def test_strict_database_failure_never_falls_back_to_payload(monkeypatch):
 def test_invalid_mail_mode_is_rejected_with_zero_hits():
     with pytest.raises(ValueError):
         load_visible_retrieval_hits([], mail_mode='INVALID')
+
+
+def test_bool_chunk_index_cannot_borrow_loaded_concept_identity():
+    hits = _mail_filter_records(chunk_source='root', concept_source='root')
+    with session_scope() as session:
+        session.query(DocumentChunk).filter_by(doc_id='scope-doc').update({'chunk_index': 0})
+        session.query(OkfConcept).filter_by(doc_id='scope-doc').update({'chunk_index': 0})
+    hits.append(Hit('invalid', .9, dict(point_type='chunk', doc_id='scope-doc', chunk_index=False)))
+    kept, _ = load_visible_retrieval_hits(hits, mail_mode='exclude')
+    assert 'invalid' not in [hit.point_id for hit in kept]

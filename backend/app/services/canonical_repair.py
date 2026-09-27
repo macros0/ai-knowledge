@@ -25,6 +25,7 @@ from app.services.generation_publication import publish_prepared_document
 from app.services.generation_store import (
     GenerationConflict, abandon_generation, begin_generation, lock_document_write, lock_generation_read, mark_generation_ready,
 )
+from app.services.errors import VectorStoreError
 from app.services.json_atomic import write_json_atomic
 from app.services.okf_generator import _source_manifest
 from app.services.vector_store import chunk_point_id, concept_point_id
@@ -133,12 +134,12 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
         with session_scope() as session:
             mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication))
         publish_prepared_document(settings, vector_store, doc_id, generation_id)
-    except Exception:
+    except Exception as exc:
         try:
             with session_scope() as session:
                 candidate = session.get(DocumentGeneration, generation_id)
                 # A verified ready manifest is retryable after index/readback failure.
-                if candidate is not None and candidate.phase != "ready":
+                if candidate is not None and (candidate.phase != "ready" or not isinstance(exc, VectorStoreError)):
                     abandon_generation(session, doc_id, generation_id)
         except Exception:
             logger.warning("[%s] Не удалось отменить ремонтную версию %s", doc_id, generation_id, exc_info=True)

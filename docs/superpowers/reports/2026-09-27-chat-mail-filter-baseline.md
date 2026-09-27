@@ -12,4 +12,4 @@ Expected compatibility difference: graph expansion will apply tags/locale using 
 
 User identifies primary test contour by root `.env`. Stage 8 contour is documented in `2026-09-12-glossary-stage8-test-environment.md` and configured by `tests/scripts/stage8/stage8-test-profile.ps1`; verify live settings before apply.
 
-Outstanding Task 0 gates: synthetic real-service baseline, disposable PG/Qdrant integration resources, latency baseline; these must precede release and are not claimed passed.
+Task 0 real-service baseline now recorded in the validation report: same owned PG/Qdrant corpus/config/index, original base code; 10 warmups/100 measurements per mode, fixed-candidate hydration comparison. Disposable probes passed; unconstrained all context size agrees with baseline. No user corpus baseline generation.

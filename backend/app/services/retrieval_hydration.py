@@ -136,7 +136,7 @@ def _verify_mail_identities(hits, session, *, mail_mode, active_generations, tim
                 payload["chunk_index"] = index
                 payload["filepath"] = f"{doc_id}/{key[1]}.md" if mail_mode != "all" else payload.get("filepath") or f"{doc_id}/{key[1]}.md"
         else:
-            verified = payload.get("point_type") == "chunk" and (doc_id, index) in chunks
+            verified = payload.get("point_type") == "chunk" and type(index) is int and index >= 0 and (doc_id, index) in chunks
             source_id = chunks.get((doc_id, index)) if verified else None
         scope = maps.get(doc_id, {}).get(source_id, "unknown")
         chunk_source = chunks.get((doc_id, index))
@@ -182,7 +182,7 @@ def _enrich_retrieval_hits_in_session(
     if active_generations is None:
         active_generations = dict(session.execute(select(
             DocumentGenerationState.doc_id, DocumentGenerationState.active_generation_id,
-        ).where(DocumentGenerationState.doc_id.in_({hit.payload.get("doc_id") for hit in hits}))))
+        ).where(DocumentGenerationState.doc_id.in_({hit.payload.get("doc_id") for hit in hits}))).all())
     hits = _verify_mail_identities(hits, session, mail_mode=mail_mode,
                                   active_generations=active_generations, timings=timings)
     concept_pairs: list[tuple[str, str]] = []

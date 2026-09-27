@@ -72,8 +72,8 @@ def test_image_only_cid_with_escaped_caption_skips_llm_and_preserves_artifact(tm
     pipeline.okf_generator.generate_chunk = generate
     for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
         monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: None)
-    for method in ("index_concepts", "index_chunks"):
-        monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: set())
+    from tests.mail_pipeline_boundary import use_memory_qdrant
+    use_memory_qdrant(pipeline, monkeypatch)
     pipeline._process(DOC_ID, source, "image.eml", [], resume=False)
     assert len(calls) == (1 if body else 0)
     document = registry.get(DOC_ID)
@@ -141,8 +141,8 @@ def test_mail_pipeline_keeps_nested_mail_chunks_concepts_and_sources_together(
     ]
     for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
         monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: None)
-    for method in ("index_concepts", "index_chunks"):
-        monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: set())
+    from tests.mail_pipeline_boundary import use_memory_qdrant
+    use_memory_qdrant(pipeline, monkeypatch)
 
     pipeline._process(DOC_ID, source, "forward.eml", [], resume=False)
 
@@ -244,8 +244,8 @@ def test_msg_substorage_pipeline_keeps_nested_mail_source_ownership(tmp_path, mo
     ]
     for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
         monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: None)
-    for method in ("index_concepts", "index_chunks"):
-        monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: set())
+    from tests.mail_pipeline_boundary import use_memory_qdrant
+    use_memory_qdrant(pipeline, monkeypatch)
 
     pipeline._process(doc_id, source, "nested.msg", [], resume=False)
 
@@ -313,8 +313,8 @@ def test_pipeline_reports_embedded_parse_warning_without_losing_searchable_sibli
     ]
     for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
         monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: None)
-    for method in ("index_concepts", "index_chunks"):
-        monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: set())
+    from tests.mail_pipeline_boundary import use_memory_qdrant
+    use_memory_qdrant(pipeline, monkeypatch)
 
     pipeline._process(doc_id, source, "partial.eml", [], resume=False)
 
@@ -391,8 +391,8 @@ def test_disabled_embedded_mail_keeps_parent_searchable_and_original_downloadabl
     ]
     for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
         monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: None)
-    for method in ("index_concepts", "index_chunks"):
-        monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: set())
+    from tests.mail_pipeline_boundary import use_memory_qdrant
+    use_memory_qdrant(pipeline, monkeypatch)
 
     pipeline._process(doc_id, source, "container.pdf", [], resume=False)
 

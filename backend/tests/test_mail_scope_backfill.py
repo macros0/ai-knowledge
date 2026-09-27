@@ -192,3 +192,14 @@ def test_transport_retries_are_bounded_and_validation_is_not_retried(monkeypatch
     with pytest.raises(RuntimeError):
         script._call(fail)
     assert len(calls) == expected_calls
+
+
+@pytest.mark.parametrize('doc_id', [{}, ['bad'], 42, None, ''])
+def test_malformed_document_identity_is_unknown_without_poisoning_page(monkeypatch, scope_store, capsys, doc_id):
+    _setup(scope_store)
+    scope_store.client.upsert(scope_store.collection, [qm.PointStruct(
+        id=str(uuid.uuid4()), vector={'': [1.,0.]}, payload=dict(doc_id=doc_id, point_type='chunk', chunk_index=0))])
+    code, report, _ = _cli(monkeypatch, scope_store, ['--apply'], capsys)
+    assert code == 0 and report['failed_batches'] == 0
+    assert report['scanned'] == 3 and report['updated'] == 3
+    assert report['unknown'] == 1 and report['orphan'] == 1
