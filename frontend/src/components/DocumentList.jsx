@@ -720,6 +720,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                   <button
                     className="tag-edit-toggle"
                     onClick={() => toggleEditTags(doc.id)}
+                    title={t("docs.editTagsAria")}
                     aria-label={t("docs.editTagsAria")}
                   >
                     ✎
@@ -786,6 +787,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
                     <button
                       className="tag-edit-toggle"
                       onClick={() => toggleEditLocale(doc.id)}
+                      title={t("docs.localeEditAria")}
                       aria-label={t("docs.localeEditAria")}
                     >
                       ✎

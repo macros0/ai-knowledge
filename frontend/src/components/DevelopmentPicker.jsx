@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { LinkIcon, PencilIcon } from "./icons";
+import { LinkIcon } from "./icons";
 import { positionPopup } from "@/lib/popupPosition";
 import { useI18n } from "@/i18n/LocaleContext";
 
@@ -84,12 +84,12 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
           </Link>
           <button
             type="button"
-            className="dev-picker-edit"
+            className="tag-edit-toggle"
             onClick={openPopup}
             title={t("dev.changeTitle")}
             aria-label={t("dev.changeAria")}
           >
-            <PencilIcon size={12} />
+            ✎
           </button>
         </span>
       ) : (

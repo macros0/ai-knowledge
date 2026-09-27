@@ -475,7 +475,7 @@ main {
   max-width: 100%;
 }
 
-.doc-meta-line > * + *::before {
+.doc-meta-line > * + *:not(.tag-edit-toggle)::before {
   content: "·";
   color: var(--border);
   margin-right: 8px;
@@ -3388,22 +3388,6 @@ main {
 
 .dev-picker-link:hover {
   background: rgba(79, 140, 255, 0.12);
-}
-
-.dev-picker-edit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 3px;
-  border-radius: 4px;
-}
-
-.dev-picker-edit:hover {
-  color: var(--accent);
 }
 
 .dev-picker-pop {
