@@ -474,6 +474,12 @@
   "chat.historyTitle": [],
   "chat.loading": [],
   "chat.localeLabel": [],
+  "chat.mailModeAll": [],
+  "chat.mailModeExclude": [],
+  "chat.mailModeHint": [],
+  "chat.mailModeLabel": [],
+  "chat.mailModeOnly": [],
+  "chat.mailModeUnknownHint": [],
   "chat.messagesCount": [],
   "chat.modeBm25": [],
   "chat.modeDense": [],
@@ -487,6 +493,7 @@
   "chat.newChatTitle": [],
   "chat.noHistory": [],
   "chat.noSources": [],
+  "chat.noSourcesMailFilter": [],
   "chat.openThreadError": [
     "message"
   ],
@@ -1108,6 +1115,9 @@
   ],
   "sourceLocation.title": [],
   "sourceLocation.unavailable": [],
+  "sources.collapse": [
+    "name"
+  ],
   "sources.dateUnknown": [],
   "sources.download": [],
   "sources.downloadContainer": [],
@@ -1123,9 +1133,6 @@
   ],
   "sources.loadError": [
     "error"
-  ],
-  "sources.collapse": [
-    "name"
   ],
   "sources.loading": [],
   "sources.location.body": [],

@@ -38,8 +38,8 @@ def _pipeline(tmp_path, monkeypatch):
     pipeline = Pipeline()
     for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
         monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: None)
-    for method in ("index_concepts", "index_chunks"):
-        monkeypatch.setattr(pipeline.vector_store, method, lambda *_args, **_kwargs: set())
+    from tests.mail_pipeline_boundary import use_memory_qdrant
+    use_memory_qdrant(pipeline, monkeypatch)
     return pipeline, registry, settings
 
 

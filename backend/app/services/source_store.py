@@ -118,3 +118,17 @@ def _validate_tree(rows: list[dict]) -> None:
                 raise ValueError(f"Цикл в дереве источников: {source_id}")
             seen.add(current)
             current = by_id[current].get("parent_source_id")
+
+
+def fetch_source_trees(session, doc_ids: set[str]) -> dict[str, list[dict]]:
+    """Raw provenance in the caller snapshot; never use this as public source_path."""
+    trees = {doc_id: [] for doc_id in doc_ids}
+    if not doc_ids:
+        return trees
+    rows = session.scalars(select(DocumentSource).where(DocumentSource.doc_id.in_(doc_ids)))
+    for row in rows:
+        trees[row.doc_id].append({
+            'source_id': row.source_id, 'parent_source_id': row.parent_source_id,
+            'kind': row.kind, 'metadata': row.metadata_json,
+        })
+    return trees

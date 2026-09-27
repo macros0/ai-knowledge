@@ -34,6 +34,7 @@ from app.services.fusion import Hit
 from app.services.generation_search import generation_exclusions
 from app.services.generation_store import lock_generation_read
 from app.services.sparse import to_sparse_vector
+from app.services.mail_scope import MAIL_SCOPE_VERSION, MailScope, MailMode, mail_scope_allowed
 from app.services.storage import StorageFullError, is_storage_full_text
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,8 @@ CONCEPT_POINT_TYPE = "concept"
 CHUNK_POINT_TYPE = "chunk"
 
 PAYLOAD_INDEX_FIELDS: dict[str, str] = {
+    "mail_scope": "keyword",
+    "mail_scope_version": "integer",
     "point_type": "keyword",
     "doc_id": "keyword",
     "generation_id": "keyword",
@@ -135,6 +138,8 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
 # filters; omitting the potentially large payload `content` reduces response
 # serialization without changing point ids, scores, or ranking.
 RETRIEVAL_PAYLOAD_FIELDS = (
+    "mail_scope",
+    "mail_scope_version",
     "point_type",
     "doc_id",
     "generation_id",
@@ -401,6 +406,67 @@ class VectorStore:
             except Exception:
                 pass
 
+    def ensure_mail_scope_indexes(self) -> None:
+        """Require actual keyword/integer schemas; errors propagate to release gates."""
+        expected = {"mail_scope": qm.PayloadSchemaType.KEYWORD,
+                    "mail_scope_version": qm.PayloadSchemaType.INTEGER}
+        info = _qdrant_call(self.client.get_collection, self.collection)
+        for field, schema in expected.items():
+            actual = info.payload_schema.get(field)
+            if actual is not None and actual.data_type != schema:
+                raise VectorStoreError("Incorrect mail scope index schema")
+            if actual is None:
+                _qdrant_call(self.client.create_payload_index, collection_name=self.collection,
+                             field_name=field, field_schema=schema, wait=True)
+        info = _qdrant_call(self.client.get_collection, self.collection)
+        if any(field not in info.payload_schema or info.payload_schema[field].data_type != schema
+               for field, schema in expected.items()):
+            raise VectorStoreError("Mail scope index schema verification failed")
+
+    def patch_mail_scopes(self, scopes_by_point_id: dict[str, MailScope]) -> int:
+        """Patch only scope/version, bounded by IDs, with unchanged skip and readback."""
+        _validated_mail_scopes(list(scopes_by_point_id.values()), len(scopes_by_point_id))
+        updated = 0
+        ids = list(scopes_by_point_id)
+        batch_size = min(getattr(self.settings, "qdrant_upsert_batch_size", 256) or 256, 1000)
+        for start in range(0, len(ids), batch_size):
+            batch = ids[start:start + batch_size]
+            rows = _qdrant_call(self.client.retrieve, collection_name=self.collection, ids=batch,
+                                with_payload=["mail_scope", "mail_scope_version"], with_vectors=False)
+            existing = {str(row.id): row.payload or {} for row in rows}
+            if set(existing) != set(batch):
+                raise VectorStoreError("Mail scope patch missing point")
+            changed = [pid for pid in batch if existing[pid].get("mail_scope") != scopes_by_point_id[pid]
+                       or type(existing[pid].get("mail_scope_version")) is not int
+                       or existing[pid].get("mail_scope_version") != MAIL_SCOPE_VERSION]
+            for scope in ("mail", "document", "unknown"):
+                group = [pid for pid in changed if scopes_by_point_id[pid] == scope]
+                if not group:
+                    continue
+                for attempt in range(3):
+                    try:
+                        _qdrant_call(self.client.set_payload, collection_name=self.collection,
+                                     points=group, payload={"mail_scope": scope,
+                                     "mail_scope_version": MAIL_SCOPE_VERSION}, wait=True)
+                        break
+                    except VectorStoreError as exc:
+                        status = getattr(exc.__cause__, "status_code", None)
+                        if attempt == 2 or (status is not None and status < 500 and status != 429):
+                            raise
+                        time.sleep(min(2.0, 0.5 * (attempt + 1)))
+            if changed:
+                rows = _qdrant_call(self.client.retrieve, collection_name=self.collection, ids=changed,
+                                    with_payload=["mail_scope", "mail_scope_version"], with_vectors=False)
+                readback = {str(row.id): row.payload or {} for row in rows}
+                if set(readback) != set(changed) or any(
+                    readback[pid].get("mail_scope") != scopes_by_point_id[pid]
+                    or type(readback[pid].get("mail_scope_version")) is not int
+                    or readback[pid].get("mail_scope_version") != MAIL_SCOPE_VERSION for pid in changed
+                ):
+                    raise VectorStoreError("Mail scope patch readback failed")
+                updated += len(changed)
+        return updated
+
     def _upsert_batches(
         self,
         points: list,
@@ -491,13 +557,15 @@ class VectorStore:
         source_locale: str | None = None,
         *,
         generation_id: str | None = None,
+        mail_scopes: list[MailScope] | None = None,
     ) -> set[str]:
         """Индексирует концепты в Qdrant. Возвращает set point_id для последующей очистки орфанов."""
+        mail_scopes = _validated_mail_scopes(mail_scopes, len(okf_docs))
         cap = self.settings.okf_max_concept_chars
         dev_tags = dev_tags or []
         points = []
         point_ids: set[str] = set()
-        for okf_doc, vector in zip(okf_docs, vectors):
+        for okf_doc, vector, mail_scope in zip(okf_docs, vectors, mail_scopes):
             meta = okf_doc.metadata
             slug = Path(okf_doc.filepath).stem
             point_id = concept_point_id(doc_id, slug, generation_id=generation_id)
@@ -516,6 +584,8 @@ class VectorStore:
                     },
                     payload={
                         "point_type": CONCEPT_POINT_TYPE,
+                        "mail_scope": mail_scope,
+                        "mail_scope_version": MAIL_SCOPE_VERSION,
                         "generation_id": generation_id,
                         "doc_id": doc_id,
                         "slug": slug,
@@ -555,6 +625,7 @@ class VectorStore:
         *,
         generation_id: str | None = None,
         chunk_indices: list[int] | None = None,
+        mail_scopes: list[MailScope] | None = None,
     ) -> set[str]:
         """Индексирует сырые чанки как отдельные точки Qdrant (point_type="chunk").
 
@@ -570,6 +641,7 @@ class VectorStore:
         point_id детерминирован и изолирован от концептов префиксом "chunk:".
         Возвращает set point_id для последующей очистки орфанов.
         """
+        mail_scopes = _validated_mail_scopes(mail_scopes, len(chunk_texts))
         section_titles = section_titles or [""] * len(chunk_texts)
         source_ids = source_ids or [None] * len(chunk_texts)
         chunk_indices = list(range(len(chunk_texts))) if chunk_indices is None else chunk_indices
@@ -581,7 +653,8 @@ class VectorStore:
         cap = self.settings.okf_max_chunk_index_chars
         points = []
         point_ids: set[str] = set()
-        for i, text, vector, section_title, source_id in zip(chunk_indices, chunk_texts, vectors, section_titles, source_ids):
+        for i, text, vector, section_title, source_id, mail_scope in zip(
+                chunk_indices, chunk_texts, vectors, section_titles, source_ids, mail_scopes):
             point_id = chunk_point_id(doc_id, i, generation_id=generation_id)
             point_ids.add(point_id)
             capped = text[:cap]
@@ -595,6 +668,8 @@ class VectorStore:
                     },
                     payload={
                         "point_type": CHUNK_POINT_TYPE,
+                        "mail_scope": mail_scope,
+                        "mail_scope_version": MAIL_SCOPE_VERSION,
                         "generation_id": generation_id,
                         "doc_id": doc_id,
                         "chunk_index": i,
@@ -929,7 +1004,7 @@ class VectorStore:
         ]
 
     def _graph_expansion(
-        self, ranked_lists: list[tuple[list[Hit], float]]
+        self, ranked_lists: list[tuple[list[Hit], float]], *, search_filter: qm.Filter
     ) -> list[Hit]:
         """Graph expansion: достаёт соседей по relations концептов.
 
@@ -948,8 +1023,7 @@ class VectorStore:
         if not relations_set:
             return []
         slug_filter = qm.Filter(
-            must=[qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))],
-            must_not=self._build_search_filter(None).must_not,
+            must=[search_filter, qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))],
         )
         records, _ = _qdrant_call(
             self.client.scroll,
@@ -974,6 +1048,7 @@ class VectorStore:
         top_k: int,
         source_locales: list[str] | None = None,
         include_unknown_source_locale: bool = False,
+        mail_mode: MailMode = "all",
     ) -> list[Hit]:
         """Композитный поиск: запускает включённые ветки, сливает через RRF.
 
@@ -992,7 +1067,7 @@ class VectorStore:
         """
         search_filter = self._build_search_filter(
             tags, source_locales=source_locales,
-            include_unknown=include_unknown_source_locale,
+            include_unknown=include_unknown_source_locale, mail_mode=mail_mode,
         )
         per_branch = self.settings.search_per_branch_top_k
         k = self.settings.search_rrf_k
@@ -1008,7 +1083,7 @@ class VectorStore:
             ranked_lists.append((hits, self.settings.search_rrf_bm25_weight))
 
         if self.settings.search_graph_expansion_enabled:
-            graph_hits = self._graph_expansion(ranked_lists)
+            graph_hits = self._graph_expansion(ranked_lists, search_filter=search_filter)
             if graph_hits:
                 ranked_lists.append((graph_hits, self.settings.search_rrf_graph_expansion_weight))
 
@@ -1022,6 +1097,7 @@ class VectorStore:
         tags: list[str] | None,
         source_locales: list[str] | None = None,
         include_unknown: bool = False,
+        *, mail_mode: MailMode = "all",
     ) -> qm.Filter:
         """Жёсткий pre-filter для dense и bm25 веток + исключение корзины.
 
@@ -1032,8 +1108,15 @@ class VectorStore:
         deleted` (Этап 4a.2) — единая обёртка, чтобы удалённые точки не попадали
         в поиск из любого нового сценария.
         """
+        mail_scope_allowed("unknown", mail_mode)  # validate even on an empty request
         must_not = [*(_not_deleted().must_not or []), *generation_exclusions()]
         must: list = []
+        if mail_mode != "all":
+            must.extend([
+                qm.FieldCondition(key="mail_scope", match=qm.MatchValue(
+                    value="mail" if mail_mode == "only" else "document")),
+                qm.FieldCondition(key="mail_scope_version", match=qm.MatchValue(value=MAIL_SCOPE_VERSION)),
+            ])
         if tags:
             must.append(_tag_match_filter(tags))
         if source_locales or include_unknown:
@@ -1201,6 +1284,8 @@ class VectorStore:
         from app.db.models import Document, DocumentChunk
         from app.db.session import session_scope
         from app.services.development_registry import get_development_registry
+        from app.services.mail_scope import build_record_mail_scopes
+        from app.services.source_store import fetch_source_trees
 
         dev_reg = get_development_registry()
 
@@ -1221,6 +1306,7 @@ class VectorStore:
                     Document.deleted_at.is_(None)
                 )
             ).all()
+            source_trees = fetch_source_trees(s, {doc_id for doc_id, _, _ in docs})
             for doc_id, filename, dev_id in docs:
                 chunks = (
                     s.query(DocumentChunk)
@@ -1232,6 +1318,10 @@ class VectorStore:
                     continue
                 doc = s.get(Document, doc_id)
                 global_tags = [t.tag_rel.canonical_text for t in (doc.tags_rel or [])]
+                _, chunk_scopes = build_record_mail_scopes(
+                    source_trees[doc_id], [],
+                    [{"chunk_index": c.chunk_index, "source_id": c.source_id} for c in chunks],
+                )
                 docs_data.append(
                     {
                         "doc_id": doc_id,
@@ -1240,6 +1330,8 @@ class VectorStore:
                         "dev_id": dev_id,
                         "global_tags": global_tags,
                         "source_locale": doc.source_locale,
+                        "mail_scopes": chunk_scopes,
+                        "source_ids": [c.source_id for c in chunks],
                         "chunks": [
                             (c.chunk_index, c.section_title or "", c.content or "")
                             for c in chunks
@@ -1282,6 +1374,9 @@ class VectorStore:
                             "tags": d["global_tags"],
                             "dev_tags": dev_tags,
                             "source_locale": d["source_locale"],
+                            "source_id": d["source_ids"][pos],
+                            "mail_scope": d["mail_scopes"][pos],
+                            "mail_scope_version": MAIL_SCOPE_VERSION,
                         },
                     )
                 )
@@ -1397,3 +1492,11 @@ class VectorStore:
             )
             total += len(point_ids)
         return total
+
+
+def _validated_mail_scopes(scopes: list[MailScope] | None, count: int) -> list[MailScope]:
+    if scopes is None:
+        return ["unknown"] * count
+    if len(scopes) != count or any(scope not in ("mail", "document", "unknown") for scope in scopes):
+        raise ValueError("Mail scopes must match the record count and use valid values")
+    return scopes

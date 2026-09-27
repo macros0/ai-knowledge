@@ -28,6 +28,7 @@ export function ChatProvider({ children }) {
   const [sessionId, setSessionId] = useState(null);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
+  const [mailMode, setMailMode] = useState("all");
   const [useGlossary, setUseGlossary] = useState(true);
 
   const MODE_LABELS = useMemo(
@@ -66,8 +67,8 @@ export function ChatProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ messages, tags, pending, settings, selectedMode, sessionId, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }),
-    [messages, tags, pending, settings, selectedMode, sessionId, useGlossary, MODE_LABELS]
+    () => ({ messages, tags, pending, settings, selectedMode, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }),
+    [messages, tags, pending, settings, selectedMode, sessionId, mailMode, useGlossary, MODE_LABELS]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

@@ -10,6 +10,8 @@ from app.db.models import Development, Document, DocumentChunk, DocumentGenerati
 from app.db.session import session_scope
 from app.models.schemas import OkfDocument
 from app.services.generation_store import lock_generation_read
+from app.services.source_store import fetch_source_trees
+from app.services.mail_scope import build_record_mail_scopes
 
 
 def published_document_ids() -> list[str]:
@@ -44,6 +46,11 @@ def reindex_published_document(doc_id, settings, store, embedder, *, concepts_on
         chunks = session.query(DocumentChunk).filter_by(doc_id=doc_id).order_by(DocumentChunk.chunk_index).all()
         if not generation_id and document.status != "done" and not concepts and not chunks:
             return counts
+        concept_scopes, chunk_scopes = build_record_mail_scopes(
+            fetch_source_trees(session, {doc_id})[doc_id],
+            [dict(source_id=row.source_id, chunk_index=row.chunk_index) for row in concepts],
+            [dict(source_id=row.source_id, chunk_index=row.chunk_index) for row in chunks],
+        )
         if concepts:
             docs = [OkfDocument(
                 filepath=str(settings.okf_dir / doc_id / f"{row.slug}.md"),
@@ -58,7 +65,8 @@ def reindex_published_document(doc_id, settings, store, embedder, *, concepts_on
                 for item in docs
             ])
             store.index_concepts(doc_id, docs, vectors, dev_tags=dev_tags,
-                                 source_locale=document.source_locale, generation_id=generation_id)
+                                 source_locale=document.source_locale, generation_id=generation_id,
+                                 mail_scopes=concept_scopes)
             counts["concepts"] = len(docs)
         if not concepts_only and settings.search_index_chunks_enabled and chunks:
             texts = [row.content or "" for row in chunks]
@@ -72,7 +80,7 @@ def reindex_published_document(doc_id, settings, store, embedder, *, concepts_on
                 doc_id, document.filename, texts, global_tags, vectors,
                 section_titles=titles, dev_tags=dev_tags, source_locale=document.source_locale,
                 source_ids=[row.source_id for row in chunks], generation_id=generation_id,
-                chunk_indices=[row.chunk_index for row in chunks],
+                chunk_indices=[row.chunk_index for row in chunks], mail_scopes=chunk_scopes,
             )
             counts["chunks"] = len(chunks)
         counts["docs"] = 1

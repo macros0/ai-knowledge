@@ -9,6 +9,7 @@ import re
 
 from app.config import Settings, get_settings
 from app.services.fusion import Hit
+from app.services.mail_scope import MailMode, mail_scope_allowed
 from app.services.glossary.matching import (
     exact_excerpt,
     group_form_matches,
@@ -72,9 +73,54 @@ def resolve_branches(
     return SEARCH_MODE_PRESETS.get(preset_name, {"dense", "bm25"})
 
 
+def _block_mail_provenance(primary, hits):
+    fields = ("doc_id", "source_id", "chunk_index", "generation_id", "mail_scope",
+              "_canonical_verified", "point_type", "slug")
+    components = [{key: hit.payload.get(key) for key in fields} for hit in hits]
+    if primary and primary.payload.get("mail_fragment"):
+        components.append(primary.payload.get("_mail_fragment_component") or {})
+    return {
+        "mail_scope": primary.payload.get("mail_scope", "unknown") if primary else "unknown",
+        "generation_id": primary.payload.get("generation_id") if primary else None,
+        "_canonical_verified": bool(primary and primary.payload.get("_canonical_verified") is True),
+        "_mail_components": components,
+        "_mail_fragment_component": primary.payload.get("_mail_fragment_component") if primary else None,
+    }
+
+
+def filter_mail_scope_blocks(blocks: list[dict], *, mail_mode: MailMode) -> list[dict]:
+    """Reject whole strict blocks if any participating identity is unproven."""
+    mail_scope_allowed("unknown", mail_mode)
+    if mail_mode == "all":
+        return blocks
+    allowed = []
+    for block in blocks:
+        components = block.get("_mail_components")
+        if (block.get("_canonical_verified") is not True or not block.get("source_id")
+                or not mail_scope_allowed(block.get("mail_scope", "unknown"), mail_mode)
+                or not isinstance(components, list) or not components):
+            continue
+        if any(not isinstance(c, dict) or c.get("_canonical_verified") is not True
+               or not mail_scope_allowed(c.get("mail_scope", "unknown"), mail_mode)
+               or any(c.get(key) != block.get(key) for key in
+                      ("doc_id", "source_id", "generation_id", "chunk_index")) for c in components):
+            continue
+        if block.get("mail_fragment") and (
+                mail_mode == "exclude" or not block.get("_mail_fragment_component")
+                or block["_mail_fragment_component"] not in components):
+            continue
+        if mail_mode == "exclude" and any(
+            node.get("mail") is True or node.get("kind") == "mail"
+            for node in block.get("source_path") or []
+        ):
+            continue
+        allowed.append(block)
+    return allowed
+
+
 def merge_and_format(
     hits: list[Hit], settings: Settings | None = None, filename_lookup: dict[str, str] | None = None,
-    *, exact_groups: tuple[MatchGroup, ...] = (),
+    *, exact_groups: tuple[MatchGroup, ...] = (), mail_mode: MailMode = "all",
 ) -> list[dict]:
     """Группировка по (doc_id, chunk_index), merge концепт+чанк.
 
@@ -93,6 +139,10 @@ def merge_and_format(
     группу — их узкий контент (дословный контекст якоря) регулярно обгонял
     широкий основной концепт и перехватывал заголовок/цитату [1].
     """
+    mail_scope_allowed("unknown", mail_mode)
+    if mail_mode != "all":
+        hits = [hit for hit in hits if hit.payload.get("_canonical_verified") is True
+                and mail_scope_allowed(hit.payload.get("mail_scope", "unknown"), mail_mode)]
     if settings is None:
         settings = get_settings()
 
@@ -115,11 +165,12 @@ def merge_and_format(
     for hit in hits:
         doc_id = hit.payload.get("doc_id", "")
         chunk_idx = hit.payload.get("chunk_index")
-        key = (doc_id, chunk_idx)
+        key = (doc_id, chunk_idx) if mail_mode == "all" else (doc_id, chunk_idx, hit.payload.get("source_id"))
         groups.setdefault(key, []).append(hit)
 
     merged: list[dict] = []
-    for (doc_id, chunk_idx), group_hits in groups.items():
+    for group_key, group_hits in groups.items():
+        doc_id, chunk_idx = group_key[:2]
 
         chunks_in_group = [h for h in group_hits if h.payload.get("point_type") == CHUNK_TYPE]
         concepts_in_group = [h for h in group_hits if h.payload.get("point_type") == CONCEPT_TYPE]
@@ -213,6 +264,7 @@ def merge_and_format(
 
         merged.append(
             {
+                **_block_mail_provenance(source_hit, group_hits),
                 "title": merged_title,
                 "content": content,
                 # Собственный контент репрезентативного концепта: сырой чанк
@@ -254,6 +306,7 @@ def merge_and_format(
                 continue
             merged.append(
                 {
+                    **_block_mail_provenance(concept, [concept]),
                     "title": concept.payload.get("title", "Без названия"),
                     "content": sibling_content,
                     "tags": sorted(concept.payload.get("tags", [])),
@@ -285,7 +338,7 @@ def merge_and_format(
             continue
         limited.append(block)
         total_chars += len(block['content'])
-    return limited
+    return filter_mail_scope_blocks(limited, mail_mode=mail_mode)
 
 
 # Служебные слова вопроса, бесполезные как маркер выбора блока. В отличие от

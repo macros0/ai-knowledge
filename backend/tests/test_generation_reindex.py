@@ -191,3 +191,19 @@ def test_integrity_reports_active_bundle_drift_and_nested_orphan(rebuild_env):
     result = check_doc("integrity", 2, 1, settings, verify_content=True)
     assert any("chunk_04" in issue for issue in result["issues"])
     assert any("orphan.bin" in issue for issue in result["issues"])
+
+
+def test_reindex_mail_scopes_use_locked_canonical_tree(rebuild_env):
+    from app.services.source_store import replace_sources
+    _settings, _store, run = rebuild_env
+    _published('doc')
+    with session_scope() as session:
+        replace_sources(session, 'doc', [
+            dict(source_id='root', parent_source_id=None),
+            dict(source_id='root/0', parent_source_id='root', kind='mail'),
+            dict(source_id='root/0/0', parent_source_id='root/0'),
+            dict(source_id='root/1', parent_source_id='root'),
+        ])
+    points = run('reindex')
+    assert {p.payload['mail_scope'] for p in points if p.payload['chunk_index'] == 4} == {'mail'}
+    assert {p.payload['mail_scope'] for p in points if p.payload['chunk_index'] == 9} == {'document'}

@@ -55,6 +55,16 @@ def isolated_env(tmp_path, monkeypatch):
     ):
         monkeypatch.setattr(f"{mod}.get_settings", lambda: settings)
 
+    from qdrant_client import QdrantClient
+    from app.services.vector_store import VectorStore
+    def memory_store():
+        store = VectorStore.__new__(VectorStore)
+        store.settings = settings
+        store.client = QdrantClient(":memory:")
+        store.ensure_collection()
+        return store
+    monkeypatch.setattr("app.services.pipeline.VectorStore", memory_store)
+
     # БД уже сконфигурирована автозапускаемой фикстурой _db (conftest.py).
     reg = DocumentRegistry()
     monkeypatch.setattr("app.services.pipeline.get_registry", lambda: reg)
@@ -118,10 +128,11 @@ class TestPartialGenerationRecovery:
         pipeline.settings.dedup_enabled = False
         pipeline.settings.dev_detection_enabled = False
         pipeline.okf_generator.chunk_text = lambda text: ["first chunk", "second chunk"]
-        for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
-            monkeypatch.setattr(pipeline.vector_store, method, lambda *a, **k: None)
-        for method in ("index_concepts", "index_chunks"):
-            monkeypatch.setattr(pipeline.vector_store, method, lambda *a, **k: set())
+        # The publication manifest verifies real deterministic IDs and scope readback.
+        # Keep the external boundary isolated while exercising the actual writers.
+        from qdrant_client import QdrantClient
+        monkeypatch.setattr(pipeline.vector_store, "client", QdrantClient(":memory:"))
+        pipeline.vector_store.ensure_collection()
         return pipeline
 
     def test_automatic_retry_only_repeats_incomplete_chunk(self, isolated_env, monkeypatch):
@@ -378,8 +389,6 @@ class TestPipelineLLMChaos:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -400,7 +409,6 @@ class TestPipelineLLMChaos:
         pipeline = Pipeline()
         pipeline.okf_generator.generate_chunk = always_timeout
         pipeline.vector_store.ensure_collection = lambda: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -451,7 +459,6 @@ class TestPipelineVectorChaos:
         pipeline.vector_store.ensure_collection = lambda: (_ for _ in ()).throw(
             VectorStoreError("Qdrant недоступен", cause=ConnectionRefusedError("refused"))
         )
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
@@ -498,7 +505,6 @@ class TestPipelineFinalizeRetry:
         pipeline.vector_store.index_concepts = lambda *a, **k: (_ for _ in ()).throw(
             VectorStoreError("Qdrant недоступен", cause=ConnectionRefusedError("refused"))
         )
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -520,9 +526,9 @@ class TestPipelineFinalizeRetry:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
+        from app.services.vector_store import VectorStore
+        pipeline.vector_store.index_concepts = lambda *args, **kwargs: VectorStore.index_concepts(pipeline.vector_store, *args, **kwargs)
         pipeline._process(doc_id, src, "test.doc", [], resume=True)
 
         doc = reg.get(doc_id)
@@ -550,7 +556,8 @@ class TestPipelineNoConcepts:
 
         def cap_chunks(*args, **kwargs):
             calls["chunks"] = list(args[2]) if len(args) > 2 else list(kwargs.get("chunk_texts", []))
-            return set()
+            from app.services.vector_store import VectorStore
+            return VectorStore.index_chunks(pipeline.vector_store, *args, **kwargs)
 
         pipeline.vector_store.index_chunks = cap_chunks
         pipeline.vector_store.index_concepts = lambda *a, **k: (_ for _ in ()).throw(
@@ -615,8 +622,6 @@ class TestPipelineNoConcepts:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         gen_quality.drain()  # чистый буфер потока перед прогоном
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
@@ -642,8 +647,6 @@ class TestPipelineNoConcepts:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         gen_quality.drain()
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
@@ -669,8 +672,6 @@ class TestPipelineNoConcepts:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         gen_quality.drain()
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
@@ -686,8 +687,6 @@ class TestPipelineNoConcepts:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -705,8 +704,6 @@ class TestPipelineNoConcepts:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -731,8 +728,6 @@ class TestPipelineNoConcepts:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -759,8 +754,6 @@ class TestPipelineNoConcepts:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         # Dual-write: этот тест проверяет формат .md-бандла, поэтому включаем флаг.
         pipeline.settings.okf_write_bundles = True
@@ -802,8 +795,6 @@ class TestAttachmentTag:
         pipeline.okf_generator.generate_chunk = lambda *args, **kwargs: [_concept()]
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_orphaned_points = lambda *args, **kwargs: None
-        pipeline.vector_store.index_concepts = lambda *args, **kwargs: set()
-        pipeline.vector_store.index_chunks = lambda *args, **kwargs: set()
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
         with session_scope() as session:
             rows = session.query(OkfConcept).filter_by(doc_id=doc_id).order_by(OkfConcept.chunk_index).all()
@@ -819,8 +810,6 @@ class TestAttachmentTag:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
         return pipeline
 
@@ -868,8 +857,6 @@ class TestAttachmentTag:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
         all_tags = self._tags(doc_id)
         assert all_tags and all("attachment" not in tags for tags in all_tags)
@@ -972,8 +959,6 @@ class TestPipelineRegenerate:
         pipeline.okf_generator.generate_chunk = generate
         pipeline.vector_store.delete_document = lambda *a, **k: delete_calls.__setitem__("n", delete_calls["n"] + 1)
         pipeline.vector_store.ensure_collection = lambda: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
 
         pipeline.regenerate(doc_id)
@@ -997,8 +982,6 @@ class TestPipelineRegenerate:
         pipeline.okf_generator.generate_chunk = lambda *a, **k: [_concept()]
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.ensure_collection = lambda: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
 
         pipeline.regenerate(doc_id)
@@ -1041,11 +1024,13 @@ class TestFinalizeDevTagsHealing:
 
         def cap_concepts(*args, **kwargs):
             captured["concepts_dev_tags"] = kwargs.get("dev_tags")
-            return set()
+            from app.services.vector_store import VectorStore
+            return VectorStore.index_concepts(pipeline.vector_store, *args, **kwargs)
 
         def cap_chunks(*args, **kwargs):
             captured["chunks_dev_tags"] = kwargs.get("dev_tags")
-            return set()
+            from app.services.vector_store import VectorStore
+            return VectorStore.index_chunks(pipeline.vector_store, *args, **kwargs)
 
         pipeline.vector_store.index_concepts = cap_concepts
         pipeline.vector_store.index_chunks = cap_chunks
@@ -1073,8 +1058,6 @@ class TestHasDuplicatesFlag:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -1091,8 +1074,6 @@ class TestHasDuplicatesFlag:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
 
         pipeline._process(doc_id, src, "test.doc", [], resume=False)
 
@@ -1110,8 +1091,6 @@ class TestPipelineDbStore:
         pipeline.vector_store.ensure_collection = lambda: None
         pipeline.vector_store.delete_document = lambda *a, **k: None
         pipeline.vector_store.delete_orphaned_points = lambda *a, **k: None
-        pipeline.vector_store.index_concepts = lambda *a, **k: set()
-        pipeline.vector_store.index_chunks = lambda *a, **k: set()
         if attachments is not None:
             monkeypatch.setattr(
                 "app.services.pipeline._collect_attachments", lambda b, d: attachments

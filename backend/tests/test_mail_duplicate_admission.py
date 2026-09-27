@@ -126,8 +126,8 @@ def test_same_msg_standalone_and_inside_docx_keeps_both_document_origins(tmp_pat
     ]
     for method in ("ensure_collection", "delete_document", "delete_orphaned_points"):
         monkeypatch.setattr(pipeline.vector_store, method, lambda *args, **kwargs: None)
-    for method in ("index_concepts", "index_chunks"):
-        monkeypatch.setattr(pipeline.vector_store, method, lambda *args, **kwargs: set())
+    from tests.mail_pipeline_boundary import use_memory_qdrant
+    use_memory_qdrant(pipeline, monkeypatch)
 
     ids = []
     for filename, data in (("direct.msg", payload), ("container.docx", buffer.getvalue())):

@@ -10,7 +10,10 @@ from app.services.chunk_store import replace_chunks
 from app.services.concept_store import replace_concepts
 from app.services.generation_artifacts import load_verified_publication
 from app.services.generation_store import publish_generation
-from app.services.source_store import replace_sources
+from app.services.source_store import replace_sources, fetch_source_trees
+from app.services.mail_scope import build_record_mail_scopes
+from app.services.vector_store import concept_point_id, chunk_point_id
+from app.services.generation_artifacts import GenerationIntegrityError
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,27 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
                 raise GenerationConflict("Canonical document changed before repair publication")
         vector_store.verify_generation_points(doc_id, generation_id, prepared["point_ids"])
         okf_docs = [OkfDocument.model_validate(item) for item in prepared["concepts"]]
+        sources = prepared["sources"]
+        if sources is None:
+            sources = fetch_source_trees(session, {doc_id})[doc_id]
+        concept_scopes, chunk_scopes = build_record_mail_scopes(
+            sources, [item.metadata for item in okf_docs], prepared["chunks"],
+        )
+        concept_mapping = {
+            concept_point_id(doc_id, Path(item.filepath).stem, generation_id=generation_id): scope
+            for item, scope in zip(okf_docs, concept_scopes)
+        }
+        chunk_mapping = {
+            chunk_point_id(doc_id, row["chunk_index"], generation_id=generation_id): scope
+            for row, scope in zip(prepared["chunks"], chunk_scopes)
+        }
+        ids = set(prepared["point_ids"])
+        if (len(ids) != len(prepared["point_ids"]) or len(concept_mapping) != len(okf_docs)
+                or len(chunk_mapping) != len(prepared["chunks"])
+                or ids not in (set(concept_mapping), set(concept_mapping) | set(chunk_mapping))):
+            raise GenerationIntegrityError()
+        expected_scopes = {**concept_mapping, **chunk_mapping}
+        vector_store.patch_mail_scopes({pid: expected_scopes[pid] for pid in ids})
         effects = prepared.get("parse_effects") or {}
         previous_duplicate_ids = set()
         if effects.get("signature"):

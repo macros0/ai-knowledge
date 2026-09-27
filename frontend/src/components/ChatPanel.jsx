@@ -10,6 +10,7 @@ import DevelopmentFilter from "./DevelopmentFilter";
 import ModulePicker from "./ModulePicker";
 import MarkdownViewer from "./MarkdownViewer";
 import { CheckIcon, CopyIcon } from "./icons";
+import { retryMailMode } from "@/lib/chatMailFilter.mjs";
 import { useChat } from "@/context/ChatContext";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
@@ -27,7 +28,7 @@ function getPresetLabel(preset, settings, t) {
 }
 
 export default function ChatPanel() {
-  const { messages, tags, pending, settings, selectedMode, sessionId, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
+  const { messages, tags, pending, settings, selectedMode, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
   const { user } = useAuth();
   const { showToast } = useToast();
   const { t, locale } = useI18n();
@@ -168,17 +169,18 @@ export default function ChatPanel() {
     e.preventDefault();
     const q = query.trim();
     if (!q || pending) return;
+    const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestMode: selectedMode, requestSourceLocale: sourceLocale };
     const uploadHint = resolveUploadHint(effectiveTags);
-    setMessages((m) => [...m, { role: "user", text: q, query: q }]);
+    setMessages((m) => [...m, { role: "user", text: q, query: q, ...requestOptions }]);
     setQuery("");
     setPending(true);
-    setMessages((m) => [...m, { role: "assistant", text: t("chat.thinking"), sources: [] }]);
+    setMessages((m) => [...m, { role: "assistant", text: t("chat.thinking"), sources: [], ...requestOptions }]);
     try {
-      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale, useGlossary);
+      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale, useGlossary, requestOptions.requestMailMode);
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((m) => {
         const copy = [...m];
-        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, requestTags: effectiveTags, requestTopK: selectedTopK, requestMode: selectedMode, requestSourceLocale: sourceLocale };
+        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, ...requestOptions };
         return copy;
       });
     } catch (err) {
@@ -191,7 +193,7 @@ export default function ChatPanel() {
       } else {
         setMessages((m) => {
           const copy = [...m];
-          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q };
+          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q, ...requestOptions };
           return copy;
         });
       }
@@ -203,21 +205,22 @@ export default function ChatPanel() {
   const repeatWithoutGlossary = async (message) => {
     if (pending || !message.query) return;
     const q = message.query;
-    setMessages((items) => [...items, { role: "user", text: q, query: q }]);
+    const requestOptions = { requestMailMode: retryMailMode(message), requestTags: message.requestTags ?? effectiveTags, requestTopK: message.requestTopK ?? selectedTopK, requestMode: message.requestMode ?? selectedMode, requestSourceLocale: message.requestSourceLocale ?? sourceLocale };
+    setMessages((items) => [...items, { role: "user", text: q, query: q, ...requestOptions }]);
     setPending(true);
-    setMessages((items) => [...items, { role: "assistant", text: t("chat.thinking"), sources: [] }]);
+    setMessages((items) => [...items, { role: "assistant", text: t("chat.thinking"), sources: [], ...requestOptions }]);
     try {
-      const resp = await chat(q, message.requestTags ?? effectiveTags, message.requestTopK ?? selectedTopK, message.requestMode ?? selectedMode, sessionId, message.requestSourceLocale ?? sourceLocale, false);
+      const resp = await chat(q, requestOptions.requestTags, requestOptions.requestTopK, requestOptions.requestMode, sessionId, requestOptions.requestSourceLocale, false, requestOptions.requestMailMode);
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((items) => {
         const copy = [...items];
-        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q };
+        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, ...requestOptions };
         return copy;
       });
     } catch (err) {
       setMessages((items) => {
         const copy = [...items];
-        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q };
+        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q, ...requestOptions };
         return copy;
       });
     } finally { setPending(false); }
@@ -423,6 +426,14 @@ export default function ChatPanel() {
           emptyLabel={t("docs.empty")}
           ariaLabel={t("docs.localeFilterAria")}
         />
+        <label htmlFor="chat-mail-mode" className="tag-picker-label">{t("chat.mailModeLabel")}</label>
+        <select id="chat-mail-mode" value={mailMode} onChange={(e) => setMailMode(e.target.value)} aria-describedby="chat-mail-hint chat-mail-unknown-hint">
+          <option value="all">{t("chat.mailModeAll")}</option>
+          <option value="exclude">{t("chat.mailModeExclude")}</option>
+          <option value="only">{t("chat.mailModeOnly")}</option>
+        </select>
+        <span id="chat-mail-hint" className="chat-mail-hint">{t("chat.mailModeHint")}</span>
+        <span id="chat-mail-unknown-hint" className="chat-mail-hint">{mailMode !== "all" ? t("chat.mailModeUnknownHint") : ""}</span>
       </div>
       <form className="chat-form" onSubmit={send}>
         <input

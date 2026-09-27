@@ -444,3 +444,41 @@ class _BatchFailingQdrant:
         first_idx = points[0].payload["chunk_index"]
         if self.fail_from <= first_idx <= self.fail_to:
             _raise_422()
+
+
+def test_startup_chunk_backfill_preserves_canonical_mail_scope(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from qdrant_client import QdrantClient
+    from app.db.models import Document, DocumentChunk, DocumentSource
+    from app.db.session import session_scope
+
+    doc_id = 'feed0123456789ab'
+    with session_scope() as session:
+        session.add(Document(id=doc_id, filename='mixed.docx', status='done'))
+        session.add_all([
+            DocumentSource(doc_id=doc_id, source_id='root', kind='document'),
+            DocumentSource(doc_id=doc_id, source_id='root/0', parent_source_id='root', kind='mail'),
+            DocumentSource(doc_id=doc_id, source_id='root/0/0', parent_source_id='root/0', kind='attachment'),
+        ])
+        for index, source in enumerate(['root', 'root/0/0', None]):
+            session.add(DocumentChunk(doc_id=doc_id, chunk_index=index, source_id=source,
+                                      section_title='topic', content=f'topic {index}'))
+    store, _ = _vs(tmp_path, monkeypatch, records=[])
+    memory = QdrantClient(':memory:')
+    monkeypatch.setattr(store, 'client', memory)
+    store.ensure_collection()
+    embedder = SimpleNamespace(embed_texts=lambda texts: [[1.] + [0.] * 7 for _ in texts])
+    try:
+        assert store.backfill_chunks(embedder) == 3
+        points = memory.retrieve(store.collection, ids=[chunk_point_id(doc_id, i) for i in range(3)])
+        by_index = {point.payload['chunk_index']: point.payload for point in points}
+        assert [by_index[i].get('mail_scope') for i in range(3)] == ['document', 'mail', 'unknown']
+        assert all(point.payload.get('mail_scope_version') == 1 for point in points)
+        assert [by_index[i].get('source_id') for i in range(3)] == ['root', 'root/0/0', None]
+        for mode, expected in [('all', {0, 1, 2}), ('exclude', {0}), ('only', {1})]:
+            hits = store.search_composite(dense_vec=[1.] + [0.] * 7, sparse_vec=None,
+                                          tags=[], branches={'dense'}, top_k=10, mail_mode=mode)
+            assert {hit.payload['chunk_index'] for hit in hits} == expected
+        assert store.backfill_chunks(embedder) == 0
+    finally:
+        memory.close()

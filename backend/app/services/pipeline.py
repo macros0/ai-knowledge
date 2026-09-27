@@ -1013,6 +1013,11 @@ class Pipeline:
         locale_fields = _source_locale_fields(detected_locale, current_source_locale)
         effective_locale = locale_fields.get("source_locale", current_locale)
 
+        from app.services.mail_scope import build_record_mail_scopes
+
+        concept_scopes, chunk_scopes = build_record_mail_scopes(
+            source_rows or [], [doc.metadata for doc in okf_docs], chunk_rows,
+        )
         keep_point_ids: set[str] = set()
         if okf_docs:
             cap = self.settings.okf_max_concept_chars
@@ -1028,7 +1033,7 @@ class Pipeline:
             # Если Qdrant отвалится между upsert и cleanup, новые точки уже на месте.
             concept_point_ids = self.vector_store.index_concepts(
                 doc_id, okf_docs, vectors, dev_tags=dev_tags, source_locale=effective_locale,
-                generation_id=generation_id,
+                generation_id=generation_id, mail_scopes=concept_scopes,
             )
             keep_point_ids = set(concept_point_ids)
 
@@ -1051,7 +1056,7 @@ class Pipeline:
                     section_titles=chunk_section_titles, dev_tags=dev_tags,
                     source_locale=effective_locale,
                     source_ids=[row.get("source_id") for row in chunk_rows],
-                    generation_id=generation_id,
+                    generation_id=generation_id, mail_scopes=chunk_scopes,
                 )
                 keep_point_ids |= chunk_point_ids
                 logger.info("[%s] Проиндексировано %d чанков", doc_id, len(chunk_texts))
