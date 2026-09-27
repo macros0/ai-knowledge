@@ -68,11 +68,22 @@ def probe():
         store.client.delete(store.collection, points_selector=[missing_id], wait=True)
         missing = run_backfill(store, settings)
         assert missing['missing_active_points'] == 1
+        # Startup recovery is also a full writer and must preserve strict scopes.
+        from types import SimpleNamespace
+        from app.services.vector_store import chunk_point_id
+        mail_id = chunk_point_id('ab12cd34ef56ab78', 0)
+        store.client.delete(store.collection, points_selector=[mail_id], wait=True)
+        assert store.backfill_chunks(SimpleNamespace(embed_texts=lambda texts: [[1., 0.] for _ in texts])) == 2
+        restored = store.client.retrieve(store.collection, [missing_id, mail_id])
+        assert {r.payload['chunk_index']: (r.payload['mail_scope'], r.payload['mail_scope_version']) for r in restored} == {40: ('document', 1), 0: ('mail', 1)}
+        for mode, point in [('exclude', missing_id), ('only', mail_id)]:
+            rows, _ = store.client.scroll(store.collection, scroll_filter=store._build_search_filter([], mail_mode=mode), limit=100)
+            assert str(point) in {str(r.id) for r in rows}
         # Stale point search survives but SQL hydration discards missing identity.
         stale = Hit('stale', 1., dict(point_type='chunk', doc_id='ab12cd34ef56ab78', chunk_index=999, content='FORBIDDEN', mail_scope='document', mail_scope_version=1))
         assert load_visible_retrieval_hits([stale], mail_mode='exclude')[0] == []
     return dict(status='PASS', matrix_checks=checks, forbidden_markers=0, preserved_vectors=True,
-                migration_idempotent=True, missing_point_audit=True)
+                migration_idempotent=True, missing_point_audit=True, startup_writer=True)
 
 
 if __name__ == '__main__':

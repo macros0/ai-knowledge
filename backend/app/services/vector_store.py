@@ -1233,6 +1233,8 @@ class VectorStore:
         from app.db.models import Document, DocumentChunk
         from app.db.session import session_scope
         from app.services.development_registry import get_development_registry
+        from app.services.mail_scope import build_record_mail_scopes
+        from app.services.source_store import fetch_source_trees
 
         dev_reg = get_development_registry()
 
@@ -1253,6 +1255,7 @@ class VectorStore:
                     Document.deleted_at.is_(None)
                 )
             ).all()
+            source_trees = fetch_source_trees(s, {doc_id for doc_id, _, _ in docs})
             for doc_id, filename, dev_id in docs:
                 chunks = (
                     s.query(DocumentChunk)
@@ -1264,6 +1267,10 @@ class VectorStore:
                     continue
                 doc = s.get(Document, doc_id)
                 global_tags = [t.tag_rel.canonical_text for t in (doc.tags_rel or [])]
+                _, chunk_scopes = build_record_mail_scopes(
+                    source_trees[doc_id], [],
+                    [{"chunk_index": c.chunk_index, "source_id": c.source_id} for c in chunks],
+                )
                 docs_data.append(
                     {
                         "doc_id": doc_id,
@@ -1272,6 +1279,8 @@ class VectorStore:
                         "dev_id": dev_id,
                         "global_tags": global_tags,
                         "source_locale": doc.source_locale,
+                        "mail_scopes": chunk_scopes,
+                        "source_ids": [c.source_id for c in chunks],
                         "chunks": [
                             (c.chunk_index, c.section_title or "", c.content or "")
                             for c in chunks
@@ -1314,6 +1323,9 @@ class VectorStore:
                             "tags": d["global_tags"],
                             "dev_tags": dev_tags,
                             "source_locale": d["source_locale"],
+                            "source_id": d["source_ids"][pos],
+                            "mail_scope": d["mail_scopes"][pos],
+                            "mail_scope_version": MAIL_SCOPE_VERSION,
                         },
                     )
                 )
