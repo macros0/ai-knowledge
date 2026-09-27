@@ -33,7 +33,7 @@ from app.services.fusion import Hit
 from app.services.generation_search import generation_exclusions
 from app.services.generation_store import lock_generation_read
 from app.services.sparse import to_sparse_vector
-from app.services.mail_scope import MAIL_SCOPE_VERSION, MailScope
+from app.services.mail_scope import MAIL_SCOPE_VERSION, MailScope, MailMode, mail_scope_allowed
 from app.services.storage import StorageFullError, is_storage_full_text
 
 logger = logging.getLogger(__name__)
@@ -953,7 +953,7 @@ class VectorStore:
         ]
 
     def _graph_expansion(
-        self, ranked_lists: list[tuple[list[Hit], float]]
+        self, ranked_lists: list[tuple[list[Hit], float]], *, search_filter: qm.Filter
     ) -> list[Hit]:
         """Graph expansion: достаёт соседей по relations концептов.
 
@@ -972,8 +972,7 @@ class VectorStore:
         if not relations_set:
             return []
         slug_filter = qm.Filter(
-            must=[qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))],
-            must_not=self._build_search_filter(None).must_not,
+            must=[search_filter, qm.FieldCondition(key="slug", match=qm.MatchAny(any=list(relations_set)))],
         )
         records, _ = _qdrant_call(
             self.client.scroll,
@@ -998,6 +997,7 @@ class VectorStore:
         top_k: int,
         source_locales: list[str] | None = None,
         include_unknown_source_locale: bool = False,
+        mail_mode: MailMode = "all",
     ) -> list[Hit]:
         """Композитный поиск: запускает включённые ветки, сливает через RRF.
 
@@ -1016,7 +1016,7 @@ class VectorStore:
         """
         search_filter = self._build_search_filter(
             tags, source_locales=source_locales,
-            include_unknown=include_unknown_source_locale,
+            include_unknown=include_unknown_source_locale, mail_mode=mail_mode,
         )
         per_branch = self.settings.search_per_branch_top_k
         k = self.settings.search_rrf_k
@@ -1032,7 +1032,7 @@ class VectorStore:
             ranked_lists.append((hits, self.settings.search_rrf_bm25_weight))
 
         if self.settings.search_graph_expansion_enabled:
-            graph_hits = self._graph_expansion(ranked_lists)
+            graph_hits = self._graph_expansion(ranked_lists, search_filter=search_filter)
             if graph_hits:
                 ranked_lists.append((graph_hits, self.settings.search_rrf_graph_expansion_weight))
 
@@ -1046,6 +1046,7 @@ class VectorStore:
         tags: list[str] | None,
         source_locales: list[str] | None = None,
         include_unknown: bool = False,
+        *, mail_mode: MailMode = "all",
     ) -> qm.Filter:
         """Жёсткий pre-filter для dense и bm25 веток + исключение корзины.
 
@@ -1056,8 +1057,15 @@ class VectorStore:
         deleted` (Этап 4a.2) — единая обёртка, чтобы удалённые точки не попадали
         в поиск из любого нового сценария.
         """
+        mail_scope_allowed("unknown", mail_mode)  # validate even on an empty request
         must_not = [*(_not_deleted().must_not or []), *generation_exclusions()]
         must: list = []
+        if mail_mode != "all":
+            must.extend([
+                qm.FieldCondition(key="mail_scope", match=qm.MatchValue(
+                    value="mail" if mail_mode == "only" else "document")),
+                qm.FieldCondition(key="mail_scope_version", match=qm.MatchValue(value=MAIL_SCOPE_VERSION)),
+            ])
         if tags:
             must.append(_tag_match_filter(tags))
         if source_locales or include_unknown:

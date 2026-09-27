@@ -121,10 +121,10 @@ def test_graph_expansion_cannot_reveal_unpublished_related_concept(store):
         DOC_ID, [_concept("related")], [[1.0, 0.0]], generation_id=generation_id,
     )
     seed = Hit("seed", 1.0, {"point_type": "concept", "relations": ["related"]})
-    before = store._graph_expansion([([seed], 1.0)])
+    before = store._graph_expansion([([seed], 1.0)], search_filter=store._build_search_filter(None))
     assert {hit.point_id for hit in before} == old
     _publish(generation_id)
-    after = store._graph_expansion([([seed], 1.0)])
+    after = store._graph_expansion([([seed], 1.0)], search_filter=store._build_search_filter(None))
     assert {hit.point_id for hit in after} == new
 
 
