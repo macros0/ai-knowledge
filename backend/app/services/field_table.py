@@ -840,6 +840,31 @@ def _dedup_key(c) -> tuple[str, str]:
     return (c.title.strip().lower(), c.content)
 
 
+def _large_record_title_column(block: RawTableBlock) -> int | None:
+    """Keep very large, record-like tables out of a single LLM request.
+
+    The classifier sees only five rows and can label a directory as a data set.
+    For a large table with a mostly unique textual column, every row is still
+    a useful searchable record. Extracting it deterministically preserves all
+    rows regardless of the model's context window or classification variance.
+    """
+    rows = block.raw_rows
+    if len(rows) < 100:
+        return None
+    limit = get_settings().okf_max_chunk_chars
+    if sum(len(row) + 1 for row in rows) <= 4 * limit:
+        return None
+    sample = [_parse_row_cells(row) for row in rows[:200]]
+    count = len(sample)
+    for column in range(len(block.header)):
+        values = [cells[column].strip().casefold() if column < len(cells) else ""
+                  for cells in sample]
+        textual = sum(any(char.isalpha() for char in value) for value in values)
+        if textual >= 0.8 * count and len(set(values)) >= 0.8 * count:
+            return column
+    return None
+
+
 def _extract_with_llm_classify(
     chunk: str, chunk_index: int | None, llm: _ClassifierLLM, doc_id: str
 ) -> tuple[list[Concept], str]:
@@ -852,31 +877,57 @@ def _extract_with_llm_classify(
     codes = [_find_message_code(lines, b.start) for b in blocks]
     seen_keys: set[tuple[str, str]] = set()  # дедуп по (title, content)
     extracted_blocks: list[tuple[RawTableBlock, str]] = []
+
+    def add_row_concepts(
+        block: RawTableBlock, classification: TableClassification, code: str | None,
+        *, preserve_duplicate_rows: bool = False,
+    ) -> None:
+        for concept in build_row_concepts(block, classification, code, lines=lines):
+            key = _dedup_key(concept)
+            if key in seen_keys and not (preserve_duplicate_rows and "table-row" in concept.tags):
+                logger.debug("Дедуп: пропущен дубликат title=%r", concept.title)
+                continue
+            seen_keys.add(key)
+            concepts.append(concept)
+        extracted_blocks.append((block, f"[Таблица-перечень извлечена программно: {len(block.raw_rows)} строк]"))
+
     for bi, b in enumerate(blocks):
         code = codes[bi]
+        record_col = _large_record_title_column(b)
         try:
             cls = _llm_classify_table(b.header, b.raw_rows, llm, doc_id, chunk_index or 0)
+            if (not cls.concept_per_row or cls.extraction_mode == "whole") and record_col is not None:
+                logger.warning(
+                    "[%s] Чанк %s: большая таблица (%d строк) извлекается построчно, "
+                    "чтобы сохранить данные при ограниченном контексте LLM",
+                    doc_id, chunk_index, len(b.raw_rows),
+                )
+                cls = TableClassification(
+                    concept_per_row=True,
+                    title_col=record_col,
+                    description_cols=cls.description_cols,
+                    concept_type=cls.concept_type,
+                    extraction_mode="per_row",
+                )
             if cls.concept_per_row:
-                row_concepts = build_row_concepts(b, cls, code, lines=lines)
-                # дедуп по (title, content): разные строки перечня с одинаковым
-                # title (неуникальная title-колонка) не являются дублями
-                for c in row_concepts:
-                    key = _dedup_key(c)
-                    if key in seen_keys:
-                        logger.debug("Дедуп: пропущен дубликат title=%r", c.title)
-                        continue
-                    seen_keys.add(key)
-                    concepts.append(c)
-                extracted_blocks.append((b, f"[Таблица-перечень извлечена программно: {len(b.raw_rows)} строк]"))
+                add_row_concepts(b, cls, code, preserve_duplicate_rows=record_col is not None)
             # если concept_per_row=False — таблица остаётся LLM (не извлекаем)
         except Exception as e:
-            logger.warning("LLM-классификатор ошибся (%s), fallback на XML-эвристику для таблицы чанка %s", e, chunk_index)
+            logger.warning("LLM-классификатор ошибся (%s), fallback для таблицы чанка %s", e, chunk_index)
             from app.services import gen_quality
 
             gen_quality.record(
                 gen_quality.CLASSIFIER_FALLBACK,
                 f"chunk {chunk_index}: LLM-классификатор таблиц упал ({e})",
             )
+            if record_col is not None:
+                add_row_concepts(b, TableClassification(
+                    concept_per_row=True,
+                    title_col=record_col,
+                    description_cols=[i for i in range(len(b.header)) if i != record_col],
+                    extraction_mode="per_row",
+                ), code, preserve_duplicate_rows=True)
+                continue
             # fallback: проверить как таблицу полей XML
             if _is_field_table(b.header, b.raw_rows):
                 rows: list[FieldRow] = []

@@ -324,6 +324,7 @@
   "apiError.file_too_large": [],
   "apiError.forbidden": [],
   "apiError.generation_rate_limited": [],
+  "apiError.generation_context_exceeded": [],
   "apiError.generation_retrying": [],
   "apiError.generation_timeout": [],
   "apiError.glossary_alias_conflict": [],

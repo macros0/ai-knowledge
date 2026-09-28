@@ -2,6 +2,7 @@
 import logging
 import re
 import unicodedata
+import litellm
 from datetime import date
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Protocol
@@ -209,15 +210,23 @@ class OKFGenerator:
         try:
             raw = self.llm.chat_json(system, prompt, doc_id=doc_id, chunk_idx=index)
             return _normalize(raw)
-        except LLMTruncationError:
+        except (LLMTruncationError, litellm.ContextWindowExceededError) as exc:
+            context_overflow = isinstance(exc, litellm.ContextWindowExceededError)
             halves: list[str] = []
-            if self.settings.okf_split_on_truncation and depth < self.settings.okf_split_max_depth:
+            # Context rejection is independent of the configured output-truncation
+            # depth. Allow enough balanced splits for even very large tables.
+            split_limit = (
+                max(32, self.settings.okf_split_max_depth)
+                if context_overflow else self.settings.okf_split_max_depth
+            )
+            if (context_overflow or self.settings.okf_split_on_truncation) and depth < split_limit:
                 halves = _split_in_half(chunk)
             if len(halves) >= 2 and all(len(h) < len(chunk) for h in halves):
                 logger.warning(
-                    "[%s] Чанк %s: JSON обрезан, сплит чанка пополам (depth %d, %d+%d символов)",
+                    "[%s] Чанк %s: %s, сплит чанка пополам (depth %d, %d+%d символов)",
                     doc_id,
                     index,
+                    "контекст LLM переполнен" if context_overflow else "JSON обрезан",
                     depth + 1,
                     len(halves[0]),
                     len(halves[1]),
@@ -226,7 +235,7 @@ class OKFGenerator:
                 for half in halves:
                     result.extend(self._generate_chunk_recursive(half, filename, index, total, doc_id, depth + 1))
                 return result
-            if self.settings.okf_salvage_truncated:
+            if not context_overflow and self.settings.okf_salvage_truncated:
                 logger.warning(
                     "[%s] Чанк %s: сплит невозможен/исчерпан, спасаю частичный результат (данные неполные)",
                     doc_id,
@@ -476,17 +485,12 @@ def _chunk_text(text: str, max_chars: int) -> list[str]:
 
 
 def _chunk_groups(unit_lens: list[int], max_chars: int) -> list[list[int]]:
-    """Группировка индексов юнитов в чанки — та же арифметика, что в _chunk_text.
-
-    Вынесена отдельно, чтобы attachment_shares строил доли ровно по тем же
-    границам чанков, что и _chunk_text (условие переполнения `+1`, аккумуляция
-    длины `+2` на разделитель «\\n\\n» — байт-в-байт исходная логика).
-    """
+    """Группировка индексов с учётом двухсимвольного разделителя чанков."""
     groups: list[list[int]] = []
     current: list[int] = []
     cur_len = 0
     for i, ulen in enumerate(unit_lens):
-        if current and cur_len + ulen + 1 > max_chars:
+        if current and cur_len + ulen + 2 > max_chars:
             groups.append(current)
             current = []
             cur_len = 0
@@ -538,17 +542,29 @@ def _split_in_half(text: str) -> list[str]:
 
 
 def _split_table_rows(text: str) -> list[str]:
-    """Split an isolated table, preserving complete rows and both header lines."""
+    """Split one table by complete rows, repeating its heading and header."""
     from app.services.field_table import _is_separator_row, _is_table_row
 
-    lines = text.strip().splitlines()
-    if (len(lines) < 4 or not all(_is_table_row(line) for line in lines)
-            or not _is_separator_row(lines[1])):
+    lines = text.strip().split("\n")
+    table_start = next((i for i in range(len(lines) - 1)
+                        if _is_table_row(lines[i]) and _is_separator_row(lines[i + 1])), None)
+    if table_start is None or len(lines) - table_start < 4:
         return [text]
-    # Multiple headers in one block are not one table; keep that block intact.
-    if any(_is_separator_row(line) for line in lines[2:]):
+    rows: list[str] = []
+    cursor = table_start + 2
+    while cursor < len(lines):
+        if not lines[cursor].lstrip().startswith("|") or _is_separator_row(lines[cursor]):
+            return [text]
+        row_lines = [lines[cursor]]
+        cursor += 1
+        while not row_lines[-1].rstrip().endswith("|"):
+            if cursor >= len(lines) or lines[cursor].lstrip().startswith("|"):
+                return [text]
+            row_lines.append(lines[cursor])
+            cursor += 1
+        rows.append("\n".join(row_lines))
+    if len(rows) < 2:
         return [text]
-    rows = lines[2:]
     target = sum(len(row) + 1 for row in rows) / 2
     size = 0
     cut = 1
@@ -557,7 +573,7 @@ def _split_table_rows(text: str) -> list[str]:
         cut = index
         if size >= target:
             break
-    header = lines[:2]
+    header = lines[:table_start + 2]
     parts = ["\n".join(header + rows[:cut]), "\n".join(header + rows[cut:])]
     return parts if all(0 < len(part) < len(text) for part in parts) else [text]
 

@@ -20,6 +20,16 @@ from app.config import Settings
 ROLE_GROUPS = {"KB_Viewer": "viewer", "KB_Admin": "admin"}
 
 
+def test_context_window_exceeded_has_actionable_processing_code():
+    import litellm
+    from app.services.errors import processing_error_code
+
+    exc = litellm.ContextWindowExceededError(
+        "provider diagnostic", model="test-model", llm_provider="openai",
+    )
+    assert processing_error_code(exc) == "generation_context_exceeded"
+
+
 def _raise_too_large(*args, **kwargs):
     from app import error_codes as codes
     from app.services.errors import DomainError

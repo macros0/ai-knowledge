@@ -505,6 +505,7 @@ class TestDedupByKeyNotTitle:
             assert f"| Номер ДП | {dp} |" in joined, f"ДП {dp} потерян"
         assert "Таблица-перечень извлечена программно: 5 строк" in remainder
 
+
     def test_identical_full_duplicates_collapsed(self, tmp_path, monkeypatch):
         """Идентичные строки (title+content) — настоящий дубль, схлопывается."""
         table = """# Справочник ДП
@@ -522,6 +523,84 @@ class TestDedupByKeyNotTitle:
         rows = [c for c in concepts if "table-row" in (c.tags or [])]
         # 6 строк данных, из них одна точная копия другой → 5 концептов
         assert len(rows) == 5, f"дубликат не схлопнулся: {len(rows)}"
+
+
+def test_large_directory_preserves_rows_when_llm_classifies_it_as_whole(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "okf_field_table_min_rows", 5)
+    monkeypatch.setattr(settings, "okf_max_chunk_chars", 180)
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    rows = [f"| Person {i:03d} | {i:03d} |" for i in range(120)]
+    table = "\n".join(["| Person | Code |", "|---|---|", *rows])
+    llm = FakeClassifierLLM([{
+        "concept_per_row": False, "title_col": 0, "description_cols": [1],
+        "concept_type": "reference", "extraction_mode": "whole",
+    }])
+    concepts, remainder = extract_table_concepts(
+        table, chunk_index=1, llm=llm, use_llm_classify=True,
+    )
+    row_concepts = [c for c in concepts if "table-row" in c.tags]
+    assert len(row_concepts) == len(rows)
+    assert [c.title for c in row_concepts] == [f"Person {i:03d}" for i in range(120)]
+    assert "120 строк" in remainder
+
+
+def test_large_numeric_dataset_remains_whole_after_classification(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "okf_field_table_min_rows", 5)
+    monkeypatch.setattr(settings, "okf_max_chunk_chars", 180)
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    rows = [f"| {i:03d} | {i * 10} |" for i in range(120)]
+    table = "\n".join(["| Date | Amount |", "|---|---|", *rows])
+    llm = FakeClassifierLLM([{
+        "concept_per_row": False, "title_col": 0, "description_cols": [1],
+        "concept_type": "reference", "extraction_mode": "whole",
+    }])
+    concepts, remainder = extract_table_concepts(
+        table, chunk_index=1, llm=llm, use_llm_classify=True,
+    )
+    assert concepts == []
+    assert remainder == table
+
+
+def test_large_directory_preserves_rows_when_classifier_fails(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "okf_field_table_min_rows", 5)
+    monkeypatch.setattr(settings, "okf_max_chunk_chars", 180)
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    rows = [f"| Person {i:03d} | {i:03d} |" for i in range(120)]
+    table = "\n".join(["| Person | Code |", "|---|---|", *rows])
+
+    class FailingClassifier:
+        def chat_json(self, *args, **kwargs):
+            raise RuntimeError("classifier unavailable")
+
+    concepts, remainder = extract_table_concepts(
+        table, chunk_index=1, llm=FailingClassifier(), use_llm_classify=True,
+    )
+    row_concepts = [c for c in concepts if "table-row" in c.tags]
+    assert len(row_concepts) == len(rows)
+    assert "120 строк" in remainder
+
+
+def test_large_directory_override_keeps_repeated_rows(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "okf_field_table_min_rows", 5)
+    monkeypatch.setattr(settings, "okf_max_chunk_chars", 180)
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    rows = [f"| Person {i:03d} | {i:03d} |" for i in range(100)]
+    rows += rows[:20]
+    table = "\n".join(["| Person | Code |", "|---|---|", *rows])
+    llm = FakeClassifierLLM([{
+        "concept_per_row": False, "title_col": 0, "description_cols": [1],
+        "concept_type": "reference", "extraction_mode": "whole",
+    }])
+    concepts, _ = extract_table_concepts(
+        table, chunk_index=1, llm=llm, use_llm_classify=True,
+    )
+    row_concepts = [c for c in concepts if "table-row" in c.tags]
+    assert len(row_concepts) == len(rows)
+    assert [c.title for c in row_concepts][-20:] == [f"Person {i:03d}" for i in range(20)]
 
 
 class TestClassifierNoneTolerance:

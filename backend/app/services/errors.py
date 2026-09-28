@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import grpc
 import httpx
+import litellm
 
 from app import error_codes as codes
 
@@ -40,6 +41,8 @@ def public_error_code(exc: Exception) -> str:
             return codes.PARSER_FAILED
         if isinstance(current, DomainError):
             return current.code
+        if isinstance(current, litellm.ContextWindowExceededError):
+            return codes.GENERATION_CONTEXT_EXCEEDED
         if isinstance(current, (TimeoutError, httpx.TimeoutException)):
             return codes.TIMEOUT
         if isinstance(current, grpc.RpcError) and callable(getattr(current, "code", None)):

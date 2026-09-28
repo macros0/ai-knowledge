@@ -63,6 +63,7 @@ JOB_INTERRUPTED = "job_interrupted"
 GENERATION_RETRYING = "generation_retrying"
 GENERATION_TIMEOUT = "generation_timeout"
 GENERATION_RATE_LIMITED = "generation_rate_limited"
+GENERATION_CONTEXT_EXCEEDED = "generation_context_exceeded"
 PROCESSING_UNAVAILABLE = "processing_unavailable"
 
 # --- Доменные правила (коды для DomainError сервисного слоя) ---

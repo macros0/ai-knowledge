@@ -922,6 +922,7 @@
   "apiError.operator_rollback": "The export was cancelled by an administrator. Start a new export if needed.",
   "apiError.internal_error": "An internal error occurred. Please contact technical support.",
   "apiError.dependency_unavailable": "A required service is temporarily unavailable. Please try again later.",
+  "apiError.generation_context_exceeded": "A document segment exceeds the model's context window. Processing is paused; ask an administrator to reduce the segment or select a model with a larger context window.",
   "apiError.service.llm": "The generation service is temporarily unavailable. Please try again later.",
   "apiError.service.ollama": "The text processing service is temporarily unavailable. Please try again later.",
   "apiError.service.qdrant": "Knowledge base search is temporarily unavailable. Please try again later.",

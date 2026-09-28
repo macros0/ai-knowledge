@@ -267,6 +267,44 @@ class TestChunkText:
         chunks = _chunk_text(text, 200)
         assert any(c.startswith("| a | b |") and c.rstrip().endswith("| 1 | 2 |") for c in chunks)
 
+    def test_oversized_table_stays_atomic_until_classification(self):
+        header = "| Person | Code |"
+        separator = "|---|---|"
+        rows = [f"| Person {i:03d} | {i:03d} |" for i in range(80)]
+        chunks = _chunk_text("\n".join([header, separator, *rows]), 180)
+        assert chunks == ["\n".join([header, separator, *rows])]
+
+    def test_context_split_with_attached_heading_preserves_all_table_rows(self):
+        from app.services.okf_generator import _split_in_half
+
+        header = "| Person | Code |"
+        separator = "|---|---|"
+        rows = [f"| Person {i:03d} | {i:03d} |" for i in range(60)]
+        text = "## Employees\n" + "\n".join([header, separator, *rows])
+        halves = _split_in_half(text)
+        assert len(halves) == 2
+        assert all(part.startswith("## Employees\n" + header + "\n" + separator) for part in halves)
+        assert [line for part in halves for line in part.splitlines() if line in rows] == rows
+
+    def test_context_split_keeps_multiline_cells_together(self):
+        from app.services.okf_generator import _split_in_half
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from app.services.field_table import detect_tables
+
+        rows = [f"| Person {i:03d} | first line\nsecond line {i:03d} |" for i in range(30)]
+        text = "\n".join(["| Person | Notes |", "|---|---|", *rows])
+        chunks = _split_in_half(text)
+        assert len(chunks) == 2
+        with patch("app.services.field_table.get_settings", return_value=SimpleNamespace(
+            okf_field_table_min_rows=1,
+        )):
+            assert [row for chunk in chunks for block in detect_tables(chunk)
+                    for row in block.raw_rows] == rows
+
+    def test_chunk_join_separator_counts_toward_limit(self):
+        assert _chunk_text("aaaa\n\nbbbb", 9) == ["aaaa", "bbbb"]
+
 
 class TestAttachmentShares:
     """attachment_shares — доля символов вложения в каждом чанке (программный тег)."""
@@ -592,6 +630,36 @@ class TestGenerateChunkTruncation:
             gen.settings = settings
         return gen
 
+    def test_large_table_is_classified_once_before_context_splitting(self, tmp_path):
+        from unittest.mock import patch
+        from app.config import Settings
+
+        class RowTableLLM:
+            def __init__(self):
+                self.classifier_calls = 0
+
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0,
+                          salvage_truncated=False, single_object=False):
+                if single_object:
+                    self.classifier_calls += 1
+                    return {"concept_per_row": True, "title_col": 0,
+                            "description_cols": [1], "concept_type": "reference",
+                            "extraction_mode": "per_row"}
+                return []
+
+        settings = Settings(data_dir=tmp_path, okf_max_chunk_chars=180,
+                            okf_table_llm_classify=True, okf_field_table_min_rows=1)
+        llm = RowTableLLM()
+        gen = self._make_gen(tmp_path, llm, settings=settings)
+        rows = [f"| Unique Person {i:03d} | {i:03d} |" for i in range(80)]
+        table = "\n".join(["| Unique Person | Code |", "|---|---|", *rows])
+        with patch("app.services.field_table.get_settings", return_value=settings):
+            concepts = gen.generate(table, "source.docx")
+        assert llm.classifier_calls == 1
+        row_concepts = [c for c in concepts if "table-row" in c.tags]
+        assert len(row_concepts) == len(rows)
+        assert [c.title for c in row_concepts] == [f"Unique Person {i:03d}" for i in range(80)]
+
     def test_split_on_truncation_merges_halves(self, tmp_path):
         class SplittingLLM:
             def __init__(self):
@@ -612,6 +680,74 @@ class TestGenerateChunkTruncation:
         assert titles == ["вторая концепт", "первая концепт"]
         assert len(llm.calls) == 3  # целый чанк + две половинки
         assert llm.calls[0][2] is False and llm.calls[1][2] is False and llm.calls[2][2] is False
+
+    @pytest.mark.parametrize("provider", ["openai", "anthropic", "gemini"])
+    def test_context_rejection_splits_table_rows_without_salvage(self, tmp_path, provider):
+        import litellm
+        from app.config import Settings
+
+        class LimitedContextLLM:
+            def __init__(self):
+                self.calls = []
+
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+                self.calls.append(user)
+                rows = [line for line in user.splitlines() if line.startswith("| Person ") and line[9:10].isdigit()]
+                if len(rows) > 6:
+                    raise litellm.ContextWindowExceededError(
+                        "context exceeded", model="test-model", llm_provider=provider,
+                    )
+                return [_concept_dict(row.split("|")[1].strip()) for row in rows]
+
+        llm = LimitedContextLLM()
+        gen = self._make_gen(tmp_path, llm, settings=Settings(
+            okf_table_llm_classify=False, okf_field_table_min_rows=0,
+        ))
+        rows = [f"| Person {i:02d} | {i:02d} |" for i in range(12)]
+        table = "\n".join(["| Person | Code |", "|---|---|", *rows])
+        concepts = gen.generate_chunk(table, "source.docx", 1, 1)
+        assert [concept.title for concept in concepts] == [f"Person {i:02d}" for i in range(12)]
+        assert len(llm.calls) == 3
+
+    def test_context_rejection_splits_multiline_table_rows(self, tmp_path):
+        import litellm
+        from app.config import Settings
+
+        class LimitedContextLLM:
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+                rows = [line for line in user.splitlines()
+                        if line.startswith("| Person ") and line[9:10].isdigit()]
+                if len(rows) > 3:
+                    raise litellm.ContextWindowExceededError(
+                        "context exceeded", model="test-model", llm_provider="openai",
+                    )
+                return [_concept_dict(row.split("|")[1].strip()) for row in rows]
+
+        gen = self._make_gen(tmp_path, LimitedContextLLM(), settings=Settings(
+            okf_table_llm_classify=False, okf_field_table_min_rows=0,
+        ))
+        rows = [f"| Person {i:02d} | first line\nsecond line {i:02d} |" for i in range(6)]
+        table = "\n".join(["| Person | Notes |", "|---|---|", *rows])
+        concepts = gen.generate_chunk(table, "source.docx", 1, 1)
+        assert [concept.title for concept in concepts] == [f"Person {i:02d}" for i in range(6)]
+
+    def test_context_rejection_can_split_beyond_twelve_levels(self, tmp_path):
+        import litellm
+
+        class OneRowLLM:
+            def chat_json(self, system, user, doc_id="unknown", chunk_idx=0, salvage_truncated=False):
+                rows = [line for line in user.splitlines()
+                        if line.startswith("| Person ") and line[9:10].isdigit()]
+                if len(rows) > 1:
+                    raise litellm.ContextWindowExceededError(
+                        "context exceeded", model="test-model", llm_provider="openai",
+                    )
+                return [_concept_dict(row.split("|")[1].strip()) for row in rows]
+
+        gen = self._make_gen(tmp_path, OneRowLLM())
+        table = "| Person | Code |\n|---|---|\n| Person 00 | 00 |\n| Person 01 | 01 |"
+        concepts = gen._generate_chunk_recursive(table, "source.docx", 1, 1, "test", depth=12)
+        assert [c.title for c in concepts] == ["Person 00", "Person 01"]
 
     def test_depth_limit_reached_triggers_salvage(self, tmp_path):
         from app.config import Settings

@@ -220,7 +220,7 @@ test("recoverable errors explain the next action without sending users to suppor
   for (const locale of ["ru", "en"]) {
     const translate = createTranslator(locale).t;
     for (const code of ["server_restarted", "job_interrupted", "generation_retrying",
-      "generation_timeout", "generation_rate_limited", "processing_unavailable",
+      "generation_timeout", "generation_rate_limited", "generation_context_exceeded", "processing_unavailable",
       "dependency_unavailable", "timeout", "rate_limited", "operator_rollback"]) {
       const text = friendlyApiError(new ApiError("private provider diagnostic", { code }), translate);
       assert.equal(text, translate(`apiError.${code}`));
