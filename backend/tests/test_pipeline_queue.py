@@ -14,7 +14,7 @@ from app.services.registry import DocumentRegistry
 def queue_pipeline(tmp_path):
     p = Pipeline.__new__(Pipeline)
     p.registry = DocumentRegistry()
-    p.settings = SimpleNamespace(uploads_dir=tmp_path)
+    p.settings = SimpleNamespace(uploads_dir=tmp_path, pipeline_max_workers=1, pipeline_max_pending=1)
     p._threads = {}
     p._abort_events = {}
     p._start_lock = threading.Lock()
@@ -56,6 +56,41 @@ def test_resume_waiting_for_worker_is_queued_and_preserves_progress(queue_pipeli
     task.result(timeout=10)
     assert processed == [("resume-me", True)]
     assert "resume-me" not in p._threads
+
+
+def test_queue_status_counts_admitted_work_and_frees_capacity(queue_pipeline):
+    p = queue_pipeline
+    assert p.queue_status() == {
+        "processing": 0, "processing_limit": 1,
+        "queued": 0, "queue_limit": 1, "available": 2,
+    }
+    paused_document(p, "first")
+    paused_document(p, "second")
+    paused_document(p, "third")
+    started = threading.Event()
+    release_processing = threading.Event()
+    def process(*_args, **_kwargs):
+        started.set()
+        assert release_processing.wait(timeout=10)
+    p._process = process
+    p._test_release_worker.set()
+    try:
+        p.resume("first")
+        assert started.wait(timeout=10)
+        p.resume("second")
+        assert p.queue_status() == {
+            "processing": 1, "processing_limit": 1,
+            "queued": 1, "queue_limit": 1, "available": 0,
+        }
+        with pytest.raises(DomainError) as exc:
+            p.resume("third")
+        assert exc.value.code == "queue_overloaded"
+    finally:
+        tasks = list(p._threads.values())
+        release_processing.set()
+        for task in tasks:
+            task.result(timeout=10)
+    assert p.queue_status()["available"] == 2
 
 
 def test_full_queue_keeps_paused_document_resumable(queue_pipeline):

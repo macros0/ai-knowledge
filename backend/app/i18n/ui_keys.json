@@ -809,6 +809,15 @@
     "total"
   ],
   "docs.progressQueued": [],
+  "docs.queue.full": [],
+  "docs.queue.loading": [],
+  "docs.queue.summary": [
+    "processing",
+    "processingLimit",
+    "queueLimit",
+    "queued"
+  ],
+  "docs.queue.unknown": [],
   "docs.quickSelect": [],
   "docs.regenerateError": [
     "message"

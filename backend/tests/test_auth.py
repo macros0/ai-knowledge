@@ -180,6 +180,35 @@ def test_simulate_allows_protected(client):
     assert client.get("/api/documents").status_code == 200
 
 
+@pytest.mark.parametrize("username,allowed", [
+    ("demo.user", False),
+    ("demo.editor", True),
+    ("demo.admin", True),
+    ("demo.security", False),
+])
+def test_document_queue_status_is_visible_only_to_document_writers(client, monkeypatch, username, allowed):
+    from app.api import documents
+
+    class QueueSnapshot:
+        def queue_status(self):
+            return {"processing": 1, "processing_limit": 1,
+                    "queued": 8, "queue_limit": 8, "available": 0}
+
+    monkeypatch.setattr(documents, "get_pipeline", lambda: QueueSnapshot())
+    assert client.get("/api/documents/queue-status").status_code == 401
+    client.post("/api/auth/simulate", json={"username": username})
+    response = client.get("/api/documents/queue-status")
+    if allowed:
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json() == {
+            "processing": 1, "processing_limit": 1,
+            "queued": 8, "queue_limit": 8, "available": 0,
+        }
+    else:
+        assert response.status_code == 403
+
+
 def test_logout_clears_session(client):
     client.post("/api/auth/simulate", json={"username": "demo.user"})
     assert client.get("/api/auth/me").json()["user"]["username"] == "demo.user"

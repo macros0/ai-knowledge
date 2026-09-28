@@ -281,6 +281,10 @@ export function getDocumentStats() {
   return request("/documents/stats");
 }
 
+export function getDocumentQueueStatus() {
+  return request("/documents/queue-status");
+}
+
 export function getSourceLocaleFacets(uploader) {
   const qs = uploader ? `?uploader=${encodeURIComponent(uploader)}` : "";
   return request(`/documents/source-locale-facets${qs}`).then((data) => data.items ?? []);

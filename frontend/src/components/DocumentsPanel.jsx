@@ -6,6 +6,7 @@ import TagPicker from "./TagPicker";
 import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import UploadZone from "./UploadZone";
 import DocumentList from "./DocumentList";
+import DocumentQueueStatus from "./DocumentQueueStatus";
 import TrashPanel from "./TrashPanel";
 import DevelopmentPicker from "./DevelopmentPicker";
 import { listDevelopments } from "@/lib/api";
@@ -74,6 +75,7 @@ export default function DocumentsPanel() {
         >
           {t("docs.view.trash")}
         </button>
+        {view === "docs" && canUpload && <DocumentQueueStatus refreshKey={refreshKey} />}
       </div>
       {view === "trash" ? (
         <TrashPanel />

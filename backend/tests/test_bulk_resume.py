@@ -5,6 +5,7 @@ import pytest
 
 from app import error_codes as codes
 from app.services.audit import AuditService
+from app.services.errors import DomainError
 from app.services.job_queue import JobQueue
 from app.services.registry import DocumentRegistry, SERVER_RESTARTED_MESSAGE
 from tests.test_bulk_ops import client as client, login, make_docs
@@ -83,6 +84,88 @@ def test_worker_skips_ineligible_and_records_failures(operation, monkeypatch):
         entries = AuditService().query(action_type="document_bulk_resume")
         assert {e["target_id"] for e in entries} == {ids[0], ids[3]}
     assert {e["doc_id"] for e in result["skipped"]} == ({ids[1], ids[2], ids[4]} if operation == "bulk_resume" else {ids[1], ids[4]})
+
+
+@pytest.mark.parametrize("operation", ["bulk_resume", "bulk_regenerate"])
+def test_bulk_worker_waits_for_pipeline_capacity(operation, monkeypatch):
+    ids = make_docs(1)
+    reg = DocumentRegistry()
+    reg.update(ids[0], status="paused")
+    attempts = []
+
+    def generate(doc_id):
+        attempts.append(doc_id)
+        if len(attempts) == 1:
+            raise DomainError("Очередь обработки документов перегружена", code=codes.QUEUE_OVERLOADED)
+        reg.update(doc_id, status="done")
+
+    monkeypatch.setattr("app.services.pipeline.get_pipeline", lambda: SimpleNamespace(
+        registry=reg, resume=generate, regenerate=generate,
+    ))
+    monkeypatch.setattr("app.services.job_queue.time.sleep", lambda _seconds: None)
+    q = JobQueue(start_worker=False)
+    job = q.submit(operation, ids, SimpleNamespace(user_id="admin", username="admin"))
+
+    q._execute(job["id"])
+
+    result = q.get(job["id"])["result"]
+    assert attempts == ids * 2
+    assert result["processed"] == 1
+    assert result["errors"] == []
+
+
+def test_twenty_doc_regeneration_batch_runs_after_pipeline_frees(monkeypatch):
+    ids = make_docs(20)
+    reg = DocumentRegistry()
+    for doc_id in ids:
+        reg.update(doc_id, status="done")
+    attempts = []
+
+    def regenerate(doc_id):
+        attempts.append(doc_id)
+        if len(attempts) == 1:
+            raise DomainError("Очередь обработки документов перегружена", code=codes.QUEUE_OVERLOADED)
+        reg.update(doc_id, status="done")
+
+    monkeypatch.setattr("app.services.pipeline.get_pipeline", lambda: SimpleNamespace(
+        registry=reg, regenerate=regenerate,
+    ))
+    monkeypatch.setattr("app.services.job_queue.time.sleep", lambda _seconds: None)
+    q = JobQueue(start_worker=False)
+    job = q.submit("bulk_regenerate", ids, SimpleNamespace(user_id="admin", username="admin"))
+    assert job["status"] == "awaiting_approval"
+    q.approve(job["id"], SimpleNamespace(user_id="second-admin", username="second-admin"))
+
+    q._execute(job["id"])
+
+    result = q.get(job["id"])["result"]
+    assert result["processed"] == 20
+    assert result["errors"] == []
+    assert attempts == [ids[0], *ids]
+
+
+def test_capacity_wait_does_not_consume_document_processing_timeout(monkeypatch):
+    from app.services import job_queue as jq
+
+    clock = [0.0]
+    attempts = []
+
+    def regenerate(_doc_id):
+        attempts.append(clock[0])
+        if len(attempts) == 1:
+            raise DomainError("Очередь обработки документов перегружена", code=codes.QUEUE_OVERLOADED)
+
+    pipeline = SimpleNamespace(
+        regenerate=regenerate,
+        registry=SimpleNamespace(get=lambda _doc_id: {"status": "done" if clock[0] >= 2 else "processing"}),
+    )
+    monkeypatch.setattr(jq, "get_settings", lambda: SimpleNamespace(job_doc_timeout_seconds=2))
+    monkeypatch.setattr(jq.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(jq.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+
+    JobQueue(start_worker=False)._regenerate_one(pipeline, "waited-doc")
+
+    assert attempts == [0.0, 1.0]
 
 
 def test_restart_preserves_completed_document_results(monkeypatch):

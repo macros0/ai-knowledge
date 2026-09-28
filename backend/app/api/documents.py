@@ -525,6 +525,13 @@ def document_stats(user: User = Depends(require_user)):
     return _registry.markup_stats()
 
 
+@router.get("/queue-status", response_model=dict[str, int])
+def document_queue_status(response: Response, user: User = Depends(require_role("editor", "admin"))):
+    """Общая загрузка конвейера без сведений о чужих документах."""
+    response.headers["Cache-Control"] = "no-store"
+    return get_pipeline().queue_status()
+
+
 @router.get("/uploaders", response_model=UploaderListOut)
 def list_uploaders(user: User = Depends(require_user)):
     """Отдельные username загрузчиков (для дропдауна фильтра на фронтенде)."""

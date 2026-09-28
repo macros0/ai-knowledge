@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import * as documentLayout from "../src/lib/documentLayout.mjs";
 import { buildCompactDocumentMeta, countActiveDocumentFilters } from "../src/lib/documentLayout.mjs";
+import { createTranslator } from "../src/i18n/core.js";
 
 test("partial generation action uses resume and only appears for recoverable completed documents", async () => {
   const source = await readFile(new URL("../src/components/DocumentList.jsx", import.meta.url), "utf8");
@@ -66,6 +67,32 @@ test("compact document metadata omits empty optional fields", () => {
     { key: "uploader", value: "demo.admin" },
     { key: "date", value: "12.09.2026" },
   ]);
+});
+
+test("queue indicator distinguishes available capacity from a full queue", () => {
+  const t = (key, params) => `${key}:${JSON.stringify(params ?? {})}`;
+  assert.deepEqual(documentLayout.documentQueueView({
+    processing: 1, processing_limit: 1, queued: 7, queue_limit: 8, available: 1,
+  }, t), {
+    summary: 'docs.queue.summary:{"processing":1,"processingLimit":1,"queued":7,"queueLimit":8}',
+    full: false,
+  });
+  assert.equal(documentLayout.documentQueueView({
+    processing: 1, processing_limit: 1, queued: 8, queue_limit: 8, available: 0,
+  }, t).full, true);
+  assert.equal(documentLayout.documentQueueView({ queued: 0 }, t), null);
+});
+
+test("queue indicator explains shared capacity in both interface languages", () => {
+  const status = {
+    processing: 1, processing_limit: 1, queued: 8, queue_limit: 8, available: 0,
+  };
+  const ru = createTranslator("ru").t;
+  const en = createTranslator("en").t;
+  assert.match(documentLayout.documentQueueView(status, ru).summary, /Обработка: 1 из 1.*Ожидают: 8 из 8/);
+  assert.match(documentLayout.documentQueueView(status, en).summary, /Processing: 1 of 1.*Waiting: 8 of 8/);
+  assert.match(ru("docs.queue.full"), /Очередь заполнена/);
+  assert.match(en("docs.queue.full"), /Queue is full/);
 });
 
 test("compact document metadata preserves tags, development and locale", () => {

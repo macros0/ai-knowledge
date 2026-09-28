@@ -27,6 +27,20 @@ export function countActiveDocumentFilters(filters = {}) {
   return Object.values(filters).filter((value) => value !== false && value !== null && value !== undefined && value !== "").length;
 }
 
+export function documentQueueView(status, t) {
+  const fields = ["processing", "processing_limit", "queued", "queue_limit", "available"];
+  if (!status || fields.some((field) => !Number.isInteger(status[field]) || status[field] < 0)) return null;
+  return {
+    summary: t("docs.queue.summary", {
+      processing: status.processing,
+      processingLimit: status.processing_limit,
+      queued: status.queued,
+      queueLimit: status.queue_limit,
+    }),
+    full: status.available === 0,
+  };
+}
+
 export function resetDocumentFilters() {
   return {
     searchInput: "",

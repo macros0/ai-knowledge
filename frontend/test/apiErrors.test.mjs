@@ -27,6 +27,26 @@ import { createTranslator } from "../src/i18n/core.js";
 // англоязычный пользователь получал бы русские литералы из api.js.
 const t = createTranslator("ru").t;
 
+test("document queue status reads the shared admission snapshot", async () => {
+  const original = globalThis.fetch;
+  let requestedUrl;
+  globalThis.fetch = async (url) => {
+    requestedUrl = url;
+    return Response.json({
+      processing: 1, processing_limit: 1, queued: 8, queue_limit: 8, available: 0,
+    });
+  };
+  try {
+    const status = await api.getDocumentQueueStatus();
+    assert.equal(requestedUrl, "/api/documents/queue-status");
+    assert.deepEqual(status, {
+      processing: 1, processing_limit: 1, queued: 8, queue_limit: 8, available: 0,
+    });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("legacy and current parser memory errors include safe support details", () => {
   const doc = {
     id: "f48f01e6814f4418", error_code: "internal_error",

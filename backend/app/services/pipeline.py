@@ -221,6 +221,20 @@ class Pipeline:
         self._storage_failure_docs: set[tuple[str, int]] = set()
         self._storage_failure_docs_lock = threading.Lock()
 
+    def queue_status(self) -> dict[str, int]:
+        """Snapshot of this process's document admission slots, without document details."""
+        with self._start_lock:
+            tasks = tuple(self._threads.values())
+        processing = sum(task.running() for task in tasks)
+        capacity = self.settings.pipeline_max_workers + self.settings.pipeline_max_pending
+        return {
+            "processing": processing,
+            "processing_limit": self.settings.pipeline_max_workers,
+            "queued": len(tasks) - processing,
+            "queue_limit": self.settings.pipeline_max_pending,
+            "available": max(0, capacity - len(tasks)),
+        }
+
     def ingest(
         self,
         doc_id: str,

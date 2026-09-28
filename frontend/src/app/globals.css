@@ -2383,6 +2383,27 @@ main {
 }
 
 /* Общий спойлер (загрузка документов и пр.): заголовок-кнопка + тело. */
+.document-queue-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 8px 11px;
+  margin-bottom: 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.document-queue-full {
+  border-color: var(--danger);
+}
+
+.document-queue-full strong {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .upload-spoiler {
   display: flex;
   flex-direction: column;

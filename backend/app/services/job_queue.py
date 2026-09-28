@@ -388,7 +388,21 @@ class JobQueue:
     def _regenerate_one(self, pipeline, doc_id: str, *, resume: bool = False) -> None:
         """Generate or resume one document, waiting before starting the next."""
         settings = get_settings()
-        (pipeline.resume if resume else pipeline.regenerate)(doc_id)
+        admission_deadline = time.monotonic() + settings.job_doc_timeout_seconds
+        while True:
+            try:
+                (pipeline.resume if resume else pipeline.regenerate)(doc_id)
+                break
+            except DomainError as exc:
+                if exc.code != codes.QUEUE_OVERLOADED:
+                    raise
+                remaining = admission_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise DomainError(
+                        "Превышено время ожидания очереди обработки документа",
+                        code=codes.REGENERATE_TIMEOUT,
+                    ) from exc
+                time.sleep(min(1.0, remaining))
         deadline = time.monotonic() + settings.job_doc_timeout_seconds
         while time.monotonic() < deadline:
             doc = pipeline.registry.get(doc_id)
