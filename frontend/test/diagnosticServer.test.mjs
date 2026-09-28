@@ -80,11 +80,12 @@ test("production runner survives a normal SIGTERM and starts again on the same s
   const fixture = path.join(root, "worker.mjs");
   const recorderUrl = new URL("../src/lib/diagnosticServer.mjs", import.meta.url).href;
   const runnerUrl = new URL("../scripts/diagnostics-runner.mjs", import.meta.url).href;
+  const launcher = path.join(root, "launcher.mjs");
   await writeFile(fixture, `import { DiagnosticServerRecorder, installServerDiagnosticsShutdown } from ${JSON.stringify(recorderUrl)};\n`
     + `const recorder = new DiagnosticServerRecorder({root: ${JSON.stringify(spool)}, minFreeBytes: 0});\n`
     + `if (!await recorder.start()) process.exit(3); installServerDiagnosticsShutdown(recorder); setInterval(() => {}, 1000);\n`);
-  const run = () => spawn(process.execPath, ["--input-type=module", "-e",
-    `import { runServer } from ${JSON.stringify(runnerUrl)}; runServer(${JSON.stringify(fixture)});`],
+  await writeFile(launcher, `import { runServer } from ${JSON.stringify(runnerUrl)}; runServer(${JSON.stringify(fixture)});\n`);
+  const run = () => spawn(process.execPath, [launcher],
     { stdio: ["ignore", "pipe", "pipe"] });
   const waitForMarker = async () => {
     for (let i = 0; i < 200; i++) {

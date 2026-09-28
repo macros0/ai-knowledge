@@ -30,6 +30,7 @@ data_dir=${data_dir:-./data}
 data_dir=$(cd "$data_dir" && pwd)
 export OKF_RUNTIME_ENV_FILE="$env_file"
 compose() { docker compose --env-file "$env_file" "$@"; }
+archive_user="$(id -u):$(id -g)"
 
 archive="$backup_root/backup-$(date -u +%Y%m%dT%H%M%SZ)"
 if ((dry_run)); then archive="$backup_root/backup-dry-run"; fi
@@ -44,7 +45,7 @@ trap cleanup EXIT
 if ((dry_run)); then
   compose stop frontend backend
   compose exec -T postgres pg_dump -U okf -d okf_knowledge --format=custom
-  compose run --rm --no-deps --user 0 --entrypoint python -v "$archive:/backup" backend scripts/create_qdrant_snapshot.py --output-dir /backup/qdrant
+  compose run --rm --no-deps --user "$archive_user" --entrypoint python -v "$archive:/backup" backend scripts/create_qdrant_snapshot.py --output-dir /backup/qdrant
   echo "dry-run: would archive data and write manifest to $archive"
   exit 0
 fi
@@ -71,8 +72,8 @@ compose stop frontend backend
 restart=1
 compose exec -T postgres pg_dump -U okf -d okf_knowledge --format=custom > "$archive/postgres.dump"
 compose exec -T postgres pg_restore --list < "$archive/postgres.dump" > "$archive/postgres.list"
-compose run --rm --no-deps --user 0 --entrypoint python -v "$archive_path:/backup" backend scripts/create_qdrant_snapshot.py --output-dir /backup/qdrant
-compose run --rm --no-deps --user 0 --entrypoint python -v "$archive_path:/backup" backend scripts/backup_totals.py --output /backup/totals.json
+compose run --rm --no-deps --user "$archive_user" --entrypoint python -v "$archive_path:/backup" backend scripts/create_qdrant_snapshot.py --output-dir /backup/qdrant
+compose run --rm --no-deps --user "$archive_user" --entrypoint python -v "$archive_path:/backup" backend scripts/backup_totals.py --output /backup/totals.json
 if [[ $archive_path == "$data_dir/"* ]]; then
   archive_relative=${archive_path#"$data_dir/"}
   (cd "$data_dir" && tar --create --exclude="./$archive_relative" --file "$archive_path/data.tar" .)
@@ -80,6 +81,6 @@ else
   (cd "$data_dir" && tar --create --file "$archive_path/data.tar" .)
 fi
 compose images --format json > "$archive/compose-images.json"
-compose run --rm --no-deps --user 0 --entrypoint python -v "$archive_path:/backup" backend scripts/write_backup_manifest.py --backup-dir /backup
+compose run --rm --no-deps --user "$archive_user" --entrypoint python -v "$archive_path:/backup" backend scripts/write_backup_manifest.py --backup-dir /backup
 (cd "$archive" && sha256sum postgres.dump postgres.list data.tar totals.json compose-images.json qdrant/* > SHA256SUMS)
 echo "$archive"

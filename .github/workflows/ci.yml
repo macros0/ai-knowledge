@@ -76,7 +76,7 @@ jobs:
       - name: File safety, writer lock and offline export
         working-directory: backend
         run: |
-          python -m pytest tests/test_diagnostics_store.py tests/test_diagnostics_retention.py tests/test_collect_diagnostics.py tests/test_diagnostics_deployment.py -q --basetemp ../tests/tmp/diagnostics/ci-windows
+          python -m pytest tests/test_diagnostics_store.py tests/test_diagnostics_retention.py tests/test_collect_diagnostics.py tests/test_diagnostics_deployment.py -q --basetemp "$env:RUNNER_TEMP\diagnostics-ci"
 
   audit:
     name: зависимости (известные уязвимости)

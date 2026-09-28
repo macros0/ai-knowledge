@@ -1,15 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { registerHooks } from "node:module";
+import * as nodeModule from "node:module";
 import { randomUUID } from "node:crypto";
 import { currentRequestId } from "../src/lib/requestContext.mjs";
+import { resolve } from "./diagnosticNextResolver.mjs";
 
 // Next's bundler resolves extensionless entry points; Node's test runner needs
 // the .js suffix. Use the real installed headers/cookies API and request stores.
-registerHooks({ resolve(specifier, context, next) {
-  return next(["next/headers", "next/server"].includes(specifier) ? `${specifier}.js` : specifier, context);
-} });
+if (typeof nodeModule.registerHooks === "function") {
+  nodeModule.registerHooks({ resolve });
+} else {
+  nodeModule.register(new URL("./diagnosticNextResolver.mjs", import.meta.url), import.meta.url);
+}
 globalThis.AsyncLocalStorage = AsyncLocalStorage;
 const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external.js");
 const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external.js");

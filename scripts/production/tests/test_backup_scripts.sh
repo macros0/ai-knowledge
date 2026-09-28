@@ -31,9 +31,9 @@ PATH="$fixture_bin:$PATH" FAKE_DOCKER_LOG="$fake_docker_log" \
   "$root/scripts/production/backup-bundled.sh" --env-file "$fixture_env" --backup-dir "$tmp/backup" --dry-run
 grep -qx 'compose stop frontend backend' "$fake_docker_log"
 grep -qx 'compose exec -T postgres pg_dump -U okf -d okf_knowledge --format=custom' "$fake_docker_log"
-# The archive is root-owned and mode 0700. Its one-shot writer must retain
-# root inside the helper container; the normal backend still drops privileges.
-grep -Fqx "compose run --rm --no-deps --user 0 --entrypoint python -v $tmp/backup/backup-dry-run:/backup backend scripts/create_qdrant_snapshot.py --output-dir /backup/qdrant" "$fake_docker_log"
+# The helper writes as the backup operator, keeping the private archive readable
+# by the checksum step without opening it to other local users.
+grep -Fqx "compose run --rm --no-deps --user $(id -u):$(id -g) --entrypoint python -v $tmp/backup/backup-dry-run:/backup backend scripts/create_qdrant_snapshot.py --output-dir /backup/qdrant" "$fake_docker_log"
 
 PATH="$fixture_bin:$PATH" FAKE_DOCKER_LOG="$fake_docker_log" \
   "$root/scripts/production/restore-bundled.sh" --env-file "$fixture_env" --backup-dir "$tmp/backup" --target-project recovered --target-data-dir "$tmp/recovered" --dry-run
