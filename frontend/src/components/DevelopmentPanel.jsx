@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -78,7 +80,7 @@ export default function DevelopmentPanel() {
       setDevelopments(res.developments);
       setTotal(res.total);
     } catch (err) {
-      showToast(t("devpanel.loadError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.loadError", { message: friendlyApiError(err, t) }) });
     }
   }, [search, moduleFilter, sortBy, sortOrder, page, showToast, t]);
 
@@ -134,7 +136,7 @@ export default function DevelopmentPanel() {
         await addAttributeValue("module", v, { label: v, canonicalLocale: sourceLocale });
         setModules((prev) => [...prev, v].sort());
       } catch (err) {
-        showToast(t("devpanel.addModuleError", { message: friendlyApiError(err, t) }), { type: "error" });
+        showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.addModuleError", { message: friendlyApiError(err, t) }) });
         throw err;
       }
       return v;
@@ -155,7 +157,7 @@ export default function DevelopmentPanel() {
       showToast(t("devpanel.created", { name }), { type: "success" });
       await load();
     } catch (err) {
-      showToast(t("devpanel.createError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.createError", { message: friendlyApiError(err, t) }) });
     } finally {
       setBusy(false);
     }
@@ -204,7 +206,7 @@ export default function DevelopmentPanel() {
         setEditForm((f) => ({ ...f, version: err.data?.current?.version }));
         showToast(t("devpanel.versionConflict"), { type: "error" });
       } else {
-        showToast(t("devpanel.saveError", { message: friendlyApiError(err, t) }), { type: "error" });
+        showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.saveError", { message: friendlyApiError(err, t) }) });
       }
     } finally {
       setBusy(false);
@@ -224,7 +226,7 @@ export default function DevelopmentPanel() {
         setPendingDelete(null);
         await load();
       } else {
-        showToast(t("devpanel.deleteError", { message: friendlyApiError(err, t) }), { type: "error" });
+        showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.deleteError", { message: friendlyApiError(err, t) }) });
       }
     } finally {
       setBusy(false);
@@ -257,7 +259,7 @@ export default function DevelopmentPanel() {
       setNewModule("");
       showToast(t("devpanel.moduleAdded", { name: value }), { type: "success" });
     } catch (err) {
-      showToast(t("devpanel.addModuleError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.addModuleError", { message: friendlyApiError(err, t) }) });
     }
   };
 
@@ -268,7 +270,7 @@ export default function DevelopmentPanel() {
       setModules((prev) => prev.filter((m) => m !== value));
       showToast(t("devpanel.moduleRemoved", { name: value }), { type: "success" });
     } catch (err) {
-      showToast(t("devpanel.removeModuleError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.removeModuleError", { message: friendlyApiError(err, t) }) });
     }
   };
 

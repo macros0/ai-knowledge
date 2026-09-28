@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { chat, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
+import ErrorReference from "./ErrorReference";
 import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
 import TagPicker from "./TagPicker";
@@ -204,11 +205,11 @@ export default function ChatPanel() {
         // авто-повтора — пользователь сам решает, повторять ли вопрос в новом чате.
         startNewChat();
         setQuery("");
-        showToast(t("chat.sessionDeleted"), { type: "error" });
+        showToast(t("chat.sessionDeleted"), { type: "error", requestId: err.requestId, localReportId: err.localReportId });
       } else {
         setMessages((m) => {
           const copy = [...m];
-          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q, ...requestOptions };
+          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q, requestId: err.requestId, localReportId: err.localReportId, ...requestOptions };
           return copy;
         });
       }
@@ -235,7 +236,7 @@ export default function ChatPanel() {
     } catch (err) {
       setMessages((items) => {
         const copy = [...items];
-        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q, ...requestOptions };
+        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q, requestId: err.requestId, localReportId: err.localReportId, ...requestOptions };
         return copy;
       });
     } finally { setPending(false); }
@@ -289,6 +290,7 @@ export default function ChatPanel() {
                 m.text
               )}
             </div>
+            {m.role === "assistant" && <ErrorReference requestId={m.requestId} localReportId={m.localReportId} />}
             {m.role === "assistant" && <AppliedTerms status={m.expansion_status} appliedTerms={m.applied_terms} />}
             {m.role === "assistant" && m.applied_terms?.length > 0 && (
               <button type="button" className="btn ghost glossary-repeat" onClick={() => repeatWithoutGlossary(m)} disabled={pending}>

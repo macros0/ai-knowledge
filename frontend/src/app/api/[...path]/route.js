@@ -1,3 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { withRequestContext } from "../../../lib/requestContext.mjs";
+import { emitServerEvent } from "../../../lib/diagnosticServer.mjs";
+import { routeTemplate } from "../../../lib/diagnosticSchema.mjs";
+
 const HOP_BY_HOP = new Set([
   "connection",
   "keep-alive",
@@ -28,11 +33,17 @@ function backendTarget(request, path) {
 }
 
 async function proxy(request, context) {
+  const requestId = randomUUID();
+  return withRequestContext({ requestId }, () => proxyBound(request, context, requestId));
+}
+
+async function proxyBound(request, context, requestId) {
   const { path } = await context.params;
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("content-length");
   for (const name of CLIENT_CONTROLLED_FORWARDING) headers.delete(name);
+  headers.set("x-request-id", requestId);
 
   const init = {
     method: request.method,
@@ -49,7 +60,24 @@ async function proxy(request, context) {
     init.duplex = "half";
   }
 
-  const upstream = await fetch(backendTarget(request, path), init);
+  const started = performance.now();
+  const safeRoute = routeTemplate(`/api/${path.join("/")}`);
+  const method = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].includes(request.method) ? { http_method: request.method } : {};
+  let upstream;
+  try {
+    upstream = await fetch(backendTarget(request, path), init);
+  } catch (error) {
+    const aborted = request.signal.aborted;
+    const timedOut = !aborted && (error?.name === "TimeoutError" || error?.cause?.code === "UND_ERR_CONNECT_TIMEOUT");
+    const status = aborted ? 499 : timedOut ? 504 : 502;
+    if (!aborted) emitServerEvent("proxy_failed", { route_template: safeRoute, ...method,
+      http_status: status, duration_ms: Math.max(0, performance.now() - started), error_code: "network_error" }, error);
+    return Response.json({ detail: aborted ? "Request cancelled" : "Service temporarily unavailable",
+      code: "network_error", request_id: requestId }, { status,
+      headers: { "x-request-id": requestId, "cache-control": "no-store", "x-content-type-options": "nosniff" } });
+  }
+  emitServerEvent("request_finished", { route_template: safeRoute, ...method,
+    http_status: upstream.status, duration_ms: Math.max(0, performance.now() - started) });
   const responseHeaders = new Headers();
   upstream.headers.forEach((value, name) => {
     if (name !== "set-cookie" && !HOP_BY_HOP.has(name)) {
@@ -69,6 +97,7 @@ async function proxy(request, context) {
   // identity data. Do not allow a browser/shared intermediary to retain them
   // after the request, regardless of an upstream default.
   responseHeaders.set("cache-control", "no-store");
+  responseHeaders.set("x-request-id", requestId);
 
   return new Response(upstream.body, {
     status: upstream.status,

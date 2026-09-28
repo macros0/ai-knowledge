@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useEffect, useMemo, useState } from "react";
 import {
   bulkReviewTags,
@@ -74,7 +76,7 @@ export default function TagManagerModal({ onClose }) {
       showToast(t("tags.manager.deleted", { name }), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(t("tags.manager.deleteError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("tags.manager.deleteError", { message: friendlyApiError(err, t) }) });
     } finally {
       setBusy(false);
     }
@@ -87,7 +89,7 @@ export default function TagManagerModal({ onClose }) {
       showToast(t("tags.manager.cleaned", { count: res?.total ?? 0 }), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(t("tags.manager.cleanupError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("tags.manager.cleanupError", { message: friendlyApiError(err, t) }) });
     } finally {
       setBusy(false);
     }
@@ -100,9 +102,9 @@ export default function TagManagerModal({ onClose }) {
       showToast(t("tags.manager.reviewed"), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(t("tags.manager.translationError", { message: friendlyApiError(err, t) }), {
+      showToast({ ...apiToast(err, t, {
         type: "error",
-      });
+      }), message: t("tags.manager.translationError", { message: friendlyApiError(err, t) }) });
     } finally {
       setBusy(false);
     }
@@ -118,9 +120,9 @@ export default function TagManagerModal({ onClose }) {
       showToast(t("tags.manager.translationSaved"), { type: "success" });
       await afterChange();
     } catch (err) {
-      showToast(t("tags.manager.translationError", { message: friendlyApiError(err, t) }), {
+      showToast({ ...apiToast(err, t, {
         type: "error",
-      });
+      }), message: t("tags.manager.translationError", { message: friendlyApiError(err, t) }) });
     } finally {
       setBusy(false);
     }

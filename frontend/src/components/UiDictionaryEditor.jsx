@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 // Редактор runtime-override UI-словаря локали (Этап 7 фаза C).
 // Правка = textarea с JSON; при первом открытии префилдится активным override.
 // ЗАЩИТА ПРАВОК: после первого ручного изменения (isDirty) повторные загрузки
@@ -111,7 +113,7 @@ export default function UiDictionaryEditor({ locale }) {
     setBusy(true);
     importUiDictionary(code, { data, note, confirm: false })
       .then((res) => setResult(res))
-      .catch((err) => showToast(friendlyApiError(err, t), { type: "error" }))
+      .catch((err) => showToast(apiToast(err, t, { type: "error" })))
       .finally(() => setBusy(false));
   };
 
@@ -136,7 +138,7 @@ export default function UiDictionaryEditor({ locale }) {
           setResult(res);
         }
       })
-      .catch((err) => showToast(friendlyApiError(err, t), { type: "error" }))
+      .catch((err) => showToast(apiToast(err, t, { type: "error" })))
       .finally(() => setBusy(false));
   };
 
@@ -150,7 +152,7 @@ export default function UiDictionaryEditor({ locale }) {
         await loadActive();
         await loadHistory();
       })
-      .catch((err) => showToast(friendlyApiError(err, t), { type: "error" }))
+      .catch((err) => showToast(apiToast(err, t, { type: "error" })))
       .finally(() => setBusy(false));
   };
 

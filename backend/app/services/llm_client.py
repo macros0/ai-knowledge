@@ -14,7 +14,6 @@ import logging
 import re
 import threading
 import time
-from pathlib import Path
 
 import httpx
 import litellm
@@ -24,6 +23,10 @@ from app.config import get_settings
 from app.services import gen_quality
 from app.services import llm_profiles
 from app.services.llm_scheduler import LLMCancelled, local_scheduler
+from app.services.diagnostics.context import current_context, run_bound
+from app.services.diagnostics.events import dependency_call, observed_llm_parse
+from app.services.diagnostics.recorder import emit_event
+from app.services.errors import public_error_code
 
 logger = logging.getLogger(__name__)
 
@@ -301,6 +304,10 @@ class LLMClient:
                     backoff * (2 ** (attempt - 1)),
                 )
                 if attempt < attempts:
+                    emit_event("retry_scheduled", exception=exc, fields={
+                        "stage": "chat" if self.interactive else "generate", "dependency": "llm",
+                        "retry_index": attempt, "error_code": public_error_code(exc), "counts": {"attempts": attempts},
+                    })
                     time.sleep(llm_profiles.remaining(backoff * (2 ** (attempt - 1))))
                 continue
             except Exception as exc:
@@ -316,9 +323,14 @@ class LLMClient:
                     delay,
                 )
                 if attempt < attempts:
+                    emit_event("retry_scheduled", exception=exc, fields={
+                        "stage": "chat" if self.interactive else "generate", "dependency": "llm",
+                        "retry_index": attempt, "error_code": public_error_code(exc), "counts": {"attempts": attempts},
+                    })
                     time.sleep(llm_profiles.remaining(delay))
         raise last_exc  # type: ignore[misc]
 
+    @dependency_call("llm")
     def _complete_once(self, system: str, user: str, max_tokens: int | None = None, idle_timeout: float | None = None, task: str | None = None) -> tuple[str, str | None]:
         """Один вызов LLM стримом в изолированном daemon-потоке.
 
@@ -464,7 +476,7 @@ class LLMClient:
             if external_cancel is not None and external_cancel.is_set():
                 raise LLMCancelled()
             raise LLMTimeoutError("LLM request budget exhausted in queue")
-        thread = threading.Thread(target=run, daemon=True, name="llm-call")
+        thread = threading.Thread(target=run_bound, args=(current_context(), run), daemon=True, name="llm-call")
         _inflight_enter(concurrency)
         try:
             thread.start()
@@ -657,6 +669,7 @@ def _stream_finish_reason(chunk) -> str | None:
     return None
 
 
+@observed_llm_parse
 def _parse_json(
     text: str,
     finish_reason: str | None = None,
@@ -823,22 +836,15 @@ def _parse_json(
 
     _dump_debug_response(text, doc_id, chunk_idx)
     raise ValueError(
-        f"Не удалось распарсить JSON (чанк {chunk_idx}). "
-        f"Дамп сохранён в data/debug/. Начало ответа: {text[:200]!r}"
+        f"Не удалось распарсить JSON (чанк {chunk_idx})."
     )
 
 
 def _dump_debug_response(text: str, doc_id: str, chunk_idx: int) -> None:
-    """Сохраняет сырой ответ LLM в data/debug/ для расследования сбоя парсинга."""
-    try:
-        debug_dir: Path = get_settings().data_dir / "debug"
-        debug_dir.mkdir(parents=True, exist_ok=True)
-        ts = time.strftime("%Y%m%d_%H%M%S")
-        path = debug_dir / f"llm_raw_{doc_id}_{chunk_idx}_{ts}.txt"
-        path.write_text(text, encoding="utf-8")
-        logger.warning("Сырой ответ LLM сохранён: %s", path)
-    except Exception as exc:
-        logger.warning("Не удалось сохранить дамп LLM: %s", exc)
+    """Explicit development opt-in, bounded and outside the exportable spool."""
+    from app.services.diagnostics.raw_debug import write_raw_debug
+    if write_raw_debug(get_settings(), text):
+        logger.warning("Сохранён отладочный ответ LLM в development-хранилище")
 
 
 def _try_load(text: str) -> list | dict | None:

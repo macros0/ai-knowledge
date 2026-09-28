@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useEffect, useRef, useState } from "react";
 import { addGlossaryAlias, deleteGlossaryAlias, friendlyApiError, getGlossaryTerm, updateGlossaryAlias, updateGlossarySource } from "@/lib/api";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -74,7 +76,7 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
       setMergeTarget(targets[0]);
       return true;
     } catch (loadError) {
-      showToast(friendlyApiError(loadError, t), { type: "error" });
+      showToast(apiToast(loadError, t, { type: "error" }));
       return false;
     }
   };
@@ -89,7 +91,7 @@ export default function GlossaryEditor({ term, canManage = false, onSaved, onClo
       return true;
     }
     catch (err) {
-      if (!(await offerConflictMerge(err, {...decline, returnFocusTo}))) showToast(friendlyApiError(err, t), { type: "error" });
+      if (!(await offerConflictMerge(err, {...decline, returnFocusTo}))) showToast(apiToast(err, t, { type: "error" }));
       return false;
     }
     finally { setBusy(false); }

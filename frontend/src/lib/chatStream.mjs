@@ -1,3 +1,5 @@
+import { errorReference } from "./diagnosticIdentifiers.mjs";
+
 export async function readChatStream(response, onText = () => {}) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -18,11 +20,15 @@ export async function readChatStream(response, onText = () => {}) {
           const error = new Error("Chat failed");
           error.code = event.code || "internal_error";
           error.status = event.status || 503;
+          error.requestId = errorReference(response.headers?.get?.("x-request-id"), event.request_id);
           throw error;
         }
       }
       if (done) throw new Error("Incomplete chat stream");
     }
+  } catch (error) {
+    error.requestId = errorReference(response.headers?.get?.("x-request-id"), error.requestId);
+    throw error;
   } finally {
     await reader.cancel().catch(() => {});
     reader.releaseLock();

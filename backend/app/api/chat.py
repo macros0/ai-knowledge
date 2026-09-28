@@ -7,6 +7,8 @@ import re
 import threading
 from dataclasses import asdict
 from functools import lru_cache
+from app.services.diagnostics.context import current_context, new_operation, operation_context
+from app.services.diagnostics.events import observed_operation
 from pathlib import Path
 
 from app.api import errors
@@ -121,6 +123,8 @@ def _chat_system_prompt(query: str, locale: str, settings: Settings) -> str:
 
 
 @router.post("", response_model=ChatResponse)
+@operation_context("search_chat")
+@observed_operation("chat")
 def chat(req: ChatRequest, current_user: User = Depends(require_user)):
     settings = get_settings()
     try:
@@ -369,8 +373,9 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
 
 @router.post("/stream")
 def chat_stream(req: ChatRequest, current_user: User = Depends(require_user)):
+    context = new_operation(current_context(), operation_kind="search_chat")
     return StreamingResponse(
-        stream_chat(lambda: chat(req, current_user)),
+        stream_chat(lambda: chat(req, current_user), context=context),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )

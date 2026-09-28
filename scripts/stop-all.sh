@@ -18,6 +18,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/stack-common.sh"
 
 echo "=== Остановка по PID-файлам ==="
 okf_stop_pidfile next next/dist/bin/next
+okf_stop_pidfile backend app.diagnostic_entrypoint
 okf_stop_pidfile backend app.main:app
 okf_stop_pidfile ollama ollama
 okf_stop_pidfile qdrant qdrant
@@ -42,7 +43,7 @@ fi
 
 echo "=== Остановка по портам (backend/frontend без PID-файла) ==="
 if command -v lsof >/dev/null 2>&1; then
-    for spec in "$OKF_BACKEND_PORT:app.main:app" "$OKF_FRONTEND_PORT:next"; do
+    for spec in "$OKF_BACKEND_PORT:app.diagnostic_entrypoint" "$OKF_BACKEND_PORT:app.main:app" "$OKF_FRONTEND_PORT:next"; do
         port="${spec%%:*}"
         pattern="${spec#*:}"
         for pid in $(lsof -nP -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null); do

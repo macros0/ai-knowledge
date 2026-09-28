@@ -80,6 +80,10 @@ EXPECTED_ACTION_TYPES = {
     "glossary_rule_create",
     "glossary_rule_update",
     "glossary_rule_delete",
+    "diagnostic_session_started", "diagnostic_session_stopped",
+    "diagnostic_bundle_requested", "diagnostic_bundle_ready", "diagnostic_bundle_failed",
+    "diagnostic_bundle_download_started", "diagnostic_bundle_deleted", "diagnostic_bundle_expired",
+    "diagnostic_view", "diagnostic_browser_invited", "diagnostic_browser_joined", "diagnostic_browser_left",
 }
 
 
@@ -159,7 +163,10 @@ def make_client(tmp_path: Path, monkeypatch, **overrides) -> TestClient:
     }
     defaults.update(overrides)
     settings = Settings(**defaults)
-    for module in ("app.config", "app.main", "app.auth.api", "app.api.documents", "app.services.pipeline"):
+    for module in (
+        "app.config", "app.main", "app.auth.api", "app.api.documents",
+        "app.services.pipeline", "app.services.staging",
+    ):
         monkeypatch.setattr(f"{module}.get_settings", lambda: settings)
     return TestClient(create_app())
 

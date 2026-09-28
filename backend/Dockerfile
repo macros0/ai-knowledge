@@ -10,6 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # пользователь Linux; при несовпадении собирайте с APP_UID=$(id -u).
 ARG APP_UID=1000
 ARG APP_GID=1000
+ARG OKF_BUILD_REVISION=unknown
+ENV OKF_BUILD_REVISION=${OKF_BUILD_REVISION}
 
 WORKDIR /app
 
@@ -51,4 +53,4 @@ EXPOSE 8000
 
 # 0.0.0.0 нужен для межконтейнерной связи (frontend -> backend:8000); сам
 # контейнер наружу не публикуется (см. docker-compose.yml без ports у backend).
-CMD ["sh", "-c", "uvicorn app.main:app --host ${UVICORN_HOST:-0.0.0.0} --port 8000 --workers ${UVICORN_WORKERS:-1}"]
+CMD ["sh", "-c", "exec python -m app.diagnostic_entrypoint --host ${UVICORN_HOST:-0.0.0.0} --port 8000 --workers ${UVICORN_WORKERS:-1}"]

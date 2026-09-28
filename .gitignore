@@ -74,11 +74,16 @@ data/exports/*
 !data/exports/.gitkeep
 .runtime-cookie-check/
 .stage8-runtime-logs/
+/diagnostics/
+/.ci-diagnostics/
 
 # Maintained test outputs and disposable test runtime data
 tests/artifacts/
 tests/tmp/
 !tests/artifacts/
+!tests/artifacts/diagnostics/
+tests/artifacts/diagnostics/*
+!tests/artifacts/diagnostics/*.json
 !tests/artifacts/stage8/
 tests/artifacts/stage8/*
 !tests/artifacts/stage8/stage8-manifest*.json

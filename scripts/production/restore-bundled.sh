@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage() { echo "usage: $0 --env-file FILE --backup-dir DIR --target-project NAME --target-data-dir DIR [--dry-run] [--replace-existing --confirm-replace-existing]" >&2; exit 2; }
-env_file= backup_dir= target_project= target_data= dry_run=0 replace=0 confirm=0
+usage() { echo "usage: $0 --env-file FILE --backup-dir DIR --target-project NAME --target-data-dir DIR [--target-diagnostics-dir DIR] [--dry-run] [--replace-existing --confirm-replace-existing]" >&2; exit 2; }
+env_file= backup_dir= target_project= target_data= target_diagnostics= dry_run=0 replace=0 confirm=0
 while (($#)); do
   case "$1" in
     --env-file) env_file=${2:-}; shift 2 ;;
     --backup-dir) backup_dir=${2:-}; shift 2 ;;
     --target-project) target_project=${2:-}; shift 2 ;;
     --target-data-dir) target_data=${2:-}; shift 2 ;;
+    --target-diagnostics-dir) target_diagnostics=${2:-}; shift 2 ;;
     --dry-run) dry_run=1; shift ;;
     --replace-existing) replace=1; shift ;;
     --confirm-replace-existing) confirm=1; shift ;;
@@ -16,13 +17,14 @@ while (($#)); do
   esac
 done
 [[ -n $env_file && -n $backup_dir && -n $target_project && -n $target_data && -f $env_file ]] || usage
+target_diagnostics=${target_diagnostics:-${target_data}-diagnostics}
 [[ $target_project =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]] || { echo 'unsafe target project name' >&2; exit 1; }
 dotenv_value() { awk -F= -v key="$1" '$0 !~ /^[[:space:]]*#/ && $1 == key {sub("^[^=]*=", ""); print; exit}' "$env_file"; }
 [[ $(dotenv_value STORAGE_MODE) == bundled ]] || { echo 'restore requires STORAGE_MODE=bundled' >&2; exit 1; }
 if ((replace && !confirm)); then echo 'replace mode requires --confirm-replace-existing' >&2; exit 1; fi
 if ((!replace)) && [[ -e $target_data ]]; then echo "target data directory already exists: $target_data" >&2; exit 1; fi
 export OKF_RUNTIME_ENV_FILE="$env_file"
-compose() { OKF_DATA_DIR="$target_data" docker compose --project-name "$target_project" --env-file "$env_file" "$@"; }
+compose() { OKF_DATA_DIR="$target_data" OKF_DIAGNOSTICS_DIR="$target_diagnostics" docker compose --project-name "$target_project" --env-file "$env_file" "$@"; }
 fallback_lock=
 cleanup() { [[ -z $fallback_lock ]] || rmdir "$fallback_lock" 2>/dev/null || true; }
 trap cleanup EXIT
@@ -30,10 +32,14 @@ trap cleanup EXIT
 if ((dry_run)); then
   compose up -d --no-deps postgres qdrant
   compose exec -T postgres pg_restore --clean --if-exists -U okf -d okf_knowledge
-  compose run --rm --no-deps -v "$backup_dir:/backup:ro" backend python scripts/restore_qdrant_snapshot.py --snapshot-file /backup/qdrant/SNAPSHOT
+  compose run --rm --no-deps --user 0 --entrypoint python -v "$backup_dir:/backup:ro" backend scripts/restore_qdrant_snapshot.py --snapshot-file /backup/qdrant/SNAPSHOT
   echo 'dry-run: default restore never removes Docker volumes'
   exit 0
 fi
+[[ -d "$target_diagnostics/backend" && -d "$target_diagnostics/frontend" && ! -L $target_diagnostics ]] || {
+  echo "prepare separate target diagnostics first: $target_diagnostics" >&2
+  exit 1
+}
 [[ -f "$backup_dir/manifest.json" && -f "$backup_dir/SHA256SUMS" ]] || { echo 'backup manifest or checksums missing' >&2; exit 1; }
 (cd "$backup_dir" && sha256sum --check SHA256SUMS)
 lock_root=$(cd "$(dirname "$backup_dir")" && pwd)
@@ -75,9 +81,9 @@ compose cp "$backup_dir/postgres.dump" postgres:/tmp/okf-restore.dump
 compose exec -T postgres pg_restore --clean --if-exists -U okf -d okf_knowledge /tmp/okf-restore.dump
 snapshot=$(find "$backup_dir/qdrant" -maxdepth 1 -type f ! -name '*.sha256' -print -quit)
 [[ -n $snapshot ]] || { echo 'Qdrant snapshot is missing' >&2; exit 1; }
-compose run --rm --no-deps -v "$(cd "$backup_dir" && pwd):/backup:ro" backend python scripts/restore_qdrant_snapshot.py --snapshot-file "/backup/qdrant/$(basename "$snapshot")"
+compose run --rm --no-deps --user 0 --entrypoint python -v "$(cd "$backup_dir" && pwd):/backup:ro" backend scripts/restore_qdrant_snapshot.py --snapshot-file "/backup/qdrant/$(basename "$snapshot")"
 compose run --rm --no-deps migrate alembic upgrade head
-compose run --rm --no-deps -v "$(cd "$backup_dir" && pwd):/backup:ro" backend python scripts/check_integrity.py --strict --expected-manifest /backup/manifest.json
+compose run --rm --no-deps --user 0 --entrypoint python -v "$(cd "$backup_dir" && pwd):/backup:ro" backend scripts/check_integrity.py --strict --expected-manifest /backup/manifest.json
 compose up -d backend
 compose up -d frontend
 echo "restored into Compose project $target_project"

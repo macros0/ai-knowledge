@@ -1,5 +1,7 @@
 # build
 FROM node:20-alpine AS build
+ARG OKF_BUILD_REVISION=unknown
+ENV NEXT_PUBLIC_APP_REVISION=${OKF_BUILD_REVISION}
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -8,10 +10,12 @@ RUN npm run build
 
 # run
 FROM node:20-alpine AS runner
+ARG OKF_BUILD_REVISION=unknown
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
+ENV OKF_BUILD_REVISION=${OKF_BUILD_REVISION}
 
 # node:*-alpine уже содержит непривилегированного пользователя node (uid 1000) —
 # сервер Next не нуждается в root (порт 3000 > 1024). --chown нужен, чтобы
@@ -19,7 +23,8 @@ ENV PORT=3000
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public
+COPY --from=build --chown=node:node /app/scripts/diagnostics-runner.mjs ./diagnostics-runner.mjs
 USER node
 
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "diagnostics-runner.mjs"]

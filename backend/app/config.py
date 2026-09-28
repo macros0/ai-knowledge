@@ -34,6 +34,62 @@ class Settings(BaseSettings):
     knowledge_profile: str = "Основной контур"
     data_dir: Path = Path("./data")
 
+    # Diagnostics use a separate root so short-lived logs do not enter document backups.
+    diagnostics_dir: Path = Path("./diagnostics")
+    diagnostics_baseline_enabled: bool = True
+    diagnostics_capture_enabled: bool = False
+    diagnostics_bundle_enabled: bool = False
+    diagnostics_download_enabled: bool = False
+    diagnostics_total_mb: int = Field(default=500, ge=1)
+    diagnostics_backend_mb: int = Field(default=480, ge=1)
+    diagnostics_frontend_mb: int = Field(default=20, ge=1)
+    diagnostics_baseline_mb: int = Field(default=50, ge=1)
+    diagnostics_session_mb: int = Field(default=100, ge=1)
+    diagnostics_bundle_mb: int = Field(default=200, ge=1)
+    diagnostics_segment_mb: int = Field(default=5, ge=1)
+    diagnostics_min_free_mb: int = Field(default=2048, ge=0)
+    diagnostics_baseline_days: int = Field(default=7, ge=1, le=7)
+    diagnostics_capture_ttl_hours: int = Field(default=24, ge=1, le=24)
+    diagnostics_bundle_ttl_hours: int = Field(default=24, ge=1, le=24)
+    diagnostics_queue_size: int = Field(default=4096, ge=1, le=4096)
+    diagnostics_default_minutes: int = Field(default=15, ge=5, le=60)
+    diagnostics_max_pending: int = Field(default=2, ge=1, le=2)
+    diagnostics_max_ops_per_hour: int = Field(default=3, ge=1, le=3)
+    llm_raw_debug_enabled: bool = False
+
+    @field_validator("diagnostics_dir", mode="before")
+    @classmethod
+    def _resolve_diagnostics_dir(cls, value: object) -> Path:
+        path = Path(value or "./diagnostics")
+        return path if path.is_absolute() else Path(__file__).resolve().parents[2] / path
+
+    @model_validator(mode="after")
+    def _validate_diagnostics(self):
+        self.diagnostics_limits()
+        root, data = self.diagnostics_dir.resolve(), self.data_dir.resolve()
+        if root.is_relative_to(data) or data.is_relative_to(root):
+            raise ValueError("Diagnostics root must be separate from document data")
+        if self.environment == "production" and self.llm_raw_debug_enabled:
+            raise ValueError("Raw LLM debug output is forbidden in production")
+        return self
+
+    def diagnostics_limits(self):
+        from app.services.diagnostics.schema import DiagnosticLimits, MIB
+        return DiagnosticLimits(
+            total_bytes=self.diagnostics_total_mb * MIB,
+            backend_bytes=self.diagnostics_backend_mb * MIB,
+            frontend_bytes=self.diagnostics_frontend_mb * MIB,
+            baseline_bytes=self.diagnostics_baseline_mb * MIB,
+            session_bytes=self.diagnostics_session_mb * MIB,
+            bundle_bytes=self.diagnostics_bundle_mb * MIB,
+            segment_bytes=self.diagnostics_segment_mb * MIB,
+            min_free_bytes=self.diagnostics_min_free_mb * MIB,
+            baseline_seconds=self.diagnostics_baseline_days * 86400,
+            capture_seconds=self.diagnostics_capture_ttl_hours * 3600,
+            bundle_seconds=self.diagnostics_bundle_ttl_hours * 3600,
+            queue_size=self.diagnostics_queue_size,
+        )
+
     # --- Реляционная БД (метаданные: документы, теги, OKF-концепты) ---
     # Прод: PostgreSQL (синхронный драйвер psycopg3). Пример строки:
     #   postgresql+psycopg://postgres:password@127.0.0.1:5432/okf_knowledge

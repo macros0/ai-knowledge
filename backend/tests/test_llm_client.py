@@ -754,15 +754,17 @@ class TestParseJson:
     def test_debug_file_is_created_on_failure(self, tmp_path, monkeypatch):
         from app.services.llm_client import _parse_json
 
-        debug_dir = tmp_path / "debug"
-        monkeypatch.setattr("app.services.llm_client.get_settings", lambda: type("S", (), {"data_dir": tmp_path})())
+        debug_dir = tmp_path / "dev-llm-debug"
+        monkeypatch.setattr("app.services.llm_client.get_settings", lambda: type("S", (), {
+            "data_dir": tmp_path, "environment": "development", "llm_raw_debug_enabled": True,
+        })())
 
         try:
             _parse_json("совершенный мусор без json", doc_id="dump-test", chunk_idx=7)
         except ValueError:
             pass
 
-        files = list(debug_dir.glob("llm_raw_dump-test_7_*.txt"))
+        files = list(debug_dir.glob("llm_raw_*.txt"))
         assert len(files) == 1, f"Expected 1 debug file, got {files}"
         content = files[0].read_text(encoding="utf-8")
         assert "совершенный мусор" in content

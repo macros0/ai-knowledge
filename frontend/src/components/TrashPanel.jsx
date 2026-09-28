@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useCallback, useEffect, useState } from "react";
 import { bulkRestoreDocuments, friendlyApiError, listTrashDocuments, restoreDocument } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -35,7 +37,7 @@ export default function TrashPanel() {
   }, [page]);
 
   useEffect(() => {
-    load().catch((err) => showToast(t("trash.loadError", { message: friendlyApiError(err, t) }), { type: "error" }));
+    load().catch((err) => showToast({ ...apiToast(err, t, { type: "error" }), message: t("trash.loadError", { message: friendlyApiError(err, t) }) }));
   }, [load, showToast, t]);
 
   const restoreOne = async (doc, { force = false } = {}) => {
@@ -54,7 +56,7 @@ export default function TrashPanel() {
       if (err.code === "duplicate") {
         setConflict({ doc, duplicates: err.data?.duplicates ?? {} });
       } else {
-        showToast(t("trash.restoreError", { message: friendlyApiError(err, t) }), { type: "error" });
+        showToast({ ...apiToast(err, t, { type: "error" }), message: t("trash.restoreError", { message: friendlyApiError(err, t) }) });
       }
     } finally {
       setBusy((s) => ({ ...s, [doc.id]: false }));
@@ -89,7 +91,7 @@ export default function TrashPanel() {
       setSelected({});
       load();
     } catch (err) {
-      showToast(t("trash.restoreError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("trash.restoreError", { message: friendlyApiError(err, t) }) });
     }
   };
 

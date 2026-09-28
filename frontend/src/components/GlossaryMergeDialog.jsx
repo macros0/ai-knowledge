@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useState } from "react";
 import { commitGlossaryMerge, friendlyApiError, previewGlossaryMerge } from "@/lib/api";
 import { buildGlossaryMergeRequest, normalizeGlossaryIdentity, defaultGlossaryMergeChoice } from "@/lib/glossaryConflicts.mjs";
@@ -67,7 +69,7 @@ export default function GlossaryMergeDialog({ source: initialSource, target: ini
       const result = await previewGlossaryMerge(request());
       setProposal(result); setPreviewAliases(result.merged?.aliases || []);
     }
-    catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); }
+    catch (err) { showToast(apiToast(err, t, { type: "error" })); }
     finally { setBusy(false); }
   };
   const commit = async () => {
@@ -83,7 +85,7 @@ export default function GlossaryMergeDialog({ source: initialSource, target: ini
             fresh.target[field] ?? (field === "enabled" ? true : ""))])));
         setAliasChoices({}); setTranslationChoices({}); setPreviewAliases(fresh.merged?.aliases || []);
       }
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error" }));
     }
     finally { setBusy(false); }
   };

@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useEffect, useMemo, useState } from "react";
 import { glossaryTranslation, listActiveLocales, reviewGlossaryTranslation, friendlyApiError } from "@/lib/api";
 import { translationState } from "@/lib/glossaryUi.mjs";
@@ -67,7 +69,7 @@ export default function GlossaryTranslations({ term, onSaved, beforeSave }) {
       onSaved(updated);
       showToast(t("admin.glossary.translationSaved"), { type: "success" });
     } catch (err) {
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error" }));
     } finally { setBusy(false); }
   };
 
@@ -76,7 +78,7 @@ export default function GlossaryTranslations({ term, onSaved, beforeSave }) {
     if (beforeSave && !beforeSave()) return;
     setBusy(true);
     try { onSaved(await reviewGlossaryTranslation(term.id, locale, { translation_version: current.version, source_revision: term.source_revision })); }
-    catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); }
+    catch (err) { showToast(apiToast(err, t, { type: "error" })); }
     finally { setBusy(false); }
   };
 

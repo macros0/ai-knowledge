@@ -22,6 +22,7 @@ if [[ "${args[0]:-}" == compose ]]; then
   args=("${args[@]:1}")
   if [[ "${args[0]:-}" == --env-file ]]; then args=("${args[@]:2}"); fi
   { printf 'compose'; printf ' %s' "${args[@]}"; printf '\n'; } >> "$FAKE_DOCKER_LOG"
+  printf 'diagnostics=%s\n' "${OKF_DIAGNOSTICS_DIR:-}" >> "$FAKE_DOCKER_LOG"
 fi
 EOF
 chmod +x "$fixture_bin/docker"
@@ -30,10 +31,14 @@ PATH="$fixture_bin:$PATH" FAKE_DOCKER_LOG="$fake_docker_log" \
   "$root/scripts/production/backup-bundled.sh" --env-file "$fixture_env" --backup-dir "$tmp/backup" --dry-run
 grep -qx 'compose stop frontend backend' "$fake_docker_log"
 grep -qx 'compose exec -T postgres pg_dump -U okf -d okf_knowledge --format=custom' "$fake_docker_log"
-grep -Fqx "compose run --rm --no-deps -v $tmp/backup/backup-dry-run:/backup backend python scripts/create_qdrant_snapshot.py --output-dir /backup/qdrant" "$fake_docker_log"
+# The archive is root-owned and mode 0700. Its one-shot writer must retain
+# root inside the helper container; the normal backend still drops privileges.
+grep -Fqx "compose run --rm --no-deps --user 0 --entrypoint python -v $tmp/backup/backup-dry-run:/backup backend scripts/create_qdrant_snapshot.py --output-dir /backup/qdrant" "$fake_docker_log"
 
 PATH="$fixture_bin:$PATH" FAKE_DOCKER_LOG="$fake_docker_log" \
   "$root/scripts/production/restore-bundled.sh" --env-file "$fixture_env" --backup-dir "$tmp/backup" --target-project recovered --target-data-dir "$tmp/recovered" --dry-run
+grep -Fqx "diagnostics=$tmp/recovered-diagnostics" "$fake_docker_log"
+grep -Fqx "compose --project-name recovered --env-file $fixture_env run --rm --no-deps --user 0 --entrypoint python -v $tmp/backup:/backup:ro backend scripts/restore_qdrant_snapshot.py --snapshot-file /backup/qdrant/SNAPSHOT" "$fake_docker_log"
 ! grep -q 'volume rm' "$fake_docker_log"
 
 mkdir "$tmp/existing"

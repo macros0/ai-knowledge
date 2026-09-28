@@ -165,7 +165,7 @@ try {
 }
 
 $results['Backend'] = Start-Service -Name 'Backend' -Url 'http://localhost:18000/health' -Launch {
-    & $Helper -FilePath (Join-Path $Root 'backend\.venv\Scripts\python.exe') -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '18000') `
+    & $Helper -FilePath (Join-Path $Root 'backend\.venv\Scripts\python.exe') -ArgumentList @('-m', 'app.diagnostic_entrypoint', '--host', '127.0.0.1', '--port', '18000') `
         -WorkingDirectory (Join-Path $Root 'backend') `
         -Port 18000 `
         -PidFile (Join-Path $LogDir 'backend.pid')

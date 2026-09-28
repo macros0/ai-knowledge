@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useState } from "react";
 import { bulkUpdateTags, friendlyApiError } from "@/lib/api";
 import { bumpTagVersion } from "@/lib/tagDictionary";
@@ -75,7 +77,7 @@ export default function SelectionBar({
       if (op === "add") setAddTag("");
       else setRemoveTag("");
     } catch (err) {
-      showToast(t("selection.bulkError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("selection.bulkError", { message: friendlyApiError(err, t) }) });
     } finally {
       setBusy(false);
     }

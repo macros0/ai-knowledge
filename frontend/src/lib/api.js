@@ -1,5 +1,6 @@
 import { detectLocale, readStored } from "../i18n/core.js";
 import { readChatStream } from "./chatStream.mjs";
+import { errorReference, validRequestId } from "./diagnosticIdentifiers.mjs";
 
 const BASE = "/api";
 const CHAT_TIMEOUT_MS = 210_000;
@@ -19,13 +20,16 @@ export function serviceMessageKey(service) {
 }
 
 export class ApiError extends Error {
-  constructor(message, { status, code, service, data } = {}) {
+  constructor(message, { status, code, service, data, requestId, localReportId } = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.service = service;
     this.data = data;
+    this.requestId = validRequestId(requestId) ? requestId : null;
+    this.localReportId = !this.requestId && status === 0
+      ? validRequestId(localReportId) ? localReportId : globalThis.crypto?.randomUUID?.() || null : null;
   }
 
   get isDependencyUnavailable() {
@@ -126,7 +130,8 @@ async function fetchApi(url, { init, timeoutMs, parse = (resp) => resp.json() } 
       } catch {
         // not JSON — use raw text
       }
-      throw new ApiError(message, { status: resp.status, code, service, data });
+      throw new ApiError(message, { status: resp.status, code, service, data,
+        requestId: errorReference(resp.headers.get("x-request-id"), data?.request_id) });
     }
     return await parse(resp);
   } catch (err) {
@@ -184,6 +189,24 @@ function jsonRequest(path, method, data, timeoutMs) {
     body: JSON.stringify(data),
   }, timeoutMs);
 }
+
+export const joinDiagnosticBrowser = (code = null) => jsonRequest("/diagnostic-client/join", "POST", code === null ? {} : { code });
+export const leaveDiagnosticBrowser = (participationId) => jsonRequest("/diagnostic-client/leave", "POST", { participation_id: participationId });
+export const sendDiagnosticBrowserEvent = (event) => request("/diagnostic-client/events", {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(event),
+}, 5000, () => null);
+
+const diagnosticBase = "/admin/diagnostics";
+export const getDiagnosticsStatus = () => request(`${diagnosticBase}/status`);
+export const queryDiagnosticEvents = (filters) => jsonRequest(`${diagnosticBase}/events/query`, "POST", filters);
+export const startDiagnosticSession = (settings) => jsonRequest(`${diagnosticBase}/sessions`, "POST", settings);
+export const stopDiagnosticSession = (id) => jsonRequest(`${diagnosticBase}/sessions/${encodeURIComponent(id)}/stop`, "POST", {});
+export const inviteDiagnosticBrowser = (id) => jsonRequest(`${diagnosticBase}/sessions/${encodeURIComponent(id)}/invite`, "POST", {});
+export const createDiagnosticBundle = (filters) => jsonRequest(`${diagnosticBase}/bundles`, "POST", filters);
+export const listDiagnosticBundles = (offset = 0) => request(`${diagnosticBase}/bundles?offset=${offset}&limit=20`);
+export const previewDiagnosticBundle = (id) => jsonRequest(`${diagnosticBase}/bundles/${encodeURIComponent(id)}/preview`, "POST", {});
+export const deleteDiagnosticBundle = (id) => request(`${diagnosticBase}/bundles/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const diagnosticDownloadUrl = (id) => `${BASE}${diagnosticBase}/bundles/${encodeURIComponent(id)}/download`;
 
 export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale, allowSimilar = false } = {}) {
   const form = new FormData();
@@ -488,7 +511,8 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
         return await readChatStream(response, onText);
       } catch (err) {
         if (err.name === "AbortError") throw err;
-        throw new ApiError("Chat stream failed", { code: err.code || "dependency_unavailable", status: err.status || 503 });
+        throw new ApiError("Chat stream failed", { code: err.code || "dependency_unavailable", status: err.status || 503,
+          requestId: err.requestId });
       }
     } : undefined
   );

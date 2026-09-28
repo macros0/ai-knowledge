@@ -23,6 +23,9 @@ from pathlib import Path
 from typing import BinaryIO
 
 from app.config import get_settings
+from app.services.diagnostics.context import bind_context, current_context, new_operation, run_bound, set_generation_id
+from app.services.diagnostics.events import operation_span, start_stage, finish_stage, record_failure
+from app.services.diagnostics.recorder import emit_event
 from app.db.session import session_scope
 from app.db.models import DocumentChunk, DocumentGeneration, DocumentGenerationState
 from app.services.chunk_store import replace_chunks
@@ -414,8 +417,9 @@ class Pipeline:
                 # Publish admission before submit: a busy executor may not start
                 # this document for minutes, and resume must stop showing paused.
                 self.registry.update(doc_id, status="queued", error=None, error_code=None)
+                context = new_operation(current_context(), doc_id=doc_id)
                 task = self._executor.submit(
-                    self._run, doc_id, filepath, filename, user_tags, resume, reset_staging,
+                    run_bound, context, self._run, doc_id, filepath, filename, user_tags, resume, reset_staging,
                 )
             except Exception:
                 self._abort_events.pop(doc_id, None)
@@ -597,6 +601,17 @@ class Pipeline:
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
         *, fresh_table_cache: bool = False,
     ) -> None:
+        context = current_context()
+        if context.doc_id != doc_id or not context.operation_id:
+            context = new_operation(context, doc_id=doc_id)
+        with bind_context(context), operation_span():
+            return self._process_bound(doc_id, filepath, filename, user_tags, resume,
+                                       fresh_table_cache=fresh_table_cache)
+
+    def _process_bound(
+        self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
+        *, fresh_table_cache: bool = False,
+    ) -> None:
         with session_scope() as session:
             capture_published_update(session, doc_id, self.settings)
         self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
@@ -609,6 +624,7 @@ class Pipeline:
                 paths = prepare_generation_paths(session, self.settings, doc_id, generation_id)
             else:
                 paths = generation_paths(self.settings, doc_id, generation_id)
+        set_generation_id(generation_id)
         set_table_cache_fresh_since(_table_cache_fresh_since(paths.uploads_root, fresh_table_cache, resume))
         if phase == "ready":
             checkpoint = staging.load() or {}
@@ -628,6 +644,7 @@ class Pipeline:
         with tempfile.TemporaryDirectory(prefix=".attachments-attempt-", dir=paths.uploads_root) as attempt:
             parse_attachments_dir = Path(attempt)
             parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled)
+            parse_started = start_stage("parse")
             if self.settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
                 supervised = parse_document_supervised(
                     filepath,
@@ -650,6 +667,7 @@ class Pipeline:
                 )
                 parse_warnings = list(parse_context.warnings)
                 parser_version = parse_context.parser_version
+            finish_stage("parse", parse_started, counts={"processed": len(blocks)})
             markdown, attach_spans = markdown_attachment_spans(blocks)
             # Keep the existing canonical markdown contract for ordinary files and
             # test/legacy parser adapters. Rebuild when disabled mail or administrative
@@ -816,6 +834,7 @@ class Pipeline:
                 degradation: list[dict] = []
                 for chunk_attempt in range(1, max_chunk_retries + 1):
                     try:
+                        generation_started = start_stage("generate", chunk_index=i, retry_index=chunk_attempt - 1)
                         gen_quality.drain()
                         self.registry.update(doc_id, current_chunk=i + 1)
                         if not has_text or (blocks and chunk_source_ids[i] not in text_source_ids):
@@ -829,6 +848,8 @@ class Pipeline:
                         # Телеметрия деградации этого чанка (salvage JSON,
                         # fallback классификатора) — до любых других вызовов.
                         degradation = gen_quality.drain()
+                        finish_stage("generate", generation_started, chunk_index=i,
+                                     retry_index=chunk_attempt - 1, counts={"concepts": len(concepts or [])})
                         if self._abort_events.get(doc_id, threading.Event()).is_set():
                             logger.info("Генерация %s прервана после чанка %d", doc_id, i + 1)
                             return
@@ -851,6 +872,8 @@ class Pipeline:
                             }
                             staging.append_chunk(i, concepts, degradation=degradation, provenance=provenance, global_tags=user_tags)
                         if incomplete and chunk_attempt < max_chunk_retries:
+                            emit_event("retry_scheduled", fields={"stage": "generate", "chunk_index": i,
+                                                                  "retry_index": chunk_attempt, "counts": {"attempts": max_chunk_retries}})
                             logger.info("[%s] Догенерация чанка %d/%d: попытка %d/%d",
                                         doc_id, i + 1, total, chunk_attempt + 1, max_chunk_retries)
                             if self._abort_events.get(doc_id, threading.Event()).wait(timeout=chunk_backoff * chunk_attempt):
@@ -867,6 +890,9 @@ class Pipeline:
                             self.registry.update(doc_id, error=str(exc), error_code=processing_error_code(exc))
                             raise
                         delay = chunk_backoff * chunk_attempt
+                        emit_event("retry_scheduled", exception=exc,
+                                   fields={"stage": "generate", "chunk_index": i, "retry_index": chunk_attempt,
+                                           "error_code": processing_error_code(exc)})
                         msg = (
                             f"Сбой генерации чанка ({exc}). "
                             f"Повтор {chunk_attempt}/{max_chunk_retries} через {int(delay)}с..."
@@ -878,6 +904,7 @@ class Pipeline:
 
                 self.registry.update(doc_id, processed_chunks=len(staging.processed_chunks), current_chunk=None)
         except Exception as exc:
+            record_failure(exc, stage="generate")
             logger.warning("Генерация OKF прервана на документе %s: %s", doc_id, exc, exc_info=True)
             if is_storage_full(exc):
                 self._record_storage_full(doc_id, processed_chunks=len(staging.processed_chunks))
@@ -907,6 +934,7 @@ class Pipeline:
         except DocumentUpdateCancelled:
             return
         except DependencyUnavailableError as exc:
+            record_failure(exc, stage="index")
             # Staging не удаляем: чекпоинты всех чанков сохраняются, чтобы
             # повторный resume повторил только финализацию (embed+index),
             # не перегенерируя концепты через LLM.
@@ -922,6 +950,7 @@ class Pipeline:
             # Staging не удаляем: чекпоинты всех чанков сохраняются, чтобы
             # повторный resume повторил только финализацию (embed+index),
             # не перегенерируя концепты через LLM.
+            record_failure(exc, stage="index")
             logger.exception("Финализация документа %s не удалась", doc_id)
             if is_storage_full(exc):
                 self._record_storage_full(doc_id)
@@ -948,6 +977,7 @@ class Pipeline:
                 generation_id = prepare_generation_attempt(session, doc_id, resume=True).id
             paths = prepare_generation_paths(session, self.settings, doc_id, generation_id)
         staging.bind_generation(generation_id)
+        indexing_started = start_stage("index")
         # Денормализованная проекция разработки (номер/название/модуль) в payload
         # Qdrant `dev_tags` — отдельное поле, не смешивается с `tags`.
         dev_tags: list[str] = []
@@ -1204,6 +1234,7 @@ class Pipeline:
         write_json_atomic(publication_path, prepared)
         with session_scope() as session:
             mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication_path))
+        finish_stage("index", indexing_started, counts={"concepts": len(okf_docs), "chunks": len(chunk_rows), "points": len(keep_point_ids)})
         self._publish_prepared_generation(doc_id, generation_id, staging)
         logger.info(
             "Документ %s обработан: %d OKF-концептов, %d чанков%s",
@@ -1212,8 +1243,10 @@ class Pipeline:
         )
 
     def _publish_prepared_generation(self, doc_id: str, generation_id: str, staging: StagingStore) -> None:
+        publication_started = start_stage("publish")
         if not publish_prepared_document(self.settings, self.vector_store, doc_id, generation_id):
             return
+        finish_stage("publish", publication_started)
         # Keep incomplete generation checkpoints for selective recovery, even
         # after successful indexing. Clean runs release them after the DB update.
         try:

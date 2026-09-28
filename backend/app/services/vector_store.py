@@ -36,6 +36,7 @@ from app.services.generation_store import lock_generation_read
 from app.services.sparse import to_sparse_vector
 from app.services.mail_scope import MAIL_SCOPE_VERSION, MailScope, MailMode, mail_scope_allowed
 from app.services.storage import StorageFullError, is_storage_full_text
+from app.services.diagnostics.events import dependency_call
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class _UpsertStats(TypedDict):
     failure: VectorStoreError | None
 
 
+@dependency_call("qdrant")
 def _qdrant_call(func, *args, **kwargs):
     """Обёртка для Qdrant-вызовов: перехватывает сбои → VectorStoreError.
 

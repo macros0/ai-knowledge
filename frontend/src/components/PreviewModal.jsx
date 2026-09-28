@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useEffect, useState } from "react";
 import { bulkDelete, bulkPreview, bulkRegenerate, friendlyApiError } from "@/lib/api";
 import { TYPED_CONFIRM_THRESHOLD } from "@/lib/constants";
@@ -28,7 +30,7 @@ export default function PreviewModal({ docIds, onClose, onDone }) {
         const data = await bulkPreview(docIds);
         if (!cancelled) setPreview(data);
       } catch (err) {
-        if (!cancelled) showToast(t("preview.loadError", { message: friendlyApiError(err, t) }));
+        if (!cancelled) showToast({ ...apiToast(err, t), message: t("preview.loadError", { message: friendlyApiError(err, t) }) });
         if (!cancelled) onClose();
       } finally {
         if (!cancelled) setLoading(false);
@@ -57,7 +59,7 @@ export default function PreviewModal({ docIds, onClose, onDone }) {
       onClose();
       onDone?.();
     } catch (err) {
-      showToast(friendlyApiError(err, t), { type: "error", duration: 8000 });
+      showToast(apiToast(err, t, { type: "error", duration: 8000 }));
       setBusy(false);
     }
   };

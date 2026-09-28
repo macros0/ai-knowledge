@@ -1,4 +1,4 @@
-# Admin Diagnostics Implementation Plan
+# Диагностика из интерфейса администратора — подробный план разработки
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -16,8 +16,39 @@ pytest и Node test runner; Docker Compose bundled/external.
 
 **Spec:** [2026-09-27-admin-diagnostics-design.md](../specs/2026-09-27-admin-diagnostics-design.md).
 
-**Status:** Только план, 2026-09-27. Код функции, миграции и тесты ещё не написаны
-и не запускались. Значения ниже — целевые требования, не результаты измерений.
+**Status:** План уточнён 2026-09-28 по основному checkout `e9f6abd`.
+В рамках подготовки плана продуктовый код не менялся и тесты реализации не
+запускались. Значения ниже — целевые требования, не результаты измерений.
+
+## Пользовательский сценарий и выбранный подход
+
+1. Администратор открывает «Администрирование → Диагностика» и видит последние
+   ошибки, состояние записи и занятое место. Для уже произошедшего сбоя выбирает
+   время либо код обращения и сразу формирует пакет из постоянного журнала.
+2. Для воспроизводимого сбоя выбирает область: вся система, один документ,
+   поиск/чат или интерфейс. Включает подробную диагностику на 15 минут;
+   интерфейс показывает срок автоматической остановки и лимит 100 МиБ.
+3. Воспроизводит проблему. При проблеме в браузере отдельно подключает свой
+   браузер или передаёт одноразовое приглашение вошедшему пользователю.
+4. Останавливает сбор вручную либо ждёт серверного ограничения. Закрытие вкладки
+   не мешает остановке. После рестарта подробный сбор остаётся выключенным.
+5. Формирует ZIP, проверяет состав и отметки неполноты, скачивает его и вручную
+   передаёт разработчику. Отправка из приложения не требуется.
+6. Данные подробной сессии и готовый пакет удаляются по TTL. Администратор может
+   удалить пакет раньше; постоянный журнал продолжает ротироваться.
+
+Выбран комбинированный подход: небольшой постоянный журнал + временный подробный
+сбор. Только временный сбор не поможет расследовать уже случившийся невоспроизводимый
+сбой. Постоянный DEBUG всех сервисов расходует место и увеличивает риск записи
+содержимого документов. Выгрузка существующих произвольных текстовых логов не даёт
+проверяемой гарантии очистки. Поэтому первая версия создаёт отдельный безопасный
+канал событий с явным набором разрешённых полей.
+
+Значения по умолчанию в этом плане — предлагаемые решения для реализации.
+Внешняя система логирования, удалённый доступ разработчика и автоматическая отправка
+пакетов не нужны. План не зависит от незавершённого плана административных runtime
+настроек: эксплуатационные лимиты задаются конфигурацией при запуске, UI управляет
+только диагностическими сессиями и пакетами.
 
 ## Global Constraints
 
@@ -43,8 +74,10 @@ pytest и Node test runner; Docker Compose bundled/external.
 - Windows dev: 18000/16300; localhost для внутренних соединений не использовать.
   Внутри Docker порты остаются 8000/3000. npm shims локально не использовать.
 - Не менять продуктовый код в ходе подготовки этого плана. При исполнении сначала
-  заново проверить dirty working tree: сейчас уже изменены pipeline, llm_client,
-  models, audit, api.js, i18n и SECURITY.md другой работой. Не откатывать её.
+  заново проверить working tree и актуальные interfaces. На момент повторной
+  проверки основной код находится на `e9f6abd`; несвязанный файл плана
+  `2026-09-27-admin-runtime-settings.md` не отслеживается Git. Не включать его
+  в изменения диагностики и не откатывать последующую чужую работу.
 - Выполнение не означает автоматический commit/push/deploy. Коммиты — только
   при соответствующем поручении, точные файлы/hunks; никогда `git add .`.
 - Изменения прав, журналирования, retention и deployment документировать в
@@ -72,6 +105,7 @@ pytest и Node test runner; Docker Compose bundled/external.
 |---|---|
 | `backend/app/services/diagnostics/schema.py`, `sanitize.py` | Типы событий, allowlists, безопасный стек |
 | `.../context.py`, `.../middleware.py` | Request/operation context и pure ASGI |
+| `.../events.py`, `.../raw_debug.py` | Явные этапы/зависимости и отдельный development opt-in для сырых дампов |
 | `.../store.py`, `.../recorder.py` | Сегменты, budgets/leases, bounded queue |
 | `.../sessions.py`, `.../control.py` | TTL, activation, recovery, deferred control audit |
 | `.../snapshot.py`, `.../bundle.py`, `.../bundle_queue.py` | Snapshot, ZIP, отдельная очередь |
@@ -131,7 +165,9 @@ CI использует рабочие npm scripts; локально прямо�
 изменить `backend/app/config.py`, `backend/tests/test_settings.py`.
 
 **Interfaces:** `DiagnosticContext(request_id: str|None, operation_id: str|None,
-doc_id: str|None, generation_id: str|None)` — immutable dataclass.
+doc_id: str|None, generation_id: str|None, operation_kind: CaptureScope|None=None)`
+— immutable dataclass. `operation_kind` — внутренний признак отбора; не поле
+экспортируемого события и не новый уровень доступа.
 `sanitize_event(raw: Mapping[str, object]) -> dict | None`;
 `safe_exception(exc: BaseException) -> dict`;
 `encode_event(event: Mapping[str, object]) -> bytes` — JSONL UTF-8 <=8192 bytes.
@@ -184,6 +220,11 @@ exception: BaseException|None=None, fields: Mapping[str, object]|None=None) -> b
   для Unix fcntl через маленький адаптер.
 - [ ] Подключить безопасный handler существующих WARN/ERROR без `getMessage()`;
   дедуп fingerprint вычислять из code/frames/context, не из содержимого сообщения.
+- [ ] Добавить `test_baseline_error_survives_capture_expiry` и
+  `test_duplicate_summary_preserves_first_last_and_count`: WARN/ERROR сохраняется
+  в постоянном журнале и во время подробной сессии; удаление detail через 24 часа
+  не сокращает baseline retention 7 суток. Повторы дают bounded summary с первым
+  и последним временем и количеством; дедуп-таблица тоже имеет предел памяти.
 - [ ] Writer повторно проверяет deadline/scope перед записью detailed queue:
   события, оставшиеся в очереди после stop/expiry, не продлевают запись сессии;
   потери отражаются отдельным счётчиком, baseline error при этом допустим.
@@ -200,7 +241,7 @@ exception: BaseException|None=None, fields: Mapping[str, object]|None=None) -> b
 не копировать сегодняшний head и не изменять существующие миграции.
 
 **Interfaces:** `DiagnosticSessionService.start(scope: CaptureScope, minutes: int,
-actor: User) -> SessionOut`; `stop(session_id: UUID, actor: User|None,
+actor: User, *, doc_id: str|None=None) -> SessionOut`; `stop(session_id: UUID, actor: User|None,
 reason: StopReason) -> SessionOut`; `active_for(context, event_code) -> UUID|None`;
 `recover(boot_id: UUID) -> RecoveryResult`; `tick(now_utc, now_monotonic) -> None`.
 `write_control_event(event: ControlEvent) -> None` и `reconcile_control_events()`.
@@ -211,6 +252,10 @@ actor metadata хранится отдельно от экспортируемо
   `test_stop_is_idempotent`, `test_monotonic_deadline_survives_wall_clock_change`.
   Assertions: одна active, вторая заявка conflict; при audit failure ноль captured
   detailed events; после 900 секунд active_for возвращает None.
+- [ ] `test_document_scope_requires_existing_document`: для scope=document
+  doc_id обязателен и указывает на существующий документ вне корзины;
+  для других scope doc_id запрещён. SessionStart DTO и API проверяют этот
+  контракт до активации; одинаковый смысл ошибки в SQLite и PostgreSQL.
 - [ ] RED: `test_restart_never_resumes_capture`, `test_expiry_with_database_down`,
   `test_deferred_audit_replay_is_idempotent`, `test_stop_with_full_disk_marks_gap`.
 - [ ] Добавить обе таблицы с перечисленными в spec колонками; active_slot nullable
@@ -237,7 +282,8 @@ actor metadata хранится отдельно от экспортируемо
 
 **Interfaces:** `bind_context(context: DiagnosticContext) -> ContextManager`;
 `current_context() -> DiagnosticContext`;
-`new_operation(parent: DiagnosticContext, *, doc_id=None, generation_id=None) -> DiagnosticContext`;
+`new_operation(parent: DiagnosticContext, *, doc_id=None, generation_id=None,
+operation_kind: CaptureScope|None=None) -> DiagnosticContext`;
 `DiagnosticContextMiddleware(app)` — pure ASGI.
 
 - [ ] RED: `test_parallel_requests_and_threads_do_not_share_context`,
@@ -252,6 +298,12 @@ actor metadata хранится отдельно от экспортируемо
 - [ ] Передавать immutable context в thread/task при постановке, не читать
   ContextVar случайного рабочего потока. Resume создаёт новую операцию;
   существующая generation identity используется, её семантика не меняется.
+- [ ] Проставлять `operation_kind=document` для pipeline, `search_chat` для chat/search,
+  `system` для остальных фоновых работ. Scope нельзя выводить только из
+  отсутствия doc_id: иначе массовый экспорт попадёт в диагностику поиска.
+  `test_search_scope_excludes_background_export` проверяет это в реальных
+  очередях, `test_generation_context_matches_actual_candidate` — привязку
+  generation_id после подготовки новой попытки, без изменения её поведения.
 - [ ] GREEN: `python -m pytest tests/test_diagnostics_context.py tests/test_chat_stream.py -q`;
   документировать связь parent request → operation → generation/chunk.
 
@@ -259,7 +311,8 @@ actor metadata хранится отдельно от экспортируемо
 
 **Files:** изменить `services/{pipeline,llm_client,vector_store,embedder,health}.py`,
 `api/{chat,search}.py`, `config.py`; создать `backend/tests/test_diagnostics_pipeline.py`,
-`test_diagnostics_privacy.py`; дополнить `tests/test_local_llm.py`.
+`test_diagnostics_privacy.py`, `test_diagnostics_dependencies.py`,
+`services/diagnostics/{events,raw_debug}.py`; дополнить `tests/test_local_llm.py`.
 
 **Interfaces:** только `emit_event` и DiagnosticContext предыдущих задач.
 Event codes: `operation_started`, `stage_started`, `stage_finished`,
@@ -279,6 +332,12 @@ Event codes: `operation_started`, `stage_started`, `stage_finished`,
 - [ ] Добавить structured hooks на границах вызовов/этапов без изменения retries,
   prompt, timeout, публикации, recovery и классификации existing problem codes.
   Provider status код классифицировать, его body/message никогда не передавать.
+- [ ] `test_failed_dependency_is_retained_without_capture`: отказ LLM,
+  embeddings или Qdrant остаётся в baseline при выключенном подробном сборе,
+  включая перехваченное и обработанное исключение. `test_llm_worker_inherits_context`
+  проверяет IDs внутри фактического daemon thread вызова LLM, а не только
+  в потоке pipeline. `test_failed_finalization_has_no_success_event` исключает
+  ложное успешное завершение после перехваченной ошибки публикации/индексации.
 - [ ] GREEN: `python -m pytest tests/test_diagnostics_pipeline.py tests/test_diagnostics_privacy.py tests/test_local_llm.py tests/test_health_readiness.py -q`;
   регрессии pipeline запускать вместе с задачей 14 после интеграции.
 
@@ -301,6 +360,9 @@ instrumentation hook не сериализует err/request/context целик�
 - [ ] Proxy генерирует UUID вместо внешнего ID; SSR proxy передаёт ID в request
   headers, backendFetch его наследует. При fetch rejection вернуть безопасный
   JSON 502/504 с code/request_id и записать техническое событие, без upstream URL.
+  Не полагаться на общую AsyncLocalStorage между Next Proxy и SSR: передавать ID
+  через request headers, в SSR читать его через документированный Next API.
+  Проверить `test_ssr_inherits_request_id_without_shared_proxy_state`.
 - [ ] Сохранить passthrough upload/ZIP/NDJSON, AbortSignal, no-store и все Set-Cookie;
   отличать клиентский abort от ошибки зависимости. Успешные status/duration
   писать только при живой interface/system control lease.
@@ -313,6 +375,11 @@ instrumentation hook не сериализует err/request/context целик�
   Не снимать marker по одному TTL. Проверить crash/restart и второй writer в тесте.
 - [ ] GREEN: `node --test test/diagnosticServer.test.mjs test/api-proxy.test.js`;
   production build не включает server FS-модуль в client chunk.
+  Координаты JS-стека согласовать с Python-валидатором: известные модули приложения
+  либо build asset ID/line/column, внешние кадры заменять `external_frame`.
+  Общий fixture должен включать Node/browser кадры и отклонять абсолютные пути,
+  URL, query и произвольные имена функций от клиента. Python в контейнере
+  не должен требовать наличия исходников frontend для проверки такого кадра.
 
 ## Task 7 — Opt-in браузера и код обращения в пользовательских ошибках
 
@@ -374,9 +441,15 @@ BuiltBundle: filename key, size_bytes, sha256, manifest; no arbitrary path in AP
 - [ ] Построить строго фиксированный состав ZIP из spec. Streams валидировать
   повторно; имена ZIP entry статические; не обходить data/debug или uploads.
   Готовить DEFLATE level1 по блокам, ограничивать и вход, и фактический выход.
-- [ ] Admission резервирует полную оценку snapshot+ZIP+metadata; одновременно
-  максимум 1 building и 2 queued, durable rate limit 3/hour/admin. Commit audit
-  requested до постановки; publish ready + audit только после проверки ZIP.
+- [ ] Admission резервирует bounded metadata очереди; единственный worker
+  копирует только события выбранного фильтра с per-write quota и перед сборкой
+  ZIP резервирует верхнюю оценку фактического snapshot+ZIP. Резервирование всех
+  retained-сегментов при admission отклоняло узкий пакет из-за посторонних
+  событий; принятый пакет может завершиться ошибкой при последующем исчерпании
+  места, что показывается администратору. Одновременно максимум 1 building и
+  2 queued, не более 1 незавершённого пакета на администратора, durable rate
+  limit 3/hour/admin. Commit audit requested до постановки; publish ready +
+  audit только после проверки ZIP.
 - [ ] Ошибка компонента даёт partial manifest, превышение размера — failed с
   `diagnostic_bundle_too_large`. Rename без ready DB state не открывает download.
   Recovery удаляет/карантинирует orphan temporary в пределах budgets, не пытается
@@ -396,7 +469,7 @@ BuiltBundle: filename key, size_bytes, sha256, manifest; no arbitrary path in AP
 |---|---|
 | GET `/admin/diagnostics/status` | capabilities, recorder status, quota, session; без текстов событий |
 | POST `/admin/diagnostics/events/query` | filters, bounded cursor, audited view; до 100 событий |
-| POST `/admin/diagnostics/sessions` | scope/minutes; 201, 409 если active |
+| POST `/admin/diagnostics/sessions` | scope/minutes/doc_id для document; 201, 409 если active |
 | POST `/admin/diagnostics/sessions/{id}/stop` | идемпотентный stop |
 | POST `/admin/diagnostics/sessions/{id}/invite` | одноразовый код, admin + audit |
 | POST `/admin/diagnostics/bundles` | 202 BundleOut после audit/admission |
@@ -453,6 +526,10 @@ Entry wrapper использует recorder без DB и запускает uvic
 - [ ] Flags разделены: capture/bundle/download могут быть выключены независимо;
   baseline off прекращает recording, но не cleanup. Settings read через существующий
   механизм; изменение env вступает после управляемого restart, UI stop мгновенный.
+- [ ] Maintenance подключает housekeeping нового development raw-debug root
+  даже после выключения opt-in; старый `data/debug` не обходит. Проверить TTL
+  без последующих LLM-вызовов и остановку capture после ошибки записи/лимита:
+  callback recorder обновляет состояние сессии и control projection.
 - [ ] Сохранить startup scripts healthchecks, ownership PID/port и host-порты;
   проверить распознавание своего процесса после смены backend command line.
 - [ ] GREEN: `python -m pytest tests/test_diagnostics_lifecycle.py tests/test_health_readiness.py -q`;
@@ -582,6 +659,10 @@ Wrapper принимает явные runtime env file и Compose project; не 
   отдельный реальный smoke без генерации confidential fixture наружу.
   p95 overhead <=10%/20%; RSS backend delta <=128 МиБ, Node <=32 МиБ;
   no new business 5xx, ZIP CRC и quotas проходят. Сохранить environment/build ID.
+  Решением владельца от 28.09.2026 оптимизация p95 вынесена в отдельную задачу
+  `docs/superpowers/plans/2026-09-28-admin-diagnostics-performance.md`.
+  Фактические превышения остаются в отчёте приёмки; этот пункт не считать
+  выполненным из-за переноса, а production-включение оценивать отдельно.
 - [ ] Browser acceptance: admin start→reproduce→stop→preview→download→unzip;
   code reference matches; обычный пользователь join/report без read; RU/EN;
   backend down error в Node spool; после восстановления partial пакет;
@@ -625,20 +706,56 @@ Wrapper принимает явные runtime env file и Compose project; не 
 
 ## Definition of Done
 
-- [ ] Все 14 задач имеют проверенный результат и ссылки на evidence.
+- [ ] Функциональные части всех 14 задач имеют проверенный результат и ссылки
+  на evidence; отклонение p95 связано с отдельной задачей оптимизации.
 - [ ] Администратор получает понятный пакет без доступа разработчика к системе.
 - [ ] Negative privacy/RBAC/disk-full/restart/streaming tests зелёные.
 - [ ] No-content гарантия ограничена новым schema-based каналом; старые/raw логи
   не представлены как очищенные. Partial/missing evidence виден в manifest/UI.
-- [ ] Производительность и дисковые пределы подтверждены измерениями.
+- [ ] Дисковые пределы подтверждены измерениями. p95 честно измерен и
+  зафиксирован как известное превышение; его оптимизация и прежние пороги
+  вынесены в `2026-09-28-admin-diagnostics-performance.md` по решению владельца.
 - [ ] Runbook, SECURITY.md, миграция, release/rollback drill готовы.
 - [ ] Текущие чужие изменения сохранены; deployment/commit/push не выполнены
   без отдельного поручения.
+
+## Контрольные результаты и оценка объёма
+
+Оценка — инженерный ориентир для одного разработчика, знакомого с проектом,
+при наличии тестового Linux-стенда и учётных записей admin/reader. Она включает
+разработку и проверку, но не ожидание доступа, решений заказчика и production-окна.
+
+| Этап | Задачи | Результат для проверки | Оценка |
+|---|---|---|---|
+| Основа хранения и управления | 1–3 | Безопасные события, ограниченный spool, сессии и аудит | 3–5 рабочих дней |
+| Связь ошибок и источники событий | 4–7 | Корреляция API/потоков/Next/браузера без исходного текста | 4–6 дней |
+| Выгрузка и администраторский сценарий | 8–11 | Snapshot, ZIP, защищённое скачивание и RU/EN UI | 4–6 дней |
+| Эксплуатация и выпуск | 12–14 | Offline-сбор, оба production-режима, аварийные и нагрузочные проверки | 4–6 дней |
+
+Итого: ориентировочно 15–23 рабочих дня, дополнительно 20–30% резерва на
+обнаруженные проблемы интеграции и производительности. До завершения приёмки
+capture/bundle/download выключены. Промежуточный результат после задачи 11 можно
+показать на изолированном стенде; он ещё не означает готовность к production.
+
+Самые вероятные причины роста объёма: перенос контекста через существующие
+фоновые потоки, совместная квота snapshot/ZIP, Windows file leases, ранние ошибки
+Next и восстановление audit после одновременного отказа БД и диска. При изменении
+оценки фиксировать конкретную причину и затронутые критерии, не убирать проверки.
+
+Для начала реализации открытых архитектурных вопросов нет: лимиты и ограничения
+первой версии заданы выше. Перед production-вводом владелец системы определяет
+каталог с подходящими правами, согласует целевые лимиты для своего диска и ручной
+канал передачи ZIP разработчику. Эти эксплуатационные решения не блокируют
+разработку и не разрешают включение функции на продуктиве автоматически.
 
 ## Самопроверка плана
 
 Проверены соответствие spec задачам, producer/consumer interfaces, границы
 полномочий и failure paths. Все Review Focus привязаны к тестам. Точная ревизия
 Alembic намеренно определяется по head на момент исполнения, поскольку сейчас
-в рабочем дереве уже есть новая несвязанная миграция. Никакие тесты будущей
+head может измениться вследствие другой разработки. Дополнительно уточнены
+doc_id в SessionStart/service/API, независимое сохранение baseline во время capture,
+summary повторов, внутренний operation_kind, LLM daemon thread, failed dependency,
+передача SSR request ID без общего состояния Proxy и housekeeping после opt-out.
+Никакие тесты будущей
 реализации этим документом не объявляются пройденными.

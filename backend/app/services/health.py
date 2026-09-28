@@ -30,6 +30,7 @@ from typing import Callable
 import httpx
 
 from app.config import get_settings
+from app.services.diagnostics.recorder import emit_event
 from app.services.embedder import Embedder
 from app.services.vector_store import VectorStore
 from docparser import PdfProviderUnavailable, get_pdf_provider_metadata
@@ -49,6 +50,20 @@ _refresh_lock = threading.Lock()
 # а не на каждом опросе (healthcheck раз в 10 с, баннер раз в 20 с).
 _last_status: dict[str, str] = {}
 _last_status_lock = threading.Lock()
+
+
+def get_cached_diagnostic_status() -> dict:
+    """Read the last health result without starting probes or exposing error text."""
+    cached = _cache
+    if not cached or time.time() - _cache_ts > 60:
+        return {"status": "unknown", "dependencies": {}}
+    names = {"database": "database", "qdrant": "qdrant", "llm": "llm",
+             "ollama": "embeddings", "pdf_parser": "pdf"}
+    dependencies = cached.get("dependencies", {})
+    return {"status": cached.get("status", "unknown"), "dependencies": {
+        target: {"status": dependencies[source].get("status", "unknown")}
+        for source, target in names.items() if isinstance(dependencies.get(source), dict)
+    }}
 
 # litellm-префиксы моделей Ollama: у нативного API Ollama нет GET /models.
 _OLLAMA_MODEL_PREFIXES = ("ollama/", "ollama_chat/")
@@ -155,6 +170,10 @@ def _log_transitions(results: dict[str, dict]) -> None:
         }
         _last_status.update({name: dep["status"] for name, dep in results.items()})
     for name, dep in changed.items():
+        dependency = {"llm": "llm", "ollama": "embeddings", "qdrant": "qdrant",
+                      "database": "database", "pdf_parser": "pdf"}.get(name)
+        if dependency:
+            emit_event("dependency_status_changed", fields={"dependency": dependency, "dependency_status": dep["status"]})
         if dep["status"] == "ok":
             logger.info("Зависимость %s снова доступна", name)
         else:

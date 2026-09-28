@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useState } from "react";
 import { previewGlossaryQuery, friendlyApiError } from "@/lib/api";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -16,7 +18,7 @@ export default function GlossaryPreview({ locale }) {
     if (!query.trim()) return;
     setBusy(true);
     try { setResult(await previewGlossaryQuery(query.trim(), locale)); }
-    catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); }
+    catch (err) { showToast(apiToast(err, t, { type: "error" })); }
     finally { setBusy(false); }
   };
   return (

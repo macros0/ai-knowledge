@@ -1,0 +1,17 @@
+{
+  "valid": [
+    {"schema_version":1,"event_id":"00000000-0000-4000-8000-000000000001","boot_id":"00000000-0000-4000-8000-000000000002","timestamp_utc":"2026-09-27T00:00:00+00:00","component":"backend","level":"ERROR","event_code":"operation_failed","origin":"server","error_code":"internal_error"},
+    {"schema_version":1,"event_id":"00000000-0000-4000-8000-000000000003","boot_id":"00000000-0000-4000-8000-000000000002","timestamp_utc":"2026-09-27T00:00:00+00:00","component":"frontend","level":"ERROR","event_code":"render_failed","origin":"server","exception_type":"Error","frames":[{"module":"frontend/src/lib/backendFetch.js","function":"server","line":12}]},
+    {"schema_version":1,"event_id":"00000000-0000-4000-8000-000000000004","boot_id":"00000000-0000-4000-8000-000000000002","timestamp_utc":"2026-09-27T00:00:00+00:00","component":"browser","level":"ERROR","event_code":"browser_error","origin":"client_reported","build_id":"abcdef123","frames":[{"module":"frontend/_next/abcdef123456.js","function":"client","line":120}]}
+  ],
+  "invalid_changes": [
+    {"message":"CANARY_PRIVATE_CONTENT"},
+    {"event_code":"unregistered"},
+    {"request_id":"not-a-uuid"},
+    {"route_template":"/private?token=CANARY"},
+    {"counts":{"private_name":1}},
+    {"exception_type":"CANARY_SECRET"},
+    {"schema_version":2},
+    {"timestamp_utc":"2026-02-30T00:00:00+00:00"}
+  ]
+}
