@@ -33,7 +33,7 @@ export default function ChatPanel() {
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
-  const [responseMode, setResponseMode] = useState("full");
+  const [responseMode, setResponseMode] = useState("fast");
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
   const [showCustom, setShowCustom] = useState(false);
   const [customValue, setCustomValue] = useState("");
