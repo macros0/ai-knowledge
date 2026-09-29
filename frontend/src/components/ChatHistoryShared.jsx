@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
+import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
 import { groupSourcesByDocument } from "@/lib/chatAnswerState.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -22,8 +22,8 @@ export function SourceBadges({ sources, responseMode }) {
       <div className="history-sources">
         {groupSourcesByDocument(sources).map((group) => (
           <div key={group.doc_id} className="history-document-group">
-            {sourceHref(group.source) ? (
-              <Link href={sourceHref(group.source)}>{group.filename}</Link>
+            {documentHref(group.source) ? (
+              <Link href={documentHref(group.source)}>{group.filename}</Link>
             ) : group.filename}
             <ul>
               {group.sources.map((source, index) => (

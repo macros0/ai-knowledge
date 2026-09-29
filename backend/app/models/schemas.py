@@ -281,6 +281,7 @@ class ChatSource(BaseModel):
     snippet: str = ""
     point_type: str = "concept"
     chunk_index: int | None = None
+    source_slug: str | None = None
     source_id: str | None = None
     source_path: list[dict[str, Any]] | None = None
     # Источник найден поиском; только true означает, что его текст вошёл в контекст LLM.

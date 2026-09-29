@@ -66,8 +66,8 @@ def test_documents_mode_lists_all_hits_without_generation(monkeypatch):
     from app.api import chat as chat_module
 
     _patch_retrieval(monkeypatch, chat_module, hits=[{"id": "p1"}])
-    first = {**_block(), "title": "Раздел A", "doc_id": "doc-a"}
-    second = {**_block(), "title": "Раздел B", "doc_id": "doc-b"}
+    first = {**_block(), "title": "Раздел A", "doc_id": "doc-a", "source_slug": "section-a"}
+    second = {**_block(), "title": "Раздел B", "doc_id": "doc-b", "source_slug": "section-b"}
     monkeypatch.setattr(chat_module, "merge_and_format", lambda *a, **k: [first, second])
     monkeypatch.setattr(chat_module, "_get_llm", lambda: (_ for _ in ()).throw(AssertionError("LLM used")))
     response = make_client(monkeypatch).post(
@@ -75,6 +75,7 @@ def test_documents_mode_lists_all_hits_without_generation(monkeypatch):
     )
     assert response.status_code == 200, response.text
     assert len(response.json()["sources"]) == 2
+    assert [src["source_slug"] for src in response.json()["sources"]] == ["section-a", "section-b"]
     assert response.json()["response_mode"] == "documents"
     assert all(not src["in_model_context"] for src in response.json()["sources"])
 
@@ -83,8 +84,8 @@ def test_fast_mode_calls_llm_once_and_shows_unchosen_source(monkeypatch):
     from app.api import chat as chat_module
 
     _patch_retrieval(monkeypatch, chat_module, hits=[{"id": "p1"}])
-    first = {**_block(), "doc_id": "doc-a", "content": "x" * 200}
-    second = {**_block(), "doc_id": "doc-b", "content": "y" * 200}
+    first = {**_block(), "doc_id": "doc-a", "content": "x" * 200, "source_slug": "section-a"}
+    second = {**_block(), "doc_id": "doc-b", "content": "y" * 200, "source_slug": "section-b"}
     monkeypatch.setattr(chat_module, "merge_and_format", lambda *a, **k: [first, second])
     monkeypatch.setattr(chat_module, "format_context", lambda blocks, **kw: "\n".join(b["content"] for b in blocks))
     monkeypatch.setattr("app.api.chat.ChatTokenBudget.fits", lambda *a, **k: True)
@@ -98,6 +99,7 @@ def test_fast_mode_calls_llm_once_and_shows_unchosen_source(monkeypatch):
     assert response.status_code == 200, response.text
     assert len(calls) == 1
     assert len(response.json()["sources"]) == 2
+    assert [src["source_slug"] for src in response.json()["sources"]] == ["section-a", "section-b"]
     assert [source["in_model_context"] for source in response.json()["sources"]] == [True, False]
 
 

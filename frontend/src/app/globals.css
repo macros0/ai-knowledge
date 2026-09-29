@@ -3935,9 +3935,17 @@ main {
 
 .chat-toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  min-width: 0;
+}
+
+.chat-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .history-list {
@@ -4547,23 +4555,16 @@ main {
 }
 
 .chat-response-modes {
-  margin: 12px 0;
-  align-items: stretch;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
 }
 
 .chat-response-modes .mode-btn {
-  display: flex;
-  flex: 1 1 190px;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  text-align: left;
-}
-
-.chat-response-modes .mode-btn small {
-  font-size: 11px;
-  line-height: 1.3;
-  opacity: .78;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .chat-document-list {

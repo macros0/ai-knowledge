@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
-import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
+import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
 import { applyAnswerEvent, groupSourcesByDocument } from "@/lib/chatAnswerState.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
@@ -267,18 +267,32 @@ export default function ChatPanel() {
   return (
     <section className="panel">
       <div className="chat-toolbar">
-        <Link href="/chat/history" className="btn ghost">
-          {t("chat.historyBtn")}
-        </Link>
-        <button
-          type="button"
-          className="btn ghost"
-          onClick={() => { stopCurrent(); startNewChat(); }}
-          disabled={messages.length === 0}
-          title={t("chat.newChatTitle")}
-        >
-          {t("chat.newChat")}
-        </button>
+        {settings.response_modes?.length > 0 && (
+          <div className="mode-picker chat-response-modes" role="radiogroup" aria-label={t("chat.responseModeLabel")}>
+            {settings.response_modes.map((mode) => (
+              <button key={mode} type="button" role="radio" aria-checked={responseMode === mode}
+                className={`mode-btn ${responseMode === mode ? "active" : ""}`}
+                title={t(`chat.responseMode.${mode}.description`)}
+                onClick={() => setResponseMode(mode)}>
+                {t(`chat.responseMode.${mode}.label`)}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="chat-toolbar-actions">
+          <Link href="/chat/history" className="btn ghost">
+            {t("chat.historyBtn")}
+          </Link>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => { stopCurrent(); startNewChat(); }}
+            disabled={messages.length === 0}
+            title={t("chat.newChatTitle")}
+          >
+            {t("chat.newChat")}
+          </button>
+        </div>
       </div>
       <div className="chat-log" ref={logRef}>
         {messages.map((m, i) => (
@@ -316,8 +330,8 @@ export default function ChatPanel() {
               <ul className="chat-document-list">
                 {groupSourcesByDocument(m.sources).map((group) => (
                   <li key={group.doc_id}>
-                    {sourceHref(group.source) ? (
-                      <Link href={sourceHref(group.source)}>{group.filename}</Link>
+                    {documentHref(group.source) ? (
+                      <Link href={documentHref(group.source)}>{group.filename}</Link>
                     ) : group.filename}
                     <span className="meta"> · {group.sources.length} {t("chat.fragments")}</span>
                   </li>
@@ -420,19 +434,6 @@ export default function ChatPanel() {
           </div>
         ))}
       </div>
-      {settings.response_modes?.length > 0 && (
-        <div className="mode-picker chat-response-modes" role="radiogroup" aria-label={t("chat.responseModeLabel")}>
-          {settings.response_modes.map((mode) => (
-            <button key={mode} type="button" role="radio" aria-checked={responseMode === mode}
-              className={`mode-btn ${responseMode === mode ? "active" : ""}`}
-              title={t(`chat.responseMode.${mode}.description`)}
-              onClick={() => setResponseMode(mode)}>
-              <span>{t(`chat.responseMode.${mode}.label`)}</span>
-              <small>{t(`chat.responseMode.${mode}.description`)}</small>
-            </button>
-          ))}
-        </div>
-      )}
       <details className="search-settings">
         <summary>{t("chat.searchSettings")}</summary>
         {settings.glossary_query_expansion_enabled === false && (

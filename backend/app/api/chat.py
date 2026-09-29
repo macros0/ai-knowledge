@@ -448,6 +448,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
                     snippet=exact_excerpt(m["content"], 200, exact_groups),
                     point_type=m["point_type"],
                     chunk_index=m["chunk_index"],
+                    source_slug=m.get("source_slug"),
                     source_id=m.get("source_id"),
                     source_path=m.get("source_path"),
                     in_model_context=index < len(context_blocks) if req.response_mode is None else False,
