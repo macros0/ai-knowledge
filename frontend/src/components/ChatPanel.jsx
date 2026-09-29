@@ -106,7 +106,7 @@ export default function ChatPanel() {
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages.length]);
 
   const copyAnswer = async (index, text) => {
     try {
@@ -185,7 +185,7 @@ export default function ChatPanel() {
     setMessages((items) => {
       const copy = [...items];
       if (copy.at(-1)?.role === "assistant") {
-        copy[copy.length - 1] = { ...copy.at(-1), sources };
+        copy[copy.length - 1] = { ...copy.at(-1), sources, sourcesOpen: sources.length > 0 };
       }
       return copy;
     });
@@ -206,7 +206,7 @@ export default function ChatPanel() {
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((m) => {
         const copy = [...m];
-        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, ...requestOptions };
+        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, sourcesOpen: copy.at(-1)?.sourcesOpen || false, uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, ...requestOptions };
         return copy;
       });
     } catch (err) {
@@ -219,7 +219,7 @@ export default function ChatPanel() {
       } else {
         setMessages((m) => {
           const copy = [...m];
-          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: copy.at(-1)?.sources || [], query: q, ...requestOptions };
+          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: copy.at(-1)?.sources || [], sourcesOpen: copy.at(-1)?.sourcesOpen || false, query: q, ...requestOptions };
           return copy;
         });
       }
@@ -240,13 +240,13 @@ export default function ChatPanel() {
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((items) => {
         const copy = [...items];
-        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, ...requestOptions };
+        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, sourcesOpen: copy.at(-1)?.sourcesOpen || false, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, ...requestOptions };
         return copy;
       });
     } catch (err) {
       setMessages((items) => {
         const copy = [...items];
-        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: copy.at(-1)?.sources || [], query: q, ...requestOptions };
+        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: copy.at(-1)?.sources || [], sourcesOpen: copy.at(-1)?.sourcesOpen || false, query: q, ...requestOptions };
         return copy;
       });
     } finally { setPending(false); }
@@ -307,7 +307,19 @@ export default function ChatPanel() {
               </button>
             )}
             {m.sources && m.sources.length > 0 && (
-              <details className="sources" open={pending && i === messages.length - 1}>
+              <details
+                className="sources"
+                open={Boolean(m.sourcesOpen)}
+                onToggle={(event) => {
+                  const open = event.currentTarget.open;
+                  setMessages((items) => {
+                    if (!items[i] || items[i].sourcesOpen === open) return items;
+                    const copy = [...items];
+                    copy[i] = { ...copy[i], sourcesOpen: open };
+                    return copy;
+                  });
+                }}
+              >
                 <summary>{t("chat.sources")}</summary>
                 <ol>
                   {m.sources.map((s, j) => {
