@@ -182,14 +182,9 @@ export default function ChatPanel() {
   stopCurrentRef.current = stopCurrent;
 
   useEffect(() => {
-    const stopWhenHidden = () => {
-      if (document.visibilityState === "hidden") stopCurrentRef.current?.();
-    };
     const stopOnLeave = () => stopCurrentRef.current?.();
-    document.addEventListener("visibilitychange", stopWhenHidden);
     window.addEventListener("pagehide", stopOnLeave);
     return () => {
-      document.removeEventListener("visibilitychange", stopWhenHidden);
       window.removeEventListener("pagehide", stopOnLeave);
       stopCurrentRef.current?.();
     };
