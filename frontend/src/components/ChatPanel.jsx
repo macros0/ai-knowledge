@@ -188,11 +188,9 @@ export default function ChatPanel() {
     const stopOnLeave = () => stopCurrentRef.current?.();
     document.addEventListener("visibilitychange", stopWhenHidden);
     window.addEventListener("pagehide", stopOnLeave);
-    window.addEventListener("blur", stopOnLeave);
     return () => {
       document.removeEventListener("visibilitychange", stopWhenHidden);
       window.removeEventListener("pagehide", stopOnLeave);
-      window.removeEventListener("blur", stopOnLeave);
       stopCurrentRef.current?.();
     };
   }, []);
