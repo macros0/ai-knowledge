@@ -105,6 +105,10 @@ export function friendlyDocumentError(doc, t) {
 // обёртки отдал бы наружу браузерное «Failed to fetch» вместо ключа словаря.
 async function fetchApi(url, { init, timeoutMs, parse = (resp) => resp.json() } = {}) {
   const controller = new AbortController();
+  const externalSignal = init?.signal;
+  const abortFromCaller = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
   const timer =
     timeoutMs != null
       ? setTimeout(() => controller.abort(), timeoutMs)
@@ -144,6 +148,7 @@ async function fetchApi(url, { init, timeoutMs, parse = (resp) => resp.json() } 
     throw err;
   } finally {
     if (timer != null) clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", abortFromCaller);
   }
 }
 
@@ -465,8 +470,10 @@ export function search(query, tags = [], topK = 5, mode = "hybrid", useGlossary 
   });
 }
 
-export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true, mailMode = "all", onText = null, onSources = null) {
+export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true, mailMode = "all", onText = null, onSources = null, options = {}) {
   const body = { query, locale: currentUiLocale(), tags, top_k: topK, mode, use_glossary: useGlossary, mail_mode: mailMode };
+  if (options.responseMode) body.response_mode = options.responseMode;
+  if (options.attemptId) body.attempt_id = options.attemptId;
   if (sessionId) body.session_id = sessionId;
   // Фильтр по языку документа (Этап 7 фаза D): не отправляем поле при «Все языки».
   if (sourceLocale === "unknown") {
@@ -481,17 +488,30 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: options.signal,
     },
-    CHAT_TIMEOUT_MS,
+    options.responseMode ? undefined : CHAT_TIMEOUT_MS,
     onText ? async (response) => {
       try {
-        return await readChatStream(response, onText, onSources || (() => {}));
+        return await readChatStream(response, onText, onSources || (() => {}), {
+          onProgress: options.onProgress,
+          idleTimeoutMs: options.responseMode ? CHAT_TIMEOUT_MS : 0,
+        });
       } catch (err) {
         if (err.name === "AbortError") throw err;
         throw new ApiError("Chat stream failed", { code: err.code || "dependency_unavailable", status: err.status || 503 });
       }
     } : undefined
   );
+}
+
+export function cancelChatAttempt(attemptId, sessionId) {
+  return request(`/chat/attempts/${encodeURIComponent(attemptId)}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId }),
+    keepalive: true,
+  });
 }
 
 export function listChatSessions(params = {}) {

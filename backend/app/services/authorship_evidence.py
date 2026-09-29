@@ -42,7 +42,9 @@ def is_authorship_query(query: str) -> bool:
     return bool(_AUTHOR_QUERY.search(query))
 
 
-def load_authorship_evidence(merged: list[dict], max_chars: int, *, mail_mode: MailMode = "all") -> list[dict]:
+def load_authorship_evidence(merged: list[dict], max_chars: int, *, mail_mode: MailMode = "all",
+                             per_source_chars: int | None = None,
+                             deduplicate: bool = True) -> list[dict]:
     """Read only canonical chunks belonging to already-visible retrieved blocks.
 
     A concept's chunk and source identity are re-read from SQL. Missing/stale
@@ -100,10 +102,11 @@ def load_authorship_evidence(merged: list[dict], max_chars: int, *, mail_mode: M
                 ).where(tuple_(DocumentChunk.doc_id, DocumentChunk.chunk_index).in_(chunk_pairs)))
             }
     evidence, seen, remaining = [], set(), max_chars
-    for index, (m, key) in enumerate(zip(merged, keys), 1):
-        if not key or key in seen or key[2] != m.get("source_id") or remaining <= 0:
+    for sequential_index, (m, key) in enumerate(zip(merged, keys), 1):
+        index = m.get("_source_index", sequential_index)
+        if not key or (deduplicate and key in seen) or key[2] != m.get("source_id") or remaining <= 0:
             continue
-        text = chunks.get(key, "")[:remaining]
+        text = chunks.get(key, "")[:min(remaining, per_source_chars or remaining)]
         if text:
             evidence.append({"index": index, "text": text})
             seen.add(key)

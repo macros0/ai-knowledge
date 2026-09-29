@@ -4545,3 +4545,31 @@ main {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+
+.chat-response-modes {
+  margin: 12px 0;
+  align-items: stretch;
+}
+
+.chat-response-modes .mode-btn {
+  display: flex;
+  flex: 1 1 190px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+}
+
+.chat-response-modes .mode-btn small {
+  font-size: 11px;
+  line-height: 1.3;
+  opacity: .78;
+}
+
+.chat-document-list {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.chat-document-list li + li { margin-top: 5px; }
+.chat-progress { margin: 8px 0; color: var(--muted); font-size: 13px; }

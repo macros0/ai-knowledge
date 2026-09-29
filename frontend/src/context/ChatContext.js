@@ -12,6 +12,7 @@ const FALLBACK_SETTINGS = {
   top_k_presets: [4, 5, 10],
   search_mode_default: "hybrid",
   search_modes: ["dense", "bm25", "hybrid"],
+  response_modes: [],
   glossary_query_expansion_enabled: null,
   bulk_export_enabled: false,
   bulk_export_download_enabled: false,

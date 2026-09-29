@@ -666,7 +666,8 @@ def format_context(
     """
     parts = []
     mail_fragments = {}
-    for i, item in enumerate(merged, start=1):
+    for sequential_index, item in enumerate(merged, start=1):
+        i = item.get("_source_index", sequential_index)
         tags_str = ", ".join(item.get("tags", []))
         source = item.get("source_filename", "")
         kind = item.get("kind", item.get("point_type", "concept"))

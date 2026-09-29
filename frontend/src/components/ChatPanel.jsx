@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { chat, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
+import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
 import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
+import { applyAnswerEvent, groupSourcesByDocument } from "@/lib/chatAnswerState.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
@@ -14,7 +15,6 @@ import { CheckIcon, CopyIcon } from "./icons";
 import { retryMailMode } from "@/lib/chatMailFilter.mjs";
 import { useChat } from "@/context/ChatContext";
 import { useAuth } from "@/context/AuthContext";
-import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import AppliedTerms from "./AppliedTerms";
 import SearchableSelect from "./SearchableSelect";
@@ -31,9 +31,9 @@ function getPresetLabel(preset, settings, t) {
 export default function ChatPanel() {
   const { messages, tags, pending, settings, selectedMode, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
   const { user } = useAuth();
-  const { showToast } = useToast();
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
+  const [responseMode, setResponseMode] = useState("full");
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
   const [showCustom, setShowCustom] = useState(false);
   const [customValue, setCustomValue] = useState("");
@@ -48,6 +48,8 @@ export default function ChatPanel() {
   // Фильтр по языку документа: "" = все, "unknown" = «не определён», иначе код.
   const [sourceLocale, setSourceLocale] = useState("");
   const logRef = useRef(null);
+  const activeRequestRef = useRef(null);
+  const stopCurrentRef = useRef(null);
   const copyTimerRef = useRef(null);
 
   useEffect(() => {
@@ -166,90 +168,107 @@ export default function ChatPanel() {
     localeOptions.push({ value: sourceLocale, label: sourceLocale, searchText: sourceLocale });
   }
 
-  const streamIntoLastAnswer = () => {
-    let text = "";
-    return (delta) => {
-      text += delta;
-      const snapshot = text;
+  const stopCurrent = () => {
+    const active = activeRequestRef.current;
+    if (!active) return;
+    cancelChatAttempt(active.id, active.sessionId).catch(() => {});
+    active.controller.abort();
+    activeRequestRef.current = null;
+    setPending(false);
+    setMessages((items) => items.map((item) =>
+      item.attemptId === active.id ? { ...item, stopped: true, text: t("chat.answerStopped") } : item
+    ));
+  };
+  stopCurrentRef.current = stopCurrent;
+
+  useEffect(() => {
+    const stopWhenHidden = () => {
+      if (document.visibilityState === "hidden") stopCurrentRef.current?.();
+    };
+    const stopOnLeave = () => stopCurrentRef.current?.();
+    document.addEventListener("visibilitychange", stopWhenHidden);
+    window.addEventListener("pagehide", stopOnLeave);
+    window.addEventListener("blur", stopOnLeave);
+    return () => {
+      document.removeEventListener("visibilitychange", stopWhenHidden);
+      window.removeEventListener("pagehide", stopOnLeave);
+      window.removeEventListener("blur", stopOnLeave);
+      stopCurrentRef.current?.();
+    };
+  }, []);
+
+  const sendQuestion = async (q, requestOptions, glossary = useGlossary) => {
+    stopCurrent();
+    const attemptId = crypto.randomUUID();
+    const targetSessionId = sessionId || crypto.randomUUID();
+    if (!sessionId) setSessionId(targetSessionId);
+    const controller = new AbortController();
+    activeRequestRef.current = { id: attemptId, sessionId: targetSessionId, controller };
+    const uploadHint = resolveUploadHint(requestOptions.requestTags);
+    setMessages((items) => [
+      ...items,
+      { role: "user", text: q, query: q, ...requestOptions },
+      { role: "assistant", attemptId, text: t("chat.thinking"), sources: [], query: q, ...requestOptions },
+    ]);
+    setPending(true);
+    try {
+      const resp = await chat(
+        q, requestOptions.requestTags, requestOptions.requestTopK,
+        requestOptions.requestMode, targetSessionId, requestOptions.requestSourceLocale,
+        glossary, requestOptions.requestMailMode,
+        (text) => setMessages((items) => applyAnswerEvent(items, { attemptId, type: "delta", text })),
+        (sources) => setMessages((items) => applyAnswerEvent(items, { attemptId, type: "sources", sources })),
+        {
+          responseMode: requestOptions.responseMode,
+          attemptId,
+          signal: controller.signal,
+          onProgress: (event) => setMessages((items) => applyAnswerEvent(items, { ...event, attemptId })),
+        },
+      );
+      if (activeRequestRef.current?.id !== attemptId) return;
+      if (resp.session_id) setSessionId(resp.session_id);
       setMessages((items) => {
+        if (items.at(-1)?.attemptId !== attemptId) return items;
         const copy = [...items];
-        if (copy.at(-1)?.role === "assistant") {
-          copy[copy.length - 1] = { ...copy.at(-1), text: snapshot };
-        }
+        copy[copy.length - 1] = {
+          ...copy.at(-1), text: resp.answer, sources: resp.sources,
+          uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status,
+        };
         return copy;
       });
-    };
-  };
-
-  const streamSourcesIntoLastAnswer = (sources) => {
-    setMessages((items) => {
-      const copy = [...items];
-      if (copy.at(-1)?.role === "assistant") {
-        copy[copy.length - 1] = { ...copy.at(-1), sources, sourcesOpen: sources.length > 0 };
+    } catch (err) {
+      if (activeRequestRef.current?.id !== attemptId) return;
+      setMessages((items) => {
+        if (items.at(-1)?.attemptId !== attemptId) return items;
+        const copy = [...items];
+        copy[copy.length - 1] = {
+          ...copy.at(-1), text: controller.signal.aborted ? t("chat.answerStopped") : t("chat.errorPrefix", { message: friendlyApiError(err, t) }),
+          stopped: controller.signal.aborted,
+        };
+        return copy;
+      });
+    } finally {
+      if (activeRequestRef.current?.id === attemptId) {
+        activeRequestRef.current = null;
+        setPending(false);
       }
-      return copy;
-    });
+    }
   };
 
   const send = async (e) => {
     e.preventDefault();
     const q = query.trim();
-    if (!q || pending) return;
-    const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestMode: selectedMode, requestSourceLocale: sourceLocale };
-    const uploadHint = resolveUploadHint(effectiveTags);
-    setMessages((m) => [...m, { role: "user", text: q, query: q, ...requestOptions }]);
+    if (!q) return;
+    const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestMode: selectedMode, requestSourceLocale: sourceLocale, responseMode: settings.response_modes?.includes(responseMode) ? responseMode : null };
     setQuery("");
-    setPending(true);
-    setMessages((m) => [...m, { role: "assistant", text: t("chat.thinking"), sources: [], ...requestOptions }]);
-    try {
-      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale, useGlossary, requestOptions.requestMailMode, streamIntoLastAnswer(), streamSourcesIntoLastAnswer);
-      if (resp.session_id) setSessionId(resp.session_id);
-      setMessages((m) => {
-        const copy = [...m];
-        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, sourcesOpen: copy.at(-1)?.sourcesOpen || false, uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, ...requestOptions };
-        return copy;
-      });
-    } catch (err) {
-      if (err.status === 409) {
-        // Сессия была удалена (в корзине): сбрасываем тред и поле ввода без
-        // авто-повтора — пользователь сам решает, повторять ли вопрос в новом чате.
-        startNewChat();
-        setQuery("");
-        showToast(t("chat.sessionDeleted"), { type: "error" });
-      } else {
-        setMessages((m) => {
-          const copy = [...m];
-          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: copy.at(-1)?.sources || [], sourcesOpen: copy.at(-1)?.sourcesOpen || false, query: q, ...requestOptions };
-          return copy;
-        });
-      }
-    } finally {
-      setPending(false);
-    }
+    await sendQuestion(q, requestOptions);
   };
 
   const repeatWithoutGlossary = async (message) => {
-    if (pending || !message.query) return;
+    if (!message.query) return;
     const q = message.query;
-    const requestOptions = { requestMailMode: retryMailMode(message), requestTags: message.requestTags ?? effectiveTags, requestTopK: message.requestTopK ?? selectedTopK, requestMode: message.requestMode ?? selectedMode, requestSourceLocale: message.requestSourceLocale ?? sourceLocale };
-    setMessages((items) => [...items, { role: "user", text: q, query: q, ...requestOptions }]);
-    setPending(true);
-    setMessages((items) => [...items, { role: "assistant", text: t("chat.thinking"), sources: [], ...requestOptions }]);
-    try {
-      const resp = await chat(q, requestOptions.requestTags, requestOptions.requestTopK, requestOptions.requestMode, sessionId, requestOptions.requestSourceLocale, false, requestOptions.requestMailMode, streamIntoLastAnswer(), streamSourcesIntoLastAnswer);
-      if (resp.session_id) setSessionId(resp.session_id);
-      setMessages((items) => {
-        const copy = [...items];
-        copy[copy.length - 1] = { role: "assistant", text: resp.answer, sources: resp.sources, sourcesOpen: copy.at(-1)?.sourcesOpen || false, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status, query: q, ...requestOptions };
-        return copy;
-      });
-    } catch (err) {
-      setMessages((items) => {
-        const copy = [...items];
-        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: copy.at(-1)?.sources || [], sourcesOpen: copy.at(-1)?.sourcesOpen || false, query: q, ...requestOptions };
-        return copy;
-      });
-    } finally { setPending(false); }
+    const requestOptions = { requestMailMode: retryMailMode(message), requestTags: message.requestTags ?? effectiveTags, requestTopK: message.requestTopK ?? selectedTopK, requestMode: message.requestMode ?? selectedMode, requestSourceLocale: message.requestSourceLocale ?? sourceLocale, responseMode: message.responseMode ?? (settings.response_modes?.includes(responseMode) ? responseMode : null) };
+    await sendQuestion(q, requestOptions, false);
   };
 
   return (
@@ -261,8 +280,8 @@ export default function ChatPanel() {
         <button
           type="button"
           className="btn ghost"
-          onClick={startNewChat}
-          disabled={pending || messages.length === 0}
+          onClick={() => { stopCurrent(); startNewChat(); }}
+          disabled={messages.length === 0}
           title={t("chat.newChatTitle")}
         >
           {t("chat.newChat")}
@@ -300,6 +319,43 @@ export default function ChatPanel() {
                 m.text
               )}
             </div>
+            {m.role === "assistant" && m.responseMode === "documents" && m.sources?.length > 0 && (
+              <ul className="chat-document-list">
+                {groupSourcesByDocument(m.sources).map((group) => (
+                  <li key={group.doc_id}>
+                    {sourceHref(group.source) ? (
+                      <Link href={sourceHref(group.source)}>{group.filename}</Link>
+                    ) : group.filename}
+                    <span className="meta"> · {group.sources.length} {t("chat.fragments")}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {m.role === "assistant" && m.responseMode === "fast" && m.sources?.length > 0 && (
+              <div className="meta" role="status">
+                {t("chat.fastCoverage", {
+                  used: m.sources.filter((source) => source.in_model_context).length,
+                  found: m.sources.length,
+                })}
+              </div>
+            )}
+            {m.role === "assistant" && m.progress?.phase && pending && i === messages.length - 1 && (
+              <div className="chat-progress" role="status">
+                {m.progress.phase === "synthesis"
+                  ? t("chat.synthesizing")
+                  : t("chat.batchProgress", { done: m.progress.batches_done ?? 0, total: m.progress.batches_total ?? 0 })}
+              </div>
+            )}
+            {m.role === "assistant" && pending && i === messages.length - 1 && (
+              <button type="button" className="btn ghost" onClick={stopCurrent}>{t("chat.stopAnswer")}</button>
+            )}
+            {m.role === "assistant" && m.stopped && (
+              <button type="button" className="btn ghost" onClick={() => sendQuestion(m.query, {
+                requestMailMode: m.requestMailMode, requestTags: m.requestTags,
+                requestTopK: m.requestTopK, requestMode: m.requestMode,
+                requestSourceLocale: m.requestSourceLocale, responseMode: m.responseMode,
+              })}>{t("chat.restartAnswer")}</button>
+            )}
             {m.role === "assistant" && <AppliedTerms status={m.expansion_status} appliedTerms={m.applied_terms} />}
             {m.role === "assistant" && m.applied_terms?.length > 0 && (
               <button type="button" className="btn ghost glossary-repeat" onClick={() => repeatWithoutGlossary(m)} disabled={pending}>
@@ -315,7 +371,7 @@ export default function ChatPanel() {
                   setMessages((items) => {
                     if (!items[i] || items[i].sourcesOpen === open) return items;
                     const copy = [...items];
-                    copy[i] = { ...copy[i], sourcesOpen: open };
+                    copy[i] = { ...copy[i], sourcesOpen: open, sourcesTouched: true };
                     return copy;
                   });
                 }}
@@ -339,7 +395,7 @@ export default function ChatPanel() {
                           s.title
                         )}
                         {t("chat.relevance", { pct: (s.score * 100).toFixed(0) })}
-                        {" "}<span className="meta">{t(inModelContext(s) ? "chat.sourceInContext" : "chat.sourceSearchOnly")}</span>
+                        {" "}<span className="meta">{t(m.responseMode === "documents" ? "chat.sourceFound" : inModelContext(s) ? "chat.sourceInContext" : "chat.sourceSearchOnly")}</span>
                         {s.development_number && (
                           <span
                             className="source-dev-badge"
@@ -371,6 +427,19 @@ export default function ChatPanel() {
           </div>
         ))}
       </div>
+      {settings.response_modes?.length > 0 && (
+        <div className="mode-picker chat-response-modes" role="radiogroup" aria-label={t("chat.responseModeLabel")}>
+          {settings.response_modes.map((mode) => (
+            <button key={mode} type="button" role="radio" aria-checked={responseMode === mode}
+              className={`mode-btn ${responseMode === mode ? "active" : ""}`}
+              title={t(`chat.responseMode.${mode}.description`)}
+              onClick={() => setResponseMode(mode)}>
+              <span>{t(`chat.responseMode.${mode}.label`)}</span>
+              <small>{t(`chat.responseMode.${mode}.description`)}</small>
+            </button>
+          ))}
+        </div>
+      )}
       <details className="search-settings">
         <summary>{t("chat.searchSettings")}</summary>
         {settings.glossary_query_expansion_enabled === false && (
@@ -391,7 +460,7 @@ export default function ChatPanel() {
           </button>
         ))}
       </div>
-      <div className="topk-picker" role="radiogroup" aria-label={t("chat.topkLabel")}>
+      {settings.response_modes?.length === 0 && <div className="topk-picker" role="radiogroup" aria-label={t("chat.topkLabel")}>
         <span className="topk-label">{t("chat.resultsLabel")}</span>
         {settings.top_k_presets.map((preset) => (
           <button
@@ -428,7 +497,7 @@ export default function ChatPanel() {
             }}
           />
         )}
-      </div>
+      </div>}
       </details>
       <TagPicker
         label={t("chat.tagsLabel")}
@@ -481,7 +550,7 @@ export default function ChatPanel() {
           placeholder={t("chat.queryPlaceholder")}
           autoComplete="off"
         />
-        <button type="submit" disabled={pending}>
+        <button type="submit">
           {t("chat.send")}
         </button>
       </form>

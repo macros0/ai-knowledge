@@ -223,6 +223,8 @@ class SearchResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     mail_mode: Literal["all", "exclude", "only"] = "all"
+    response_mode: Literal["documents", "fast", "full"] | None = None
+    attempt_id: str | None = None
     query: QueryText
     # Язык ответа при неопределимом языке короткого запроса; UI передаёт
     # текущую локаль, прямые API-вызовы получают русский fallback.
@@ -249,6 +251,7 @@ class ChatRequest(BaseModel):
 
 class ChatSettingsOut(BaseModel):
     knowledge_profile: str = "Основной контур"
+    response_modes: list[str] = Field(default_factory=lambda: ["documents", "fast", "full"])
     top_k_min: int
     top_k_max: int
     top_k_default: int
@@ -282,6 +285,12 @@ class ChatSource(BaseModel):
     source_path: list[dict[str, Any]] | None = None
     # Источник найден поиском; только true означает, что его текст вошёл в контекст LLM.
     in_model_context: bool = True
+    source_index: int | None = None
+    submitted_parts: int = 0
+    completed_parts: int = 0
+    parts_total: int = 1
+    cited: bool = False
+    partial: bool = False
     # Бейджи модуль/разработка в источниках (Этап 5.1).
     development_number: str | None = None
     development_name: str | None = None
@@ -292,10 +301,16 @@ class ChatResponse(BaseModel):
     query: str
     answer: str
     sources: list[ChatSource]
+    response_mode: Literal["documents", "fast", "full"] | None = None
+    attempt_id: str | None = None
     # UUID треда, к которому относится обмен (для продолжения «Нового чата»).
     session_id: str | None = None
     expansion_status: str = "disabled"
     applied_terms: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ChatAttemptCancelRequest(BaseModel):
+    session_id: str
 
 
 class ChatHistoryMessageOut(BaseModel):
