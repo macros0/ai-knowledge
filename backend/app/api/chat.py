@@ -228,7 +228,10 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
         # payload["content"]/["section_title"] чанк-точек.
 
         filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
-        merged = merge_and_format(hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups, mail_mode=req.mail_mode)
+        merged = merge_and_format(
+            hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups,
+            mail_mode=req.mail_mode, limit_total_chars=False,
+        )
         # top_k — число БЛОКОВ в контексте/источниках (группы с сиблингами), не точек.
         merged = merged[: req.top_k]
         domain_cache = {}
@@ -264,7 +267,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
             match_groups=exact_groups,
             domain_cache=domain_cache,
             lexical_cache=lexical_cache,
-            strict=settings.llm_profile == "local_qwen",
+            strict=True,
         )
         context = format_context(
             context_blocks,

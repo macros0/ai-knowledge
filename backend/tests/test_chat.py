@@ -1,5 +1,8 @@
 """Тесты короткого замыкания /chat при пустом результате (Этап 4a.1)."""
 
+from types import SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
@@ -147,3 +150,54 @@ def test_chat_keeps_retrieved_sources_after_context_budget(monkeypatch):
     with session_scope() as session:
         saved = session.query(ChatMessage).filter_by(role="assistant").order_by(ChatMessage.id.desc()).first()
         assert [source["in_model_context"] for source in saved.sources] == [True, False]
+
+
+@pytest.mark.parametrize("profile", ["standard", "local_qwen"])
+def test_chat_source_list_is_not_cut_by_model_context_budget(monkeypatch, profile):
+    from app.api import chat as chat_module
+    from app.services.fusion import Hit
+
+    settings = Settings(
+        _env_file=None, auth_provider="disabled", llm_profile=profile,
+        chat_max_context_chars=1000,
+    )
+    hits = [
+        Hit(
+            f"point-{i}", 0.9 - i * 0.1,
+            {
+                "point_type": "concept", "doc_id": "0123456789abcdef",
+                "chunk_index": i, "slug": f"source-{i}", "title": f"ЭЛН блок {i}",
+                "content": "ЭЛН " + "текст " * 100, "tags": [],
+                "filepath": f"0123456789abcdef/source-{i}.md",
+            },
+        )
+        for i in range(3)
+    ]
+    prompts = []
+    client = make_client(monkeypatch)
+    monkeypatch.setattr(chat_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(chat_module, "_get_embedder", lambda: SimpleNamespace(embed=lambda _: [0.0]))
+    monkeypatch.setattr(
+        chat_module, "_get_vector_store",
+        lambda: SimpleNamespace(search_composite=lambda **_: hits),
+    )
+    monkeypatch.setattr(chat_module, "load_visible_retrieval_hits", lambda found, **_: (found, {}))
+    monkeypatch.setattr(
+        chat_module, "_get_llm",
+        lambda: SimpleNamespace(chat=lambda system, user: prompts.append(user) or "Ответ [1]"),
+    )
+    monkeypatch.setattr(chat_module.chat_history, "store_turn", lambda *a, **k: "session-1")
+    monkeypatch.setattr(chat_module.get_rate_limiter(), "check_action", lambda *a, **k: None)
+
+    response = client.post(
+        "/api/chat", json={"query": "ЭЛН", "top_k": 21, "use_glossary": False}
+    )
+    assert response.status_code == 200, response.text
+    sources = response.json()["sources"]
+    assert [source["title"] for source in sources] == [
+        "ЭЛН блок 0", "ЭЛН блок 1", "ЭЛН блок 2",
+    ]
+    assert [source["in_model_context"] for source in sources] == [True, False, False]
+    assert len(prompts) == 1
+    assert "ЭЛН блок 0" in prompts[0]
+    assert "ЭЛН блок 1" not in prompts[0]

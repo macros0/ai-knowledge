@@ -276,6 +276,7 @@ def run_case(
         settings,
         filename_lookup=filename_lookup,
         exact_groups=exact_groups,
+        limit_total_chars=case.get("api", "chat") != "chat",
     )
     timings["merge_ms"] = round((perf_counter() - started) * 1000, 3)
     merged_before_top_k = merged

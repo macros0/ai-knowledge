@@ -121,6 +121,7 @@ def filter_mail_scope_blocks(blocks: list[dict], *, mail_mode: MailMode) -> list
 def merge_and_format(
     hits: list[Hit], settings: Settings | None = None, filename_lookup: dict[str, str] | None = None,
     *, exact_groups: tuple[MatchGroup, ...] = (), mail_mode: MailMode = "all",
+    limit_total_chars: bool = True,
 ) -> list[dict]:
     """Группировка по (doc_id, chunk_index), merge концепт+чанк.
 
@@ -331,13 +332,14 @@ def merge_and_format(
     limited = []
     total_chars = 0
     for block in merged:
-        if total_chars >= settings.chat_max_context_chars:
+        if limit_total_chars and total_chars >= settings.chat_max_context_chars:
             break
         if exact_groups and not any(group_form_matches(
             f"{block['title']}\n{block['content']}", group) for group in exact_groups):
             continue
         limited.append(block)
-        total_chars += len(block['content'])
+        if limit_total_chars:
+            total_chars += len(block['content'])
     return filter_mail_scope_blocks(limited, mail_mode=mail_mode)
 
 
