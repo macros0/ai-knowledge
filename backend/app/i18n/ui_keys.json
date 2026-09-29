@@ -306,6 +306,12 @@
   "apiError.bulk_export_storage_quota": [],
   "apiError.bulk_export_storage_reserve": [],
   "apiError.bulk_export_user_active": [],
+  "apiError.chat_answer_truncated": [],
+  "apiError.chat_budget_unavailable": [],
+  "apiError.chat_evidence_invalid": [],
+  "apiError.chat_evidence_too_large": [],
+  "apiError.chat_sources_changed": [],
+  "apiError.chat_summary_too_large": [],
   "apiError.chunk_not_found": [],
   "apiError.conflict": [],
   "apiError.dependency_unavailable": [],
@@ -323,8 +329,8 @@
   "apiError.file_not_found": [],
   "apiError.file_too_large": [],
   "apiError.forbidden": [],
-  "apiError.generation_rate_limited": [],
   "apiError.generation_context_exceeded": [],
+  "apiError.generation_rate_limited": [],
   "apiError.generation_retrying": [],
   "apiError.generation_timeout": [],
   "apiError.glossary_alias_conflict": [],
@@ -450,11 +456,17 @@
   "bulkGeneration.skipped": [],
   "bulkGeneration.start": [],
   "chat.adminHint": [],
+  "chat.answerIncomplete": [],
+  "chat.answerStopped": [],
   "chat.askFirst": [],
   "chat.assistant": [],
   "chat.backToList": [],
   "chat.backToSessions": [],
   "chat.backToUsers": [],
+  "chat.batchProgress": [
+    "done",
+    "total"
+  ],
   "chat.copied": [],
   "chat.copy": [],
   "chat.copyAnswer": [],
@@ -473,6 +485,11 @@
   "chat.errorPrefix": [
     "message"
   ],
+  "chat.fastCoverage": [
+    "found",
+    "used"
+  ],
+  "chat.fragments": [],
   "chat.glossary.count": [],
   "chat.glossary.disabled": [],
   "chat.glossary.infotypeRule": [],
@@ -517,6 +534,14 @@
   "chat.relevance": [
     "pct"
   ],
+  "chat.responseMode.documents.description": [],
+  "chat.responseMode.documents.label": [],
+  "chat.responseMode.fast.description": [],
+  "chat.responseMode.fast.label": [],
+  "chat.responseMode.full.description": [],
+  "chat.responseMode.full.label": [],
+  "chat.responseModeLabel": [],
+  "chat.restartAnswer": [],
   "chat.resultsLabel": [],
   "chat.searchSettings": [],
   "chat.send": [],
@@ -524,9 +549,12 @@
   "chat.sessionsLoadError": [
     "message"
   ],
+  "chat.sourceFound": [],
   "chat.sourceInContext": [],
   "chat.sourceSearchOnly": [],
   "chat.sources": [],
+  "chat.stopAnswer": [],
+  "chat.synthesizing": [],
   "chat.tagsLabel": [],
   "chat.tagsPlaceholder": [],
   "chat.thinking": [],

@@ -540,7 +540,8 @@ def test_posix_group_removes_descendants_on_every_exit(tmp_path, outcome):
     import signal
 
     pid_file = tmp_path / "child.pid"
-    arguments = dict(attachments_dir=tmp_path / "attachments", timeout_seconds=3,
+    # Full-suite coverage can use the old timeout before the child writes its PID marker.
+    arguments = dict(attachments_dir=tmp_path / "attachments", timeout_seconds=15,
                      max_memory_mb=1024, _worker_target=_descendant_worker)
     if outcome == "timeout":
         with pytest.raises(ParserTimeoutError):
