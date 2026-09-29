@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { inModelContext } from "./chatSourceContext.mjs";
 
 // Превращает ссылки-цитаты [N] в remark-узлы link на якорь #cite-N.
 function remarkCiteLinks() {
@@ -64,7 +65,7 @@ function CiteLink({ href, children, sources, ...props }) {
   if (!m) return <a href={href} {...props}>{children}</a>;
   const n = Number(m[1]);
   const s = sources[n - 1];
-  const url = sourceHref(s);
+  const url = inModelContext(s) ? sourceHref(s) : null;
   if (!url) {
     return <span className="cite">{children}</span>;
   }

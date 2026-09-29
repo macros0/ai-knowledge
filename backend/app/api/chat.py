@@ -35,7 +35,7 @@ from app.services.context_builder import (
 from app.services.embedder import Embedder
 from app.services.errors import LLMError
 from app.services.llm_client import LLMBusyError, LLMClient
-from app.services.llm_profiles import request_scope, remaining
+from app.services.llm_profiles import request_scope, request_state, remaining
 from app.services.chat_stream import stream_chat
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.stopwords import KIND_BM25, get_stopwords
@@ -219,6 +219,9 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
     if not hits:
         answer = _no_sources_answer(req)
         sources: list[ChatSource] = []
+        on_sources = request_state().get("on_sources")
+        if on_sources:
+            on_sources([])
     else:
         # Этап 2b: полный текст чанков — из document_chunks (natural key), а не
         # из payload Qdrant. Вызывается до merge_and_format, который читает
@@ -251,7 +254,10 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
             domain_cache=domain_cache,
             focus_named_objects=settings.chat_focus_named_objects,
         )
-        merged = limit_context(
+        # Отбор по происхождению относится и к видимым источникам. Лимит
+        # контекста ниже ограничивает только текст, отправляемый модели.
+        merged = filter_mail_scope_blocks(merged, mail_mode=req.mail_mode)
+        context_blocks = limit_context(
             merged,
             settings.chat_max_context_chars,
             query=req.query,
@@ -260,9 +266,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
             lexical_cache=lexical_cache,
             strict=settings.llm_profile == "local_qwen",
         )
-        merged = filter_mail_scope_blocks(merged, mail_mode=req.mail_mode)
         context = format_context(
-            merged,
+            context_blocks,
             query=req.query,
             match_groups=exact_groups,
             domain_cache=domain_cache,
@@ -270,7 +275,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
         )
         max_score = max((m["score"] for m in merged), default=0.0)
         sources = []
-        for m in merged:
+        for index, m in enumerate(merged):
             score = m["score"] / max_score if max_score > 0 else m["score"]
             src_doc = doc_lookup.get(m["doc_id"]) or {}
             sources.append(
@@ -286,13 +291,17 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
                     chunk_index=m["chunk_index"],
                     source_id=m.get("source_id"),
                     source_path=m.get("source_path"),
+                    in_model_context=index < len(context_blocks),
                     development_number=src_doc.get("development_number"),
                     development_name=src_doc.get("development_name"),
                     development_module=src_doc.get("development_module"),
                 )
             )
+        on_sources = request_state().get("on_sources")
+        if on_sources:
+            on_sources([source.model_dump(mode="json") for source in sources])
 
-        if not merged:
+        if not context_blocks:
             answer = _no_sources_answer(req)
         else:
             system = _chat_system_prompt(req.query, req.locale, settings)
@@ -302,7 +311,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
                     # Internal extraction JSON is not a user-facing answer.
                     with request_scope(on_text=None):
                         answer = answer_authorship(
-                            req.query, merged, _get_llm(), locale=req.locale,
+                            req.query, context_blocks, _get_llm(), locale=req.locale,
                             max_chars=settings.chat_max_context_chars, mail_mode=req.mail_mode,
                         )
                 else:
@@ -313,7 +322,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings) -> ChatRes
                 raise LLMError(cause=exc) from exc
             # Normalize citations only after an answer was produced from sources.
             if not is_authorship_query(req.query):
-                answer = normalize_citations(answer, max_index=len(merged))
+                answer = normalize_citations(answer, max_index=len(context_blocks))
 
     used_in = [branch for branch in ("dense", "bm25") if branch in branches]
     applied_terms = [

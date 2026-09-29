@@ -122,3 +122,28 @@ class TestChatAdmission:
         assert resp.json()["code"] == "rate_limited"
         assert resp.headers["retry-after"] == "7"
         assert stored == []
+
+
+def test_chat_keeps_retrieved_sources_after_context_budget(monkeypatch):
+    from app.api import chat as chat_module
+
+    _patch_retrieval(monkeypatch, chat_module, hits=[{"id": "p1"}])
+    first = {**_block(), "title": "Письмо", "filepath": "doc/mail.md"}
+    second = {**_block(), "title": "Нужный справочник", "filepath": "doc/reference.md"}
+    monkeypatch.setattr(chat_module, "merge_and_format", lambda *a, **k: [first, second])
+    monkeypatch.setattr(chat_module, "limit_context", lambda blocks, *a, **k: blocks[:1])
+    monkeypatch.setattr(chat_module._get_llm(), "chat", lambda *a: "Ответ [1]")
+
+    response = make_client(monkeypatch).post(
+        "/api/chat", json={"query": "справочник", "top_k": 10, "use_glossary": False}
+    )
+    assert response.status_code == 200, response.text
+    assert [source["title"] for source in response.json()["sources"]] == [
+        "Письмо", "Нужный справочник",
+    ]
+    assert [source["in_model_context"] for source in response.json()["sources"]] == [True, False]
+    from app.db.models import ChatMessage
+    from app.db.session import session_scope
+    with session_scope() as session:
+        saved = session.query(ChatMessage).filter_by(role="assistant").order_by(ChatMessage.id.desc()).first()
+        assert [source["in_model_context"] for source in saved.sources] == [True, False]

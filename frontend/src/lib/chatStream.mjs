@@ -1,4 +1,4 @@
-export async function readChatStream(response, onText = () => {}) {
+export async function readChatStream(response, onText = () => {}, onSources = () => {}) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = "";
@@ -13,6 +13,7 @@ export async function readChatStream(response, onText = () => {}) {
         if (!line) continue;
         const event = JSON.parse(line);
         if (event.type === "delta") onText(event.text);
+        if (event.type === "sources") onSources(event.sources || []);
         if (event.type === "result") return event.data;
         if (event.type === "error") {
           const error = new Error("Chat failed");

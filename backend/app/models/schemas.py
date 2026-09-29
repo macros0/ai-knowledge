@@ -280,6 +280,8 @@ class ChatSource(BaseModel):
     chunk_index: int | None = None
     source_id: str | None = None
     source_path: list[dict[str, Any]] | None = None
+    # Источник найден поиском; только true означает, что его текст вошёл в контекст LLM.
+    in_model_context: bool = True
     # Бейджи модуль/разработка в источниках (Этап 5.1).
     development_number: str | None = None
     development_name: str | None = None

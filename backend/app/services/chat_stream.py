@@ -23,10 +23,15 @@ async def stream_chat(work):
             raise LLMCancelled()
         events.put({"type": "delta", "text": text})
 
+    def emit_sources(sources):
+        if cancel.is_set():
+            raise LLMCancelled()
+        events.put({"type": "sources", "sources": sources})
+
     def run():
         try:
             settings = get_settings()
-            with request_scope(on_text=emit, cancel=cancel,
+            with request_scope(on_text=emit, on_sources=emit_sources, cancel=cancel,
                                deadline=time.monotonic() + settings.llm_chat_total_timeout_seconds):
                 result = work()
             if not cancel.is_set():

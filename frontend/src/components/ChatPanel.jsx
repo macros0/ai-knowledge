@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { chat, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
 import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
+import { inModelContext } from "@/lib/chatSourceContext.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
@@ -180,6 +181,16 @@ export default function ChatPanel() {
     };
   };
 
+  const streamSourcesIntoLastAnswer = (sources) => {
+    setMessages((items) => {
+      const copy = [...items];
+      if (copy.at(-1)?.role === "assistant") {
+        copy[copy.length - 1] = { ...copy.at(-1), sources };
+      }
+      return copy;
+    });
+  };
+
   const send = async (e) => {
     e.preventDefault();
     const q = query.trim();
@@ -191,7 +202,7 @@ export default function ChatPanel() {
     setPending(true);
     setMessages((m) => [...m, { role: "assistant", text: t("chat.thinking"), sources: [], ...requestOptions }]);
     try {
-      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale, useGlossary, requestOptions.requestMailMode, streamIntoLastAnswer());
+      const resp = await chat(q, effectiveTags, selectedTopK, selectedMode, sessionId, sourceLocale, useGlossary, requestOptions.requestMailMode, streamIntoLastAnswer(), streamSourcesIntoLastAnswer);
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((m) => {
         const copy = [...m];
@@ -208,7 +219,7 @@ export default function ChatPanel() {
       } else {
         setMessages((m) => {
           const copy = [...m];
-          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q, ...requestOptions };
+          copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: copy.at(-1)?.sources || [], query: q, ...requestOptions };
           return copy;
         });
       }
@@ -225,7 +236,7 @@ export default function ChatPanel() {
     setPending(true);
     setMessages((items) => [...items, { role: "assistant", text: t("chat.thinking"), sources: [], ...requestOptions }]);
     try {
-      const resp = await chat(q, requestOptions.requestTags, requestOptions.requestTopK, requestOptions.requestMode, sessionId, requestOptions.requestSourceLocale, false, requestOptions.requestMailMode, streamIntoLastAnswer());
+      const resp = await chat(q, requestOptions.requestTags, requestOptions.requestTopK, requestOptions.requestMode, sessionId, requestOptions.requestSourceLocale, false, requestOptions.requestMailMode, streamIntoLastAnswer(), streamSourcesIntoLastAnswer);
       if (resp.session_id) setSessionId(resp.session_id);
       setMessages((items) => {
         const copy = [...items];
@@ -235,7 +246,7 @@ export default function ChatPanel() {
     } catch (err) {
       setMessages((items) => {
         const copy = [...items];
-        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: [], query: q, ...requestOptions };
+        copy[copy.length - 1] = { role: "assistant", text: t("chat.errorPrefix", { message: friendlyApiError(err, t) }), sources: copy.at(-1)?.sources || [], query: q, ...requestOptions };
         return copy;
       });
     } finally { setPending(false); }
@@ -296,7 +307,7 @@ export default function ChatPanel() {
               </button>
             )}
             {m.sources && m.sources.length > 0 && (
-              <details className="sources">
+              <details className="sources" open={pending && i === messages.length - 1}>
                 <summary>{t("chat.sources")}</summary>
                 <ol>
                   {m.sources.map((s, j) => {
@@ -316,6 +327,7 @@ export default function ChatPanel() {
                           s.title
                         )}
                         {t("chat.relevance", { pct: (s.score * 100).toFixed(0) })}
+                        {" "}<span className="meta">{t(inModelContext(s) ? "chat.sourceInContext" : "chat.sourceSearchOnly")}</span>
                         {s.development_number && (
                           <span
                             className="source-dev-badge"

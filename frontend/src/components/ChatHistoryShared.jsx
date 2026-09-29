@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { CiteLink, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
+import { inModelContext } from "@/lib/chatSourceContext.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 import MarkdownViewer from "./MarkdownViewer";
 import AppliedTerms from "./AppliedTerms";
@@ -22,6 +23,7 @@ export function SourceBadges({ sources }) {
         const label = (
           <>
             {s.title || s.filename}
+            {" "}<span className="meta">{t(inModelContext(s) ? "chat.sourceInContext" : "chat.sourceSearchOnly")}</span>
             {s.development_number && (
               <span className="source-dev-badge" title={s.development_name || t("chat.developmentTitle")}>
                 {s.development_number}

@@ -486,6 +486,8 @@
   "chat.copied": "Copied",
   "chat.copy": "Copy",
   "chat.sources": "Sources",
+  "chat.sourceInContext": "in model context",
+  "chat.sourceSearchOnly": "found by search · outside model context",
   "chat.relevance": "(relevance {pct}%)",
   "chat.developmentTitle": "Development",
   "chat.mailModeLabel": "Sources",

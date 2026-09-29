@@ -512,6 +512,8 @@ export default {
   "chat.copied": "Скопировано",
   "chat.copy": "Копировать",
   "chat.sources": "Источники",
+  "chat.sourceInContext": "в контексте модели",
+  "chat.sourceSearchOnly": "найден поиском · вне контекста модели",
   "chat.relevance": "(релевантность {pct}%)",
   "chat.developmentTitle": "Разработка",
   "chat.mailModeLabel": "Источники",

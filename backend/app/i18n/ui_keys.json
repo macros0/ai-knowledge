@@ -524,6 +524,8 @@
   "chat.sessionsLoadError": [
     "message"
   ],
+  "chat.sourceInContext": [],
+  "chat.sourceSearchOnly": [],
   "chat.sources": [],
   "chat.tagsLabel": [],
   "chat.tagsPlaceholder": [],

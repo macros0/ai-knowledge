@@ -465,7 +465,7 @@ export function search(query, tags = [], topK = 5, mode = "hybrid", useGlossary 
   });
 }
 
-export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true, mailMode = "all", onText = null) {
+export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true, mailMode = "all", onText = null, onSources = null) {
   const body = { query, locale: currentUiLocale(), tags, top_k: topK, mode, use_glossary: useGlossary, mail_mode: mailMode };
   if (sessionId) body.session_id = sessionId;
   // Фильтр по языку документа (Этап 7 фаза D): не отправляем поле при «Все языки».
@@ -485,7 +485,7 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
     CHAT_TIMEOUT_MS,
     onText ? async (response) => {
       try {
-        return await readChatStream(response, onText);
+        return await readChatStream(response, onText, onSources || (() => {}));
       } catch (err) {
         if (err.name === "AbortError") throw err;
         throw new ApiError("Chat stream failed", { code: err.code || "dependency_unavailable", status: err.status || 503 });
