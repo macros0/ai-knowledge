@@ -977,6 +977,16 @@ added only on explicit assignment (the `new_value` form without assignment is un
 No new action_type was introduced; permissions are the previous
 `require_role("editor","admin")`. No impact on trust boundaries/network topology.
 
+### 2026-09-30 — Dependency audit before push
+
+GitHub npm audit found brace-expansion denial-of-service advisories
+GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p in the frontend
+development dependency tree. The lock file now uses patched 1.1.21 and 5.0.12
+within the existing dependency ranges. The local pre-push hook audits the exact
+sent commit's package files, fails closed on audit/network errors and removes
+its temporary snapshot. It does not install dependencies or bypass CI gates.
+Dependabot proposes weekly dependency updates without automatic merging.
+
 ### 2026-09-27 — Cancel document update while preserving its published version
 
 `POST /documents/{id}/cancel-update` is restricted to editor/admin and active

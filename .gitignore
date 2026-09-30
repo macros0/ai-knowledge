@@ -63,6 +63,7 @@ backend/scripts/probe-baseline.json
 backend/scripts/probe-stage8-*.json
 
 # Temporary pytest basetemp directories created by local verification
+backend/tests/tmp/
 .pytest-run-*/
 .pytest-*/
 pytest-*/

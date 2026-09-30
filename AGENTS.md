@@ -859,6 +859,15 @@ ru), полнота plural-форм.
 
 ## Тесты
 
+Перед коммитом запускайте из корня `node scripts/check-project.mjs`:
+npm audit (high), ESLint, весь frontend test suite и Ruff бэкенда.
+После нового клона включите `node scripts/check-project.mjs --install-hooks`.
+Локальный pre-push проверяет зависимости именно отправляемого коммита; ошибка
+аудита или сети блокирует пуш. Не обходите hook для исправления красного CI.
+Переводы и `backend/app/i18n/ui_{keys,en}.json` обновляйте до запуска pytest,
+а не во время него: словарь кешируется в процессе. Не объявляйте быстрый набор
+полным CI. Подробности: `docs/DEVELOPMENT_CHECKS.md`.
+
 ```powershell
 python -m pytest tests/ -q   # из backend/
 ```
