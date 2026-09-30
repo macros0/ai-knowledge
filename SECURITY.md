@@ -15,6 +15,14 @@ router/firewall/port publication and makes no claim of network isolation.
 The new `POST /api/chat/stream` uses the same authenticated chat handler,
 authorization, rate limiting and CSRF middleware as `POST /api/chat`.
 Responses are no-store; transport errors expose stable codes, not provider text.
+Selected-source answers use the same chat routes and access controls. The request
+references a search attempt in the current user's active session and source indices;
+client-supplied document text is never used. Search history stores canonical excerpt
+identities, offsets and digests rather than a second copy of full context. Before
+generation, `chat_source_selection.restore_blocks` checks visibility, active generation,
+canonical identity, original mail scope and excerpt digest. Publication/deletion during
+generation also invalidates the answer. A new generation attempt processes the selected
+excerpts with the existing context budget, admission, rate limits and cancellation.
 Only completed answers are passed to history storage; cancellation before that
 step prevents storing a partial answer. JSON schema constrains output shape,
 not factual truth or resistance to prompt injection. See `docs/LOCAL_LLM.md`.

@@ -80,6 +80,49 @@ def test_documents_mode_lists_all_hits_without_generation(monkeypatch):
     assert all(not src["in_model_context"] for src in response.json()["sources"])
 
 
+@pytest.mark.parametrize("mode", ["documents", "fast", "full"])
+def test_chat_depth_is_used_for_search_and_reported_before_answer(monkeypatch, mode):
+    import json
+    from uuid import uuid4
+    from app.api import chat as chat_module
+    from app.services import chat_history
+
+    _patch_retrieval(monkeypatch, chat_module, hits=[{"id": "p1"}])
+    captured = {}
+
+    def search(**kwargs):
+        captured.update(kwargs)
+        kwargs["retrieval_status"]["limit_reached"] = True
+        return [{"id": "p1"}]
+
+    monkeypatch.setattr(chat_module._get_vector_store(), "search_composite", search)
+    monkeypatch.setattr(chat_module, "_answer_mode", lambda *a, **k: "Ответ")
+    session_id = str(uuid4())
+    response = make_client(monkeypatch).post("/api/chat/stream", json={
+        "query": "справочник", "response_mode": mode, "search_depth": 100,
+        "attempt_id": str(uuid4()), "session_id": session_id,
+    })
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert not any(event["type"] == "error" for event in events), events
+    assert captured["top_k"] == captured["per_branch_top_k"] == 100
+    retrieval = next(event for event in events if event.get("phase") == "retrieval")
+    assert retrieval["search_depth"] == 100
+    assert retrieval["search_limit_reached"] is True
+    result = events[-1]["data"]
+    assert result["search_depth"] == 100 and result["search_limit_reached"] is True
+    saved = chat_history.get_thread(session_id, "anonymous")["messages"][-1]
+    assert saved["retrieval_metadata"]["search_limit_reached"] is True
+    assert saved["retrieval_metadata"]["search_depth"] == 100
+
+
+@pytest.mark.parametrize("depth", [0, 501, 1.5, True])
+def test_chat_rejects_invalid_search_depth(monkeypatch, depth):
+    response = make_client(monkeypatch).post("/api/chat", json={
+        "query": "справочник", "response_mode": "documents", "search_depth": depth,
+    })
+    assert response.status_code == 422
+
+
 def test_fast_mode_calls_llm_once_and_shows_unchosen_source(monkeypatch):
     from app.api import chat as chat_module
 
@@ -344,7 +387,7 @@ def test_documents_stream_persists_sources_and_attempt_identity(monkeypatch):
     )
     assert response.status_code == 200, response.text
     events = [json.loads(line) for line in response.text.splitlines()]
-    assert [event["type"] for event in events if event["type"] != "ping"] == ["start", "sources", "result"]
+    assert [event["type"] for event in events if event["type"] != "ping"] == ["start", "progress", "sources", "result"]
     assert all(event["attempt_id"] == attempt_id for event in events)
     thread = chat_history.get_thread(session_id, "anonymous")
     assert len(thread["messages"][-1]["sources"]) == 1

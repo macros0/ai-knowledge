@@ -27,3 +27,17 @@ test("source refresh preserves manual collapse", () => {
   assert.equal(result[0].sourcesOpen, false);
   assert.equal(result[0].sources.length, 1);
 });
+
+test("retrieval limit warning survives generation progress and source updates", () => {
+  let messages = [{ role: "assistant", attemptId: "a", sources: [] }];
+  messages = applyAnswerEvent(messages, {
+    attemptId: "a", type: "progress", phase: "retrieval",
+    search_depth: 100, search_limit_reached: true,
+  });
+  assert.equal(messages[0].searchLimitReached, true);
+  assert.equal(messages[0].requestSearchDepth, 100);
+  assert.equal(messages[0].progress, undefined);
+  messages = applyAnswerEvent(messages, { attemptId: "a", type: "progress", phase: "generation" });
+  messages = applyAnswerEvent(messages, { attemptId: "a", type: "sources", sources: [{ doc_id: "x" }] });
+  assert.equal(messages[0].searchLimitReached, true);
+});

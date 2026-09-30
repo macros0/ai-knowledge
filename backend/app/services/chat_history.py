@@ -99,11 +99,16 @@ def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, res
         return AttemptRef(session_id, message.id, attempt_id)
 
 
-def save_attempt_sources(ref: AttemptRef, user, sources: list[dict]) -> None:
+def save_attempt_sources(ref: AttemptRef, user, sources: list[dict], *, retrieval_metadata: dict | None = None) -> None:
     with session_scope() as s:
         message = _attempt_message(s, ref, user)
         if message.retrieval_metadata["answer_attempt"]["status"] == "incomplete":
             message.sources = deepcopy(sources)
+            if retrieval_metadata is not None:
+                message.retrieval_metadata = {
+                    **message.retrieval_metadata,
+                    **{k: deepcopy(v) for k, v in retrieval_metadata.items() if k != "answer_attempt"},
+                }
 
 
 def finish_attempt(ref: AttemptRef, user, *, status: str, answer: str) -> bool:
@@ -142,6 +147,15 @@ def find_attempt(session_id: str, user, attempt_id: str) -> AttemptRef | None:
             if metadata.get("id") == attempt_id:
                 return AttemptRef(session_id, message.id, attempt_id, metadata.get("status", "incomplete"))
         return None
+
+
+def read_attempt_sources(session_id: str, user, attempt_id: str):
+    ref = find_attempt(session_id, user, attempt_id)
+    if ref is None:
+        return None
+    with session_scope() as s:
+        message = _attempt_message(s, ref, user)
+        return deepcopy(message.sources or []), deepcopy(message.retrieval_metadata or {})
 
 
 class ChatOwnershipError(Exception):

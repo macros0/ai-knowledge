@@ -92,6 +92,14 @@ export function HistoryMessage({ m, userLabel }) {
     <div className={`msg ${m.role}`}>
       <div className="role">{m.role === "user" ? youLabel : t("chat.assistant")}</div>
       <div className="bubble history-bubble">{content}</div>
+      {m.role === "assistant" && m.retrieval_metadata?.source_selection && (
+        <div className="meta">{t("chat.selectedAnswerContext", { count: m.retrieval_metadata.source_selection.indexes.length })}</div>
+      )}
+      {m.role === "assistant" && m.retrieval_metadata?.search_limit_reached && (
+        <div className="meta" role="status">
+          {t(m.retrieval_metadata.search_depth >= 500 ? "chat.searchLimitReachedMax" : "chat.searchLimitReached", { depth: m.retrieval_metadata.search_depth })}
+        </div>
+      )}
       {m.role === "assistant" && m.retrieval_metadata && (
         <AppliedTerms status={m.retrieval_metadata.expansion_status} appliedTerms={m.retrieval_metadata.applied_terms} />
       )}

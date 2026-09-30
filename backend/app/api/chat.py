@@ -56,6 +56,7 @@ from app.services.glossary.query_sparse import build_query_sparse
 from app.services.glossary.snapshot import GlossaryMigrationRequiredError
 from app.services.generation_store import lock_generation_read
 from app.services.ui_dictionary import localized_message
+from app.services.chat_source_selection import snapshot_blocks, restore_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +314,43 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         slots.release()
 
 
+def _answer_selected(req, current_user, settings, attempt_ref):
+    saved = chat_history.read_attempt_sources(req.session_id, current_user, req.source_selection.attempt_id)
+    if saved is None:
+        raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Результат поиска не найден")
+    found, metadata = saved
+    if (metadata.get('answer_attempt', {}).get('mode') != 'documents'
+            or metadata.get('answer_attempt', {}).get('query') != req.query):
+        raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Выбор не относится к этому поиску")
+    indexes = sorted(set(req.source_selection.indexes))
+    snapshots = metadata.get('source_blocks') or []
+    if any(index > len(found) or index > len(snapshots) for index in indexes):
+        raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Некорректный выбор источников")
+    # Filters belong to the saved search. Explicit selections are never filtered again.
+    req = req.model_copy(update={'mail_mode': metadata.get('mail_mode', 'all')})
+    merged = restore_blocks([snapshots[index - 1] for index in indexes], mail_mode=req.mail_mode)
+    _validate_final_source_state(merged)
+    sources = [ChatSource.model_validate({**found[index - 1], 'source_index': number,
+        'in_model_context': False, 'parts_total': 1, 'submitted_parts': 0,
+        'completed_parts': 0, 'cited': False, 'partial': False}) for number, index in enumerate(indexes, 1)]
+    selected_metadata = {'schema_version': 1, 'mail_mode': req.mail_mode,
+                         'response_mode': 'full', 'source_selection': {
+                             'attempt_id': req.source_selection.attempt_id, 'indexes': indexes}}
+    chat_history.save_attempt_sources(attempt_ref, current_user,
+        [source.model_dump(mode='json') for source in sources], retrieval_metadata=selected_metadata)
+    on_sources = request_state().get('on_sources')
+    if on_sources:
+        on_sources([source.model_dump(mode='json') for source in sources])
+    answer = _answer_mode(req, merged, sources, settings, (), {}, {},
+                          attempt_ref=attempt_ref, current_user=current_user)
+    _validate_final_source_state(merged)
+    return ChatResponse(query=req.query, answer=answer, sources=sources, session_id=attempt_ref.session_id,
+                        response_mode='full', attempt_id=attempt_ref.attempt_id)
+
+
 def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_ref=None) -> ChatResponse:
+    if req.source_selection:
+        return _answer_selected(req, current_user, settings, attempt_ref)
     try:
         plan = prepare_query(
             req.query,
@@ -339,6 +376,10 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         else None
     )
 
+    search_depth = req.search_depth if req.search_depth is not None else (
+        40 if req.response_mode is not None else settings.search_per_branch_top_k
+    )
+    retrieval_status = {}
     hits = _get_vector_store().search_composite(
         dense_vec=vector,
         sparse_vec=sparse_vec,
@@ -352,8 +393,15 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         # до группировки ронял концепты-сиблинги с более низким fused-рангом
         # (таблица «Перечень: Наименование поля» при bm25-ранге #5) — они не
         # доживали до merge и не попадали ни в контекст LLM, ни в sources.
-        top_k=settings.search_per_branch_top_k,
+        top_k=search_depth,
+        per_branch_top_k=search_depth,
+        retrieval_status=retrieval_status,
     )
+    search_limit_reached = retrieval_status.get("limit_reached", len(hits) >= search_depth)
+    retrieval_summary = {"search_depth": search_depth, "search_limit_reached": search_limit_reached}
+    on_progress = request_state().get("on_progress")
+    if on_progress and (req.response_mode is not None or req.search_depth is not None):
+        on_progress({"phase": "retrieval", **retrieval_summary})
     if attempt_ref:
         remaining(settings.llm_chat_total_timeout_seconds)
     exact_groups = plan.strict_groups or plan.match_groups
@@ -373,7 +421,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         if on_sources:
             on_sources([])
         if attempt_ref:
-            chat_history.save_attempt_sources(attempt_ref, current_user, [])
+            chat_history.save_attempt_sources(attempt_ref, current_user, [], retrieval_metadata=retrieval_summary)
     else:
         # Этап 2b: полный текст чанков — из document_chunks (natural key), а не
         # из payload Qdrant. Вызывается до merge_and_format, который читает
@@ -463,6 +511,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         if attempt_ref:
             chat_history.save_attempt_sources(
                 attempt_ref, current_user, [source.model_dump(mode="json") for source in sources],
+                retrieval_metadata={**retrieval_summary, "mail_mode": req.mail_mode,
+                                    "source_blocks": snapshot_blocks(merged)} if req.response_mode == 'documents' else retrieval_summary,
             )
         if on_sources:
             on_sources([source.model_dump(mode="json") for source in sources])
@@ -501,6 +551,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         for term in plan.applied_terms
     ]
     retrieval_metadata = {
+        **retrieval_summary,
         "schema_version": 1,
         "mail_mode": req.mail_mode,
         "expansion_status": plan.status,
@@ -520,7 +571,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
     try:
         if attempt_ref:
             session_id = attempt_ref.session_id
-            chat_history.save_attempt_sources(attempt_ref, current_user, [s.model_dump(mode="json") for s in sources])
+            chat_history.save_attempt_sources(attempt_ref, current_user, [s.model_dump(mode="json") for s in sources],
+                                              retrieval_metadata=retrieval_metadata)
         else:
             session_id = chat_history.store_turn(
                 req.session_id,
@@ -549,6 +601,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         query=req.query,
         answer=answer,
         sources=sources,
+        **retrieval_summary,
         response_mode=req.response_mode,
         attempt_id=attempt_ref.attempt_id if attempt_ref else None,
         session_id=session_id,
@@ -568,11 +621,21 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
 
     authorship = is_authorship_query(req.query)
     if authorship:
-        canonical = load_authorship_evidence(
-            merged, settings.chat_chunk_max_chars * max(1, len(merged)),
-            mail_mode=req.mail_mode, per_source_chars=settings.chat_chunk_max_chars,
-            deduplicate=False,
-        )
+        if req.source_selection:
+            # Attribution needs original text. Do not widen an explicit selection
+            # to a shared chunk, or promote an LLM digest to proof of identity.
+            canonical = []
+            for block in merged:
+                original = (block['content'] if (block.get('_evidence') or {}).get('point_type') == 'chunk'
+                            else (block.get('mail_fragment') or {}).get('content'))
+                if original:
+                    canonical.append({'index': block['_source_index'], 'text': original})
+        else:
+            canonical = load_authorship_evidence(
+                merged, settings.chat_chunk_max_chars * max(1, len(merged)),
+                mail_mode=req.mail_mode, per_source_chars=settings.chat_chunk_max_chars,
+                deduplicate=False,
+            )
         canonical_by_index = {item["index"]: item["text"] for item in canonical}
         merged = [{**block, "content": canonical_by_index[block["_source_index"]]}
                   for block in merged if block["_source_index"] in canonical_by_index]

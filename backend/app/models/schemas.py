@@ -221,10 +221,17 @@ class SearchResponse(BaseModel):
     applied_terms: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ChatSourceSelection(BaseModel):
+    attempt_id: str = Field(max_length=36)
+    indexes: list[Annotated[int, Field(strict=True, ge=1)]] = Field(min_length=1, max_length=10000)
+
+
 class ChatRequest(BaseModel):
     mail_mode: Literal["all", "exclude", "only"] = "all"
     response_mode: Literal["documents", "fast", "full"] | None = None
     attempt_id: str | None = None
+    search_depth: int | None = Field(default=None, ge=1, le=500, strict=True)
+    source_selection: ChatSourceSelection | None = None
     query: QueryText
     # Язык ответа при неопределимом языке короткого запроса; UI передаёт
     # текущую локаль, прямые API-вызовы получают русский fallback.
@@ -244,6 +251,11 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
 
     _normalize_query = field_validator("query", mode="before")(_normalize_query)
+    @model_validator(mode="after")
+    def validate_source_selection(self):
+        if self.source_selection and (not self.session_id or self.response_mode != 'full'):
+            raise ValueError('Selected sources require a session and full response mode')
+        return self
     _normalize_filters = field_validator("tags", "source_locales", mode="after")(
         _normalize_filter_values
     )
@@ -252,6 +264,10 @@ class ChatRequest(BaseModel):
 class ChatSettingsOut(BaseModel):
     knowledge_profile: str = "Основной контур"
     response_modes: list[str] = Field(default_factory=lambda: ["documents", "fast", "full"])
+    search_depth_default: int = 40
+    search_depth_min: int = 1
+    search_depth_max: int = 500
+    search_depth_presets: list[int] = Field(default_factory=lambda: [40, 100, 200])
     top_k_min: int
     top_k_max: int
     top_k_default: int
@@ -302,6 +318,8 @@ class ChatResponse(BaseModel):
     query: str
     answer: str
     sources: list[ChatSource]
+    search_depth: int = 40
+    search_limit_reached: bool = False
     response_mode: Literal["documents", "fast", "full"] | None = None
     attempt_id: str | None = None
     # UUID треда, к которому относится обмен (для продолжения «Нового чата»).

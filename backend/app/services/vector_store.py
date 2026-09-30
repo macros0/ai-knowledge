@@ -1004,7 +1004,8 @@ class VectorStore:
         ]
 
     def _graph_expansion(
-        self, ranked_lists: list[tuple[list[Hit], float]], *, search_filter: qm.Filter
+        self, ranked_lists: list[tuple[list[Hit], float]], *, search_filter: qm.Filter,
+        per_branch_top_k: int | None = None,
     ) -> list[Hit]:
         """Graph expansion: достаёт соседей по relations концептов.
 
@@ -1029,7 +1030,7 @@ class VectorStore:
             self.client.scroll,
             collection_name=self.collection,
             scroll_filter=slug_filter,
-            limit=self.settings.search_per_branch_top_k,
+            limit=per_branch_top_k if per_branch_top_k is not None else self.settings.search_per_branch_top_k,
             with_payload=True,
             with_vectors=False,
         )
@@ -1049,6 +1050,8 @@ class VectorStore:
         source_locales: list[str] | None = None,
         include_unknown_source_locale: bool = False,
         mail_mode: MailMode = "all",
+        per_branch_top_k: int | None = None,
+        retrieval_status: dict | None = None,
     ) -> list[Hit]:
         """Композитный поиск: запускает включённые ветки, сливает через RRF.
 
@@ -1069,7 +1072,7 @@ class VectorStore:
             tags, source_locales=source_locales,
             include_unknown=include_unknown_source_locale, mail_mode=mail_mode,
         )
-        per_branch = self.settings.search_per_branch_top_k
+        per_branch = per_branch_top_k if per_branch_top_k is not None else self.settings.search_per_branch_top_k
         k = self.settings.search_rrf_k
         ranked_lists: list[tuple[list[Hit], float]] = []
 
@@ -1083,13 +1086,20 @@ class VectorStore:
             ranked_lists.append((hits, self.settings.search_rrf_bm25_weight))
 
         if self.settings.search_graph_expansion_enabled:
-            graph_hits = self._graph_expansion(ranked_lists, search_filter=search_filter)
+            graph_hits = self._graph_expansion(
+                ranked_lists, search_filter=search_filter, per_branch_top_k=per_branch,
+            )
             if graph_hits:
                 ranked_lists.append((graph_hits, self.settings.search_rrf_graph_expansion_weight))
 
         from app.services.fusion import reciprocal_rank_fusion
 
         fused = reciprocal_rank_fusion(ranked_lists, k=k)
+        if retrieval_status is not None:
+            # Reaching a cap is a warning about search depth, not a count of omitted matches.
+            retrieval_status["limit_reached"] = (
+                len(fused) >= top_k or any(len(hits) >= per_branch for hits, _ in ranked_lists)
+            )
         return fused[:top_k]
 
     @staticmethod

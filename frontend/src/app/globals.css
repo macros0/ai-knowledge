@@ -1151,8 +1151,30 @@ main {
 
 .msg .sources ol {
   margin: 6px 0 0;
-  padding-left: 20px;
+  padding-inline-start: calc(var(--source-number-digits, 2) * 1ch + 1.25rem);
   color: var(--muted);
+}
+
+.msg .sources li::marker { font-variant-numeric: tabular-nums; }
+.source-select { margin-inline-end: 7px; vertical-align: middle; }
+.source-selection-actions {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.source-selection-actions .btn:not(.ghost):not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
 }
 
 .msg .sources a.source-link {

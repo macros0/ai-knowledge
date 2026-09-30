@@ -13,6 +13,10 @@ const FALLBACK_SETTINGS = {
   search_mode_default: "hybrid",
   search_modes: ["dense", "bm25", "hybrid"],
   response_modes: [],
+  search_depth_default: 40,
+  search_depth_min: 1,
+  search_depth_max: 500,
+  search_depth_presets: [40, 100, 200],
   glossary_query_expansion_enabled: null,
   bulk_export_enabled: false,
   bulk_export_download_enabled: false,
@@ -29,6 +33,7 @@ export function ChatProvider({ children }) {
   const [sessionId, setSessionId] = useState(null);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
+  const [searchDepth, setSearchDepth] = useState(FALLBACK_SETTINGS.search_depth_default);
   const [mailMode, setMailMode] = useState("all");
   const [useGlossary, setUseGlossary] = useState(true);
 
@@ -68,8 +73,8 @@ export function ChatProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ messages, tags, pending, settings, selectedMode, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }),
-    [messages, tags, pending, settings, selectedMode, sessionId, mailMode, useGlossary, MODE_LABELS]
+    () => ({ messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }),
+    [messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

@@ -6,6 +6,7 @@ import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listA
 import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
 import { applyAnswerEvent, groupSourcesByDocument } from "@/lib/chatAnswerState.mjs";
+import { updateSelection, selectionState } from "@/lib/chatSourceSelection.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
@@ -28,8 +29,15 @@ function getPresetLabel(preset, settings, t) {
   return String(preset);
 }
 
+function SelectionCheckbox({ state, label, onChange }) {
+  return <input type="checkbox" className="source-select" aria-label={label}
+    aria-checked={state === "some" ? "mixed" : state === "all"}
+    checked={state === "all"} ref={(element) => { if (element) element.indeterminate = state === "some"; }}
+    onChange={(event) => onChange(event.target.checked)} />;
+}
+
 export default function ChatPanel() {
-  const { messages, tags, pending, settings, selectedMode, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
+  const { messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
@@ -37,6 +45,8 @@ export default function ChatPanel() {
   const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
   const [showCustom, setShowCustom] = useState(false);
   const [customValue, setCustomValue] = useState("");
+  const [showCustomDepth, setShowCustomDepth] = useState(false);
+  const [customDepthValue, setCustomDepthValue] = useState("");
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [modules, setModules] = useState([]);
   const [developments, setDevelopments] = useState([]);
@@ -190,6 +200,19 @@ export default function ChatPanel() {
     };
   }, []);
 
+  const normalizeDepth = (value) => {
+    const number = Number(value);
+    return value === "" || !Number.isFinite(number) ? searchDepth
+      : Math.min(settings.search_depth_max, Math.max(settings.search_depth_min, Math.trunc(number)));
+  };
+
+  const applyCustomDepth = () => {
+    const depth = normalizeDepth(customDepthValue);
+    setSearchDepth(depth);
+    setCustomDepthValue(String(depth));
+    return depth;
+  };
+
   const sendQuestion = async (q, requestOptions, glossary = useGlossary) => {
     stopCurrent();
     const attemptId = crypto.randomUUID();
@@ -213,6 +236,8 @@ export default function ChatPanel() {
         (sources) => setMessages((items) => applyAnswerEvent(items, { attemptId, type: "sources", sources })),
         {
           responseMode: requestOptions.responseMode,
+          searchDepth: requestOptions.requestSearchDepth,
+          sourceSelection: requestOptions.requestSourceSelection,
           attemptId,
           signal: controller.signal,
           onProgress: (event) => setMessages((items) => applyAnswerEvent(items, { ...event, attemptId })),
@@ -225,6 +250,8 @@ export default function ChatPanel() {
         const copy = [...items];
         copy[copy.length - 1] = {
           ...copy.at(-1), text: resp.answer, sources: resp.sources,
+          requestSearchDepth: resp.search_depth ?? requestOptions.requestSearchDepth,
+          searchLimitReached: Boolean(resp.search_limit_reached),
           uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status,
         };
         return copy;
@@ -252,15 +279,30 @@ export default function ChatPanel() {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestMode: selectedMode, requestSourceLocale: sourceLocale, responseMode: settings.response_modes?.includes(responseMode) ? responseMode : null };
+    const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestSearchDepth: showCustomDepth ? applyCustomDepth() : searchDepth, requestMode: selectedMode, requestSourceLocale: sourceLocale, responseMode: settings.response_modes?.includes(responseMode) ? responseMode : null };
     setQuery("");
     await sendQuestion(q, requestOptions);
   };
 
+  const selectSources = (messageIndex, indexes, checked) => {
+    setMessages((items) => items.map((message, index) => index === messageIndex ? {
+      ...message, selectedSourceIndexes: updateSelection(message.selectedSourceIndexes ?? [], indexes, checked, message.sources),
+    } : message));
+  };
+
+  const answerSelected = (message) => sendQuestion(message.query, {
+    requestMailMode: message.requestMailMode, requestTags: message.requestTags,
+    requestTopK: message.requestTopK, requestMode: message.requestMode,
+    requestSearchDepth: message.requestSearchDepth, requestSourceLocale: message.requestSourceLocale,
+    responseMode: "full", requestSourceSelection: {
+      attempt_id: message.attemptId, indexes: [...(message.selectedSourceIndexes ?? [])],
+    },
+  }, false);
+
   const repeatWithoutGlossary = async (message) => {
     if (!message.query) return;
     const q = message.query;
-    const requestOptions = { requestMailMode: retryMailMode(message), requestTags: message.requestTags ?? effectiveTags, requestTopK: message.requestTopK ?? selectedTopK, requestMode: message.requestMode ?? selectedMode, requestSourceLocale: message.requestSourceLocale ?? sourceLocale, responseMode: message.responseMode ?? (settings.response_modes?.includes(responseMode) ? responseMode : null) };
+    const requestOptions = { requestMailMode: retryMailMode(message), requestTags: message.requestTags ?? effectiveTags, requestTopK: message.requestTopK ?? selectedTopK, requestSearchDepth: message.requestSearchDepth ?? searchDepth, requestMode: message.requestMode ?? selectedMode, requestSourceLocale: message.requestSourceLocale ?? sourceLocale, responseMode: message.responseMode ?? (settings.response_modes?.includes(responseMode) ? responseMode : null) };
     await sendQuestion(q, requestOptions, false);
   };
 
@@ -295,7 +337,9 @@ export default function ChatPanel() {
         </div>
       </div>
       <div className="chat-log" ref={logRef}>
-        {messages.map((m, i) => (
+        {messages.map((m, i) => {
+          const selectedSources = new Set(m.selectedSourceIndexes ?? []);
+          return (
           <div key={i} className={`msg ${m.role}`}>
             <div className="role-row">
               <div className="role">{m.role === "user" ? t("chat.you") : t("chat.assistant")}</div>
@@ -327,9 +371,22 @@ export default function ChatPanel() {
               )}
             </div>
             {m.role === "assistant" && m.responseMode === "documents" && m.sources?.length > 0 && (
+              <div className="source-selection-actions">
+                <button type="button" className="btn ghost" onClick={() => selectSources(i, m.sources.map((source) => source.source_index), true)}>{t("chat.selectAllSources")}</button>
+                <button type="button" className="btn ghost" onClick={() => selectSources(i, m.sources.map((source) => source.source_index), false)} disabled={!m.selectedSourceIndexes?.length}>{t("chat.clearSourceSelection")}</button>
+                <button type="button" className="btn" disabled={pending || !m.selectedSourceIndexes?.length} onClick={() => answerSelected(m)}>
+                  {t("chat.answerSelected", { count: m.selectedSourceIndexes?.length ?? 0 })}
+                </button>
+                <span className="meta">{t("chat.selectionDescription")}</span>
+              </div>
+            )}
+            {m.role === "assistant" && m.responseMode === "documents" && m.sources?.length > 0 && (
               <ul className="chat-document-list">
                 {groupSourcesByDocument(m.sources).map((group) => (
                   <li key={group.doc_id}>
+                    <SelectionCheckbox state={selectionState(selectedSources, group.sources.map((source) => source.source_index))}
+                      label={t("chat.selectDocument", { name: group.filename })}
+                      onChange={(checked) => selectSources(i, group.sources.map((source) => source.source_index), checked)} />
                     {documentHref(group.source) ? (
                       <Link href={documentHref(group.source)}>{group.filename}</Link>
                     ) : group.filename}
@@ -337,6 +394,14 @@ export default function ChatPanel() {
                   </li>
                 ))}
               </ul>
+            )}
+            {m.role === "assistant" && m.requestSourceSelection && (
+              <div className="meta">{t("chat.selectedAnswerContext", { count: m.requestSourceSelection.indexes.length })}</div>
+            )}
+            {m.role === "assistant" && m.searchLimitReached && (
+              <div className="meta" role="status">
+                {t(m.requestSearchDepth >= settings.search_depth_max ? "chat.searchLimitReachedMax" : "chat.searchLimitReached", { depth: m.requestSearchDepth })}
+              </div>
             )}
             {m.role === "assistant" && m.responseMode === "fast" && m.sources?.length > 0 && (
               <div className="meta" role="status">
@@ -360,6 +425,8 @@ export default function ChatPanel() {
               <button type="button" className="btn ghost" onClick={() => sendQuestion(m.query, {
                 requestMailMode: m.requestMailMode, requestTags: m.requestTags,
                 requestTopK: m.requestTopK, requestMode: m.requestMode,
+                requestSearchDepth: m.requestSearchDepth,
+                requestSourceSelection: m.requestSourceSelection,
                 requestSourceLocale: m.requestSourceLocale, responseMode: m.responseMode,
               })}>{t("chat.restartAnswer")}</button>
             )}
@@ -384,13 +451,18 @@ export default function ChatPanel() {
                 }}
               >
                 <summary>{t("chat.sources")}</summary>
-                <ol>
+                <ol style={{ "--source-number-digits": String(m.sources.length).length }}>
                   {m.sources.map((s, j) => {
                     const href = sourceHref(s);
                     const isChunk = s.point_type === "chunk";
                     const badge = isChunk ? "\u{1F4E6}" : "\u{1F4C4}";
                     return (
                       <li key={j}>
+                        {m.responseMode === "documents" && (
+                          <SelectionCheckbox state={selectionState(selectedSources, [s.source_index])}
+                            label={t("chat.selectFragment", { index: s.source_index, name: s.title })}
+                            onChange={(checked) => selectSources(i, [s.source_index], checked)} />
+                        )}
                         <span className="source-badge">{badge}</span>{" "}
                         {href ? (
                           <>
@@ -432,10 +504,37 @@ export default function ChatPanel() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
       <details className="search-settings">
         <summary>{t("chat.searchSettings")}</summary>
+        {settings.response_modes?.length > 0 && (
+          <div className="topk-picker">
+            <span className="topk-label" title={t("chat.searchDepthDescription")}>{t("chat.searchDepthLabel")}</span>
+            <div className="topk-picker" style={{ marginBottom: 0 }} role="radiogroup" aria-label={t("chat.searchDepthLabel")}>
+              {settings.search_depth_presets.map((depth) => (
+                <button key={depth} type="button" role="radio" aria-checked={searchDepth === depth && !showCustomDepth}
+                  className={`topk-btn ${searchDepth === depth && !showCustomDepth ? "active" : ""}`}
+                  onClick={() => { setSearchDepth(depth); setShowCustomDepth(false); }}>
+                  {depth}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="topk-btn" aria-pressed={showCustomDepth}
+              onClick={() => { setCustomDepthValue(String(searchDepth)); setShowCustomDepth((value) => !value); }}>
+              {t("chat.topkOther")}{!settings.search_depth_presets.includes(searchDepth) ? ` (${searchDepth})` : ""}
+            </button>
+            {showCustomDepth && (
+              <input type="number" className="topk-custom" aria-label={t("chat.searchDepthLabel")}
+                min={settings.search_depth_min} max={settings.search_depth_max} step="1"
+                value={customDepthValue} onChange={(event) => setCustomDepthValue(event.target.value)}
+                onBlur={applyCustomDepth} onKeyDown={(event) => {
+                  if (event.key === "Enter") { event.preventDefault(); applyCustomDepth(); }
+                }} />
+            )}
+          </div>
+        )}
         {settings.glossary_query_expansion_enabled === false && (
           <div className="glossary-status-warning" role="status">{t("chat.glossary.disabled")}</div>
         )}

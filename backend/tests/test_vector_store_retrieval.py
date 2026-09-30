@@ -102,6 +102,70 @@ from app.config import Settings
 from app.services.fusion import Hit
 
 
+@pytest.mark.parametrize('depth', [10, 100, 500])
+def test_request_depth_controls_each_branch_and_fused_results_without_global_changes(depth):
+    store = VectorStore.__new__(VectorStore)
+    store.settings = Settings(_env_file=None, search_per_branch_top_k=40,
+                              search_graph_expansion_enabled=False)
+    calls = []
+
+    def retrieve(vec, query_filter, top_k):
+        calls.append(top_k)
+        return [Hit(str(i), 1.0, {}, i) for i in range(top_k)]
+
+    store.search_dense = retrieve
+    store.search_bm25 = retrieve
+    status = {}
+    hits = store.search_composite(
+        dense_vec=[1], sparse_vec=qm.SparseVector(indices=[1], values=[1]),
+        tags=None, branches={'dense', 'bm25'}, top_k=depth,
+        per_branch_top_k=depth, retrieval_status=status,
+    )
+    assert calls == [depth, depth]
+    assert len(hits) == depth
+    assert status['limit_reached'] is True
+    assert store.settings.search_per_branch_top_k == 40
+
+
+def test_branch_limit_is_reported_even_when_deduplication_leaves_a_shorter_list():
+    store = VectorStore.__new__(VectorStore)
+    store.settings = Settings(_env_file=None, search_graph_expansion_enabled=False)
+    store.search_dense = lambda *args: [Hit('same', 1.0, {}, i) for i in range(3)]
+    status = {}
+    hits = store.search_composite(dense_vec=[1], sparse_vec=None, tags=None,
+                                  branches={'dense'}, top_k=3, per_branch_top_k=3,
+                                  retrieval_status=status)
+    assert len(hits) == 1
+    assert status['limit_reached'] is True
+
+
+def test_short_search_does_not_report_a_limit():
+    store = VectorStore.__new__(VectorStore)
+    store.settings = Settings(_env_file=None, search_graph_expansion_enabled=False)
+    store.search_dense = lambda *args: [Hit('a', 1.0, {})]
+    status = {}
+    store.search_composite(dense_vec=[1], sparse_vec=None, tags=None,
+                           branches={'dense'}, top_k=100, per_branch_top_k=100,
+                           retrieval_status=status)
+    assert status['limit_reached'] is False
+
+
+def test_request_depth_controls_graph_expansion():
+    store = VectorStore.__new__(VectorStore)
+    store.settings = Settings(_env_file=None, search_graph_expansion_enabled=True)
+    store.search_dense = lambda *args: [Hit('a', 1.0, {'point_type': 'concept', 'relations': ['b']})]
+    calls = []
+
+    def scroll(**kwargs):
+        calls.append(kwargs['limit'])
+        return [], None
+
+    store.client = SimpleNamespace(scroll=scroll)
+    store.search_composite(dense_vec=[1], sparse_vec=None, tags=None,
+                           branches={'dense'}, top_k=100, per_branch_top_k=100)
+    assert calls == [100]
+
+
 @pytest.mark.parametrize('mail_mode,scope', [('all', None), ('exclude', 'document'), ('only', 'mail')])
 @pytest.mark.parametrize('branches', [{'dense'}, {'bm25'}, {'dense', 'bm25'}])
 def test_every_branch_uses_same_mail_tags_locale_filter(mail_mode, scope, branches):

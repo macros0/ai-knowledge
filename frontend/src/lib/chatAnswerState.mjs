@@ -34,7 +34,9 @@ export function applyAnswerEvent(messages, event) {
       sourcesOpen: current.sourcesTouched ? current.sourcesOpen : (event.sources || []).length > 0,
     };
   } else if (event.type === "progress") {
-    changed = { ...current, progress: event };
+    changed = event.phase === "retrieval"
+      ? { ...current, requestSearchDepth: event.search_depth, searchLimitReached: event.search_limit_reached }
+      : { ...current, progress: event };
   } else {
     return messages;
   }

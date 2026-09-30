@@ -457,6 +457,7 @@
   "bulkGeneration.start": [],
   "chat.adminHint": [],
   "chat.answerIncomplete": [],
+  "chat.answerSelected": [],
   "chat.answerStopped": [],
   "chat.askFirst": [],
   "chat.assistant": [],
@@ -467,6 +468,7 @@
     "done",
     "total"
   ],
+  "chat.clearSourceSelection": [],
   "chat.copied": [],
   "chat.copy": [],
   "chat.copyAnswer": [],
@@ -543,7 +545,25 @@
   "chat.responseModeLabel": [],
   "chat.restartAnswer": [],
   "chat.resultsLabel": [],
+  "chat.searchDepthDescription": [],
+  "chat.searchDepthLabel": [],
+  "chat.searchLimitReached": [
+    "depth"
+  ],
+  "chat.searchLimitReachedMax": [
+    "depth"
+  ],
   "chat.searchSettings": [],
+  "chat.selectAllSources": [],
+  "chat.selectDocument": [
+    "name"
+  ],
+  "chat.selectFragment": [
+    "index",
+    "name"
+  ],
+  "chat.selectedAnswerContext": [],
+  "chat.selectionDescription": [],
   "chat.send": [],
   "chat.sessionDeleted": [],
   "chat.sessionsLoadError": [

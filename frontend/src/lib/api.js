@@ -473,7 +473,9 @@ export function search(query, tags = [], topK = 5, mode = "hybrid", useGlossary 
 export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true, mailMode = "all", onText = null, onSources = null, options = {}) {
   const body = { query, locale: currentUiLocale(), tags, top_k: topK, mode, use_glossary: useGlossary, mail_mode: mailMode };
   if (options.responseMode) body.response_mode = options.responseMode;
+  if (options.searchDepth != null) body.search_depth = options.searchDepth;
   if (options.attemptId) body.attempt_id = options.attemptId;
+  if (options.sourceSelection) body.source_selection = options.sourceSelection;
   if (sessionId) body.session_id = sessionId;
   // Фильтр по языку документа (Этап 7 фаза D): не отправляем поле при «Все языки».
   if (sourceLocale === "unknown") {

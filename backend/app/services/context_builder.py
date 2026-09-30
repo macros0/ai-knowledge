@@ -74,12 +74,21 @@ def resolve_branches(
 
 
 def _block_mail_provenance(primary, hits):
+    from app.services.chat_source_selection import excerpt_reference
     fields = ("doc_id", "source_id", "chunk_index", "generation_id", "mail_scope",
               "_canonical_verified", "point_type", "slug")
     components = [{key: hit.payload.get(key) for key in fields} for hit in hits]
     if primary and primary.payload.get("mail_fragment"):
         components.append(primary.payload.get("_mail_fragment_component") or {})
+    mail_evidence = None
+    if primary and primary.payload.get("mail_fragment"):
+        fragment = primary.payload["mail_fragment"]
+        mail_evidence = excerpt_reference(Hit('', 0., {
+            **primary.payload, 'point_type': 'chunk', 'content': fragment['content'],
+            'chunk_index': fragment['chunk_index'],
+        }), fragment['content'])
     return {
+        "_mail_evidence": mail_evidence,
         "mail_scope": primary.payload.get("mail_scope", "unknown") if primary else "unknown",
         "generation_id": primary.payload.get("generation_id") if primary else None,
         "_canonical_verified": bool(primary and primary.payload.get("_canonical_verified") is True),
@@ -140,6 +149,7 @@ def merge_and_format(
     группу — их узкий контент (дословный контекст якоря) регулярно обгонял
     широкий основной концепт и перехватывал заголовок/цитату [1].
     """
+    from app.services.chat_source_selection import excerpt_reference
     mail_scope_allowed("unknown", mail_mode)
     if mail_mode != "all":
         hits = [hit for hit in hits if hit.payload.get("_canonical_verified") is True
@@ -236,8 +246,10 @@ def merge_and_format(
             multi_topic = len(main_concepts) > 1
             if multi_topic and concept_content_value:
                 content = concept_content_value
+                evidence_hit = primary
             else:
                 content = exact_excerpt(chunk.payload.get("content", ""), settings.chat_chunk_max_chars, exact_groups)
+                evidence_hit = chunk
             if not merged_title:
                 section_title = chunk.payload.get("section_title", "")
                 if section_title:
@@ -250,6 +262,7 @@ def merge_and_format(
             concept = primary_concept
             merged_title = concept.payload.get("title", "Без названия")
             content = exact_excerpt(concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
+            evidence_hit = concept
             point_type = CONCEPT_TYPE
             kind = "concept"
         else:
@@ -260,6 +273,7 @@ def merge_and_format(
             else:
                 merged_title = f"{source_filename} (Раздел {chunk_idx + 1})" if chunk_idx is not None else source_filename
             content = exact_excerpt(chunk.payload.get("content", ""), settings.chat_chunk_max_chars, exact_groups)
+            evidence_hit = chunk
             point_type = CHUNK_TYPE
             kind = "chunk"
 
@@ -268,6 +282,10 @@ def merge_and_format(
                 **_block_mail_provenance(source_hit, group_hits),
                 "title": merged_title,
                 "content": content,
+                "_evidence": excerpt_reference(evidence_hit, content),
+                "_concept_evidence": excerpt_reference(primary_concept,
+                    exact_excerpt(primary_concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups))
+                    if primary_concept else None,
                 # Собственный контент репрезентативного концепта: сырой чанк
                 # содержит чужие подразделы раздела, выжимка — только про объект.
                 # Используется точным фильтром (drop_partial_title_matches).
@@ -310,6 +328,7 @@ def merge_and_format(
                     **_block_mail_provenance(concept, [concept]),
                     "title": concept.payload.get("title", "Без названия"),
                     "content": sibling_content,
+                    "_evidence": excerpt_reference(concept, sibling_content),
                     "tags": sorted(concept.payload.get("tags", [])),
                     "filepath": concept.payload.get("filepath", ""),
                     "doc_id": doc_id,
@@ -572,7 +591,7 @@ def drop_partial_title_matches(
         for m in full:
             concept_content = m.get("concept_content")
             if concept_content:
-                m = {**m, "content": concept_content}
+                m = {**m, "content": concept_content, "_evidence": m.get("_concept_evidence")}
             out.append(m)
         return out
 
@@ -595,7 +614,7 @@ def drop_partial_title_matches(
     for m in full:
         concept_content = m.get("concept_content")
         if concept_content:
-            m = {**m, "content": concept_content}
+            m = {**m, "content": concept_content, "_evidence": m.get("_concept_evidence")}
         out.append(m)
     return out
 
