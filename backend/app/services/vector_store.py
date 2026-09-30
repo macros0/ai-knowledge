@@ -1052,6 +1052,7 @@ class VectorStore:
         mail_mode: MailMode = "all",
         per_branch_top_k: int | None = None,
         retrieval_status: dict | None = None,
+        doc_ids: list[str] | None = None,
     ) -> list[Hit]:
         """Композитный поиск: запускает включённые ветки, сливает через RRF.
 
@@ -1068,9 +1069,14 @@ class VectorStore:
         Returns:
             Список Hit, отсортированный по fused RRF score.
         """
+        if doc_ids is not None and not doc_ids:
+            if retrieval_status is not None:
+                retrieval_status['limit_reached'] = False
+            return []
         search_filter = self._build_search_filter(
             tags, source_locales=source_locales,
             include_unknown=include_unknown_source_locale, mail_mode=mail_mode,
+            doc_ids=doc_ids,
         )
         per_branch = per_branch_top_k if per_branch_top_k is not None else self.settings.search_per_branch_top_k
         k = self.settings.search_rrf_k
@@ -1108,6 +1114,7 @@ class VectorStore:
         source_locales: list[str] | None = None,
         include_unknown: bool = False,
         *, mail_mode: MailMode = "all",
+        doc_ids: list[str] | None = None,
     ) -> qm.Filter:
         """Жёсткий pre-filter для dense и bm25 веток + исключение корзины.
 
@@ -1121,6 +1128,8 @@ class VectorStore:
         mail_scope_allowed("unknown", mail_mode)  # validate even on an empty request
         must_not = [*(_not_deleted().must_not or []), *generation_exclusions()]
         must: list = []
+        if doc_ids is not None:
+            must.append(qm.FieldCondition(key='doc_id', match=qm.MatchAny(any=doc_ids)))
         if mail_mode != "all":
             must.extend([
                 qm.FieldCondition(key="mail_scope", match=qm.MatchValue(

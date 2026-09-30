@@ -10,7 +10,7 @@ from tests.test_chat import make_client
 
 
 @pytest.fixture
-def found(monkeypatch):
+def found(monkeypatch, request):
     from app.api import chat as api
     with session_scope() as s:
         s.add(Document(id='selected-doc', filename='reference.docx'))
@@ -25,9 +25,16 @@ def found(monkeypatch):
     prompts = []
     monkeypatch.setattr(api, '_get_llm', lambda: SimpleNamespace(model='test', chat=lambda sys, user: prompts.append(user) or 'Ответ [1]'))
     client = make_client(monkeypatch)
-    search = client.post('/api/chat', json={'query': 'Доказательство', 'response_mode': 'documents',
-                                         'attempt_id': str(uuid4()), 'session_id': str(uuid4())}).json()
+    mode = getattr(request, 'param', 'documents')
+    with monkeypatch.context() as initial:
+        if mode == 'fast':
+            from app.config import Settings
+            initial.setattr(api, 'get_settings', lambda: Settings(
+                _env_file=None, auth_provider='disabled', chat_max_context_chars=380))
+        search = client.post('/api/chat', json={'query': 'Доказательство', 'response_mode': mode,
+                                             'attempt_id': str(uuid4()), 'session_id': str(uuid4())}).json()
     assert len(search['sources']) == 3
+    prompts.clear()
     def no_search():
         raise AssertionError('Selected answer must not retrieve again')
     monkeypatch.setattr(api, '_get_embedder', no_search)
@@ -52,6 +59,48 @@ def test_answer_uses_only_selected_found_fragments(found):
     messages = get_thread(search['session_id'], 'anonymous')['messages']
     assert len(messages[1]['sources']) == 3
     assert len(messages[-1]['sources']) == 2
+
+
+@pytest.mark.parametrize('found', ['documents', 'fast', 'full'], indirect=True)
+def test_every_mode_can_select_and_then_refine_the_answer(found):
+    client, search, prompts = found
+    if search['response_mode'] == 'fast':
+        assert search['sources'][-1]['in_model_context'] is False
+    response = client.post('/api/chat', json=selected_request(search, [1, 3]))
+    assert response.status_code == 200, response.text
+    answer = response.json()
+    assert [source['title'] for source in answer['sources']] == ['Источник 0', 'Источник 2']
+    assert 'Доказательство 1' not in prompts[-1]
+
+    refined = client.post('/api/chat', json=selected_request(answer, [2]))
+    assert refined.status_code == 200, refined.text
+    assert [source['title'] for source in refined.json()['sources']] == ['Источник 2']
+    assert refined.json()['sources'][0]['source_index'] == 1
+    assert 'Доказательство 2' in prompts[-1]
+    assert 'Доказательство 0' not in prompts[-1]
+    assert all(source['selectable'] for source in search['sources'])
+    assert all(source['selectable'] for source in answer['sources'])
+
+
+def test_legacy_attempt_without_saved_fragments_cannot_be_selected(found):
+    from app.db.models import ChatMessage
+    client, search, prompts = found
+    with session_scope() as s:
+        message = s.query(ChatMessage).filter_by(session_id=search['session_id'], role='assistant').one()
+        metadata = dict(message.retrieval_metadata)
+        metadata.pop('source_blocks')
+        message.retrieval_metadata = metadata
+    response = client.post('/api/chat', json=selected_request(search, [1]))
+    assert response.status_code == 422, response.text
+    assert prompts == []
+
+
+def test_selection_cannot_answer_a_different_question(found):
+    client, search, prompts = found
+    request = {**selected_request(search, [1]), 'query': 'Другой вопрос'}
+    response = client.post('/api/chat', json=request)
+    assert response.status_code == 422, response.text
+    assert prompts == []
 
 
 @pytest.mark.parametrize('indexes', [[], [4], [True], [1.5]])

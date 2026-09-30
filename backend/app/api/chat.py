@@ -22,7 +22,10 @@ from app.auth.service import require_user
 from app.db.models import Document
 from app.db.session import session_scope
 from app.config import Settings, get_settings
-from app.models.schemas import ChatRequest, ChatResponse, ChatSource, ChatAttemptCancelRequest
+from app.models.schemas import (
+    ChatRequest, ChatResponse, ChatSource, ChatAttemptCancelRequest,
+    ChatSearchScopeRequest, ChatSearchScopeDocument,
+)
 from app.prompts.store import get_store
 from app.services import chat_history
 from app.services.citation import normalize_citations
@@ -295,6 +298,9 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         if ref.existing or ref.status != "incomplete":
             raise ApiError(status_code=409, code=errors.CONFLICT, detail="Эта попытка уже завершена")
         try:
+            if req.search_doc_ids is not None:
+                chat_history.save_attempt_sources(ref, current_user, [],
+                    retrieval_metadata={'search_doc_ids': req.search_doc_ids})
             remaining(settings.llm_chat_total_timeout_seconds)
             result = _answer(req, current_user, settings, attempt_ref=ref)
             cancel = request_state().get("cancel")
@@ -314,12 +320,28 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         slots.release()
 
 
+def _search_scope_documents(doc_ids: list[str]) -> list[ChatSearchScopeDocument]:
+    """Batch visibility lookup; never return metadata for missing or trashed documents."""
+    if not doc_ids:
+        return []
+    with session_scope() as session:
+        filenames = dict(session.execute(select(Document.id, Document.filename).where(
+            Document.id.in_(doc_ids), Document.deleted_at.is_(None))).all())
+    return [ChatSearchScopeDocument(doc_id=doc_id, filename=filenames.get(doc_id),
+                                   available=doc_id in filenames) for doc_id in doc_ids]
+
+
+@router.post('/search-scope', response_model=list[ChatSearchScopeDocument])
+def search_scope(req: ChatSearchScopeRequest, current_user: User = Depends(require_user)):
+    return _search_scope_documents(req.doc_ids)
+
+
 def _answer_selected(req, current_user, settings, attempt_ref):
     saved = chat_history.read_attempt_sources(req.session_id, current_user, req.source_selection.attempt_id)
     if saved is None:
         raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Результат поиска не найден")
     found, metadata = saved
-    if (metadata.get('answer_attempt', {}).get('mode') != 'documents'
+    if (metadata.get('answer_attempt', {}).get('mode') not in {'documents', 'fast', 'full'}
             or metadata.get('answer_attempt', {}).get('query') != req.query):
         raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Выбор не относится к этому поиску")
     indexes = sorted(set(req.source_selection.indexes))
@@ -332,9 +354,10 @@ def _answer_selected(req, current_user, settings, attempt_ref):
     _validate_final_source_state(merged)
     sources = [ChatSource.model_validate({**found[index - 1], 'source_index': number,
         'in_model_context': False, 'parts_total': 1, 'submitted_parts': 0,
-        'completed_parts': 0, 'cited': False, 'partial': False}) for number, index in enumerate(indexes, 1)]
+        'completed_parts': 0, 'cited': False, 'partial': False,
+        'selectable': True}) for number, index in enumerate(indexes, 1)]
     selected_metadata = {'schema_version': 1, 'mail_mode': req.mail_mode,
-                         'response_mode': 'full', 'source_selection': {
+                         'response_mode': 'full', 'source_blocks': snapshot_blocks(merged), 'source_selection': {
                              'attempt_id': req.source_selection.attempt_id, 'indexes': indexes}}
     chat_history.save_attempt_sources(attempt_ref, current_user,
         [source.model_dump(mode='json') for source in sources], retrieval_metadata=selected_metadata)
@@ -351,6 +374,16 @@ def _answer_selected(req, current_user, settings, attempt_ref):
 def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_ref=None) -> ChatResponse:
     if req.source_selection:
         return _answer_selected(req, current_user, settings, attempt_ref)
+    scope_ids = None
+    if req.search_doc_ids is not None:
+        if not req.search_doc_ids:
+            raise ApiError(status_code=422, code='chat_search_scope_empty',
+                           detail='Добавьте документы в область поиска или отключите ограничение.')
+        scope_ids = [document.doc_id for document in _search_scope_documents(req.search_doc_ids)
+                     if document.available]
+        if not scope_ids:
+            raise ApiError(status_code=409, code='chat_search_scope_unavailable',
+                           detail='Документы области поиска недоступны. Измените область или отключите ограничение.')
     try:
         plan = prepare_query(
             req.query,
@@ -396,9 +429,12 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         top_k=search_depth,
         per_branch_top_k=search_depth,
         retrieval_status=retrieval_status,
+        **({'doc_ids': scope_ids} if scope_ids is not None else {}),
     )
     search_limit_reached = retrieval_status.get("limit_reached", len(hits) >= search_depth)
     retrieval_summary = {"search_depth": search_depth, "search_limit_reached": search_limit_reached}
+    if req.search_doc_ids is not None:
+        retrieval_summary['search_doc_ids'] = req.search_doc_ids
     on_progress = request_state().get("on_progress")
     if on_progress and (req.response_mode is not None or req.search_depth is not None):
         on_progress({"phase": "retrieval", **retrieval_summary})
@@ -408,6 +444,9 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
     # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
     # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
     # и orphan-точки (документа нет в БД — восстановлен во время purge или сбой).
+    if scope_ids is not None:
+        allowed_ids = set(scope_ids)
+        hits = [hit for hit in hits if hit.payload.get('doc_id') in allowed_ids]
     hits, doc_lookup = load_visible_retrieval_hits(hits, mail_mode=req.mail_mode, **({"exact_groups": exact_groups} if exact_groups else {}))
     # Короткое замыкание (Этап 4a.1): при нуле хитов не зовём LLM — ответ
     # без источников формируется здесь, фронтенд по пустому `sources` покажет
@@ -416,6 +455,10 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         answer = ("Документы не найдены." if req.response_mode == "documents" and not req.locale.lower().startswith("en")
                   else "No documents found." if req.response_mode == "documents"
                   else _no_sources_answer(req))
+        if req.search_doc_ids is not None:
+            answer = ('В области поиска источники не найдены. Измените вопрос, фильтры или состав области поиска.'
+                      if not req.locale.lower().startswith('en') else
+                      'No sources found in the search scope. Adjust your question, filters, or the scope documents.')
         sources: list[ChatSource] = []
         on_sources = request_state().get("on_sources")
         if on_sources:
@@ -501,6 +544,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
                     source_path=m.get("source_path"),
                     in_model_context=index < len(context_blocks) if req.response_mode is None else False,
                     source_index=index + 1 if req.response_mode is not None else None,
+                    selectable=bool(attempt_ref and m.get('_evidence')),
                     parts_total=0 if req.response_mode == "documents" else 1,
                     development_number=src_doc.get("development_number"),
                     development_name=src_doc.get("development_name"),
@@ -512,7 +556,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
             chat_history.save_attempt_sources(
                 attempt_ref, current_user, [source.model_dump(mode="json") for source in sources],
                 retrieval_metadata={**retrieval_summary, "mail_mode": req.mail_mode,
-                                    "source_blocks": snapshot_blocks(merged)} if req.response_mode == 'documents' else retrieval_summary,
+                                    "source_blocks": snapshot_blocks(merged)},
             )
         if on_sources:
             on_sources([source.model_dump(mode="json") for source in sources])

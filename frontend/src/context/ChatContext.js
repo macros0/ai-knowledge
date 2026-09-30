@@ -36,6 +36,8 @@ export function ChatProvider({ children }) {
   const [searchDepth, setSearchDepth] = useState(FALLBACK_SETTINGS.search_depth_default);
   const [mailMode, setMailMode] = useState("all");
   const [useGlossary, setUseGlossary] = useState(true);
+  const [searchScopeDocuments, setSearchScopeDocuments] = useState([]);
+  const [searchScopeEnabled, setSearchScopeEnabled] = useState(false);
 
   const MODE_LABELS = useMemo(
     () => ({
@@ -51,6 +53,8 @@ export function ChatProvider({ children }) {
   const startNewChat = () => {
     setMessages([]);
     setSessionId(null);
+    setSearchScopeDocuments([]);
+    setSearchScopeEnabled(false);
   };
 
   useEffect(() => {
@@ -73,8 +77,8 @@ export function ChatProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS }),
-    [messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS]
+    () => ({ messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled }),
+    [messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

@@ -232,6 +232,8 @@ class ChatRequest(BaseModel):
     attempt_id: str | None = None
     search_depth: int | None = Field(default=None, ge=1, le=500, strict=True)
     source_selection: ChatSourceSelection | None = None
+    # None searches the entire knowledge base; [] is an enabled, empty scope.
+    search_doc_ids: list[FilterValue] | None = Field(default=None, max_length=500)
     query: QueryText
     # Язык ответа при неопределимом языке короткого запроса; UI передаёт
     # текущую локаль, прямые API-вызовы получают русский fallback.
@@ -255,7 +257,13 @@ class ChatRequest(BaseModel):
     def validate_source_selection(self):
         if self.source_selection and (not self.session_id or self.response_mode != 'full'):
             raise ValueError('Selected sources require a session and full response mode')
+        if self.source_selection and self.search_doc_ids is not None:
+            raise ValueError('Source selection and document search scope are separate actions')
         return self
+    @field_validator('search_doc_ids', mode='after')
+    @classmethod
+    def normalize_search_doc_ids(cls, values):
+        return _normalize_filter_values(values) if values is not None else None
     _normalize_filters = field_validator("tags", "source_locales", mode="after")(
         _normalize_filter_values
     )
@@ -303,6 +311,8 @@ class ChatSource(BaseModel):
     # Источник найден поиском; только true означает, что его текст вошёл в контекст LLM.
     in_model_context: bool = True
     source_index: int | None = None
+    # True only when this attempt saved a canonical excerpt reference for selection.
+    selectable: bool = False
     submitted_parts: int = 0
     completed_parts: int = 0
     parts_total: int = 1
@@ -330,6 +340,17 @@ class ChatResponse(BaseModel):
 
 class ChatAttemptCancelRequest(BaseModel):
     session_id: str
+
+
+class ChatSearchScopeRequest(BaseModel):
+    doc_ids: list[FilterValue] = Field(max_length=500)
+    _normalize_ids = field_validator('doc_ids', mode='after')(_normalize_filter_values)
+
+
+class ChatSearchScopeDocument(BaseModel):
+    doc_id: str
+    filename: str | None = None
+    available: bool
 
 
 class ChatHistoryMessageOut(BaseModel):

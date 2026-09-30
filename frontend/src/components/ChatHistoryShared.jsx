@@ -95,6 +95,9 @@ export function HistoryMessage({ m, userLabel }) {
       {m.role === "assistant" && m.retrieval_metadata?.source_selection && (
         <div className="meta">{t("chat.selectedAnswerContext", { count: m.retrieval_metadata.source_selection.indexes.length })}</div>
       )}
+      {m.role === "assistant" && m.retrieval_metadata?.search_doc_ids != null && (
+        <div className="meta">{t("chat.scopeUsed", { count: m.retrieval_metadata.search_doc_ids.length })}</div>
+      )}
       {m.role === "assistant" && m.retrieval_metadata?.search_limit_reached && (
         <div className="meta" role="status">
           {t(m.retrieval_metadata.search_depth >= 500 ? "chat.searchLimitReachedMax" : "chat.searchLimitReached", { depth: m.retrieval_metadata.search_depth })}

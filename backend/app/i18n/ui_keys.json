@@ -310,6 +310,8 @@
   "apiError.chat_budget_unavailable": [],
   "apiError.chat_evidence_invalid": [],
   "apiError.chat_evidence_too_large": [],
+  "apiError.chat_search_scope_empty": [],
+  "apiError.chat_search_scope_unavailable": [],
   "apiError.chat_sources_changed": [],
   "apiError.chat_summary_too_large": [],
   "apiError.chunk_not_found": [],
@@ -507,6 +509,10 @@
     "message"
   ],
   "chat.historyTitle": [],
+  "chat.jumpToRequest": [
+    "number",
+    "question"
+  ],
   "chat.loading": [],
   "chat.localeLabel": [],
   "chat.mailModeAll": [],
@@ -536,6 +542,11 @@
   "chat.relevance": [
     "pct"
   ],
+  "chat.requestGroup": [
+    "first",
+    "last"
+  ],
+  "chat.requestNavigation": [],
   "chat.responseMode.documents.description": [],
   "chat.responseMode.documents.label": [],
   "chat.responseMode.fast.description": [],
@@ -545,6 +556,30 @@
   "chat.responseModeLabel": [],
   "chat.restartAnswer": [],
   "chat.resultsLabel": [],
+  "chat.scopeAddSelected": [],
+  "chat.scopeAdded": [],
+  "chat.scopeAllUnavailable": [],
+  "chat.scopeAvailable": [],
+  "chat.scopeChecking": [],
+  "chat.scopeClear": [],
+  "chat.scopeDescription": [],
+  "chat.scopeEditList": [],
+  "chat.scopeEmpty": [],
+  "chat.scopeEmptyActive": [],
+  "chat.scopeLimit": [
+    "max"
+  ],
+  "chat.scopeOnly": [],
+  "chat.scopeRefresh": [],
+  "chat.scopeRemove": [],
+  "chat.scopeRemoveDocument": [
+    "name"
+  ],
+  "chat.scopeSomeUnavailable": [],
+  "chat.scopeTitle": [],
+  "chat.scopeUnavailable": [],
+  "chat.scopeUnknown": [],
+  "chat.scopeUsed": [],
   "chat.searchDepthDescription": [],
   "chat.searchDepthLabel": [],
   "chat.searchLimitReached": [

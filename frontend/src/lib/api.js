@@ -476,6 +476,7 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
   if (options.searchDepth != null) body.search_depth = options.searchDepth;
   if (options.attemptId) body.attempt_id = options.attemptId;
   if (options.sourceSelection) body.source_selection = options.sourceSelection;
+  if (options.searchDocIds != null) body.search_doc_ids = options.searchDocIds;
   if (sessionId) body.session_id = sessionId;
   // Фильтр по языку документа (Этап 7 фаза D): не отправляем поле при «Все языки».
   if (sourceLocale === "unknown") {
@@ -505,6 +506,13 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
       }
     } : undefined
   );
+}
+
+export function getChatSearchScope(docIds) {
+  return request('/chat/search-scope', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_ids: docIds }),
+  });
 }
 
 export function cancelChatAttempt(attemptId, sessionId) {

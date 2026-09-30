@@ -1,3 +1,8 @@
+export function selectableSources(message) {
+  if (!message.attemptId || !['documents', 'fast', 'full'].includes(message.responseMode)) return [];
+  return (message.sources ?? []).filter((source) => source.selectable === true && Number.isInteger(source.source_index));
+}
+
 export function updateSelection(selected, indexes, checked, sources) {
   const next = new Set(selected);
   for (const index of indexes) {

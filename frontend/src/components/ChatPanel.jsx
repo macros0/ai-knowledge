@@ -6,8 +6,9 @@ import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listA
 import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
 import { applyAnswerEvent, groupSourcesByDocument } from "@/lib/chatAnswerState.mjs";
-import { updateSelection, selectionState } from "@/lib/chatSourceSelection.mjs";
+import { updateSelection, selectionState, selectableSources } from "@/lib/chatSourceSelection.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
+import { addScopeDocuments, scopeRequestIds, SEARCH_SCOPE_MAX_DOCUMENTS } from "@/lib/chatSearchScope.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
 import ModulePicker from "./ModulePicker";
@@ -19,6 +20,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/i18n/LocaleContext";
 import AppliedTerms from "./AppliedTerms";
 import SearchableSelect from "./SearchableSelect";
+import ChatSearchScope from "./ChatSearchScope";
+import ChatRequestNavigation from "./ChatRequestNavigation";
 
 function getPresetLabel(preset, settings, t) {
   if (preset === settings.top_k_default) return t("chat.topkStandard");
@@ -37,7 +40,7 @@ function SelectionCheckbox({ state, label, onChange }) {
 }
 
 export default function ChatPanel() {
-  const { messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS } = useChat();
+  const { messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled } = useChat();
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
@@ -48,6 +51,7 @@ export default function ChatPanel() {
   const [showCustomDepth, setShowCustomDepth] = useState(false);
   const [customDepthValue, setCustomDepthValue] = useState("");
   const [copiedIndex, setCopiedIndex] = useState(null);
+  const [scopeNotice, setScopeNotice] = useState(null);
   const [modules, setModules] = useState([]);
   const [developments, setDevelopments] = useState([]);
   const [localeFacets, setLocaleFacets] = useState([]);
@@ -238,6 +242,7 @@ export default function ChatPanel() {
           responseMode: requestOptions.responseMode,
           searchDepth: requestOptions.requestSearchDepth,
           sourceSelection: requestOptions.requestSourceSelection,
+          searchDocIds: requestOptions.requestDocIds,
           attemptId,
           signal: controller.signal,
           onProgress: (event) => setMessages((items) => applyAnswerEvent(items, { ...event, attemptId })),
@@ -279,14 +284,15 @@ export default function ChatPanel() {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestSearchDepth: showCustomDepth ? applyCustomDepth() : searchDepth, requestMode: selectedMode, requestSourceLocale: sourceLocale, responseMode: settings.response_modes?.includes(responseMode) ? responseMode : null };
+    if (searchScopeEnabled && !searchScopeDocuments.length) return;
+    const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestSearchDepth: showCustomDepth ? applyCustomDepth() : searchDepth, requestMode: selectedMode, requestSourceLocale: sourceLocale, responseMode: settings.response_modes?.includes(responseMode) ? responseMode : null, requestDocIds: scopeRequestIds(searchScopeDocuments, searchScopeEnabled) };
     setQuery("");
     await sendQuestion(q, requestOptions);
   };
 
   const selectSources = (messageIndex, indexes, checked) => {
     setMessages((items) => items.map((message, index) => index === messageIndex ? {
-      ...message, selectedSourceIndexes: updateSelection(message.selectedSourceIndexes ?? [], indexes, checked, message.sources),
+      ...message, selectedSourceIndexes: updateSelection(message.selectedSourceIndexes ?? [], indexes, checked, selectableSources(message)),
     } : message));
   };
 
@@ -299,10 +305,21 @@ export default function ChatPanel() {
     },
   }, false);
 
+  const addSelectedToScope = (message) => {
+    try {
+      const next = addScopeDocuments(searchScopeDocuments, message.sources, message.selectedSourceIndexes ?? []);
+      setScopeNotice({ key: "chat.scopeAdded", count: next.length - searchScopeDocuments.length });
+      setSearchScopeDocuments(next);
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      setScopeNotice({ key: "chat.scopeLimit", max: SEARCH_SCOPE_MAX_DOCUMENTS });
+    }
+  };
+
   const repeatWithoutGlossary = async (message) => {
     if (!message.query) return;
     const q = message.query;
-    const requestOptions = { requestMailMode: retryMailMode(message), requestTags: message.requestTags ?? effectiveTags, requestTopK: message.requestTopK ?? selectedTopK, requestSearchDepth: message.requestSearchDepth ?? searchDepth, requestMode: message.requestMode ?? selectedMode, requestSourceLocale: message.requestSourceLocale ?? sourceLocale, responseMode: message.responseMode ?? (settings.response_modes?.includes(responseMode) ? responseMode : null) };
+    const requestOptions = { requestMailMode: retryMailMode(message), requestTags: message.requestTags ?? effectiveTags, requestTopK: message.requestTopK ?? selectedTopK, requestSearchDepth: message.requestSearchDepth ?? searchDepth, requestMode: message.requestMode ?? selectedMode, requestSourceLocale: message.requestSourceLocale ?? sourceLocale, responseMode: message.responseMode ?? (settings.response_modes?.includes(responseMode) ? responseMode : null), requestDocIds: message.requestDocIds, requestSourceSelection: message.requestSourceSelection };
     await sendQuestion(q, requestOptions, false);
   };
 
@@ -322,25 +339,38 @@ export default function ChatPanel() {
           </div>
         )}
         <div className="chat-toolbar-actions">
+          <label className="chat-scope-toggle">
+            <input type="checkbox" checked={searchScopeEnabled} onChange={(event) => setSearchScopeEnabled(event.target.checked)} />
+            {t("chat.scopeOnly")} <span className="meta">({searchScopeDocuments.length})</span>
+          </label>
           <Link href="/chat/history" className="btn ghost">
             {t("chat.historyBtn")}
           </Link>
           <button
             type="button"
             className="btn ghost"
-            onClick={() => { stopCurrent(); startNewChat(); }}
-            disabled={messages.length === 0}
+            onClick={() => { stopCurrent(); startNewChat(); setScopeNotice(null); }}
+            disabled={messages.length === 0 && searchScopeDocuments.length === 0 && !searchScopeEnabled}
             title={t("chat.newChatTitle")}
           >
             {t("chat.newChat")}
           </button>
         </div>
       </div>
+      {searchScopeEnabled && <ChatSearchScope documents={searchScopeDocuments}
+        onRemove={(docId) => { setSearchScopeDocuments((items) => items.filter((document) => document.doc_id !== docId)); setScopeNotice(null); }}
+        onClear={() => { setSearchScopeDocuments([]); setScopeNotice(null); }}
+        refreshKey={messages.length} />}
+      {scopeNotice && <div className="meta" role="status">{t(scopeNotice.key, scopeNotice)}</div>}
+      <div className="chat-log-frame">
       <div className="chat-log" ref={logRef}>
+      <div className="chat-log-content">
         {messages.map((m, i) => {
           const selectedSources = new Set(m.selectedSourceIndexes ?? []);
+          const availableSources = selectableSources(m);
+          const availableIndexes = new Set(availableSources.map((source) => source.source_index));
           return (
-          <div key={i} className={`msg ${m.role}`}>
+          <div key={i} className={`msg ${m.role}`} data-request-index={m.role === "user" ? i : undefined}>
             <div className="role-row">
               <div className="role">{m.role === "user" ? t("chat.you") : t("chat.assistant")}</div>
               {m.role === "assistant" && (
@@ -370,23 +400,24 @@ export default function ChatPanel() {
                 m.text
               )}
             </div>
-            {m.role === "assistant" && m.responseMode === "documents" && m.sources?.length > 0 && (
+            {m.role === "assistant" && availableSources.length > 0 && (
               <div className="source-selection-actions">
-                <button type="button" className="btn ghost" onClick={() => selectSources(i, m.sources.map((source) => source.source_index), true)}>{t("chat.selectAllSources")}</button>
+                <button type="button" className="btn ghost" onClick={() => selectSources(i, availableSources.map((source) => source.source_index), true)}>{t("chat.selectAllSources")}</button>
                 <button type="button" className="btn ghost" onClick={() => selectSources(i, m.sources.map((source) => source.source_index), false)} disabled={!m.selectedSourceIndexes?.length}>{t("chat.clearSourceSelection")}</button>
                 <button type="button" className="btn" disabled={pending || !m.selectedSourceIndexes?.length} onClick={() => answerSelected(m)}>
                   {t("chat.answerSelected", { count: m.selectedSourceIndexes?.length ?? 0 })}
                 </button>
+                <button type="button" className="btn ghost" disabled={!m.selectedSourceIndexes?.length} onClick={() => addSelectedToScope(m)}>{t("chat.scopeAddSelected")}</button>
                 <span className="meta">{t("chat.selectionDescription")}</span>
               </div>
             )}
-            {m.role === "assistant" && m.responseMode === "documents" && m.sources?.length > 0 && (
+            {m.role === "assistant" && m.sources?.length > 0 && (
               <ul className="chat-document-list">
                 {groupSourcesByDocument(m.sources).map((group) => (
                   <li key={group.doc_id}>
-                    <SelectionCheckbox state={selectionState(selectedSources, group.sources.map((source) => source.source_index))}
+                    {group.sources.some((source) => availableIndexes.has(source.source_index)) && <SelectionCheckbox state={selectionState(selectedSources, group.sources.filter((source) => availableIndexes.has(source.source_index)).map((source) => source.source_index))}
                       label={t("chat.selectDocument", { name: group.filename })}
-                      onChange={(checked) => selectSources(i, group.sources.map((source) => source.source_index), checked)} />
+                      onChange={(checked) => selectSources(i, group.sources.map((source) => source.source_index), checked)} />}
                     {documentHref(group.source) ? (
                       <Link href={documentHref(group.source)}>{group.filename}</Link>
                     ) : group.filename}
@@ -397,6 +428,9 @@ export default function ChatPanel() {
             )}
             {m.role === "assistant" && m.requestSourceSelection && (
               <div className="meta">{t("chat.selectedAnswerContext", { count: m.requestSourceSelection.indexes.length })}</div>
+            )}
+            {m.role === "assistant" && m.requestDocIds != null && (
+              <div className="meta">{t("chat.scopeUsed", { count: m.requestDocIds.length })}</div>
             )}
             {m.role === "assistant" && m.searchLimitReached && (
               <div className="meta" role="status">
@@ -427,6 +461,7 @@ export default function ChatPanel() {
                 requestTopK: m.requestTopK, requestMode: m.requestMode,
                 requestSearchDepth: m.requestSearchDepth,
                 requestSourceSelection: m.requestSourceSelection,
+                requestDocIds: m.requestDocIds,
                 requestSourceLocale: m.requestSourceLocale, responseMode: m.responseMode,
               })}>{t("chat.restartAnswer")}</button>
             )}
@@ -458,7 +493,7 @@ export default function ChatPanel() {
                     const badge = isChunk ? "\u{1F4E6}" : "\u{1F4C4}";
                     return (
                       <li key={j}>
-                        {m.responseMode === "documents" && (
+                        {availableIndexes.has(s.source_index) && (
                           <SelectionCheckbox state={selectionState(selectedSources, [s.source_index])}
                             label={t("chat.selectFragment", { index: s.source_index, name: s.title })}
                             onChange={(checked) => selectSources(i, [s.source_index], checked)} />
@@ -506,6 +541,9 @@ export default function ChatPanel() {
           </div>
           );
         })}
+      </div>
+      </div>
+      <ChatRequestNavigation messages={messages} logRef={logRef} />
       </div>
       <details className="search-settings">
         <summary>{t("chat.searchSettings")}</summary>
@@ -643,7 +681,7 @@ export default function ChatPanel() {
           placeholder={t("chat.queryPlaceholder")}
           autoComplete="off"
         />
-        <button type="submit">
+        <button type="submit" disabled={searchScopeEnabled && searchScopeDocuments.length === 0}>
           {t("chat.send")}
         </button>
       </form>
