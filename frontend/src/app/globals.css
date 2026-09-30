@@ -3765,8 +3765,14 @@ main {
 
 .doc-view-toggle {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.doc-view-toggle .document-queue-status {
+  margin: 0 0 0 auto;
 }
 
 .view-btn {

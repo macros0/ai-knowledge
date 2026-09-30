@@ -8,8 +8,8 @@
                               16333/16334, NOT the Qdrant default 6333/6334 —
                               those fall into the Windows Hyper-V/WSL excluded
                               port range on this machine. Reuses scripts/start-qdrant.ps1.
-      2. Ollama    -> :12400 (OLLAMA_HOST=127.0.0.1:12400; 11434 is inside the
-                              Windows Hyper-V excluded port range on this machine)
+      2. Ollama    -> :16400 (OLLAMA_HOST=127.0.0.1:16400; previous port 12400
+                              now falls inside the Windows Hyper-V exclusion range)
       3. PostgreSQL -> :5432 (reuses scripts/start-postgres.ps1, portable binary)
       4. Backend   -> :18000 (uvicorn app.main:app from backend/; 8000 is inside the
                               Windows Hyper-V/WSL excluded port range on this machine)
@@ -45,7 +45,7 @@ function Get-OllamaExe {
 # и порт внутри исключённого блока не может быть забинден (winerror 10013).
 # Проверка: netsh interface ipv4 show excludedportrange protocol=tcp
 function Assert-PortsAvailable {
-    $ports = 16333, 12400, 5432, 18000, 16300
+    $ports = 16333, 16400, 5432, 18000, 16300
     $excluded = @{}
     try {
         $out = & netsh interface ipv4 show excludedportrange protocol=tcp 2>$null
@@ -60,9 +60,9 @@ function Assert-PortsAvailable {
     } catch { }
     foreach ($p in $ports) {
         if ($excluded.ContainsKey($p)) {
-            Write-Output "[FAIL] Порт $p зарезервирован Windows/HNS (диапазон $($excluded[$p]))."
-            Write-Output "       Резервации меняются от загрузки к загрузке (WSL/Hyper-V). См. AGENTS.md — квирк про порты."
-            Write-Output "       Проверить: netsh interface ipv4 show excludedportrange protocol=tcp"
+            Write-Host "[FAIL] Порт $p зарезервирован Windows/HNS (диапазон $($excluded[$p]))."
+            Write-Host "       Резервации меняются от загрузки к загрузке (WSL/Hyper-V). См. AGENTS.md — квирк про порты."
+            Write-Host "       Проверить: netsh interface ipv4 show excludedportrange protocol=tcp"
             return $false
         }
     }
@@ -81,12 +81,12 @@ function Wait-Health {
         try {
             $r = Invoke-WebRequest -Uri $Url -TimeoutSec 4 -UseBasicParsing
             if ($r.StatusCode -eq 200) {
-                Write-Output "[OK] $Name  ->  $Url"
+                Write-Host "[OK] $Name  ->  $Url"
                 return $true
             }
         } catch { }
     }
-    Write-Output "[FAIL] $Name  не ответил за $Retries c: $Url"
+    Write-Host "[FAIL] $Name  не ответил за $Retries c: $Url"
     return $false
 }
 
@@ -94,25 +94,25 @@ function Wait-PgReady {
     param([int]$Retries = 10, [int]$DelaySec = 1)
     $pg_isready = 'C:\postgresql17\pgsql\bin\pg_isready.exe'
     if (-not (Test-Path -LiteralPath $pg_isready)) {
-        Write-Output "[FAIL] PostgreSQL  не найден pg_isready.exe (установите portable-бинарь)"
+        Write-Host "[FAIL] PostgreSQL  не найден pg_isready.exe (установите portable-бинарь)"
         return $false
     }
     for ($i = 0; $i -lt $Retries; $i++) {
         Start-Sleep -Seconds $DelaySec
         & $pg_isready -h 127.0.0.1 -p 5432 -q 2>$null
         if ($LASTEXITCODE -eq 0) {
-            Write-Output "[OK] PostgreSQL  ->  pg_isready 127.0.0.1:5432"
+            Write-Host "[OK] PostgreSQL  ->  pg_isready 127.0.0.1:5432"
             return $true
         }
     }
-    Write-Output "[FAIL] PostgreSQL  не ответил за $Retries c (pg_isready 127.0.0.1:5432)"
+    Write-Host "[FAIL] PostgreSQL  не ответил за $Retries c (pg_isready 127.0.0.1:5432)"
     return $false
 }
 
 function Start-Service {
     param([string]$Name, [scriptblock]$Launch, [string]$Url)
-    Write-Output ""
-    Write-Output "=== $Name ==="
+    Write-Host ""
+    Write-Host "=== $Name ==="
     # Reuse a healthy listener instead of replacing it.  On Windows a
     # service's child processes may keep the previous redirected log handle
     # open for a short time after the parent is stopped; restarting a healthy
@@ -120,14 +120,14 @@ function Start-Service {
     try {
         $existing = Invoke-WebRequest -Uri $Url -TimeoutSec 4 -UseBasicParsing
         if ($existing.StatusCode -eq 200) {
-            Write-Output "  [OK] $Name уже работает; существующий процесс переиспользован."
+            Write-Host "  [OK] $Name уже работает; существующий процесс переиспользован."
             return $true
         }
     } catch { }
     try {
-        & $Launch | ForEach-Object { Write-Output "  $_" }
+        & $Launch | ForEach-Object { Write-Host "  $_" }
     } catch {
-        Write-Output "  [ERROR] $($_.Exception.Message)"
+        Write-Host "  [ERROR] $($_.Exception.Message)"
         return $false
     }
     return Wait-Health -Name $Name -Url $Url
@@ -146,11 +146,11 @@ $results['Qdrant'] = Start-Service -Name 'Qdrant' -Url 'http://localhost:16333/c
     & (Join-Path $PSScriptRoot 'start-qdrant.ps1')
 }
 
-$results['Ollama'] = Start-Service -Name 'Ollama' -Url 'http://localhost:12400/api/tags' -Launch {
+$results['Ollama'] = Start-Service -Name 'Ollama' -Url 'http://127.0.0.1:16400/api/tags' -Launch {
     & $Helper -FilePath (Get-OllamaExe) -ArgumentList @('serve') `
         -WorkingDirectory $LogDir `
-        -Env @{ OLLAMA_HOST = '127.0.0.1:12400' } `
-        -Port 12400 `
+        -Env @{ OLLAMA_HOST = '127.0.0.1:16400' } `
+        -Port 16400 `
         -PidFile (Join-Path $LogDir 'ollama.pid')
 }
 
@@ -196,4 +196,5 @@ if ($allOk) {
     Get-ChildItem (Join-Path $LogDir '*.log') -ErrorAction SilentlyContinue | ForEach-Object {
         Write-Output "  $($_.FullName)"
     }
+    exit 1
 }

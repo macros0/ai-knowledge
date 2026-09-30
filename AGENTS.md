@@ -35,7 +35,7 @@ during startup» — shell без `LANG`, запуск из IDE); на Linux с�
 | Сервис | URL | Health |
 |---|---|---|
 | Qdrant | http://localhost:16333 | `GET /collections` |
-| Ollama | http://localhost:12400 | `GET /api/tags` |
+| Ollama | http://127.0.0.1:16400 | `GET /api/tags` |
 | PostgreSQL | 127.0.0.1:5432 | `pg_isready -h 127.0.0.1 -p 5432` |
 | Backend (FastAPI) | http://localhost:18000 | `GET /health` |
 | Frontend (Next.js) | http://localhost:16300 | `GET /` |
@@ -62,9 +62,10 @@ UI: http://localhost:16300
 
 ## Важные квирки (не исследовать заново)
 
-- **Ollama слушает порт 12400, НЕ 11434.** Порт 11434 попадает в исключённый диапазон Windows Hyper-V
-  (проверить: `netsh interface ipv4 show excludedportrange protocol=tcp`). В `.env` уже стоит
-  `EMBEDDING_API_BASE=http://localhost:12400`. Запуск: `OLLAMA_HOST=127.0.0.1:12400`.
+- **Ollama слушает порт 16400, НЕ 12400/11434.** На 29.09.2026 диапазон
+  `12337–12436` зарезервирован Windows Hyper-V и включает прежний порт 12400
+  (проверить: `netsh interface ipv4 show excludedportrange protocol=tcp`). В `.env` стоит
+  `EMBEDDING_API_BASE=http://127.0.0.1:16400`. Запуск: `OLLAMA_HOST=127.0.0.1:16400`.
 - **npx/npm shims на этой машине сломаны** (`node_modules\npm\bin\npx-cli.js` отсутствует), а
   `cmd /c "npm run dev"` ломает кавычки в хелпере. Фронтенд запускать ТОЛЬКО через
   `node node_modules/next/dist/bin/next dev` (из `frontend/`).
@@ -102,7 +103,7 @@ UI: http://localhost:16300
   уже `http://127.0.0.1:16333`; для локального latency можно задать
   `QDRANT_PREFER_GRPC=true` и `QDRANT_GRPC_PORT=16334`.
 - **`localhost` на этой машине = +2с на каждое НОВОЕ TCP-соединение (05.09.2026, диагностика
-  инцидента «Готов, а поиск не находит»):** Qdrant (16333), Ollama (12400) и т.п. слушают только
+  инцидента «Готов, а поиск не находит»):** Qdrant (16333), Ollama (16400) и т.п. слушают только
   IPv4 (`127.0.0.1`), а хост `localhost` резолвится на `::1` первым — connect к `::1` «виснет»
   ~2.05с и лишь потом уходит на IPv4. Квирк бил на КАЖДЫЙ вызов `qdrant-client` (не переиспользует
   соединение: один Qdrant-запрос ≈ 2.2с, батч эмбеддингов ≈ 2.1с) — отсюда и старая пометка

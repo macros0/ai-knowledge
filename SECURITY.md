@@ -49,7 +49,7 @@ Splitting with other documents:
   `frontend/src/app/api/[...path]/route.js`, while `/health` uses the explicit rewrite in
   `frontend/next.config.js`. The browser never contacts the backend directly.
 - **Must not be reachable from outside**: backend (`:8000`), Qdrant (`:6333`/`:6334`),
-  PostgreSQL (`:5432`), Ollama (`:12400`). In `docker-compose.yml` only `frontend`
+  PostgreSQL (`:5432`), Ollama (local Windows `:16400`). In `docker-compose.yml` only `frontend`
   (`8080:3000`) publishes a port.
 - **Trust boundary** — the reverse proxy plus the backend authentication layer. Everything
   inside the compose network is considered trusted (backend ↔ Qdrant ↔ DB ↔ Ollama talk
@@ -864,6 +864,13 @@ hits whose document is absent from the DB (previously such hits passed — `(Non
 interpreted "no document" as "not deleted"). Reason: purge is the only irreversible step of
 the lifecycle, and restoring at the moment of cleanup must not cost data; orphan points
 (finalization failure) must not reach results.
+
+### 2026-09-30 — Local Ollama moved to port 16400
+Windows startup and shutdown scripts now use `127.0.0.1:16400` for Ollama;
+the previous port 12400 falls inside the Hyper-V/HNS excluded range observed
+on 2026-09-29. The startup script checks the new port for reservations and
+uses the same IPv4 loopback address for its health request. Ollama remains
+unreachable from other machines; production Compose network exposure is unchanged.
 
 ### 2026-09-05 — Local backend moved to port 18000
 Change: port 8000 (local Uvicorn) fell into the Windows Hyper-V/WSL excluded range
