@@ -5,7 +5,7 @@ import Link from "next/link";
 import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
 import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
-import { applyAnswerEvent, groupSourcesByDocument } from "@/lib/chatAnswerState.mjs";
+import { applyAnswerEvent, groupSourcesByDocument, searchLimitWarning } from "@/lib/chatAnswerState.mjs";
 import { updateSelection, selectionState, selectableSources } from "@/lib/chatSourceSelection.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
 import { addScopeDocuments, scopeRequestIds, SEARCH_SCOPE_MAX_DOCUMENTS } from "@/lib/chatSearchScope.mjs";
@@ -425,9 +425,9 @@ export default function ChatPanel() {
             {m.role === "assistant" && m.requestDocIds != null && (
               <div className="meta">{t("chat.scopeUsed", { count: m.requestDocIds.length })}</div>
             )}
-            {m.role === "assistant" && m.searchLimitReached && (
+            {m.role === "assistant" && searchLimitWarning(m.searchLimitReached, m.sources?.length ?? 0, m.requestSearchDepth, settings.search_depth_max) && (
               <div className="meta" role="status">
-                {t(m.requestSearchDepth >= settings.search_depth_max ? "chat.searchLimitReachedMax" : "chat.searchLimitReached", { depth: m.requestSearchDepth })}
+                {t(searchLimitWarning(m.searchLimitReached, m.sources?.length ?? 0, m.requestSearchDepth, settings.search_depth_max), { depth: m.requestSearchDepth })}
               </div>
             )}
             {m.role === "assistant" && m.responseMode === "fast" && m.sources?.length > 0 && (

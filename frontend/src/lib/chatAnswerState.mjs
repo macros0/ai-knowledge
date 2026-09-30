@@ -1,3 +1,10 @@
+export function searchLimitWarning(reached, sourceCount, depth, maxDepth = 500) {
+  // The backend flag also covers capped candidates before merging and filtering.
+  // Only a full result list warrants advising the user to raise its limit.
+  if (!reached || sourceCount < depth) return null;
+  return depth >= maxDepth ? "chat.searchLimitReachedMax" : "chat.searchLimitReached";
+}
+
 export function groupSourcesByDocument(sources = []) {
   const groups = [];
   const byId = new Map();

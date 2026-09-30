@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { groupSourcesByDocument, applyAnswerEvent } from "../src/lib/chatAnswerState.mjs";
+import { groupSourcesByDocument, applyAnswerEvent, searchLimitWarning } from "../src/lib/chatAnswerState.mjs";
 
 test("groups every fragment under one document without losing source order", () => {
   const sources = [
@@ -40,4 +40,25 @@ test("retrieval limit warning survives generation progress and source updates", 
   messages = applyAnswerEvent(messages, { attemptId: "a", type: "progress", phase: "generation" });
   messages = applyAnswerEvent(messages, { attemptId: "a", type: "sources", sources: [{ doc_id: "x" }] });
   assert.equal(messages[0].searchLimitReached, true);
+});
+
+test("a capped candidate search with eight fragments does not claim the 200-fragment limit was reached", () => {
+  let messages = [{ role: "assistant", attemptId: "a", sources: [] }];
+  messages = applyAnswerEvent(messages, {
+    attemptId: "a", type: "progress", phase: "retrieval",
+    search_depth: 200, search_limit_reached: true,
+  });
+  messages = applyAnswerEvent(messages, { attemptId: "a", type: "sources",
+    sources: Array.from({ length: 8 }, (_, index) => ({ source_index: index + 1 })) });
+  const message = messages[0];
+  assert.equal(searchLimitWarning(message.searchLimitReached, message.sources.length, message.requestSearchDepth), null);
+});
+
+test("a warning names the result limit only when the displayed fragments fill it", () => {
+  assert.equal(searchLimitWarning(true, 200, 200), "chat.searchLimitReached");
+  assert.equal(searchLimitWarning(true, 500, 500), "chat.searchLimitReachedMax");
+  assert.equal(searchLimitWarning(true, 8, 500), null);
+  assert.equal(searchLimitWarning(true, 0, 200), null);
+  assert.equal(searchLimitWarning(false, 8, 200), null);
+  assert.equal(searchLimitWarning(false, 200, 200), null);
 });

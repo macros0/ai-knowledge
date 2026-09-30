@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
-import { groupSourcesByDocument } from "@/lib/chatAnswerState.mjs";
+import { groupSourcesByDocument, searchLimitWarning } from "@/lib/chatAnswerState.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 import MarkdownViewer from "./MarkdownViewer";
 import AppliedTerms from "./AppliedTerms";
@@ -98,9 +98,9 @@ export function HistoryMessage({ m, userLabel }) {
       {m.role === "assistant" && m.retrieval_metadata?.search_doc_ids != null && (
         <div className="meta">{t("chat.scopeUsed", { count: m.retrieval_metadata.search_doc_ids.length })}</div>
       )}
-      {m.role === "assistant" && m.retrieval_metadata?.search_limit_reached && (
+      {m.role === "assistant" && searchLimitWarning(m.retrieval_metadata?.search_limit_reached, m.sources?.length ?? 0, m.retrieval_metadata?.search_depth) && (
         <div className="meta" role="status">
-          {t(m.retrieval_metadata.search_depth >= 500 ? "chat.searchLimitReachedMax" : "chat.searchLimitReached", { depth: m.retrieval_metadata.search_depth })}
+          {t(searchLimitWarning(m.retrieval_metadata.search_limit_reached, m.sources?.length ?? 0, m.retrieval_metadata.search_depth), { depth: m.retrieval_metadata.search_depth })}
         </div>
       )}
       {m.role === "assistant" && m.retrieval_metadata && (
