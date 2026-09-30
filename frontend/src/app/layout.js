@@ -4,6 +4,7 @@ import "./globals.css";
 import Nav from "@/components/Nav";
 import KnowledgeProfile from "@/components/KnowledgeProfile";
 import { ChatProvider } from "@/context/ChatContext";
+import { DocumentFiltersProvider } from "@/context/DocumentFiltersContext";
 import { ToastProvider } from "@/components/Toast";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -95,7 +96,9 @@ export default async function RootLayout({ children }) {
                     <HealthBanner />
                     <main>
                       <AuthErrorBanner />
-                      <RequireAuth>{children}</RequireAuth>
+                      <DocumentFiltersProvider>
+                        <RequireAuth>{children}</RequireAuth>
+                      </DocumentFiltersProvider>
                     </main>
                   </div>
                 </ChatProvider>

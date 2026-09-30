@@ -57,3 +57,21 @@ export function resetDocumentFilters() {
     page: 0,
   };
 }
+
+// Явные фильтры ссылки заменяют сохранённый вид целиком. Параметры
+// одноразового префилла загрузки не должны мешать восстановлению списка.
+export function resolveDocumentFilterParams(searchParams, savedQuery = "", savedUrlQuery = null) {
+  const keys = ["q", "uploader", "module", "tag", "dev", "problem", "status", "from", "to", "locale", "sort", "page", "group"];
+  // При возврате из корзины URL списка может отставать от последнего ввода
+  // из-за debounce. Только отличающаяся ссылка задаёт новый явный выбор.
+  const previousUrl = new URLSearchParams(savedUrlQuery ?? "");
+  const isNewLink = savedUrlQuery === null || keys.some((key) => searchParams.get(key) !== previousUrl.get(key));
+  const source = keys.some((key) => searchParams.has(key)) && isNewLink
+    ? searchParams
+    : new URLSearchParams(savedQuery);
+  const params = new URLSearchParams();
+  for (const key of keys) {
+    if (source.has(key)) params.set(key, source.get(key));
+  }
+  return params;
+}

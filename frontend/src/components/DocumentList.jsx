@@ -1,18 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, cancelDocumentUpdate, createBulkExport, deleteDocument, friendlyApiError, friendlyDocumentError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
 import { documentUpdateView } from "@/lib/documentUpdate.mjs";
 import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
-import { buildCompactDocumentMeta, countActiveDocumentFilters, resetDocumentFilters } from "@/lib/documentLayout.mjs";
+import { buildCompactDocumentMeta, countActiveDocumentFilters, resetDocumentFilters, resolveDocumentFilterParams } from "@/lib/documentLayout.mjs";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import { useChat } from "@/context/ChatContext";
+import { useDocumentFilters } from "@/context/DocumentFiltersContext";
 import { selectionLimit } from "@/lib/documentBulkLimits.mjs";
 import SelectionBar from "./SelectionBar";
 import PreviewModal from "./PreviewModal";
@@ -100,7 +101,9 @@ function buildGroups(docs, groupBy, locale, t) {
 
 export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const urlParams = useSearchParams();
+  const { savedView, rememberFilters } = useDocumentFilters();
+  const [searchParams] = useState(() => resolveDocumentFilterParams(urlParams, savedView.query, savedView.urlQuery));
   const { mode, hasRole, loading, user } = useAuth();
   const { settings } = useChat();
   const { showToast } = useToast();
@@ -161,7 +164,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   // Спойлер панели массовых действий: свёрнут по умолчанию, раскрывается по клику
   // или автоматически при появлении выделения.
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(savedView.filtersOpen);
   const mounted = useRef(true);
   const timer = useRef(null);
   const loadSeq = useRef(0);
@@ -316,7 +319,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
 
   // URL-синхронизация фильтров (Этап 5): состояние → query-параметры (shareable
   // view). Чтение — только при инициализации стейта, поэтому цикл не возникает.
-  useEffect(() => {
+  const documentQuery = useMemo(() => {
     const params = new URLSearchParams();
     if (search) params.set("q", search);
     if (chosenUploader != null) params.set("uploader", chosenUploader);
@@ -331,9 +334,21 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     if (sortKey !== "date_desc") params.set("sort", sortKey);
     if (page > 0) params.set("page", String(page));
     if (groupBy) params.set("group", groupBy);
-    const qs = params.toString();
-    router.replace(qs ? `/?${qs}` : "/", { scroll: false });
-  }, [search, chosenUploader, moduleFilter, tagFilter, devFilter, problemOnly, statusFilter, dateFrom, dateTo, localeFilter, sortKey, page, groupBy, router]);
+    return params.toString();
+  }, [search, chosenUploader, moduleFilter, tagFilter, devFilter, problemOnly, statusFilter, dateFrom, dateTo, localeFilter, sortKey, page, groupBy]);
+
+  useEffect(() => {
+    router.replace(documentQuery ? `/?${documentQuery}` : "/", { scroll: false });
+  }, [documentQuery, router]);
+
+  useEffect(() => {
+    // Сохраняем и ещё не отправленную debounce-поиском строку: быстрый
+    // переход на другую вкладку не должен терять последнее введённое значение.
+    const savedParams = new URLSearchParams(documentQuery);
+    if (searchInput.trim()) savedParams.set("q", searchInput.trim());
+    else savedParams.delete("q");
+    rememberFilters(savedParams.toString(), documentQuery, filtersOpen);
+  }, [documentQuery, searchInput, filtersOpen, rememberFilters]);
 
   // Debounce серверного поиска: не слать запрос на каждое нажатие клавиши.
   useEffect(() => {
