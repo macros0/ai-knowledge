@@ -585,7 +585,7 @@ export default {
   "chat.modeHybrid": "Hybrid",
   "chat.topkLabel": "Number of results for the answer",
   "chat.searchDepthLabel": "Search depth",
-  "chat.searchDepthDescription": "How many search matches to consider. More matches broaden the search and take longer to process.",
+  "chat.searchDepthDescription": "Maximum retrieved fragments after merging and filtering. Search expands automatically; fewer matching fragments produce a shorter list.",
   "chat.searchLimitReached": "Search limit reached ({depth}). Increase search depth — additional sources may be available.",
   "chat.searchLimitReachedMax": "Maximum search depth reached ({depth}). Additional sources may be available.",
   "chat.resultsLabel": "Results:",

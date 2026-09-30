@@ -88,10 +88,10 @@ def test_chat_depth_is_used_for_search_and_reported_before_answer(monkeypatch, m
     from app.services import chat_history
 
     _patch_retrieval(monkeypatch, chat_module, hits=[{"id": "p1"}])
-    captured = {}
+    captured = []
 
     def search(**kwargs):
-        captured.update(kwargs)
+        captured.append(kwargs)
         kwargs["retrieval_status"]["limit_reached"] = True
         return [{"id": "p1"}]
 
@@ -104,7 +104,9 @@ def test_chat_depth_is_used_for_search_and_reported_before_answer(monkeypatch, m
     })
     events = [json.loads(line) for line in response.text.splitlines()]
     assert not any(event["type"] == "error" for event in events), events
-    assert captured["top_k"] == captured["per_branch_top_k"] == 100
+    assert captured[0]["top_k"] == captured[0]["per_branch_top_k"] == 100
+    assert len(captured) <= 4
+    assert all(call['top_k'] == call['per_branch_top_k'] <= 800 for call in captured)
     retrieval = next(event for event in events if event.get("phase") == "retrieval")
     assert retrieval["search_depth"] == 100
     assert retrieval["search_limit_reached"] is True

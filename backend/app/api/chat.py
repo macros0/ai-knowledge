@@ -371,6 +371,24 @@ def _answer_selected(req, current_user, settings, attempt_ref):
                         response_mode='full', attempt_id=attempt_ref.attempt_id)
 
 
+def _filtered_chat_blocks(hits, req, settings, exact_groups):
+    hits, doc_lookup = load_visible_retrieval_hits(
+        hits, mail_mode=req.mail_mode, **({'exact_groups': exact_groups} if exact_groups else {}))
+    filenames = {doc_id: (doc or {}).get('filename', '') for doc_id, doc in doc_lookup.items()}
+    merged = merge_and_format(hits, settings, filename_lookup=filenames,
+        exact_groups=exact_groups, mail_mode=req.mail_mode, limit_total_chars=False) if hits else []
+    # Preserve the legacy API's top_k contract; the three modes count final fragments.
+    if req.response_mode is None:
+        merged = merged[:req.top_k]
+    domain_cache, lexical_cache = {}, {}
+    merged = drop_unmatched_blocks(merged, req.query, match_groups=exact_groups,
+        domain_cache=domain_cache, lexical_cache=lexical_cache)
+    merged = drop_partial_title_matches(merged, req.query, match_groups=exact_groups,
+        domain_cache=domain_cache, focus_named_objects=settings.chat_focus_named_objects)
+    merged = filter_mail_scope_blocks(merged, mail_mode=req.mail_mode)
+    return hits, merged, doc_lookup, domain_cache, lexical_cache
+
+
 def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_ref=None) -> ChatResponse:
     if req.source_selection:
         return _answer_selected(req, current_user, settings, attempt_ref)
@@ -412,42 +430,43 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
     search_depth = req.search_depth if req.search_depth is not None else (
         40 if req.response_mode is not None else settings.search_per_branch_top_k
     )
-    retrieval_status = {}
-    hits = _get_vector_store().search_composite(
-        dense_vec=vector,
-        sparse_vec=sparse_vec,
-        tags=req.tags or None,
-        branches=branches,
-        source_locales=req.source_locales or None,
-        include_unknown_source_locale=req.include_unknown_source_locale,
-        mail_mode=req.mail_mode,
-        # Берём широкий набор точек (per_branch_top_k): итог режем по БЛОКАМ после
-        # merge (группы (doc_id, chunk_index) + сиблинг-концепты). Срез по точкам
-        # до группировки ронял концепты-сиблинги с более низким fused-рангом
-        # (таблица «Перечень: Наименование поля» при bm25-ранге #5) — они не
-        # доживали до merge и не попадали ни в контекст LLM, ни в sources.
-        top_k=search_depth,
-        per_branch_top_k=search_depth,
-        retrieval_status=retrieval_status,
-        **({'doc_ids': scope_ids} if scope_ids is not None else {}),
-    )
-    search_limit_reached = retrieval_status.get("limit_reached", len(hits) >= search_depth)
-    retrieval_summary = {"search_depth": search_depth, "search_limit_reached": search_limit_reached}
+    exact_groups = plan.strict_groups or plan.match_groups
+    candidate_depth = search_depth
+    # At most four widening rounds (N, 2N, 4N, 8N). Keep retrieval bounded even
+    # when canonical filtering removes most hits; report an unfinished search cap.
+    candidate_ceiling = search_depth * (8 if req.response_mode is not None else 1)
+    store = _get_vector_store()
+    while True:
+        remaining(settings.llm_chat_total_timeout_seconds)
+        retrieval_status = {}
+        hits = store.search_composite(
+            dense_vec=vector, sparse_vec=sparse_vec, tags=req.tags or None, branches=branches,
+            source_locales=req.source_locales or None,
+            include_unknown_source_locale=req.include_unknown_source_locale,
+            mail_mode=req.mail_mode, top_k=candidate_depth, per_branch_top_k=candidate_depth,
+            retrieval_status=retrieval_status,
+            **({'doc_ids': scope_ids} if scope_ids is not None else {}),
+        )
+        candidate_limit_reached = retrieval_status.get('limit_reached', len(hits) >= candidate_depth)
+        if scope_ids is not None:
+            allowed_ids = set(scope_ids)
+            hits = [hit for hit in hits if hit.payload.get('doc_id') in allowed_ids]
+        hits, merged, doc_lookup, domain_cache, lexical_cache = _filtered_chat_blocks(
+            hits, req, settings, exact_groups)
+        if (req.response_mode is None or len(merged) >= search_depth
+                or not candidate_limit_reached or candidate_depth >= candidate_ceiling):
+            break
+        candidate_depth = min(candidate_depth * 2, candidate_ceiling)
+    search_limit_reached = candidate_limit_reached or (
+        req.response_mode is not None and len(merged) > search_depth)
+    if req.response_mode is not None:
+        merged = merged[:search_depth]
+    retrieval_summary = {'search_depth': search_depth, 'search_limit_reached': search_limit_reached}
     if req.search_doc_ids is not None:
         retrieval_summary['search_doc_ids'] = req.search_doc_ids
-    on_progress = request_state().get("on_progress")
+    on_progress = request_state().get('on_progress')
     if on_progress and (req.response_mode is not None or req.search_depth is not None):
-        on_progress({"phase": "retrieval", **retrieval_summary})
-    if attempt_ref:
-        remaining(settings.llm_chat_total_timeout_seconds)
-    exact_groups = plan.strict_groups or plan.match_groups
-    # Defense-in-depth к Qdrant-фильтру `must_not deleted` — единое место
-    # (services/search_filter.py): гонка софт-делита (payload не синхронизирован)
-    # и orphan-точки (документа нет в БД — восстановлен во время purge или сбой).
-    if scope_ids is not None:
-        allowed_ids = set(scope_ids)
-        hits = [hit for hit in hits if hit.payload.get('doc_id') in allowed_ids]
-    hits, doc_lookup = load_visible_retrieval_hits(hits, mail_mode=req.mail_mode, **({"exact_groups": exact_groups} if exact_groups else {}))
+        on_progress({'phase': 'retrieval', **retrieval_summary})
     # Короткое замыкание (Этап 4a.1): при нуле хитов не зовём LLM — ответ
     # без источников формируется здесь, фронтенд по пустому `sources` покажет
     # переход «загрузить документ» при активном фильтре модуля/разработки.
@@ -466,44 +485,6 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         if attempt_ref:
             chat_history.save_attempt_sources(attempt_ref, current_user, [], retrieval_metadata=retrieval_summary)
     else:
-        # Этап 2b: полный текст чанков — из document_chunks (natural key), а не
-        # из payload Qdrant. Вызывается до merge_and_format, который читает
-        # payload["content"]/["section_title"] чанк-точек.
-
-        filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
-        merged = merge_and_format(
-            hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups,
-            mail_mode=req.mail_mode, limit_total_chars=False,
-        )
-        # top_k — число БЛОКОВ в контексте/источниках (группы с сиблингами), не точек.
-        if req.response_mode is None:
-            merged = merged[: req.top_k]
-        domain_cache = {}
-        lexical_cache = {}
-        # Анти-шум: блоки без лексического совпадения с запросом не доходят до
-        # LLM и sources — модели периодически вписывают их в ответ не по теме
-        # (пустой Matched terms игнорируется даже сильными моделями). При
-        # полном отсутствии совпадений (парафразный запрос) фильтр пропускает всё.
-        merged = drop_unmatched_blocks(
-            merged,
-            req.query,
-            match_groups=exact_groups,
-            domain_cache=domain_cache,
-            lexical_cache=lexical_cache,
-        )
-        # Запрос-точное-имя: если какой-то заголовок покрывает ВСЕ термины запроса,
-        # контекст ограничивается блоками «про объект» — смежные блоки, где объект
-        # лишь упомянут в теле, модели сливают в описание объекта.
-        merged = drop_partial_title_matches(
-            merged,
-            req.query,
-            match_groups=exact_groups,
-            domain_cache=domain_cache,
-            focus_named_objects=settings.chat_focus_named_objects,
-        )
-        # Отбор по происхождению относится и к видимым источникам. Лимит
-        # контекста ниже ограничивает только текст, отправляемый модели.
-        merged = filter_mail_scope_blocks(merged, mail_mode=req.mail_mode)
         context_blocks = []
         context = ""
         if req.response_mode is None:

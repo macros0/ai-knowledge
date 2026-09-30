@@ -230,6 +230,7 @@ class ChatRequest(BaseModel):
     mail_mode: Literal["all", "exclude", "only"] = "all"
     response_mode: Literal["documents", "fast", "full"] | None = None
     attempt_id: str | None = None
+    # For the three response modes, cap final fragments after merge and filtering.
     search_depth: int | None = Field(default=None, ge=1, le=500, strict=True)
     source_selection: ChatSourceSelection | None = None
     # None searches the entire knowledge base; [] is an enabled, empty scope.
