@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
 import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
@@ -9,6 +9,7 @@ import { applyAnswerEvent, groupSourcesByDocument } from "@/lib/chatAnswerState.
 import { updateSelection, selectionState, selectableSources } from "@/lib/chatSourceSelection.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
 import { addScopeDocuments, scopeRequestIds, SEARCH_SCOPE_MAX_DOCUMENTS } from "@/lib/chatSearchScope.mjs";
+import { attachChatScroll } from "@/lib/chatScrollPosition.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
 import ModulePicker from "./ModulePicker";
@@ -40,27 +41,18 @@ function SelectionCheckbox({ state, label, onChange }) {
 }
 
 export default function ChatPanel() {
-  const { messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled } = useChat();
+  const { messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
+    responseMode, setResponseMode, selectedTopK, setSelectedTopK, showCustom, setShowCustom, customValue, setCustomValue,
+    showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue, moduleFilter, setModuleFilter, devFilter, setDevFilter,
+    sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen } = useChat();
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
-  const [responseMode, setResponseMode] = useState("fast");
-  const [selectedTopK, setSelectedTopK] = useState(settings.top_k_default);
-  const [showCustom, setShowCustom] = useState(false);
-  const [customValue, setCustomValue] = useState("");
-  const [showCustomDepth, setShowCustomDepth] = useState(false);
-  const [customDepthValue, setCustomDepthValue] = useState("");
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [scopeNotice, setScopeNotice] = useState(null);
   const [modules, setModules] = useState([]);
   const [developments, setDevelopments] = useState([]);
   const [localeFacets, setLocaleFacets] = useState([]);
-  // Исключающий scope-фильтр (Этап 4a.1, развитие плана): активен не более один из
-  // moduleFilter / devFilter — иначе backend-OR даёт объединение, а не пересечение.
-  const [moduleFilter, setModuleFilter] = useState("");
-  const [devFilter, setDevFilter] = useState(null);
-  // Фильтр по языку документа: "" = все, "unknown" = «не определён», иначе код.
-  const [sourceLocale, setSourceLocale] = useState("");
   const logRef = useRef(null);
   const activeRequestRef = useRef(null);
   const stopCurrentRef = useRef(null);
@@ -120,9 +112,10 @@ export default function ChatPanel() {
     return null;
   };
 
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [messages.length]);
+  useLayoutEffect(() => {
+    if (!logRef.current) return;
+    return attachChatScroll(logRef.current, scrollPositionRef, { sessionId, messageCount: messages.length });
+  }, [messages.length, sessionId, scrollPositionRef]);
 
   const copyAnswer = async (index, text) => {
     try {
@@ -545,7 +538,7 @@ export default function ChatPanel() {
       </div>
       <ChatRequestNavigation messages={messages} logRef={logRef} />
       </div>
-      <details className="search-settings">
+      <details className="search-settings" open={searchSettingsOpen} onToggle={(event) => setSearchSettingsOpen(event.currentTarget.open)}>
         <summary>{t("chat.searchSettings")}</summary>
         {settings.response_modes?.length > 0 && (
           <div className="topk-picker">

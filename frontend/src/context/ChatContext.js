@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getChatSettings } from "@/lib/api";
 import { useI18n } from "@/i18n/LocaleContext";
 
@@ -31,8 +31,21 @@ export function ChatProvider({ children }) {
   const [tags, setTags] = useState([]);
   const [pending, setPending] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const scrollPositionRef = useRef(null);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
+  const [responseMode, setResponseMode] = useState("fast");
+  const [selectedTopK, setSelectedTopK] = useState(null);
+  const [showCustom, setShowCustom] = useState(false);
+  const [customValue, setCustomValue] = useState("");
+  const [showCustomDepth, setShowCustomDepth] = useState(false);
+  const [customDepthValue, setCustomDepthValue] = useState("");
+  const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
+  // Эти фильтры и режимы живут вместе с чатом, включая переходы к концептам.
+  // Модуль и разработка взаимоисключающие: их объединение в backend работает как OR.
+  const [moduleFilter, setModuleFilter] = useState("");
+  const [devFilter, setDevFilter] = useState(null);
+  const [sourceLocale, setSourceLocale] = useState("");
   const [searchDepth, setSearchDepth] = useState(FALLBACK_SETTINGS.search_depth_default);
   const [mailMode, setMailMode] = useState("all");
   const [useGlossary, setUseGlossary] = useState(true);
@@ -51,6 +64,7 @@ export function ChatProvider({ children }) {
   // «Новый чат»: сбрасывает ленту и UUID треда — следующее сообщение откроет
   // новую сессию истории (Этап 6).
   const startNewChat = () => {
+    scrollPositionRef.current = null;
     setMessages([]);
     setSessionId(null);
     setSearchScopeDocuments([]);
@@ -77,8 +91,12 @@ export function ChatProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled }),
-    [messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled]
+    () => ({ messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
+      responseMode, setResponseMode, selectedTopK: selectedTopK ?? settings.top_k_default, setSelectedTopK,
+      showCustom, setShowCustom, customValue, setCustomValue, showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue,
+      moduleFilter, setModuleFilter, devFilter, setDevFilter, sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen }),
+    [messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled,
+      responseMode, selectedTopK, showCustom, customValue, showCustomDepth, customDepthValue, moduleFilter, devFilter, sourceLocale, searchSettingsOpen]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
