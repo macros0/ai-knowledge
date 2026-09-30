@@ -5,20 +5,7 @@
     "original_name": "Payroll Status",
     "original_description": "Payroll status information for an employee.",
     "canonical_locale": "en",
-    "aliases": [
-      {
-        "alias": "IT0003",
-        "locale": "en",
-        "auto_expand": true,
-        "search_enabled": true
-      },
-      {
-        "alias": "IT 0003",
-        "locale": "en",
-        "auto_expand": true,
-        "search_enabled": true
-      }
-    ]
+    "aliases": []
   },
   {
     "canonical": "PA20",
