@@ -123,12 +123,12 @@ test("unknown alias locale is not displayed as the UI locale", () => {
 test("new reference forms default to the current UI locale", () => {
   const developmentPanel = readFileSync(new URL("../src/components/DevelopmentPanel.jsx", import.meta.url), "utf8");
   const documentsPanel = readFileSync(new URL("../src/components/DocumentsPanel.jsx", import.meta.url), "utf8");
-  const selectionBar = readFileSync(new URL("../src/components/SelectionBar.jsx", import.meta.url), "utf8");
+  const bulkTagsModal = readFileSync(new URL("../src/components/BulkTagsModal.jsx", import.meta.url), "utf8");
 
   assert.match(developmentPanel, /const \[originLocale, setOriginLocale\] = useState\(locale\);/);
   assert.match(developmentPanel, /const \[moduleLocale, setModuleLocale\] = useState\(locale\);/);
   assert.match(documentsPanel, /const \[tagLocale, setTagLocale\] = useState\(locale\);/);
-  assert.match(selectionBar, /const \[tagLocale, setTagLocale\] = useState\(locale\);/);
+  assert.match(bulkTagsModal, /const \[tagLocale, setTagLocale\] = useState\(locale\);/);
 });
 
 test("glossary source fields and enabled state share an explicit save", () => {

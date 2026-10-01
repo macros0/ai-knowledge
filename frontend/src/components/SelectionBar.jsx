@@ -1,198 +1,61 @@
 "use client";
 
-import { useState } from "react";
-import { bulkUpdateTags, friendlyApiError } from "@/lib/api";
-import { bumpTagVersion } from "@/lib/tagDictionary";
-import { useToast } from "./Toast";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LocaleContext";
+import { BULK_LIMITS } from "@/lib/documentBulkLimits.mjs";
 import { TrashIcon } from "./icons";
-import TagCombobox from "./TagCombobox";
-import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 
-// Должен совпадать с backend BULK_TAGS_MAX_DOCS (config.bulk_tags_max_docs).
-const MAX_BULK_DOCS = 50;
-
-/**
- * Панель выделения документов (для Editor/Admin), свёрнута под спойлер.
- *
- * Массовые действия — не частая операция, поэтому по умолчанию виден только
- * компактный заголовок-кнопка «Массовые действия» со счётчиком выделения.
- * Тело панели (переключатель «Выделить все», независимая кнопка «Выделить на
- * странице», счётчик «N из total», массовые правки тегов, деструктивный
- * предпросмотр для Admin) раскрывается по клику; при появлении выделения —
- * автоматически.
- *
- * «Выделить все» — двухпозиционный toggle с собственным состоянием: кнопка
- * сама знает, включена она (✓) или частично рассинхронизирована с фильтром
- * (◐), и её клик предсказуем в обе стороны. Точный факт «сколько выделено»
- * несёт счётчик «N из total», а не кнопка.
- */
-export default function SelectionBar({
-  selectedIds,
-  total,
-  allByFilterOn,
-  allByFilterPartial,
-  canDelete = false,
-  canExport = false,
-  open = false,
-  onToggle,
-  onToggleAllByFilter,
-  onSelectPage,
-  onOpenPreview,
-  onGeneration,
-  onExport,
-  onDone,
-  leadingAction,
-  leadingContent,
-}) {
-  const [addTag, setAddTag] = useState("");
-  const [removeTag, setRemoveTag] = useState("");
-  const [busy, setBusy] = useState(false);
-  const { showToast } = useToast();
-  const { t, locale } = useI18n();
-  const [tagLocale, setTagLocale] = useState(locale);
-
-  const hasSelection = selectedIds.length > 0;
-  const danger = canDelete && hasSelection;
-
-  const applyTags = async (op) => {
-    const value = op === "add" ? addTag.trim() : removeTag.trim();
-    if (!value || !hasSelection || busy) return;
-    if (selectedIds.length > MAX_BULK_DOCS) {
-      showToast(
-        t("selection.limitToast", { max: MAX_BULK_DOCS, selected: selectedIds.length }),
-        { type: "warning", duration: 8000 }
-      );
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await bulkUpdateTags(selectedIds, {
-        add: op === "add" ? [value] : [],
-        canonicalLocale: tagLocale || locale,
-        remove: op === "remove" ? [value] : [],
-      });
-      bumpTagVersion();
-      onDone?.(result);
-      if (op === "add") setAddTag("");
-      else setRemoveTag("");
-    } catch (err) {
-      showToast(t("selection.bulkError", { message: friendlyApiError(err, t) }), { type: "error" });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="selection-panel">
-      <div className="document-actions-row">
-        {leadingAction}
-        <button
-          type="button"
-          className="selection-toggle"
-          onClick={onToggle}
-          aria-expanded={open}
-          aria-label={t("selection.bulkActions")}
-        >
-          <span>{t("selection.bulkActions")}</span>
-          <span className="selection-count">
-            {t("selection.selected", { selected: selectedIds.length, total })}
-          </span>
-          <span className="selection-chevron">{open ? "▾" : "▸"}</span>
+export default function SelectionBar({ selectedIds, canDelete = false, canExport = false, exportMaxDocs = 1000,
+  onEditTags, onOpenPreview, onGeneration, onExport, onClear }) {
+  const { t } = useI18n();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  const triggerRef = useRef(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event) => {
+      if (event.type === "keydown") {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        setMenuOpen(false);
+        triggerRef.current?.focus();
+      } else if (!menuRef.current?.contains(event.target)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [menuOpen]);
+  if (!selectedIds.length) return null;
+  const count = selectedIds.length;
+  const action = (callback) => { setMenuOpen(false); triggerRef.current?.focus(); callback(); };
+  return <div className="selection-panel">
+    <div className="bulk-bar bulk-bar-soft">
+      <strong className="bulk-count" role="status">{t("selection.count", { selected: count })}</strong>
+      <LimitedAction name={t("selection.editTags")} onClick={onEditTags} count={count} max={BULK_LIMITS.tags} helpId="tags-selection-limit" />
+      {canExport && <LimitedAction name={t("selection.export")} onClick={onExport} count={count} max={exportMaxDocs} helpId="export-selection-limit" />}
+      {canDelete && <div className="bulk-more" ref={menuRef}>
+        <button ref={triggerRef} type="button" className="bulk-tag-btn" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen}>
+          {t("selection.more")} ▾
         </button>
-      </div>
-      {leadingContent}
-      {open && (
-        <div className={`bulk-bar ${danger ? "bulk-bar-danger" : "bulk-bar-soft"}`}>
-          <button
-            type="button"
-            className={`all-by-filter-btn${allByFilterOn ? " active" : ""}${allByFilterPartial ? " partial" : ""}`}
-            onClick={onToggleAllByFilter}
-            disabled={busy || total === 0}
-            title={t("selection.selectAllTitle")}
-          >
-            {allByFilterOn ? "✓ " : allByFilterPartial ? "◐ " : ""}{t("selection.selectAll")}
-          </button>
-          <button
-            type="button"
-            className="bulk-tag-btn"
-            onClick={onSelectPage}
-            disabled={busy || total === 0}
-            title={t("selection.selectPageTitle")}
-          >
-            {t("selection.selectPage")}
-          </button>
-          <span className="bulk-count">
-            {t("selection.selected", { selected: selectedIds.length, total })}
-          </span>
-          {canExport && (
-            <button
-              type="button"
-              className="bulk-tag-btn"
-              onClick={onExport}
-              disabled={busy || !hasSelection}
-              title={t("selection.exportTitle", { selected: selectedIds.length })}
-            >
-              {t("selection.export")}
-            </button>
-          )}
-          {canDelete && <>
-            <button type="button" className="bulk-tag-btn" disabled={busy || !hasSelection} onClick={() => onGeneration("regenerate")}>
-              {t("bulkGeneration.regenerate")}
-            </button>
-            <button type="button" className="bulk-tag-btn" disabled={busy || !hasSelection} onClick={() => onGeneration("resume")}>
-              {t("bulkGeneration.resume")}
-            </button>
-            <button type="button" className="bulk-tag-btn" disabled={busy} onClick={() => onGeneration("interrupted")}>
-              {t("bulkGeneration.interrupted")}
-            </button>
-          </>}
-          <ReferenceLocaleSelect value={tagLocale} onChange={setTagLocale} disabled={busy} />
-          <TagCombobox
-            value={addTag}
-            onChange={setAddTag}
-            placeholder={t("selection.addPlaceholder")}
-            ariaLabel={t("selection.addAria")}
-            className="bulk-tag-input"
-            disabled={!hasSelection}
-          />
-          <button
-            type="button"
-            className="bulk-tag-btn"
-            onClick={() => applyTags("add")}
-            disabled={busy || !hasSelection}
-          >
-            {t("selection.add")}
-          </button>
-          <TagCombobox
-            value={removeTag}
-            onChange={setRemoveTag}
-            placeholder={t("selection.removePlaceholder")}
-            ariaLabel={t("selection.removeAria")}
-            allowNew={false}
-            className="bulk-tag-input"
-            disabled={!hasSelection}
-          />
-          <button
-            type="button"
-            className="bulk-tag-btn"
-            onClick={() => applyTags("remove")}
-            disabled={busy || !hasSelection}
-          >
-            {t("selection.remove")}
-          </button>
-          {canDelete && (
-            <button
-              type="button"
-              className="bulk-preview-btn"
-              onClick={onOpenPreview}
-              disabled={busy || !hasSelection}
-            >
-              <TrashIcon size={14} /> {t("selection.previewImpact")}
-            </button>
-          )}
-        </div>
-      )}
+        {menuOpen && <div className="bulk-more-options">
+          <button type="button" onClick={() => action(() => onGeneration("resume"))}>{t("bulkGeneration.resume")}</button>
+          <button type="button" onClick={() => action(() => onGeneration("regenerate"))}>{t("bulkGeneration.regenerate")}</button>
+          <LimitedAction name={<><TrashIcon size={14} /> {t("selection.delete")}</>} onClick={() => action(onOpenPreview)} count={count} max={BULK_LIMITS.delete} helpId="delete-selection-limit" />
+        </div>}
+      </div>}
+      <button type="button" className="bulk-tag-btn selection-clear" onClick={onClear}>{t("selection.clear")}</button>
     </div>
-  );
+  </div>;
+}
+
+function LimitedAction({ name, onClick, count, max, helpId }) {
+  const { t } = useI18n();
+  return <span className="bulk-action-with-help">
+    <button type="button" className="bulk-tag-btn" onClick={onClick} disabled={count > max}
+      aria-describedby={count > max ? helpId : undefined}>{name}</button>
+    {count > max && <span id={helpId} className="bulk-action-help" tabIndex={0}>{t("selection.actionLimit", { max })}</span>}
+  </span>;
 }

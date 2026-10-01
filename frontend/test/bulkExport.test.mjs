@@ -50,7 +50,8 @@ test("document and export errors use the stable storage-full code for localizati
 });
 
 test("upload UI stops the batch and shows the localized storage-full cause", async () => {
-  const source = await readFile(new URL("../src/components/UploadZone.jsx", import.meta.url), "utf8");
-  assert.match(source, /err\.code === "storage_full"/);
-  assert.match(source, /apiError\.storage_full/);
+  const batch = await readFile(new URL("../src/lib/documentUploadBatch.mjs", import.meta.url), "utf8");
+  const hook = await readFile(new URL("../src/hooks/useDocumentUpload.js", import.meta.url), "utf8");
+  assert.match(batch, /error\.code === "storage_full"/);
+  assert.match(hook, /apiError\.storage_full/);
 });

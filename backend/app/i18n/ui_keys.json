@@ -435,6 +435,7 @@
   "bulkGeneration.batch": [
     "total"
   ],
+  "bulkGeneration.checkFailed": [],
   "bulkGeneration.counts": [
     "eligible",
     "skipped"
@@ -445,6 +446,7 @@
   "bulkGeneration.limit": [
     "max"
   ],
+  "bulkGeneration.notice": [],
   "bulkGeneration.progress": [
     "errors",
     "processed",
@@ -455,6 +457,8 @@
   "bulkGeneration.regenerateHelp": [],
   "bulkGeneration.resume": [],
   "bulkGeneration.resumeHelp": [],
+  "bulkGeneration.retryCheck": [],
+  "bulkGeneration.reviewInterrupted": [],
   "bulkGeneration.skipped": [],
   "bulkGeneration.start": [],
   "chat.adminHint": [],
@@ -948,6 +952,7 @@
   "docs.updateCancelling": [],
   "docs.updateFailedPreviousSaved": [],
   "docs.updateRunning": [],
+  "docs.uploadAction": [],
   "docs.uploadAria": [],
   "docs.uploadDevLabel": [],
   "docs.uploadModuleHint": [
@@ -1196,13 +1201,23 @@
   "security.untilForever": [],
   "security.userBlocked": [],
   "security.userUnblocked": [],
+  "selection.actionLimit": [
+    "max"
+  ],
   "selection.add": [],
   "selection.addAria": [],
   "selection.addPlaceholder": [],
+  "selection.apply": [],
   "selection.bulkActions": [],
   "selection.bulkError": [
     "message"
   ],
+  "selection.clear": [],
+  "selection.count": [
+    "selected"
+  ],
+  "selection.delete": [],
+  "selection.editTags": [],
   "selection.export": [],
   "selection.exportConfirm": [
     "selected"
@@ -1220,6 +1235,7 @@
     "max",
     "selected"
   ],
+  "selection.more": [],
   "selection.previewImpact": [],
   "selection.remove": [],
   "selection.removeAria": [],
@@ -1228,10 +1244,15 @@
   "selection.selectAllTitle": [],
   "selection.selectPage": [],
   "selection.selectPageTitle": [],
+  "selection.selectResults": [],
+  "selection.selectShown": [],
   "selection.selected": [
     "selected",
     "total"
   ],
+  "selection.tagConflict": [],
+  "selection.tagLanguage": [],
+  "selection.tagsTarget": [],
   "sort.alphaAsc": [],
   "sort.alphaDesc": [],
   "sort.emptyFirst": [],
@@ -1438,7 +1459,13 @@
     "name"
   ],
   "trash.selected": [],
+  "upload.advanced": [],
+  "upload.batchProgress": [
+    "current",
+    "total"
+  ],
   "upload.busy": [],
+  "upload.chooseFiles": [],
   "upload.confirmSimilar": [],
   "upload.dropHint": [],
   "upload.dupCancel": [],

@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import TagPicker from "./TagPicker";
-import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
-import UploadZone from "./UploadZone";
 import DocumentList from "./DocumentList";
 import DocumentQueueStatus from "./DocumentQueueStatus";
+import InterruptedDocumentsNotice from "./InterruptedDocumentsNotice";
 import TrashPanel from "./TrashPanel";
-import DevelopmentPicker from "./DevelopmentPicker";
-import { listDevelopments } from "@/lib/api";
+import DocumentUploadPanel from "./DocumentUploadPanel";
+import UploadReviewDialog from "./UploadReviewDialog";
+import useDocumentUpload from "@/hooks/useDocumentUpload";
+import { listDevelopments, listActiveLocales } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/i18n/LocaleContext";
 
@@ -22,9 +22,8 @@ export default function DocumentsPanel() {
   const [uploadTags, setUploadTags] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [developments, setDevelopments] = useState([]);
-  // Область загрузки свёрнута под спойлер (загрузка — не частая операция),
-  // раскрывается по клику на заголовок-кнопку.
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [activeLocales, setActiveLocales] = useState([]);
+  const upload = useDocumentUpload({ onUploaded: () => setRefreshKey((key) => key + 1) });
   // Переключатель «Документы» / «Корзина» (Этап 4a.2).
   const [view, setView] = useState("docs");
 
@@ -38,6 +37,7 @@ export default function DocumentsPanel() {
 
   useEffect(() => {
     let cancelled = false;
+    listActiveLocales().then((items) => { if (!cancelled) setActiveLocales(items); }).catch(() => {});
     listDevelopments()
       .then((devs) => {
         if (!cancelled) setDevelopments(devs);
@@ -57,6 +57,7 @@ export default function DocumentsPanel() {
 
   // Загрузка — мутирующее действие: только editor/admin (в disabled — все).
   const canUpload = mode === "disabled" || hasRole("editor", "admin");
+  const isAdmin = mode === "disabled" || hasRole("admin");
 
   return (
     <section className="panel">
@@ -64,10 +65,14 @@ export default function DocumentsPanel() {
         <button
           type="button"
           className={`view-btn${view === "docs" ? " active" : ""}`}
-          onClick={() => setView("docs")}
+          onClick={() => { setView("docs"); setRefreshKey((key) => key + 1); }}
         >
           {t("docs.view.documents")}
         </button>
+        {canUpload && <button type="button" className={`view-btn${view === "upload" ? " active" : ""}`} onClick={() => setView("upload")}>
+          {t("docs.uploadAction")}
+          {upload.busy && <span className="upload-tab-progress">{t("upload.batchProgress", { current: upload.progress.completed, total: upload.progress.total })}</span>}
+        </button>}
         <button
           type="button"
           className={`view-btn${view === "trash" ? " active" : ""}`}
@@ -77,62 +82,16 @@ export default function DocumentsPanel() {
         </button>
         {view === "docs" && canUpload && <DocumentQueueStatus refreshKey={refreshKey} />}
       </div>
-      {view === "trash" ? (
-        <TrashPanel />
-      ) : (
-        <>
-          <DocumentList
-            refreshKey={refreshKey}
-            onOpenTrash={() => setView("trash")}
-            uploadToggle={canUpload && (
-              <button
-                type="button"
-                className="spoiler-toggle"
-                onClick={() => setUploadOpen((v) => !v)}
-                aria-expanded={uploadOpen}
-                aria-label={t("docs.uploadAria")}
-              >
-                <span>{t("docs.uploadTitle")}</span>
-                <span className="spoiler-chevron">{uploadOpen ? "▾" : "▸"}</span>
-              </button>
-            )}
-            uploadBody={canUpload && uploadOpen && (
-              <div className="upload-spoiler-body">
-                {uploadModule && uploadDevId == null && (
-                  <div className="upload-module-hint">
-                    {t("docs.uploadModuleHint", { module: uploadModule })}
-                  </div>
-                )}
-                <ReferenceLocaleSelect value={tagLocale} onChange={setTagLocale} />
-                <TagPicker
-                  collapsible
-                  label={t("docs.uploadTagsLabel")}
-                  placeholder={t("docs.uploadTagsPlaceholder")}
-                  selected={uploadTags}
-                  onChange={setUploadTags}
-                  refreshKey={refreshKey}
-                />
-                {developments.length > 0 && (
-                  <div className="upload-dev-row">
-                    <span className="tag-picker-label">{t("docs.uploadDevLabel")}</span>
-                    <DevelopmentPicker
-                      developments={developments}
-                      value={uploadDevId}
-                      onChange={setUploadDevId}
-                    />
-                  </div>
-                )}
-                <UploadZone
-                  tags={uploadTags}
-                  canonicalLocale={tagLocale || locale}
-                  developmentId={uploadDevId}
-                  onUploaded={() => setRefreshKey((k) => k + 1)}
-                />
-              </div>
-            )}
-          />
-        </>
-      )}
+      {view === "docs" && isAdmin && <InterruptedDocumentsNotice refreshKey={refreshKey} onRestored={() => setRefreshKey((key) => key + 1)} />}
+      {view === "upload" && canUpload && <DocumentUploadPanel upload={upload}
+        tags={uploadTags} onTagsChange={setUploadTags} developmentId={uploadDevId} onDevelopmentChange={setUploadDevId}
+        developments={developments} canonicalLocale={tagLocale || locale} onLocaleChange={setTagLocale}
+        activeLocales={activeLocales} uploadModule={uploadModule} refreshKey={refreshKey} />}
+      {view === "trash" && <TrashPanel />}
+      <div className="documents-list-view" hidden={view !== "docs"} inert={view !== "docs" ? true : undefined}>
+        <DocumentList refreshKey={refreshKey} onOpenTrash={() => setView("trash")} />
+      </div>
+      <UploadReviewDialog review={upload.review} onDecision={upload.resolveReview} />
     </section>
   );
 }

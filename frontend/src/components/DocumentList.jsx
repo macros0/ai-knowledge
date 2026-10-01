@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, cancelDocumentUpdate, createBulkExport, deleteDocument, friendlyApiError, friendlyDocumentError, getDocumentStats, getSourceLocaleFacets, listActiveLocales, listAttributeValues, listDevelopments, listDocuments, listUploaders, regenerateDocument, resumeDocument, setDocumentDevelopment, setDocumentSourceLocale, updateDocumentTags } from "@/lib/api";
@@ -15,10 +15,12 @@ import { useI18n } from "@/i18n/LocaleContext";
 import { useChat } from "@/context/ChatContext";
 import { useDocumentFilters } from "@/context/DocumentFiltersContext";
 import { selectionLimit } from "@/lib/documentBulkLimits.mjs";
+import { selectionScopeKey, shouldApplySelectionResult } from "@/lib/documentSelection.mjs";
 import SelectionBar from "./SelectionBar";
 import PreviewModal from "./PreviewModal";
 import Modal from "./Modal";
 import BulkGenerationModal from "./BulkGenerationModal";
+import BulkTagsModal from "./BulkTagsModal";
 import DevelopmentFilter from "./DevelopmentFilter";
 import DevelopmentPicker from "./DevelopmentPicker";
 import DuplicateModal from "./DuplicateModal";
@@ -100,7 +102,7 @@ function buildGroups(docs, groupBy, locale, t) {
   });
 }
 
-export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle, uploadBody }) {
+export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const router = useRouter();
   const urlParams = useSearchParams();
   const { savedView, rememberFilters } = useDocumentFilters();
@@ -119,8 +121,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
   // Id документов, которые выделил toggle «Выделить все» (по фильтру). Нужны,
   // чтобы отличать «включено» (✓) от частично снятого вручную (◐).
   const [filterSelectedIds, setFilterSelectedIds] = useState([]);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(null);
   const [generationAction, setGenerationAction] = useState(null);
+  const [tagActionIds, setTagActionIds] = useState(null);
   // Поиск теперь серверный: searchInput — что ввёл пользователь (без задержки),
   // search — дебаунснутое значение, уходящее в запрос.
   const [searchInput, setSearchInput] = useState(() => initialParam(searchParams, "q", ""));
@@ -162,13 +165,11 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
   const [editingLocale, setEditingLocale] = useState({});
   // Фасеты языков документа (GET /documents/source-locale-facets) для фильтр-селекта.
   const [localeFacets, setLocaleFacets] = useState([]);
-  // Спойлер панели массовых действий: свёрнут по умолчанию, раскрывается по клику
-  // или автоматически при появлении выделения.
-  const [bulkOpen, setBulkOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(savedView.filtersOpen);
   const mounted = useRef(true);
   const timer = useRef(null);
   const loadSeq = useRef(0);
+  const selectionVersion = useRef(0);
 
   const STATUS_LABELS = {
     uploaded: t("status.uploaded"),
@@ -234,6 +235,28 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
 
   const resolvedUploader =
     selectedUploader === "__me__" ? user?.username ?? "" : selectedUploader;
+
+  const selectionScope = selectionScopeKey({
+    searchInput, uploader: resolvedUploader, problem: problemOnly, module: moduleFilter,
+    development: devFilter, tag: tagFilter, status: statusFilter, from: dateFrom, to: dateTo, locale: localeFilter,
+  });
+  const [selectedScope, setSelectedScope] = useState(selectionScope);
+  const currentSelectionScope = useRef(selectionScope);
+  useLayoutEffect(() => {
+    currentSelectionScope.current = selectionScope;
+    selectionVersion.current += 1;
+  }, [selectionScope]);
+  // Reset during render so neither the old selection nor its actions survive a new filter.
+  if (selectedScope !== selectionScope) {
+    setSelectedScope(selectionScope);
+    setSelected({});
+    setFilterSelectedIds([]);
+  }
+  const clearSelection = () => {
+    selectionVersion.current += 1;
+    setSelected({});
+    setFilterSelectedIds([]);
+  };
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -397,6 +420,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
       load();
       return;
     }
+    selectionVersion.current += 1;
     setSelected((s) => {
       const next = { ...s };
       delete next[doc.id];
@@ -484,6 +508,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
   };
 
   const toggleSelect = (id) => {
+    selectionVersion.current += 1;
     setSelected((s) => {
       const next = { ...s };
       if (next[id]) delete next[id];
@@ -526,6 +551,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
   const selectedIds = Object.keys(selected);
 
   useEffect(() => {
+    selectionVersion.current += 1;
     setSelected((current) => {
       const ids = Object.keys(current);
       if (ids.length <= selectLimit) return current;
@@ -534,22 +560,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
     setFilterSelectedIds((ids) => ids.slice(0, selectLimit));
   }, [selectLimit]);
 
-  // При появлении выделения панель массовых действий раскрывается автоматически
-  // (чтобы можно было сразу применить операцию); ручное сворачивание сохраняется.
-  useEffect(() => {
-    if (selectedIds.length > 0) setBulkOpen(true);
-  }, [selectedIds.length]);
-
   const pageDocIds = docs.map((d) => d.id);
 
   const allByFilterOn =
     filterSelectedIds.length > 0 && filterSelectedIds.every((id) => selected[id]);
-  const allByFilterPartial =
-    filterSelectedIds.length > 0 &&
-    !allByFilterOn &&
-    filterSelectedIds.some((id) => selected[id]);
-
   const selectPage = () => {
+    selectionVersion.current += 1;
     setSelected((s) => {
       const next = { ...s };
       // Кап MAX_SELECT: в grouped-режиме docs — весь отфильтрованный набор
@@ -570,6 +586,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
   };
 
   const selectAllFiltered = async () => {
+    const requestScope = selectionScope;
+    const requestVersion = ++selectionVersion.current;
     try {
       const result = await listDocuments({
         uploader: resolvedUploader || undefined,
@@ -582,11 +600,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
         dateTo: dateTo || undefined,
         sourceLocales: localeFilter && localeFilter !== "unknown" ? localeFilter : undefined,
         sourceLocaleUnknown: localeFilter === "unknown" ? true : undefined,
-        search: search || undefined,
+        search: searchInput.trim() || undefined,
         sort: sortKey,
         limit: selectLimit,
         offset: 0,
       });
+      if (!mounted.current || !shouldApplySelectionResult(requestScope, currentSelectionScope.current, requestVersion, selectionVersion.current)) return;
       const ids = result.documents.map((d) => d.id);
       const next = {};
       ids.forEach((id) => {
@@ -601,14 +620,14 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
         );
       }
     } catch (err) {
+      if (!shouldApplySelectionResult(requestScope, currentSelectionScope.current, requestVersion, selectionVersion.current)) return;
       showToast(t("docs.selectError", { message: friendlyApiError(err, t) }), { type: "error" });
     }
   };
 
   const toggleAllByFilter = async () => {
     if (allByFilterOn) {
-      setSelected({});
-      setFilterSelectedIds([]);
+      clearSelection();
       return;
     }
     await selectAllFiltered();
@@ -910,37 +929,20 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
           <p style={{ whiteSpace: "pre-line" }}>{t("docs.confirmCancelUpdate", { name: cancelUpdateDoc.filename })}</p>
         </Modal>
       )}
-      {canEdit && (
-        <SelectionBar
-          leadingAction={uploadToggle}
-          leadingContent={uploadBody}
-          selectedIds={selectedIds}
-          total={total}
-          allByFilterOn={allByFilterOn}
-          allByFilterPartial={allByFilterPartial}
-          canDelete={isAdmin}
-          canExport={exportEnabled && selectedIds.length <= settings.bulk_export_max_docs}
-          open={bulkOpen}
-          onToggle={() => setBulkOpen((v) => !v)}
-          onToggleAllByFilter={toggleAllByFilter}
-          onSelectPage={selectPage}
-          onOpenPreview={() => setShowPreview(true)}
-          onGeneration={(operation) => setGenerationAction({ operation, docIds: selectedIds })}
-          onExport={exportSelected}
-          onDone={(result) => {
-            const n = result?.updated?.length ?? 0;
-            showToast(n > 0 ? tc("docs.tagsUpdated", n) : t("docs.tagsUnchanged"));
-            load();
-          }}
-        />
-      )}
+      {tagActionIds && <BulkTagsModal docIds={tagActionIds} onClose={() => setTagActionIds(null)} onDone={(result) => {
+        setTagActionIds(null);
+        const n = result?.updated?.length ?? 0;
+        showToast(n > 0 ? tc("docs.tagsUpdated", n) : t("docs.tagsUnchanged"));
+        if (result?.sync_failed?.length) showToast(t("docs.tagsSyncPending"), { type: "warning" });
+        load();
+      }} />}
       {showPreview && (
         <PreviewModal
-          docIds={selectedIds}
-          onClose={() => setShowPreview(false)}
+          docIds={showPreview}
+          onClose={() => setShowPreview(null)}
           onDone={() => {
-            setSelected({});
-            setShowPreview(false);
+            clearSelection();
+            setShowPreview(null);
             load();
           }}
         />
@@ -951,8 +953,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
         onClose={() => setGenerationAction(null)}
         onDone={() => {
           setGenerationAction(null);
-          setSelected({});
-          setFilterSelectedIds([]);
+          clearSelection();
           load();
         }}
       />}
@@ -965,12 +966,6 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
         />
       )}
       {showTags && <TagManagerModal onClose={() => setShowTags(false)} />}
-      {!canEdit && uploadToggle && (
-        <div className="upload-spoiler">
-          {uploadToggle}
-          {uploadBody}
-        </div>
-      )}
       <div className="document-view-row">
         <div className="doc-view-mode" role="radiogroup" aria-label={t("docs.viewModeLabel")}>
           <button
@@ -1123,6 +1118,25 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle
           </div>
         )}
       </div>
+      {canEdit && <div className="document-selection-controls">
+        <button type="button" className="bulk-tag-btn" onClick={selectPage} disabled={!docs.length}>
+          {t(groupBy ? "selection.selectShown" : "selection.selectPage")}
+        </button>
+        <button type="button" className={`all-by-filter-btn${allByFilterOn ? " active" : ""}`} onClick={toggleAllByFilter} disabled={!total}>
+          {t(allByFilterOn ? "selection.clear" : "selection.selectResults")}
+        </button>
+      </div>}
+      {canEdit && selectedIds.length > 0 && <SelectionBar
+        selectedIds={selectedIds}
+        canDelete={isAdmin}
+        canExport={exportEnabled}
+        exportMaxDocs={settings.bulk_export_max_docs}
+        onClear={clearSelection}
+        onOpenPreview={() => setShowPreview([...selectedIds])}
+        onGeneration={(operation) => setGenerationAction({ operation, docIds: [...selectedIds] })}
+        onExport={exportSelected}
+        onEditTags={() => setTagActionIds([...selectedIds])}
+      />}
       {groupBy ? (
         <div className="document-groups">
           {groups.map((g) => (

@@ -5,6 +5,7 @@ import { ApiError, bulkPreview, bulkRegenerate, bulkResume, friendlyApiError, pr
 import { useI18n } from "@/i18n/LocaleContext";
 import { useToast } from "./Toast";
 import Modal from "./Modal";
+import { generationPreviewOverLimit } from "@/lib/generationPreview.mjs";
 
 export default function BulkGenerationModal({ operation, docIds, onClose, onDone }) {
   const { t } = useI18n();
@@ -26,7 +27,7 @@ export default function BulkGenerationModal({ operation, docIds, onClose, onDone
   }, [docIds, operation]);
 
   const ids = preview?.eligible_doc_ids ?? [];
-  const overLimit = preview && ids.length > preview.max_docs;
+  const overLimit = generationPreviewOverLimit(preview);
   const close = () => { if (!submitting.current) onClose(); };
   const run = async () => {
     if (submitting.current || !ids.length || overLimit) return;

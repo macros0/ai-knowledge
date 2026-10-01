@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { useTagDictionary } from "@/lib/tagDictionary";
 import { useI18n } from "@/i18n/LocaleContext";
 import { positionPopup } from "@/lib/popupPosition";
+import { consumePopupEscape } from "@/lib/popupKeyboard.mjs";
 
 const MAX_OPTIONS = 20;
 
@@ -21,6 +22,7 @@ export default function TagCombobox({
   ariaLabel,
   className = "",
   disabled = false,
+  portalContainer = null,
 }) {
   const { t, tc } = useI18n();
   const dictionary = useTagDictionary();
@@ -97,6 +99,7 @@ export default function TagCombobox({
         setOpen(false);
       }
     } else if (e.key === "Escape") {
+      consumePopupEscape(e, open);
       setOpen(false);
     } else {
       setOpen(true);
@@ -156,7 +159,7 @@ export default function TagCombobox({
             </li>
           ))}
         </ul>,
-        document.body
+        portalContainer || document.body
       )}
     </div>
   );
