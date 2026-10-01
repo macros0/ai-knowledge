@@ -4,6 +4,7 @@ import SourceContentViewer from "@/components/SourceContentViewer";
 import { backendFetch } from "@/lib/backendFetch";
 import { serverTranslator } from "@/i18n/server";
 import SourceLocationView from "@/components/SourceLocationView";
+import DocumentMarkupButton from "@/components/DocumentMarkupButton";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,12 @@ export default async function ChunkPage({ params, searchParams }) {
         return (
           <div className="okf-viewer source-chunk-viewer">
             <Link className="back-link" href={`/documents/${docId}/okf?source=${encodeURIComponent(location.source_id || "root")}`}>{t("okf.page.backToList")}</Link>
-            <h1>{t("okf.page.chunkH1", { index: index + 1 })}</h1>
+            <div className="document-viewer-heading">
+              <h1>
+                {t("okf.page.chunkH1", { index: index + 1 })}
+              </h1>
+              <DocumentMarkupButton docId={docId} />
+            </div>
             <SourceLocationView docId={docId} chunks={[{ chunk_index: index, source_id: location.source_id, content: text }]} location={location} sources={sourceData.sources || []} />
           </div>
         );
@@ -58,7 +64,10 @@ export default async function ChunkPage({ params, searchParams }) {
       <Link className="back-link" href={`/documents/${docId}/okf`}>
         {t("okf.page.backToList")}
       </Link>
-      <h1>{t("okf.page.chunkH1", { index: index + 1 })}</h1>
+      <div className="document-viewer-heading">
+        <h1>{t("okf.page.chunkH1", { index: index + 1 })}</h1>
+        <DocumentMarkupButton docId={docId} />
+      </div>
       {sourceUnavailable && <p className="source-location-note">{t("sourceLocation.unavailable")}</p>}
       <SourceContentViewer docId={docId} chunks={[chunk]} sources={sourceData.sources || []} />
     </div>

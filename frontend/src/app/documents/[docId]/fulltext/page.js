@@ -4,6 +4,7 @@ import SourceContentViewer from "@/components/SourceContentViewer";
 import { backendFetch } from "@/lib/backendFetch";
 import { serverTranslator } from "@/i18n/server";
 import SourceLocationView from "@/components/SourceLocationView";
+import DocumentMarkupButton from "@/components/DocumentMarkupButton";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,10 @@ export default async function FulltextPage({ params, searchParams }) {
         return (
           <div className="okf-viewer source-fulltext-viewer">
             <Link className="back-link" href={`/documents/${docId}/okf?source=${encodeURIComponent(location.source_id || "root")}`}>{t("okf.page.backToList")}</Link>
-            <h1>{t("okf.page.fulltextH1")}</h1>
+            <div className="document-viewer-heading">
+              <h1>{t("okf.page.fulltextH1")}</h1>
+              <DocumentMarkupButton docId={docId} />
+            </div>
             <SourceLocationView docId={docId} chunks={chunks} location={location} heading={t("sourceLocation.title")} showAll sources={sourceData.sources || []} />
           </div>
         );
@@ -50,7 +54,10 @@ export default async function FulltextPage({ params, searchParams }) {
       <Link className="back-link" href={`/documents/${docId}/okf`}>
         {t("okf.page.backToList")}
       </Link>
-      <h1>{t("okf.page.fulltextH1")}</h1>
+      <div className="document-viewer-heading">
+        <h1>{t("okf.page.fulltextH1")}</h1>
+        <DocumentMarkupButton docId={docId} />
+      </div>
       {sourceUnavailable && <p className="source-location-note">{t("sourceLocation.unavailable")}</p>}
       <SourceContentViewer docId={docId} chunks={chunks} sources={sourceData.sources || []} />
     </div>

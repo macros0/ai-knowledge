@@ -2716,6 +2716,56 @@ main {
 }
 
 /* ---------- Справочник тегов (TagManagerModal) ---------- */
+.document-markup-filename {
+  margin: 0 0 16px;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.document-markup-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.document-markup-fields fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.document-markup-fields legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.document-markup .reference-locale-select {
+  display: block;
+  margin-top: 8px;
+}
+
+.document-markup .dev-picker-assigned {
+  flex-wrap: wrap;
+}
+
+.document-markup-notice {
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+
+.document-viewer-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.document-viewer-heading h1 {
+  min-width: 0;
+}
+
 .tag-manager {
   max-width: 520px;
 }

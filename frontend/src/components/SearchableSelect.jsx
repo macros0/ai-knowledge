@@ -27,6 +27,7 @@ export default function SearchableSelect({
   triggerClassName = "doc-filter-select",
   renderTrigger,
   renderOption,
+  portalContainer = null,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -112,6 +113,7 @@ export default function SearchableSelect({
       else if (open && allowCustomInput && query.trim()) choose(query.trim());
     } else if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       close(true);
     }
   };
@@ -139,7 +141,7 @@ export default function SearchableSelect({
       >
         {triggerContent}
       </button>
-      {open &&
+      {open && !disabled &&
         createPortal(
           <div className="dev-picker-pop searchable-select-pop" ref={popupRef} data-dialog-popup
             onKeyDown={(event) => {
@@ -167,8 +169,8 @@ export default function SearchableSelect({
                     className={`dev-picker-option${index === active ? " active" : ""}`}
                     onMouseDown={(event) => {
                       event.preventDefault();
-                      choose(option.value);
                     }}
+                    onClick={() => choose(option.value)}
                     onMouseEnter={() => setActive(index)}
                     role="option"
                     aria-selected={String(option.value) === String(value)}
@@ -180,7 +182,7 @@ export default function SearchableSelect({
               {filtered.length === 0 && <li className="dev-picker-empty">{emptyLabel}</li>}
             </ul>
           </div>,
-          document.body
+          portalContainer || document.body
         )}
     </span>
   );

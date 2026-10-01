@@ -969,6 +969,29 @@
   "docs.view.trash": [],
   "docs.viewConceptsTitle": [],
   "docs.viewModeLabel": [],
+  "documentMarkup.button": [],
+  "documentMarkup.development": [],
+  "documentMarkup.field.development": [],
+  "documentMarkup.field.source_locale": [],
+  "documentMarkup.field.tags": [],
+  "documentMarkup.loadError": [
+    "message"
+  ],
+  "documentMarkup.partial": [
+    "fields"
+  ],
+  "documentMarkup.recoveryNeeded": [],
+  "documentMarkup.save": [],
+  "documentMarkup.saveError": [
+    "message"
+  ],
+  "documentMarkup.saved": [],
+  "documentMarkup.saving": [],
+  "documentMarkup.sourceLanguage": [],
+  "documentMarkup.syncPending": [],
+  "documentMarkup.tagLanguage": [],
+  "documentMarkup.tags": [],
+  "documentMarkup.title": [],
   "dup.confirmText": [],
   "dup.confirmTextPost": [],
   "dup.confirmTextPre": [],
