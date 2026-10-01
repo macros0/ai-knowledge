@@ -253,8 +253,46 @@ def test_child_read_retries_transient_exec_gap_before_measuring():
 
 
 def test_unreadable_live_child_after_vm_transition_is_not_zero():
-    readings = iter((100, 100, None, None))
+    readings = iter((100, 100, None, None, None, None, None))
     comparisons = iter((True, False))
     with pytest.raises(RuntimeError, match="Child RSS unavailable"):
         http_probe._address_space_rss(101, [101, 102], rss_reader=lambda pid: next(readings),
             vm_compare=lambda left, right: next(comparisons), process_alive=lambda pid: True)
+
+
+def test_child_rss_gap_waits_for_confirmed_exit(monkeypatch):
+    alive = iter((True, False))
+    waits = []
+    monkeypatch.setattr(http_probe.time, "sleep", waits.append)
+    result = http_probe._address_space_rss(101, [101, 102],
+        rss_reader=lambda pid: 100 if pid == 101 else None,
+        vm_compare=lambda left, right: False, process_alive=lambda pid: next(alive))
+    assert result["total"] == result["raw_total"] == 100
+    assert result["descendants"] == 0
+    assert waits == [0.001]
+
+
+def test_child_rss_after_two_missing_reads_is_counted(monkeypatch):
+    readings = iter((100, None, None, 200))
+    waits = []
+    monkeypatch.setattr(http_probe.time, "sleep", waits.append)
+    result = http_probe._address_space_rss(101, [101, 102],
+        rss_reader=lambda pid: next(readings), vm_compare=lambda left, right: False,
+        process_alive=lambda pid: True)
+    assert result["total"] == result["raw_total"] == 300
+    assert result["descendants"] == 200
+    assert waits == [0.001]
+
+
+@pytest.mark.parametrize("failure, expected", [
+    (ProcessLookupError(3, "gone"), False),
+    (PermissionError(13, "denied"), None),
+])
+def test_proc_stat_failure_distinguishes_exit_from_unknown(failure, expected):
+    class UnreadableProc:
+        def __truediv__(self, value):
+            return self
+
+        def read_text(self):
+            raise failure
+    assert http_probe._process_alive(102, proc_root=UnreadableProc()) is expected

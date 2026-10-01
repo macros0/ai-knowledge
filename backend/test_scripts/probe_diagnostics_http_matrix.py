@@ -6,6 +6,7 @@ Only synthetic search terms and numeric results are persisted. The caller seeds
 
 import argparse
 import ctypes
+import errno
 import platform
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -73,9 +74,9 @@ def _process_alive(pid, proc_root=Path("/proc")):
     try:
         state = (proc_root / str(pid) / "stat").read_text().rsplit(")", 1)[1].split()[0]
         return state not in {"Z", "X"}
-    except FileNotFoundError:
-        return False
-    except (OSError, IndexError):
+    except OSError as exc:
+        return False if exc.errno in {errno.ENOENT, errno.ESRCH} else None
+    except IndexError:
         return None
 
 
@@ -94,6 +95,16 @@ def _address_space_rss(pid, members, *, rss_reader=_rss_bytes, vm_compare=_same_
         if reading is None:
             if member == pid:
                 raise RuntimeError("Container RSS unavailable")
+            # exit_mm can remove VmRSS before /proc/stat becomes Z/absent.
+            # Wait at most3ms for a readable RSS or a proven exit; unknown
+            # and live unreadable workers must still reject the measurement.
+            for _ in range(3):
+                if process_alive(member) is False:
+                    return None
+                time.sleep(0.001)
+                reading = rss_reader(member)
+                if reading is not None:
+                    return reading
             if process_alive(member) is not False:
                 raise RuntimeError("Child RSS unavailable")
         return reading
