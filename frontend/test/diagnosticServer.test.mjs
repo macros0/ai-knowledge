@@ -297,6 +297,9 @@ test("second writer and stale crash marker refuse takeover", async (t) => {
 
 test("writer permissions failure never escapes business operation", async (t) => {
   const { recorder, spool } = await setup(t);
+  // Finish server_started IO before replacing its directory with an obstruction.
+  // Otherwise the background writer can recreate baseline between rm and writeFile.
+  await recorder.flush();
   await mkdir(path.join(spool, "events", "baseline"), { recursive: true });
   await rm(path.join(spool, "events", "baseline"), { recursive: true });
   await writeFile(path.join(spool, "events", "baseline"), "blocked");
