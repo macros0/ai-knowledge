@@ -195,6 +195,7 @@ function jsonRequest(path, method, data, timeoutMs) {
   }, timeoutMs);
 }
 
+export const getDiagnosticBrowserStatus = () => request("/diagnostic-client/status", {}, 5000);
 export const joinDiagnosticBrowser = (code = null) => jsonRequest("/diagnostic-client/join", "POST", code === null ? {} : { code });
 export const leaveDiagnosticBrowser = (participationId) => jsonRequest("/diagnostic-client/leave", "POST", { participation_id: participationId });
 export const sendDiagnosticBrowserEvent = (event) => request("/diagnostic-client/events", {

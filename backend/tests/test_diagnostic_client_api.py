@@ -48,6 +48,65 @@ def join_reader(browser, client):
     return response.json()
 
 
+def test_browser_status_requires_login_and_exposes_only_availability(browser):
+    service, client, _ = browser
+    assert client.get("/api/diagnostic-client/status").status_code == 401
+    login(client, "demo.user")
+    response = client.get("/api/diagnostic-client/status")
+    assert response.status_code == 200
+    assert response.json() == {"available": True}
+    assert response.headers["cache-control"] == "no-store"
+    assert client.get("/api/admin/diagnostics/status").status_code == 403
+    with session_scope() as db:
+        row = db.get(DiagnosticSession, service.sessions.status()["session"]["id"])
+        assert not row.participants
+
+
+@pytest.mark.parametrize("scope,expected", [("system", True), ("interface", True), ("search_chat", False), ("document", False)])
+def test_browser_status_tracks_capture_scope_and_manual_stop(browser, scope, expected):
+    service, client, _ = browser
+    login(client, "demo.user")
+    service.sessions.stop(service.sessions.status()["session"]["id"], actor())
+    assert client.get("/api/diagnostic-client/status").json() == {"available": False}
+    options = {}
+    if scope == "document":
+        from app.services.registry import DocumentRegistry
+
+        doc_id = "abcdef0123456789"
+        DocumentRegistry().create(doc_id, "synthetic.docx", "doc", 10)
+        options["doc_id"] = doc_id
+    started = service.sessions.start(scope, 5, actor(), **options)
+    assert client.get("/api/diagnostic-client/status").json() == {"available": expected}
+    service.sessions.stop(started.id, actor())
+    assert client.get("/api/diagnostic-client/status").json() == {"available": False}
+
+
+@pytest.mark.parametrize("reason", ["expired", "disabled", "audit_pending"])
+def test_browser_status_hides_capture_that_cannot_accept_browser_events(browser, reason):
+    service, client, _ = browser
+    login(client, "demo.user")
+    if reason == "expired":
+        service.sessions.monotonic = lambda: service.sessions._active_view.deadline_mono + 1
+    elif reason == "disabled":
+        service.sessions.settings.diagnostics_capture_enabled = False
+    else:
+        service.sessions._audit_gap = True
+    assert client.get("/api/diagnostic-client/status").json() == {"available": False}
+
+
+def test_browser_status_hides_missing_diagnostics(browser, monkeypatch):
+    _, client, _ = browser
+    login(client, "demo.user")
+
+    def disabled():
+        raise DiagnosticControlError("diagnostic_disabled")
+
+    monkeypatch.setattr(diagnostic_client, "get_browser_service", disabled)
+    response = client.get("/api/diagnostic-client/status")
+    assert response.status_code == 200
+    assert response.json() == {"available": False}
+
+
 def test_reader_can_report_but_cannot_read_diagnostics(browser):
     service, client, recorder = browser
     joined = join_reader(service, client)

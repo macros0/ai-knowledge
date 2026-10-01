@@ -63,6 +63,15 @@ class DiagnosticBrowserService:
             raise DiagnosticControlError("diagnostic_audit_unavailable")
         return identity
 
+    def available(self, user):
+        self._require_user(user)
+        with self.sessions._lock:
+            try:
+                self._active_id()
+            except DiagnosticControlError:
+                return False
+            return True
+
     @staticmethod
     def _require_user(user):
         if user.user_id == "anonymous" or not user.roles:

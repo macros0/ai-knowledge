@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/i18n/LocaleContext";
 import { browserDiagnosticRegistry } from "@/lib/browserDiagnosticRegistry.mjs";
-import { joinDiagnosticBrowser, leaveDiagnosticBrowser, friendlyApiError } from "@/lib/api";
+import { getDiagnosticBrowserStatus, joinDiagnosticBrowser, leaveDiagnosticBrowser, friendlyApiError } from "@/lib/api";
 import ErrorReference from "./ErrorReference";
 
 export default function DiagnosticClientReporter() {
@@ -15,6 +15,7 @@ export default function DiagnosticClientReporter() {
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [availableFor, setAvailableFor] = useState(null);
   const generation = useRef(0);
 
   useEffect(() => {
@@ -22,6 +23,38 @@ export default function DiagnosticClientReporter() {
     reporter.current = instance;
     setActive(instance.status().active); setCode(""); setError(null);
     return () => { generation.current++; reporter.current = null; };
+  }, [user?.user_id]);
+
+  useEffect(() => {
+    const userId = user?.user_id;
+    if (!userId || userId === "anonymous") return;
+    let disposed = false;
+    let checking = false;
+    const refresh = async () => {
+      if (checking || document.visibilityState !== "visible") return;
+      checking = true;
+      let available = false;
+      try { available = (await getDiagnosticBrowserStatus()).available === true; }
+      catch { /* Hide connection controls unless the server confirms availability. */ }
+      finally { checking = false; }
+      if (disposed) return;
+      setAvailableFor(available ? userId : null);
+      if (!available) {
+        generation.current++;
+        reporter.current?.deactivate();
+        setActive(false); setBusy(false); setCode(""); setError(null);
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 10000);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
   }, [user?.user_id]);
 
   useEffect(() => {
@@ -61,7 +94,7 @@ export default function DiagnosticClientReporter() {
     finally { setBusy(false); }
   }
 
-  if (!user || user.user_id === "anonymous") return null;
+  if (!user || user.user_id === "anonymous" || availableFor !== user.user_id) return null;
   return <details className="diagnostic-browser-controls">
     <summary>{t("diagnostics.browserTitle")}{active ? ` · ${t("diagnostics.browserActive")}` : ""}</summary>
     <p>{t("diagnostics.browserHelp")}</p>

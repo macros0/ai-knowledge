@@ -34,6 +34,17 @@ async def bounded_body(request, model):
         raise ApiError(status_code=422, code="invalid_request", detail="Invalid diagnostic report") from exc
 
 
+@router.get("/status")
+def browser_status(response: Response, user: User = Depends(require_user)):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return {"available": get_browser_service().available(user)}
+    except DiagnosticControlError as exc:
+        if exc.code == "diagnostic_disabled":
+            return {"available": False}
+        control_error(exc)
+
+
 @router.post("/join")
 async def join(request: Request, user: User = Depends(require_user)):
     data = await bounded_body(request, BrowserJoin)
