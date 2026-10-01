@@ -185,3 +185,16 @@ latency localization или исходного FAILED. Подробности, �
 [Память Node на объединённой версии](2026-10-01-diagnostics-node-memory.md).
 Следующий этап — отдельная приёмка merged release без test-only profiler/
 observer, с исходными thresholds. Main merge/push не выполнялись.
+
+
+## Приёмка merged release завершена — 02.10.2026
+
+Обновлённый кандидат (main38f7ed6 включён, runtime57727d9, harnessfdc327b)
+прошёл отдельную пятиблочную HTTP-приёмку: 102 series, 324 018 measured requests,
+все исходные gates PASSED. Максимальный ordinary p95 overhead 4,58%, ZIP 15,28%;
+backend/front RSS delta <=23,56/3,18 МиБ. Полный backend2847passed24skipped,
+frontend339passed1skipped; фактическая очистка завершена, собственные контейнеры
+остановлены, production/frozen сохранены. Исторический FAILED остаётся прежним;
+причина того отказа не установлена. Main merge/push/deployment не выполнялись.
+Подробности и safe evidence:
+[Приёмка объединённого release](2026-10-01-diagnostics-merged-release-acceptance.md).

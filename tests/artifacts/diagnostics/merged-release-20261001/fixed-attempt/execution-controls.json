@@ -1,0 +1,13 @@
+{
+  "orchestrator_sha256": "d6f0c6d11c524d87f00f185282d8d5419424f3bc5291d88294a35786e4280a42",
+  "pve_observer_sha256": "43cf0ddb6d2f21b839e0045d7ffef1b1e68a890759e19d494cb86154631aec9b",
+  "numeric_thresholds_unchanged": true,
+  "warmup_seconds": 30,
+  "measurement_seconds": 60,
+  "minimum_requests": 1000,
+  "repeats": 3,
+  "concurrencies": [
+    1,
+    8
+  ]
+}

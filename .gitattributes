@@ -4,3 +4,5 @@
 tests/artifacts/diagnostics/integration-20261001/*.json -text
 
 tests/artifacts/diagnostics/node-memory-integration-20261001/*.json -text
+
+tests/artifacts/diagnostics/merged-release-20261001/**/*.json -text

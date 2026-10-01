@@ -1,0 +1,7 @@
+{
+  "source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "reference_source_revision": "16bb493762d9e188ef5d7d5f57270c2163087fa8",
+  "chat_ast_equal_after_error_constant_resolution": true,
+  "targeted_tests_passed": 111,
+  "targeted_tests_exit": 0
+}

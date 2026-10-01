@@ -1,0 +1,18 @@
+{
+  "source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "full_backend_exit": 0,
+  "full_backend_passed": 2847,
+  "full_backend_skipped": 24,
+  "full_backend_warnings": 21,
+  "full_backend_seconds": 2453.58,
+  "full_backend_collection_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "harness_revision": "fdc327bcffe004c6aed2fc096d543aa0ed027dda",
+  "additional_harness_targeted_tests_passed": 61,
+  "additional_harness_targeted_tests_exit": 0,
+  "frontend_tests_passed": 339,
+  "frontend_tests_skipped": 1,
+  "frontend_production_build_exit": 0,
+  "ruff_exit": 0,
+  "eslint_errors": 0,
+  "eslint_warnings": 41
+}

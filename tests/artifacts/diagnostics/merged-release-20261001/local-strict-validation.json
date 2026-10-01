@@ -1,0 +1,122 @@
+{
+  "cleanup_corrected_after_measurement": true,
+  "cleanup_validated": true,
+  "deleted_remaining_test_archives": 29,
+  "external_containers_unchanged": true,
+  "first_aborted_rejected_as_incomplete": true,
+  "harness_revision": "fdc327bcffe004c6aed2fc096d543aa0ed027dda",
+  "matrices": [
+    {
+      "analysis_equal": true,
+      "failed_gates": null,
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": true,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": true,
+        "all_zip_overlap_pass": true
+      },
+      "max_backend_rss_growth_mib": 0.2734375,
+      "max_frontend_rss_growth_mib": 2.2421875,
+      "max_p95_overhead_pct": 4.575860917680585,
+      "requests": 75652,
+      "rows": 18,
+      "stage": "1doc-normal",
+      "status": "passed"
+    },
+    {
+      "analysis_equal": true,
+      "failed_gates": null,
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": true,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": true,
+        "all_zip_overlap_pass": true
+      },
+      "max_backend_rss_growth_mib": 19.32421875,
+      "max_frontend_rss_growth_mib": 1.13671875,
+      "max_p95_overhead_pct": 7.225285411695048,
+      "requests": 101198,
+      "rows": 24,
+      "stage": "1doc-active-zip",
+      "status": "passed"
+    },
+    {
+      "analysis_equal": true,
+      "failed_gates": null,
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": true,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": true,
+        "all_zip_overlap_pass": true
+      },
+      "max_backend_rss_growth_mib": 0.19921875,
+      "max_frontend_rss_growth_mib": 3.1796875,
+      "max_p95_overhead_pct": 2.02676911580717,
+      "requests": 44202,
+      "rows": 18,
+      "stage": "100doc-normal",
+      "status": "passed"
+    },
+    {
+      "analysis_equal": true,
+      "failed_gates": null,
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": true,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": true,
+        "all_zip_overlap_pass": true
+      },
+      "max_backend_rss_growth_mib": 23.2890625,
+      "max_frontend_rss_growth_mib": 1.7734375,
+      "max_p95_overhead_pct": 2.91768840740545,
+      "requests": 58630,
+      "rows": 24,
+      "stage": "100doc-active-zip",
+      "status": "passed"
+    },
+    {
+      "analysis_equal": true,
+      "failed_gates": null,
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": true,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": true,
+        "all_zip_overlap_pass": true
+      },
+      "max_backend_rss_growth_mib": 23.5625,
+      "max_frontend_rss_growth_mib": 1.078125,
+      "max_p95_overhead_pct": 15.283089400259865,
+      "requests": 44336,
+      "rows": 18,
+      "stage": "100doc-stopped-zip",
+      "status": "passed"
+    }
+  ],
+  "original_api_first_page_records": 20,
+  "remote_bytes_verified": true,
+  "schema_version": 1,
+  "source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "status": "passed",
+  "total_requests": 324018,
+  "total_rows": 102
+}
