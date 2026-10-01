@@ -1268,6 +1268,12 @@
   "sources.location.header": [],
   "sources.location.table": [],
   "sources.location.textbox": [],
+  "sources.mailDate": [
+    "date"
+  ],
+  "sources.sender": [
+    "sender"
+  ],
   "sources.status.encrypted": [],
   "sources.status.parsed": [],
   "sources.status.protected": [],

@@ -397,6 +397,8 @@ export default {
   "sources.downloadNamed": "Скачать: {name}",
   "sources.downloadContainerNamed": "Скачать контейнер для: {name}",
   "sources.dateUnknown": "Дата неизвестна",
+  "sources.sender": "Отправитель: {sender}",
+  "sources.mailDate": "Дата письма / ответа: {date}",
   "sources.warning.rtf": "Тело письма доступно только в RTF; извлечение этого формата пока не поддерживается.",
   "sources.warning.external": "Объект содержит внешнюю ссылку. Связанный файл не загружался.",
   "sources.warning.unavailable": "Внутри документа нет доступных данных этого вложения.",

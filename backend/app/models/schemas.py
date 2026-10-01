@@ -34,6 +34,11 @@ def _normalize_filter_values(values: list[str]) -> list[str]:
     return result
 
 
+class DocumentMailOut(BaseModel):
+    sender: str | None = None
+    sent_at: datetime | None = None
+
+
 class DocumentOut(BaseModel):
     id: str
     filename: str
@@ -55,6 +60,8 @@ class DocumentOut(BaseModel):
     okf_concept_count: int = 0
     # Latest actual generation timestamp among this document's saved concepts.
     concepts_generated_at: datetime | None = None
+    # Original root mail headers; None for ordinary documents, even with mail attachments.
+    mail: DocumentMailOut | None = None
     total_chunks: int = 0
     processed_chunks: int = 0
     current_chunk: int | None = None

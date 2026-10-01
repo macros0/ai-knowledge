@@ -3,14 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import ContentViewer from "@/components/ContentViewer";
 import { useI18n } from "@/i18n/LocaleContext";
+import MailMetadata from "./MailMetadata";
 
-export default function SourceLocationView({ docId, chunks, location, heading, showAll = false }) {
+export default function SourceLocationView({ docId, chunks, location, heading, showAll = false, sources = [] }) {
   const { t } = useI18n();
   const current = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const spans = location?.spans || [];
   const selectedIndex = Math.min(activeIndex, Math.max(0, spans.length - 1));
   const targetChunk = chunks.find(({ chunk_index }) => chunk_index === location?.chunk_index);
+  const sourcesById = new Map(sources.map((source) => [source.source_id, source]));
 
   useEffect(() => {
     const root = current.current;
@@ -58,7 +60,11 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
           <p>{spans[selectedIndex].quote}</p>
         </blockquote>
       )}
-      {chunks.filter(({ chunk_index }) => showAll || chunk_index === location.chunk_index).map((chunk) => (
+      {chunks.filter(({ chunk_index }) => showAll || chunk_index === location.chunk_index).map((chunk, index, visibleChunks) => {
+        const sourceId = chunk.source_id || "root";
+        const source = sourcesById.get(sourceId);
+        const startsSource = index === 0 || sourceId !== (visibleChunks[index - 1].source_id || "root");
+        return (
         <div
           key={chunk.chunk_index}
           ref={chunk.chunk_index === targetChunk.chunk_index ? current : undefined}
@@ -66,9 +72,12 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
           className={`source-location-chunk${chunk.chunk_index === targetChunk.chunk_index ? " is-source-target" : ""}`}
         >
           {showAll && <h2 className="source-chunk-heading">{t("okf.page.chunkH1", { index: chunk.chunk_index + 1 })}</h2>}
-          <ContentViewer text={chunk.content} docId={docId} sourceSpans={chunk.chunk_index === targetChunk.chunk_index ? spans : []} />
+          {startsSource && <MailMetadata source={source} />}
+          <ContentViewer text={chunk.content} docId={docId} sourceSpans={chunk.chunk_index === targetChunk.chunk_index ? spans : []}
+            preserveLineBreaks={source?.kind === "mail" || source?.metadata?.mail === true} />
         </div>
-      ))}
+        );
+      })}
     </section>
   );
 }

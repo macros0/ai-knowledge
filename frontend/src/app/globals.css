@@ -1514,6 +1514,22 @@ main {
   margin-top: 12px;
 }
 
+.mail-metadata {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.source-content-section > .mail-metadata {
+  margin-bottom: 8px;
+}
+
+.mail-content .okf-markdown p {
+  white-space: pre-line;
+}
+
 .source-content-viewer {
   flex: 1;
   min-height: 0;

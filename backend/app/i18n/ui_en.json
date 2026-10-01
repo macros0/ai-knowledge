@@ -376,6 +376,8 @@
   "sources.downloadNamed": "Download: {name}",
   "sources.downloadContainerNamed": "Download container for: {name}",
   "sources.dateUnknown": "Date unknown",
+  "sources.sender": "Sender: {sender}",
+  "sources.mailDate": "Email / reply date: {date}",
   "sources.warning.rtf": "The message body is available only as RTF; extraction of this format is not supported yet.",
   "sources.warning.external": "The object contains an external link. The linked file was not downloaded.",
   "sources.warning.unavailable": "The document contains no accessible data for this attachment.",

@@ -204,3 +204,13 @@ export function formatDateTime(value, locale) {
 export function formatNumber(value, locale) {
   return new Intl.NumberFormat(normalizeLocale(locale)).format(Number(value) || 0);
 }
+
+export function formatMailDateTime(value, locale, timeZone) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(normalizeLocale(locale), {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+    ...(timeZone ? { timeZone } : {}),
+  }).format(date);
+}

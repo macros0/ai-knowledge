@@ -2,22 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { friendlyApiError, getDocumentSources } from "@/lib/api";
-import { canDownloadSource, sourceAncestors, sourceDepth, sourceDownloadUrl, sourceHasChildren, sourceStatusKey, sourceLocationKey, sourceWarningKeys, sourceDateText, visibleSourceIds } from "@/lib/sourceTree.mjs";
+import { canDownloadSource, sourceAncestors, sourceDepth, sourceDownloadUrl, sourceHasChildren, sourceStatusKey, sourceLocationKey, sourceWarningKeys, visibleSourceIds } from "@/lib/sourceTree.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
+import MailMetadata from "./MailMetadata";
 
-function sourceMeta(source, fmtDateTime, t) {
+function sourceMeta(source, t) {
   const meta = source.metadata || {};
   const values = [];
-  if (meta.sender) values.push(meta.sender);
-  const date = sourceDateText(source, fmtDateTime, t);
-  if (date) values.push(date);
+  if (meta.sender && source.kind !== "mail" && meta.mail !== true) values.push(meta.sender);
   const locationKey = sourceLocationKey(source);
   if (locationKey) values.push(t(locationKey));
   return values;
 }
 
 export default function DocumentSources({ docId, focusedSourceId = null }) {
-  const { t, fmtDateTime } = useI18n();
+  const { t } = useI18n();
   const [sources, setSources] = useState(null);
   const [error, setError] = useState(null);
   const [expandedSourceIds, setExpandedSourceIds] = useState(new Set());
@@ -64,7 +63,7 @@ export default function DocumentSources({ docId, focusedSourceId = null }) {
         <ol className="document-sources-list">
           {sources.filter((source) => visibleIds.has(source.source_id)).map((source) => {
             const statusKey = sourceStatusKey(source.extraction_status);
-            const meta = sourceMeta(source, fmtDateTime, t);
+            const meta = sourceMeta(source, t);
             const mailSubject = source.metadata?.subject;
             const download = canDownloadSource(source);
             const sourceName = mailSubject || source.display_name;
@@ -96,6 +95,7 @@ export default function DocumentSources({ docId, focusedSourceId = null }) {
                         <span className="document-sources-filename">{source.display_name}</span>
                       )}
                       {meta.length > 0 && <span className="document-sources-meta">{meta.join(" · ")}</span>}
+                      <MailMetadata source={source} />
                       {sourceWarningKeys(source).map((key) => (
                         <span className="document-sources-meta" key={key}>{t(key)}</span>
                       ))}

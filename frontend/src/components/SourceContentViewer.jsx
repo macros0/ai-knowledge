@@ -4,6 +4,7 @@ import { useState } from "react";
 import ContentViewer from "@/components/ContentViewer";
 import { sourceAncestors, visibleSourceContentIds, visibleSourceIds } from "@/lib/sourceTree.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
+import MailMetadata from "./MailMetadata";
 
 function normalizedSourceId(chunk) {
   return chunk.source_id || "root";
@@ -35,6 +36,7 @@ export default function SourceContentViewer({ docId, chunks, sources, focusedSou
         const source = sourcesById.get(sourceId);
         const previousSourceId = index > 0 ? normalizedSourceId(chunks[index - 1]) : null;
         const startsSourceRun = sourceId !== "root" && sourceId !== previousSourceId;
+        const startsMailRun = sourceId !== previousSourceId;
         const sourceVisible = !source || visibleHeaders.has(sourceId);
         const contentVisible = sourceId === "root" || !source || visibleContent.has(sourceId);
         const sourceName = source?.metadata?.subject || source?.display_name || sourceId;
@@ -55,7 +57,8 @@ export default function SourceContentViewer({ docId, chunks, sources, focusedSou
                 <strong>{sourceName}</strong>
               </button>
             )}
-            {contentVisible && <ContentViewer text={chunk.content} docId={docId} />}
+            {startsMailRun && <MailMetadata source={source} />}
+            {contentVisible && <ContentViewer text={chunk.content} docId={docId} preserveLineBreaks={source?.kind === "mail" || source?.metadata?.mail === true} />}
           </section>
         );
       })}

@@ -22,14 +22,18 @@ export default async function ChunkPage({ params, searchParams }) {
         redirect(`/documents/${docId}/chunks/${location.chunk_index}?concept=${encodeURIComponent(query.concept)}`);
       }
       if (location.chunk_index === index && location.status !== "unavailable") {
-        const resp = await backendFetch(`/api/documents/${docId}/chunks/${index}`);
+        const [resp, sourcesResp] = await Promise.all([
+          backendFetch(`/api/documents/${docId}/chunks/${index}`),
+          backendFetch(`/api/documents/${docId}/sources`),
+        ]);
         if (!resp.ok) notFound();
         const text = await resp.text();
+        const sourceData = sourcesResp.ok ? await sourcesResp.json() : { sources: [] };
         return (
           <div className="okf-viewer source-chunk-viewer">
             <Link className="back-link" href={`/documents/${docId}/okf?source=${encodeURIComponent(location.source_id || "root")}`}>{t("okf.page.backToList")}</Link>
             <h1>{t("okf.page.chunkH1", { index: index + 1 })}</h1>
-            <SourceLocationView docId={docId} chunks={[{ chunk_index: index, content: text }]} location={location} />
+            <SourceLocationView docId={docId} chunks={[{ chunk_index: index, source_id: location.source_id, content: text }]} location={location} sources={sourceData.sources || []} />
           </div>
         );
       }

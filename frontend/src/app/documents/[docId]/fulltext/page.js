@@ -15,18 +15,20 @@ export default async function FulltextPage({ params, searchParams }) {
   let sourceUnavailable = false;
 
   if (concept) {
-    const [locationResp, chunksResp] = await Promise.all([
+    const [locationResp, chunksResp, mailSourcesResp] = await Promise.all([
       backendFetch(`/api/documents/${docId}/concepts/${encodeURIComponent(concept)}/source-location`),
       backendFetch(`/api/documents/${docId}/fulltext/chunks`),
+      backendFetch(`/api/documents/${docId}/sources`),
     ]);
     if (locationResp.ok && chunksResp.ok) {
       const [location, chunks] = await Promise.all([locationResp.json(), chunksResp.json()]);
+      const sourceData = mailSourcesResp.ok ? await mailSourcesResp.json() : { sources: [] };
       if (location.status !== "unavailable" && location.chunk_index != null && chunks.length) {
         return (
           <div className="okf-viewer source-fulltext-viewer">
             <Link className="back-link" href={`/documents/${docId}/okf?source=${encodeURIComponent(location.source_id || "root")}`}>{t("okf.page.backToList")}</Link>
             <h1>{t("okf.page.fulltextH1")}</h1>
-            <SourceLocationView docId={docId} chunks={chunks} location={location} heading={t("sourceLocation.title")} showAll />
+            <SourceLocationView docId={docId} chunks={chunks} location={location} heading={t("sourceLocation.title")} showAll sources={sourceData.sources || []} />
           </div>
         );
       }

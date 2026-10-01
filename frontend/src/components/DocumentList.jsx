@@ -26,6 +26,7 @@ import TagPicker from "./TagPicker";
 import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import TagManagerModal from "./TagManagerModal";
 import SearchableSelect from "./SearchableSelect";
+import { DocumentMailMetadata } from "./MailMetadata";
 
 const BUSY_STATUSES = ["uploaded", "queued", "processing", "splitting", "indexing", "paused"];
 
@@ -708,6 +709,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
             <span className="meta doc-primary-meta">
               {doc.error_code || doc.error ? friendlyDocumentError(doc, t) : (progress || fallbackMeta)}
               {updateView.noticeKey && <span className="doc-update-notice" role="status">{t(updateView.noticeKey)}</span>}
+              <DocumentMailMetadata doc={doc} />
             </span>
           </div>
           <div className="doc-meta-line">
