@@ -217,7 +217,7 @@ class TestResumeAuditHook:
                            degradation=[{"event": "llm_salvage"}])
         assert client.get(f"/api/documents/{did}").json()["partial_chunks"] == [0]
         called = []
-        monkeypatch.setattr(docs.get_pipeline(), "resume", lambda doc_id: called.append(doc_id))
+        monkeypatch.setattr(docs.get_pipeline(), "resume", lambda doc_id, *, is_admin=False: called.append(doc_id))
         response = client.post(f"/api/documents/{did}/resume")
         assert response.status_code == 200, response.text
         assert called == [did]
@@ -231,7 +231,7 @@ class TestResumeAuditHook:
         reg.create(did, "a.pdf", "application/pdf", 123)
         reg.update(did, status="done", problem="llm_partial_result")
         called = []
-        monkeypatch.setattr(docs.get_pipeline(), "resume", lambda doc_id: called.append(doc_id))
+        monkeypatch.setattr(docs.get_pipeline(), "resume", lambda doc_id, *, is_admin=False: called.append(doc_id))
         response = client.post(f"/api/documents/{did}/resume")
         assert response.status_code == 400
         assert not called
@@ -243,7 +243,7 @@ class TestResumeAuditHook:
         DocumentRegistry().create("0123456789abcdef", "a.pdf", "application/pdf", 123)
         DocumentRegistry().update("0123456789abcdef", status="paused")
 
-        def fake_resume(doc_id):
+        def fake_resume(doc_id, *, is_admin=False):
             DocumentRegistry().update(doc_id, status="processing")
 
         monkeypatch.setattr(docs.get_pipeline(), "resume", fake_resume)

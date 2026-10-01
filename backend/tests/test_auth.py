@@ -190,7 +190,7 @@ def test_document_queue_status_is_visible_only_to_document_writers(client, monke
     from app.api import documents
 
     class QueueSnapshot:
-        def queue_status(self):
+        def queue_status(self, *, is_admin=False):
             return {"processing": 1, "processing_limit": 1,
                     "queued": 8, "queue_limit": 8, "available": 0}
 

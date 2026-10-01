@@ -606,12 +606,23 @@ user.
 
 ### 2026-09-10 — Bounded document-processing admission
 Change: regular document processing now uses a bounded executor controlled by
-`PIPELINE_MAX_WORKERS` and `PIPELINE_MAX_PENDING`; when all slots are occupied, new work is
+`PIPELINE_MAX_WORKERS`, `PIPELINE_MAX_PENDING` (ordinary callers), and
+`PIPELINE_ADMIN_MAX_PENDING` (authenticated admins); when all applicable slots are occupied, new work is
 rejected with the stable `queue_overloaded` domain code instead of creating an unbounded daemon
 thread. The limit is per backend process. Reason: parser work and pending documents consume
 memory before the LLM semaphore is reached, so an LLM-only limit did not protect the service
 from authenticated upload bursts. Multi-worker production must account for capacity being
 multiplied per process or deploy a shared queue. Tests cover concurrent starts and task cleanup.
+
+### 2026-10-01 — Separate admin document-admission ceiling
+Upload, resume and single-document regenerate select a bounded shared-queue ceiling from
+the authenticated user's server-resolved roles: `PIPELINE_MAX_PENDING=8` for ordinary
+callers, `PIPELINE_ADMIN_MAX_PENDING=1000` for `admin`. Request form/query parameters cannot
+select the higher ceiling. Both roles share the same FIFO executor and worker count;
+the admin backlog can exhaust ordinary admission. The aggregate queue endpoint exposes
+the caller's applicable ceiling without document details. Bulk-job quotas remain unchanged.
+Reason: initial imports of approximately 500 documents require a larger bounded admin
+backlog without expanding ordinary upload admission or processing concurrency.
 
 ### 2026-09-10 — Recoverable OIDC callback failures
 Change: the OIDC callback now handles `httpx.HTTPError` from token and userinfo requests and
