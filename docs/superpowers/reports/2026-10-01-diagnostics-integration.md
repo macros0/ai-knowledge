@@ -172,3 +172,16 @@ Merge в main и push не выполнялись. Рабочая main база 
 Code/evidence исходной ветки: `491dbc4`, `4ec9e14`.
 
 Evidence commit: `f12cbd2`; финальный ESLint выполнен после него и уточнён в этом отчёте.
+
+
+## Выполнен следующий bounded memory эксперимент — 01.10.2026
+
+Предложенный выше Node RSS/heap опыт завершён: 8 matched-age режимов,
+39 280 измеренных requests, без forced GC/GC tuning. Крупный избыток памяти
+capture/ZIP не воспроизведён; heap после natural GC около 30,6–31,0 МиБ.
+Память наблюдалась только в этом новом опыте; это не пересмотр предыдущей
+latency localization или исходного FAILED. Подробности, ограничения,
+проверки harness и конечное состояние:
+[Память Node на объединённой версии](2026-10-01-diagnostics-node-memory.md).
+Следующий этап — отдельная приёмка merged release без test-only profiler/
+observer, с исходными thresholds. Main merge/push не выполнялись.
