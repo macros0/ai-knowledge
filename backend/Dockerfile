@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY backend/app ./app
 COPY backend/prompts ./prompts
+COPY backend/seeds ./seeds
 # Миграции и скрипты предзаполнения обязательны при деплое
 # (docs/PRODUCTION_DEPLOYMENT.md §7) и потому должны быть в образе: иначе внутри
 # контейнера нечем выполнить ни `alembic upgrade head`, ни сид справочников.

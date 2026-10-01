@@ -271,15 +271,16 @@ class LLMClient:
         # соединение и квоту провайдера.
         if self.local:
             max_tokens = max_tokens or self.settings.llm_chat_max_tokens
+        single_pass = bool(llm_profiles.request_state().get("single_pass"))
         visible_stream = self.interactive and bool(llm_profiles.request_state().get("on_text"))
-        if self.local or visible_stream:
+        if self.local or visible_stream or single_pass:
             # Never replay partially streamed prose. JSON generation has its own
             # bounded retries, whereas a chat is one visible attempt.
             attempts = 1
         text, reason = self._complete_with_retries(system, user, max_tokens=max_tokens, attempts=attempts, idle_timeout=idle)
-        if (self.local or visible_stream) and reason == "length":
+        if (self.local or visible_stream or single_pass) and reason == "length":
             raise LLMTruncationError("LLM answer reached its output limit")
-        if (self.local or visible_stream) and not text.strip():
+        if (self.local or visible_stream or single_pass) and not text.strip():
             raise ValueError("LLM returned no final content")
         return text
 

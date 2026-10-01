@@ -144,6 +144,7 @@ FRONTEND_FRAME_MODULES = frozenset({
 # Only static route templates; unknown routes use /unknown, never the raw path.
 ROUTE_TEMPLATES = frozenset({
     "/unknown", "/", "/health", "/health/ready", "/api/chat", "/api/chat/stream",
+    "/api/chat/search-scope", "/api/chat/attempts/{attempt_id}/cancel",
     "/api/search", "/api/documents", "/api/documents/{doc_id}",
     "/api/documents/{doc_id}/resume", "/api/documents/{doc_id}/regenerate",
     "/api/documents/{doc_id}/chunks", "/api/documents/{doc_id}/fulltext",

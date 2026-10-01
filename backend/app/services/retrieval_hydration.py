@@ -173,6 +173,7 @@ def _enrich_retrieval_hits_in_session(
     max_concept_chars: int,
     max_chunk_chars: int,
     full_text: bool = False,
+    hydrate_all_chunks: bool = False,
     mail_mode: MailMode = "all",
     active_generations: dict | None = None,
     timings: dict | None = None,
@@ -231,7 +232,7 @@ def _enrich_retrieval_hits_in_session(
     else:
         concept_source_ids = {}
         concept_chunk_indices = {}
-    needed_chunk_pairs = chunk_pairs if full_text else _chunk_pairs_needed_for_merge(
+    needed_chunk_pairs = chunk_pairs if full_text or hydrate_all_chunks else _chunk_pairs_needed_for_merge(
         hits, concept_contents, chunk_pairs
     )
     skipped_chunk_pairs = set(chunk_pairs) - set(needed_chunk_pairs)
@@ -355,6 +356,7 @@ def load_visible_retrieval_hits(
     max_chunk_chars: int | None = None,
     exact_groups: tuple[MatchGroup, ...] = (),
     mail_mode: MailMode = "all",
+    hydrate_all_chunks: bool = False,
 ) -> tuple[list, dict]:
     """Read visibility, active generation and canonical text consistently.
 
@@ -433,6 +435,7 @@ def load_visible_retrieval_hits(
             max_concept_chars=concept_chars,
             max_chunk_chars=chunk_chars,
             full_text=bool(exact_groups), mail_mode=mail_mode,
+            hydrate_all_chunks=hydrate_all_chunks,
             active_generations=active_generations, timings=timings,
         )
         visible = _filter_exact_hits(visible, exact_groups)

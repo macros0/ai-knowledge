@@ -186,6 +186,11 @@ async def lifespan(app: FastAPI):
         from app.services.stopwords import ensure_seeded
 
         ensure_seeded()
+        from app.services.glossary.seed import ensure_initial_rules
+
+        rules_seeded = ensure_initial_rules()
+        if rules_seeded:
+            logging.info("Начальное заполнение глоссария: добавлено правил %d", rules_seeded)
         from app.services.registry import reset_stale_statuses
 
         reset_stale_statuses()

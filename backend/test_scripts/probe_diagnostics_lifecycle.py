@@ -29,6 +29,8 @@ def run(base_url):
     session = admin.call("POST", "/api/admin/diagnostics/sessions",
                          {"scope": "system", "capture_level": "standard", "minutes": 5})
     session_id = session["id"]
+    if session.get("capture_level") != "standard":
+        raise RuntimeError("Session level mismatch")
     try:
         for _ in range(20):
             admin.call("GET", "/api/settings")

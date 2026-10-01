@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from dataclasses import dataclass
 import threading
 import time
 import uuid
@@ -34,6 +35,127 @@ from app.db.session import session_scope
 from app.services import audit
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AttemptRef:
+    session_id: str
+    message_id: int
+    attempt_id: str
+    status: str = "incomplete"
+    existing: bool = False
+
+
+def _attempt_message(s, ref: AttemptRef, user):
+    sess = s.get(ChatSession, ref.session_id)
+    if sess is None or sess.user_id != user.user_id:
+        raise ChatOwnershipError("Сессия принадлежит другому пользователю")
+    if sess.deleted_at is not None:
+        raise ChatSessionDeletedError("Сессия удалена")
+    message = s.get(ChatMessage, ref.message_id, with_for_update=True)
+    if (message is None or message.session_id != sess.id or
+            (message.retrieval_metadata or {}).get("answer_attempt", {}).get("id") != ref.attempt_id):
+        raise ChatOwnershipError("Попытка ответа не найдена")
+    return message
+
+
+def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, response_mode: str) -> AttemptRef:
+    """Persist one question/placeholder pair before search; no evidence checkpoint."""
+    session_id = session_id or str(uuid.uuid4())
+    with session_scope() as s:
+        sess = s.get(ChatSession, session_id, with_for_update=True)
+        if sess is not None:
+            if sess.user_id != user.user_id:
+                raise ChatOwnershipError("Сессия принадлежит другому пользователю")
+            if sess.deleted_at is not None:
+                raise ChatSessionDeletedError("Сессия удалена")
+            messages = s.execute(select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.id)).scalars().all()
+            for message in messages:
+                attempt = (message.retrieval_metadata or {}).get("answer_attempt", {})
+                if attempt.get("id") == attempt_id:
+                    if attempt.get("query") != query or attempt.get("mode") != response_mode:
+                        raise ValueError("Attempt ID reused with different request")
+                    return AttemptRef(session_id, message.id, attempt_id, attempt.get("status", "incomplete"), True)
+                if message.role == "assistant" and attempt.get("status") == "incomplete":
+                    message.retrieval_metadata = {**(message.retrieval_metadata or {}),
+                        "answer_attempt": {**attempt, "status": "stopped"}}
+        else:
+            sess = ChatSession(
+                id=session_id, user_id=user.user_id,
+                username=getattr(user, "username", None), title=query[:1024],
+            )
+            s.add(sess)
+        sess.updated_at = _now()
+        s.add(ChatMessage(session_id=session_id, role="user", content=query))
+        message = ChatMessage(
+            session_id=session_id, role="assistant", content="",
+            sources=[], retrieval_metadata={"answer_attempt": {
+                "id": attempt_id, "query": query, "mode": response_mode,
+                "status": "incomplete",
+            }},
+        )
+        s.add(message)
+        s.flush()
+        return AttemptRef(session_id, message.id, attempt_id)
+
+
+def save_attempt_sources(ref: AttemptRef, user, sources: list[dict], *, retrieval_metadata: dict | None = None) -> None:
+    with session_scope() as s:
+        message = _attempt_message(s, ref, user)
+        if message.retrieval_metadata["answer_attempt"]["status"] == "incomplete":
+            message.sources = deepcopy(sources)
+            if retrieval_metadata is not None:
+                message.retrieval_metadata = {
+                    **message.retrieval_metadata,
+                    **{k: deepcopy(v) for k, v in retrieval_metadata.items() if k != "answer_attempt"},
+                }
+
+
+def finish_attempt(ref: AttemptRef, user, *, status: str, answer: str) -> bool:
+    if status not in {"completed", "stopped", "failed"}:
+        raise ValueError("Invalid terminal status")
+    with session_scope() as s:
+        message = _attempt_message(s, ref, user)
+        metadata = message.retrieval_metadata or {}
+        if metadata.get("answer_attempt", {}).get("status") != "incomplete":
+            return False
+        message.retrieval_metadata = {**metadata, "answer_attempt": {
+            **metadata["answer_attempt"], "status": status,
+        }}
+        message.content = answer if status == "completed" else ""
+        return True
+
+
+def attempt_status(ref: AttemptRef, user) -> str:
+    with session_scope() as s:
+        message = _attempt_message(s, ref, user)
+        return (message.retrieval_metadata or {})["answer_attempt"]["status"]
+
+
+def find_attempt(session_id: str, user, attempt_id: str) -> AttemptRef | None:
+    with session_scope() as s:
+        sess = s.get(ChatSession, session_id)
+        if sess is None:
+            return None
+        if sess.user_id != user.user_id:
+            raise ChatOwnershipError("Сессия принадлежит другому пользователю")
+        if sess.deleted_at is not None:
+            raise ChatSessionDeletedError("Сессия удалена")
+        messages = s.execute(select(ChatMessage).where(ChatMessage.session_id == session_id, ChatMessage.role == "assistant")).scalars()
+        for message in messages:
+            metadata = (message.retrieval_metadata or {}).get("answer_attempt", {})
+            if metadata.get("id") == attempt_id:
+                return AttemptRef(session_id, message.id, attempt_id, metadata.get("status", "incomplete"))
+        return None
+
+
+def read_attempt_sources(session_id: str, user, attempt_id: str):
+    ref = find_attempt(session_id, user, attempt_id)
+    if ref is None:
+        return None
+    with session_scope() as s:
+        message = _attempt_message(s, ref, user)
+        return deepcopy(message.sources or []), deepcopy(message.retrieval_metadata or {})
 
 
 class ChatOwnershipError(Exception):

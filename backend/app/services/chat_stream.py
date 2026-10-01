@@ -11,26 +11,44 @@ from app.api.errors import ApiError
 from app.services.errors import public_error_code
 from app.services.llm_profiles import request_scope
 from app.services.llm_scheduler import LLMCancelled
+from app.services import chat_history
 from app.services.diagnostics.context import bind_context, current_context, exception_recorded
 from app.services.diagnostics.recorder import emit_event
 
 logger = logging.getLogger(__name__)
 
 
-async def stream_chat(work, *, context=None):
+async def stream_chat(work, *, context=None, independent_calls: bool = False, current_user=None):
     context = context or current_context()
     events = queue.Queue()
     cancel = threading.Event()
+    attempt_ref = None
+
+    def emit_start(ref):
+        nonlocal attempt_ref
+        attempt_ref = ref
+        events.put({"type": "start", "session_id": ref.session_id,
+                    "assistant_message_id": ref.message_id, "attempt_id": ref.attempt_id})
     def emit(text):
         if cancel.is_set():
             raise LLMCancelled()
         events.put({"type": "delta", "text": text})
 
+    def emit_sources(sources):
+        if cancel.is_set():
+            raise LLMCancelled()
+        events.put({"type": "sources", "sources": sources})
+
+    def emit_progress(progress):
+        if not cancel.is_set():
+            events.put({"type": "progress", **progress})
+
     def run_with_context():
         try:
             settings = get_settings()
-            with request_scope(on_text=emit, cancel=cancel,
-                               deadline=time.monotonic() + settings.llm_chat_total_timeout_seconds):
+            with request_scope(on_text=emit, on_sources=emit_sources, on_start=emit_start,
+                               on_progress=emit_progress, cancel=cancel,
+                               deadline=None if independent_calls else time.monotonic() + settings.llm_chat_total_timeout_seconds):
                 result = work()
             if not cancel.is_set():
                 events.put({"type": "result", "data": result.model_dump(mode="json")})
@@ -54,7 +72,16 @@ async def stream_chat(work, *, context=None):
     worker = asyncio.create_task(asyncio.to_thread(run))
     try:
         ping_at = time.monotonic() + 5
+        status_at = time.monotonic() + 1
+        event_seq = 0
         while True:
+            if attempt_ref is not None and current_user is not None and time.monotonic() >= status_at:
+                status_at = time.monotonic() + 1
+                try:
+                    if chat_history.attempt_status(attempt_ref, current_user) in {"stopped", "failed"}:
+                        cancel.set()
+                except (chat_history.ChatOwnershipError, chat_history.ChatSessionDeletedError):
+                    cancel.set()
             try:
                 event = events.get_nowait()
             except queue.Empty:
@@ -65,6 +92,12 @@ async def stream_chat(work, *, context=None):
                     ping_at = time.monotonic() + 5
                 await asyncio.sleep(.05)
                 continue
+            event_seq += 1
+            if attempt_ref is not None:
+                event.setdefault("session_id", attempt_ref.session_id)
+                event.setdefault("assistant_message_id", attempt_ref.message_id)
+                event.setdefault("attempt_id", attempt_ref.attempt_id)
+                event["event_seq"] = event_seq
             yield json.dumps(event, ensure_ascii=False) + "\n"
             if event["type"] in ("result", "error"):
                 break

@@ -14,6 +14,7 @@ import {
   createTranslator,
   formatDate,
   formatDateTime,
+  formatMailDateTime,
   formatNumber,
 } from "./core";
 import { makeTitle } from "./titles";
@@ -121,6 +122,7 @@ export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}
       setLocale: changeLocale,
       fmtDate: (v) => formatDate(v, effective),
       fmtDateTime: (v) => formatDateTime(v, effective),
+      fmtMailDateTime: (v) => formatMailDateTime(v, effective),
       fmtNumber: (v) => formatNumber(v, effective),
     }),
     [effective, t, tc, changeLocale]

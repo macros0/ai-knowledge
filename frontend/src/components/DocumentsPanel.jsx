@@ -81,8 +81,10 @@ export default function DocumentsPanel() {
         <TrashPanel />
       ) : (
         <>
-          {canUpload && (
-            <div className="upload-spoiler">
+          <DocumentList
+            refreshKey={refreshKey}
+            onOpenTrash={() => setView("trash")}
+            uploadToggle={canUpload && (
               <button
                 type="button"
                 className="spoiler-toggle"
@@ -93,43 +95,42 @@ export default function DocumentsPanel() {
                 <span>{t("docs.uploadTitle")}</span>
                 <span className="spoiler-chevron">{uploadOpen ? "▾" : "▸"}</span>
               </button>
-              {uploadOpen && (
-                <div className="upload-spoiler-body">
-                  {uploadModule && uploadDevId == null && (
-                    <div className="upload-module-hint">
-                      {t("docs.uploadModuleHint", { module: uploadModule })}
-                    </div>
-                  )}
-                  <ReferenceLocaleSelect value={tagLocale} onChange={setTagLocale} />
-                  <TagPicker
-                    collapsible
-                    label={t("docs.uploadTagsLabel")}
-                    placeholder={t("docs.uploadTagsPlaceholder")}
-                    selected={uploadTags}
-                    onChange={setUploadTags}
-                    refreshKey={refreshKey}
-                  />
-                  {developments.length > 0 && (
-                    <div className="upload-dev-row">
-                      <span className="tag-picker-label">{t("docs.uploadDevLabel")}</span>
-                      <DevelopmentPicker
-                        developments={developments}
-                        value={uploadDevId}
-                        onChange={setUploadDevId}
-                      />
-                    </div>
-                  )}
-                  <UploadZone
-                    tags={uploadTags}
-                    canonicalLocale={tagLocale || locale}
-                    developmentId={uploadDevId}
-                    onUploaded={() => setRefreshKey((k) => k + 1)}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-          <DocumentList refreshKey={refreshKey} onOpenTrash={() => setView("trash")} />
+            )}
+            uploadBody={canUpload && uploadOpen && (
+              <div className="upload-spoiler-body">
+                {uploadModule && uploadDevId == null && (
+                  <div className="upload-module-hint">
+                    {t("docs.uploadModuleHint", { module: uploadModule })}
+                  </div>
+                )}
+                <ReferenceLocaleSelect value={tagLocale} onChange={setTagLocale} />
+                <TagPicker
+                  collapsible
+                  label={t("docs.uploadTagsLabel")}
+                  placeholder={t("docs.uploadTagsPlaceholder")}
+                  selected={uploadTags}
+                  onChange={setUploadTags}
+                  refreshKey={refreshKey}
+                />
+                {developments.length > 0 && (
+                  <div className="upload-dev-row">
+                    <span className="tag-picker-label">{t("docs.uploadDevLabel")}</span>
+                    <DevelopmentPicker
+                      developments={developments}
+                      value={uploadDevId}
+                      onChange={setUploadDevId}
+                    />
+                  </div>
+                )}
+                <UploadZone
+                  tags={uploadTags}
+                  canonicalLocale={tagLocale || locale}
+                  developmentId={uploadDevId}
+                  onUploaded={() => setRefreshKey((k) => k + 1)}
+                />
+              </div>
+            )}
+          />
         </>
       )}
     </section>

@@ -415,6 +415,7 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
             get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}",
             doc["filename"],
             user_tags=user_tags,
+            is_admin="admin" in user.roles,
         )
     except Exception as exc:
         # Admission has not started a worker, so there are no vectors to delete.
@@ -427,6 +428,10 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
             status = 503 if exc.code == errors.QUEUE_OVERLOADED else 400
             raise errors.domain_error(exc, status) from exc
         raise
+    # Admission synchronously publishes queued; return that current state
+    # instead of the uploaded snapshot captured before the pipeline call.
+    # A read failure after admission must not roll back a worker's document.
+    doc = _registry.get(doc_id) or doc
     audit_value = {"filename": doc.get("filename"), "size": size}
     if bound_development_id is not None:
         audit_value["development_id"] = bound_development_id
@@ -529,7 +534,7 @@ def document_stats(user: User = Depends(require_user)):
 def document_queue_status(response: Response, user: User = Depends(require_role("editor", "admin"))):
     """Общая загрузка конвейера без сведений о чужих документах."""
     response.headers["Cache-Control"] = "no-store"
-    return get_pipeline().queue_status()
+    return get_pipeline().queue_status(is_admin="admin" in user.roles)
 
 
 @router.get("/uploaders", response_model=UploaderListOut)
@@ -1017,7 +1022,7 @@ def resume_document(
             detail="Документ не требует возобновления",
         )
     try:
-        get_pipeline().resume(doc_id)
+        get_pipeline().resume(doc_id, is_admin="admin" in user.roles)
     except DomainError as exc:
         status = 503 if exc.code == errors.QUEUE_OVERLOADED else 400
         raise errors.domain_error(exc, status) from exc
@@ -1058,7 +1063,7 @@ def regenerate_document(
             detail="Документ уже обрабатывается",
         )
     try:
-        get_pipeline().regenerate(doc_id)
+        get_pipeline().regenerate(doc_id, is_admin="admin" in user.roles)
     except DomainError as exc:
         status = 503 if exc.code == errors.QUEUE_OVERLOADED else 400
         raise errors.domain_error(exc, status) from exc

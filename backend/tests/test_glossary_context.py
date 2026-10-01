@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.services.context_builder import (
     drop_partial_title_matches,
     drop_unmatched_blocks,
@@ -35,7 +37,7 @@ def _infotype_plan(query: str = "инфотип 3"):
         "sap_infotype",
         "Payroll infotype",
         canonical_locale="de",
-        aliases=[GlossaryAliasInput(text, auto_expand=True, search_enabled=True) for text in ["инфотип 3", "IT0003"]],
+        aliases=[GlossaryAliasInput(text, auto_expand=True, search_enabled=True) for text in ["инфотип 3", "ИТ 0003", "IT0003"]],
     )
     return prepare_query(query, ui_locale="ru", enabled=True)
 
@@ -176,6 +178,57 @@ def test_exact_domain_title_uses_own_concept_content_but_numeric_title_does_not(
     )
     assert numeric_kept == [numeric_only]
     assert numeric_kept[0]["content"] == "сырой текст числового раздела"
+
+
+@pytest.mark.parametrize("query", ["инфотип 3", "ИТ 0003", "IT0003"])
+def test_term_only_query_keeps_complete_matches_in_body_when_one_title_matches(query):
+    plan = _infotype_plan(query)
+    about = _block("Standard Retroactive Behavior and IT0003 Clearing", "IT0003 clearing.")
+    table = _block("Table T5JRIC", "Retroactive date management uses IT0003.")
+    infotypes = _block("Infotipos: Datos Maestros", "IT0003 - Payroll Status")
+    near_code = _block("Other infotype", "Payroll Status for IT00037.")
+
+    kept = drop_partial_title_matches(
+        [about, table, infotypes, near_code],
+        query,
+        match_groups=plan.strict_groups,
+    )
+
+    assert [item["title"] for item in kept] == [
+        "Standard Retroactive Behavior and IT0003 Clearing",
+        "Table T5JRIC",
+        "Infotipos: Datos Maestros",
+    ]
+    assert kept[1]["content"] == "Retroactive date management uses IT0003."
+
+
+def test_term_only_body_match_preserves_raw_chunk_evidence():
+    plan = _infotype_plan("ИТ 0003")
+    about = _block("Настройка IT0003", "Параметры IT0003.")
+    body_match = _block(
+        "Retroactive processing",
+        "Original IT0003 clearing details.",
+        concept_content="General retroactive processing summary.",
+    )
+
+    kept = drop_partial_title_matches(
+        [about, body_match], plan.original_query, match_groups=plan.strict_groups,
+    )
+
+    assert len(kept) == 2
+    assert kept[1]["content"] == "Original IT0003 clearing details."
+
+
+def test_term_with_additional_title_tokens_still_focuses_the_named_topic():
+    plan = _infotype_plan("Настройка инфотип 3")
+    about = _block("Настройка IT0003", "Параметры IT0003.")
+    adjacent = _block("Table T5JRIC", "Настройка даты использует IT0003.")
+
+    kept = drop_partial_title_matches(
+        [about, adjacent], plan.original_query, match_groups=plan.strict_groups,
+    )
+
+    assert [item["title"] for item in kept] == ["Настройка IT0003"]
 
 
 def test_two_domain_groups_keep_both_sides_and_do_not_require_added_name_in_title():

@@ -8,7 +8,7 @@ import { sourceSpansToLineRanges, splitRawSourceSpans } from "@/lib/sourceHighli
 
 const IMAGE_PATTERN = /!\[[^\]]*\]\([^)]*\)/g;
 
-export default function ContentViewer({ text, docId, stripFrontmatter = false, sourceSpans = [] }) {
+export default function ContentViewer({ text, docId, stripFrontmatter = false, sourceSpans = [], preserveLineBreaks = false }) {
   const { t, tc } = useI18n();
   const [mode, setMode] = useState("render");
   const [expanded, setExpanded] = useState({});
@@ -40,7 +40,7 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false, s
   const imageOnly = imageCount > 0 && !hasText;
 
   return (
-    <div className="content-viewer">
+    <div className={`content-viewer${preserveLineBreaks ? " mail-content" : ""}`}>
       <button
         className="view-mode-toggle"
         onClick={() => setMode((m) => (m === "render" ? "raw" : "render"))}

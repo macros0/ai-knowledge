@@ -34,7 +34,9 @@ def _route_template(scope):
 class DiagnosticContextMiddleware:
     def __init__(self, app, *, api_prefix="/api"):
         self.app = app
-        self.search_routes = frozenset({f"{api_prefix}/chat", f"{api_prefix}/chat/stream", f"{api_prefix}/search"})
+        self.search_routes = frozenset({f"{api_prefix}/chat", f"{api_prefix}/chat/stream", f"{api_prefix}/search",
+                                        f"{api_prefix}/chat/search-scope",
+                                        f"{api_prefix}/chat/attempts/{{attempt_id}}/cancel"})
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -43,7 +45,8 @@ class DiagnosticContextMiddleware:
         incoming = candidates[0].decode("ascii", errors="replace") if len(candidates) == 1 else None
         request_id = canonical_request_id(incoming) or str(uuid4())
         scope.setdefault("state", {})["request_id"] = request_id
-        kind = "search_chat" if scope.get("path") in self.search_routes else "interface"
+        kind = "search_chat" if (scope.get("path") in self.search_routes
+                                 or _route_template(scope) in self.search_routes) else "interface"
         context = DiagnosticContext(request_id=request_id, operation_kind=kind)
         started = time.monotonic()
         status = None

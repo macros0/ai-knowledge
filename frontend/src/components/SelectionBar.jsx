@@ -44,6 +44,8 @@ export default function SelectionBar({
   onGeneration,
   onExport,
   onDone,
+  leadingAction,
+  leadingContent,
 }) {
   const [addTag, setAddTag] = useState("");
   const [removeTag, setRemoveTag] = useState("");
@@ -85,19 +87,23 @@ export default function SelectionBar({
 
   return (
     <div className="selection-panel">
-      <button
-        type="button"
-        className="selection-toggle"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-label={t("selection.bulkActions")}
-      >
-        <span>{t("selection.bulkActions")}</span>
-        <span className="selection-count">
-          {t("selection.selected", { selected: selectedIds.length, total })}
-        </span>
-        <span className="selection-chevron">{open ? "▾" : "▸"}</span>
-      </button>
+      <div className="document-actions-row">
+        {leadingAction}
+        <button
+          type="button"
+          className="selection-toggle"
+          onClick={onToggle}
+          aria-expanded={open}
+          aria-label={t("selection.bulkActions")}
+        >
+          <span>{t("selection.bulkActions")}</span>
+          <span className="selection-count">
+            {t("selection.selected", { selected: selectedIds.length, total })}
+          </span>
+          <span className="selection-chevron">{open ? "▾" : "▸"}</span>
+        </button>
+      </div>
+      {leadingContent}
       {open && (
         <div className={`bulk-bar ${danger ? "bulk-bar-danger" : "bulk-bar-soft"}`}>
           <button

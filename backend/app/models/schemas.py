@@ -34,6 +34,11 @@ def _normalize_filter_values(values: list[str]) -> list[str]:
     return result
 
 
+class DocumentMailOut(BaseModel):
+    sender: str | None = None
+    sent_at: datetime | None = None
+
+
 class DocumentOut(BaseModel):
     id: str
     filename: str
@@ -55,6 +60,8 @@ class DocumentOut(BaseModel):
     okf_concept_count: int = 0
     # Latest actual generation timestamp among this document's saved concepts.
     concepts_generated_at: datetime | None = None
+    # Original root mail headers; None for ordinary documents, even with mail attachments.
+    mail: DocumentMailOut | None = None
     total_chunks: int = 0
     processed_chunks: int = 0
     current_chunk: int | None = None
@@ -221,8 +228,20 @@ class SearchResponse(BaseModel):
     applied_terms: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ChatSourceSelection(BaseModel):
+    attempt_id: str = Field(max_length=36)
+    indexes: list[Annotated[int, Field(strict=True, ge=1)]] = Field(min_length=1, max_length=10000)
+
+
 class ChatRequest(BaseModel):
     mail_mode: Literal["all", "exclude", "only"] = "all"
+    response_mode: Literal["documents", "fast", "full"] | None = None
+    attempt_id: str | None = None
+    # For the three response modes, cap final fragments after merge and filtering.
+    search_depth: int | None = Field(default=None, ge=1, le=500, strict=True)
+    source_selection: ChatSourceSelection | None = None
+    # None searches the entire knowledge base; [] is an enabled, empty scope.
+    search_doc_ids: list[FilterValue] | None = Field(default=None, max_length=500)
     query: QueryText
     # Язык ответа при неопределимом языке короткого запроса; UI передаёт
     # текущую локаль, прямые API-вызовы получают русский fallback.
@@ -242,6 +261,17 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
 
     _normalize_query = field_validator("query", mode="before")(_normalize_query)
+    @model_validator(mode="after")
+    def validate_source_selection(self):
+        if self.source_selection and (not self.session_id or self.response_mode != 'full'):
+            raise ValueError('Selected sources require a session and full response mode')
+        if self.source_selection and self.search_doc_ids is not None:
+            raise ValueError('Source selection and document search scope are separate actions')
+        return self
+    @field_validator('search_doc_ids', mode='after')
+    @classmethod
+    def normalize_search_doc_ids(cls, values):
+        return _normalize_filter_values(values) if values is not None else None
     _normalize_filters = field_validator("tags", "source_locales", mode="after")(
         _normalize_filter_values
     )
@@ -249,6 +279,11 @@ class ChatRequest(BaseModel):
 
 class ChatSettingsOut(BaseModel):
     knowledge_profile: str = "Основной контур"
+    response_modes: list[str] = Field(default_factory=lambda: ["documents", "fast", "full"])
+    search_depth_default: int = 40
+    search_depth_min: int = 1
+    search_depth_max: int = 500
+    search_depth_presets: list[int] = Field(default_factory=lambda: [40, 100, 200])
     top_k_min: int
     top_k_max: int
     top_k_default: int
@@ -278,8 +313,19 @@ class ChatSource(BaseModel):
     snippet: str = ""
     point_type: str = "concept"
     chunk_index: int | None = None
+    source_slug: str | None = None
     source_id: str | None = None
     source_path: list[dict[str, Any]] | None = None
+    # Источник найден поиском; только true означает, что его текст вошёл в контекст LLM.
+    in_model_context: bool = True
+    source_index: int | None = None
+    # True only when this attempt saved a canonical excerpt reference for selection.
+    selectable: bool = False
+    submitted_parts: int = 0
+    completed_parts: int = 0
+    parts_total: int = 1
+    cited: bool = False
+    partial: bool = False
     # Бейджи модуль/разработка в источниках (Этап 5.1).
     development_number: str | None = None
     development_name: str | None = None
@@ -290,10 +336,29 @@ class ChatResponse(BaseModel):
     query: str
     answer: str
     sources: list[ChatSource]
+    search_depth: int = 40
+    search_limit_reached: bool = False
+    response_mode: Literal["documents", "fast", "full"] | None = None
+    attempt_id: str | None = None
     # UUID треда, к которому относится обмен (для продолжения «Нового чата»).
     session_id: str | None = None
     expansion_status: str = "disabled"
     applied_terms: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ChatAttemptCancelRequest(BaseModel):
+    session_id: str
+
+
+class ChatSearchScopeRequest(BaseModel):
+    doc_ids: list[FilterValue] = Field(max_length=500)
+    _normalize_ids = field_validator('doc_ids', mode='after')(_normalize_filter_values)
+
+
+class ChatSearchScopeDocument(BaseModel):
+    doc_id: str
+    filename: str | None = None
+    available: bool
 
 
 class ChatHistoryMessageOut(BaseModel):

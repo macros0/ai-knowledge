@@ -206,7 +206,8 @@ class Pipeline:
             thread_name_prefix="document-pipeline",
         )
         self._pipeline_slots = threading.BoundedSemaphore(
-            self.settings.pipeline_max_workers + self.settings.pipeline_max_pending
+            self.settings.pipeline_max_workers
+            + max(self.settings.pipeline_max_pending, self.settings.pipeline_admin_max_pending)
         )
         # Проверка «не запущен» и регистрация потока должны быть одной
         # атомарной операцией: эндпоинты синхронные, FastAPI исполняет их в
@@ -224,17 +225,22 @@ class Pipeline:
         self._storage_failure_docs: set[tuple[str, int]] = set()
         self._storage_failure_docs_lock = threading.Lock()
 
-    def queue_status(self) -> dict[str, int]:
+    def _queue_limit(self, is_admin: bool) -> int:
+        regular_limit = getattr(self.settings, "pipeline_max_pending", 0)
+        return getattr(self.settings, "pipeline_admin_max_pending", regular_limit) if is_admin else regular_limit
+
+    def queue_status(self, *, is_admin: bool = False) -> dict[str, int]:
         """Snapshot of this process's document admission slots, without document details."""
         with self._start_lock:
             tasks = tuple(self._threads.values())
         processing = sum(task.running() for task in tasks)
-        capacity = self.settings.pipeline_max_workers + self.settings.pipeline_max_pending
+        queue_limit = self._queue_limit(is_admin)
+        capacity = self.settings.pipeline_max_workers + queue_limit
         return {
             "processing": processing,
             "processing_limit": self.settings.pipeline_max_workers,
             "queued": len(tasks) - processing,
-            "queue_limit": self.settings.pipeline_max_pending,
+            "queue_limit": queue_limit,
             "available": max(0, capacity - len(tasks)),
         }
 
@@ -244,10 +250,11 @@ class Pipeline:
         filepath: str | Path,
         filename: str,
         user_tags: list[str] | None = None,
+        *, is_admin: bool = False,
     ) -> None:
-        self._start(doc_id, str(filepath), filename, user_tags or [], resume=False)
+        self._start(doc_id, str(filepath), filename, user_tags or [], resume=False, is_admin=is_admin)
 
-    def resume(self, doc_id: str) -> None:
+    def resume(self, doc_id: str, *, is_admin: bool = False) -> None:
         doc = self.registry.get(doc_id)
         if not doc:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
@@ -266,7 +273,7 @@ class Pipeline:
         filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
-        self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=True)
+        self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=True, is_admin=is_admin)
 
     def _ensure_not_running(self, doc_id: str) -> None:
         """Единая защита от запуска второго потока на один и тот же staging.
@@ -278,7 +285,7 @@ class Pipeline:
         if task and not task.done():
             raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
 
-    def regenerate(self, doc_id: str) -> None:
+    def regenerate(self, doc_id: str, *, is_admin: bool = False) -> None:
         """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
 
         Сбрасывает staging и запускает новую версию. Опубликованные данные
@@ -296,7 +303,8 @@ class Pipeline:
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
 
-        self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False, reset_staging=True)
+        self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False,
+                    reset_staging=True, is_admin=is_admin)
 
     def wait_for(self, doc_id: str, timeout: float = 3600) -> dict:
         """Блокирующее ожидание терминального статуса документа.
@@ -381,7 +389,7 @@ class Pipeline:
 
     def _start(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
-        *, reset_staging: bool = False,
+        *, reset_staging: bool = False, is_admin: bool = False,
     ) -> None:
         with self._start_lock:
             self._ensure_not_running(doc_id)
@@ -391,7 +399,10 @@ class Pipeline:
                 self._pipeline_slots = threading.BoundedSemaphore(1)
             if not hasattr(self, "_executor"):
                 self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="document-pipeline")
-            if not self._pipeline_slots.acquire(blocking=False):
+            # Both roles share the executor and FIFO; an editor cannot consume
+            # the larger admin ceiling even when physical semaphore slots remain.
+            capacity = getattr(self.settings, "pipeline_max_workers", 1) + self._queue_limit(is_admin)
+            if len(self._threads) >= capacity or not self._pipeline_slots.acquire(blocking=False):
                 raise DomainError(
                     "Очередь обработки документов перегружена",
                     code=codes.QUEUE_OVERLOADED,

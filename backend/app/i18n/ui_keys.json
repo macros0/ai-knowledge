@@ -306,6 +306,14 @@
   "apiError.bulk_export_storage_quota": [],
   "apiError.bulk_export_storage_reserve": [],
   "apiError.bulk_export_user_active": [],
+  "apiError.chat_answer_truncated": [],
+  "apiError.chat_budget_unavailable": [],
+  "apiError.chat_evidence_invalid": [],
+  "apiError.chat_evidence_too_large": [],
+  "apiError.chat_search_scope_empty": [],
+  "apiError.chat_search_scope_unavailable": [],
+  "apiError.chat_sources_changed": [],
+  "apiError.chat_summary_too_large": [],
   "apiError.chunk_not_found": [],
   "apiError.conflict": [],
   "apiError.dependency_unavailable": [],
@@ -466,11 +474,19 @@
   "bulkGeneration.skipped": [],
   "bulkGeneration.start": [],
   "chat.adminHint": [],
+  "chat.answerIncomplete": [],
+  "chat.answerSelected": [],
+  "chat.answerStopped": [],
   "chat.askFirst": [],
   "chat.assistant": [],
   "chat.backToList": [],
   "chat.backToSessions": [],
   "chat.backToUsers": [],
+  "chat.batchProgress": [
+    "done",
+    "total"
+  ],
+  "chat.clearSourceSelection": [],
   "chat.copied": [],
   "chat.copy": [],
   "chat.copyAnswer": [],
@@ -489,6 +505,11 @@
   "chat.errorPrefix": [
     "message"
   ],
+  "chat.fastCoverage": [
+    "found",
+    "used"
+  ],
+  "chat.fragments": [],
   "chat.glossary.count": [],
   "chat.glossary.disabled": [],
   "chat.glossary.infotypeRule": [],
@@ -504,6 +525,10 @@
     "message"
   ],
   "chat.historyTitle": [],
+  "chat.jumpToRequest": [
+    "number",
+    "question"
+  ],
   "chat.loading": [],
   "chat.localeLabel": [],
   "chat.mailModeAll": [],
@@ -533,14 +558,74 @@
   "chat.relevance": [
     "pct"
   ],
+  "chat.requestGroup": [
+    "first",
+    "last"
+  ],
+  "chat.requestNavigation": [],
+  "chat.responseMode.documents.description": [],
+  "chat.responseMode.documents.label": [],
+  "chat.responseMode.fast.description": [],
+  "chat.responseMode.fast.label": [],
+  "chat.responseMode.full.description": [],
+  "chat.responseMode.full.label": [],
+  "chat.responseModeLabel": [],
+  "chat.restartAnswer": [],
   "chat.resultsLabel": [],
+  "chat.scopeAddSelected": [],
+  "chat.scopeAdded": [],
+  "chat.scopeAllUnavailable": [],
+  "chat.scopeAvailable": [],
+  "chat.scopeChecking": [],
+  "chat.scopeClear": [],
+  "chat.scopeDescription": [],
+  "chat.scopeEditList": [],
+  "chat.scopeEmpty": [],
+  "chat.scopeEmptyActive": [],
+  "chat.scopeLimit": [
+    "max"
+  ],
+  "chat.scopeOnly": [],
+  "chat.scopeRefresh": [],
+  "chat.scopeRemove": [],
+  "chat.scopeRemoveDocument": [
+    "name"
+  ],
+  "chat.scopeSomeUnavailable": [],
+  "chat.scopeTitle": [],
+  "chat.scopeUnavailable": [],
+  "chat.scopeUnknown": [],
+  "chat.scopeUsed": [],
+  "chat.searchDepthDescription": [],
+  "chat.searchDepthLabel": [],
+  "chat.searchLimitReached": [
+    "depth"
+  ],
+  "chat.searchLimitReachedMax": [
+    "depth"
+  ],
   "chat.searchSettings": [],
+  "chat.selectAllSources": [],
+  "chat.selectDocument": [
+    "name"
+  ],
+  "chat.selectFragment": [
+    "index",
+    "name"
+  ],
+  "chat.selectedAnswerContext": [],
+  "chat.selectionDescription": [],
   "chat.send": [],
   "chat.sessionDeleted": [],
   "chat.sessionsLoadError": [
     "message"
   ],
+  "chat.sourceFound": [],
+  "chat.sourceInContext": [],
+  "chat.sourceSearchOnly": [],
   "chat.sources": [],
+  "chat.stopAnswer": [],
+  "chat.synthesizing": [],
   "chat.tagsLabel": [],
   "chat.tagsPlaceholder": [],
   "chat.thinking": [],
@@ -1321,6 +1406,12 @@
   "sources.location.header": [],
   "sources.location.table": [],
   "sources.location.textbox": [],
+  "sources.mailDate": [
+    "date"
+  ],
+  "sources.sender": [
+    "sender"
+  ],
   "sources.status.encrypted": [],
   "sources.status.parsed": [],
   "sources.status.protected": [],

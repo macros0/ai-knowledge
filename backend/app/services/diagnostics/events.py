@@ -8,6 +8,7 @@ from functools import wraps
 from app.services.errors import public_error_code
 from .recorder import emit_event
 from .context import current_context
+from .sanitize import _ERROR_CODES
 
 
 @dataclass
@@ -19,13 +20,19 @@ class OperationOutcome:
 _outcome = ContextVar("diagnostic_operation_outcome", default=None)
 
 
+def diagnostic_error_code(exception):
+    """Preserve only registered public codes; never persist arbitrary exception text."""
+    code = getattr(exception, "code", None)
+    return code if type(code) is str and code in _ERROR_CODES else public_error_code(exception)
+
+
 def record_failure(exception, *, stage=None, **fields):
     outcome = _outcome.get()
     if outcome is not None:
         outcome.failed = True
     if stage:
         fields["stage"] = stage
-    fields["error_code"] = public_error_code(exception)
+    fields["error_code"] = diagnostic_error_code(exception)
     emit_event("operation_failed", exception=exception, fields=fields)
 
 

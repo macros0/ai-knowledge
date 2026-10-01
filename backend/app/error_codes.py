@@ -147,3 +147,13 @@ DIAGNOSTIC_BROWSER_NOT_JOINED = "diagnostic_browser_not_joined"
 DIAGNOSTIC_RATE_LIMITED = "diagnostic_rate_limited"
 BULK_EXPORT_PART_NOT_FOUND = "bulk_export_part_not_found"
 DOCUMENT_UPDATE_CONFLICT = "document_update_conflict"
+
+# --- Interactive chat ---
+CHAT_BUDGET_UNAVAILABLE = "chat_budget_unavailable"
+CHAT_ANSWER_TRUNCATED = "chat_answer_truncated"
+CHAT_EVIDENCE_INVALID = "chat_evidence_invalid"
+CHAT_SOURCES_CHANGED = "chat_sources_changed"
+CHAT_SUMMARY_TOO_LARGE = "chat_summary_too_large"
+CHAT_EVIDENCE_TOO_LARGE = "chat_evidence_too_large"
+CHAT_SEARCH_SCOPE_EMPTY = "chat_search_scope_empty"
+CHAT_SEARCH_SCOPE_UNAVAILABLE = "chat_search_scope_unavailable"

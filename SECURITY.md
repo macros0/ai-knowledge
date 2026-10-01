@@ -62,6 +62,14 @@ router/firewall/port publication and makes no claim of network isolation.
 The new `POST /api/chat/stream` uses the same authenticated chat handler,
 authorization, rate limiting and CSRF middleware as `POST /api/chat`.
 Responses are no-store; transport errors expose stable codes, not provider text.
+Selected-source answers use the same chat routes and access controls. The request
+references a search attempt in the current user's active session and source indices;
+client-supplied document text is never used. Search history stores canonical excerpt
+identities, offsets and digests rather than a second copy of full context. Before
+generation, `chat_source_selection.restore_blocks` checks visibility, active generation,
+canonical identity, original mail scope and excerpt digest. Publication/deletion during
+generation also invalidates the answer. A new generation attempt processes the selected
+excerpts with the existing context budget, admission, rate limits and cancellation.
 Only completed answers are passed to history storage; cancellation before that
 step prevents storing a partial answer. JSON schema constrains output shape,
 not factual truth or resistance to prompt injection. See `docs/LOCAL_LLM.md`.
@@ -88,7 +96,7 @@ Splitting with other documents:
   `frontend/src/app/api/[...path]/route.js`, while `/health` uses the explicit rewrite in
   `frontend/next.config.js`. The browser never contacts the backend directly.
 - **Must not be reachable from outside**: backend (`:8000`), Qdrant (`:6333`/`:6334`),
-  PostgreSQL (`:5432`), Ollama (`:12400`). In `docker-compose.yml` only `frontend`
+  PostgreSQL (`:5432`), Ollama (local Windows `:16400`). In `docker-compose.yml` only `frontend`
   (`8080:3000`) publishes a port.
 - **Trust boundary** — the reverse proxy plus the backend authentication layer. Everything
   inside the compose network is considered trusted (backend ↔ Qdrant ↔ DB ↔ Ollama talk
@@ -670,12 +678,23 @@ user.
 
 ### 2026-09-10 — Bounded document-processing admission
 Change: regular document processing now uses a bounded executor controlled by
-`PIPELINE_MAX_WORKERS` and `PIPELINE_MAX_PENDING`; when all slots are occupied, new work is
+`PIPELINE_MAX_WORKERS`, `PIPELINE_MAX_PENDING` (ordinary callers), and
+`PIPELINE_ADMIN_MAX_PENDING` (authenticated admins); when all applicable slots are occupied, new work is
 rejected with the stable `queue_overloaded` domain code instead of creating an unbounded daemon
 thread. The limit is per backend process. Reason: parser work and pending documents consume
 memory before the LLM semaphore is reached, so an LLM-only limit did not protect the service
 from authenticated upload bursts. Multi-worker production must account for capacity being
 multiplied per process or deploy a shared queue. Tests cover concurrent starts and task cleanup.
+
+### 2026-10-01 — Separate admin document-admission ceiling
+Upload, resume and single-document regenerate select a bounded shared-queue ceiling from
+the authenticated user's server-resolved roles: `PIPELINE_MAX_PENDING=8` for ordinary
+callers, `PIPELINE_ADMIN_MAX_PENDING=1000` for `admin`. Request form/query parameters cannot
+select the higher ceiling. Both roles share the same FIFO executor and worker count;
+the admin backlog can exhaust ordinary admission. The aggregate queue endpoint exposes
+the caller's applicable ceiling without document details. Bulk-job quotas remain unchanged.
+Reason: initial imports of approximately 500 documents require a larger bounded admin
+backlog without expanding ordinary upload admission or processing concurrency.
 
 ### 2026-09-10 — Recoverable OIDC callback failures
 Change: the OIDC callback now handles `httpx.HTTPError` from token and userinfo requests and
@@ -929,6 +948,13 @@ interpreted "no document" as "not deleted"). Reason: purge is the only irreversi
 the lifecycle, and restoring at the moment of cleanup must not cost data; orphan points
 (finalization failure) must not reach results.
 
+### 2026-09-30 — Local Ollama moved to port 16400
+Windows startup and shutdown scripts now use `127.0.0.1:16400` for Ollama;
+the previous port 12400 falls inside the Hyper-V/HNS excluded range observed
+on 2026-09-29. The startup script checks the new port for reservations and
+uses the same IPv4 loopback address for its health request. Ollama remains
+unreachable from other machines; production Compose network exposure is unchanged.
+
 ### 2026-09-05 — Local backend moved to port 18000
 Change: port 8000 (local Uvicorn) fell into the Windows Hyper-V/WSL excluded range
 (`netsh interface ipv4 show excludedportrange` — blocks change per boot); the backend
@@ -1041,6 +1067,16 @@ added only on explicit assignment (the `new_value` form without assignment is un
 No new action_type was introduced; permissions are the previous
 `require_role("editor","admin")`. No impact on trust boundaries/network topology.
 
+### 2026-09-30 — Dependency audit before push
+
+GitHub npm audit found brace-expansion denial-of-service advisories
+GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p in the frontend
+development dependency tree. The lock file now uses patched 1.1.21 and 5.0.12
+within the existing dependency ranges. The local pre-push hook audits the exact
+sent commit's package files, fails closed on audit/network errors and removes
+its temporary snapshot. It does not install dependencies or bypass CI gates.
+Dependabot proposes weekly dependency updates without automatic merging.
+
 ### 2026-09-27 — Cancel document update while preserving its published version
 
 `POST /documents/{id}/cancel-update` is restricted to editor/admin and active
@@ -1078,3 +1114,7 @@ test_local_llm.py checks unfinished objects, long truncated tails, schema-invali
 records, duplicate IDs, and rejection of complete invalid output;
 test_generation_pipeline.py checks problem/checkpoint persistence. Table splitting
 preserves whole source rows and headers, without rewriting canonical chunks.
+
+Integration 2026-10-01: the diagnostic allowlist includes the registered chat
+errors, search-scope route and normalized attempt cancellation template.
+Arbitrary error codes and raw attempt parameters remain excluded.

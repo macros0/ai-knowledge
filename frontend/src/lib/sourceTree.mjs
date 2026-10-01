@@ -95,3 +95,13 @@ export function sourceDateText(source, format, t) {
   return typeof date === "string" && Number.isFinite(Date.parse(date))
     ? format(date) : t("sources.dateUnknown");
 }
+
+export function sourceMailMeta(source, format, t) {
+  const date = sourceDateText(source, format, t);
+  if (!date) return null;
+  const sender = source.metadata?.sender;
+  return [
+    sender ? t("sources.sender", { sender }) : null,
+    t("sources.mailDate", { date }),
+  ].filter(Boolean).join(" · ");
+}

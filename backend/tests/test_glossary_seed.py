@@ -83,3 +83,94 @@ def test_seed_rolls_back_entire_batch_on_existing_alias_conflict():
     with pytest.raises(ValueError):
         seed_glossary(registry, entries, apply=True)
     assert [item['id'] for item in registry.list()] == [owner['id']]
+
+
+def test_initial_rules_seed_fresh_glossary_once_and_preserve_admin_edits():
+    from app.services.glossary import seed
+    from app.services.glossary.rule_registry import GlossaryRuleRegistry
+
+    assert seed.ensure_initial_rules() == 4
+    registry = GlossaryRuleRegistry()
+    rules = registry.list()
+    assert [(rule['name'], rule['number_from'], rule['number_to'], rule['enabled'])
+            for rule in rules] == [
+        ('PA Infotepe', 0, 999, True), ('OM infotipe', 1000, 1999, True),
+        ('PT infotipe', 2000, 2999, True), ('PA infotipe', 3000, 8999, True),
+    ]
+    assert 'it' in rules[0]['prefixes'] and 'it ' in rules[0]['prefixes']
+    assert 'инфотипу ' in rules[0]['prefixes']
+    assert 'hrp' in rules[1]['prefixes'] and 'hrt' in rules[1]['prefixes']
+    assert 'pa' not in rules[1]['prefixes']
+    registry.update(rules[0]['id'], rules[0]['version'], enabled=False,
+                    prefixes=['custom '], actor_id='admin')
+    registry.delete(rules[1]['id'], rules[1]['version'], actor_id='admin')
+    before = registry.list()
+
+    assert seed.ensure_initial_rules() == 0
+    assert registry.list() == before
+    assert GlossaryRegistry().list() == []
+
+
+def test_initial_rules_do_not_repopulate_glossary_after_all_rules_deleted():
+    from app.services.glossary import seed
+    from app.services.glossary.rule_registry import GlossaryRuleRegistry
+
+    seed.ensure_initial_rules()
+    registry = GlossaryRuleRegistry()
+    for rule in registry.list():
+        registry.delete(rule['id'], rule['version'], actor_id='admin')
+    assert seed.ensure_initial_rules() == 0
+    assert registry.list() == []
+
+
+def test_initial_rules_leave_existing_glossary_untouched():
+    from app.services.glossary import seed
+    from app.services.glossary.rule_registry import GlossaryRuleRegistry
+
+    GlossaryRegistry().create(None, 'business_term', 'Existing term')
+    assert seed.ensure_initial_rules() == 0
+    assert GlossaryRuleRegistry().list() == []
+
+
+def test_default_rules_explicit_seed_is_read_only_then_idempotent():
+    from app.services.glossary import seed
+    from app.services.glossary.rule_registry import GlossaryRuleRegistry
+
+    registry = GlossaryRegistry()
+    rules = seed.load_seed_rules()
+    preview = seed_glossary(registry, [], rules=rules)
+    assert preview['rules_would_create'] == 4 and preview['rules_created'] == 0
+    assert GlossaryRuleRegistry().list() == []
+    first = seed_glossary(registry, [], rules=rules, apply=True)
+    second = seed_glossary(registry, [], rules=rules, apply=True)
+    assert first['rules_created'] == 4
+    assert second['rules_created'] == 0 and second['rules_unchanged'] == 4
+
+
+def test_builtin_term_seed_is_compatible_with_initial_rules():
+    from app.services.glossary import seed
+    from app.services.glossary.expansion import prepare_query
+
+    registry = GlossaryRegistry()
+    entries = load_seed()
+    report = seed_glossary(registry, entries, rules=seed.load_seed_rules(), apply=False)
+    assert report['conflict'] == 0
+    assert report['would_create'] == len(entries)
+    seed_glossary(registry, entries, rules=seed.load_seed_rules(), apply=True)
+    result = prepare_query('IT0003', ui_locale='en', enabled=True)
+    assert result.strict_groups
+
+
+def test_custom_term_seed_does_not_inject_default_rules(tmp_path, monkeypatch):
+    import json
+    from scripts.seed_glossary import main
+    from app.services.glossary.rule_registry import GlossaryRuleRegistry
+
+    path = tmp_path / 'custom.json'
+    path.write_text(json.dumps([dict(canonical='CUSTOM', kind='business_term',
+                                    original_name='Custom', canonical_locale='en', aliases=[])]),
+                    encoding='utf-8')
+    monkeypatch.setattr('sys.argv', ['seed_glossary.py', '--path', str(path), '--apply'])
+    assert main() == 0
+    assert [term['original_name'] for term in GlossaryRegistry().list()] == ['Custom']
+    assert GlossaryRuleRegistry().list() == []

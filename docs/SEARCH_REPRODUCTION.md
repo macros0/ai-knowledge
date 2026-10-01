@@ -194,7 +194,7 @@ curl -X POST http://localhost:18000/api/search \
   reindex через `regenerate` документа.
 
 **Ветка `bm25` не находит ничего** — проверьте, что коллекция имеет sparse-вектор
-`"sparse"` (`GET /collections/okf_knowledge_base`), и что Ollama (порт **12400**,
+`"sparse"` (`GET /collections/okf_knowledge_base`), и что Ollama (порт **16400**,
 не 11434!) отдаёт эмбеддинги. Sparse строится локально, но dense-эмбеддинг
 запроса требует живой модели.
 

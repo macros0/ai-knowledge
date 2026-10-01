@@ -1,0 +1,4 @@
+.githooks/* text eol=lf
+
+# Preserve numeric evidence bytes and SHA across Windows/Linux checkouts.
+tests/artifacts/diagnostics/integration-20261001/*.json -text

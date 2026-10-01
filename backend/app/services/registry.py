@@ -196,12 +196,33 @@ def _document_dicts(session, docs: list[Document]) -> list[dict]:
     attempts = {row.doc_id: row for row in session.scalars(select(DocumentUpdateAttempt).where(
         DocumentUpdateAttempt.doc_id.in_(doc_ids),
     ))}
+    mail_headers = {}
+    for doc_id, kind, metadata in session.execute(select(
+        DocumentSource.doc_id, DocumentSource.kind, DocumentSource.metadata_json,
+    ).where(DocumentSource.doc_id.in_(doc_ids), DocumentSource.source_id == "root")):
+        metadata = metadata if isinstance(metadata, dict) else {}
+        if kind != "mail" and metadata.get("mail") is not True:
+            continue
+        sent_at = metadata.get("sent_at")
+        try:
+            timestamp = datetime.fromisoformat(sent_at) if isinstance(sent_at, str) else None
+        except ValueError:
+            timestamp = None
+        # A missing timezone is ambiguous; never substitute processing/upload time.
+        if timestamp is not None and timestamp.tzinfo is None:
+            timestamp = None
+        sender = metadata.get("sender")
+        mail_headers[doc_id] = {
+            "sender": sender if isinstance(sender, str) and sender else None,
+            "sent_at": timestamp,
+        }
     for doc in docs:
         timestamp = generated.get(doc.id)
         # SQLite drops timezone info; provenance is written in UTC.
         if timestamp is not None and timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
         item = _to_dict(doc, timestamp)
+        item["mail"] = mail_headers.get(doc.id)
         item["partial_chunks"] = partial.get(doc.id, [])
         attempt = attempts.get(doc.id)
         item["has_published_version"] = bool(active.get(doc.id) or attempt or doc.status == "done")

@@ -1020,12 +1020,128 @@ main {
 }
 
 /* ---------- chat ---------- */
-.chat-log {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 8px;
+.chat-search-scope {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
   margin-bottom: 12px;
 }
+.chat-search-scope.active { border-color: var(--accent); }
+.chat-scope-header, .chat-scope-toggle, .chat-scope-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.chat-scope-header { justify-content: space-between; }
+.chat-search-scope p { margin: 6px 0; }
+.chat-scope-details summary { cursor: pointer; font-size: 13px; }
+.chat-scope-documents {
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-scope-documents li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 4px 0;
+}
+.chat-scope-documents li > a, .chat-scope-documents li > span:first-child {
+  flex: 1;
+  min-width: 120px;
+  overflow-wrap: anywhere;
+}
+
+.chat-log-frame {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  margin-bottom: 12px;
+  padding-right: 20px;
+}
+
+.chat-log {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.chat-request-navigation {
+  position: absolute;
+  right: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 16px;
+  border-right: 2px solid var(--border);
+}
+
+.chat-request-marker-slot {
+  position: absolute;
+  right: -2px;
+  width: 18px;
+}
+
+.chat-request-mark {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 12px;
+  transform: translateY(-50%);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chat-request-mark::after {
+  content: "";
+  display: block;
+  height: 3px;
+  width: 10px;
+  margin-left: auto;
+  border-radius: 2px;
+  background: var(--muted);
+}
+
+.chat-request-mark.active::after, .chat-request-mark:hover::after {
+  background: var(--accent);
+  width: 16px;
+}
+
+.chat-request-mark:focus-visible { outline: 2px solid var(--accent); }
+.chat-request-mark.grouped::after { height: 5px; }
+.chat-request-menu {
+  position: absolute;
+  right: 22px;
+  z-index: 5;
+  width: min(320px, 65vw);
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 3px 12px #0003;
+}
+.chat-request-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+}
+.chat-request-menu button:hover, .chat-request-menu button[aria-current] { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 
 /* ---------- top-k picker ---------- */
 .topk-picker {
@@ -1172,8 +1288,30 @@ main {
 
 .msg .sources ol {
   margin: 6px 0 0;
-  padding-left: 20px;
+  padding-inline-start: calc(var(--source-number-digits, 2) * 1ch + 1.25rem);
   color: var(--muted);
+}
+
+.msg .sources li::marker { font-variant-numeric: tabular-nums; }
+.source-select { margin-inline-end: 7px; vertical-align: middle; }
+.source-selection-actions {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.source-selection-actions .btn:not(.ghost):not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
 }
 
 .msg .sources a.source-link {
@@ -1395,6 +1533,22 @@ main {
 
 .table-remainder-block .okf-markdown {
   margin-top: 12px;
+}
+
+.mail-metadata {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.source-content-section > .mail-metadata {
+  margin-bottom: 8px;
+}
+
+.mail-content .okf-markdown p {
+  white-space: pre-line;
 }
 
 .source-content-viewer {
@@ -2370,6 +2524,18 @@ main {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 8px;
+}
+
+.document-actions-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.document-actions-row > button {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .selection-toggle {
@@ -3648,8 +3814,14 @@ main {
 
 .doc-view-toggle {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.doc-view-toggle .document-queue-status {
+  margin: 0 0 0 auto;
 }
 
 .view-btn {
@@ -3721,10 +3893,18 @@ main {
 
 /* --- Этап 5: группировка, прогресс разметки, фильтры, чипы модулей --- */
 
+.document-view-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
 .doc-view-mode {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .document-groups {
@@ -3756,9 +3936,10 @@ main {
 
 .markup-progress {
   display: flex;
+  flex: 1 1 320px;
+  min-width: 0;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -3766,15 +3947,15 @@ main {
 }
 
 .markup-progress-label {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   font-size: 12px;
   color: var(--muted);
   margin-bottom: 0;
-  white-space: nowrap;
 }
 
 .markup-progress-bar {
   flex: 1;
+  min-width: 48px;
   height: 6px;
   background: var(--border);
   border-radius: 999px;
@@ -3956,10 +4137,25 @@ main {
 
 .chat-toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
+
+.chat-toolbar-actions {
+  display: flex;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  gap: 8px;
+  margin-left: auto;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chat-toolbar-actions .chat-scope-toggle { min-width: 0; }
 
 .history-list {
   list-style: none;
@@ -4572,3 +4768,24 @@ main {
   .diagnostics-controls { display: grid; grid-template-columns: minmax(0, 1fr); }
   .diagnostics-controls label, .diagnostics-controls input, .diagnostics-controls select { width: 100%; max-width: none; }
 }
+
+.chat-response-modes {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.chat-response-modes .mode-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.chat-document-list {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.chat-document-list li + li { margin-top: 5px; }
+.chat-progress { margin: 8px 0; color: var(--muted); font-size: 13px; }

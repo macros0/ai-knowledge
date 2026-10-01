@@ -30,3 +30,12 @@ test("structured error preserves code and status for localized UI", async () => 
     '{"type":"error","code":"conflict","status":409}\n',
   ])), e => e.code === "conflict" && e.status === 409);
 });
+
+test("retrieved sources arrive before generation error", async () => {
+  const seen = [];
+  await assert.rejects(readChatStream(response([
+    '{"type":"sources","sources":[{"title":"Нужный справочник","in_model_context":false}]}\n',
+    '{"type":"error","code":"dependency_unavailable","status":503}\n',
+  ]), () => {}, sources => seen.push(sources)), e => e.code === "dependency_unavailable");
+  assert.deepEqual(seen, [[{ title: "Нужный справочник", in_model_context: false }]]);
+});

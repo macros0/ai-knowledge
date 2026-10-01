@@ -381,6 +381,7 @@ class Settings(BaseSettings):
     # and waiting work; they are per backend process until a shared queue exists.
     pipeline_max_workers: int = Field(default=2, ge=1, le=32)
     pipeline_max_pending: int = Field(default=8, ge=0, le=256)
+    pipeline_admin_max_pending: int = Field(default=1000, ge=0, le=10_000)
     # Недоверенный document parser запускается в отдельном killable process.
     # Лимит памяти применяется через RSS monitoring на Windows и RLIMIT_AS на
     # POSIX; лимит времени включает ожидание всей рекурсивной распаковки.

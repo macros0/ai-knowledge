@@ -9,7 +9,7 @@ from dataclasses import replace
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.db.models import GlossaryInfotypeRule, GlossaryInfotypePrefix, GlossaryState
+from app.db.models import DomainTerm, GlossaryInfotypeRule, GlossaryInfotypePrefix, GlossaryState
 from app.db.session import session_scope
 from app.services.glossary.rule_registry import GlossaryRuleRegistry
 from app.services.glossary.rules import validate_rule
@@ -28,6 +28,54 @@ from app.services.glossary.mutation import glossary_write_session
 from app.services.glossary.types import GlossaryAliasInput, InfotypeRuleSnapshot
 
 DEFAULT_SEED_PATH = Path(__file__).resolve().parents[3] / "seeds" / "glossary.json"
+DEFAULT_RULES_SEED_PATH = DEFAULT_SEED_PATH.with_name("glossary_rules.json")
+
+
+def load_seed_rules(path: str | Path = DEFAULT_RULES_SEED_PATH) -> tuple[InfotypeRuleSnapshot, ...]:
+    """Read literal, administrator-editable defaults without generating forms."""
+    with Path(path).open(encoding="utf-8") as stream:
+        value = json.load(stream)
+    rows = value.get("rules", value) if isinstance(value, dict) else value
+    if not isinstance(rows, list):
+        raise GlossaryValidationError("Seed правил глоссария должен быть массивом")
+    rules = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict) or not all(
+            key in row for key in ("name", "number_from", "number_to", "prefixes")
+        ):
+            raise GlossaryValidationError(f"Некорректное правило seed #{index + 1}")
+        prefixes = validate_rule(row["number_from"], row["number_to"], row["prefixes"], name=row["name"])
+        enabled = row.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise GlossaryValidationError("enabled правила должен быть логическим значением")
+        rules.append(InfotypeRuleSnapshot(
+            rule_id=index + 1, name=row["name"], number_from=row["number_from"],
+            number_to=row["number_to"], prefixes=prefixes, enabled=enabled,
+        ))
+    return tuple(rules)
+
+
+def _is_pristine(session, state) -> bool:
+    return (
+        (state is None or (state.identities_ready and state.revision == 0))
+        and session.scalar(select(DomainTerm.id).limit(1)) is None
+        and session.scalar(select(GlossaryInfotypeRule.id).limit(1)) is None
+    )
+
+
+def ensure_initial_rules() -> int:
+    """Seed only a fresh glossary; deleted/edited defaults stay user-owned."""
+    with session_scope() as session:
+        if not _is_pristine(session, session.get(GlossaryState, 1)):
+            return 0
+    configured = load_seed_rules()
+    with glossary_write_session() as (session, state):
+        # Recheck under the shared writer lock, including concurrent startups.
+        if not _is_pristine(session, state):
+            return 0
+        report = _seed_in_session(GlossaryRegistry(), [], apply=True,
+                                  session=session, state=state, configured=configured)
+        return report["rules_created"]
 
 
 def load_seed(path: str | Path = DEFAULT_SEED_PATH) -> list[dict]:

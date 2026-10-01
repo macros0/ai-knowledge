@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { inModelContext } from "./chatSourceContext.mjs";
+import { documentHref, sourceHref } from "./chatSourceLinks.mjs";
 
 // Превращает ссылки-цитаты [N] в remark-узлы link на якорь #cite-N.
 function remarkCiteLinks() {
@@ -48,23 +50,13 @@ function remarkCiteLinks() {
   };
 }
 
-// URL документа по источнику (снапшот ChatSource). null — источник без документа.
-function sourceHref(s) {
-  if (!s || !s.doc_id) return null;
-  if (s.point_type === "chunk" && s.chunk_index != null)
-    return `/documents/${s.doc_id}/chunks/${s.chunk_index}`;
-  if (s.filename)
-    return `/documents/${s.doc_id}/okf/${encodeURIComponent(s.filename)}`;
-  return `/documents/${s.doc_id}/okf`;
-}
-
 // Компонент <a> для react-markdown: якорь #cite-N резолвится в ссылку на документ.
 function CiteLink({ href, children, sources, ...props }) {
   const m = /^#cite-(\d+)$/.exec(href || "");
   if (!m) return <a href={href} {...props}>{children}</a>;
   const n = Number(m[1]);
   const s = sources[n - 1];
-  const url = sourceHref(s);
+  const url = inModelContext(s) ? sourceHref(s) : null;
   if (!url) {
     return <span className="cite">{children}</span>;
   }
@@ -75,4 +67,4 @@ function CiteLink({ href, children, sources, ...props }) {
   );
 }
 
-export { CiteLink, remarkCiteLinks, sourceHref };
+export { CiteLink, documentHref, remarkCiteLinks, sourceHref };

@@ -84,6 +84,24 @@ def test_stream_failure_never_exposes_provider_text():
     assert "secret" not in json.dumps(events)
 
 
+def test_stream_keeps_retrieved_sources_when_generation_fails(monkeypatch):
+    from app.api import chat as chat_module
+    from tests.test_chat import _block, _patch_retrieval, make_client
+
+    _patch_retrieval(monkeypatch, chat_module, hits=[{"id": "p1"}])
+    monkeypatch.setattr(chat_module, "merge_and_format", lambda *a, **k: [_block()])
+    monkeypatch.setattr(chat_module._get_llm(), "chat", lambda *a: (_ for _ in ()).throw(ValueError("provider secret")))
+
+    response = make_client(monkeypatch).post(
+        "/api/chat/stream", json={"query": "тест", "use_glossary": False}
+    )
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert [event["type"] for event in events] == ["sources", "error"]
+    assert events[0]["sources"][0]["title"] == "Концепт"
+    assert events[-1]["code"] == "internal_error"
+    assert "provider secret" not in response.text
+
+
 def test_stream_route_retains_empty_source_short_circuit(monkeypatch):
     from app.api import chat as chat_module
     from tests.test_chat import make_client
