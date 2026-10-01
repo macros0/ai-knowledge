@@ -1,0 +1,148 @@
+{
+  "mode": "standard",
+  "repeat": 1,
+  "corpus_size": 1,
+  "concurrency": 8,
+  "warmup_seconds": 2,
+  "elapsed_seconds": 10.023005552007817,
+  "requests": 728,
+  "p50_ms": 89.27070500794798,
+  "p95_ms": 125.15232793521136,
+  "p99_ms": 398.72434397693723,
+  "max_ms": 418.9810090465471,
+  "throughput_per_second": 72.6329039949665,
+  "peak_rss_bytes": {
+    "backend": 446791680,
+    "frontend": 210313216,
+    "backend_child": 28893184
+  },
+  "measurement_peak_rss_bytes": {
+    "backend": 446791680,
+    "frontend": 210313216,
+    "backend_child": 28893184
+  },
+  "response_fingerprints": {
+    "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+    "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5",
+    "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe"
+  },
+  "response_equality_pass": true,
+  "capture_search_counts": {
+    "backend_requests": 896,
+    "frontend_requests": 896,
+    "backend_operations": 896,
+    "backend_qdrant": 896
+  },
+  "expected_capture_search_calls": 896,
+  "capture_counts_pass": true,
+  "cpu_seconds": {
+    "backend": 13.278968999999998,
+    "frontend": 4.100041000000001
+  },
+  "spool_bytes_growth": 61054,
+  "recorder_delta": {
+    "used_bytes": 63750,
+    "reserved_bytes": 6625,
+    "quota_bytes": 0,
+    "free_bytes": -376832,
+    "unsafe_paths": 0,
+    "written": 112,
+    "dropped": 0,
+    "invalid": 0,
+    "repeats": 0,
+    "expired_queue": 0,
+    "storage_errors": 0,
+    "shutdown_timeout": 0,
+    "drain_timeouts": 0,
+    "sampled_success": 0,
+    "aggregated_success": 2105,
+    "sampled_out_traces": 0,
+    "sampled_out_slow": 0,
+    "policy_omitted": 2184,
+    "aggregate_overflow": 0,
+    "queued": 0
+  },
+  "frontend_delta": {
+    "schema_version": 0,
+    "written": 4,
+    "dropped": 0,
+    "invalid": 0,
+    "repeats": 0,
+    "expired_queue": 0,
+    "intentional_aggregated": 744,
+    "intentional_sampled": 0,
+    "aggregate_overflow": 0,
+    "queued": 0
+  },
+  "recorder": {
+    "used_bytes": 106427064,
+    "reserved_bytes": 122161,
+    "quota_bytes": 503316480,
+    "free_bytes": 66885656576,
+    "measured_at": "2026-09-30T08:04:26.751655+00:00",
+    "storage_degraded": false,
+    "unsafe_paths": 0,
+    "last_failure": null,
+    "written": 143,
+    "dropped": 0,
+    "invalid": 0,
+    "repeats": 0,
+    "expired_queue": 0,
+    "storage_errors": 0,
+    "shutdown_timeout": 0,
+    "drain_timeouts": 0,
+    "sampled_success": 0,
+    "aggregated_success": 2580,
+    "sampled_out_traces": 0,
+    "sampled_out_slow": 0,
+    "policy_omitted": 2688,
+    "aggregate_overflow": 0,
+    "queued": 0,
+    "running": true,
+    "boot_id": "f5e8815e-e8d4-4205-8c9c-e9ef6709ba88",
+    "started_at_utc": "2026-09-30T08:03:19.179918+00:00"
+  },
+  "session_id": "1b97f612-20d6-4367-b354-abea92ecb312",
+  "stopped_before_bundle": false,
+  "bundle": {
+    "status": "ready",
+    "size_bytes": 5223,
+    "build_seconds": 2.9092796489130706,
+    "observed_building": true,
+    "overlapping_requests": 168,
+    "phase_latencies": {
+      "prepare": {
+        "requests": 136,
+        "observed_seconds": 2.29496506403666,
+        "p50_ms": 107.04969096696004,
+        "p95_ms": 394.59800894837826,
+        "p99_ms": 418.458633008413,
+        "max_ms": 418.9810090465471
+      },
+      "zip": {
+        "requests": 24,
+        "observed_seconds": 0.23230381694156677,
+        "p50_ms": 107.49983153073117,
+        "p95_ms": 136.5762959467247,
+        "p99_ms": 138.60127399675548,
+        "max_ms": 138.60127399675548
+      }
+    },
+    "phases": [
+      {
+        "phase": "prepare",
+        "pid": 2349994,
+        "started": 744748.653213372,
+        "finished": 744750.948178436,
+        "closed": true
+      },
+      {
+        "phase": "zip",
+        "pid": 2350099,
+        "started": 744750.968986143,
+        "finished": 744751.20128996,
+        "closed": true
+      }
+    ]
+  }
+}

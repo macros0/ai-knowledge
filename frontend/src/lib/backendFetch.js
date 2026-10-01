@@ -1,5 +1,8 @@
-import { cookies } from "next/headers";
+import { cookies, headers as requestHeaders } from "next/headers";
 import { serializeCookies } from "./serializeCookies.mjs";
+import { requestIdFromHeaders, withRequestContext } from "./requestContext.mjs";
+import { emitServerEvent } from "./diagnosticServer.mjs";
+import { routeTemplate } from "./diagnosticSchema.mjs";
 
 /**
  * Серверный fetch к бэкенду с пробросом авторизационной cookie.
@@ -19,13 +22,23 @@ export async function backendFetch(path, options = {}) {
   const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:18000";
   const cookieStore = await cookies();
   const cookieString = serializeCookies(cookieStore.getAll());
-  const headers = { ...(options.headers || {}) };
+  const headers = new Headers(options.headers);
   if (cookieString) {
-    headers.Cookie = cookieString;
+    headers.set("Cookie", cookieString);
   }
-  return fetch(`${backendUrl}${path}`, {
-    ...options,
-    headers,
-    cache: "no-store",
+  const requestId = requestIdFromHeaders(await requestHeaders());
+  headers.set("x-request-id", requestId);
+  return withRequestContext({ requestId }, async () => {
+    const started = performance.now();
+    try {
+      const response = await fetch(`${backendUrl}${path}`, { ...options, headers, cache: "no-store" });
+      emitServerEvent("request_finished", { route_template: routeTemplate(path), http_status: response.status,
+        duration_ms: Math.max(0, performance.now() - started) });
+      return response;
+    } catch (error) {
+      if (!options.signal?.aborted) emitServerEvent("proxy_failed", { route_template: routeTemplate(path),
+        duration_ms: Math.max(0, performance.now() - started), error_code: "network_error" }, error);
+      throw error;
+    }
   });
 }

@@ -1,0 +1,19 @@
+{
+  "measured_seconds": 2,
+  "postgres_container_io": {
+    "okf-diag-levels-20260929-postgres-1": {
+      "processes": 11,
+      "read_bytes": 0,
+      "write_bytes": 0
+    },
+    "okf-knowledge-postgres-1": {
+      "processes": 8,
+      "read_bytes": 0,
+      "write_bytes": 0
+    }
+  },
+  "device_mapping": {
+    "259:0": "nvme0n1",
+    "252:6": "pve-vm--102--disk--0"
+  }
+}

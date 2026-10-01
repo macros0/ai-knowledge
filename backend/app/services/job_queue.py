@@ -29,6 +29,9 @@ from app.services import audit as audit_mod
 from app import error_codes as codes
 from app.services.errors import ConflictError, DomainError, NotFoundError
 from app.services.bulk_generation import generation_skip_code, reserved_generation_doc_ids
+from app.services.diagnostics.context import (
+    bind_context, context_from_metadata, context_metadata, current_context, new_operation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +212,7 @@ class JobQueue:
                 params={
                     "doc_ids": doc_ids,
                     "ip_address": ip_address,
+                    "diagnostic_context": context_metadata(new_operation(current_context(), operation_kind="system")),
                 },
             )
             s.add(job)
@@ -325,6 +329,13 @@ class JobQueue:
 
     def _execute(self, job_id: int) -> None:
         job = self.get(job_id)
+        context = context_from_metadata((job or {}).get("params", {}).get("diagnostic_context"))
+        if not context.operation_id:
+            context = new_operation(context)
+        with bind_context(context):
+            self._execute_bound(job_id, job)
+
+    def _execute_bound(self, job_id: int, job) -> None:
         if (
             job is None
             or job["job_type"] not in JOB_TYPES

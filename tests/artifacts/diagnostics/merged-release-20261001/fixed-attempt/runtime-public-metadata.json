@@ -1,0 +1,58 @@
+{
+  "source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "project": "okf-diag-release-57727d9-rssfix",
+  "image_ids": {
+    "backend": "sha256:ac7f713a109f100e013e37ff86b51be3fdc0ee9aac1b4eac9008ba3c4944aceb",
+    "frontend": "sha256:15aafe8f31facdf95f66c5f6052045fa28f76474f2abb1bb6386c310b4f4b64b"
+  },
+  "commands": {
+    "backend": [
+      "sh",
+      "-c",
+      "exec python -m app.diagnostic_entrypoint --host ${UVICORN_HOST:-0.0.0.0} --port 8000 --workers ${UVICORN_WORKERS:-1}"
+    ],
+    "frontend": [
+      "node",
+      "diagnostics-runner.mjs"
+    ]
+  },
+  "baseline_enabled": true,
+  "stock_runtime": true,
+  "port": 18085,
+  "fresh_volumes": true,
+  "memory_limits_mib": {
+    "backend": 1024,
+    "frontend": 768,
+    "postgres": 384,
+    "qdrant": 384
+  },
+  "environment": "development/simulation",
+  "harness_revision": "fdc327bcffe004c6aed2fc096d543aa0ed027dda",
+  "harness_sha256": "d65285c8297c513e2a8f3336f4b715ed728e925ff5d3054953f3fc8e0bd3277f",
+  "containers": {
+    "backend": {
+      "image_id": "sha256:ac7f713a109f100e013e37ff86b51be3fdc0ee9aac1b4eac9008ba3c4944aceb",
+      "started_at": "2026-10-01T19:18:08.399504829Z",
+      "memory_limit": 1073741824,
+      "status": "running"
+    },
+    "frontend": {
+      "image_id": "sha256:15aafe8f31facdf95f66c5f6052045fa28f76474f2abb1bb6386c310b4f4b64b",
+      "started_at": "2026-10-01T19:18:19.548631919Z",
+      "memory_limit": 805306368,
+      "status": "running"
+    },
+    "postgres": {
+      "image_id": "sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675",
+      "started_at": "2026-10-01T19:17:59.599072496Z",
+      "memory_limit": 402653184,
+      "status": "running"
+    },
+    "qdrant": {
+      "image_id": "sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc",
+      "started_at": "2026-10-01T19:17:59.595085507Z",
+      "memory_limit": 402653184,
+      "status": "running"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "frontend/scripts/numeric-memory-observer.mjs": "bed07a20fab4642bbac085f8bacf72dd8c18a90b97e0007efdfcc761b551b35a",
+  "backend/test_scripts/probe_node_memory_matched.py": "6c6049b3ebd38087d987ffc373d899962ca51d5656b9df3116ab21b625111e8e"
+}

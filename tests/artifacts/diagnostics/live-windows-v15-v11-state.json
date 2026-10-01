@@ -1,0 +1,61 @@
+{
+  "stand": "Windows / Docker Desktop Linux VM",
+  "images": {
+    "backend": "sha256:2aad41d130c6d877b8bcfd98f3ed7381b4f4acaa2e6a0fe7fec5e0cfdd8bb023",
+    "frontend": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799"
+  },
+  "thresholds_unchanged": true,
+  "history": [
+    {
+      "stage": "http-1doc-normal-windows-v15-v11",
+      "status": "passed",
+      "started_utc": "2026-09-30T21:48:05.257204+00:00",
+      "exit_code": 0,
+      "finished_utc": "2026-09-30T22:15:34.869178+00:00",
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": true,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": true,
+        "all_zip_overlap_pass": true
+      }
+    },
+    {
+      "stage": "http-1doc-active-windows-v15-v11",
+      "status": "passed",
+      "started_utc": "2026-09-30T22:15:35.027674+00:00",
+      "exit_code": 0,
+      "finished_utc": "2026-09-30T22:52:05.396488+00:00",
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": true,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": true,
+        "all_zip_overlap_pass": true
+      }
+    },
+    {
+      "stage": "http-1doc-stopped-windows-v15-v11",
+      "status": "failed",
+      "started_utc": "2026-09-30T22:52:05.556484+00:00",
+      "exit_code": 1,
+      "finished_utc": "2026-09-30T23:19:38.717741+00:00",
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": false,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": true,
+        "all_zip_overlap_pass": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,596 @@
+{
+  "rows": [
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 14187,
+          "event_codes": {
+            "operation_summary": {
+              "bytes": 917671,
+              "bytes_per_event": 508.9689406544648,
+              "events": 1803
+            },
+            "success_aggregate": {
+              "bytes": 43301,
+              "bytes_per_event": 656.0757575757576,
+              "events": 66
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 5383,
+          "event_codes": {
+            "success_aggregate": {
+              "bytes": 13834,
+              "bytes_per_event": 628.8181818181819,
+              "events": 22
+            }
+          }
+        }
+      },
+      "concurrency": 1,
+      "mode": "standard",
+      "repeat": 1,
+      "session_id": "50ab86e9-ba3c-44d9-8f5c-785d9b89c700"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 10203,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 890827,
+              "bytes_per_event": 489.7344694887301,
+              "events": 1819
+            },
+            "operation_finished": {
+              "bytes": 891065,
+              "bytes_per_event": 489.8653106102254,
+              "events": 1819
+            },
+            "operation_started": {
+              "bytes": 809455,
+              "bytes_per_event": 445.0,
+              "events": 1819
+            },
+            "request_finished": {
+              "bytes": 860022,
+              "bytes_per_event": 472.79934029686643,
+              "events": 1819
+            },
+            "stage_finished": {
+              "bytes": 883727,
+              "bytes_per_event": 485.83122594832327,
+              "events": 1819
+            },
+            "stage_started": {
+              "bytes": 802179,
+              "bytes_per_event": 441.0,
+              "events": 1819
+            },
+            "success_aggregate": {
+              "bytes": 41335,
+              "bytes_per_event": 656.1111111111111,
+              "events": 63
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 3412,
+          "event_codes": {
+            "request_finished": {
+              "bytes": 754039,
+              "bytes_per_event": 416.82642343836375,
+              "events": 1809
+            },
+            "success_aggregate": {
+              "bytes": 10016,
+              "bytes_per_event": 626.0,
+              "events": 16
+            }
+          }
+        }
+      },
+      "concurrency": 1,
+      "mode": "detailed",
+      "repeat": 1,
+      "session_id": "8899392e-d101-49b4-959b-62aeac4db864"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 21086,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 2936,
+              "bytes_per_event": 489.3333333333333,
+              "events": 6
+            },
+            "operation_summary": {
+              "bytes": 924832,
+              "bytes_per_event": 509.26872246696036,
+              "events": 1816
+            },
+            "success_aggregate": {
+              "bytes": 43455,
+              "bytes_per_event": 658.4090909090909,
+              "events": 66
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 7622,
+          "event_codes": {
+            "success_aggregate": {
+              "bytes": 13869,
+              "bytes_per_event": 630.4090909090909,
+              "events": 22
+            }
+          }
+        }
+      },
+      "concurrency": 8,
+      "mode": "standard",
+      "repeat": 1,
+      "session_id": "23ef1f8c-cc37-4b52-b9b3-3dfbf71cfa6b"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 17130,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 892631,
+              "bytes_per_event": 489.1128767123288,
+              "events": 1825
+            },
+            "operation_finished": {
+              "bytes": 892294,
+              "bytes_per_event": 490.27142857142854,
+              "events": 1820
+            },
+            "operation_started": {
+              "bytes": 809900,
+              "bytes_per_event": 445.0,
+              "events": 1820
+            },
+            "request_finished": {
+              "bytes": 858874,
+              "bytes_per_event": 471.90879120879123,
+              "events": 1820
+            },
+            "stage_finished": {
+              "bytes": 884911,
+              "bytes_per_event": 486.21483516483516,
+              "events": 1820
+            },
+            "stage_started": {
+              "bytes": 802620,
+              "bytes_per_event": 441.0,
+              "events": 1820
+            },
+            "success_aggregate": {
+              "bytes": 40829,
+              "bytes_per_event": 658.5322580645161,
+              "events": 62
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 5765,
+          "event_codes": {
+            "request_finished": {
+              "bytes": 765330,
+              "bytes_per_event": 415.9402173913044,
+              "events": 1840
+            },
+            "success_aggregate": {
+              "bytes": 12580,
+              "bytes_per_event": 629.0,
+              "events": 20
+            }
+          }
+        }
+      },
+      "concurrency": 8,
+      "mode": "detailed",
+      "repeat": 1,
+      "session_id": "57c29c14-b722-4a94-925f-f42bb534c959"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 14445,
+          "event_codes": {
+            "operation_summary": {
+              "bytes": 920775,
+              "bytes_per_event": 508.9966832504146,
+              "events": 1809
+            },
+            "success_aggregate": {
+              "bytes": 43301,
+              "bytes_per_event": 656.0757575757576,
+              "events": 66
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 5415,
+          "event_codes": {
+            "success_aggregate": {
+              "bytes": 12567,
+              "bytes_per_event": 628.35,
+              "events": 20
+            }
+          }
+        }
+      },
+      "concurrency": 1,
+      "mode": "standard",
+      "repeat": 2,
+      "session_id": "56e98f20-71d4-4bd5-bf08-fb5784bbf6ca"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 10265,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 885477,
+              "bytes_per_event": 489.7549778761062,
+              "events": 1808
+            },
+            "operation_finished": {
+              "bytes": 885645,
+              "bytes_per_event": 489.8478982300885,
+              "events": 1808
+            },
+            "operation_started": {
+              "bytes": 804560,
+              "bytes_per_event": 445.0,
+              "events": 1808
+            },
+            "request_finished": {
+              "bytes": 854844,
+              "bytes_per_event": 472.8119469026549,
+              "events": 1808
+            },
+            "stage_finished": {
+              "bytes": 878411,
+              "bytes_per_event": 485.8467920353982,
+              "events": 1808
+            },
+            "stage_started": {
+              "bytes": 797328,
+              "bytes_per_event": 441.0,
+              "events": 1808
+            },
+            "success_aggregate": {
+              "bytes": 42652,
+              "bytes_per_event": 656.1846153846154,
+              "events": 65
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 3412,
+          "event_codes": {
+            "request_finished": {
+              "bytes": 755287,
+              "bytes_per_event": 416.825055187638,
+              "events": 1812
+            },
+            "success_aggregate": {
+              "bytes": 9391,
+              "bytes_per_event": 626.0666666666667,
+              "events": 15
+            }
+          }
+        }
+      },
+      "concurrency": 1,
+      "mode": "detailed",
+      "repeat": 2,
+      "session_id": "a6a99301-8d68-4f16-acb0-7a343e5a450c"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 17134,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 891213,
+              "bytes_per_event": 489.1399560922064,
+              "events": 1822
+            },
+            "operation_finished": {
+              "bytes": 892232,
+              "bytes_per_event": 490.23736263736265,
+              "events": 1820
+            },
+            "operation_started": {
+              "bytes": 809900,
+              "bytes_per_event": 445.0,
+              "events": 1820
+            },
+            "request_finished": {
+              "bytes": 858819,
+              "bytes_per_event": 471.87857142857143,
+              "events": 1820
+            },
+            "stage_finished": {
+              "bytes": 884949,
+              "bytes_per_event": 486.23571428571427,
+              "events": 1820
+            },
+            "stage_started": {
+              "bytes": 802620,
+              "bytes_per_event": 441.0,
+              "events": 1820
+            },
+            "success_aggregate": {
+              "bytes": 41471,
+              "bytes_per_event": 658.2698412698413,
+              "events": 63
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 5686,
+          "event_codes": {
+            "request_finished": {
+              "bytes": 748700,
+              "bytes_per_event": 415.94444444444446,
+              "events": 1800
+            },
+            "success_aggregate": {
+              "bytes": 13233,
+              "bytes_per_event": 630.1428571428571,
+              "events": 21
+            }
+          }
+        }
+      },
+      "concurrency": 8,
+      "mode": "detailed",
+      "repeat": 2,
+      "session_id": "8c347e4a-9893-43d2-8462-08542bfa60f4"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 21169,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 2447,
+              "bytes_per_event": 489.4,
+              "events": 5
+            },
+            "operation_summary": {
+              "bytes": 919732,
+              "bytes_per_event": 509.26467331118494,
+              "events": 1806
+            },
+            "success_aggregate": {
+              "bytes": 41484,
+              "bytes_per_event": 658.4761904761905,
+              "events": 63
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 7677,
+          "event_codes": {
+            "success_aggregate": {
+              "bytes": 12605,
+              "bytes_per_event": 630.25,
+              "events": 20
+            }
+          }
+        }
+      },
+      "concurrency": 8,
+      "mode": "standard",
+      "repeat": 2,
+      "session_id": "0462c40e-2d5c-43e4-ba02-cc9e363d299f"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 10239,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 887415,
+              "bytes_per_event": 489.7433774834437,
+              "events": 1812
+            },
+            "operation_finished": {
+              "bytes": 887615,
+              "bytes_per_event": 489.8537527593819,
+              "events": 1812
+            },
+            "operation_started": {
+              "bytes": 806340,
+              "bytes_per_event": 445.0,
+              "events": 1812
+            },
+            "request_finished": {
+              "bytes": 856693,
+              "bytes_per_event": 472.78863134657837,
+              "events": 1812
+            },
+            "stage_finished": {
+              "bytes": 880359,
+              "bytes_per_event": 485.8493377483444,
+              "events": 1812
+            },
+            "stage_started": {
+              "bytes": 799092,
+              "bytes_per_event": 441.0,
+              "events": 1812
+            },
+            "success_aggregate": {
+              "bytes": 43294,
+              "bytes_per_event": 655.969696969697,
+              "events": 66
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 3405,
+          "event_codes": {
+            "request_finished": {
+              "bytes": 758549,
+              "bytes_per_event": 416.78516483516484,
+              "events": 1820
+            },
+            "success_aggregate": {
+              "bytes": 12565,
+              "bytes_per_event": 628.25,
+              "events": 20
+            }
+          }
+        }
+      },
+      "concurrency": 1,
+      "mode": "detailed",
+      "repeat": 3,
+      "session_id": "e00d27d6-9487-4ca7-93d3-df96ed2f69b2"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 14480,
+          "event_codes": {
+            "operation_summary": {
+              "bytes": 918247,
+              "bytes_per_event": 509.0060975609756,
+              "events": 1804
+            },
+            "success_aggregate": {
+              "bytes": 43301,
+              "bytes_per_event": 656.0757575757576,
+              "events": 66
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 5424,
+          "event_codes": {
+            "success_aggregate": {
+              "bytes": 13829,
+              "bytes_per_event": 628.5909090909091,
+              "events": 22
+            }
+          }
+        }
+      },
+      "concurrency": 1,
+      "mode": "standard",
+      "repeat": 3,
+      "session_id": "c985b5fc-9964-4d21-9601-8ece64fcc9f4"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 21276,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 1957,
+              "bytes_per_event": 489.25,
+              "events": 4
+            },
+            "operation_summary": {
+              "bytes": 926901,
+              "bytes_per_event": 509.2862637362637,
+              "events": 1820
+            },
+            "success_aggregate": {
+              "bytes": 41476,
+              "bytes_per_event": 658.3492063492064,
+              "events": 63
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 7764,
+          "event_codes": {
+            "success_aggregate": {
+              "bytes": 13231,
+              "bytes_per_event": 630.047619047619,
+              "events": 21
+            }
+          }
+        }
+      },
+      "concurrency": 8,
+      "mode": "standard",
+      "repeat": 3,
+      "session_id": "1859b81e-d58e-48b2-9859-1a4bf02d0729"
+    },
+    {
+      "components": {
+        "backend": {
+          "aggregate_calls": 17057,
+          "event_codes": {
+            "dependency_call_finished": {
+              "bytes": 893162,
+              "bytes_per_event": 489.1358159912377,
+              "events": 1826
+            },
+            "operation_finished": {
+              "bytes": 892206,
+              "bytes_per_event": 490.2230769230769,
+              "events": 1820
+            },
+            "operation_started": {
+              "bytes": 809900,
+              "bytes_per_event": 445.0,
+              "events": 1820
+            },
+            "request_finished": {
+              "bytes": 858846,
+              "bytes_per_event": 471.8934065934066,
+              "events": 1820
+            },
+            "stage_finished": {
+              "bytes": 884923,
+              "bytes_per_event": 486.2214285714286,
+              "events": 1820
+            },
+            "stage_started": {
+              "bytes": 802620,
+              "bytes_per_event": 441.0,
+              "events": 1820
+            },
+            "success_aggregate": {
+              "bytes": 42789,
+              "bytes_per_event": 658.2923076923076,
+              "events": 65
+            }
+          }
+        },
+        "frontend": {
+          "aggregate_calls": 5687,
+          "event_codes": {
+            "request_finished": {
+              "bytes": 756940,
+              "bytes_per_event": 415.9010989010989,
+              "events": 1820
+            },
+            "success_aggregate": {
+              "bytes": 11972,
+              "bytes_per_event": 630.1052631578947,
+              "events": 19
+            }
+          }
+        }
+      },
+      "concurrency": 8,
+      "mode": "detailed",
+      "repeat": 3,
+      "session_id": "4c5babea-8902-45db-9ed4-2efdf6ce7be0"
+    }
+  ],
+  "schema_version": 1
+}

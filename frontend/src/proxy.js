@@ -6,15 +6,18 @@ import { buildContentSecurityPolicy, createNonce } from "./lib/contentSecurityPo
 // скриптам при рендере, а layout.js читает x-nonce для инлайн-скриптов.
 // Страницы и так динамические (layout читает cookies/headers).
 export function proxy(request) {
+  const requestId = crypto.randomUUID();
   const nonce = createNonce();
   const policy = buildContentSecurityPolicy(nonce, { dev: process.env.NODE_ENV === "development" });
 
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-request-id", requestId);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", policy);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", policy);
+  response.headers.set("x-request-id", requestId);
   return response;
 }
 

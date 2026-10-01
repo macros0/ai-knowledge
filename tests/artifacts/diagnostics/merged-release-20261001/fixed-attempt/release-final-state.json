@@ -1,0 +1,30 @@
+{
+  "frontend": {
+    "image_id": "sha256:15aafe8f31facdf95f66c5f6052045fa28f76474f2abb1bb6386c310b4f4b64b",
+    "started_at": "2026-10-01T19:18:19.548631919Z",
+    "status": "exited",
+    "exit_code": 143,
+    "oom_killed": false
+  },
+  "backend": {
+    "image_id": "sha256:ac7f713a109f100e013e37ff86b51be3fdc0ee9aac1b4eac9008ba3c4944aceb",
+    "started_at": "2026-10-01T19:18:08.399504829Z",
+    "status": "exited",
+    "exit_code": 0,
+    "oom_killed": false
+  },
+  "qdrant": {
+    "image_id": "sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc",
+    "started_at": "2026-10-01T19:17:59.595085507Z",
+    "status": "exited",
+    "exit_code": 143,
+    "oom_killed": false
+  },
+  "postgres": {
+    "image_id": "sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675",
+    "started_at": "2026-10-01T19:17:59.599072496Z",
+    "status": "exited",
+    "exit_code": 0,
+    "oom_killed": false
+  }
+}

@@ -441,9 +441,15 @@ BuiltBundle: filename key, size_bytes, sha256, manifest; no arbitrary path in AP
 - [ ] Построить строго фиксированный состав ZIP из spec. Streams валидировать
   повторно; имена ZIP entry статические; не обходить data/debug или uploads.
   Готовить DEFLATE level1 по блокам, ограничивать и вход, и фактический выход.
-- [ ] Admission резервирует полную оценку snapshot+ZIP+metadata; одновременно
-  максимум 1 building и 2 queued, durable rate limit 3/hour/admin. Commit audit
-  requested до постановки; publish ready + audit только после проверки ZIP.
+- [ ] Admission резервирует bounded metadata очереди; единственный worker
+  копирует только события выбранного фильтра с per-write quota и перед сборкой
+  ZIP резервирует верхнюю оценку фактического snapshot+ZIP. Резервирование всех
+  retained-сегментов при admission отклоняло узкий пакет из-за посторонних
+  событий; принятый пакет может завершиться ошибкой при последующем исчерпании
+  места, что показывается администратору. Одновременно максимум 1 building и
+  2 queued, не более 1 незавершённого пакета на администратора, durable rate
+  limit 3/hour/admin. Commit audit requested до постановки; publish ready +
+  audit только после проверки ZIP.
 - [ ] Ошибка компонента даёт partial manifest, превышение размера — failed с
   `diagnostic_bundle_too_large`. Rename без ready DB state не открывает download.
   Recovery удаляет/карантинирует orphan temporary в пределах budgets, не пытается
@@ -653,6 +659,10 @@ Wrapper принимает явные runtime env file и Compose project; не 
   отдельный реальный smoke без генерации confidential fixture наружу.
   p95 overhead <=10%/20%; RSS backend delta <=128 МиБ, Node <=32 МиБ;
   no new business 5xx, ZIP CRC и quotas проходят. Сохранить environment/build ID.
+  Решением владельца от 28.09.2026 оптимизация p95 вынесена в отдельную задачу
+  `docs/superpowers/plans/2026-09-28-admin-diagnostics-performance.md`.
+  Фактические превышения остаются в отчёте приёмки; этот пункт не считать
+  выполненным из-за переноса, а production-включение оценивать отдельно.
 - [ ] Browser acceptance: admin start→reproduce→stop→preview→download→unzip;
   code reference matches; обычный пользователь join/report без read; RU/EN;
   backend down error в Node spool; после восстановления partial пакет;
@@ -696,12 +706,15 @@ Wrapper принимает явные runtime env file и Compose project; не 
 
 ## Definition of Done
 
-- [ ] Все 14 задач имеют проверенный результат и ссылки на evidence.
+- [ ] Функциональные части всех 14 задач имеют проверенный результат и ссылки
+  на evidence; отклонение p95 связано с отдельной задачей оптимизации.
 - [ ] Администратор получает понятный пакет без доступа разработчика к системе.
 - [ ] Negative privacy/RBAC/disk-full/restart/streaming tests зелёные.
 - [ ] No-content гарантия ограничена новым schema-based каналом; старые/raw логи
   не представлены как очищенные. Partial/missing evidence виден в manifest/UI.
-- [ ] Производительность и дисковые пределы подтверждены измерениями.
+- [ ] Дисковые пределы подтверждены измерениями. p95 честно измерен и
+  зафиксирован как известное превышение; его оптимизация и прежние пороги
+  вынесены в `2026-09-28-admin-diagnostics-performance.md` по решению владельца.
 - [ ] Runbook, SECURITY.md, миграция, release/rollback drill готовы.
 - [ ] Текущие чужие изменения сохранены; deployment/commit/push не выполнены
   без отдельного поручения.

@@ -1,0 +1,12 @@
+{
+  "started_utc": "2026-09-30T19:37:01.047340+00:00",
+  "finished_utc": "2026-09-30T19:55:42.935242+00:00",
+  "probe_exit_code": 0,
+  "ct_monitor_exit_code": 0,
+  "ct_monitor_error_bytes": 0,
+  "images": {
+    "backend": "sha256:2aad41d130c6d877b8bcfd98f3ed7381b4f4acaa2e6a0fe7fec5e0cfdd8bb023",
+    "frontend": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799"
+  },
+  "diagnostic_only": true
+}

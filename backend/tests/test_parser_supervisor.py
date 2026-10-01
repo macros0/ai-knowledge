@@ -430,7 +430,10 @@ def test_windows_job_removes_descendants_on_every_exit(tmp_path, outcome):
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     child_handle = None
     try:
-        arguments = dict(attachments_dir=tmp_path / "attachments", timeout_seconds=3,
+        # The Windows spawn imports the backend before this worker can create
+        # the PID marker. Full-suite load can consume the old 3-second budget
+        # before descendant cleanup is exercised.
+        arguments = dict(attachments_dir=tmp_path / "attachments", timeout_seconds=15,
                          max_memory_mb=1024, _worker_target=_descendant_worker)
         if outcome == "timeout":
             with pytest.raises(ParserTimeoutError):
@@ -540,7 +543,8 @@ def test_posix_group_removes_descendants_on_every_exit(tmp_path, outcome):
     import signal
 
     pid_file = tmp_path / "child.pid"
-    # Full-suite coverage can use the old timeout before the child writes its PID marker.
+    # Under full-suite coverage, spawn can spend the old 3-second budget
+    # importing the backend before it creates the descendant PID marker.
     arguments = dict(attachments_dir=tmp_path / "attachments", timeout_seconds=15,
                      max_memory_mb=1024, _worker_target=_descendant_worker)
     if outcome == "timeout":

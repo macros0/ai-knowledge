@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "kind": "record_of_observed_tool_results",
+  "backend_ct_image_id": "sha256:269ca91ac78e46b21472f57191723a1ad9182476a3b8cad6b154228b9f609066",
+  "frontend_ct_tag": "okf-diag-levels-frontend:20260930-v9",
+  "cleanup_red": {
+    "test": "test_aborted_worker_credit_accounts_surviving_uncommitted_output",
+    "exit_code": 1,
+    "expected_growth_bytes": 1024,
+    "observed_growth_bytes": 0
+  },
+  "cleanup_green_linux": {
+    "files": ["test_diagnostics_worker_protocol.py", "test_diagnostics_bundle_queue.py", "test_diagnostics_prepare_worker.py"],
+    "passed": 30,
+    "elapsed_seconds": 68.78,
+    "exit_code": 0
+  },
+  "active_zip_linux": {
+    "test": "test_active_zip_after_compressed_write_releases_resources",
+    "termination_modes": ["kill", "shutdown"],
+    "passed": 2,
+    "elapsed_seconds": 9.67,
+    "exit_code": 0,
+    "checkpoint": "real ZipFile.writestr and file flush in actual bundle_worker.main"
+  },
+  "windows_native": {
+    "files": ["test_diagnostics_prepare_worker.py", "test_diagnostics_worker_protocol.py", "test_diagnostics_store.py", "test_diagnostics_batching.py"],
+    "passed": 33,
+    "elapsed_seconds": 35.46,
+    "exit_code": 0,
+    "log": "windows-final-v12.log"
+  },
+  "static_review": {
+    "initial_important_findings": 1,
+    "cleanup_followup_important_findings": 0,
+    "runtime_acceptance_proven_by_review": false
+  },
+  "ruff_backend_no_cache_exit_code": 0,
+  "git_diff_check_exit_code": 0,
+  "full_performance_acceptance": false
+}

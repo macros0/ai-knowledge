@@ -1,0 +1,548 @@
+{
+  "image_ids": {
+    "backend": "sha256:269ca91ac78e46b21472f57191723a1ad9182476a3b8cad6b154228b9f609066",
+    "frontend": "sha256:97b1530a72eecf33b8d7f98388035f59acf6f0732d2291220f112602323bb322"
+  },
+  "rows": [
+    {
+      "bundle": null,
+      "bundle_reference": true,
+      "capture_counts_pass": null,
+      "capture_search_counts": null,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 5.4398570000000035,
+        "frontend": 2.619389999999999
+      },
+      "elapsed_seconds": 5.076961040031165,
+      "expected_capture_search_calls": null,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 0,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 0
+      },
+      "max_ms": 397.87271805107594,
+      "measurement_peak_rss_bytes": {
+        "backend": 486785024,
+        "backend_child": 29069312,
+        "frontend": 189267968
+      },
+      "mode": "baseline",
+      "p50_ms": 82.5247050379403,
+      "p95_ms": 100.72688397485763,
+      "p99_ms": 391.9900059700012,
+      "peak_rss_bytes": {
+        "backend": 486785024,
+        "backend_child": 29069312,
+        "frontend": 189267968
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 22,
+        "boot_id": "0d9ccdaf-8794-423a-a422-26040fd2e4c5",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66886934528,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T07:51:45.776163+00:00",
+        "policy_omitted": 0,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 1,
+        "reserved_bytes": 36041,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T07:27:13.431721+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 106244814,
+        "written": 139
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 0,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -163840,
+        "invalid": 0,
+        "policy_omitted": 0,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": 0,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 3,
+        "written": 0
+      },
+      "repeat": 1,
+      "requests": 408,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": null,
+      "spool_bytes_growth": 0,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 80.36303544245742,
+      "warmup_seconds": 2
+    },
+    {
+      "bundle": {
+        "build_seconds": 2.8630922939628363,
+        "observed_building": true,
+        "overlapping_requests": 197,
+        "phase_latencies": {
+          "prepare": {
+            "max_ms": 129.74757398478687,
+            "observed_seconds": 2.258556966087781,
+            "p50_ms": 97.50726795755327,
+            "p95_ms": 117.16319003608078,
+            "p99_ms": 127.19753501005471,
+            "requests": 160
+          },
+          "zip": {
+            "max_ms": 127.05888599157333,
+            "observed_seconds": 0.23186027398332953,
+            "p50_ms": 103.70813350891694,
+            "p95_ms": 127.05888599157333,
+            "p99_ms": 127.05888599157333,
+            "requests": 16
+          }
+        },
+        "phases": [
+          {
+            "closed": true,
+            "finished": 744002.853688201,
+            "phase": "prepare",
+            "pid": 2339228,
+            "started": 744000.595131235
+          },
+          {
+            "closed": true,
+            "finished": 744003.107826372,
+            "phase": "zip",
+            "pid": 2339303,
+            "started": 744002.875966098
+          }
+        ],
+        "size_bytes": 5916,
+        "status": "ready"
+      },
+      "capture_counts_pass": false,
+      "capture_search_counts": {
+        "backend_operations": 0,
+        "backend_qdrant": 0,
+        "backend_requests": 0,
+        "frontend_requests": 496
+      },
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 7.726095999999998,
+        "frontend": 2.098447
+      },
+      "elapsed_seconds": 5.003110946039669,
+      "expected_capture_search_calls": 496,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 386,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 1
+      },
+      "max_ms": 403.5193289164454,
+      "measurement_peak_rss_bytes": {
+        "backend": 485527552,
+        "backend_child": 26062848,
+        "frontend": 198291456
+      },
+      "mode": "standard",
+      "p50_ms": 88.75254198210314,
+      "p95_ms": 117.3496029805392,
+      "p99_ms": 389.89294902421534,
+      "peak_rss_bytes": {
+        "backend": 485527552,
+        "backend_child": 26062848,
+        "frontend": 198291456
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 1455,
+        "boot_id": "0d9ccdaf-8794-423a-a422-26040fd2e4c5",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66886647808,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T07:51:53.805915+00:00",
+        "policy_omitted": 1488,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 1,
+        "reserved_bytes": 55910,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T07:27:13.431721+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 106296788,
+        "written": 227
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 1056,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -196608,
+        "invalid": 0,
+        "policy_omitted": 1080,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": -27428,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 33347,
+        "written": 53
+      },
+      "repeat": 1,
+      "requests": 360,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": "73ffcaa2-2eaa-4eea-8ba1-0ea19c3d127f",
+      "spool_bytes_growth": 28056,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 71.95523023229507,
+      "warmup_seconds": 2
+    },
+    {
+      "bundle": {
+        "build_seconds": 2.923707428970374,
+        "observed_building": true,
+        "overlapping_requests": 184,
+        "phase_latencies": {
+          "prepare": {
+            "max_ms": 422.915089991875,
+            "observed_seconds": 2.29474764096085,
+            "p50_ms": 97.71857445593923,
+            "p95_ms": 393.2035369798541,
+            "p99_ms": 422.75558004621416,
+            "requests": 144
+          },
+          "zip": {
+            "max_ms": 122.21987405791879,
+            "observed_seconds": 0.25593692902475595,
+            "p50_ms": 97.07646549213678,
+            "p95_ms": 116.27915105782449,
+            "p99_ms": 122.21987405791879,
+            "requests": 24
+          }
+        },
+        "phases": [
+          {
+            "closed": true,
+            "finished": 744011.982333833,
+            "phase": "prepare",
+            "pid": 2339571,
+            "started": 744009.687586192
+          },
+          {
+            "closed": true,
+            "finished": 744012.259091574,
+            "phase": "zip",
+            "pid": 2339673,
+            "started": 744012.003154645
+          }
+        ],
+        "size_bytes": 3896,
+        "status": "ready"
+      },
+      "capture_counts_pass": false,
+      "capture_search_counts": {
+        "backend_operations": 0,
+        "backend_qdrant": 0,
+        "backend_requests": 0,
+        "frontend_requests": 544
+      },
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 7.739777000000004,
+        "frontend": 2.0882059999999996
+      },
+      "elapsed_seconds": 5.007010318920948,
+      "expected_capture_search_calls": 544,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 382,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 6
+      },
+      "max_ms": 422.915089991875,
+      "measurement_peak_rss_bytes": {
+        "backend": 486375424,
+        "backend_child": 26034176,
+        "frontend": 194789376
+      },
+      "mode": "detailed",
+      "p50_ms": 86.01266297046095,
+      "p95_ms": 122.21987405791879,
+      "p99_ms": 416.6869680630043,
+      "peak_rss_bytes": {
+        "backend": 486375424,
+        "backend_child": 26034176,
+        "frontend": 196112384
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 3091,
+        "boot_id": "0d9ccdaf-8794-423a-a422-26040fd2e4c5",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66886356992,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T07:52:02.751571+00:00",
+        "policy_omitted": 1488,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 1,
+        "reserved_bytes": 76370,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 3243,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T07:27:13.431721+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 106327912,
+        "written": 282
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 1114,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -188416,
+        "invalid": 0,
+        "policy_omitted": 0,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": -16736,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 2203,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 20635,
+        "written": 34
+      },
+      "repeat": 1,
+      "requests": 368,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": "82a08bdb-e92d-4671-a670-68ea5785df36",
+      "spool_bytes_growth": 19443,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 73.49695258453293,
+      "warmup_seconds": 2
+    },
+    {
+      "bundle": {
+        "build_seconds": 9.13656885002274,
+        "observed_building": true,
+        "overlapping_requests": 328,
+        "phase_latencies": {
+          "prepare": {
+            "max_ms": 417.786524980329,
+            "observed_seconds": 7.213456550030969,
+            "p50_ms": 92.06186298979446,
+            "p95_ms": 128.54109902400523,
+            "p99_ms": 409.19011691585183,
+            "requests": 232
+          },
+          "zip": {
+            "observed_seconds": 0.2504592159530148,
+            "requests": 0
+          }
+        },
+        "phases": [
+          {
+            "closed": true,
+            "finished": 744026.987247064,
+            "phase": "prepare",
+            "pid": 2339998,
+            "started": 744019.773790514
+          },
+          {
+            "closed": true,
+            "finished": 744027.23770628,
+            "phase": "zip",
+            "pid": 2340189,
+            "started": 744026.987247064
+          }
+        ],
+        "size_bytes": 17608,
+        "status": "ready"
+      },
+      "capture_counts_pass": null,
+      "capture_search_counts": null,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 8.576688000000004,
+        "frontend": 1.6329669999999972
+      },
+      "elapsed_seconds": 5.003821187070571,
+      "expected_capture_search_calls": null,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 0,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 0
+      },
+      "max_ms": 417.786524980329,
+      "measurement_peak_rss_bytes": {
+        "backend": 511008768,
+        "backend_child": 49238016,
+        "frontend": 207134720
+      },
+      "mode": "baseline",
+      "p50_ms": 96.17272298783064,
+      "p95_ms": 130.06187602877617,
+      "p99_ms": 403.95617799367756,
+      "peak_rss_bytes": {
+        "backend": 511008768,
+        "backend_child": 49238016,
+        "frontend": 207134720
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 3092,
+        "boot_id": "0d9ccdaf-8794-423a-a422-26040fd2e4c5",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66886045696,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T07:52:11.181746+00:00",
+        "policy_omitted": 1488,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 1,
+        "reserved_bytes": 36041,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 3244,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T07:27:13.431721+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 106394815,
+        "written": 285
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 0,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -217088,
+        "invalid": 0,
+        "policy_omitted": 0,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": 0,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 65276,
+        "written": 0
+      },
+      "repeat": 1,
+      "requests": 336,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": null,
+      "spool_bytes_growth": 65276,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 67.14868246455211,
+      "warmup_seconds": 2
+    }
+  ],
+  "schema_version": 2
+}

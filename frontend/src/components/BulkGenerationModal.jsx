@@ -5,6 +5,7 @@ import { ApiError, bulkPreview, bulkRegenerate, bulkResume, friendlyApiError, pr
 import { useI18n } from "@/i18n/LocaleContext";
 import { useToast } from "./Toast";
 import Modal from "./Modal";
+import ErrorReference from "./ErrorReference";
 import { generationPreviewOverLimit } from "@/lib/generationPreview.mjs";
 
 export default function BulkGenerationModal({ operation, docIds, onClose, onDone }) {
@@ -53,7 +54,8 @@ export default function BulkGenerationModal({ operation, docIds, onClose, onDone
     </>}>
       <p>{t(regenerate ? "bulkGeneration.regenerateHelp" : "bulkGeneration.resumeHelp")}</p>
       {operation === "interrupted" && <p>{t("bulkGeneration.interruptedHelp")}</p>}
-      {error && <p role="alert">{error.status === 404 ? t("bulkGeneration.backendUpdate") : friendlyApiError(error, t)}</p>}
+      {error && <div role="alert"><p>{error.status === 404 ? t("bulkGeneration.backendUpdate") : friendlyApiError(error, t)}</p>
+        <ErrorReference requestId={error.requestId} localReportId={error.localReportId} /></div>}
       {!preview && !error && <p>{t("preview.loading")}</p>}
       {preview && <>
         <p>{t("bulkGeneration.counts", { eligible: ids.length, skipped: preview.skipped.length })}</p>

@@ -1,0 +1,29 @@
+{
+  "accepted": 599997,
+  "achieved_rate_per_second": 9999.949107836319,
+  "attempted": 599997,
+  "duration_seconds": 60.00000535300933,
+  "health": {
+    "failed": 0,
+    "max_ms": 165.37201404571533,
+    "ok": 58
+  },
+  "peak_process_rss_bytes": 38920192,
+  "quota_bytes": 16777216,
+  "recorder": {
+    "dropped": 0,
+    "invalid": 0,
+    "queued": 0,
+    "repeats": 0,
+    "reserved_bytes": 0,
+    "storage_degraded": false,
+    "used_bytes": 8299170,
+    "written": 599997
+  },
+  "search": {
+    "failed": 0,
+    "max_ms": 26.335418922826648,
+    "ok": 58
+  },
+  "target_rate_per_second": 10000
+}

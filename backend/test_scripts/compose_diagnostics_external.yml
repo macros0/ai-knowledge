@@ -1,0 +1,19 @@
+# Disposable CT102 external-topology probe; never use for production.
+services:
+  migrate:
+    image: okf-diag-levels-backend:20260929-v9
+    security_opt: [apparmor=unconfined]
+    networks: [storage_network, app_network, upstream_storage]
+  backend:
+    image: okf-diag-levels-backend:20260929-v9
+    security_opt: [apparmor=unconfined]
+    restart: 'no'
+    networks: [app_network, storage_network, upstream_storage]
+  frontend:
+    image: okf-diag-levels-frontend:20260929-v4
+    security_opt: [apparmor=unconfined]
+    restart: 'no'
+networks:
+  upstream_storage:
+    external: true
+    name: okf-diag-levels-20260929_storage_network

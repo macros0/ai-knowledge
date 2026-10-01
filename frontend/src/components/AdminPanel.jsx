@@ -1,6 +1,9 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ApiError, approveJob, cancelJob, deleteExportArtifacts, friendlyApiError, listJobs } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -64,7 +67,7 @@ export default function AdminPanel() {
       await fn(id);
       await load();
     } catch (err) {
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error", requestId: err.requestId, localReportId: err.localReportId }));
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
     }
@@ -74,6 +77,7 @@ export default function AdminPanel() {
     <section className="panel admin-panel">
       <div className="panel-head">
         <h2>{t("admin.title")}</h2>
+        <Link href="/admin/diagnostics">{t("diagnostics.title")}</Link>
         <span className={`job-pending${pending > 0 ? " active" : ""}`}>
           {t("admin.pending", { count: pending })}
         </span>

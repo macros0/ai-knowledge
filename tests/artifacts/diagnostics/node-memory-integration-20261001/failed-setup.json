@@ -1,0 +1,20 @@
+{
+  "diagnostic_only": true,
+  "hypothesis": "RSS reflects heap expansion and natural GC history, rather than diagnostic retention",
+  "source_revision": "2a4a0e0",
+  "images": {
+    "backend": "sha256:17dbaf92358dbbac7b82f731448194bc984183413ec1f748ad7d49a6d73cdce5",
+    "frontend": "sha256:ba0f7a01c178201160b43f87cc66f60dd74e808d588d06f445fa87010627b266"
+  },
+  "fresh_frontend_each_case": true,
+  "forced_gc": false,
+  "inspector": false,
+  "concurrency": 8,
+  "start_age_seconds": 10,
+  "warmup_seconds": 30,
+  "measurement_seconds": 60,
+  "idle_seconds": 60,
+  "rows": [],
+  "complete": false,
+  "failure_type": "ConnectionResetError"
+}

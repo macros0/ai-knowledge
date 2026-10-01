@@ -1,0 +1,16 @@
+{
+  "method": "standalone \u0448\u0442\u0430\u0442\u043d\u044b\u0439 DiagnosticBundleQueue.delete; all DB rows, no pagination",
+  "initial_status_counts": {
+    "ready": 29,
+    "deleted": 21
+  },
+  "deleted_remaining_archives": 29,
+  "final_status_counts": {
+    "deleted": 50
+  },
+  "live_bundle_jobs": 0,
+  "remaining_zip_files": 0,
+  "tombstones_retained": 50,
+  "measured_backend_frontend_restarted": false,
+  "original_container_pins_preserved": true
+}

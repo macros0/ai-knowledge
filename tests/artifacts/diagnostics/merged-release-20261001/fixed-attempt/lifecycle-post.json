@@ -1,0 +1,24 @@
+{
+  "admin_lifecycle": "passed",
+  "bundle_bytes": 2528,
+  "bundle_id": "a88d6370-178c-4faa-b670-dfcf8daa850b",
+  "coverage_modes": {
+    "baseline": "errors",
+    "sessions": {
+      "c860dad2-8aa5-4a12-924b-188bb57bfe59": "aggregated"
+    }
+  },
+  "crc": "passed",
+  "csrf_denial": "not_applicable_simulation",
+  "delete_denial": "passed",
+  "events": 2,
+  "gaps": [],
+  "loss_counters_state": {
+    "backend_process": "known",
+    "frontend_process": "known"
+  },
+  "manifest_version": 2,
+  "partial": false,
+  "reader_denial": "passed",
+  "session_id": "c860dad2-8aa5-4a12-924b-188bb57bfe59"
+}

@@ -1,0 +1,87 @@
+[
+  {
+    "stage": "1doc-normal",
+    "started_at": "2026-10-01T19:19:45.218688+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "all_p95_pass": true,
+      "all_rss_pass": true,
+      "all_duration_requests_pass": true,
+      "all_losses_pass": true,
+      "all_zip_overlap_pass": true,
+      "all_response_equality_pass": true,
+      "all_capture_counts_pass": true,
+      "all_phase_distributions_pass": true
+    },
+    "finished_at": "2026-10-01T19:47:09.495306+00:00"
+  },
+  {
+    "stage": "1doc-active-zip",
+    "started_at": "2026-10-01T19:47:10.567237+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "all_p95_pass": true,
+      "all_rss_pass": true,
+      "all_duration_requests_pass": true,
+      "all_losses_pass": true,
+      "all_zip_overlap_pass": true,
+      "all_response_equality_pass": true,
+      "all_capture_counts_pass": true,
+      "all_phase_distributions_pass": true
+    },
+    "finished_at": "2026-10-01T20:23:35.951999+00:00"
+  },
+  {
+    "stage": "100doc-normal",
+    "started_at": "2026-10-01T20:23:43.259000+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "all_p95_pass": true,
+      "all_rss_pass": true,
+      "all_duration_requests_pass": true,
+      "all_losses_pass": true,
+      "all_zip_overlap_pass": true,
+      "all_response_equality_pass": true,
+      "all_capture_counts_pass": true,
+      "all_phase_distributions_pass": true
+    },
+    "finished_at": "2026-10-01T20:51:08.280900+00:00"
+  },
+  {
+    "stage": "100doc-active-zip",
+    "started_at": "2026-10-01T20:51:09.319856+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "all_p95_pass": true,
+      "all_rss_pass": true,
+      "all_duration_requests_pass": true,
+      "all_losses_pass": true,
+      "all_zip_overlap_pass": true,
+      "all_response_equality_pass": true,
+      "all_capture_counts_pass": true,
+      "all_phase_distributions_pass": true
+    },
+    "finished_at": "2026-10-01T21:27:39.776845+00:00"
+  },
+  {
+    "stage": "100doc-stopped-zip",
+    "started_at": "2026-10-01T21:27:40.816912+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "all_p95_pass": true,
+      "all_rss_pass": true,
+      "all_duration_requests_pass": true,
+      "all_losses_pass": true,
+      "all_zip_overlap_pass": true,
+      "all_response_equality_pass": true,
+      "all_capture_counts_pass": true,
+      "all_phase_distributions_pass": true
+    },
+    "finished_at": "2026-10-01T21:55:08.169327+00:00"
+  }
+]

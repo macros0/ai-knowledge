@@ -1,0 +1,16 @@
+{
+  "quota": {
+    "used_bytes": 12747903,
+    "reserved_bytes": 63865,
+    "quota_bytes": 503316480,
+    "storage_degraded": false,
+    "unsafe_paths": 0
+  },
+  "last_failure_present": false,
+  "capture_off": true,
+  "pending_bundles": 0,
+  "worker_pids": [],
+  "test_backend_ready_http": 200,
+  "llama101_active": true,
+  "checked_unix": 1790864965.8593986
+}

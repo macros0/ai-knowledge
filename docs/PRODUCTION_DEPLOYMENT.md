@@ -460,3 +460,14 @@ python scripts/backfill_translations.py --locale en --entities tags,developments
 Требует поднятого бэкенда (LLM-шлюз) и `TRANSLATION_PROVIDER`, отличного от `off`.
 Для прод без интернета — только ручной ввод переводов через Admin UI («Поддержка языков»).
 Подробности: `docs/ADD_LANGUAGE.md`.
+
+## Диагностика ошибок
+
+Перед первым запуском задайте `OKF_DIAGNOSTICS_DIR=/srv/okf-knowledge/diagnostics`
+вне `OKF_DATA_DIR` и `DIAGNOSTICS_MIN_FREE_MB=2048`, подготовьте
+каталоги через `backend/scripts/prepare_diagnostics_dirs.py` и проверьте права
+backend/frontend. Порядок действий администратора, лимиты, аварийный offline
+экспорт и откат приведены в [ADMIN_DIAGNOSTICS.md](ADMIN_DIAGNOSTICS.md).
+Диагностическая папка должна оставаться вне `OKF_DATA_DIR` и обычного
+`data.tar` backup. Build-аргумент `OKF_BUILD_REVISION` задавайте фактическим
+коммитом релиза; при локальной сборке оставляйте `unknown`.

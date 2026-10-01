@@ -1,0 +1,24 @@
+{
+  "source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "reference_source_revision": "16bb493762d9e188ef5d7d5f57270c2163087fa8",
+  "chat_ast_equal_after_error_constant_resolution": true,
+  "targeted_tests_passed": 111,
+  "targeted_tests_exit": 0,
+  "initial_full_completed": true,
+  "initial_full_exit": 1,
+  "initial_full_failures": [
+    "tests/test_error_codes.py::TestCodeCoverage::test_no_code_is_declared_but_never_raised"
+  ],
+  "initial_full_passed": 2846,
+  "initial_full_skipped": 24,
+  "initial_full_warnings": 21,
+  "initial_full_seconds": 2503.53,
+  "frontend_tests_passed": 339,
+  "frontend_tests_skipped": 1,
+  "frontend_production_build_exit": 0,
+  "ruff_exit": 0,
+  "eslint_errors": 0,
+  "eslint_warnings": 41,
+  "final_full_status": "running",
+  "final_acceptance_requires_full_green": true
+}

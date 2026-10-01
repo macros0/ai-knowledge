@@ -3,6 +3,8 @@
 
 """Роут умного поиска: dense / BM25 по концептам и чанкам."""
 from functools import lru_cache
+from app.services.diagnostics.context import operation_context
+from app.services.diagnostics.events import observed_operation
 
 from fastapi import APIRouter, Depends
 
@@ -43,6 +45,8 @@ def _get_vector_store() -> VectorStore:
 
 
 @router.post("", response_model=SearchResponse)
+@operation_context("search_chat")
+@observed_operation("search")
 def search(req: SearchRequest, current_user: User = Depends(require_user)):
     settings = get_settings()
     try:

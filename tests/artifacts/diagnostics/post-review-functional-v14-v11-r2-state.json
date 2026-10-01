@@ -1,0 +1,23 @@
+[
+  {
+    "stage": "outcome-baseline-v14-v11",
+    "started_at": "2026-09-30T13:34:59.688625+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "finished_at": "2026-09-30T13:35:13.654386+00:00"
+  },
+  {
+    "stage": "outcome-standard-v14-v11",
+    "started_at": "2026-09-30T13:35:13.654625+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "finished_at": "2026-09-30T13:35:27.812224+00:00"
+  },
+  {
+    "stage": "outcome-detailed-v14-v11",
+    "started_at": "2026-09-30T13:35:27.812454+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "finished_at": "2026-09-30T13:35:41.963715+00:00"
+  }
+]

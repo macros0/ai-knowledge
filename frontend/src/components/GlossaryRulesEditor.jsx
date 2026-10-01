@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useEffect, useState } from "react";
 import { createGlossaryRule, deleteGlossaryRule, friendlyApiError, listGlossaryRules,
   updateGlossaryRule, previewGlossaryRuleMerge, commitGlossaryRuleMerge, previewGlossaryRule } from "@/lib/api";
@@ -32,13 +34,13 @@ export default function GlossaryRulesEditor({ canManage = false }) {
   const load = async () => {
     setLoading(true);
     try { setRules(await listGlossaryRules()); }
-    catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); }
+    catch (err) { showToast(apiToast(err, t, { type: "error" })); }
     finally { setLoading(false); }
   };
   useEffect(() => {
     let active = true;
     listGlossaryRules().then((items) => { if (active) setRules(items); })
-      .catch((err) => { if (active) showToast(friendlyApiError(err, t), {type: "error"}); })
+      .catch((err) => { if (active) showToast(apiToast(err, t, {type: "error"})); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [showToast, t]);
@@ -61,13 +63,13 @@ export default function GlossaryRulesEditor({ canManage = false }) {
         setProposal(null);
         setMerge({targets, targetId: targets[0].id, returnFocusTo,
           ...(editingId ? {source: rules.find((item) => item.id === editingId), sourceEdit: payload} : {draft: payload})});
-      } else showToast(friendlyApiError(err, t), { type: "error" });
+      } else showToast(apiToast(err, t, { type: "error" }));
     } finally { setBusy(false); }
   };
   const remove = async (rule) => {
     setBusy(true);
     try { await deleteGlossaryRule(rule.id, rule.version); await load(); }
-    catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); }
+    catch (err) { showToast(apiToast(err, t, { type: "error" })); }
     finally { setBusy(false); }
   };
   const beginEdit = (rule) => {
@@ -79,7 +81,7 @@ export default function GlossaryRulesEditor({ canManage = false }) {
     if (!event.currentTarget.form.reportValidity() || !query.trim() || previewBusy) return;
     setPreviewBusy(true);
     try { setRulePreview({key: previewKey, data: await previewGlossaryRule({...payloadFor(draft), query})}); }
-    catch (err) { setRulePreview(null); showToast(friendlyApiError(err, t), {type: "error"}); }
+    catch (err) { setRulePreview(null); showToast(apiToast(err, t, {type: "error"})); }
     finally { setPreviewBusy(false); }
   };
   const beginMerge = (source, returnFocusTo) => {
@@ -97,7 +99,7 @@ export default function GlossaryRulesEditor({ canManage = false }) {
   const previewMerge = async () => {
     setBusy(true);
     try { setProposal(await previewGlossaryRuleMerge(mergeRequest())); }
-    catch (err) { setProposal(null); showToast(friendlyApiError(err, t), {type: "error"}); }
+    catch (err) { setProposal(null); showToast(apiToast(err, t, {type: "error"})); }
     finally { setBusy(false); }
   };
   const commitMerge = async () => {
@@ -105,7 +107,7 @@ export default function GlossaryRulesEditor({ canManage = false }) {
     try {
       await commitGlossaryRuleMerge({...mergeRequest(), preview_digest: proposal.digest, expected_revision: proposal.glossary_revision});
       setMerge(null); setProposal(null); setEditingId(null); setDraft(empty); await load();
-    } catch (err) { setProposal(null); showToast(friendlyApiError(err, t), {type: "error"}); }
+    } catch (err) { setProposal(null); showToast(apiToast(err, t, {type: "error"})); }
     finally { setBusy(false); }
   };
   return <section className="glossary-rules" aria-label={t("admin.glossary.infotypeRuleTitle")}>

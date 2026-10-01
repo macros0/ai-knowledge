@@ -21,6 +21,8 @@ from app.api import (
     audit,
     chat,
     chat_history,
+    diagnostic_client,
+    diagnostics,
     glossary,
     developments,
     documents,
@@ -42,11 +44,17 @@ from app.services.errors import DependencyUnavailableError, public_error_code
 from app.services.health import get_health, get_readiness, public_view
 from app.services.storage import is_storage_full
 from app.services.vector_store import VectorStore
+from app.services.diagnostics.context import current_context
+from app.services.diagnostics.middleware import DiagnosticContextMiddleware
 from docparser import PdfProviderUnavailable, get_pdf_provider_metadata
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 INTERNAL_ERROR_MESSAGE = "Внутренняя ошибка. Обратитесь в техническую поддержку."
+
+
+def _error_content(content):
+    return {**content, "request_id": current_context().request_id}
 
 
 def _validate_runtime_dependencies() -> None:
@@ -71,7 +79,7 @@ class CatchAllErrorsMiddleware(BaseHTTPMiddleware):
             if is_storage_full(exc):
                 return JSONResponse(
                     status_code=507,
-                    content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
+                    content=_error_content({"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL}),
                 )
             raise
         except Exception as exc:
@@ -79,14 +87,14 @@ class CatchAllErrorsMiddleware(BaseHTTPMiddleware):
             if is_storage_full(exc):
                 return JSONResponse(
                     status_code=507,
-                    content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
+                    content=_error_content({"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL}),
                 )
             return JSONResponse(
                 status_code=500,
-                content={
+                content=_error_content({
                     "detail": INTERNAL_ERROR_MESSAGE,
                     "code": "internal_error",
-                },
+                }),
             )
 
 
@@ -107,7 +115,7 @@ class CsrfMiddleware(BaseHTTPMiddleware):
             if not csrf_cookie or not secrets.compare_digest(supplied, csrf_cookie):
                 return JSONResponse(
                     status_code=403,
-                    content={"detail": "Недействительный CSRF-токен", "code": "csrf_failed"},
+                    content=_error_content({"detail": "Недействительный CSRF-токен", "code": "csrf_failed"}),
                 )
         response = await call_next(request)
         if not csrf_cookie:
@@ -142,6 +150,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.services.diagnostics.runtime import initialize_diagnostics
+
+    diagnostic_runtime = initialize_diagnostics()
+    app.state.diagnostics = diagnostic_runtime if diagnostic_runtime.available else None
     worker_hint = os.getenv("UVICORN_WORKERS") or os.getenv("WEB_CONCURRENCY")
     try:
         worker_count = int(worker_hint) if worker_hint else 1
@@ -153,7 +165,12 @@ async def lifespan(app: FastAPI):
             "rate limiter, pipeline и purge state не разделяются между workers",
             worker_count,
         )
-    _validate_runtime_dependencies()
+    try:
+        _validate_runtime_dependencies()
+    except Exception as exc:
+        if diagnostic_runtime.available:
+            diagnostic_runtime.recorder.emit("server_start_failed", exception=exc)
+        raise
     # Создание отсутствующих таблиц БД (идемпотентно). Мягкий старт: если БД
     # недоступна — не валить процесс, репозитории будут пытаться при запросах.
     try:
@@ -184,6 +201,8 @@ async def lifespan(app: FastAPI):
             logging.info("Удалено просроченных auth-сессий: %d", purged)
     except Exception as exc:
         logging.warning("Не удалось инициализировать БД при старте: %s", exc)
+
+    diagnostic_runtime.start()
 
     # Очередь массовых операций: поднимаем worker и возвращаем в очередь задачи,
     # потерянные при рестарте. Здесь, а не на импорте app.api.jobs — восстановление
@@ -279,6 +298,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        diagnostic_runtime.stop()
         generation_cleanup_stop.set()
         generation_cleanup_thread.join(timeout=2)
         # Функция не создаёт singleton, поэтому teardown не поднимет worker при
@@ -324,6 +344,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(auth_router, prefix=settings.api_prefix)
+    # Last-added middleware is outermost: IDs also cover auth and CSRF failures.
+    app.add_middleware(DiagnosticContextMiddleware, api_prefix=settings.api_prefix)
 
     # Защищённые роуты: в disabled-режиме require_user пропускает всех,
     # в simulation/sso — требует сессию (401 без неё).
@@ -332,6 +354,8 @@ def create_app() -> FastAPI:
     protected.include_router(search.router)
     protected.include_router(chat.router)
     protected.include_router(chat_history.router)
+    protected.include_router(diagnostic_client.router)
+    protected.include_router(diagnostics.router)
     protected.include_router(glossary.router)
     protected.include_router(tags.router)
     protected.include_router(developments.router)
@@ -360,7 +384,7 @@ def create_app() -> FastAPI:
         logger.warning("Ошибка API %s %s: %s", request.method, request.url.path, exc.detail, exc_info=exc)
         return JSONResponse(
             status_code=exc.status_code,
-            content={**exc.extra, "detail": INTERNAL_ERROR_MESSAGE if exc.status_code >= 500 else exc.detail, "code": exc.code},
+            content=_error_content({**exc.extra, "detail": INTERNAL_ERROR_MESSAGE if exc.status_code >= 500 else exc.detail, "code": exc.code}),
             headers=exc.headers,
         )
 
@@ -373,13 +397,13 @@ def create_app() -> FastAPI:
         if is_storage_full(exc):
             return JSONResponse(
                 status_code=507,
-                content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
+                content=_error_content({"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL}),
             )
         content = (
             {"detail": INTERNAL_ERROR_MESSAGE, "code": error_codes.INTERNAL_ERROR}
             if exc.status_code >= 500 else {"detail": exc.detail}
         )
-        return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
+        return JSONResponse(status_code=exc.status_code, content=_error_content(content), headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(request: Request, exc: RequestValidationError):
@@ -402,7 +426,7 @@ def create_app() -> FastAPI:
                 if "alias" in locations
                 else error_codes.INVALID_REQUEST
             )
-        return JSONResponse(status_code=422, content=content)
+        return JSONResponse(status_code=422, content=_error_content(content))
 
     @app.exception_handler(DependencyUnavailableError)
     async def dependency_error_handler(request: Request, exc: DependencyUnavailableError):
@@ -410,7 +434,7 @@ def create_app() -> FastAPI:
         if is_storage_full(exc):
             return JSONResponse(
                 status_code=507,
-                content={"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL},
+                content=_error_content({"detail": "Недостаточно свободного места на диске", "code": error_codes.STORAGE_FULL}),
             )
         code = public_error_code(exc)
         detail = {
@@ -420,11 +444,11 @@ def create_app() -> FastAPI:
         }.get(code, INTERNAL_ERROR_MESSAGE)
         return JSONResponse(
             status_code=503,
-            content={
+            content=_error_content({
                 "detail": detail,
                 "code": code,
                 "service": exc.service,
-            },
+            }),
         )
 
     @app.get("/health")

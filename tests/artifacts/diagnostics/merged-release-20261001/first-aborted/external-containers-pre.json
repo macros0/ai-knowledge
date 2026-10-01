@@ -1,0 +1,22 @@
+{
+  "okf-knowledge-backend-1": {
+    "image_id": "sha256:fee7089d30732eed1a0b2b0b3aad52bc1bc7b28e11cf9d7e1233ce206a400598",
+    "started_at": "2026-09-28T11:25:59.758028492Z",
+    "status": "running"
+  },
+  "okf-knowledge-frontend-1": {
+    "image_id": "sha256:509f1108bab50c6862c7a9508691c3002b15eb26b84838932ee364b60fc7cc86",
+    "started_at": "2026-09-28T11:25:59.682657267Z",
+    "status": "running"
+  },
+  "okf-diag-levels-20260929-backend-1": {
+    "image_id": "sha256:0a805ae89c3d42360981e170d845d150445912bb277946a52d5b75d9506de388",
+    "started_at": "2026-10-01T12:47:44.645599168Z",
+    "status": "running"
+  },
+  "okf-diag-levels-20260929-frontend-1": {
+    "image_id": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799",
+    "started_at": "2026-10-01T12:47:55.837136261Z",
+    "status": "running"
+  }
+}

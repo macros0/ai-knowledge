@@ -1,0 +1,113 @@
+{
+  "runtime": {
+    "images": {
+      "backend": "sha256:0a805ae89c3d42360981e170d845d150445912bb277946a52d5b75d9506de388",
+      "frontend": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799"
+    },
+    "capture_off": true,
+    "runtime_available": true,
+    "recorder": {
+      "queued": 0,
+      "dropped": 0,
+      "invalid": 0,
+      "expired_queue": 0,
+      "storage_errors": 0,
+      "drain_timeouts": 0,
+      "written": 22576
+    },
+    "status_keys": [
+      "server_now",
+      "runtime",
+      "capabilities",
+      "recorder",
+      "session",
+      "quota"
+    ],
+    "containers": {
+      "backend": {
+        "running": true,
+        "health": "healthy",
+        "restarts": 0,
+        "oom": false,
+        "image": "sha256:0a805ae89c3d42360981e170d845d150445912bb277946a52d5b75d9506de388",
+        "original_command": true,
+        "baseline_flag_true": true
+      },
+      "frontend": {
+        "running": true,
+        "health": null,
+        "restarts": 0,
+        "oom": false,
+        "image": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799",
+        "original_command": true,
+        "baseline_flag_true": true
+      }
+    },
+    "frontend_http_18084": 200,
+    "frontend_http_8080": 200,
+    "backend_health_okf-diag-levels-20260929": "healthy",
+    "backend_health_okf-knowledge": "healthy",
+    "owned_workload_pids": []
+  },
+  "resources": {
+    "samples": 4674,
+    "duration_seconds": 9348.431894779205,
+    "min_available_gib": 3.1674652099609375,
+    "swap_out_pages_delta": 116113,
+    "swap_in_pages_delta": 67986,
+    "io_full_pct": 2.240739060387062,
+    "guests": {
+      "101": {
+        "memory_current_mib": 3456.84765625,
+        "event_deltas": {
+          "low": 0,
+          "high": 287,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0,
+          "sock_throttled": 1
+        }
+      },
+      "102": {
+        "memory_current_mib": 3769.9375,
+        "event_deltas": {
+          "low": 1643,
+          "high": 0,
+          "max": 0,
+          "oom": 0,
+          "oom_kill": 0,
+          "oom_group_kill": 0,
+          "sock_throttled": 0
+        }
+      }
+    }
+  },
+  "configuration": {
+    "100": {
+      "memory_mib": "2048",
+      "swap_mib": "256",
+      "onboot": "0",
+      "status": "status: stopped"
+    },
+    "101": {
+      "memory_mib": "8192",
+      "swap_mib": "512",
+      "onboot": "1",
+      "status": "status: running"
+    },
+    "102": {
+      "memory_mib": "5120",
+      "swap_mib": "0",
+      "onboot": "1",
+      "status": "status: running",
+      "memory_low_bytes": 4294967296,
+      "memory_min_bytes": 0
+    },
+    "103": {
+      "status": "status: stopped"
+    },
+    "lxc_memory_low_bytes": 4294967296
+  },
+  "checked_unix": 1790864469.8752837
+}

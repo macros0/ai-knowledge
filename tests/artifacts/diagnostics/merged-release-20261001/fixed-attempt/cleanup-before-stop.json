@@ -1,0 +1,32 @@
+{
+  "active_capture": false,
+  "bundle_jobs": 20,
+  "recorder": {
+    "used_bytes": 22530742,
+    "reserved_bytes": 54019,
+    "quota_bytes": 503316480,
+    "free_bytes": 62763180032,
+    "measured_at": "2026-10-01T21:55:09.695997+00:00",
+    "storage_degraded": false,
+    "unsafe_paths": 0,
+    "last_failure": null,
+    "written": 41681,
+    "dropped": 0,
+    "invalid": 0,
+    "repeats": 0,
+    "expired_queue": 0,
+    "storage_errors": 0,
+    "shutdown_timeout": 0,
+    "drain_timeouts": 0,
+    "sampled_success": 0,
+    "aggregated_success": 706040,
+    "sampled_out_traces": 717702,
+    "sampled_out_slow": 0,
+    "policy_omitted": 362913,
+    "aggregate_overflow": 0,
+    "queued": 0,
+    "running": true,
+    "boot_id": "1b197831-78ac-4d94-8fa4-d464e15ab962",
+    "started_at_utc": "2026-10-01T19:18:12.408992+00:00"
+  }
+}

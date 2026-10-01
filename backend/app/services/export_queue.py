@@ -37,6 +37,9 @@ from app.services.bulk_export import (
 from app.services.errors import DomainError
 from app.services.registry import DocumentRegistry
 from app.services.storage import is_storage_full
+from app.services.diagnostics.context import (
+    bind_context, context_from_metadata, context_metadata, current_context, new_operation,
+)
 
 BULK_EXPORT = "bulk_export"
 STATUS_QUEUED = "queued"
@@ -214,6 +217,7 @@ class ExportQueue:
                 with session_scope() as s:
                     _assert_capacity(s, settings, user, plan.estimated_output_bytes)
                     params = plan.to_job_params(ip_address)
+                    params["diagnostic_context"] = context_metadata(new_operation(current_context(), operation_kind="system"))
                     job = Job(
                         job_type=BULK_EXPORT,
                         status=STATUS_QUEUED,
@@ -552,6 +556,13 @@ class ExportQueue:
 
     def _execute(self, job_id: int) -> None:
         job = self.get(job_id)
+        context = context_from_metadata((job or {}).get("params", {}).get("diagnostic_context"))
+        if not context.operation_id:
+            context = new_operation(context)
+        with bind_context(context):
+            self._execute_bound(job_id, job)
+
+    def _execute_bound(self, job_id: int, job) -> None:
         if job is None or job["status"] != STATUS_QUEUED:
             return
         settings = get_settings()

@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 // Запуск перевода справочников (теги/разработки/атрибуты) для локали — Этап 7.
 // Перед запуском показывает: provider + model (фактический маршрут), число объектов
 // без ручного перевода (count_pending — тот же источник, что и бэкфилл) и
@@ -116,7 +118,7 @@ export default function BackfillControl({ locale }) {
       setResult(result);
       await loadPending();
     } catch (err) {
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error" }));
     } finally {
       setBusy(false);
     }

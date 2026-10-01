@@ -40,6 +40,55 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class DiagnosticSession(Base):
+    __tablename__ = "diagnostic_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    active_slot: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    capture_level: Mapped[str] = mapped_column(String(12), default="standard", nullable=False)
+    policy_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    policy_snapshot: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    doc_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    boot_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_by_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stop_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    bytes_written: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    counts: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    participants: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    invitations: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    audit_receipts: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    __table_args__ = (
+        CheckConstraint("active_slot IS NULL OR active_slot = 1", name="diagnostic_session_single_slot"),
+        CheckConstraint("status IN ('starting','active','stopped')", name="diagnostic_session_status"),
+    )
+
+
+class DiagnosticBundle(Base):
+    __tablename__ = "diagnostic_bundles"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    created_by_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cutoff_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    request: Mapped[dict] = mapped_column(JSON, nullable=False)
+    manifest: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    counts: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    audit_receipts: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+
 class Organization(Base):
     __tablename__ = "organizations"
 

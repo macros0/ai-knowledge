@@ -1,0 +1,17 @@
+{
+  "all_bundle_pass": true,
+  "all_duration_requests_pass": true,
+  "all_loss_counters_known_pass": true,
+  "all_losses_pass": false,
+  "all_p95_pass": true,
+  "all_private_rss_pass": true,
+  "observed_losses": {
+    "drain_timeouts": 0,
+    "dropped": 17903,
+    "expired_queue": 0,
+    "invalid": 0,
+    "storage_errors": 0
+  },
+  "performance_acceptance": false,
+  "scope": "private TestClient control"
+}

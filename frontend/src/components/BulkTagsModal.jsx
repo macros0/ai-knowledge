@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Modal from "./Modal";
+import ErrorReference from "./ErrorReference";
 import TagCombobox from "./TagCombobox";
 import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import { bulkUpdateTags, friendlyApiError } from "@/lib/api";
@@ -31,7 +32,7 @@ export default function BulkTagsModal({ docIds, onClose, onDone }) {
       bumpTagVersion();
       onDone(result);
     } catch (err) {
-      setError(friendlyApiError(err, t));
+      setError(err);
       submitting.current = false; setBusy(false);
     }
   };
@@ -48,7 +49,8 @@ export default function BulkTagsModal({ docIds, onClose, onDone }) {
       <label>{t("selection.removePlaceholder")}<TagCombobox value={removeTag} onChange={setRemoveTag} disabled={busy}
         allowNew={false} ariaLabel={t("selection.removeAria")} className="bulk-tag-input" portalContainer={portalContainer} /></label>
       {conflict && <p role="alert">{t("selection.tagConflict")}</p>}
-      {error && <p role="alert">{error}</p>}
+      {error && <div role="alert"><p>{friendlyApiError(error, t)}</p>
+        <ErrorReference requestId={error.requestId} localReportId={error.localReportId} /></div>}
     </div>
   </Modal>;
 }

@@ -20,6 +20,7 @@ import { bootScript as localeBootScript } from "@/i18n/boot";
 import { AUTO_FALLBACK_LOCALE, resolveServerLocale } from "@/i18n/core";
 import { backendFetch } from "@/lib/backendFetch";
 import InlineScript from "@/components/InlineScript";
+import DiagnosticClientReporter from "@/components/DiagnosticClientReporter";
 
 export const metadata = {
   title: "OKF Knowledge Service",
@@ -94,6 +95,7 @@ export default async function RootLayout({ children }) {
                       <Nav />
                     </header>
                     <HealthBanner />
+                    <DiagnosticClientReporter />
                     <main>
                       <AuthErrorBanner />
                       <DocumentFiltersProvider>

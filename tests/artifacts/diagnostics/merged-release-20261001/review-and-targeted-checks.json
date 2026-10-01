@@ -1,0 +1,37 @@
+{
+  "reviewed_base": "38f7ed66ec253d342e48f51c46c9d57912891c35",
+  "reviewed_head": "dc2cd51a1397cb1fea892da880307257754f10a6",
+  "fix_revision": "16bb493762d9e188ef5d7d5f57270c2163087fa8",
+  "critical": 0,
+  "important": 3,
+  "minor": 0,
+  "findings": [
+    {
+      "issue": "invalid baseline accepted",
+      "status": "fixed",
+      "regression": "baseline warmup/duration/requests/losses/answers/p95/RSS must be valid"
+    },
+    {
+      "issue": "unreadable live ZIP child RSS treated as zero",
+      "status": "fixed",
+      "regression": "alive/unknown child reads reject measurement; confirmed exit only can omit"
+    },
+    {
+      "issue": "document markup errors omit diagnostic references",
+      "status": "fixed",
+      "regression": "load/save server requestId and localReportId rendered with copy control"
+    }
+  ],
+  "focused_backend_tests_passed": 57,
+  "focused_markup_tests_passed": 17,
+  "full_node_tests_passed": 339,
+  "full_node_tests_skipped": 1,
+  "eslint_errors": 0,
+  "eslint_warnings": 41,
+  "deferred_minor": [],
+  "review_boundaries": [
+    "actual CT performance and image/source proof require live acceptance",
+    "RAG ranking/quality outside integration scope",
+    "not a full security audit"
+  ]
+}

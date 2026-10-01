@@ -373,9 +373,9 @@ start_backend() {
         echo "         backend/.venv/bin/pip install -e ./doc-parser -r backend/requirements.txt"
         return 1
     fi
-    run_service Backend backend app.main:app "$OKF_BACKEND_PORT" \
+    run_service Backend backend app.diagnostic_entrypoint "$OKF_BACKEND_PORT" \
         "http://127.0.0.1:$OKF_BACKEND_PORT/health" python "$OKF_ROOT/backend" \
-        "$python" -m uvicorn app.main:app --host 127.0.0.1 --port "$OKF_BACKEND_PORT"
+        "$python" -m app.diagnostic_entrypoint --host 127.0.0.1 --port "$OKF_BACKEND_PORT"
 }
 
 start_frontend() {

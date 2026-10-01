@@ -1,7 +1,14 @@
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # Bundled storage is an all-or-nothing production profile. Neither service
   # has a host port: only containers on storage_network can reach them.
   postgres:
+    logging: *bounded-logging
     image: postgres:17@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675
     profiles: ["bundled"]
     environment:
@@ -22,6 +29,7 @@ services:
     restart: unless-stopped
 
   qdrant:
+    logging: *bounded-logging
     image: qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
     profiles: ["bundled"]
     volumes:
@@ -32,12 +40,14 @@ services:
   # Schema migration is a one-shot gate. Validation and the read-only Qdrant
   # wait run before Alembic so a mixed topology cannot touch either database.
   migrate:
+    logging: *bounded-logging
     build:
       context: .
       dockerfile: backend/Dockerfile
       args:
         APP_UID: ${APP_UID:-1000}
         APP_GID: ${APP_GID:-1000}
+        OKF_BUILD_REVISION: ${OKF_BUILD_REVISION:-unknown}
     image: okf-migrate:local
     env_file:
       - ${OKF_RUNTIME_ENV_FILE:?set OKF_RUNTIME_ENV_FILE to the selected runtime env file}
@@ -67,6 +77,7 @@ services:
   # In external mode app_network provides egress to customer-owned storage;
   # bundled storage remains confined to the internal network.
   backend:
+    logging: *bounded-logging
     deploy:
       replicas: 1
     build:
@@ -75,14 +86,20 @@ services:
       args:
         APP_UID: ${APP_UID:-1000}
         APP_GID: ${APP_GID:-1000}
+        OKF_BUILD_REVISION: ${OKF_BUILD_REVISION:-unknown}
     image: okf-backend:local
     env_file:
       - ${OKF_RUNTIME_ENV_FILE:?set OKF_RUNTIME_ENV_FILE to the selected runtime env file}
     environment:
       DATA_DIR: /data
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      DIAGNOSTICS_DIR: /diagnostics/backend
+      OKF_FRONTEND_DIAGNOSTICS_DIR: /diagnostics/frontend
+      OKF_BUILD_REVISION: ${OKF_BUILD_REVISION:-unknown}
     volumes:
       - ${OKF_DATA_DIR:-./data}:/data
+      - ${OKF_DIAGNOSTICS_DIR:-./diagnostics}/backend:/diagnostics/backend
+      - ${OKF_DIAGNOSTICS_DIR:-./diagnostics}/frontend:/diagnostics/frontend:ro
     networks: [app_network, storage_network]
     depends_on:
       migrate:
@@ -100,12 +117,25 @@ services:
       timeout: 8s
       retries: 12
       start_period: 20s
+    # Give the recorder and bundle worker time to drain after SIGTERM.
+    stop_grace_period: 30s
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    logging: *bounded-logging
+    build:
+      context: ./frontend
+      args:
+        OKF_BUILD_REVISION: ${OKF_BUILD_REVISION:-unknown}
     environment:
+      DIAGNOSTICS_BASELINE_ENABLED: ${DIAGNOSTICS_BASELINE_ENABLED:-true}
       BACKEND_URL: http://backend:8000
+      OKF_FRONTEND_DIAGNOSTICS_DIR: /diagnostics/frontend
+      OKF_DIAGNOSTICS_CONTROL_PATH: /diagnostics/control/capture.json
+      OKF_BUILD_REVISION: ${OKF_BUILD_REVISION:-unknown}
+    volumes:
+      - ${OKF_DIAGNOSTICS_DIR:-./diagnostics}/frontend:/diagnostics/frontend
+      - ${OKF_DIAGNOSTICS_DIR:-./diagnostics}/backend/control:/diagnostics/control:ro
     ports:
       - "${FRONTEND_PORT:-8080}:3000"
     networks: [app_network]

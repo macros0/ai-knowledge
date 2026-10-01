@@ -1,0 +1,64 @@
+{
+  "complete": true,
+  "requests": 39280,
+  "response_equal_across_all_cases": true,
+  "one_worker_pid_per_role_per_case": true,
+  "all_capture_counts_equal_search_calls": true,
+  "all_four_zip_crc_sha_checks_passed": true,
+  "own_project_stopped": true,
+  "containers_after_experiment": {
+    "backend": {
+      "running": false,
+      "exit_code": 0,
+      "oom_killed": false
+    },
+    "frontend": {
+      "running": false,
+      "exit_code": 143,
+      "oom_killed": false
+    },
+    "postgres": {
+      "running": false,
+      "exit_code": 0,
+      "oom_killed": false
+    },
+    "qdrant": {
+      "running": false,
+      "exit_code": 143,
+      "oom_killed": false
+    }
+  },
+  "restored_frontend": {
+    "status": "created",
+    "running": false,
+    "image_id": "sha256:ba0f7a01c178201160b43f87cc66f60dd74e808d588d06f445fa87010627b266",
+    "command": [
+      "node",
+      "diagnostics-runner.mjs"
+    ],
+    "observer_environment_present": false,
+    "observer_mounts_present": false
+  },
+  "retained_other_stacks": {
+    "okf-knowledge-backend-1": {
+      "image_id": "sha256:fee7089d30732eed1a0b2b0b3aad52bc1bc7b28e11cf9d7e1233ce206a400598",
+      "started_at": "2026-09-28T11:25:59.758028492Z",
+      "running": true
+    },
+    "okf-knowledge-frontend-1": {
+      "image_id": "sha256:509f1108bab50c6862c7a9508691c3002b15eb26b84838932ee364b60fc7cc86",
+      "started_at": "2026-09-28T11:25:59.682657267Z",
+      "running": true
+    },
+    "okf-diag-levels-20260929-backend-1": {
+      "image_id": "sha256:0a805ae89c3d42360981e170d845d150445912bb277946a52d5b75d9506de388",
+      "started_at": "2026-10-01T12:47:44.645599168Z",
+      "running": true
+    },
+    "okf-diag-levels-20260929-frontend-1": {
+      "image_id": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799",
+      "started_at": "2026-10-01T12:47:55.837136261Z",
+      "running": true
+    }
+  }
+}

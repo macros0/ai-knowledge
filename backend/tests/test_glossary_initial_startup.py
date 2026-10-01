@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from fastapi import FastAPI
 
 from app import main
 from app.services.glossary.rule_registry import GlossaryRuleRegistry
@@ -19,6 +20,10 @@ def test_backend_startup_seeds_initial_rules_after_schema_is_ready(monkeypatch, 
     monkeypatch.setattr(main, 'VectorStore', Mock())
     monkeypatch.setattr(main, 'threading', SimpleNamespace(Thread=Mock(), Event=threading.Event))
     from app.services import job_queue, export_queue, trash, chat_history
+    from app.services.diagnostics import runtime
+
+    monkeypatch.setattr(runtime, "initialize_diagnostics",
+                        lambda: SimpleNamespace(available=False, start=Mock(), stop=Mock()))
 
     monkeypatch.setattr(job_queue, 'get_job_queue', Mock())
     monkeypatch.setattr(export_queue, 'get_export_queue', Mock())
@@ -27,13 +32,15 @@ def test_backend_startup_seeds_initial_rules_after_schema_is_ready(monkeypatch, 
     registry = GlossaryRuleRegistry()
     assert registry.list() == []
 
+    application = FastAPI()
+
     async def start_twice():
-        async with main.lifespan(None):
+        async with main.lifespan(application):
             rules = registry.list()
             assert len(rules) == 4
             first_id = rules[0]['id']
             registry.update(first_id, rules[0]['version'], enabled=False, actor_id='admin')
-        async with main.lifespan(None):
+        async with main.lifespan(application):
             rules = registry.list()
             assert len(rules) == 4
             assert rules[0]['id'] == first_id and rules[0]['enabled'] is False

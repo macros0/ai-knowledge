@@ -10,6 +10,7 @@ import { buildLocaleOptions } from "@/lib/sourceLocales.mjs";
 import { bumpTagVersion } from "@/lib/tagDictionary";
 import { useI18n } from "@/i18n/LocaleContext";
 import Modal from "./Modal";
+import ErrorReference from "./ErrorReference";
 import TagPicker from "./TagPicker";
 import DevelopmentPicker from "./DevelopmentPicker";
 import SearchableSelect from "./SearchableSelect";
@@ -148,6 +149,7 @@ export default function DocumentMarkupModal({ docId, onClose }) {
         {loading && <p role="status">{t("common.loading")}</p>}
         {Object.keys(loadErrors).length > 0 && <div role="alert" className="document-markup-notice">
           {t("documentMarkup.loadError", { message: friendlyApiError(Object.values(loadErrors)[0], t) })}
+          <ErrorReference requestId={Object.values(loadErrors)[0]?.requestId} localReportId={Object.values(loadErrors)[0]?.localReportId} />
           <button type="button" className="btn" onClick={retryLoad} disabled={busy || loading}>{t("common.retry")}</button>
         </div>}
         {draft && portalContainer && <div className="document-markup-fields">
@@ -182,6 +184,7 @@ export default function DocumentMarkupModal({ docId, onClose }) {
         </div>}
         {error && <div role="alert" className="document-markup-notice">
           <p>{t("documentMarkup.saveError", { message: friendlyApiError(error, t) })}</p>
+          <ErrorReference requestId={error.requestId} localReportId={error.localReportId} />
         </div>}
         {applied.length > 0 && <p role="status">{t("documentMarkup.partial", {
           fields: applied.map((field) => t(`documentMarkup.field.${field}`)).join(", "),

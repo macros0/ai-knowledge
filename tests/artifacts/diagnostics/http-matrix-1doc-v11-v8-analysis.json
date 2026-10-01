@@ -1,0 +1,370 @@
+{
+  "all_duration_requests_pass": true,
+  "all_losses_pass": true,
+  "all_p95_pass": true,
+  "all_rss_pass": true,
+  "all_zip_overlap_pass": true,
+  "decisions": [
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -884736,
+      "baseline_p95_ms": 18.822839949280024,
+      "bundle": false,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -892928,
+      "losses_pass": true,
+      "measured_p95_ms": 19.60008090827614,
+      "mode": "standard",
+      "p95_delta_ms": 0.7772409589961171,
+      "p95_overhead_pct": 4.12924383934874,
+      "p95_pass": true,
+      "repeat": 1,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 28672,
+      "baseline_p95_ms": 18.822839949280024,
+      "bundle": false,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 962560,
+      "losses_pass": true,
+      "measured_p95_ms": 19.56811803393066,
+      "mode": "detailed",
+      "p95_delta_ms": 0.7452780846506357,
+      "p95_overhead_pct": 3.9594348496765575,
+      "p95_pass": true,
+      "repeat": 1,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -2711552,
+      "baseline_p95_ms": 93.77083193976432,
+      "bundle": false,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 3276800,
+      "losses_pass": true,
+      "measured_p95_ms": 96.7289429390803,
+      "mode": "standard",
+      "p95_delta_ms": 2.958110999315977,
+      "p95_overhead_pct": 3.154617420069572,
+      "p95_pass": true,
+      "repeat": 1,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -1302528,
+      "baseline_p95_ms": 93.77083193976432,
+      "bundle": false,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 17502208,
+      "losses_pass": true,
+      "measured_p95_ms": 95.46909399796277,
+      "mode": "detailed",
+      "p95_delta_ms": 1.698262058198452,
+      "p95_overhead_pct": 1.8110770940897414,
+      "p95_pass": true,
+      "repeat": 1,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -32768,
+      "baseline_p95_ms": 18.717375001870096,
+      "bundle": false,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 3133440,
+      "losses_pass": true,
+      "measured_p95_ms": 19.308693939819932,
+      "mode": "standard",
+      "p95_delta_ms": 0.5913189379498363,
+      "p95_overhead_pct": 3.159198006615549,
+      "p95_pass": true,
+      "repeat": 2,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -16384,
+      "baseline_p95_ms": 18.717375001870096,
+      "bundle": false,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -1744896,
+      "losses_pass": true,
+      "measured_p95_ms": 19.256763975135982,
+      "mode": "detailed",
+      "p95_delta_ms": 0.5393889732658863,
+      "p95_overhead_pct": 2.881755444938161,
+      "p95_pass": true,
+      "repeat": 2,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -49152,
+      "baseline_p95_ms": 95.5208360683173,
+      "bundle": false,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -10629120,
+      "losses_pass": true,
+      "measured_p95_ms": 97.81169996131212,
+      "mode": "detailed",
+      "p95_delta_ms": 2.290863892994821,
+      "p95_overhead_pct": 2.3982871039323506,
+      "p95_pass": true,
+      "repeat": 2,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 86016,
+      "baseline_p95_ms": 95.5208360683173,
+      "bundle": false,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -6307840,
+      "losses_pass": true,
+      "measured_p95_ms": 96.9466979149729,
+      "mode": "standard",
+      "p95_delta_ms": 1.4258618466556072,
+      "p95_overhead_pct": 1.492723373605953,
+      "p95_pass": true,
+      "repeat": 2,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 69632,
+      "baseline_p95_ms": 18.63150589633733,
+      "bundle": false,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 9748480,
+      "losses_pass": true,
+      "measured_p95_ms": 19.50224896427244,
+      "mode": "detailed",
+      "p95_delta_ms": 0.8707430679351091,
+      "p95_overhead_pct": 4.673498067090143,
+      "p95_pass": true,
+      "repeat": 3,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -81920,
+      "baseline_p95_ms": 18.63150589633733,
+      "bundle": false,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 303104,
+      "losses_pass": true,
+      "measured_p95_ms": 19.20771598815918,
+      "mode": "standard",
+      "p95_delta_ms": 0.5762100918218493,
+      "p95_overhead_pct": 3.092665160979413,
+      "p95_pass": true,
+      "repeat": 3,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -106496,
+      "baseline_p95_ms": 94.86594295594841,
+      "bundle": false,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 4374528,
+      "losses_pass": true,
+      "measured_p95_ms": 97.68035297747701,
+      "mode": "standard",
+      "p95_delta_ms": 2.8144100215286016,
+      "p95_overhead_pct": 2.9667232874452054,
+      "p95_pass": true,
+      "repeat": 3,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 12288,
+      "baseline_p95_ms": 94.86594295594841,
+      "bundle": false,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 17883136,
+      "losses_pass": true,
+      "measured_p95_ms": 97.8564970428124,
+      "mode": "detailed",
+      "p95_delta_ms": 2.9905540868639946,
+      "p95_overhead_pct": 3.152400106593234,
+      "p95_pass": true,
+      "repeat": 3,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    }
+  ],
+  "schema_version": 1
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "samples": 4663,
+  "observer_errors": [],
+  "period_seconds": 2,
+  "min_host_mem_available_mib": 5838.98828125,
+  "swap_in_pages_delta": 159,
+  "swap_out_pages_delta": 0,
+  "max_cpu_pressure_some_avg10": 16.79,
+  "max_memory_pressure_some_avg10": 0.0,
+  "guests": {
+    "101": {
+      "peak_memory_mib": 4826.51953125,
+      "peak_swap_mib": 275.2734375,
+      "memory_events_delta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0,
+        "sock_throttled": 0
+      }
+    },
+    "102": {
+      "peak_memory_mib": 5074.72265625,
+      "peak_swap_mib": 40.86328125,
+      "memory_events_delta": {
+        "low": 0,
+        "high": 529,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0,
+        "sock_throttled": 0
+      }
+    }
+  }
+}

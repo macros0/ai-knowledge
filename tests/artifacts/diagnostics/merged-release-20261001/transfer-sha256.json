@@ -1,0 +1,7 @@
+{
+  "archive_path": "/opt/okf-diag-integration-20261001/release-candidates/57727d9/acceptance-rss-fixed-fdc327b/release-safe-evidence.tar",
+  "archive_sha256": "39cbf7ad7340b94c3c0d0af391e7b957e209392fe0c0e73d1349f37961aedfe5",
+  "files": 41,
+  "bytes": 12154880,
+  "status": "passed"
+}

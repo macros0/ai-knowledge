@@ -1,6 +1,334 @@
 # Уровни детализации и производительность административной диагностики — план реализации
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Пользователь запросил только план; исполнение, commit, push и deployment этим документом не разрешены.
+## Итог оставшейся приёмки — 01.10.2026
+
+**Все пять оставшихся блоков сняты. Общая приёмка производительности — FAILED.**
+Использованы неизменные образы backend v16 / frontend v11, исходная команда
+`node diagnostics-runner.mjs` и включённая baseline-диагностика. Завершены
+102 серии и 323 369 измеренных запросов за 2 ч 35 мин 48 с
+(14:43–17:19 МСК). После решения пользователя новых оптимизаций и повторов
+не выполняли. Предыдущие failed-результаты сохранены. Exit 0 означает успешное
+завершение сбора; общий журнал прямо хранит `acceptance=failed`.
+
+| Корпус / сценарий | Серии / запросы | Максимум p95: прибавка / мс | Прирост RSS backend / Node, МиБ | Результат |
+|---|---:|---:|---:|---|
+| 1 документ, обычная нагрузка | 18 / 74 587 | +58,490% / +10,941 | 0,203 / 39,777 | failed: p95 и RSS |
+| 1 документ, active ZIP | 24 / 102 302 | +58,355% / +10,722 | 25,145 / 67,223 | failed: p95 и RSS |
+| 100 документов, обычная нагрузка | 18 / 44 862 | +7,152% / +8,481 | 0,934 / 10,672 | passed |
+| 100 документов, active ZIP | 24 / 57 917 | +10,454% / +12,446 | 1,488 / 1,789 | passed |
+| 100 документов, ZIP после stop | 18 / 43 701 | +5,076% / +6,306 | 0,332 / 2,168 | passed |
+
+Пороги сохранены: p95 +10% для обычной нагрузки, +20% для ZIP;
+RSS backend +128 МиБ, Node +32 МиБ. Во всех пяти блоках пройдены проверки
+длительности, числа запросов, совпадения ответов, точности счётчиков,
+отсутствия непреднамеренных потерь и применимых пересечений фаз ZIP.
+Повторный расчёт всех пяти analyses полностью совпал с сохранённым;
+проверены точные наборы серий и digest обоих образов.
+
+Исходные JSON, analyses, status и review каждого блока, общий журнал,
+числовой PVE observer и конечное состояние сохранены с проверкой SHA в
+`tests/artifacts/diagnostics/`. Ранее отдельно пройдены native TTL/квоты
+(3 теста), 60-секундный recorder storm и HTTP lifecycle. Статус ZIP ready
+в матрице не означает CRC каждого архива: CRC/SHA/manifest, права и удаление
+проверены отдельным lifecycle smoke. Storm — нагрузка частного recorder
+с параллельной проверкой живого API, а не 10 000 HTTP-ошибок в секунду.
+
+### Что доказано и что остаётся неизвестным
+
+- Отказы на 1 документе сохраняются. Максимальный прирост Node RSS
+  +67,223 МиБ наблюдался при **capture off + ZIP**. Причина пиков пока
+  не установлена; утечка памяти и зависимость от уровня capture не доказаны.
+  Ранее выполненный stopped ZIP для 1 документа также остаётся failed.
+- Для 100 документов исходные сравнения с baseline своего повтора прошли.
+  Разброс baseline p95 между повторами был существенным: active ZIP
+  16,702% / 9,203% при concurrency 1 / 8, stopped ZIP 17,099% / 10,571%.
+  Поэтому эти результаты ограничивают вывод о стабильности задержек.
+  Дополнительное сравнение active ZIP с самым быстрым baseline даёт
+  максимум +24,523%. Это диагностический расчёт, который не меняет
+  исходные критерии и результат сравнения внутри каждого повтора.
+- Фазовые p95 на 100 документах: active prepare до 562,832 мс
+  (минимум 5 samples), zip до 180,567 мс (минимум 4);
+  stopped prepare до 540,845 мс (минимум 5), zip до 532,277 мс
+  (минимум 4). Это малые условные выборки запросов, пересёкших фазу;
+  отдельного SLA для них в плане нет.
+- Наблюдатель PVE сохранил 4 674 samples за 9 348,43 с без ошибок.
+  Первые четыре блока прошли без новых swap-out и событий memory.high/low.
+  Swap-out начался **16:56:29 МСК, в последнем stopped100doc блоке**:
+  host swap-out 453,566 МиБ, swap-in 265,164 МиБ. MemAvailable опускалась
+  до 3,167 ГиБ; CT101 memory.high +287, CT102 memory.low +1643;
+  OOM и достижения memory.max не было. CT101 достигал 7,937 ГиБ,
+  CT102 — 3,987 ГиБ. Погрешность границ окон около 3 с.
+- В двух failed-блоках на 1 документе MemAvailable была не ниже
+  5,899 ГиБ, новых swap-out и указанных событий давления не было.
+  Позднее давление на память не объясняет эти ранние отказы.
+  Причинность p95/RSS и стабильность RAM/IO на весь прогон не установлены.
+- Swap current CT101: начало 168,129 / максимум 490,582 / конец 276,750 МиБ;
+  CT102: начало и максимум 41,121 / конец 41,090 МиБ. Старые страницы
+  CT102 остаются при swap.max=0. Host swap counters не приписываются
+  целиком одному контейнеру без отдельной проверки.
+
+### Конечное состояние и рекомендации
+
+Capture выключен, runtime доступен. Recorder queued/dropped/invalid/
+expired_queue/storage_errors/drain_timeouts равны 0. Нагрузочные процессы,
+ZIP/prepare workers и незавершённые пакеты отсутствуют. Использовано
+12 747 903 из 503 316 480 bytes квоты; storage_degraded=false,
+unsafe_paths=0, last_failure отсутствует. Reserved 63 865 bytes — остаток
+baseline append credit (65536−1671); работающий baseline writer может
+сохранять этот резерв, поэтому reserved=0 не заявляется.
+
+Тестовый backend `/health/ready` — HTTP 200. Тестовый и рабочий frontend
+18084/8080 — HTTP 200; оба backend имеют Docker healthy, рестартов/OOM нет.
+Тестовый frontend не имеет отдельного Docker healthcheck. Сохранены образы,
+исходная команда Node.js и включённые baseline flags.
+
+LLM в CT101 работает: RAM 8 ГиБ / swap 512 МиБ. CT102: RAM 5 ГиБ /
+swap 0 / memory.low 4 ГиБ / memory.min 0; memory.low родительского lxc —
+4 ГиБ. CT100 и VM103 остановлены. Постоянная конфигурация памяти проверена
+статически; перезагрузки не было. Тестовый стенд остаётся на отдельном
+синтетическом корпусе из 100 документов. Прежние volumes и данные сохранены;
+рабочую production-конфигурацию не переустанавливали.
+
+**Рекомендация:** завершить текущую итерацию с подготовленным функциональным
+результатом и явным performance-блокером. Дальнейшие настройки GC, БД или
+RAM требуют установленной причины. Semi-space=4 отклонён и не принят.
+Если расследование понадобится, выделить отдельную ограниченную по времени
+задачу общей производительности HTTP/БД/Next.js и фиксировать нагрузку CT101.
+Выбирать изменения по причинным данным; исходные пороги сохранять.
+Готовность к production не объявляется.
+
+Фактический статус регрессии: последний полный Windows-набор v15 завершён
+с exit 0 при неизменных 433 Python-файлах; итоговая summary не сохранена,
+поэтому точные counts не приводятся. Для v16 пройдены targeted prepare
+(24 теста), RSS-harness (26) и independent native TTL (3).
+Полный набор v16 и GitHub CI не запускались. Итоговые Ruff всего backend
+`--no-cache` и `git diff --check` прошли; остались только CRLF warnings i18n.
+Commit/push/merge/production не выполнялись. Task11: сбор завершён,
+приёмка failed. Выпуск и оставшиеся проверки Task12 остаются открытыми.
+
+Ниже сохранён исторический журнал; текущий итог приведён выше.
+
+## Решение пользователя: завершить оставшуюся приёмку без новых оптимизаций, 01.10.2026
+
+Пользователь выбрал завершение оставшихся обязательных matrices на frozen
+backend v16/frontend v11, original `node diagnostics-runner.mjs`, baseline on.
+Новые tuning, повторы failed blocks и изменения HTTP/DB/RAG не выполняются.
+Снять native 1doc normal/active и fresh100doc normal/active/stopped; завершённые
+matrices с failed p95/RSS сохраняются failed, но не блокируют сбор следующих.
+Incomplete matrix, ответы/потери/квоты/integrity и неизвестные setup errors
+останавливают очередь. Пороги 10% normal /20% ZIP, RSS128/32 МиБ неизменны.
+Предыдущие failures не отменяются; итоговое performance acceptance остаётся failed.
+
+Runtime preflight: test health/ready HTTP200; production health HTTP200,
+production health/ready HTTP404 (старый production API), Docker healthy и
+frontend8080 HTTP200. Production readiness не выдаётся за passed и не исправляется.
+
+
+### Завершён native normal1doc v16/v11
+
+18/18 rows,74 587 measured requests,exit0; исходные numerical gates:
+`all_p95_pass=false`, `all_rss_pass=false`; остальные6 gatestrue.
+Max p95 overhead58,490% (detailed/c1/r1), absolute10,941 ms;
+frontend RSS growth39,777 МиБ (standard/c8/r1), второй failedRSS
+34,406 МиБ (detailed/c8/r3). Backend growthmax0,203 МиБ.
+C1 baselines18,706/29,240/18,457 ms: заметная изменчивость безcapture,
+причинность не доказана. Counts/equality/lossespassed.
+Артефакты `tests/artifacts/diagnostics/http-1doc-normal-pve-v16-v11-final-20261001/`:
+rawmatrix,analysis,status,review; SHA remote/local совпали.
+Block сохранёнfailed; по выбранной пользователем политике начатactive1doc,
+повторnormal или tuning не запускается.
+
+### Завершён native active1doc v16/v11; fresh100doc начат
+
+24/24 rows,102 302 measured requests,exit0. p95/RSSfalse, остальные6 gatestrue.
+Max p95 overhead58,355% (standard/c1/r3); baseline+ZIP/c1/r3 такжеfailed
+24,597%. Frontend RSSgrowth67,223 МиБ — **baseline+ZIP/c8/r2 безcapture**.
+Backend growthmax25,145 МиБ. Это не доказательство причины роста памяти.
+C1 reference18,329/18,455/18,373 ms; c8 95,380/102,159/95,125 ms.
+Фазовые conditional distributions:prepare min87 samples/maxp95136,695 ms;
+zip min10/maxp95124,065 ms. У фаз нет отдельного SLA; samples не подменяют
+минутный критерий. ZIP overlaps/status и counts/equality/lossespassed.
+Rawmatrix/analysis/status/review экспортированы с совпадениемSHA в
+`tests/artifacts/diagnostics/http-1doc-active-pve-v16-v11-final-20261001/`.
+
+Fresh synthetic100doc storage создан отдельно, прежние volumes/data сохранены.
+Migrate imagev16, backendv16/frontendv11,originalNode,baselineon. Compose
+up--waitpassed; seed100passed; DB exactly100 synthetic canonical IDspassed.
+Normal100doc запущен12:48:03UTC. Product/production/thresholds не менялись.
+
+### Завершён native normal100doc v16/v11
+
+18/18 rows,44862 measured requests,exit0; all8 numerical gatestrue.
+Max p95 overhead7.152%, max absolute+8.481 ms.
+Backend/Node RSSgrowth max0.934/10.672 МиБ.
+Counts/equality/lossespassed. Raw/analysis/status/review экспортированы
+с совпадениемSHA в `tests/artifacts/diagnostics/http-100doc-normal-pve-v16-v11-final-20261001/`.
+Этот pass не отменяет failed1doc и предыдущие failures. Active100doc
+начат13:15:28UTC; после него только ранее не выполненный stopped100doc.
+
+### Завершён native active100doc v16/v11
+
+24/24 rows,57917 measured requests,exit0; all8 original numerical gatestrue.
+Max matched p95 overhead10.454%, absolute+12.446 ms;
+backend/Node RSSgrowth max1.488/1.789 МиБ.
+Counts/equality/losses/overlaps/distributionspassed. Raw/analysis/status/review
+экспортированы с SHA в `tests/artifacts/diagnostics/http-100doc-active-pve-v16-v11-final-20261001/`.
+Фазовые conditional p95 maxima:prepare562.832 ms
+(min5 samples),zip180.567 ms
+(min4 samples); отдельного phase SLA нет.
+
+Baseline p95 spread c1/c8=16.702/9.203%.
+Дополнительный diagnostic-only расчёт к fastest baseline даёт max
++24.523%; он не меняет original paired gates
+и не заменяет baseline. Изменчивость ограничивает причинные выводы.
+Overall performance acceptance остаётсяfailed по1doc/историческим failures.
+Последний ранее не выполненный stopped100doc начат13:51:59UTC.
+
+## Исторический срез перед завершением оставшейся приёмки, 01.10.2026
+
+**Реализация сохранена; performance acceptance не закрыта. Новые общие
+повторы и tuning не запускаются до решения по дальнейшей области работ.**
+
+- Full repeat прежней configuration:18 rows/79 496 requests, все p95 gates
+  passed; frontend standard/c8/r2 RSS+47,047 МиБ при лимите32 — failed.
+- Numeric profile подтверждает V8 heap variation также при capture off.
+  Semi-space4 bounded A/B/A дал меньший RSS, но candidate block отклонён:
+  standard/c1 p95 29,210 vs18,017 ms (+62,120%, лимит20%). Сохранены4 complete
+  rows/15 209 requests; owned probe прерван SIGINT, это **не полный block**.
+  Product Node default не изменён, frontend command восстановлен.
+  Failed-minute IO full PSI≈8,197% vs baseline2,796%, погрешность границ≈3 s;
+  RAM available>=6,044 ГиБ, new swap-out/OOM0. Причинность не доказана.
+- Independent native v16 TTL/quota:3 passed (4 existing fixture/deprecation
+  warnings). Storm:60,000 s/599998 attempts/written,9999,958 attempts/s;
+  RSS growth2,359 МиБ, disk8 299 170/16 777 216 bytes, losses0, queued/reserved0.
+  Health/search58/58 successful each, max153,779/31,896 ms. Это private
+  recorder storm + live availability через frontend, не10k HTTP failures/s.
+- Final HTTP lifecycle v16/v11 passed:manifestv2, partialfalse/gaps[], SHA/
+  component checksums/CRC/exact7 entries, admin access, reader403, delete410.
+  CSRF в simulation неприменим; production CSRF отдельными tests, не этим smoke.
+- Baseline on/off1-doc/c1:3567/3602 requests, p95 18,629/18,297 ms;
+  observed difference0,333 ms (1,819%), одинаковые responses. Одна пара —
+  instrumentation control, не доказательство causal overhead и не SLA baseline.
+  RED выявил отсутствующую передачу DIAGNOSTICS_BASELINE_ENABLED во frontend.
+  **Исправлен docker-compose.yml: передать существующий флаг, defaulttrue.**
+  GREEN: оба Docker flagsfalse, backend capabilityfalse, Node startup written0;
+  bundled/external config render при true/false —4 checks passed. Services
+  этих rendering checks не запускались. Private env остаётся на CT mode600.
+- Restored current state:baseline on/capture off/runtime available;
+  backend/frontend imagesv16/v11, original commands. Test и production backend
+  healthy, frontend18084/8080 HTTP200; LLM101active, CT100 иVM103 stopped.
+  CT1018GiB/swap512MiB, CT1025GiB/swap0/memory.low4GiB/min0 сохранены.
+  Оставшийся reserved у running backend соответствует baseline append credit
+  (65536−1671=63865 bytes); prepare/ZIP worker отсутствует. Не заявлять
+  reserved0 для постоянно работающего baseline writer.
+
+Remaining: current native1doc normal/active и100doc normal/active/stopped,
+100doc ещё не seeded; full regression/CI фактический статус открытый.
+Native TTL/storm/lifecycle и отдельный baseline-off control теперь covered
+в указанных областях. Existing failed evidence и числовые gates сохранены.
+Remaining queue guard отклоняет failed/incomplete candidate до любых mutations;
+она локально подготовлена, не запущена/не deployed. Ни commit/push/production
+не выполнялись. Product memory/DB/RAG новые изменения не вносились.
+
+Ruling: independent correctness gates были отделены от performance prerequisite,
+чтобы выполнить обязательную авторизованную работу без бесконечных matrices.
+После failed candidate дальнейшее product tuning без причины было бы догадкой;
+по systematic-debugging нужен выбор: завершать оставшуюся приёмку frozen
+configuration с честным failed status либо расширять scope на общий HTTP/DB/
+frontend performance. Исходные SLA thresholds не изменяются при обоих вариантах.
+
+
+## Semi-space=4: bounded candidate и следующий полный блок, 01.10.2026
+
+Matched-start default и4 измерены отдельно по3 c8 cases (baseline→stopped
+standard ZIP→baseline), всего31 232 requests. Default frontend peaks
+214036480/242458624/277549056 bytes,4:212602880/215052288/206970880.
+Standard growth к baseline-before27,105→2,336 МиБ; относительно меньшего
+из обоих baseline у4 +7,707 МиБ. Standard p95 default94,306/4 95,020 ms;
+к своему fastest baseline+2,776%/+3,258%. Counts/equality/ZIP ready passed.
+B control complete; original command restored, capture off/runtime available/
+recorder queued,dropped,storage_errors0; env/mount fields/images совпадают.
+Setup failures до B нагрузки сохранены отдельно, default JSON SHA подтверждён.
+Одна A/B/A на treatment не доказывает устранение редкого failed RSS.
+
+Ruling: Task11 позволяет настраивать startup values по before/after.
+Разрешён один full affected block на candidate runtime semi-space4, без
+изменения numerical gates128/32 МиБ и20% p95, frozen v16/v11 image contents.
+Это новая runtime configuration с measured обоснованием; третьей общей
+попытки на прежней configuration нет. При failed candidate не запускать
+другие GC tweaks или broad retry без нового решения; вернуть original command.
+Product Dockerfile/default не меняется до результата full candidate.
+100-doc/tail required/open; следующий queue guard должен проверять именно
+candidate result/runtime fingerprint, не переписывать исторический failed repeat.
+
+
+## Числовой frontend memory profile завершён, 01.10.2026
+
+`frontend-numeric-memory-v16-v11-20261001`: 3 c8 cases,15 656 requests,
+p95 baseline/standard/baseline93,382/92,943/92,097 ms; frontend RSS peaks
+222863360/216539136/210939904 bytes. ZIP ready, counts exact; capture off,
+runtime available, recorder queued/dropped/storage_errors0; observer errors0,
+inspector closed. Сам профиль влияет на Node, это не SLA acceptance.
+Safe numeric samples и review сохранены; heap dumps/env/object text отсутствуют.
+
+PID1 — launcher, а diagnostic recorder находится внутри Next.js server:
+прежнее название collector в numeric fields означает launcher, не writer.
+Launcher RSS46727168 bytes стабилен. В первом baseline Next memoryUsage RSS
+106037248–174473216 bytes, heapTotal46759936–115965952, heapUsed34940712–83539912;
+external<=3760029 bytes, arrayBuffers<=187584. Old space max71270400 bytes,
+new space33554432. Это подтверждает изменчивость V8 heap также без capture,
+но не объясняет причинность конкретного исторического +47,047 МиБ отказа.
+
+Один bounded matched-start experiment проверяет только semi-space=4:
+пересоздать test frontend на default, затем на4; в каждом варианте
+baseline→stopped standard ZIP→baseline, c8/30 warm/60 measure/>=1000 requests.
+Нет inspector и ручного GC. Command/actual fork flag проверяются; образы/env/
+mounts одинаковы; finally восстанавливает исходный command и runtime health.
+Это localization, не третья общая попытка, не принятие нового production default.
+Node20.20.2 docs: https://nodejs.org/download/release/v20.20.2/docs/api/cli.html#--max-semi-space-sizesize-in-mib
+Флаг меняет память young generation и может влиять на throughput; вывод только
+по measured results. Full acceptance/100-doc/tail остаются открытыми.
+
+
+## Единственный full repeat завершён: frontend RSS fail, 01.10.2026
+
+`http-1doc-stopped-pve-v16-v11-shared-vm-repeat1-20261001`:
+12:34:25–13:01:50 МСК, 18 rows / 79 496 measured requests.
+Все p95 gates passed; maximum growth относительно своего baseline +2,343%.
+Общий acceptance failed: standard/c8/repeat2 frontend RSS +47,047 МиБ
+(281055232 vs 231723008 bytes), лимит32 МиБ. Backend growth в этой строке
+200704 bytes; p95 92,469 vs93,070 ms. Counts/equality/losses/ZIP phase gates
+passed, capture off/runtime available/queued,dropped,storage_errors0;
+frozen v16/v11 images unchanged. Результаты экспортированы в safe artifacts.
+Предыдущий p95 spike не повторился; прежний failed block не отменяется.
+
+Третья общая попытка не запускается. Следующая native очередь заблокирована
+all_rss_pass=false. Выполняется один короткий frontend memory profile:
+раздельные RSS/private memory collector и Next.js server + numeric V8 stats
+на synthetic c8 baseline→stopped standard ZIP→baseline. Inspector только
+в network namespace тестового frontend, без published host port, heap dumps,
+env и содержимого объектов. Этот профиль не SLA acceptance; инструмент
+может влиять на память/тайминги. Node GC flags пока не меняются.
+100-doc/tail required/open; commit/push/production deploy не выполнялись.
+
+
+## Текущий шаг 01.10, 12:34 МСК
+
+WAL A/B/A:3 rows/10 562 requests,p95 18.853→18.812→18.571 ms,fsync p95 2.350 ms each. Spike not reproduced; no per-request timeline from this control (optional serialization compatibility issue separately fixed/verified113 requests). RAG unchanged. One full affected repeat RUNNING per section8; no third automatic retry. Next native queue prepared only;100-doc/tail remain required/open.
+
+## Текущий шаг 01.10, 12:17 МСК
+
+Full corrected stopped ZIP:18/18,79 357 requests,RSS pass (backend24.777/frontend13.770 MiB max),7/8 gates true. One standard/c1/r3 p95+47.940% failed; old failures retained. IO PSI5.145% in failed minute vs2.8–2.9% nearby, cause unresolved. Bounded WAL-sync A/B/A localization RUNNING, not acceptance; no app/RAG/PG config changes.100-doc/tail required/open, no further full repeat before evidence review.
+
+## Текущий шаг 01.10, 11:35 МСК
+
+Corrected RSS bounded control:3 rows/15 760 requests,8 gates true. Native independent observer:172 real shared-VM samples, passed. Full affected stopped ZIP repeat RUNNING (18 rows), frozen v16/v11, original numeric gates. Earlier failed results preserved;100-doc/tail remain required/open.
+
+## Текущее исполнение 01.10: RSS measurement correction
+
+Full native v16 stopped block:18/18,80 236 requests,7/8 gates passed; RSS failed. Backend shared VM double-count confirmed by KCMP_VM; frontend +37,824 MiB unresolved. Ruling: unique-address-space RSS plus preserved raw sum, unchanged128/32 MiB numeric gates; unknown comparison retains conservative sum.26 targeted tests/Ruff passed. Corrected bounded c8 control RUNNING; full affected repeat after its evidence check.100-doc/tail required/open. Details and immutable failure evidence in report.
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Исполнение авторизовано пользователем после составления плана; работа ведётся в отдельной ветке `admin-diagnostics`. Commit, push, merge и production требуют отдельного поручения.
 
 **Goal:** Снизить влияние диагностики на рабочие запросы за счёт управляемого состава событий, пакетной записи и подготовки пакетов без длительной блокировки основного процесса, сохранив пригодность диагностики для расследований.
 
@@ -10,7 +338,157 @@
 
 **Spec:** [Исходная спецификация](../specs/2026-09-27-admin-diagnostics-design.md) и дополнение к ней в разделах 2–5 этого плана. Дополнение — предлагаемое проектное решение, которое исполнитель переносит в спецификацию перед изменением поведения. Старые ограничения сохраняются, кроме явно описанного состава успешных событий и версионирования форматов.
 
-**Статус:** проект плана от 28.09.2026. Продуктовый код не изменялся; проверки будущей реализации не выполнялись. Численные настройки новой политики ниже — стартовые инженерные значения, а не уже измеренная оптимальная конфигурация.
+**Статус на 01.10.2026:** реализация выполнена, полная приёмка не закрыта.
+Ограниченный v16 A/B/A завершён:6 rows/26763 requests, baseline spread
+c1/c8 1,820%/0,379%, ZIP p95 growth1,195%/4,090%, losses0. Node RSS
+сигнал +33,613 МиБ и ещё больший следующий baseline требуют full check.
+Начат полный затронутый18-row stopped ZIP block v16/v11; original gates
+сохранены, следующие100-doc/tail только при pass. Детали в отчёте.
+Новый PVE stopped ZIP block завершён failed: 18/18 rows /78 029 requests,
+p95 standard/c1/r1,r2 false и один RSS false; остальные6 gates true.
+Baseline c1 drift48,040%, RAM pressure/OOM/new swap-out0. Целевой дефект
+launcher prepare подтверждён RED→GREEN: Linux33/Windows8/CT24 passed;
+v16 установлен только в test backend. RSS smoke завершён exit0:
+3 570 requests, три ZIP ready/counts exact/losses0; backend growth27,191
+МиБ, frontend4,223 МиБ. Короткий c1 smoke не закрывает полный SLA. Продуктовая
+заморозка снята только для этого исправления diagnostics. RAG code unchanged;
+read-only SQL pilot показал цену shared row locks. Review01.10 уточнил:
+причинность HTTP failures не доказана; RAG-изменение не является необходимым
+следующим шагом. Рекомендуется один bounded v16 A/B/A с baseline до/после
+для обеих concurrency; при стабильной среде — затронутый полный block.
+Метод RR snapshot/race tests остаётся отдельным предложением расширения scope.
+100-doc/tail не запускаются до разрешения failures. Подробности в отчёте.
+Continuation 04:12 МСК: PVE повторяемость baseline прошла, 3 c8 rows /
+15 952 requests, p95 spread2,300%, OOM/new swap-out0, images/limits unchanged.
+На новом RAM бюджете завершён отдельный полный stopped ZIP 1-doc block,
+18 cases/3 repeats/c1,c8, прежние gates, результат failed указан выше. Следующие 100-doc/tail только
+после pass; прежние Windows failures не отменяются. Детали в отчёте.
+Ограниченная локализация Windows выполнена: 6 строк / 23 088 requests,
+без воспроизведения 503; причина unresolved, прежние failures сохранены.
+По поручению пользователя исправлен бюджет PVE: CT101 8 ГиБ / swap512 МиБ,
+CT102 5 ГиБ / swap0 с мягкой memory.low4 ГиБ; CT100 и VM103 выключены,
+их автозапуск выключен. VM103 выключил пользователь, не запускать.
+GPU48 ГиБ сохранены. Runtime limits/health/policy syntax проверены без
+перезапуска CT101/102; это не закрывает performance acceptance. Подробности,
+приватный rollback и безопасные numeric artifacts перечислены в отчёте.
+Короткий контроль итогового бюджета: c8, 30 s warmup / 60 s measure,
+4 680 requests, p95 107,253 ms, response equality true, exit0; OOM/new
+swap-out0, MemAvailable min4,60 GiB. Это RAM/availability smoke,
+не drift/full SLA acceptance; IO stalls не исчезли. Следующий шаг перед
+оставшимися матрицами — ограниченный контроль повторяемости новой среды.
+Windows stopped ZIP 1-doc первый block failed: единственный p95 отказ
+standard/c8/r3 +44,588% при 20%; остальные семь gates passed, losses 0,
+totals сошлись. Queue остановилась, 100-doc и tail не запускались.
+Failed evidence сохранено. Единственный полный повтор по разделу 8 завершён
+exit 1: 11/18 строк, HTTP 503 на standard/c8/r2. Safe events локализуют отказ
+в вызове Qdrant/BM25 (VectorStoreError); исходный cause не сохранён.
+Перезапусков/OOM нет, сейчас runtime available и capture off. Третья попытка
+не запущена. Следующий рекомендуемый шаг — ограниченная локализация 503,
+а не ещё одна общая матрица. Подробности и критерий остановки — в отчёте.
+В failed минуте host CPU samples выше соседних, VM throttling/memory PSI 0;
+18/20 slowest вне child phases. Причина не доказана, продукт и thresholds
+не меняются. Детали и ограничения — в отчёте.
+Live active ZIP 1-doc Windows v15/v11: 24/24 строки, 88 973 requests,
+восемь gates passed; max p95 growth 10,251% при 20%, live RSS growth
+backend+child 24,563 МиБ / frontend 4,168 МиБ, losses 0, totals сошлись.
+Фазовые p95 выше минутных и опубликованы в отчёте; отдельный фазовый SLA
+не вводился. Статус stopped ZIP и дальнейшей очереди уточнён выше.
+Live normal 1-doc Windows v15/v11: 18/18 строк, 71 520 requests,
+восемь gates passed; max p95 growth 5,438% при 10%, live peak RSS
+growth backend+child 0,066 МиБ / frontend 2,766 МиБ, losses 0,
+capture totals сошлись. Остальные этапы required/open перечислены выше.
+Original fixed-input Windows control завершён: 12/12 строк, 45 318 requests,
+exit 0, completeness/duration/integrity/equality passed; это reference,
+без SLA current продукта. В 21:48:05 UTC начата первая из шести live matrices
+на frozen v15/v11. Их gates проверяются перед продолжением очереди.
+Current full fixed-input Windows/Docker v15/v11 завершён: 24/24 строки,
+3 повтора c1/c8, шесть gates passed, 91 119 measured requests, max p95
+growth +11,214% при прежних 20%, private RSS growth max 10,72 МиБ.
+Exact issued counts сошлись для всех 12 capture-сессий, losses 0.
+37 мин 05 с, exit 0; frozen image IDs до/после те же. CT failed результаты
+сохранены. Original full fixed-input завершён; live matrices/storm/
+baseline-off/final lifecycle остаются required/open. Продуктовый код заморожен.
+Пользователь выбрал попробовать текущую Windows. A/B/A на локальной Docker
+Desktop Linux VM с теми же v15/v11 завершён exit 0: 12 серий, 40 008 measured
+requests; capture p95 +3,293/+1,078%, ZIP +1,234/+1,924% к более быстрому
+bracketing control, drift controls <=2,350%. Exact issued counts сошлись
+для всех восьми сессий, losses 0. Windows/Docker resources/transport отличаются
+от CT102; подробности в отчёте. Это подтверждает пригодность выбранного
+стенда для продолжения контролей, но не закрывает полную исходную матрицу.
+Current fixed-input full block выполнен на Windows Docker
+с прежними cases/thresholds и дополнительным сохранением timings.
+Diagnostic A/B/A 23:10 МСК завершён на frozen v15/v11: 12 серий, 41 138
+измеренных requests, 18 мин 42 с. Рост p95 capture к более быстрому
+bracketing control +4,245/+5,908%, ZIP +0,461/+1,198%; сами controls
+дрейфуют на 38–58%. В 144 пятисекундных окнах window p95 сильно связан
+с PVE IO full stall fraction (Pearson 0,963); источник IO latency и причины
+прошлых failures не доказаны. Ollama CT100 была stopped до/после. На PVE
+только один физический NVMe; выбор другого host/storage либо ограниченной
+IO локализации CT102 задан пользователю. Новая общая матрица не запущена,
+пороги не изменены, required/open сохраняются. Подробности и artifacts —
+в верхнем разделе отчёта.
+После завершения 24/24 current private controls и 12 original controls
+fixed-input current block дважды не прошёл p95: первая серия standard/c1/r3
++67,295%, единственный полный повтор detailed/c1/r2 +41,618%. Остальные
+fixed-input gates проходят. Failed artifacts и оба attempt ledgers сохранены;
+очередь остановлена, original fixed-input и live HTTP block не запускались.
+Короткий diagnostic HTTP control без ZIP показал высокий baseline p95
+29,860 мс и detailed 28,446 мс; причины вариативности ещё не установлены.
+Перепроверка 30.09, 22:16 МСК: требование предварительно менять стенд
+преждевременно — влияние PVE/Ollama не доказано. Следующий рекомендуемый
+шаг — ограниченный (~20 минут) diagnostic A/B/A на текущем CT 102 с
+сохранением per-request timings и синхронных CPU/IO данных, отдельно для
+capture и ZIP. Это не SLA-приёмка и не новый полный прогон. Пороги
+не изменены; performance criterion остаётся open, готовность всей задачи
+не объявляется. Подробности и ограничения методики записаны в отчёте.
+Финальный review выявил три Important и одно Minor замечание; исправлены
+конечный Node batch/coalesced drain, отдельный slow budget/counter,
+освобождение document trace с parent request ID и policy interval backend
+агрегатов при непрерывной очереди. Каждое воспроизведено RED/GREEN.
+После продолжения 30.09 локализован пропуск frontend admission: совпадение
+двух пятисекундных расписаний откладывало первое renewal до границы lease 10 с.
+Runtime v15 проверяет tick раз в секунду; запись projection остаётся раз в 5 с.
+На v14/v11 реальный observer повтор показал 7464/7380, на v15/v11 — 7552/7552.
+Новая frozen Linux пара — v15/v11. Три обязательные standard/c8/active ZIP
+пары прошли все восемь gates: p95 +4,06/+6,86/+4,32%, потерь и расхождений нет.
+Linux accelerated TTL/quota/retry — 3 passed; связанные Linux tests — 41 passed.
+Чистая полная Windows regression завершилась exit 0; SHA-256 всех 433 Python
+файлов совпали до/после. Remaining controls идут; полная приёмка открыта.
+24/24 current private controls v13/v10 passed сохранены как результаты
+предыдущего кода. Потери immutable legacy reference наблюдаются и публикуются;
+нулевые losses и исходные p95/RSS gates current сборки остаются обязательными.
+После ограниченной финализации пользователь явно выбрал продолжить **полную
+приёмку исходного плана**; частичное принятие не согласовано. Образы последней
+измеренной серии: backend v15 / frontend v11. v12 исправил cleanup/accounting после отказа
+удаления, v13 — allowlist route classification после копирования ASGI scope.
+Нагрузочные числа предыдущих версий остаются результатами тех версий.
+Проверки, критерии и артефакты сведены
+в [отчёт исполнения](../reports/2026-09-28-admin-diagnostics-levels-performance.md).
+
+После повторного анализа учтены замечания: HTTP-очередь останавливается при
+численном отказе и неполных данных, обычный bundle poll приведён к 3 с,
+перекрытие подтверждается actual child phases. Управляемый stale-poll probe
+воспроизводит 7328 → 7312 без guard и 7328 → 7328 с guard; историческая
+причина остаётся неподтверждённой. Ограниченный standard/c8/active ZIP сценарий
+и парный baseline прошли три повтора на зафиксированной сборке v13/v10:
+рост p95 6,88–7,03%, все восемь gates passed. Linux TTL/quota/retry — 3 passed.
+Далее выполняются оставшиеся обязательные controls; численный отказ останавливает очередь;
+повторная общая оптимизация памяти не требуется по имеющимся данным.
+
+| Этап | Фактическое состояние |
+|---|---|
+| 1: инструменты измерения | Реализованы; ограничения RSS/phase overlap описаны в отчёте |
+| 2–9: контракт, policy, очереди, writer, leases, child prepare/ZIP, UI | Реализованы, функциональные проверки выполнены |
+| 10: отрицательные сценарии | Проверены адресными наборами; финальный cleanup/kill — Linux, native paths/accounting — Windows |
+| 11: нагрузочная приёмка | Normal 1-doc v13/v9 проходит; ограниченный standard/c8/active ZIP v13/v10 проходит три повтора по всем gates. Полная приёмка и остальные обязательные сценарии открыты |
+| 12: выпуск | Документация и smoke подготовлены; полная регрессия имеет отдельный фактический статус в отчёте, GitHub CI не запускался |
+
+Исходные подробные checklist ниже сохранены как требования, а не как
+утверждение об отсутствии реализации. Актуальные `covered / required /
+deferred` и границы готовности указаны в таблице отчёта. Отложенное
+performance-продолжение не принято: required-критерии выполняются в текущей
+задаче. Пороги
+p95/RSS и обязательные проверки молча не отменены.
 
 ## 1. Отправная точка и границы исполнения
 
@@ -88,8 +566,8 @@ HTTP и proxy имеют разные границы измерения, осо�
 |---|---:|
 | Период выдачи агрегатов | 5 секунд |
 | Ключей агрегирования на компонент/активную сессию | максимум 256 |
-| Итогов успешных коротких операций в standard | максимум 20/с суммарно на backend, burst 20 |
-| Новых подробных цепочек в detailed | максимум 20/с суммарно на компонент, burst 20 |
+| Итогов успешных коротких операций в standard | максимум 10/с суммарно на backend, burst 10 после замера CT 102 |
+| Новых подробных цепочек в detailed | максимум 1/с суммарно на компонент, burst 1 после замера CT 102 |
 | Одновременно отслеживаемых цепочек на компонент | максимум 512 |
 | Группа записи writer | до 64 КиБ или 50 мс, что раньше |
 | Резерв очереди backend / Node для важных событий | 512 / 32 при штатных размерах очереди |
@@ -424,17 +902,41 @@ Linux дополнительно: fixture tests production collection/backup wra
 
 ## Definition of Done
 
-- [ ] Состав всех уровней реализован и совпадает с manifest/UI/runbook.
-- [ ] Сокращение успешных событий доказано числом записей; ошибки/деградации и корреляция сохранены.
-- [ ] Producer не ждёт I/O/SQL через session lock; writer и чтение не держат общий lock на скан журнала.
-- [ ] Child prepare/build имеет единый с родителем учёт квот, stop/kill/restart не оставляют ресурсов.
-- [ ] v1/v2, старые строки/ZIP, mixed versions и offline имеют честное покрытие.
-- [ ] Privacy, доступ, audit, TTL, concurrent download/delete и platform tests зелёные.
-- [ ] Standard и detailed оценены отдельно по неизменённым целям p95/RSS; ограничения названы явно.
+- [x] Состав всех уровней реализован и совпадает с manifest/UI/runbook.
+- [x] Сокращение успешных событий доказано числом записей; ошибки/деградации и корреляция сохранены.
+- [x] Producer не ждёт I/O/SQL через session lock; writer и чтение не держат общий lock на скан журнала.
+- [x] Child prepare/build имеет единый с родителем учёт квот; реальные Linux stop/kill проверены, отказ измерения сохраняет резерв до безопасного восстановления.
+- [x] v1/v2, старые строки/ZIP, mixed versions и offline имеют честное покрытие.
+- [ ] Privacy, доступ, audit, TTL, concurrent download/delete и platform tests зелёные. Адресные наборы пройдены; final CT accelerated TTL остаётся required.
+- [x] Standard и detailed оценены отдельно по неизменённым целям p95/RSS; ограничения названы явно. Полного прохождения RSS этим checkbox не утверждается.
 - [ ] Полная регрессия/CI имеют фактический статус; known failures не скрыты.
-- [ ] Спецификация, SECURITY.md, runbook, отчёт и rollback drill обновлены.
-- [ ] Несвязанные изменения сохранены; без поручения не выполнены commit/push/deploy.
+- [x] Спецификация, SECURITY.md, runbook, отчёт и rollback drill обновлены.
+- [x] Несвязанные изменения сохранены; без поручения не выполнены commit/push/production deploy.
 
 ## Самопроверка плана
 
-Проверены исходные ограничения, отличие scope от level, редкие ошибки при заполненной очереди, миграция legacy rows, состав v2 и offline policy, перенос решения через потоки, барьер принятых событий, batch/free-space/ledger, узкий snapshot без полного reserve spool, prefix append/mutation и права frontend. Все пять Review Focus привязаны к задачам с отрицательными тестами. Параметры новой политики помечены как предлагаемые; прежние числа p95 не выданы за свежий замер. Реализация и production-включение не начаты.
+При составлении плана проверены исходные ограничения, отличие scope от level, редкие ошибки при заполненной очереди, миграция legacy rows, состав v2 и offline policy, перенос решения через потоки, барьер принятых событий, batch/free-space/ledger, узкий snapshot без полного reserve spool, prefix append/mutation и права frontend. Все пять Review Focus привязаны к задачам с отрицательными тестами. Параметры новой политики были помечены как предлагаемые; прежние числа p95 не выдавались за свежий замер. Актуальный статус исполнения указан в начале документа и в отчёте; production-включение не выполнялось.
+
+
+## Приёмка merged release завершена — 02.10.2026
+
+Обновлённый кандидат (main38f7ed6 включён, runtime57727d9, harnessfdc327b)
+прошёл отдельную пятиблочную HTTP-приёмку: 102 series, 324 018 measured requests,
+все исходные gates PASSED. Максимальный ordinary p95 overhead 4,58%, ZIP 15,28%;
+backend/front RSS delta <=23,56/3,18 МиБ. Полный backend2847passed24skipped,
+frontend339passed1skipped; фактическая очистка завершена, собственные контейнеры
+остановлены, production/frozen сохранены. Исторический FAILED остаётся прежним;
+причина того отказа не установлена. Main merge/push/deployment не выполнялись.
+Подробности и safe evidence:
+[Приёмка объединённого release](../reports/2026-10-01-diagnostics-merged-release-acceptance.md).
+
+
+### 02.10.2026 — слияние в main
+
+По разрешению пользователя объединены актуальная maincde0724 и
+integration64677c3, включая всю admin-diagnostics. Backend: 2851 passed,
+24 skipped; frontend: 354 passed, 1 skipped; doc-parser: 400 passed, 1 skipped.
+Ruff, ESLint (0 errors) и production Next build прошли.
+[Отчёт слияния](../reports/2026-10-02-diagnostics-main-merge.md).
+Предыдущие результаты нагрузки сохранены с исходными SHA и критериями;
+новые замеры, push и deployment не выполнялись.

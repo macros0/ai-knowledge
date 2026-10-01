@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-10-01T21:55:08.560874+00:00",
+  "after_final_measurement": true,
+  "health_ready_http_status": 200,
+  "probe_exit_code": 0,
+  "containers": {
+    "backend": {
+      "status": "running",
+      "started_at": "2026-10-01T19:18:08.399504829Z",
+      "image_id": "sha256:ac7f713a109f100e013e37ff86b51be3fdc0ee9aac1b4eac9008ba3c4944aceb"
+    },
+    "frontend": {
+      "status": "running",
+      "started_at": "2026-10-01T19:18:19.548631919Z",
+      "image_id": "sha256:15aafe8f31facdf95f66c5f6052045fa28f76474f2abb1bb6386c310b4f4b64b"
+    }
+  }
+}

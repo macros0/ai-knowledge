@@ -1,0 +1,113 @@
+[
+  {
+    "stage": "collect-baseline-r1",
+    "started_at": "2026-09-30T10:42:53.352247+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "measurement_collected": true
+    },
+    "finished_at": "2026-09-30T10:44:24.046562+00:00"
+  },
+  {
+    "stage": "collect-standard-r1",
+    "started_at": "2026-09-30T10:44:24.046834+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "measurement_collected": true
+    },
+    "finished_at": "2026-09-30T10:45:55.728319+00:00"
+  },
+  {
+    "stage": "validate-pair-r1",
+    "started_at": "2026-09-30T10:45:55.728567+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "all_p95_pass": true,
+      "all_rss_pass": true,
+      "all_duration_requests_pass": true,
+      "all_losses_pass": true,
+      "all_zip_overlap_pass": true,
+      "all_response_equality_pass": true,
+      "all_capture_counts_pass": true,
+      "all_phase_distributions_pass": true
+    },
+    "finished_at": "2026-09-30T10:45:55.728848+00:00"
+  },
+  {
+    "stage": "collect-standard-r2",
+    "started_at": "2026-09-30T10:45:55.735213+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "measurement_collected": true
+    },
+    "finished_at": "2026-09-30T10:47:27.742136+00:00"
+  },
+  {
+    "stage": "collect-baseline-r2",
+    "started_at": "2026-09-30T10:47:27.742460+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "measurement_collected": true
+    },
+    "finished_at": "2026-09-30T10:48:58.339149+00:00"
+  },
+  {
+    "stage": "validate-pair-r2",
+    "started_at": "2026-09-30T10:48:58.339441+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "all_p95_pass": true,
+      "all_rss_pass": true,
+      "all_duration_requests_pass": true,
+      "all_losses_pass": true,
+      "all_zip_overlap_pass": true,
+      "all_response_equality_pass": true,
+      "all_capture_counts_pass": true,
+      "all_phase_distributions_pass": true
+    },
+    "finished_at": "2026-09-30T10:48:58.339793+00:00"
+  },
+  {
+    "stage": "collect-baseline-r3",
+    "started_at": "2026-09-30T10:48:58.339878+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "measurement_collected": true
+    },
+    "finished_at": "2026-09-30T10:50:28.846570+00:00"
+  },
+  {
+    "stage": "collect-standard-r3",
+    "started_at": "2026-09-30T10:50:28.846877+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "measurement_collected": true
+    },
+    "finished_at": "2026-09-30T10:52:00.843353+00:00"
+  },
+  {
+    "stage": "validate-pair-r3",
+    "started_at": "2026-09-30T10:52:00.843666+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "all_p95_pass": true,
+      "all_rss_pass": true,
+      "all_duration_requests_pass": true,
+      "all_losses_pass": true,
+      "all_zip_overlap_pass": true,
+      "all_response_equality_pass": true,
+      "all_capture_counts_pass": true,
+      "all_phase_distributions_pass": true
+    },
+    "finished_at": "2026-09-30T10:52:00.844096+00:00"
+  }
+]

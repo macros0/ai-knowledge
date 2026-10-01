@@ -12,11 +12,14 @@ from app.services.errors import public_error_code
 from app.services.llm_profiles import request_scope
 from app.services.llm_scheduler import LLMCancelled
 from app.services import chat_history
+from app.services.diagnostics.context import bind_context, current_context, exception_recorded
+from app.services.diagnostics.recorder import emit_event
 
 logger = logging.getLogger(__name__)
 
 
-async def stream_chat(work, *, independent_calls: bool = False, current_user=None):
+async def stream_chat(work, *, context=None, independent_calls: bool = False, current_user=None):
+    context = context or current_context()
     events = queue.Queue()
     cancel = threading.Event()
     attempt_ref = None
@@ -40,7 +43,7 @@ async def stream_chat(work, *, independent_calls: bool = False, current_user=Non
         if not cancel.is_set():
             events.put({"type": "progress", **progress})
 
-    def run():
+    def run_with_context():
         try:
             settings = get_settings()
             with request_scope(on_text=emit, on_sources=emit_sources, on_start=emit_start,
@@ -53,9 +56,18 @@ async def stream_chat(work, *, independent_calls: bool = False, current_user=Non
             pass
         except Exception as exc:
             # Neither provider response bodies nor exception text cross the UI boundary.
-            events.put({"type": "error", "code": exc.code if isinstance(exc, ApiError) else public_error_code(exc),
-                        "status": exc.status_code if isinstance(exc, ApiError) else 503})
+            code = exc.code if isinstance(exc, ApiError) else public_error_code(exc)
+            events.put({"type": "error", "code": code,
+                        "status": exc.status_code if isinstance(exc, ApiError) else 503,
+                        "request_id": context.request_id})
+            if not exception_recorded(exc, "operation_failed"):
+                emit_event("operation_failed", context=context, exception=exc,
+                           fields={"stage": "chat", "error_code": code})
             logger.warning("Streaming chat failed (%s)", type(exc).__name__)
+
+    def run():
+        with bind_context(context):
+            run_with_context()
 
     worker = asyncio.create_task(asyncio.to_thread(run))
     try:

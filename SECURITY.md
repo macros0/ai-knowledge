@@ -1,5 +1,52 @@
 # SECURITY.md — security model
 
+## Diagnostic support bundles
+
+The administrator can enable a time-limited diagnostic session and export a
+fixed safe ZIP. `app/services/diagnostics/sanitize.py` rejects unknown fields,
+arbitrary paths and free-form exception content. The recorder, Node spool,
+browser opt-in, snapshot and ZIP builder use that contract again at each file
+boundary. `app/api/diagnostics.py` enforces the admin role on every read,
+including preview and download; cookie-authenticated writes retain CSRF checks.
+The one-time browser invitation is scoped to the active interface/system
+session, while browser reporting alone grants no read access. Control and
+export actions are audited before publication; offline export records a local
+safe event and states that SQL reconciliation remains pending. The backend
+writer lock, independent quotas, free-space reserve and TTL bound retained
+diagnostic data. Production uses separate backend/frontend bind mounts; the
+frontend sees only its spool and a read-only control projection.
+
+Negative tests are in `backend/tests/test_diagnostics_schema.py`,
+`test_diagnostic_client_api.py`, `test_diagnostics_bundle.py`,
+`test_diagnostics_api.py` and `test_collect_diagnostics.py`, plus
+`frontend/test/diagnosticServer.test.mjs` and
+`frontend/test/diagnosticClient.test.mjs`. They exercise canary rejection,
+unknown schema, role revocation, CSRF, corrupt input and bounded storage.
+The cross-component acceptance and load measurements are recorded in
+`docs/superpowers/reports/2026-09-27-admin-diagnostics-acceptance.md` against
+`docs/superpowers/plans/2026-09-27-admin-diagnostics.md` Task 14. A browser
+download completed with a valid ZIP after the admin deleted that bundle;
+the server removed the file when the existing download lease ended. Synthetic
+search load was measured on Linux CT 102. Its p95 latency exceeds the original
+target, and optimization is tracked separately in
+`docs/superpowers/plans/2026-09-28-admin-diagnostics-performance.md`.
+`docs/ADMIN_DIAGNOSTICS.md` explains
+operator steps and limits. The capture-level change adds an immutable, server
+selected policy snapshot (`app/services/diagnostics/policy.py`) and a versioned
+Node control projection. Unknown projection versions fail closed for detailed
+capture. `read_view.py` pins bounded segment prefixes; `prepare_worker.py`
+revalidates selected events in a separate process and requests quota credits
+from the parent before writing normalized component files. The parent keeps
+SQL audit and bundle publication. The new negative tests are
+`test_diagnostics_policy_contract.py`, `test_diagnostics_admission.py`,
+`test_diagnostics_read_view.py`, `test_diagnostics_worker_protocol.py`,
+`test_diagnostics_prepare_worker.py`, and
+`frontend/test/diagnosticPolicy.test.mjs`; execution status and remaining Linux
+checks are recorded in
+`docs/superpowers/reports/2026-09-28-admin-diagnostics-levels-performance.md`.
+Logs already produced by older raw-dump code are outside this sanitizer and
+require separate handling.
+
 ## Local Qwen deployment (2026-09-27)
 
 The optional `LLM_PROFILE=local_qwen` sends generation, chat, classification and
@@ -291,6 +338,31 @@ Invariants enforced by `validate_auth_provider` in `app/config.py` (production):
   Only the `security` role reads it (`app/api/audit.py`). For PostgreSQL production, a
   dedicated service account with INSERT-only privileges is recommended
   (see `README.md`, "Audit log hardening").
+
+### Operational diagnostics (control and retention)
+
+The diagnostic stream uses an explicit event-field allowlist; existing log
+message text, exception strings/locals, request bodies, query strings, document
+names and provider responses are not inputs. Its filesystem root is separate
+from document data and counts snapshots, temporary files and reservations
+against a bounded budget. Capture, bundle creation and download remain disabled
+by default until the operator enables each capability after acceptance.
+
+Diagnostics session activation requires a committed audit event. Manual/automatic
+stop first closes admission and drains accepted events for a bounded time, then
+deactivates the local selector before database I/O; an unavailable database
+cannot extend the monotonic capture deadline. Deferred stop audit has a bounded
+local journal and transactional receipt deduplication. If both disk and DB fail,
+audit completeness cannot be guaranteed: the core reports an audit gap and
+rejects new sessions. No new access to the security audit log is granted to admin.
+
+Core negative tests: `test_diagnostics_schema.py`, `test_diagnostics_store.py`,
+`test_diagnostics_recorder.py`, `test_diagnostics_sessions.py`; the acceptance
+report records the verified browser and isolated Linux CT 102 scenarios,
+alongside the remaining p95 limitation. Detailed telemetry retention is 24 hours
+after stop, baseline events 7 days; metadata pruning runs after file retention
+and audit settlement.
+The independent audit retention is unchanged.
 
 ### Raw-document bulk export
 
@@ -1042,3 +1114,7 @@ test_local_llm.py checks unfinished objects, long truncated tails, schema-invali
 records, duplicate IDs, and rejection of complete invalid output;
 test_generation_pipeline.py checks problem/checkpoint persistence. Table splitting
 preserves whole source rows and headers, without rewriting canonical chunks.
+
+Integration 2026-10-01: the diagnostic allowlist includes the registered chat
+errors, search-scope route and normalized attempt cancellation template.
+Arbitrary error codes and raw attempt parameters remain excluded.

@@ -1,0 +1,397 @@
+{
+  "seconds_bound": 12,
+  "spawned_python_children": 33,
+  "rss_checks": 1315,
+  "failure_window_traces": [
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "Z",
+          "flags": 4194316,
+          "rss_bytes": null,
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "R",
+          "flags": 4194316,
+          "rss_bytes": null,
+          "alive_result": true
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "R",
+          "flags": 4194316,
+          "rss_bytes": null,
+          "alive_result": true
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "R",
+          "flags": 4194316,
+          "rss_bytes": null,
+          "alive_result": true
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "R",
+          "flags": 4194316,
+          "rss_bytes": null,
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "R",
+          "flags": 4194316,
+          "rss_bytes": null,
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "R",
+          "flags": 4194316,
+          "rss_bytes": null,
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "Z",
+          "flags": 4227084,
+          "rss_bytes": null,
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    },
+    {
+      "failure_alive_result": true,
+      "initial": {
+        "state": "R",
+        "flags": 4194316,
+        "rss_bytes": null,
+        "alive_result": true
+      },
+      "followups": [
+        {
+          "delay_seconds": 0,
+          "state": "R",
+          "flags": 4194316,
+          "rss_bytes": null,
+          "alive_result": true
+        },
+        {
+          "delay_seconds": 0.0001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.001,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        },
+        {
+          "delay_seconds": 0.005,
+          "state": "proc_read_error",
+          "errno": 2,
+          "error_type": "FileNotFoundError",
+          "alive_result": false
+        }
+      ]
+    }
+  ]
+}

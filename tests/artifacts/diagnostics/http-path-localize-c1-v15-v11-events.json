@@ -1,0 +1,50 @@
+{
+  "scope": "sampled events; diagnostic only",
+  "summary": [
+    {
+      "component": "backend",
+      "event_code": "dependency_call_finished",
+      "dependency": "qdrant",
+      "count": 34,
+      "p50_ms": 1.900021976325661,
+      "p95_ms": 2.327868016436696,
+      "max_ms": 3.842515987344086
+    },
+    {
+      "component": "backend",
+      "event_code": "stage_finished",
+      "dependency": null,
+      "count": 34,
+      "p50_ms": 12.70600949646905,
+      "p95_ms": 25.08135500829667,
+      "max_ms": 27.07596600521356
+    },
+    {
+      "component": "backend",
+      "event_code": "operation_finished",
+      "dependency": null,
+      "count": 34,
+      "p50_ms": 12.851693027187139,
+      "p95_ms": 25.312084006145597,
+      "max_ms": 27.338747051544487
+    },
+    {
+      "component": "backend",
+      "event_code": "request_finished",
+      "dependency": null,
+      "count": 34,
+      "p50_ms": 19.72197456052527,
+      "p95_ms": 32.430482911877334,
+      "max_ms": 35.403317073360085
+    },
+    {
+      "component": "frontend",
+      "event_code": "request_finished",
+      "dependency": null,
+      "count": 34,
+      "p50_ms": 14.136231999844313,
+      "p95_ms": 26.575172003358603,
+      "max_ms": 35.414528999477625
+    }
+  ]
+}

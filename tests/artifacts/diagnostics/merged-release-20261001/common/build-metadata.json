@@ -1,0 +1,12 @@
+{
+  "source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "archive_sha256": "aa0833ad19e3e1e239d9a20815295f6115748589dc4025cd39e15afca3a89496",
+  "backend_base_image": "sha256:0a805ae89c3d42360981e170d845d150445912bb277946a52d5b75d9506de388",
+  "node_image": "sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293",
+  "lock_sha256": "70ec9567a9257ab02338a3aa4e98842857e6b1079dcf686bc718e3768a21a292",
+  "dependency_reuse": "identical lock after CRLF normalization",
+  "build_workers": 2,
+  "build_heap_mib": 1536,
+  "build_engine": "webpack",
+  "runtime_gc_flags": false
+}

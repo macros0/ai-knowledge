@@ -1,0 +1,11 @@
+{
+  "runtime_source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "harness_revision": "fdc327bcffe004c6aed2fc096d543aa0ed027dda",
+  "harness_sha256": "d65285c8297c513e2a8f3336f4b715ed728e925ff5d3054953f3fc8e0bd3277f",
+  "harness_targeted_tests_passed": 61,
+  "harness_targeted_tests_exit": 0,
+  "unknown_or_live_unreadable_child_rejected": true,
+  "exit_confirmation_requested_sleep_budget_seconds": 0.003,
+  "exit_confirmation_attempts": 3,
+  "realtime_maximum_guaranteed": false
+}

@@ -1,0 +1,140 @@
+{
+  "images": {
+    "backend": "sha256:0a805ae89c3d42360981e170d845d150445912bb277946a52d5b75d9506de388",
+    "frontend": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799"
+  },
+  "thresholds_unchanged": true,
+  "history": [
+    {
+      "stage": "http-1doc-normal-pve-v16-v11-final-20261001",
+      "status": "failed",
+      "started_utc": "2026-10-01T11:43:39.804210+00:00",
+      "exit_code": 0,
+      "failure_type": "MatrixGateError",
+      "failed_gates": [
+        "all_p95_pass",
+        "all_rss_pass"
+      ],
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": false,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": false,
+        "all_zip_overlap_pass": true
+      },
+      "continuation": "authorized: completed matrix with performance failures only",
+      "finished_utc": "2026-10-01T12:11:04.948383+00:00"
+    },
+    {
+      "stage": "http-1doc-active-pve-v16-v11-final-20261001",
+      "status": "failed",
+      "started_utc": "2026-10-01T12:11:04.978739+00:00",
+      "exit_code": 0,
+      "failure_type": "MatrixGateError",
+      "failed_gates": [
+        "all_p95_pass",
+        "all_rss_pass"
+      ],
+      "gates": {
+        "all_capture_counts_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_p95_pass": false,
+        "all_phase_distributions_pass": true,
+        "all_response_equality_pass": true,
+        "all_rss_pass": false,
+        "all_zip_overlap_pass": true
+      },
+      "continuation": "authorized: completed matrix with performance failures only",
+      "finished_utc": "2026-10-01T12:47:32.383530+00:00"
+    },
+    {
+      "stage": "switch-fresh-100doc-v16-20261001",
+      "status": "passed",
+      "started_utc": "2026-10-01T12:47:32.424148+00:00",
+      "exit_code": 0,
+      "gates": {},
+      "finished_utc": "2026-10-01T12:47:56.500058+00:00"
+    },
+    {
+      "stage": "seed-synthetic-100doc-v16-20261001",
+      "status": "passed",
+      "started_utc": "2026-10-01T12:47:56.520926+00:00",
+      "exit_code": 0,
+      "gates": {},
+      "finished_utc": "2026-10-01T12:48:02.472171+00:00"
+    },
+    {
+      "stage": "verify-synthetic-100doc-v16-20261001",
+      "status": "passed",
+      "started_utc": "2026-10-01T12:48:02.492583+00:00",
+      "exit_code": 0,
+      "gates": {},
+      "finished_utc": "2026-10-01T12:48:03.513074+00:00"
+    },
+    {
+      "stage": "http-100doc-normal-pve-v16-v11-final-20261001",
+      "status": "passed",
+      "started_utc": "2026-10-01T12:48:03.543015+00:00",
+      "exit_code": 0,
+      "gates": {
+        "all_p95_pass": true,
+        "all_rss_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_zip_overlap_pass": true,
+        "all_response_equality_pass": true,
+        "all_capture_counts_pass": true,
+        "all_phase_distributions_pass": true
+      },
+      "finished_utc": "2026-10-01T13:15:28.847488+00:00"
+    },
+    {
+      "stage": "http-100doc-active-pve-v16-v11-final-20261001",
+      "status": "passed",
+      "started_utc": "2026-10-01T13:15:28.877205+00:00",
+      "exit_code": 0,
+      "gates": {
+        "all_p95_pass": true,
+        "all_rss_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_zip_overlap_pass": true,
+        "all_response_equality_pass": true,
+        "all_capture_counts_pass": true,
+        "all_phase_distributions_pass": true
+      },
+      "finished_utc": "2026-10-01T13:51:59.288339+00:00"
+    },
+    {
+      "stage": "http-100doc-stopped-pve-v16-v11-final-20261001",
+      "status": "passed",
+      "started_utc": "2026-10-01T13:51:59.331423+00:00",
+      "exit_code": 0,
+      "gates": {
+        "all_p95_pass": true,
+        "all_rss_pass": true,
+        "all_duration_requests_pass": true,
+        "all_losses_pass": true,
+        "all_zip_overlap_pass": true,
+        "all_response_equality_pass": true,
+        "all_capture_counts_pass": true,
+        "all_phase_distributions_pass": true
+      },
+      "finished_utc": "2026-10-01T14:19:27.669948+00:00"
+    }
+  ],
+  "runtime_command": [
+    "node",
+    "diagnostics-runner.mjs"
+  ],
+  "authorization": "User selected remaining acceptance without new optimizations; preserve failed p95/RSS",
+  "complete": true,
+  "acceptance": "failed",
+  "known_prior_performance_failures_preserved": true,
+  "capture_off": true,
+  "finished_utc": "2026-10-01T14:19:27.730154+00:00"
+}

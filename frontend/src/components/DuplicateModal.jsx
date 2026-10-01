@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useEffect, useState } from "react";
 import { deleteDocument, friendlyApiError, listDocumentDuplicates } from "@/lib/api";
 import { useToast } from "./Toast";
@@ -18,7 +20,7 @@ export default function DuplicateModal({ doc, canDelete, onClose, onDeleted }) {
     listDocumentDuplicates(doc.id)
       .then(setData)
       .catch((err) => {
-        showToast(t("dup.loadError", { message: friendlyApiError(err, t) }), { type: "error" });
+        showToast({ ...apiToast(err, t, { type: "error" }), message: t("dup.loadError", { message: friendlyApiError(err, t) }) });
         onClose();
       });
   }, [doc.id, showToast, onClose, t]);

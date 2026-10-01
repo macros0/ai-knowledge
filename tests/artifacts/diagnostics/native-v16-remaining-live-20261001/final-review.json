@@ -1,0 +1,81 @@
+{
+  "collection_complete": true,
+  "performance_acceptance": "failed",
+  "rows": 102,
+  "requests": 323369,
+  "blocks": [
+    {
+      "stage": "http-1doc-normal-pve-v16-v11-final-20261001",
+      "corpus": 1,
+      "scenario": "normal",
+      "rows": 18,
+      "requests": 74587,
+      "status": "failed",
+      "failed_gates": [
+        "all_p95_pass",
+        "all_rss_pass"
+      ],
+      "max_p95_pct": 58.49037078412731,
+      "max_p95_delta_ms": 10.941064916551113,
+      "backend_rss_mib": 0.203125,
+      "frontend_rss_mib": 39.77734375
+    },
+    {
+      "stage": "http-1doc-active-pve-v16-v11-final-20261001",
+      "corpus": 1,
+      "scenario": "active",
+      "rows": 24,
+      "requests": 102302,
+      "status": "failed",
+      "failed_gates": [
+        "all_p95_pass",
+        "all_rss_pass"
+      ],
+      "max_p95_pct": 58.35458123206927,
+      "max_p95_delta_ms": 10.721500031650066,
+      "backend_rss_mib": 25.14453125,
+      "frontend_rss_mib": 67.22265625
+    },
+    {
+      "stage": "http-100doc-normal-pve-v16-v11-final-20261001",
+      "corpus": 100,
+      "scenario": "normal",
+      "rows": 18,
+      "requests": 44862,
+      "status": "passed",
+      "failed_gates": [],
+      "max_p95_pct": 7.1518327348808475,
+      "max_p95_delta_ms": 8.480978896841407,
+      "backend_rss_mib": 0.93359375,
+      "frontend_rss_mib": 10.671875
+    },
+    {
+      "stage": "http-100doc-active-pve-v16-v11-final-20261001",
+      "corpus": 100,
+      "scenario": "active",
+      "rows": 24,
+      "requests": 57917,
+      "status": "passed",
+      "failed_gates": [],
+      "max_p95_pct": 10.453682492300675,
+      "max_p95_delta_ms": 12.44606007821858,
+      "backend_rss_mib": 1.48828125,
+      "frontend_rss_mib": 1.7890625
+    },
+    {
+      "stage": "http-100doc-stopped-pve-v16-v11-final-20261001",
+      "corpus": 100,
+      "scenario": "stopped",
+      "rows": 18,
+      "requests": 43701,
+      "status": "passed",
+      "failed_gates": [],
+      "max_p95_pct": 5.075547888033394,
+      "max_p95_delta_ms": 6.305872113443911,
+      "backend_rss_mib": 0.33203125,
+      "frontend_rss_mib": 2.16796875
+    }
+  ],
+  "verification": "all five saved analyses recomputed and equal; immutable images and exact scenarios checked",
+  "duration_seconds": 9347.865738153458
+}

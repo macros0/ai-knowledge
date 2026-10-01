@@ -59,6 +59,25 @@ jobs:
           pip install pytest-cov
           python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
 
+  diagnostics-windows:
+    name: diagnostics (Windows locks and offline CLI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install diagnostic test dependencies
+        run: |
+          python -m pip install -e ./doc-parser
+          python -m pip install -r backend/requirements.txt
+      - name: File safety, writer lock and offline export
+        working-directory: backend
+        run: |
+          python -m pytest tests/test_diagnostics_store.py tests/test_diagnostics_retention.py tests/test_collect_diagnostics.py tests/test_diagnostics_deployment.py -q --basetemp "$env:RUNNER_TEMP\diagnostics-ci"
+
   audit:
     name: зависимости (известные уязвимости)
     runs-on: ubuntu-latest
@@ -188,6 +207,11 @@ jobs:
           # non-root app user with the same identity so the entrypoint can
           # drop privileges without losing access to /data or backup mounts.
           printf 'APP_UID=%s\nAPP_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
+          sudo apt-get update -qq && sudo apt-get install -y -qq acl
+          sudo python3 backend/scripts/prepare_diagnostics_dirs.py \
+            --root "$PWD/.ci-diagnostics-bundled" --data-dir "$PWD/data" \
+            --app-uid "$(id -u)" --app-gid "$(id -g)" --frontend-uid 1000
+          printf 'OKF_DIAGNOSTICS_DIR=%s\n' "$PWD/.ci-diagnostics-bundled" >> .env
           cp .env .ci-bundled.env
 
       - name: Проверка конфигурации compose
@@ -321,6 +345,11 @@ jobs:
           LLM_BASE_URL=http://llm-health:8000
           LLM_MODEL=fake
           EOF
+          sudo python3 backend/scripts/prepare_diagnostics_dirs.py \
+            --root "$PWD/.ci-diagnostics-external" --data-dir "$PWD/data" \
+            --app-uid "$(id -u)" --app-gid "$(id -g)" --frontend-uid 1000
+          printf 'OKF_DIAGNOSTICS_DIR=%s\nAPP_UID=%s\nAPP_GID=%s\n' \
+            "$PWD/.ci-diagnostics-external" "$(id -u)" "$(id -g)" >> .ci-external.env
           # This root .env intentionally describes an invalid bundled topology.
           # The explicit external env file below must fully override it.
           cat > .env <<'EOF'
@@ -382,7 +411,9 @@ jobs:
           fi
 
       - name: Backup and restore shell safety suite
-        run: bash scripts/production/tests/test_backup_scripts.sh
+        run: |
+          bash scripts/production/tests/test_backup_scripts.sh
+          bash scripts/production/tests/test_collect_diagnostics.sh
 
       - name: Nonempty bundled backup restores into a fresh project
         env:
@@ -413,9 +444,28 @@ jobs:
           assert summary["schema_revision"], summary
           assert summary["pdf_provider"].get("provider") == "pypdf-pdfium", summary
           PY
+          sudo python3 backend/scripts/prepare_diagnostics_dirs.py \
+            --root "$PWD/.ci-diagnostics-restored" --data-dir "$PWD/.ci-restored-data" \
+            --app-uid "$(id -u)" --app-gid "$(id -g)" --frontend-uid 1000
           COMPOSE_FILE=docker-compose.yml:docker-compose.ci-runtime.yml \
             bash scripts/production/restore-bundled.sh --env-file .ci-bundled.env --backup-dir "$backup_dir" \
-            --target-project okf-ci-restored --target-data-dir "$PWD/.ci-restored-data"
+            --target-project okf-ci-restored --target-data-dir "$PWD/.ci-restored-data" \
+            --target-diagnostics-dir "$PWD/.ci-diagnostics-restored"
+
+      - name: Backend releases diagnostic writer on SIGTERM
+        env:
+          OKF_RUNTIME_ENV_FILE: .ci-bundled.env
+        run: |
+          compose() {
+            docker compose --project-name okf-ci-bundled --env-file .ci-bundled.env \
+              -f docker-compose.yml -f docker-compose.ci-runtime.yml "$@"
+          }
+          backend_id=$(compose ps -a -q backend)
+          test -n "$backend_id"
+          compose stop backend
+          read -r exit_code oom_killed <<< "$(docker inspect --format '{{.State.ExitCode}} {{.State.OOMKilled}}' "$backend_id")"
+          test "$exit_code" = 0
+          test "$oom_killed" = false
 
       # Release-candidate manual acceptance (not a CI substitute): reboot the
       # staging host; confirm the systemd unit starts the selected topology and

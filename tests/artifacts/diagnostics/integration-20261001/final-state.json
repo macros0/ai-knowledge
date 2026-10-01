@@ -1,0 +1,82 @@
+{
+  "capture_stopped": true,
+  "backend_ready_before_stop": "ready",
+  "active_bundle_jobs": 0,
+  "recorder": {
+    "used_bytes": 1522781,
+    "reserved_bytes": 58215,
+    "quota_bytes": 503316480,
+    "free_bytes": 64758120448,
+    "measured_at": "2026-10-01T15:47:50.392252+00:00",
+    "storage_degraded": false,
+    "unsafe_paths": 0,
+    "last_failure": null,
+    "written": 2931,
+    "dropped": 0,
+    "invalid": 0,
+    "repeats": 0,
+    "expired_queue": 0,
+    "storage_errors": 0,
+    "shutdown_timeout": 0,
+    "drain_timeouts": 0,
+    "sampled_success": 0,
+    "aggregated_success": 45322,
+    "sampled_out_traces": 0,
+    "sampled_out_slow": 0,
+    "policy_omitted": 47997,
+    "aggregate_overflow": 0,
+    "queued": 0,
+    "running": true,
+    "boot_id": "1c70c987-77e7-4492-9b11-f683d9eaccca",
+    "started_at_utc": "2026-10-01T15:34:55.883227+00:00"
+  },
+  "runtime": {
+    "available": true,
+    "failure_code": null
+  },
+  "own_project_stopped": true,
+  "containers": {
+    "backend": {
+      "running": false,
+      "exit_code": 0,
+      "oom_killed": false
+    },
+    "frontend": {
+      "running": false,
+      "exit_code": 143,
+      "oom_killed": false
+    },
+    "postgres": {
+      "running": false,
+      "exit_code": 0,
+      "oom_killed": false
+    },
+    "qdrant": {
+      "running": false,
+      "exit_code": 143,
+      "oom_killed": false
+    }
+  },
+  "retained_other_stacks": {
+    "okf-knowledge-backend-1": {
+      "image_id": "sha256:fee7089d30732eed1a0b2b0b3aad52bc1bc7b28e11cf9d7e1233ce206a400598",
+      "started_at": "2026-09-28T11:25:59.758028492Z",
+      "running": true
+    },
+    "okf-knowledge-frontend-1": {
+      "image_id": "sha256:509f1108bab50c6862c7a9508691c3002b15eb26b84838932ee364b60fc7cc86",
+      "started_at": "2026-09-28T11:25:59.682657267Z",
+      "running": true
+    },
+    "okf-diag-levels-20260929-backend-1": {
+      "image_id": "sha256:0a805ae89c3d42360981e170d845d150445912bb277946a52d5b75d9506de388",
+      "started_at": "2026-10-01T12:47:44.645599168Z",
+      "running": true
+    },
+    "okf-diag-levels-20260929-frontend-1": {
+      "image_id": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799",
+      "started_at": "2026-10-01T12:47:55.837136261Z",
+      "running": true
+    }
+  }
+}

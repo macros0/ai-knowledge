@@ -1,0 +1,18 @@
+{
+  "source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "image_ids": {
+    "backend": "sha256:ac7f713a109f100e013e37ff86b51be3fdc0ee9aac1b4eac9008ba3c4944aceb",
+    "frontend": "sha256:15aafe8f31facdf95f66c5f6052045fa28f76474f2abb1bb6386c310b4f4b64b"
+  },
+  "status": "failed",
+  "planned": [
+    "1doc-normal",
+    "1doc-active-zip",
+    "100doc-normal",
+    "100doc-active-zip",
+    "100doc-stopped-zip"
+  ],
+  "started_at": "2026-10-01T18:49:07.995142+00:00",
+  "failure_type": "RuntimeError",
+  "finished_at": "2026-10-01T19:04:23.011634+00:00"
+}

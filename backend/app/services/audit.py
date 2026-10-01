@@ -80,6 +80,18 @@ GLOSSARY_RULE_CREATE = "glossary_rule_create"
 GLOSSARY_RULE_UPDATE = "glossary_rule_update"
 GLOSSARY_RULE_DELETE = "glossary_rule_delete"
 GLOSSARY_IDENTITY_MIGRATION = "glossary_identity_migration"
+DIAGNOSTIC_SESSION_STARTED = "diagnostic_session_started"
+DIAGNOSTIC_SESSION_STOPPED = "diagnostic_session_stopped"
+DIAGNOSTIC_BUNDLE_REQUESTED = "diagnostic_bundle_requested"
+DIAGNOSTIC_BUNDLE_READY = "diagnostic_bundle_ready"
+DIAGNOSTIC_BUNDLE_FAILED = "diagnostic_bundle_failed"
+DIAGNOSTIC_BUNDLE_DOWNLOAD_STARTED = "diagnostic_bundle_download_started"
+DIAGNOSTIC_BUNDLE_DELETED = "diagnostic_bundle_deleted"
+DIAGNOSTIC_BUNDLE_EXPIRED = "diagnostic_bundle_expired"
+DIAGNOSTIC_VIEW = "diagnostic_view"
+DIAGNOSTIC_BROWSER_INVITED = "diagnostic_browser_invited"
+DIAGNOSTIC_BROWSER_JOINED = "diagnostic_browser_joined"
+DIAGNOSTIC_BROWSER_LEFT = "diagnostic_browser_left"
 
 ACTION_TYPES = frozenset(
     {
@@ -144,6 +156,10 @@ ACTION_TYPES = frozenset(
         GLOSSARY_RULE_UPDATE,
         GLOSSARY_RULE_DELETE,
         GLOSSARY_IDENTITY_MIGRATION,
+        DIAGNOSTIC_SESSION_STARTED, DIAGNOSTIC_SESSION_STOPPED,
+        DIAGNOSTIC_BUNDLE_REQUESTED, DIAGNOSTIC_BUNDLE_READY, DIAGNOSTIC_BUNDLE_FAILED,
+        DIAGNOSTIC_BUNDLE_DOWNLOAD_STARTED, DIAGNOSTIC_BUNDLE_DELETED, DIAGNOSTIC_BUNDLE_EXPIRED,
+        DIAGNOSTIC_VIEW, DIAGNOSTIC_BROWSER_INVITED, DIAGNOSTIC_BROWSER_JOINED, DIAGNOSTIC_BROWSER_LEFT,
     }
 )
 

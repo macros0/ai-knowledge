@@ -1,0 +1,9 @@
+{
+  "seconds_bound": 12,
+  "spawned_python_children": 1345,
+  "rss_checks": 208317,
+  "missing_rss_reads": 4029,
+  "alive_during_missing": 1331,
+  "observation_failures": [],
+  "harness_sha256": "d65285c8297c513e2a8f3336f4b715ed728e925ff5d3054953f3fc8e0bd3277f"
+}

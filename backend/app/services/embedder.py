@@ -17,6 +17,9 @@ import litellm
 
 from app.config import get_settings
 from app.services.errors import EmbedderError
+from app.services.diagnostics.events import dependency_call
+from app.services.diagnostics.recorder import emit_event
+from app.services.errors import public_error_code
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,7 @@ class Embedder:
     def embed(self, text: str) -> list[float]:
         return self.embed_texts([text])[0]
 
+    @dependency_call("embeddings")
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
@@ -60,6 +64,10 @@ class Embedder:
             except Exception as exc:
                 last_exc = exc
                 if attempt < max_attempts:
+                    emit_event("retry_scheduled", exception=exc, fields={
+                        "dependency": "embeddings", "retry_index": attempt,
+                        "error_code": public_error_code(exc), "counts": {"attempts": max_attempts},
+                    })
                     delay = backoff * attempt
                     logger.warning(
                         "Сбой эмбеддингов батча %d..%d (попытка %d/%d): %s. Повтор через %.0fs",

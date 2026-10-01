@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
+import ErrorReference from "./ErrorReference";
 import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
 import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
@@ -262,6 +263,7 @@ export default function ChatPanel() {
         copy[copy.length - 1] = {
           ...copy.at(-1), text: controller.signal.aborted ? t("chat.answerStopped") : t("chat.errorPrefix", { message: friendlyApiError(err, t) }),
           stopped: controller.signal.aborted,
+          requestId: err.requestId, localReportId: err.localReportId,
         };
         return copy;
       });
@@ -458,6 +460,7 @@ export default function ChatPanel() {
                 requestSourceLocale: m.requestSourceLocale, responseMode: m.responseMode,
               })}>{t("chat.restartAnswer")}</button>
             )}
+            {m.role === "assistant" && <ErrorReference requestId={m.requestId} localReportId={m.localReportId} />}
             {m.role === "assistant" && <AppliedTerms status={m.expansion_status} appliedTerms={m.applied_terms} />}
             {m.role === "assistant" && m.applied_terms?.length > 0 && (
               <button type="button" className="btn ghost glossary-repeat" onClick={() => repeatWithoutGlossary(m)} disabled={pending}>

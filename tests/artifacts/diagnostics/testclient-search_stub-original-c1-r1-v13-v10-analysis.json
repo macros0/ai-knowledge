@@ -1,0 +1,9 @@
+{
+  "all_bundle_pass": true,
+  "all_duration_requests_pass": true,
+  "all_losses_pass": true,
+  "all_p95_pass": true,
+  "all_private_rss_pass": true,
+  "performance_acceptance": false,
+  "scope": "private TestClient control"
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createGlossaryTerm, friendlyApiError, getChatSettings, getGlossaryTerm, listGlossary } from "@/lib/api";
 import { buildGlossaryListParams, keepGlossarySelection } from "@/lib/glossaryUi.mjs";
@@ -53,7 +55,7 @@ export default function GlossaryPanel() {
       if (requestId !== selectedRequest.current) return;
       setTerms(result.terms || []); setTotal(result.total || 0);
 
-    } catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); }
+    } catch (err) { showToast(apiToast(err, t, { type: "error" })); }
     finally { if (requestId === selectedRequest.current) setLoading(false); }
   }, [filters, showToast, t]);
 
@@ -77,7 +79,7 @@ export default function GlossaryPanel() {
       try {
         const result = await searchMergeTargets(mergeQuery);
         if (!cancelled && result) setMergeResults((result.terms || []).filter((item) => item.id !== selected.id));
-      } catch (err) { if (!cancelled) showToast(friendlyApiError(err, t), {type: "error"}); }
+      } catch (err) { if (!cancelled) showToast(apiToast(err, t, {type: "error"})); }
       finally { if (!cancelled) setMergeSearching(false); }
     }, 200);
     return () => { cancelled = true; clearTimeout(timer); searchMergeTargets.invalidate(); };
@@ -115,9 +117,9 @@ export default function GlossaryPanel() {
         try {
           const targets = await Promise.all(ids.map(getGlossaryTerm));
           if (targets.length) { setCreateConflict({draft, targets, returnFocusTo, targetId: targets[0].id, conflicts: conflictSummary(err.data || err)}); return; }
-        } catch (loadError) { showToast(friendlyApiError(loadError, t), {type: "error"}); }
+        } catch (loadError) { showToast(apiToast(loadError, t, {type: "error"})); }
       }
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error" }));
     }
     finally { setCreating(false); }
   };
@@ -131,7 +133,7 @@ export default function GlossaryPanel() {
     try {
       const targets = await Promise.all(ids.map(getGlossaryTerm));
       setCreateConflict({draft, targets, targetId, returnFocusTo, conflicts: nameCheck.conflicts.map((item) => ({key: item.key_value || item.alias || ""}))});
-    } catch (err) { showToast(friendlyApiError(err, t), {type: "error"}); }
+    } catch (err) { showToast(apiToast(err, t, {type: "error"})); }
     finally { setCreating(false); }
   };
 
@@ -150,7 +152,7 @@ export default function GlossaryPanel() {
         setPendingAlias(false); setPendingEdit(null); setMergeTarget(null); setMergeQuery(""); setMergeResults([]);
         setSelected(term);
       }
-    } catch (err) { showToast(friendlyApiError(err, t), { type: "error" }); }
+    } catch (err) { showToast(apiToast(err, t, { type: "error" })); }
   };
   const closeSelected = () => {
     if (pendingAlias && !window.confirm(t("admin.glossary.unsavedChangesConfirm"))) return;

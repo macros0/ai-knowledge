@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "decisions": [
+    {
+      "corpus_size": 1,
+      "concurrency": 8,
+      "repeat": 1,
+      "mode": "standard",
+      "bundle": true,
+      "baseline_p95_ms": 90.56900104042143,
+      "measured_p95_ms": 96.87321190722287,
+      "p95_delta_ms": 6.304210866801441,
+      "p95_overhead_pct": 6.96067174682411,
+      "p95_pass": true,
+      "backend_rss_growth_bytes": 26857472,
+      "frontend_rss_growth_bytes": 31240192,
+      "rss_pass": true,
+      "duration_requests_pass": true,
+      "backend_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "frontend_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0
+      },
+      "losses_pass": true,
+      "response_equality_pass": true,
+      "capture_counts_pass": false,
+      "phase_distributions_pass": true,
+      "zip_overlap_pass": true
+    }
+  ],
+  "all_p95_pass": true,
+  "all_rss_pass": true,
+  "all_duration_requests_pass": true,
+  "all_losses_pass": true,
+  "all_zip_overlap_pass": true,
+  "all_response_equality_pass": true,
+  "all_capture_counts_pass": false,
+  "all_phase_distributions_pass": true,
+  "scope": "First paired run only; count failure stopped the block; not three-repeat acceptance"
+}

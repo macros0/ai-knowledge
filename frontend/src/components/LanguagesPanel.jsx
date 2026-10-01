@@ -1,5 +1,7 @@
 "use client";
 
+import { apiToast } from "@/lib/apiToast.mjs";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   activateLocale,
@@ -64,7 +66,7 @@ function StopwordsEditor({ locale }) {
       if (currentLocaleRef.current !== requested) return; // stale-ответ — игнор
       setWords((prev) => ({ ...prev, [kind]: list }));
     } catch (err) {
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error" }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, kind]);
@@ -98,7 +100,7 @@ function StopwordsEditor({ locale }) {
       await loadWords();
       await loadHistory();
     } catch (err) {
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error" }));
     } finally {
       setBusy(false);
     }
@@ -124,7 +126,7 @@ function StopwordsEditor({ locale }) {
       });
       setPreview(res);
     } catch (err) {
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error" }));
     }
   };
 
@@ -181,7 +183,7 @@ function StopwordsEditor({ locale }) {
     try {
       setProbeResults(await probeStopwords(code, splitLines(probeText)));
     } catch (err) {
-      showToast(friendlyApiError(err, t), { type: "error" });
+      showToast(apiToast(err, t, { type: "error" }));
     }
   };
 
@@ -366,7 +368,7 @@ export default function LanguagesPanel() {
     try {
       setLocales(await listLocales());
     } catch (err) {
-      showToast(t("admin.languages.loadError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("admin.languages.loadError", { message: friendlyApiError(err, t) }) });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -395,9 +397,9 @@ export default function LanguagesPanel() {
       await load();
       notifyLocalesChanged();
     } catch (err) {
-      showToast(t("admin.languages.createError", { message: friendlyApiError(err, t) }), {
+      showToast({ ...apiToast(err, t, {
         type: "error",
-      });
+      }), message: t("admin.languages.createError", { message: friendlyApiError(err, t) }) });
     }
   };
 
@@ -408,7 +410,7 @@ export default function LanguagesPanel() {
       await load();
       notifyLocalesChanged();
     } catch (err) {
-      showToast(t("admin.languages.actError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("admin.languages.actError", { message: friendlyApiError(err, t) }) });
     }
   };
 
@@ -419,7 +421,7 @@ export default function LanguagesPanel() {
       await load();
       notifyLocalesChanged();
     } catch (err) {
-      showToast(t("admin.languages.actError", { message: friendlyApiError(err, t) }), { type: "error" });
+      showToast({ ...apiToast(err, t, { type: "error" }), message: t("admin.languages.actError", { message: friendlyApiError(err, t) }) });
     }
   };
 

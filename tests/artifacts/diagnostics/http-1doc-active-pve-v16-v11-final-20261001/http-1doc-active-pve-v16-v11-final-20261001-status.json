@@ -1,0 +1,23 @@
+{
+  "stage": "http-1doc-active-pve-v16-v11-final-20261001",
+  "status": "failed",
+  "started_utc": "2026-10-01T12:11:04.978739+00:00",
+  "exit_code": 0,
+  "failure_type": "MatrixGateError",
+  "failed_gates": [
+    "all_p95_pass",
+    "all_rss_pass"
+  ],
+  "gates": {
+    "all_capture_counts_pass": true,
+    "all_duration_requests_pass": true,
+    "all_losses_pass": true,
+    "all_p95_pass": false,
+    "all_phase_distributions_pass": true,
+    "all_response_equality_pass": true,
+    "all_rss_pass": false,
+    "all_zip_overlap_pass": true
+  },
+  "continuation": "authorized: completed matrix with performance failures only",
+  "finished_utc": "2026-10-01T12:47:32.383530+00:00"
+}

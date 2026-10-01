@@ -371,6 +371,27 @@ main {
   overflow-y: auto;
 }
 
+.diagnostics-page {
+  width: min(100%, 1100px);
+  margin: 0 auto;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.diagnostics-card { padding: 20px; overflow: visible; }
+.diagnostics-page .panel-head { flex-wrap: wrap; }
+.diagnostics-card h2 { margin-top: 0; }
+.diagnostics-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.diagnostics-controls label { display: grid; gap: 5px; min-width: 145px; }
+.diagnostics-controls input, .diagnostics-controls select { max-width: 260px; min-width: 0; }
+.diagnostics-bundles, .diagnostics-events { padding-left: 20px; max-height: 360px; overflow-y: auto; }
+.diagnostics-bundles li { margin: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.diagnostics-events li { overflow-wrap: anywhere; margin: 6px 0; }
+.diagnostics-preview { border-top: 1px solid var(--border); margin-top: 16px; }
+
 /* ---------- documents ---------- */
 .upload-zone {
   border: 2px dashed var(--border);
@@ -4859,6 +4880,12 @@ main {
   font-size: 12px;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .diagnostics-page { padding: 12px; }
+  .diagnostics-controls { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .diagnostics-controls label, .diagnostics-controls input, .diagnostics-controls select { width: 100%; max-width: none; }
 }
 
 .chat-response-modes {

@@ -9,6 +9,8 @@ import threading
 import uuid
 from dataclasses import asdict
 from functools import lru_cache
+from app.services.diagnostics.context import current_context, new_operation, operation_context
+from app.services.diagnostics.events import observed_operation
 from pathlib import Path
 
 from app.api import errors
@@ -184,7 +186,7 @@ def _validate_final_source_state(blocks: list[dict]) -> None:
     for block in blocks:
         doc_id, generation_id = block["doc_id"], block.get("generation_id")
         if doc_id in expected and expected[doc_id] != generation_id:
-            raise ApiError(status_code=409, code="chat_sources_changed",
+            raise ApiError(status_code=409, code=errors.CHAT_SOURCES_CHANGED,
                            detail="Источники изменились во время подготовки ответа")
         expected[doc_id] = generation_id
     if not expected:
@@ -196,7 +198,7 @@ def _validate_final_source_state(blocks: list[dict]) -> None:
         )))
     if visible != set(expected) or any(active.get(doc_id) != generation_id
                                      for doc_id, generation_id in expected.items()):
-        raise ApiError(status_code=409, code="chat_sources_changed",
+        raise ApiError(status_code=409, code=errors.CHAT_SOURCES_CHANGED,
                        detail="Источники изменились во время подготовки ответа")
 
 
@@ -241,6 +243,8 @@ def _chat_system_prompt(query: str, locale: str, settings: Settings) -> str:
 
 
 @router.post("", response_model=ChatResponse)
+@operation_context("search_chat")
+@observed_operation("chat")
 def chat(req: ChatRequest, current_user: User = Depends(require_user)):
     settings = get_settings()
     try:
@@ -395,12 +399,12 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
     scope_ids = None
     if req.search_doc_ids is not None:
         if not req.search_doc_ids:
-            raise ApiError(status_code=422, code='chat_search_scope_empty',
+            raise ApiError(status_code=422, code=errors.CHAT_SEARCH_SCOPE_EMPTY,
                            detail='Добавьте документы в область поиска или отключите ограничение.')
         scope_ids = [document.doc_id for document in _search_scope_documents(req.search_doc_ids)
                      if document.available]
         if not scope_ids:
-            raise ApiError(status_code=409, code='chat_search_scope_unavailable',
+            raise ApiError(status_code=409, code=errors.CHAT_SEARCH_SCOPE_UNAVAILABLE,
                            detail='Документы области поиска недоступны. Измените область или отключите ограничение.')
     try:
         plan = prepare_query(
@@ -709,9 +713,9 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
                 render=pack_render,
             )
     except ChatBudgetUnavailable as exc:
-        raise ApiError(status_code=503, code="chat_budget_unavailable", detail="Бюджет модели недоступен") from exc
+        raise ApiError(status_code=503, code=errors.CHAT_BUDGET_UNAVAILABLE, detail="Бюджет модели недоступен") from exc
     except EvidenceTooLarge as exc:
-        raise ApiError(status_code=422, code="chat_evidence_too_large", detail="Фрагмент не помещается в контекст") from exc
+        raise ApiError(status_code=422, code=errors.CHAT_EVIDENCE_TOO_LARGE, detail="Фрагмент не помещается в контекст") from exc
 
     if not batches:
         return "Не удалось поместить найденные фрагменты в контекст." if not req.locale.lower().startswith("en") else "Retrieved excerpts do not fit the context."
@@ -911,25 +915,26 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
     except LLMBusyError as exc:
         raise _busy("Все слоты генерации ответа заняты. Повторите попытку позже.", exc.retry_after) from exc
     except ChatBudgetUnavailable as exc:
-        raise ApiError(status_code=503, code="chat_budget_unavailable",
+        raise ApiError(status_code=503, code=errors.CHAT_BUDGET_UNAVAILABLE,
                        detail="Бюджет модели недоступен") from exc
     except EvidenceTooLarge as exc:
-        raise ApiError(status_code=422, code="chat_evidence_too_large",
+        raise ApiError(status_code=422, code=errors.CHAT_EVIDENCE_TOO_LARGE,
                        detail="Фрагмент не помещается в контекст") from exc
     except LLMTruncationError as exc:
-        raise ApiError(status_code=502, code="chat_answer_truncated",
+        raise ApiError(status_code=502, code=errors.CHAT_ANSWER_TRUNCATED,
                        detail="Модель обрезала ответ") from exc
     except ValueError as exc:
-        code = "chat_summary_too_large" if str(exc) == "chat_summary_too_large" else "chat_evidence_invalid"
+        code = errors.CHAT_SUMMARY_TOO_LARGE if str(exc) == errors.CHAT_SUMMARY_TOO_LARGE else errors.CHAT_EVIDENCE_INVALID
         raise ApiError(status_code=422, code=code, detail="Не удалось проверить промежуточный ответ") from exc
 
 
 @router.post("/stream")
 def chat_stream(req: ChatRequest, current_user: User = Depends(require_user)):
+    context = new_operation(current_context(), operation_kind="search_chat")
     if req.response_mode is not None and req.attempt_id is None:
         req.attempt_id = str(uuid.uuid4())
     return StreamingResponse(
-        stream_chat(lambda: chat(req, current_user), independent_calls=req.response_mode is not None,
+        stream_chat(lambda: chat(req, current_user), context=context, independent_calls=req.response_mode is not None,
                     current_user=current_user),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
