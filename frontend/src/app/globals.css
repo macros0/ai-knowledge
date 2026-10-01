@@ -2505,6 +2505,18 @@ main {
   margin-bottom: 8px;
 }
 
+.document-actions-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.document-actions-row > button {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .selection-toggle {
   display: inline-flex;
   align-items: center;
@@ -3860,10 +3872,18 @@ main {
 
 /* --- Этап 5: группировка, прогресс разметки, фильтры, чипы модулей --- */
 
+.document-view-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
 .doc-view-mode {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .document-groups {
@@ -3895,9 +3915,10 @@ main {
 
 .markup-progress {
   display: flex;
+  flex: 1 1 320px;
+  min-width: 0;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -3905,15 +3926,15 @@ main {
 }
 
 .markup-progress-label {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   font-size: 12px;
   color: var(--muted);
   margin-bottom: 0;
-  white-space: nowrap;
 }
 
 .markup-progress-bar {
   flex: 1;
+  min-width: 48px;
   height: 6px;
   background: var(--border);
   border-radius: 999px;

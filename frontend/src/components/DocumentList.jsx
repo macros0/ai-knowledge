@@ -100,7 +100,7 @@ function buildGroups(docs, groupBy, locale, t) {
   });
 }
 
-export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
+export default function DocumentList({ refreshKey = 0, onOpenTrash, uploadToggle, uploadBody }) {
   const router = useRouter();
   const urlParams = useSearchParams();
   const { savedView, rememberFilters } = useDocumentFilters();
@@ -912,6 +912,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
       )}
       {canEdit && (
         <SelectionBar
+          leadingAction={uploadToggle}
+          leadingContent={uploadBody}
           selectedIds={selectedIds}
           total={total}
           allByFilterOn={allByFilterOn}
@@ -963,45 +965,53 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         />
       )}
       {showTags && <TagManagerModal onClose={() => setShowTags(false)} />}
-      {stats && stats.total > 0 && (
-        <div
-          className="markup-progress"
-          title={t("docs.markupProgressTitle", { done: stats.with_development, total: stats.total })}
-        >
-          <span className="markup-progress-label">
-            {t("docs.markupProgress", {
-              done: stats.with_development,
-              total: stats.total,
-              pct: markupPct,
-            })}
-          </span>
-          <div className="markup-progress-bar">
-            <div className="markup-progress-fill" style={{ width: `${markupPct}%` }} />
-          </div>
+      {!canEdit && uploadToggle && (
+        <div className="upload-spoiler">
+          {uploadToggle}
+          {uploadBody}
         </div>
       )}
-      <div className="doc-view-mode" role="radiogroup" aria-label={t("docs.viewModeLabel")}>
-        <button
-          type="button"
-          className={`view-btn${groupBy === "" ? " active" : ""}`}
-          onClick={() => setGroupBy("")}
-        >
-          {t("docs.view.list")}
-        </button>
-        <button
-          type="button"
-          className={`view-btn${groupBy === "tag" ? " active" : ""}`}
-          onClick={() => setGroupBy("tag")}
-        >
-          {t("docs.view.tag")}
-        </button>
-        <button
-          type="button"
-          className={`view-btn${groupBy === "development" ? " active" : ""}`}
-          onClick={() => setGroupBy("development")}
-        >
-          {t("docs.view.development")}
-        </button>
+      <div className="document-view-row">
+        <div className="doc-view-mode" role="radiogroup" aria-label={t("docs.viewModeLabel")}>
+          <button
+            type="button"
+            className={`view-btn${groupBy === "" ? " active" : ""}`}
+            onClick={() => setGroupBy("")}
+          >
+            {t("docs.view.list")}
+          </button>
+          <button
+            type="button"
+            className={`view-btn${groupBy === "tag" ? " active" : ""}`}
+            onClick={() => setGroupBy("tag")}
+          >
+            {t("docs.view.tag")}
+          </button>
+          <button
+            type="button"
+            className={`view-btn${groupBy === "development" ? " active" : ""}`}
+            onClick={() => setGroupBy("development")}
+          >
+            {t("docs.view.development")}
+          </button>
+        </div>
+        {stats && stats.total > 0 && (
+          <div
+            className="markup-progress"
+            title={t("docs.markupProgressTitle", { done: stats.with_development, total: stats.total })}
+          >
+            <span className="markup-progress-label">
+              {t("docs.markupProgress", {
+                done: stats.with_development,
+                total: stats.total,
+                pct: markupPct,
+              })}
+            </span>
+            <div className="markup-progress-bar">
+              <div className="markup-progress-fill" style={{ width: `${markupPct}%` }} />
+            </div>
+          </div>
+        )}
       </div>
       <div className="doc-filter-bar">
         <div className="doc-filter-primary">
