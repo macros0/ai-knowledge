@@ -105,7 +105,7 @@ Evidence JSON имеет -text Git attribute: bytes/SHA сохраняются �
 тесты также прошли отдельно. Второй полный 40-минутный прогон не выполнялся:
 после первого менялись только fixture и проверки, runtime код не менялся.
 Это не объявляется новым полностью зелёным full-suite запуском.
-Ruff по всему backend passed; ESLint 0 errors / 40 warnings; final Node
+Ruff по всему backend passed; окончательный ESLint 0 errors / 41 warnings; final Node
 320 passed / 1 skipped; production webpack frontend build passed.
 
 Один измерительный эксперимент завершён: **21 704 requests**, шесть интервалов,
@@ -170,3 +170,5 @@ Merge в main и push не выполнялись. Рабочая main база 
 
 Локальный integration merge commit: `5841b31` (parents `4ec9e14`, `9cb7748`).
 Code/evidence исходной ветки: `491dbc4`, `4ec9e14`.
+
+Evidence commit: `f12cbd2`; финальный ESLint выполнен после него и уточнён в этом отчёте.
