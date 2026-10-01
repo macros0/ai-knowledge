@@ -45,6 +45,7 @@
     "local-strict-validation.json": "a57ed36d88f3b3b11592611189cebd8dca6e1b370c458df31ae071da414109d4",
     "pve-observer-summary.json": "b8fa1e92e5159a80c69b23a80b392f1cae7134b035abed105e2ff272c70f29c8",
     "remote-file-sha256.json": "1198c74c9ec3ff288649fdb11e3080db0ea574d31331f1e9c84d2a44b9a94af3",
+    "repository-at-finish.json": "551b590b2cc337102ec03eb2f60f6c15e791585765ecfcf6993b45589a0f39ba",
     "review-and-targeted-checks.json": "9d0e8306ee51bff50d657257b273b0f49093ab2a3fd4020cd444a3445db11109",
     "rss-harness-fix.json": "4cde41b3dfdfb100c5543875f552a0516eb1587f0a7103dec52ce49cba857e8e",
     "supplement-sha256.json": "70f4d3ea2977c1c2c91b369363981f37fd2644ee8ec7018d4e1fb3eb91d2274d",

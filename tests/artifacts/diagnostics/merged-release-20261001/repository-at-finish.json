@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-10-01T22:11:40Z",
+  "tested_main_base_revision": "38f7ed66ec253d342e48f51c46c9d57912891c35",
+  "measured_runtime_source_revision": "57727d9974a73a3451a8f787f9582343b94462ad",
+  "acceptance_evidence_commit": "90da910",
+  "observed_main_revision": "cde0724a745256d32875d58af8edf798076ccd75",
+  "main_advanced_concurrently": true,
+  "main_worktree_clean_when_observed": true,
+  "new_main_commit_not_in_measured_candidate": true,
+  "new_main_changed_files_count": 31,
+  "paths_changed_in_both_branches": [
+    "backend/app/i18n/ui_en.json",
+    "backend/app/i18n/ui_keys.json",
+    "frontend/src/app/globals.css",
+    "frontend/src/components/DocumentList.jsx",
+    "frontend/src/components/SelectionBar.jsx",
+    "frontend/src/i18n/locales/en.js",
+    "frontend/src/i18n/locales/ru.js"
+  ],
+  "runtime_code_in_integration_unchanged_since_measured_source": true
+}
