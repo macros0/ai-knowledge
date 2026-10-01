@@ -1,0 +1,24 @@
+{
+  "session_id": "101ee9de-9dbd-4395-80eb-48cd888cd899",
+  "bundle_id": "4abaac64-fc7d-46fd-88d0-d86edeb1284b",
+  "manifest_version": 2,
+  "partial": false,
+  "gaps": [],
+  "coverage_modes": {
+    "baseline": "errors",
+    "sessions": {
+      "101ee9de-9dbd-4395-80eb-48cd888cd899": "aggregated"
+    }
+  },
+  "loss_counters_state": {
+    "backend_process": "known",
+    "frontend_process": "known"
+  },
+  "events": 2,
+  "bundle_bytes": 2510,
+  "admin_lifecycle": "passed",
+  "reader_denial": "passed",
+  "csrf_denial": "not_applicable_simulation",
+  "delete_denial": "passed",
+  "crc": "passed"
+}

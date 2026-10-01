@@ -167,3 +167,6 @@ GC или thresholds по этим цифрам. Следующий полезн
 существенны для принятого latency критерия.
 
 Merge в main и push не выполнялись. Рабочая main база остаётся 9cb7748.
+
+Локальный integration merge commit: `5841b31` (parents `4ec9e14`, `9cb7748`).
+Code/evidence исходной ветки: `491dbc4`, `4ec9e14`.

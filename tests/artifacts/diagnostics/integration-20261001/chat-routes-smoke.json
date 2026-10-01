@@ -1,0 +1,6 @@
+{
+  "search_scope_available": true,
+  "cancel_missing_404": true,
+  "both_routes_in_search_chat_capture": true,
+  "raw_attempt_parameter_excluded": true
+}

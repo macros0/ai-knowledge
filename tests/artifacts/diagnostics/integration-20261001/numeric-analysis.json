@@ -1,0 +1,174 @@
+{
+  "experiment_complete": true,
+  "diagnostic_only": true,
+  "old_acceptance": "failed_unchanged",
+  "causal_result": "inconclusive_original_shift_not_reproduced",
+  "requests": 21704,
+  "response_equality": true,
+  "pairs": [
+    {
+      "off_p95_ms": 18.485722,
+      "standard_p95_ms": 18.334859,
+      "delta_percent": -0.8161055326916467,
+      "delta_ms": -0.15086299999999753
+    },
+    {
+      "off_p95_ms": 17.757698,
+      "standard_p95_ms": 18.255845,
+      "delta_percent": 2.8052453645737163,
+      "delta_ms": 0.49814699999999945
+    },
+    {
+      "off_p95_ms": 17.81032,
+      "standard_p95_ms": 19.268704,
+      "delta_percent": 8.18842109518525,
+      "delta_ms": 1.4583839999999988
+    }
+  ],
+  "cases": [
+    {
+      "index": 1,
+      "mode": "off",
+      "requests": 3617,
+      "http_p95_ms": 18.485722,
+      "backend_p95_ms": 13.203347,
+      "commit_p95_ms": 2.696491,
+      "sql_p95_ms": 1.188707,
+      "hydration_p95_ms": 5.374504,
+      "peaks_over_100_ms": [
+        {
+          "at_unix": 1790869078.4513116,
+          "http_ms": 320.041837,
+          "hydration_ms": 308.025127,
+          "commit_ms": 2.7976870000000003,
+          "sql_ms": 1.216113,
+          "connection_ms": 0.14931
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "mode": "standard",
+      "requests": 3604,
+      "http_p95_ms": 18.334859,
+      "backend_p95_ms": 13.438394,
+      "commit_p95_ms": 2.710939,
+      "sql_p95_ms": 1.191916,
+      "hydration_p95_ms": 5.533863,
+      "peaks_over_100_ms": [
+        {
+          "at_unix": 1790869156.7057748,
+          "http_ms": 327.799182,
+          "hydration_ms": 316.331547,
+          "commit_ms": 13.441790000000001,
+          "sql_ms": 1.2497999999999998,
+          "connection_ms": 0.135373
+        },
+        {
+          "at_unix": 1790869194.5288975,
+          "http_ms": 317.957929,
+          "hydration_ms": 305.923162,
+          "commit_ms": 2.239803,
+          "sql_ms": 1.200394,
+          "connection_ms": 0.152326
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "mode": "off",
+      "requests": 3686,
+      "http_p95_ms": 17.757698,
+      "backend_p95_ms": 12.840463,
+      "commit_p95_ms": 2.6986739999999996,
+      "sql_p95_ms": 1.158352,
+      "hydration_p95_ms": 5.329577,
+      "peaks_over_100_ms": [
+        {
+          "at_unix": 1790869232.0390189,
+          "http_ms": 324.186421,
+          "hydration_ms": 311.798007,
+          "commit_ms": 2.3513400000000004,
+          "sql_ms": 1.3436210000000002,
+          "connection_ms": 0.214196
+        },
+        {
+          "at_unix": 1790869268.9493153,
+          "http_ms": 318.176633,
+          "hydration_ms": 305.794081,
+          "commit_ms": 2.868754,
+          "sql_ms": 1.366123,
+          "connection_ms": 0.212944
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "mode": "standard",
+      "requests": 3618,
+      "http_p95_ms": 18.255845,
+      "backend_p95_ms": 13.361094,
+      "commit_p95_ms": 2.710678,
+      "sql_p95_ms": 1.2011969999999998,
+      "hydration_p95_ms": 5.422076,
+      "peaks_over_100_ms": [
+        {
+          "at_unix": 1790869344.7630153,
+          "http_ms": 318.734547,
+          "hydration_ms": 306.933044,
+          "commit_ms": 6.931269,
+          "sql_ms": 1.2302410000000001,
+          "connection_ms": 0.156744
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "mode": "off",
+      "requests": 3666,
+      "http_p95_ms": 17.81032,
+      "backend_p95_ms": 12.994281,
+      "commit_p95_ms": 2.71199,
+      "sql_p95_ms": 1.202736,
+      "hydration_p95_ms": 5.408319,
+      "peaks_over_100_ms": [
+        {
+          "at_unix": 1790869420.0941336,
+          "http_ms": 320.616805,
+          "hydration_ms": 308.683616,
+          "commit_ms": 3.107278,
+          "sql_ms": 1.3035140000000003,
+          "connection_ms": 0.144781
+        },
+        {
+          "at_unix": 1790869457.3611703,
+          "http_ms": 317.923912,
+          "hydration_ms": 306.795747,
+          "commit_ms": 3.0494060000000003,
+          "sql_ms": 1.3278,
+          "connection_ms": 0.162555
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "mode": "standard",
+      "requests": 3513,
+      "http_p95_ms": 19.268704,
+      "backend_p95_ms": 13.874692,
+      "commit_p95_ms": 2.7383100000000002,
+      "sql_p95_ms": 1.2623929999999997,
+      "hydration_p95_ms": 5.5882,
+      "peaks_over_100_ms": [
+        {
+          "at_unix": 1790869533.2308254,
+          "http_ms": 316.428666,
+          "hydration_ms": 305.112797,
+          "commit_ms": 2.747799,
+          "sql_ms": 1.2463700000000002,
+          "connection_ms": 0.166063
+        }
+      ]
+    }
+  ]
+}

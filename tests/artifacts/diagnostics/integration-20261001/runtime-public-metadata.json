@@ -1,0 +1,32 @@
+{
+  "source_tree": "e323fa0f966cae2d6099eeecd3d94dc80301926b",
+  "main_revision": "9cb7748",
+  "baseline": "merged-new-1doc",
+  "environment": "development/simulation",
+  "build_workers": 2,
+  "frontend_build": "webpack",
+  "pg_track_wal_io_timing": true,
+  "port": 18085,
+  "containers": {
+    "backend": {
+      "image_id": "sha256:17dbaf92358dbbac7b82f731448194bc984183413ec1f748ad7d49a6d73cdce5",
+      "started_at": "2026-10-01T15:34:51.155557945Z",
+      "memory_limit": 1073741824
+    },
+    "frontend": {
+      "image_id": "sha256:ba0f7a01c178201160b43f87cc66f60dd74e808d588d06f445fa87010627b266",
+      "started_at": "2026-10-01T15:35:02.334043609Z",
+      "memory_limit": 805306368
+    },
+    "postgres": {
+      "image_id": "sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675",
+      "started_at": "2026-10-01T15:33:48.330622952Z",
+      "memory_limit": 402653184
+    },
+    "qdrant": {
+      "image_id": "sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc",
+      "started_at": "2026-10-01T15:33:48.325807243Z",
+      "memory_limit": 402653184
+    }
+  }
+}
