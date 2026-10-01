@@ -555,6 +555,9 @@ def drop_partial_title_matches(
     по стемму-фолбэку (_token_in_text). Требование >= 2 токенов отсекает
     слишком общие однословные запросы. Если ни один заголовок не покрывает
     запрос целиком — блоки не меняются.
+
+    Запрос из одного термина глоссария сохраняет также полные совпадения
+    в содержимом: наличие термина в одном заголовке не сужает поиск по нему.
     """
     if not query or not merged:
         return merged
@@ -587,8 +590,16 @@ def drop_partial_title_matches(
         ]
         if not full:
             return merged
+        title_matches = {id(m) for m in full}
         out: list[dict] = []
-        for m in full:
+        for m in merged if not remaining_tokens else full:
+            if id(m) not in title_matches:
+                # A bare glossary term is a lookup across all admitted forms.
+                # A title match must not erase complete body matches; retain
+                # their evidence instead of swapping in a different digest.
+                if matched_domain_terms(m, match_groups, cache=domain_cache):
+                    out.append(m)
+                continue
             concept_content = m.get("concept_content")
             if concept_content:
                 m = {**m, "content": concept_content, "_evidence": m.get("_concept_evidence")}
