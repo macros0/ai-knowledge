@@ -83,10 +83,11 @@ Peak external 3,562–3,583 МиБ, detached contexts=0, native contexts max=3.
 
 ZIP off: 24 790/25 193 bytes, 220/221 events;
 standard: 37 549/37 410 bytes, 338/339 events.
-HTTP p95 этого инструментированного опыта 96,503–104,276 ms, существенно
-выше 17,758–19,269 ms предыдущей latency localization. Причина разницы
-не измерена; её нельзя целиком приписать observer. Эти p95 не используются
-как новая приёмка и не сравниваются с frozen release для отмены его отказов.
+HTTP p95 этого инструментированного опыта 96,503–104,276 ms измерен
+при concurrency8; прежние 17,758–19,269 ms latency localization — при
+concurrency1. Разные нагрузки нельзя напрямую сравнивать для оценки
+regression или overhead observer. Его влияние отдельным A/B не измерялось.
+Эти p95 не используются как новая приёмка и не отменяют frozen failures.
 
 ## Setup failure сохранён
 
