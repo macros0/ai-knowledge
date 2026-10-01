@@ -128,6 +128,7 @@ services:
       args:
         OKF_BUILD_REVISION: ${OKF_BUILD_REVISION:-unknown}
     environment:
+      DIAGNOSTICS_BASELINE_ENABLED: ${DIAGNOSTICS_BASELINE_ENABLED:-true}
       BACKEND_URL: http://backend:8000
       OKF_FRONTEND_DIAGNOSTICS_DIR: /diagnostics/frontend
       OKF_DIAGNOSTICS_CONTROL_PATH: /diagnostics/control/capture.json

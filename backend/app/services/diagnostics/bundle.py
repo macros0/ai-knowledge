@@ -10,6 +10,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from .sanitize import _encode_validated_event, sanitize_event
 from .schema import DiagnosticLimits, MAX_EVENT_BYTES
+from .policy import safe_policy_snapshot
+from .sanitize import valid_uuid
 
 
 class BundleTooLarge(RuntimeError):
@@ -107,26 +109,33 @@ def build_bundle(snapshot, destination: Path, limits: DiagnosticLimits, *,
     try:
         raw_hashes = {path: _file_hash(path) for path in snapshot.paths}
         counts = dict(snapshot.counts)
+        initial_invalid = counts.get("invalid", 0)
+        initial_truncated = counts.get("truncated", 0)
         hashes = {component: sha256() for component in _COMPONENTS}
         sizes = {component: 0 for component in _COMPONENTS}
         coverage = {component: {"from_utc": None, "to_utc": None} for component in _COMPONENTS}
         frontend_build_ids = set()
         revalidated = 0
-        for component, encoded in _safe_lines(snapshot.paths, counts=counts):
-            if component not in hashes:
-                counts["invalid"] = counts.get("invalid", 0) + 1
-                continue
-            hashes[component].update(encoded)
-            sizes[component] += len(encoded)
-            event = json.loads(encoded)
-            stamp = event["timestamp_utc"]
-            if component == "frontend" and event.get("build_id"):
-                frontend_build_ids.add(event["build_id"])
-            first = coverage[component]["from_utc"]
-            last = coverage[component]["to_utc"]
-            coverage[component]["from_utc"] = min(first, stamp) if first else stamp
-            coverage[component]["to_utc"] = max(last, stamp) if last else stamp
-            revalidated += 1
+        normalized = getattr(snapshot, "normalized", False) is True
+        for path in snapshot.paths:
+            for component, encoded in _safe_lines((path,), counts=counts):
+                if component not in hashes or (normalized and path.name != f"{component}.jsonl"):
+                    counts["invalid"] = counts.get("invalid", 0) + 1
+                    continue
+                hashes[component].update(encoded)
+                sizes[component] += len(encoded)
+                event = json.loads(encoded)
+                stamp = event["timestamp_utc"]
+                if component == "frontend" and event.get("build_id"):
+                    frontend_build_ids.add(event["build_id"])
+                first = coverage[component]["from_utc"]
+                last = coverage[component]["to_utc"]
+                coverage[component]["from_utc"] = min(first, stamp) if first else stamp
+                coverage[component]["to_utc"] = max(last, stamp) if last else stamp
+                revalidated += 1
+        if normalized and (counts.get("invalid", 0) > initial_invalid
+                           or counts.get("truncated", 0) > initial_truncated):
+            raise BundleInputChanged()
         counts["events"] = revalidated
         rejected = counts.get("invalid", 0) > 0 or counts.get("truncated", 0) > 0
         partial = snapshot.partial or rejected
@@ -134,7 +143,7 @@ def build_bundle(snapshot, destination: Path, limits: DiagnosticLimits, *,
         if rejected and "invalid_input" not in gaps:
             gaps.append("invalid_input")
         summary = (
-            "OKF diagnostics v1\n"
+            "OKF diagnostics v2\n"
             f"Cutoff UTC: {snapshot.cutoff_at.isoformat()}\n"
             f"Events: {revalidated}\n"
             f"Partial: {'yes' if partial else 'no'}\n"
@@ -148,9 +157,38 @@ def build_bundle(snapshot, destination: Path, limits: DiagnosticLimits, *,
         revision = os.environ.get("OKF_BUILD_REVISION", "unknown")
         if not re.fullmatch(r"[a-f0-9]{7,40}", revision):
             revision = "unknown"
+        capture_policies = []
+        for item in getattr(snapshot, "capture_policies", []):
+            if not isinstance(item, dict) or valid_uuid(item.get("session_id")) is None:
+                continue
+            safe = safe_policy_snapshot(item.get("policy_snapshot"))
+            level = item.get("capture_level")
+            version = item.get("policy_version")
+            if safe is None or safe["level"] != level or version != 1:
+                safe = None
+                level = "legacy" if version == 0 else "unknown"
+            capture_policies.append({"session_id": item["session_id"], "capture_level": level,
+                                     "policy_version": version if version in {0, 1} else None,
+                                     "policy_snapshot": safe})
+        modes = {"baseline": "errors", "sessions": {
+            item["session_id"]: {"standard": "aggregated", "detailed": "sampled",
+                                  "legacy": "legacy"}.get(item["capture_level"], "unknown")
+            for item in capture_policies}}
+        if not capture_policies:
+            modes["unattributed"] = "unknown"
+        counter_states = {
+            "backend_process": "known" if "recorder_dropped" in counts
+            and not counts.get("recorder_counters_unknown")
+            and "recorder_status_unavailable" not in gaps
+            else "unknown",
+            "frontend_process": "known" if "frontend_dropped" in counts
+            and not counts.get("frontend_counters_unknown")
+            and not any(gap in gaps for gap in ("frontend_status_unavailable", "frontend_status_stale"))
+            else "unknown",
+        }
         manifest = {
-            "format_version": 1,
-            "backend_schema_version": 1,
+            "format_version": 2,
+            "backend_schema_version": 2,
             "frontend_build_ids": sorted(frontend_build_ids) or ["unknown"],
             "collection_mode": collection_mode,
             "audit_reconciliation": audit_reconciliation,
@@ -161,6 +199,9 @@ def build_bundle(snapshot, destination: Path, limits: DiagnosticLimits, *,
             "gaps": gaps,
             "components": list(_COMPONENTS),
             "counts": counts,
+            "capture_policies": capture_policies,
+            "coverage_modes": modes,
+            "loss_counters_state": counter_states,
             "counter_scopes": {"recorder": "backend_process", "frontend": "frontend_process"},
             "checksums": checksums,
             "limits": {"bundle_bytes": limits.bundle_bytes, "event_bytes": MAX_EVENT_BYTES},
@@ -174,11 +215,21 @@ def build_bundle(snapshot, destination: Path, limits: DiagnosticLimits, *,
                 for component in _COMPONENTS:
                     digest = sha256()
                     with archive.open(f"events/{component}.jsonl", "w", force_zip64=False) as target:
-                        for _, encoded in _safe_lines(snapshot.paths, component_filter=component):
-                            target.write(encoded)
-                            digest.update(encoded)
-                            if archive.fp.tell() > limits.bundle_bytes:
-                                raise BundleTooLarge()
+                        if normalized:
+                            source = next((path for path in snapshot.paths if path.name == f"{component}.jsonl"), None)
+                            if source is not None:
+                                with source.open("rb") as handle:
+                                    while chunk := handle.read(65536):
+                                        target.write(chunk)
+                                        digest.update(chunk)
+                                        if archive.fp.tell() > limits.bundle_bytes:
+                                            raise BundleTooLarge()
+                        else:
+                            for _, encoded in _safe_lines(snapshot.paths, component_filter=component):
+                                target.write(encoded)
+                                digest.update(encoded)
+                                if archive.fp.tell() > limits.bundle_bytes:
+                                    raise BundleTooLarge()
                     if digest.hexdigest() != checksums[f"events/{component}.jsonl"]:
                         raise BundleInputChanged()
                 archive.writestr(_ENTRIES[5], runtime)

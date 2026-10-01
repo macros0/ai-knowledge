@@ -1,0 +1,7 @@
+# Disposable CT 102 corpus isolation. Reuse the same Compose project and
+# container names for the HTTP probe while keeping the 100-document volumes.
+volumes:
+  postgres_data:
+    name: okf-diag-one-postgres-20260929
+  qdrant_data:
+    name: okf-diag-one-qdrant-20260929

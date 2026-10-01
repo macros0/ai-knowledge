@@ -9,10 +9,22 @@ from types import SimpleNamespace
 from .bundle import BundleTooLarge, build_bundle
 from .sanitize import valid_uuid
 from .schema import DiagnosticLimits
-from .snapshot import _safe_operations, _safe_runtime
-from .store import DiagnosticStore
+from .safe_metadata import _safe_operations, _safe_runtime
+from .store import _is_link
 
 MAX_INPUT_BYTES = 4 * 1048576
+
+
+class WorkerPathStore:
+    """Path guard only; the parent owns the ledger and all credits."""
+    def __init__(self, root):
+        self.root = Path(os.path.abspath(root))
+
+    def safe_path(self, path):
+        path = Path(os.path.abspath(path))
+        if not path.is_relative_to(self.root) or any(_is_link(part) for part in (path, *path.parents)):
+            raise ValueError("Unsafe bundle worker path")
+        return path
 
 
 def _work(payload: dict) -> dict:
@@ -22,7 +34,7 @@ def _work(payload: dict) -> dict:
     if valid_uuid(bundle_id) is None or valid_uuid(snapshot_id) is None:
         raise ValueError("Invalid worker identity")
     limits = DiagnosticLimits(**payload["limits"])
-    store = DiagnosticStore(Path(payload["root"]), limits)
+    store = WorkerPathStore(Path(payload["root"]))
     directory = store.safe_path(store.root / "snapshots" / snapshot_id)
     if not directory.is_dir():
         raise ValueError("Snapshot unavailable")
@@ -39,6 +51,8 @@ def _work(payload: dict) -> dict:
         store=store, paths=tuple(paths), cutoff_at=datetime.fromisoformat(payload["cutoff_at"]),
         runtime=_safe_runtime(payload["runtime"]), operations=_safe_operations(payload["operations"]),
         counts=payload["counts"], partial=payload["partial"], gaps=tuple(payload["gaps"]),
+        capture_policies=payload.get("capture_policies", []),
+        normalized=payload.get("normalized") is True,
     )
     destination = store.safe_path(store.root / "bundles" / (bundle_id + ".part"))
     built = build_bundle(snapshot, destination, limits, reserved_upper=payload["reserved_upper"])

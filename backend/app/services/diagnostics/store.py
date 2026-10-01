@@ -1,7 +1,8 @@
 """Owned bounded diagnostic storage, independent of the relational database."""
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+import errno
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,8 @@ import time
 from uuid import uuid4
 
 from .sanitize import _encode_validated_event, encode_event, sanitize_event, valid_uuid
+from .segment_index import ReconcileResult, SegmentIndex
+from .read_view import ReadViewLease, SegmentDescriptor, read_event_page as page_from_view
 from .schema import DiagnosticLimits, EventFilter, MAX_EVENT_BYTES
 
 
@@ -21,6 +24,28 @@ class StorageQuotaError(RuntimeError):
 
 class WriterActiveError(RuntimeError):
     pass
+
+
+_VALIDATED_TOKEN = object()
+
+
+class ValidatedEvent:
+    __slots__ = ("encoded", "event_code", "timestamp_utc", "session_id")
+
+    def __init__(self, encoded, event_code, timestamp_utc, session_id, *, token):
+        if token is not _VALIDATED_TOKEN:
+            raise ValueError("Diagnostic event must be validated internally")
+        self.encoded = encoded
+        self.event_code = event_code
+        self.timestamp_utc = timestamp_utc
+        self.session_id = session_id
+
+
+@dataclass(frozen=True)
+class BatchWriteResult:
+    written_events: int
+    written_bytes: int
+    failure_reason: str | None = None
 
 
 @dataclass
@@ -72,8 +97,11 @@ class DiagnosticStore:
         self.root = Path(root).absolute()
         self.limits = limits
         self._mutex = threading.RLock()
+        self._projection_lock = threading.Lock()
+        self._projection_revision = None
         self._reservations: dict[str, int] = {}
         self._stream_credit: dict[str, Reservation] = {}
+        self._pins: dict[Path, int] = {}
         self._current: dict[str, Path] = {}
         self._lock_handle = None
         self._degraded = False
@@ -83,6 +111,9 @@ class DiagnosticStore:
         for relative in ("events/baseline", "snapshots", "bundles", "control", "capture-expiry"):
             path = self.safe_path(self.root / relative)
             path.mkdir(parents=True, exist_ok=True, mode=0o770)
+        self._index = SegmentIndex(self.root, self._files)
+        self._last_free_bytes = None
+        self._free_measured_at = None
 
     def safe_path(self, path: Path) -> Path:
         path = Path(os.path.abspath(path))
@@ -115,6 +146,7 @@ class DiagnosticStore:
                 handle.close()
                 raise WriterActiveError("Diagnostic writer is active") from exc
             self._lock_handle = handle
+            self._index.record(path)
 
     def close(self):
         with self._mutex:
@@ -157,7 +189,43 @@ class DiagnosticStore:
     @property
     def used_bytes(self) -> int:
         with self._mutex:
-            return sum(path.stat().st_size for path in self._files(self.root))
+            return self._index.used_bytes
+
+    def reconcile(self) -> ReconcileResult:
+        generation = self._index.generation
+        scanned = self._index.scan()  # No store lock while walking the tree.
+        with self._mutex:
+            if generation != self._index.generation:
+                return ReconcileResult(0, self._index.used_bytes, self._index.measured_at,
+                                       concurrent_write=True)
+            result = self._index.apply_scan(scanned)
+            if result.changed_files:
+                self._degraded = True
+                self._last_failure = "storage_error"
+            return result
+
+    def note_rename(self, old: Path, new: Path):
+        with self._mutex:
+            self._index.rename(self.safe_path(old), self.safe_path(new))
+
+    def note_deleted(self, path: Path):
+        with self._mutex:
+            self._index.remove(self.safe_path(path))
+
+    def commit_external_growth(self, reservation: Reservation, path: Path):
+        """Transfer supervised child growth from an outstanding credit to used bytes."""
+        with self._mutex:
+            path = self.safe_path(path)
+            if reservation.store is not self or reservation.key not in self._reservations:
+                raise StorageQuotaError("Unknown diagnostic reservation")
+            if not path.is_file():
+                raise ValueError("Missing diagnostic child file")
+            growth = path.stat().st_size - self._index.size(path)
+            if growth < 0 or growth > reservation.remaining:
+                self._degraded = True
+                raise StorageQuotaError("Diagnostic child exceeded reserved credit")
+            self._index.record(path)
+            self._reservations[reservation.key] -= growth
 
     @property
     def reserved_bytes(self) -> int:
@@ -176,6 +244,8 @@ class DiagnosticStore:
         ):
             raise StorageQuotaError("Diagnostic storage quota exceeded")
         free = shutil.disk_usage(self.root).free
+        self._last_free_bytes = free
+        self._free_measured_at = datetime.now().astimezone()
         if free - (self.reserved_bytes + max(0, growth) - min(reserved, growth)) < self.limits.min_free_bytes:
             raise StorageQuotaError("Diagnostic free-space reserve reached")
 
@@ -216,17 +286,25 @@ class DiagnosticStore:
         growth = len(data) if append else max(0, len(data) - previous)
         self._capacity(growth, reservation)
         flags = os.O_WRONLY | os.O_CREAT | (os.O_APPEND if append else os.O_TRUNC)
-        fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o660)
+        fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0), 0o660)
         try:
-            with os.fdopen(fd, "ab" if append else "wb", buffering=0) as handle:
-                # A short write is legal; do not publish a partially written event as complete.
-                view = memoryview(data)
-                while view:
-                    n = handle.write(view)
-                    if not n:
-                        raise OSError("Diagnostic write failed")
-                    view = view[n:]
+            # A short write is legal. On append failure, restore the last complete JSONL boundary.
+            view = memoryview(data)
+            while view:
+                try:
+                    n = os.write(fd, view)
+                except OSError:
+                    if append:
+                        os.ftruncate(fd, previous)
+                    raise
+                if not n:
+                    if append:
+                        os.ftruncate(fd, previous)
+                    raise OSError("Diagnostic write failed")
+                view = view[n:]
         finally:
+            os.close(fd)
+            self._index.record(path)
             if reservation:
                 actual_growth = max(0, path.stat().st_size - previous)
                 self._reservations[reservation.key] -= actual_growth
@@ -236,56 +314,104 @@ class DiagnosticStore:
             raise ValueError("Invalid diagnostic stream")
         return self.safe_path(self.root / "events" / stream)
 
-    def append(self, encoded: bytes, *, stream: str) -> bool:
-        directory = self._stream_path(stream)  # Reject traversal, even when degraded.
-        if len(encoded) > MAX_EVENT_BYTES or len(encoded) > self.limits.segment_bytes or not encoded.endswith(b"\n"):
-            return False
+    def validate_event(self, encoded: bytes) -> ValidatedEvent:
+        if type(encoded) is not bytes or not encoded.endswith(b"\n") or len(encoded) > MAX_EVENT_BYTES:
+            raise ValueError("Invalid diagnostic event bytes")
         try:
-            # Only versioned safe JSONL, even if the caller bypassed recorder.
-            if encode_event(json.loads(encoded)) != encoded:
-                return False
+            event = json.loads(encoded)
+            if encode_event(event) != encoded:
+                raise ValueError("Noncanonical diagnostic event")
+        except (ValueError, TypeError, UnicodeDecodeError) as exc:
+            raise ValueError("Invalid diagnostic event") from exc
+        return ValidatedEvent(encoded, event["event_code"], event["timestamp_utc"],
+                              event.get("diagnostic_session_id"), token=_VALIDATED_TOKEN)
+
+    def _validated_from_recorder(self, encoded: bytes, event_code: str, session_id: str | None) -> ValidatedEvent:
+        """Only the recorder calls this with bytes already encoded before queue admission."""
+        raw = json.loads(encoded)
+        return ValidatedEvent(encoded, event_code, raw["timestamp_utc"], session_id,
+                              token=_VALIDATED_TOKEN)
+
+    def append_batch(self, events: tuple[ValidatedEvent, ...], *, stream: str) -> BatchWriteResult:
+        directory = self._stream_path(stream)
+        if type(events) is not tuple or any(type(event) is not ValidatedEvent for event in events):
+            return BatchWriteResult(0, 0, "invalid")
+        if any(len(event.encoded) > self.limits.segment_bytes for event in events):
+            return BatchWriteResult(0, 0, "invalid")
+        written_events = written_bytes = 0
+        try:
             with self._mutex:
                 self.open()
                 directory.mkdir(parents=True, exist_ok=True, mode=0o770)
                 budget = self.limits.baseline_bytes if stream == "baseline" else self.limits.session_bytes
-                paths = sorted(directory.glob("*.jsonl"))
-                for path in paths:
-                    if _is_link(path):
-                        raise ValueError("Diagnostic stream contains a link")
-                used = sum(path.stat().st_size for path in paths)
-                if stream != "baseline" and used + len(encoded) > budget:
-                    self._last_failure = "size_limit"
-                    return False
-                while paths and used + len(encoded) > budget:
-                    oldest = paths.pop(0)
-                    used -= oldest.stat().st_size
-                    oldest.unlink()
-                    if self._current.get(stream) == oldest:
+                position = 0
+                while position < len(events):
+                    paths = self._index.stream_paths(stream)
+                    used = sum(self._index.size(path) for path in paths)
+                    path = self._current.get(stream)
+                    if path is not None:
+                        self.safe_path(path)
+                        if not path.exists() or path.stat().st_size != self._index.size(path):
+                            self._degraded = True
+                            self._last_failure = "storage_error"
+                            return BatchWriteResult(written_events, written_bytes, "storage_error")
+                    if path is None or self._index.size(path) + len(events[position].encoded) > self.limits.segment_bytes:
+                        path = directory / f"{time.time_ns():020d}-{uuid4().hex}.jsonl"
+                        self._current[stream] = path
+                    self.safe_path(path)
+                    remaining = self.limits.segment_bytes - self._index.size(path)
+                    selected = []
+                    total = 0
+                    for event in events[position:]:
+                        if total + len(event.encoded) > min(remaining, 65536):
+                            break
+                        selected.append(event)
+                        total += len(event.encoded)
+                    if not selected:
                         self._current.pop(stream, None)
-                path = self._current.get(stream)
-                if path is None or not path.exists() or path.stat().st_size + len(encoded) > self.limits.segment_bytes:
-                    path = directory / f"{time.time_ns():020d}-{uuid4().hex}.jsonl"
-                    self._current[stream] = path
-                if _is_link(path):
-                    raise ValueError("Diagnostic segment is a link")
-                credit = self._credit_for_append(stream, len(encoded), budget)
-                self._write_bytes_locked(path, encoded, reservation=credit, append=True)
+                        continue
+                    if stream != "baseline" and used + total > budget:
+                        self._last_failure = "size_limit"
+                        return BatchWriteResult(written_events, written_bytes, "size_limit")
+                    while stream == "baseline" and paths and used + total > budget:
+                        oldest = paths.pop(0)
+                        if self._pins.get(oldest):
+                            self._last_failure = "size_limit"
+                            return BatchWriteResult(written_events, written_bytes, "size_limit")
+                        used -= self._index.size(oldest)
+                        self.safe_path(oldest).unlink()
+                        self._index.remove(oldest)
+                        if self._current.get(stream) == oldest:
+                            self._current.pop(stream, None)
+                    credit = self._credit_for_append(stream, total, budget)
+                    self._write_bytes_locked(path, b"".join(event.encoded for event in selected),
+                                             reservation=credit, append=True)
+                    written_events += len(selected)
+                    written_bytes += total
+                    position += len(selected)
                 self._degraded = False
                 self._last_failure = None
-                return True
+                return BatchWriteResult(written_events, written_bytes)
         except (OSError, StorageQuotaError, WriterActiveError, ValueError, TypeError) as exc:
             self._degraded = True
-            self._last_failure = "storage_low" if isinstance(exc, StorageQuotaError) else "storage_error"
+            low = isinstance(exc, StorageQuotaError) or (isinstance(exc, OSError) and exc.errno in {
+                errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC),
+            })
+            self._last_failure = "storage_low" if low else "storage_error"
+            return BatchWriteResult(written_events, written_bytes, self._last_failure)
+
+    def append(self, encoded: bytes, *, stream: str) -> bool:
+        try:
+            event = self.validate_event(encoded)
+        except ValueError:
             return False
+        return self.append_batch((event,), stream=stream).written_events == 1
 
     def status(self) -> dict:
         with self._mutex:
-            try:
-                free_bytes = shutil.disk_usage(self.root).free
-            except OSError:
-                free_bytes = None
-            return {"used_bytes": self.used_bytes, "reserved_bytes": self.reserved_bytes,
-                    "quota_bytes": self.limits.backend_bytes, "free_bytes": free_bytes,
+            return {"used_bytes": self._index.used_bytes, "reserved_bytes": self.reserved_bytes,
+                    "quota_bytes": self.limits.backend_bytes, "free_bytes": self._last_free_bytes,
+                    "measured_at": self._free_measured_at,
                     "storage_degraded": self._degraded,
                     "unsafe_paths": self._unsafe, "last_failure": self._last_failure}
 
@@ -308,6 +434,43 @@ class DiagnosticStore:
             return float(value["expires_at"])
         except (FileNotFoundError, ValueError, TypeError, KeyError):
             return None
+
+    def pin_read_view(self, filter: EventFilter, cutoff_at: datetime) -> ReadViewLease:
+        if cutoff_at.tzinfo is None:
+            raise ValueError("Cutoff must be timezone-aware")
+        with self._mutex:
+            descriptors = []
+            streams = ("baseline", filter.session_id) if filter.session_id else tuple(
+                sorted(path.name for path in (self.root / "events").iterdir() if path.is_dir() and not _is_link(path)))
+            try:
+                for stream in streams:
+                    if stream is None or (stream != "baseline" and valid_uuid(stream) is None):
+                        continue
+                    expiry = self._capture_expiry(stream) if stream != "baseline" else None
+                    for path in self._index.stream_paths(stream):
+                        path = self.safe_path(path)
+                        metadata = path.stat()
+                        identity, size = self._index.files[path]
+                        if (metadata.st_dev, metadata.st_ino, metadata.st_size) != (*identity, size):
+                            raise OSError("Diagnostic segment changed before pin")
+                        expires_at = (expiry if expiry is not None else metadata.st_mtime + (
+                            self.limits.baseline_seconds if stream == "baseline" else self.limits.capture_seconds + 3600))
+                        descriptors.append(SegmentDescriptor(path, stream, identity, size, expires_at, metadata.st_mtime_ns))
+                        self._pins[path] = self._pins.get(path, 0) + 1
+            except Exception:
+                for descriptor in descriptors:
+                    count = self._pins.get(descriptor.path, 0)
+                    if count <= 1:
+                        self._pins.pop(descriptor.path, None)
+                    else:
+                        self._pins[descriptor.path] = count - 1
+                raise
+            return ReadViewLease(self, tuple(descriptors), filter, cutoff_at.astimezone(timezone.utc))
+
+    def read_event_page(self, view: ReadViewLease, *, offset: int, limit: int):
+        if view.store is not self:
+            raise ValueError("Foreign diagnostic read view")
+        return page_from_view(view, offset=offset, limit=limit)
 
     def snapshot(self, filter: EventFilter, cutoff_at: datetime) -> SnapshotLease:
         with self._mutex:
@@ -392,6 +555,7 @@ class DiagnosticStore:
             path.rmdir()
         else:
             path.unlink()
+            self._index.remove(path)
 
     def sweep(self, now: datetime) -> CleanupResult:
         deleted = size = unsafe = 0
@@ -410,19 +574,27 @@ class DiagnosticStore:
                     if _is_link(path):
                         unsafe += 1
                         continue
+                    if self._pins.get(path):
+                        continue
                     stat = path.stat()
                     ttl = self.limits.baseline_seconds if stream == "baseline" else self.limits.capture_seconds + 3600
                     if (expiry is not None and expiry <= now.timestamp()) or stat.st_mtime < now.timestamp() - ttl:
                         path.unlink()
+                        self._index.remove(path)
                         deleted += 1
                         size += stat.st_size
                         if self._current.get(stream) == path:
                             self._current.pop(stream, None)
-                if stream != "baseline" and expiry is not None and expiry <= now.timestamp():
+                # Keep a capture with pinned segments (or unexpected files)
+                # until a later sweep. Other streams can still be cleaned.
+                if (stream != "baseline" and expiry is not None and expiry <= now.timestamp()
+                        and not any(directory.iterdir())):
                     credit = self._stream_credit.pop(stream, None)
                     if credit is not None:
                         credit.release()
                     directory.rmdir()
-                    self.safe_path(self.root / "capture-expiry" / (stream + ".json")).unlink(missing_ok=True)
+                    marker = self.safe_path(self.root / "capture-expiry" / (stream + ".json"))
+                    marker.unlink(missing_ok=True)
+                    self._index.remove(marker)
             self._unsafe += unsafe
         return CleanupResult(deleted, size, unsafe)

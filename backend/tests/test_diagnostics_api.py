@@ -1,6 +1,7 @@
 """Admin diagnostic access is role-checked per action, not per URL possession."""
 from types import SimpleNamespace
 from pathlib import Path
+import os
 import io
 import threading
 import time
@@ -58,6 +59,8 @@ def test_status_role_matrix(api, username, status):
     assert response.status_code == status
     if status == 200:
         assert response.json()["capabilities"]["bundle"] is True
+        assert response.json()["capabilities"]["capture_levels"] == ["standard", "detailed"]
+        assert response.json()["capabilities"]["policy_version"] == 1
         assert "events" not in response.json()
 
 
@@ -76,7 +79,7 @@ def test_session_and_bundle_lifecycle_with_fresh_role_check(api):
     assert queue.wait_idle(10)
     preview = client.post(f"/api/admin/diagnostics/bundles/{bundle_id}/preview")
     assert preview.status_code == 200, preview.text
-    assert preview.json()["manifest"]["format_version"] == 1
+    assert preview.json()["manifest"]["format_version"] == 2
     with session_scope() as db:
         viewed = db.scalars(select(AuditLog).where(
             AuditLog.action_type == "diagnostic_view", AuditLog.target_id == bundle_id)).one()
@@ -105,7 +108,7 @@ def test_manual_stop_waits_for_accepted_capture_event(api):
                              json={"scope": "system", "minutes": 5}).json()["id"]
     diagnostics = client.app.state.diagnostics
     entered, release = threading.Event(), threading.Event()
-    original = diagnostics.store.append
+    original = diagnostics.store.append_batch
 
     def slow_append(*args, **kwargs):
         if kwargs.get("stream") == session_id:
@@ -113,10 +116,10 @@ def test_manual_stop_waits_for_accepted_capture_event(api):
             release.wait(3)
         return original(*args, **kwargs)
 
-    diagnostics.store.append = slow_append
+    diagnostics.store.append_batch = slow_append
     response = []
     try:
-        assert diagnostics.recorder.emit("stage_started", fields={"stage": "parse"})
+        assert diagnostics.recorder.emit("operation_failed", fields={"error_code": "internal_error"})
         assert entered.wait(2)
         stopping = threading.Thread(target=lambda: response.append(
             client.post(f"/api/admin/diagnostics/sessions/{session_id}/stop")))
@@ -128,6 +131,7 @@ def test_manual_stop_waits_for_accepted_capture_event(api):
         assert len(response) == 1 and response[0].status_code == 200
     finally:
         release.set()
+        diagnostics.store.append_batch = original
     assert diagnostics.recorder.status()["expired_queue"] == 0
     assert list((diagnostics.store.root / "events" / session_id).glob("*.jsonl"))
 
@@ -198,14 +202,14 @@ def test_query_reports_partial_results_when_a_segment_is_unreadable(api, monkeyp
     assert queue.store.append(safe, stream="baseline")
     assert queue.store.append(safe, stream=str(uuid4()))
     blocked = next((queue.store.root / "events" / "baseline").glob("*.jsonl"))
-    original_open = Path.open
+    original_open = os.open
 
-    def deny_one_segment(path, mode="r", *args, **kwargs):
-        if path == blocked and mode == "rb":
+    def deny_one_segment(path, flags, *args, **kwargs):
+        if Path(path) == blocked and not flags & (os.O_WRONLY | os.O_RDWR):
             raise PermissionError("segment belongs to another owner")
-        return original_open(path, mode, *args, **kwargs)
+        return original_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "open", deny_one_segment)
+    monkeypatch.setattr(os, "open", deny_one_segment)
     response = client.post("/api/admin/diagnostics/events/query", json={"limit": 100})
     assert response.status_code == 200, response.text
     assert response.json()["partial"] is True
@@ -229,6 +233,17 @@ def test_delete_defers_physical_unlink_until_existing_lease_releases(api):
     lease.release()
     lease.release()
     assert not path.exists()
+
+
+def test_restored_ready_bundle_without_zip_is_gone(api):
+    client, queue = api
+    login(client, "demo.admin")
+    bundle_id = client.post("/api/admin/diagnostics/bundles", json={}).json()["id"]
+    queue.start()
+    assert queue.wait_idle(10)
+    (queue.store.root / "bundles" / (bundle_id + ".zip")).unlink()
+    response = client.get(f"/api/admin/diagnostics/bundles/{bundle_id}/download")
+    assert response.status_code == 410
 
 
 def test_http_download_finishes_after_delete_during_stream(api, monkeypatch):
@@ -339,3 +354,34 @@ def test_expiry_sweep_blocks_new_open_but_finishes_existing_lease(api):
     assert client.get(f"/api/admin/diagnostics/bundles/{bundle_id}/download").status_code == 410
     assert b"".join(lease.chunks()).startswith(b"PK")
     assert not path.exists()
+
+
+def test_query_does_not_materialize_snapshot_directory(api, monkeypatch):
+    client, queue = api
+    login(client, "demo.admin")
+    before = set((queue.store.root / "snapshots").iterdir())
+    def forbidden_copy(*args, **kwargs):
+        raise AssertionError("Query must not create a copied snapshot")
+    monkeypatch.setattr(queue.store, "snapshot", forbidden_copy)
+    response = client.post("/api/admin/diagnostics/events/query", json={"limit": 50})
+    assert response.status_code == 200, response.text
+    assert set((queue.store.root / "snapshots").iterdir()) == before
+
+
+def test_query_reports_changed_coverage_between_pages(api):
+    client, queue = api
+    login(client, "demo.admin")
+    now = datetime.now(timezone.utc)
+    def safe():
+        return encode_event({"schema_version": 1, "event_id": str(uuid4()), "boot_id": str(uuid4()),
+            "timestamp_utc": now.isoformat(), "component": "backend", "level": "ERROR",
+            "event_code": "operation_failed", "origin": "server", "error_code": "internal_error"})
+    assert queue.store.append(safe(), stream="baseline")
+    assert queue.store.append(safe(), stream="baseline")
+    first = client.post("/api/admin/diagnostics/events/query", json={"limit": 1}).json()
+    assert first["next_offset"] == 1
+    assert queue.store.append(safe(), stream="baseline")
+    second = client.post("/api/admin/diagnostics/events/query", json={"limit": 1,
+        "offset": 1, "cutoff_at": first["cutoff_at"], "view_token": first["view_token"]}).json()
+    assert second["partial"] is True
+    assert "coverage_changed" in second["gaps"]

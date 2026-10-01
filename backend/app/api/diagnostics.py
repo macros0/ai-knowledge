@@ -1,6 +1,8 @@
 """Admin-only control and read access to bounded diagnostic artifacts."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
+from hashlib import sha256
+import json
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -16,10 +18,10 @@ from app.db.session import session_scope
 from app.models.diagnostics import BundleOut, BundleRequest, EventQuery, SessionStart
 from app.services import audit
 from app.services.diagnostics.browser import get_browser_service
-from app.services.diagnostics.bundle import _safe_lines
 from app.services.diagnostics.bundle_queue import BundleQueueError, _utc
 from app.services.diagnostics.sessions import DiagnosticControlError
-from app.services.diagnostics.snapshot import collect_snapshot
+from app.services.diagnostics.schema import EventFilter
+from app.services.diagnostics.read_view import attach_frontend
 
 router = APIRouter(prefix="/admin/diagnostics", tags=["admin-diagnostics"])
 admin = Depends(require_role("admin"))
@@ -63,7 +65,9 @@ def status(request: Request, user: User = admin):
         "capabilities": {"capture": settings.diagnostics_capture_enabled,
                          "bundle": settings.diagnostics_bundle_enabled,
                          "download": settings.diagnostics_download_enabled,
-                         "baseline": settings.diagnostics_baseline_enabled},
+                         "baseline": settings.diagnostics_baseline_enabled,
+                         "capture_levels": ["standard", "detailed"],
+                         "policy_version": 1},
         "recorder": diag.recorder.status(), "session": diag.sessions.status(),
         "quota": diag.store.status(),
     }
@@ -82,26 +86,36 @@ def audited(user, action, target_type, target_id, value=None):
 @router.post("/events/query")
 def query_events(body: EventQuery, request: Request, user: User = admin):
     diag = runtime(request)
-    snapshot = collect_snapshot(body, cutoff_at=datetime.now(timezone.utc), store=diag.store,
-                                frontend_root=getattr(diag, "frontend_root", None),
-                                metadata_provider=lambda _: ({}, []),
-                                recorder_status=diag.recorder.status)
+    now = datetime.now(timezone.utc)
+    cutoff = body.cutoff_at or now
+    if cutoff.tzinfo is None or cutoff.utcoffset() != timedelta(0) or cutoff > now or now - cutoff > timedelta(days=7):
+        raise ApiError(422, "invalid_request", "Invalid diagnostic cutoff")
+    filt = EventFilter(
+        from_utc=body.from_utc,
+        to_utc=min(body.to_utc, cutoff) if body.to_utc else cutoff,
+        session_id=str(body.session_id) if body.session_id else None,
+        request_id=str(body.request_id) if body.request_id else None,
+        operation_id=str(body.operation_id) if body.operation_id else None,
+        doc_id=body.doc_id,
+    )
+    view = diag.store.pin_read_view(filt, cutoff)
     try:
-        rows = []
-        index = 0
-        for _, encoded in _safe_lines(snapshot.paths):
-            if index >= body.offset:
-                import json
-                rows.append(json.loads(encoded))
-                if len(rows) >= body.limit:
-                    break
-            index += 1
+        if getattr(diag, "frontend_root", None):
+            attach_frontend(view, diag.frontend_root)
+        token_source = [(str(item.path), item.identity, item.length, item.mtime_ns)
+                        for item in view.descriptors]
+        view_token = sha256(json.dumps(token_source, separators=(",", ":")).encode()).hexdigest()
+        changed = body.view_token is not None and body.view_token != view_token
+        page = diag.store.read_event_page(view, offset=body.offset, limit=body.limit)
         audited(user, "diagnostic_view", "diagnostic_event_query", None,
-                {**body.model_dump(mode="json", exclude_none=True), "returned_count": len(rows)})
-        return {"events": rows, "counts": snapshot.counts, "partial": snapshot.partial,
-                "next_offset": body.offset + len(rows) if len(rows) == body.limit else None}
+                {**body.model_dump(mode="json", exclude_none=True), "returned_count": len(page.events)})
+        return {"events": page.events, "counts": page.counts,
+                "partial": page.partial or changed,
+                "gaps": (*page.gaps, "coverage_changed") if changed else page.gaps,
+                "next_offset": page.next_offset, "view_token": view_token,
+                "cutoff_at": cutoff.isoformat()}
     finally:
-        snapshot.release()
+        view.release()
 
 
 @router.post("/sessions", status_code=201)
@@ -109,7 +123,8 @@ def start_session(body: SessionStart, request: Request, user: User = admin):
     diag = runtime(request)
     require_flag(diag.settings.diagnostics_capture_enabled)
     try:
-        return diag.sessions.start(body.scope, body.minutes, user, doc_id=body.doc_id)
+        return diag.sessions.start(body.scope, body.minutes, user, doc_id=body.doc_id,
+                                   capture_level=body.capture_level)
     except DiagnosticControlError as exc:
         error(exc)
 

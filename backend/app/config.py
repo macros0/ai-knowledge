@@ -55,6 +55,16 @@ class Settings(BaseSettings):
     diagnostics_default_minutes: int = Field(default=15, ge=5, le=60)
     diagnostics_max_pending: int = Field(default=2, ge=1, le=2)
     diagnostics_max_ops_per_hour: int = Field(default=3, ge=1, le=3)
+    diagnostics_aggregate_interval_seconds: int = Field(default=5, ge=1, le=10)
+    diagnostics_success_limit_per_second: int = Field(default=10, ge=1, le=100)
+    diagnostics_trace_limit_per_second: int = Field(default=1, ge=1, le=100)
+    diagnostics_slow_limit_per_second: int = Field(default=20, ge=1, le=100)
+    diagnostics_max_inflight_traces: int = Field(default=512, ge=1, le=512)
+    diagnostics_slow_http_search_ms: int = Field(default=1000, ge=1, le=300000)
+    diagnostics_slow_qdrant_db_ms: int = Field(default=250, ge=1, le=300000)
+    diagnostics_slow_embeddings_proxy_ms: int = Field(default=1000, ge=1, le=300000)
+    diagnostics_slow_llm_chat_ms: int = Field(default=30000, ge=1, le=300000)
+    diagnostics_slow_pdf_ms: int = Field(default=5000, ge=1, le=300000)
     llm_raw_debug_enabled: bool = False
 
     @field_validator("diagnostics_dir", mode="before")

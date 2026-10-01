@@ -39,9 +39,15 @@ async function events(root) {
     .map(async (name) => (await readFile(name, "utf8")).trim().split("\n").filter(Boolean).map(JSON.parse)))).flat();
 }
 
+const capturePolicy = { level: "detailed", version: 1, aggregate_interval_ms: 5000,
+  success_limit_per_second: 100, trace_limit_per_second: 20,
+  slow_limit_per_second: 20, max_inflight_traces: 512,
+  slow_thresholds_ms: { http_search: 1000, qdrant_db: 2000,
+    embeddings_proxy: 2000, llm_chat: 5000, pdf: 10000 } };
 async function activate(controlPath, now, sessionId = randomUUID()) {
-  await writeFile(controlPath, JSON.stringify({ schema_version: 1, boot_id: randomUUID(), active: true,
-    session_id: sessionId, scope: "interface", deadline: now / 1000 + 300, lease_until: now / 1000 + 10 }));
+  await writeFile(controlPath, JSON.stringify({ schema_version: 2, boot_id: randomUUID(), revision: 1, active: true,
+    session_id: sessionId, scope: "interface", deadline: now / 1000 + 300, lease_until: now / 1000 + 10,
+    policy: capturePolicy }));
   return sessionId;
 }
 
@@ -71,6 +77,58 @@ test("shutdown IPC acknowledges release before a normal restart", async (t) => {
   assert.equal(await next.start(), true);
   await assert.rejects(stat(path.join(spool, "status.json.tmp")), { code: "ENOENT" });
   await next.stop();
+});
+
+test("normal shutdown drains accepted capture events before revoking control", async (t) => {
+  const { recorder, controlPath, spool } = await setup(t);
+  const sessionId = await activate(controlPath, Date.now());
+  await recorder.refreshControl();
+  assert.equal(recorder.emit("request_finished", { http_status: 200 }), true);
+  assert.equal(await recorder.stop(), true);
+  const captured = (await events(path.join(spool, "events", sessionId)))
+    .filter((event) => event.diagnostic_session_id === sessionId);
+  assert.equal(captured.filter((event) => event.event_code === "request_finished").length, 1);
+  assert.equal(recorder.status().expired_queue, 0);
+});
+
+test("manual capture stop preserves an event admitted before control revocation", async (t) => {
+  const { recorder, controlPath, spool } = await setup(t);
+  const sessionId = await activate(controlPath, Date.now());
+  await recorder.refreshControl();
+  assert.equal(recorder.emit("proxy_failed", { request_id: randomUUID(), http_status: 502 }), true);
+  recorder.control = null; // Control can be revoked before setImmediate drains the accepted queue.
+  await recorder.flush();
+  const captured = (await events(path.join(spool, "events", sessionId)))
+    .filter((event) => event.diagnostic_session_id === sessionId);
+  assert.equal(captured.filter((event) => event.event_code === "proxy_failed").length, 1);
+  assert.equal(recorder.status().expired_queue, 0);
+});
+
+test("renewed lease preserves an event admitted by the same session", async (t) => {
+  let mono = 0;
+  const { recorder, controlPath, spool } = await setup(t, { monotonic: () => mono });
+  const sessionId = await activate(controlPath, Date.now());
+  await recorder.refreshControl();
+  recorder.control.monotonicExpiry = 100;
+  assert.equal(recorder.emit("proxy_failed", { request_id: randomUUID(), http_status: 502 }), true);
+  mono = 200;
+  recorder.control.monotonicExpiry = 10000; // Backend renewed the same capture session.
+  await recorder.flush();
+  const captured = await events(path.join(spool, "events", sessionId));
+  assert.equal(captured.filter((event) => event.event_code === "proxy_failed").length, 1);
+  assert.equal(recorder.status().expired_queue, 0);
+});
+
+test("accepted capture queue still obeys segment retention expiry", async (t) => {
+  const { recorder, controlPath, spool } = await setup(t);
+  const sessionId = await activate(controlPath, Date.now());
+  await recorder.refreshControl();
+  assert.equal(recorder.emit("proxy_failed", { request_id: randomUUID(), http_status: 502 }), true);
+  recorder.control = null;
+  recorder.sessions[sessionId] = Date.now() - 1;
+  await recorder.flush();
+  await assert.rejects(stat(path.join(spool, "events", sessionId)), { code: "ENOENT" });
+  assert.equal(recorder.status().expired_queue, 1);
 });
 
 test("production runner survives a normal SIGTERM and starts again on the same spool", { skip: process.platform === "win32" }, async (t) => {
@@ -189,6 +247,25 @@ test("capture lease expires monotonically despite wall clock rollback", async (t
   assert.equal(recorder.emit("request_finished", { http_status: 200 }), false);
   await recorder.flush();
   assert.equal((await events(spool)).filter((event) => event.diagnostic_session_id === sessionId).length, 1);
+  assert.equal(recorder.status().invalid, 0);
+});
+
+test("missing or expired control is not counted as an invalid event", async (t) => {
+  let wall = Date.now();
+  const { recorder, controlPath } = await setup(t, { now: () => wall });
+  assert.equal(recorder.status().invalid, 0);
+  await activate(controlPath, wall);
+  await recorder.refreshControl();
+  wall += 11000;
+  await recorder.refreshControl();
+  const expiredProjection = JSON.parse(await readFile(controlPath, "utf8"));
+  await writeFile(controlPath, JSON.stringify({ ...expiredProjection, revision: 2 }));
+  await recorder.refreshControl();
+  assert.equal(recorder.status().invalid, 0);
+  assert.equal(recorder.emit("request_finished", { http_status: 200 }), false);
+  await writeFile(controlPath, JSON.stringify({ schema_version: 999, lease_until: wall / 1000 + 10 }));
+  await recorder.refreshControl();
+  assert.equal(recorder.status().invalid, 1);
 });
 
 test("capture revocation drops queued detail without deleting baseline", async (t) => {
@@ -199,7 +276,7 @@ test("capture revocation drops queued detail without deleting baseline", async (
   // Expire before yielding to the writer. A projection update across processes
   // is allowed the documented ten-second lease, not immediate synchronous revocation.
   mono = 11000;
-  await writeFile(controlPath, JSON.stringify({ schema_version: 1, boot_id: randomUUID(), active: false, lease_until: Date.now() / 1000 + 10 }));
+  await writeFile(controlPath, JSON.stringify({ schema_version: 2, boot_id: randomUUID(), revision: 2, active: false, lease_until: Date.now() / 1000 + 10 }));
   await recorder.refreshControl(); await recorder.flush();
   assert.equal((await events(spool)).filter((event) => event.event_code === "request_finished").length, 0);
   assert.equal(recorder.emit("proxy_failed", { error_code: "network_error" }), true);
@@ -266,6 +343,7 @@ test("actual twenty MiB budget includes metadata and rotates a full baseline", a
   await recorder.flush();
   const directory = path.join(spool, "events", "baseline");
   for (let i = 0; i < 4; i++) await writeFile(path.join(directory, `${Date.now() - 10000 + i}_${randomUUID()}.jsonl`), Buffer.alloc(5 * 1048576, 32));
+  await recorder.maintenance(); // External changes are discovered by reconciliation.
   recorder.emit("proxy_failed", { request_id: randomUUID() }); await recorder.flush();
   const actual = (await Promise.all((await files(spool)).map(async (filename) => (await stat(filename)).size))).reduce((a, b) => a + b, 0);
   assert.ok(actual <= budget);
@@ -277,7 +355,7 @@ test("stopped capture is removed after one day and baseline after seven days", a
   const { recorder, spool, controlPath } = await setup(t, { now: () => wall });
   const sessionId = await activate(controlPath, wall); await recorder.refreshControl();
   recorder.emit("request_finished", { http_status: 200 }); await recorder.flush();
-  await writeFile(controlPath, JSON.stringify({ schema_version: 1, boot_id: randomUUID(), active: false, lease_until: wall / 1000 + 10 }));
+  await writeFile(controlPath, JSON.stringify({ schema_version: 2, boot_id: randomUUID(), revision: 2, active: false, lease_until: wall / 1000 + 10 }));
   await recorder.refreshControl();
   wall += 25 * 3600000; await recorder.maintenance();
   assert.ok(!(await events(spool)).some((event) => event.diagnostic_session_id === sessionId));

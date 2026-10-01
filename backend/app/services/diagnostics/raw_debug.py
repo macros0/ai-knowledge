@@ -26,6 +26,7 @@ def _sweep(store, now):
         path = store.safe_path(path)
         if _OWNED_FILE.fullmatch(path.name) and path.is_file() and now.timestamp() - path.stat().st_mtime >= RAW_TTL_SECONDS:
             path.unlink()
+            store.note_deleted(path)
             deleted += 1
     return deleted
 

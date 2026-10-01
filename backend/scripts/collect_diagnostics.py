@@ -69,6 +69,25 @@ def _container_state(raw: bytes) -> dict:
     return result
 
 
+def _offline_policy_projection(root: Path):
+    """Best-effort safe policy from the last control projection, never raw metadata."""
+    from app.services.diagnostics.policy import safe_policy_snapshot
+    from app.services.diagnostics.sanitize import valid_uuid
+    path = root / "control" / "capture.json"
+    try:
+        if path.stat().st_size > 4096:
+            return []
+        value = json.loads(path.read_bytes())
+        policy = safe_policy_snapshot(value.get("policy"))
+        identity = valid_uuid(value.get("session_id"))
+        if value.get("schema_version") != 2 or value.get("active") is not True or not policy or not identity:
+            return []
+        return [{"session_id": identity, "capture_level": policy["level"],
+                 "policy_version": 1, "policy_snapshot": policy}]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
 def _collect(root: Path, output: Path, since: datetime, until: datetime,
              containers: dict | None = None, containers_incomplete: bool = False) -> int:
     from app.models.diagnostics import BundleRequest
@@ -122,6 +141,7 @@ def _collect(root: Path, output: Path, since: datetime, until: datetime,
             snapshot = collect_snapshot(request, cutoff_at=datetime.now(timezone.utc),
                                         store=store, metadata_provider=_unavailable)
             try:
+                snapshot.capture_policies = _offline_policy_projection(root)
                 snapshot.runtime = {**snapshot.runtime, "containers": containers or {}}
                 if not containers or containers_incomplete:
                     snapshot.gaps += ("container_state_unavailable",)

@@ -20,7 +20,7 @@ from app.models.diagnostics import BundleOut, BundleRequest
 from app.services import audit
 from .bundle import BuiltBundle, BundleTooLarge, estimate_bundle_upper
 from .sanitize import valid_uuid
-from .snapshot import collect_snapshot
+from .snapshot import collect_prepared_snapshot
 from .store import StorageQuotaError, _is_link
 
 
@@ -140,6 +140,11 @@ class DiagnosticBundleQueue:
             self._condition.notify_all()
             return _out(row)
 
+    def _unlink_owned(self, path):
+        path = self.store.safe_path(path)
+        path.unlink(missing_ok=True)
+        self.store.note_deleted(path)
+
     def recover(self):
         with self._condition:
             if self._running or self._active:
@@ -163,7 +168,7 @@ class DiagnosticBundleQueue:
                 if valid_uuid(item.stem) is None:
                     continue
                 self.store.safe_path(item)
-                item.unlink(missing_ok=True)
+                self._unlink_owned(item)
             for reservation in self._reservations.values():
                 reservation.release()
             self._reservations.clear()
@@ -208,14 +213,25 @@ class DiagnosticBundleQueue:
                 row.status = "building"
                 request = BundleRequest.model_validate(row.request)
                 cutoff = _utc(row.cutoff_at)
-            snapshot = collect_snapshot(request, cutoff_at=cutoff, store=self.store,
-                                        frontend_root=self.frontend_root,
-                                        recorder_status=self.recorder_status,
-                                        recorder_barrier=self.recorder_barrier)
+            def register_child(child):
+                with self._condition:
+                    if not self._running:
+                        child.kill()
+                        raise RuntimeError("Bundle queue stopping")
+                    self._child = child
+            snapshot = collect_prepared_snapshot(request, cutoff_at=cutoff, store=self.store,
+                                                 job_id=bundle_id, frontend_root=self.frontend_root,
+                                                 recorder_status=self.recorder_status,
+                                                 recorder_barrier=self.recorder_barrier,
+                                                 on_child=register_child)
+            with self._condition:
+                self._child = None
+                self._condition.notify_all()
             built = self._build_isolated(snapshot, temp, bundle_id)
             snapshot.release()
             snapshot = None
             os.replace(temp, final)
+            self.store.note_rename(temp, final)
             # Rename alone is insufficient; only this audited transaction makes
             # the download endpoint eligible to open final.
             with session_scope() as db:
@@ -235,11 +251,14 @@ class DiagnosticBundleQueue:
                     new_value={"size_bytes": built.size_bytes, "sha256": built.sha256},
                 )
         except Exception as exc:
-            temp.unlink(missing_ok=True)
-            final.unlink(missing_ok=True)
+            self._unlink_owned(temp)
+            self._unlink_owned(final)
             code = codes.DIAGNOSTIC_BUNDLE_TOO_LARGE if isinstance(exc, BundleTooLarge) else codes.DIAGNOSTIC_BUNDLE_FAILED
             self._fail(bundle_id, code)
         finally:
+            with self._condition:
+                self._child = None
+                self._condition.notify_all()
             if snapshot:
                 snapshot.release()
 
@@ -258,16 +277,27 @@ class DiagnosticBundleQueue:
                 "cutoff_at": snapshot.cutoff_at.isoformat(), "runtime": snapshot.runtime,
                 "operations": snapshot.operations, "counts": snapshot.counts,
                 "partial": snapshot.partial, "gaps": snapshot.gaps,
+                "capture_policies": snapshot.capture_policies,
+                "normalized": snapshot.normalized,
                 "limits": vars(self.store.limits), "reserved_upper": upper,
             }, separators=(",", ":")).encode("utf-8")
             if len(payload) > 4 * 1048576:
                 raise ValueError("Worker payload too large")
-            options = {"cwd": str(Path(__file__).resolve().parents[3]),
-                       "stdin": subprocess.PIPE, "stdout": subprocess.PIPE,
+            module_root = str(Path(__file__).resolve().parents[3])
+            options = {"stdin": subprocess.PIPE, "stdout": subprocess.PIPE,
                        "stderr": subprocess.DEVNULL}
             if os.name == "nt":
+                options["cwd"] = module_root
                 options["creationflags"] = (getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
                                             | getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            else:
+                # The parent holds the application and SQL stack. fork/exec briefly
+                # duplicates its RSS in the child before exec; posix_spawn avoids
+                # that spike. Python-created descriptors are CLOEXEC by default.
+                options["close_fds"] = False
+                env = os.environ.copy()
+                env["PYTHONPATH"] = os.pathsep.join(filter(None, (module_root, env.get("PYTHONPATH"))))
+                options["env"] = env
             with self._condition:
                 if not self._running:
                     raise RuntimeError("Bundle queue stopping")
@@ -301,7 +331,11 @@ class DiagnosticBundleQueue:
                 raise RuntimeError("Invalid bundle builder result")
             return BuiltBundle(destination, destination.name, size, digest, manifest)
         finally:
-            reservation.release()
+            try:
+                if destination.exists():
+                    self.store.commit_external_growth(reservation, destination)
+            finally:
+                reservation.release()
 
     def _run(self):
         while True:
@@ -363,7 +397,7 @@ class DiagnosticBundleQueue:
                         row = db.get(DiagnosticBundle, lease.bundle_id)
                         retired = row is not None and row.status in {"deleted", "expired"}
                     if retired:
-                        self.store.safe_path(self.store.root / "bundles" / (lease.bundle_id + ".zip")).unlink(missing_ok=True)
+                        self._unlink_owned(self.store.safe_path(self.store.root / "bundles" / (lease.bundle_id + ".zip")))
                 except Exception:
                     # Maintenance will clean a retired file when DB recovers.
                     pass
@@ -412,6 +446,10 @@ class DiagnosticBundleQueue:
                 if handle:
                     handle.close()
                 raise
+            except FileNotFoundError as exc:
+                if handle:
+                    handle.close()
+                raise BundleQueueError("diagnostic_bundle_gone") from exc
             except Exception as exc:
                 if handle:
                     handle.close()
@@ -441,7 +479,7 @@ class DiagnosticBundleQueue:
             except Exception as exc:
                 raise BundleQueueError("diagnostic_audit_unavailable") from exc
             if self._downloads.get(bundle_id, 0) == 0:
-                self.store.safe_path(self.store.root / "bundles" / (bundle_id + ".zip")).unlink(missing_ok=True)
+                self._unlink_owned(self.store.safe_path(self.store.root / "bundles" / (bundle_id + ".zip")))
             return output
 
     def sweep(self, now=None):
@@ -464,7 +502,7 @@ class DiagnosticBundleQueue:
                         DiagnosticBundle.status.in_(("deleted", "expired")))))
                 for bundle_id in retired_ids:
                     if self._downloads.get(bundle_id, 0) == 0:
-                        self.store.safe_path(self.store.root / "bundles" / (bundle_id + ".zip")).unlink(missing_ok=True)
+                        self._unlink_owned(self.store.safe_path(self.store.root / "bundles" / (bundle_id + ".zip")))
                 return len(retiring)
             except Exception as exc:
                 raise BundleQueueError("diagnostic_audit_unavailable") from exc
@@ -485,7 +523,7 @@ class DiagnosticBundleQueue:
                     paths = [self.store.safe_path(self.store.root / "bundles" / (row.id + suffix))
                              for suffix in (".part", ".zip")]
                     for path in paths:
-                        path.unlink(missing_ok=True)
+                        self._unlink_owned(path)
                     if any(path.exists() for path in paths):
                         continue
                     db.delete(row)

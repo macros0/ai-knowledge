@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n/LocaleContext";
 import { useToast } from "./Toast";
 import Modal from "./Modal";
 import { apiToast } from "@/lib/apiToast.mjs";
-import { diagnosticActions, diagnosticBundleRequest, diagnosticGapKey, diagnosticReasonKey, diagnosticStatusKey, remainingSeconds } from "@/lib/diagnostics.mjs";
+import { diagnosticActions, diagnosticBundleRequest, diagnosticCoverageSummary, diagnosticGapKey, diagnosticReasonKey, diagnosticStatusKey, supportedCaptureLevels, remainingSeconds } from "@/lib/diagnostics.mjs";
 import { createDiagnosticBundle, deleteDiagnosticBundle, diagnosticDownloadUrl,
   getDiagnosticsStatus, inviteDiagnosticBrowser, listDiagnosticBundles,
   previewDiagnosticBundle, queryDiagnosticEvents, startDiagnosticSession,
@@ -22,6 +22,7 @@ export default function DiagnosticsPanel() {
   const [status, setStatus] = useState(null);
   const [stale, setStale] = useState(true);
   const [scope, setScope] = useState("system");
+  const [captureLevel, setCaptureLevel] = useState("standard");
   const [minutes, setMinutes] = useState(15);
   const [docId, setDocId] = useState("");
   const [from, setFrom] = useState("");
@@ -72,6 +73,15 @@ export default function DiagnosticsPanel() {
 
   const actions = diagnosticActions(status, { stale });
   const active = status?.session?.session;
+  const levels = supportedCaptureLevels(status);
+  // A session may have been started in another tab. Disabled controls must
+  // describe that session rather than this tab's unsent form choices.
+  const shownLevel = active?.policy_version === 1 && levels.includes(active.capture_level)
+    ? active.capture_level : captureLevel;
+  const shownScope = active?.scope || scope;
+  const activeMinutes = active ? Math.round((Date.parse(active.expires_at) - Date.parse(active.created_at)) / 60000) : null;
+  const shownMinutes = activeMinutes > 0 ? activeMinutes : minutes;
+  const shownDocId = active?.scope === "document" ? active.doc_id || "" : docId;
   const remaining = active ? remainingSeconds(active.expires_at, status?.server_now, elapsed) : null;
   const filters = () => ({
     ...(from ? { from_utc: new Date(from).toISOString() } : {}),
@@ -105,31 +115,46 @@ export default function DiagnosticsPanel() {
     <section className="panel diagnostics-card" aria-label={t("diagnostics.statusTitle")}>
       <h2>{t("diagnostics.statusTitle")}</h2>
       <p role="status">{t(`diagnostics.session.${actions.sessionState}`)}</p>
+      <p>{t("diagnostics.baselineTitle")}: {status?.capabilities?.baseline == null ? "—" :
+        t(status.capabilities.baseline ? "diagnostics.baselineOn" : "diagnostics.baselineOff")}</p>
       {stale && <p role="alert">{t("diagnostics.statusUnavailable")}</p>}
       {status?.runtime?.failure_code && <p role="alert">{t("diagnostics.statusDegraded")}</p>}
       {status?.session?.audit_pending && <p role="alert">{t("diagnostics.auditPending")}</p>}
       {status?.quota?.storage_degraded && <p role="alert">{t("diagnostics.storageLow")}</p>}
       <p>{t("diagnostics.space", { used: mib(status?.quota?.used_bytes), quota: mib(status?.quota?.quota_bytes), free: mib(status?.quota?.free_bytes) })}</p>
+      {active && <p>{t("diagnostics.activeScope")}: {t(`diagnostics.scope.${active.scope}`)} ·
+        {t("diagnostics.level")}: {t(`diagnostics.level.${active.policy_version === 1 && ["standard", "detailed"].includes(active.capture_level) ? active.capture_level : "legacy"}`)}</p>}
       {active && <p>{t("diagnostics.autoStop")}: {date(active.expires_at)} · {remaining ?? "—"} {t("diagnostics.seconds")}</p>}
       {status?.session?.last_session?.stop_reason && !active && <p>{t("diagnostics.stopReason")}: {t(diagnosticReasonKey(status.session.last_session.stop_reason))}</p>}
       {(status?.recorder?.dropped > 0 || status?.recorder?.expired_queue > 0 || status?.recorder?.drain_timeouts > 0) &&
         <p role="alert">{t("diagnostics.partialNotice")}</p>}
-      {status?.recorder?.sampled_success > 0 &&
-        <p>{t("diagnostics.sampledSuccess", { count: status.recorder.sampled_success })}</p>}
+      {status?.recorder?.aggregated_success > 0 &&
+        <p>{t("diagnostics.aggregatedSuccess", { count: status.recorder.aggregated_success })}</p>}
+      {status?.recorder?.sampled_out_traces > 0 &&
+        <p>{t("diagnostics.sampledTraces", { count: status.recorder.sampled_out_traces })}</p>}
     </section>
 
     <section className="panel diagnostics-card" aria-label={t("diagnostics.captureTitle")}>
       <h2>{t("diagnostics.captureTitle")}</h2>
+      {status && status.capabilities?.capture && levels.length === 0 &&
+        <p role="alert">{t("diagnostics.levelsUnsupported")}</p>}
+      <p className="muted">{t(`diagnostics.levelDescription.${shownLevel}`)}</p>
       <div className="diagnostics-controls">
-        <label>{t("diagnostics.scope")} <select value={scope} onChange={(event) => setScope(event.target.value)} disabled={busy || !!active}>
+        <label>{t("diagnostics.level")} <select value={shownLevel} onChange={(event) => setCaptureLevel(event.target.value)}
+          disabled={busy || !!active || levels.length === 0}>
+          {levels.map((level) => <option key={level} value={level}>{t(`diagnostics.level.${level}`)}</option>)}
+        </select></label>
+        <label>{t("diagnostics.scope")} <select value={shownScope} onChange={(event) => setScope(event.target.value)} disabled={busy || !!active}>
           {["system", "document", "search_chat", "interface"].map((item) => <option key={item} value={item}>{t(`diagnostics.scope.${item}`)}</option>)}
         </select></label>
-        <label>{t("diagnostics.minutes")} <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} disabled={busy || !!active}>
+        <label>{t("diagnostics.minutes")} <select value={shownMinutes} onChange={(event) => setMinutes(Number(event.target.value))} disabled={busy || !!active}>
           {[5, 15, 30, 60].map((value) => <option key={value} value={value}>{value}</option>)}
+          {active && ![5, 15, 30, 60].includes(shownMinutes) && <option value={shownMinutes}>{shownMinutes}</option>}
         </select></label>
-        {scope === "document" && <label>{t("diagnostics.documentId")} <input value={docId} onChange={(event) => setDocId(event.target.value)} maxLength={32} disabled={busy || !!active} /></label>}
+        {shownScope === "document" && <label>{t("diagnostics.documentId")} <input value={shownDocId} onChange={(event) => setDocId(event.target.value)} maxLength={32} disabled={busy || !!active} /></label>}
         <button type="button" className="btn" disabled={busy || !actions.canStart || scope === "document" && !/^[a-f0-9]{16,32}$/.test(docId)}
-          onClick={() => action(() => startDiagnosticSession({ scope, minutes, ...(scope === "document" ? { doc_id: docId } : {}) }))}>{t("diagnostics.start")}</button>
+          onClick={() => action(() => startDiagnosticSession({ scope, minutes, capture_level: captureLevel,
+            ...(scope === "document" ? { doc_id: docId } : {}) }))}>{t("diagnostics.start")}</button>
         <button type="button" className="btn ghost" disabled={busy || !actions.canStop}
           onClick={() => action(() => stopDiagnosticSession(active.id))}>{t("diagnostics.stop")}</button>
       </div>
@@ -151,7 +176,8 @@ export default function DiagnosticsPanel() {
         <button type="button" className="btn" disabled={busy || stale} onClick={() => action(async () => {
           const query = { ...filters(), to_utc: to ? new Date(to).toISOString() : status.server_now, limit: 100 };
           const result = await queryDiagnosticEvents(query);
-          setEvents({ ...result, query });
+          setEvents({ ...result, query: { ...query, cutoff_at: result.cutoff_at,
+            view_token: result.view_token } });
         })}>{t("diagnostics.refreshEvents")}</button>
       </div>
       {events?.partial && <p role="alert">{t("diagnostics.partialPeriod")}</p>}
@@ -169,6 +195,7 @@ export default function DiagnosticsPanel() {
           setEvents((current) => current?.query === currentQuery ? {
             ...current, events: [...current.events, ...next.events], next_offset: next.next_offset,
             partial: current.partial || next.partial,
+            gaps: [...new Set([...(current.gaps || []), ...(next.gaps || [])])],
           } : current);
         })}>{t("diagnostics.moreEvents")}</button>}
     </section>
@@ -205,6 +232,10 @@ export default function DiagnosticsPanel() {
         <p>{t("diagnostics.cutoff")}: {date(preview.manifest.cutoff_at)}</p>
         {preview.manifest.gaps?.length > 0 && <p role="alert">{t("diagnostics.gaps")}: {preview.manifest.gaps.map((gap) => t(diagnosticGapKey(gap))).join(" ")}</p>}
         <h4>{t("diagnostics.coverage")}</h4>
+        <ul>{diagnosticCoverageSummary(preview.manifest).map(({ mode, count }) =>
+          <li key={mode}>{t(`diagnostics.coverageMode.${mode}`)}: {count}</li>)}</ul>
+        {Object.values(preview.manifest.loss_counters_state || {}).includes("unknown") &&
+          <p>{t("diagnostics.lossCountersUnknown")}</p>}
         <ul>{Object.entries(preview.manifest.coverage_utc || {}).map(([component, range]) =>
           <li key={component}>{component}: {date(range.from_utc)} — {date(range.to_utc)}</li>)}</ul>
       </div>}

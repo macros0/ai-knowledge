@@ -41,7 +41,8 @@ class DiagnosticRuntime:
             self.store = DiagnosticStore(settings.diagnostics_dir, settings.diagnostics_limits())
             self.sessions = DiagnosticSessionService(self.store, settings, boot_id=self.boot_id)
             self.recorder = DiagnosticRecorder(
-                self.store, capture_selector=self.sessions.active_for, boot_id=self.boot_id,
+                self.store, capture_selector=self.sessions.active_for,
+                capture_view_selector=self.sessions.runtime_view_for, boot_id=self.boot_id,
                 baseline_enabled=settings.diagnostics_baseline_enabled,
                 on_capture_written=self.sessions.record_written,
                 on_capture_failed=self.sessions.recording_failed,
@@ -128,7 +129,11 @@ class DiagnosticRuntime:
 
     def _maintenance_loop(self):
         last_sweep = time.monotonic()
-        while not self._stop_event.wait(5):
+        # Session starts are independent of this scheduler. Poll more often
+        # than tick's five-second renewal period so a start just after a loop
+        # wake cannot defer the first renewal until the ten-second lease ends.
+        # tick still writes the projection only once per five seconds.
+        while not self._stop_event.wait(1):
             self.heartbeat_once()
             if time.monotonic() - last_sweep >= self.store.limits.maintenance_seconds:
                 self.maintain_once()

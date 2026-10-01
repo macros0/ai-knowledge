@@ -6,12 +6,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.services.diagnostics.schema import CaptureScope
+from app.services.diagnostics.policy import CaptureLevel
 
 
 class SessionStart(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scope: CaptureScope = "system"
     minutes: int = Field(default=15, ge=5, le=60)
+    capture_level: CaptureLevel = "standard"
     doc_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{16,32}$")
 
     @model_validator(mode="after")
@@ -25,6 +27,9 @@ class SessionOut(BaseModel):
     id: str
     status: Literal["starting", "active", "stopped"]
     scope: CaptureScope
+    capture_level: CaptureLevel = "standard"
+    policy_version: int = 1
+    policy_snapshot: dict = Field(default_factory=dict)
     doc_id: str | None = None
     created_at: datetime
     expires_at: datetime
@@ -61,6 +66,8 @@ class BundleRequest(BaseModel):
 
 
 class EventQuery(BundleRequest):
+    cutoff_at: datetime | None = None
+    view_token: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     limit: int = Field(default=50, ge=1, le=100)
     offset: int = Field(default=0, ge=0, le=100000)
 

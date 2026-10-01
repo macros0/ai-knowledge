@@ -11,7 +11,8 @@ from uuid import UUID
 from app import error_codes, services
 from app.services import problem_codes
 from .schema import (
-    BASE_FIELDS, COUNT_KEYS, DEPENDENCIES, EVENT_FIELDS, MAX_EVENT_BYTES,
+    AGGREGATE_BUCKET_KEYS, AGGREGATE_COUNT_KEYS, BASE_FIELDS, COUNT_KEYS, DEPENDENCIES,
+    EVENT_FIELDS_V1, EVENT_FIELDS_V2, MAX_EVENT_BYTES,
     MAX_STACK_FRAMES, ROUTE_TEMPLATES, STAGES, FRONTEND_FRAME_MODULES,
 )
 
@@ -74,12 +75,16 @@ def _frames(value: object, component: str) -> list[dict] | None:
 def sanitize_event(raw: Mapping[str, object]) -> dict | None:
     if not isinstance(raw, Mapping):
         return None
+    version = raw.get("schema_version")
+    if type(version) is not int or version not in (1, 2):
+        return None
+    event_fields = EVENT_FIELDS_V1 if version == 1 else EVENT_FIELDS_V2
     code = raw.get("event_code")
-    if type(code) is not str or code not in EVENT_FIELDS:
+    if type(code) is not str or code not in event_fields:
         return None
-    if set(raw) - (BASE_FIELDS | EVENT_FIELDS[code]):
+    if set(raw) - (BASE_FIELDS | event_fields[code]):
         return None
-    if type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
+    if code == "success_aggregate" and ("request_id" in raw or "operation_id" in raw):
         return None
     if type(raw.get("component")) is not str or raw["component"] not in {"backend", "frontend", "browser"}:
         return None
@@ -99,7 +104,8 @@ def sanitize_event(raw: Mapping[str, object]) -> dict | None:
         if key in raw and (type(raw[key]) is not str or not _OPAQUE.fullmatch(raw[key])):
             return None
     try:
-        for key in ("timestamp_utc", "first_timestamp_utc", "last_timestamp_utc"):
+        for key in ("timestamp_utc", "first_timestamp_utc", "last_timestamp_utc",
+                    "window_start_utc", "window_end_utc"):
             if key != "timestamp_utc" and key not in raw:
                 continue
             stamp = raw.get(key)
@@ -114,6 +120,13 @@ def sanitize_event(raw: Mapping[str, object]) -> dict | None:
             or "repeats" not in raw.get("counts", {})
             or result["first_timestamp_utc"] > result["last_timestamp_utc"]
         ):
+            return None
+        if code == "success_aggregate" and (
+            not {"window_start_utc", "window_end_utc", "counts", "outcome"}.issubset(raw)
+            or result["window_start_utc"] > result["window_end_utc"]
+        ):
+            return None
+        if code == "operation_summary" and not {"stage", "duration_ms", "counts", "outcome"}.issubset(raw):
             return None
     except (ValueError, TypeError, AttributeError):
         return None
@@ -131,7 +144,8 @@ def sanitize_event(raw: Mapping[str, object]) -> dict | None:
         "route_template": ROUTE_TEMPLATES, "stage": STAGES, "dependency": DEPENDENCIES,
         "http_method": {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
         "dependency_status": {"ok", "down", "rate_limited", "unknown"},
-        "source_event_code": set(EVENT_FIELDS) - {"repeat_summary"},
+        "source_event_code": set(event_fields) - {"repeat_summary"},
+        "outcome": {"success", "cancelled"} if code == "operation_summary" else {"success"},
     }
     for key, allowed in enums.items():
         if key in raw and (type(raw[key]) is not str or raw[key] not in allowed):
@@ -143,9 +157,16 @@ def sanitize_event(raw: Mapping[str, object]) -> dict | None:
         return None
     if "counts" in raw:
         counts = raw["counts"]
-        if type(counts) is not dict or set(counts) - COUNT_KEYS:
+        allowed_counts = AGGREGATE_COUNT_KEYS if code == "success_aggregate" else COUNT_KEYS
+        if type(counts) is not dict or set(counts) - allowed_counts:
             return None
         if any(type(v) is not int or not 0 <= v <= 10**12 for v in counts.values()):
+            return None
+        if code == "success_aggregate" and (
+            set(counts) != AGGREGATE_COUNT_KEYS or counts["count"] < 1
+            or sum(counts[key] for key in AGGREGATE_BUCKET_KEYS) != counts["count"]
+            or counts["duration_max_us"] > counts["duration_sum_us"]
+        ):
             return None
     if "frames" in raw:
         frames = _frames(raw["frames"], raw["component"])

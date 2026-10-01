@@ -13,6 +13,7 @@ from app.db.session import session_scope
 from app.models.diagnostics import SessionOut
 from app.services import audit
 from .control import DeferredControlJournal, write_projection
+from .policy import CaptureRuntimeView, build_policy
 from .schema import DiagnosticContext
 
 
@@ -29,6 +30,8 @@ def utc(value):
 def session_out(row: DiagnosticSession) -> SessionOut:
     return SessionOut(
         id=row.id, status=row.status, scope=row.scope, doc_id=row.doc_id,
+        capture_level=row.capture_level, policy_version=row.policy_version,
+        policy_snapshot=row.policy_snapshot or {},
         created_at=utc(row.created_at), expires_at=utc(row.expires_at),
         stopped_at=utc(row.stopped_at) if row.stopped_at else None,
         stop_reason=row.stop_reason, bytes_written=row.bytes_written,
@@ -51,18 +54,24 @@ class DiagnosticSessionService:
         self.journal = DeferredControlJournal(store)
         self._lock = threading.RLock()
         self._active = None
+        self._active_view = None
+        self._revision = 0
         self._pending = []
         self._last_stopped = None
         self._audit_gap = False
         self._last_projection = 0.0
 
-    def start(self, scope, minutes, actor, *, doc_id=None) -> SessionOut:
+    def start(self, scope, minutes, actor, *, doc_id=None, capture_level="standard") -> SessionOut:
         if not self.settings.diagnostics_capture_enabled:
             raise DiagnosticControlError("diagnostic_disabled")
         if scope not in {"system", "document", "search_chat", "interface"} or type(minutes) is not int or not 5 <= minutes <= 60:
             raise DiagnosticControlError("invalid_request")
         if (scope == "document") != (doc_id is not None):
             raise DiagnosticControlError("invalid_request")
+        try:
+            policy = build_policy(capture_level, self.settings)
+        except ValueError as exc:
+            raise DiagnosticControlError("invalid_request") from exc
         with self._lock:
             if self._active:
                 raise DiagnosticControlError("diagnostic_session_active")
@@ -71,6 +80,8 @@ class DiagnosticSessionService:
             now = self.utcnow()
             row = DiagnosticSession(
                 id=str(uuid4()), active_slot=1, status="starting", scope=scope, doc_id=doc_id,
+                capture_level=policy.level, policy_version=policy.version,
+                policy_snapshot=policy.snapshot(),
                 boot_id=self.boot_id, created_by_id=actor.user_id, created_by=actor.username,
                 created_at=now, expires_at=now + timedelta(minutes=minutes), bytes_written=0,
                 counts={}, participants={}, invitations={}, audit_receipts=[], schema_version=1,
@@ -88,7 +99,8 @@ class DiagnosticSessionService:
                     audit.record_in_session(
                         db, action_type="diagnostic_session_started", user_id=actor.user_id,
                         username=actor.username, target_type="diagnostic_session", target_id=row.id,
-                        new_value={"scope": scope, "minutes": minutes, "doc_id": doc_id},
+                        new_value={"scope": scope, "minutes": minutes, "doc_id": doc_id,
+                                   "capture_level": policy.level, "policy_version": policy.version},
                     )
                 # Only committed audit allows a projection or in-memory selector.
                 with session_scope() as db:
@@ -96,8 +108,14 @@ class DiagnosticSessionService:
                     committed.status = "active"
                 state = session_out(row).model_dump()
                 state.update(status="active", deadline_mono=self.monotonic() + minutes * 60)
-                write_projection(self.store, boot_id=self.boot_id, active=state, now=now)
+                next_revision = self._revision + 1
+                write_projection(self.store, boot_id=self.boot_id, active=state, now=now, revision=next_revision)
                 self._active = state
+                self._revision = next_revision
+                self._active_view = CaptureRuntimeView(
+                    session_id=row.id, revision=self._revision, scope=scope, doc_id=doc_id,
+                    deadline_mono=state["deadline_mono"], policy=policy,
+                )
                 self._last_projection = self.monotonic()
                 return SessionOut.model_validate(state)
             except DiagnosticControlError:
@@ -125,6 +143,8 @@ class DiagnosticSessionService:
         state.pop("deadline_mono", None)
         self._last_stopped = state
         self._active = None
+        self._active_view = None
+        self._revision += 1
         self._pending.append({
             "event_id": str(uuid4()), "target_id": state["id"], "action": "diagnostic_session_stopped",
             "reason": reason, "timestamp_utc": now.isoformat(), "bytes_written": state["bytes_written"],
@@ -158,30 +178,42 @@ class DiagnosticSessionService:
             return SessionOut.model_validate(state)
 
     def active_for(self, context: DiagnosticContext, event_code: str) -> str | None:
-        with self._lock:
-            state = self._active
-            if state is None:
-                return None
-            if not self.settings.diagnostics_capture_enabled:
-                self._queue_stop(state, None, "disabled")
-                return None
-            if self.monotonic() >= state["deadline_mono"]:
-                self._queue_stop(state, None, "expired")
-                return None
-            if state["bytes_written"] >= self.store.limits.session_bytes:
-                self._queue_stop(state, None, "size_limit")
-                return None
-            scope = state["scope"]
-            matched = (
-                scope == "system" or event_code == "dependency_status_changed"
-                or (scope == "document" and context.doc_id == state["doc_id"])
-                or (scope == "search_chat" and context.operation_kind == "search_chat" and event_code in {
-                    "operation_started", "operation_finished", "operation_failed", "stage_started",
-                    "stage_finished", "dependency_call_finished", "request_finished", "retry_scheduled",
-                })
-                or (scope == "interface" and event_code in {"request_finished", "proxy_failed", "render_failed", "browser_error"})
-            )
-            return state["id"] if matched else None
+        # The immutable view is published only after start audit/projection. Hot
+        # producer admission never takes the lock held by control I/O.
+        view = self._active_view
+        if view is None:
+            return None
+        state = self._active
+        reason = None
+        if not self.settings.diagnostics_capture_enabled:
+            reason = "disabled"
+        elif self.monotonic() >= view.deadline_mono:
+            reason = "expired"
+        elif state is not None and state["bytes_written"] >= self.store.limits.session_bytes:
+            reason = "size_limit"
+        if reason:
+            with self._lock:
+                if self._active_view is view and self._active is not None:
+                    self._queue_stop(self._active, None, reason)
+            return None
+        scope = view.scope
+        matched = (
+            scope == "system" or event_code == "dependency_status_changed"
+            or (scope == "document" and context.doc_id == view.doc_id)
+            or (scope == "search_chat" and context.operation_kind == "search_chat" and event_code in {
+                "operation_started", "operation_finished", "operation_failed", "stage_started",
+                "stage_finished", "dependency_call_finished", "request_finished", "retry_scheduled",
+                "operation_summary", "success_aggregate",
+            })
+            or (scope == "interface" and event_code in {
+                "request_finished", "success_aggregate", "proxy_failed", "render_failed", "browser_error",
+            })
+        )
+        return view.session_id if matched and self._active_view is view else None
+
+    def runtime_view_for(self, context: DiagnosticContext, event_code: str) -> CaptureRuntimeView | None:
+        view = self._active_view
+        return view if view is not None and self.active_for(context, event_code) == view.session_id else None
 
     def record_written(self, session_id: str, size: int):
         with self._lock:
@@ -216,7 +248,7 @@ class DiagnosticSessionService:
 
     def _flush_pending(self):
         try:
-            write_projection(self.store, boot_id=self.boot_id, active=self._active, now=self.utcnow())
+            write_projection(self.store, boot_id=self.boot_id, active=self._active, now=self.utcnow(), revision=self._revision)
         except Exception:
             self._audit_gap = True
         for event in list(self._pending):
@@ -272,7 +304,7 @@ class DiagnosticSessionService:
                 self._flush_pending()
             if mono - self._last_projection >= 5:
                 try:
-                    write_projection(self.store, boot_id=self.boot_id, active=self._active, now=now_utc or self.utcnow())
+                    write_projection(self.store, boot_id=self.boot_id, active=self._active, now=now_utc or self.utcnow(), revision=self._revision)
                     self._last_projection = mono
                 except Exception:
                     if self._active:
@@ -282,7 +314,9 @@ class DiagnosticSessionService:
         with self._lock:
             self.boot_id = boot_id
             self._active = None
-            write_projection(self.store, boot_id=boot_id, active=None, now=self.utcnow())
+            self._active_view = None
+            self._revision += 1
+            write_projection(self.store, boot_id=boot_id, active=None, now=self.utcnow(), revision=self._revision)
             self.reconcile_control_events()
             with session_scope() as db:
                 states = [session_out(row).model_dump() for row in db.scalars(
@@ -321,4 +355,5 @@ class DiagnosticSessionService:
                         directory.rmdir()
                     marker = self.store.safe_path(self.store.root / "capture-expiry" / (row.id + ".json"))
                     marker.unlink(missing_ok=True)
+                    self.store.note_deleted(marker)
                     db.delete(row)

@@ -54,12 +54,12 @@ def test_database_is_not_required_and_message_never_formatted(tmp_path, monkeypa
 def test_queue_overflow_never_blocks(tmp_path):
     store = DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0, queue_size=1))
     entered, release = threading.Event(), threading.Event()
-    original = store.append
+    original = store.append_batch
     def slow_append(*args, **kwargs):
         entered.set()
         release.wait(3)
         return original(*args, **kwargs)
-    store.append = slow_append
+    store.append_batch = slow_append
     recorder = DiagnosticRecorder(store)
     recorder.start()
     try:
@@ -114,14 +114,14 @@ def test_manual_capture_drain_keeps_accepted_event_and_closes_admission(tmp_path
     store = DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0))
     active = [session_id]
     entered, release = threading.Event(), threading.Event()
-    original = store.append
+    original = store.append_batch
 
     def blocked_append(*args, **kwargs):
         entered.set()
         release.wait(3)
         return original(*args, **kwargs)
 
-    store.append = blocked_append
+    store.append_batch = blocked_append
     recorder = DiagnosticRecorder(store, capture_selector=lambda *_: active[0])
     recorder.start()
     try:
@@ -145,6 +145,38 @@ def test_manual_capture_drain_keeps_accepted_event_and_closes_admission(tmp_path
     assert recorder.status()["expired_queue"] == 0
 
 
+def test_finished_aggregate_releases_session_view(tmp_path):
+    from types import SimpleNamespace
+    from app.services.diagnostics.schema import DiagnosticContext
+
+    session_id = str(uuid4())
+    store = DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0))
+    recorder = DiagnosticRecorder(store, capture_selector=lambda *_: session_id)
+    view = SimpleNamespace(session_id=session_id, doc_id=None, scope="interface",
+                           policy=SimpleNamespace(aggregate_interval_ms=5000))
+    recorder._observe_success(view, "request_finished", DiagnosticContext(),
+                              {"route_template": "/api/search", "duration_ms": 1})
+    recorder._flush_aggregates()
+    recorder._flush_batches()
+    assert recorder._aggregate_views == {}
+    events = [json.loads(line) for path in (store.root / "events" / session_id).glob("*.jsonl")
+              for line in path.read_text().splitlines()]
+    assert len(events) == 1
+    assert events[0]["event_code"] == "success_aggregate"
+    store.close()
+
+
+def test_stopped_capture_history_is_bounded(tmp_path):
+    store = DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0, queue_size=2048))
+    recorder = DiagnosticRecorder(store)
+    ids = [str(uuid4()) for _ in range(1025)]
+    for session_id in ids:
+        recorder.drain_capture(session_id, timeout_seconds=0)
+    assert len(recorder._closed_captures) == 1024
+    assert ids[-1] in recorder._closed_captures
+    store.close()
+
+
 def test_snapshot_barrier_flushes_accepted_events_without_closing_capture(tmp_path):
     session_id = str(uuid4())
     store = DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0))
@@ -166,7 +198,7 @@ def test_permission_error_in_recorder_does_not_escape(tmp_path):
     store = DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0))
     def fail(*args, **kwargs):
         raise PermissionError("CANARY")
-    store.append = fail
+    store.append_batch = fail
     recorder = DiagnosticRecorder(store)
     recorder.start()
     assert recorder.emit("log_error")
@@ -207,6 +239,26 @@ def test_duplicate_summary_preserves_first_last_and_count(tmp_path):
     assert summary["first_timestamp_utc"] == first["timestamp_utc"]
     assert summary["last_timestamp_utc"] >= summary["first_timestamp_utc"]
     assert "CANARY" not in repr(events)
+
+
+def test_identical_errors_with_distinct_request_ids_remain_separate(tmp_path):
+    from app.services.diagnostics.schema import DiagnosticContext
+
+    store = DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0))
+    recorder = DiagnosticRecorder(store)
+    request_ids = [str(uuid4()), str(uuid4())]
+    recorder.start()
+    try:
+        for request_id in request_ids:
+            assert recorder.emit("log_error", context=DiagnosticContext(request_id=request_id),
+                                 exception=ValueError("CANARY_PRIVATE"))
+    finally:
+        recorder.stop()
+    events = [json.loads(line) for path in (store.root / "events" / "baseline").glob("*.jsonl")
+              for line in path.read_text().splitlines()]
+    assert {event["request_id"] for event in events} == set(request_ids)
+    assert [event["event_code"] for event in events] == ["log_error", "log_error"]
+    assert "CANARY_PRIVATE" not in repr(events)
 
 
 def test_capture_byte_accounting_notifies_session(tmp_path):

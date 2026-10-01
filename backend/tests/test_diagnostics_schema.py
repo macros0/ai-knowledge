@@ -33,7 +33,7 @@ def test_secret_values_never_reach_encoded_event():
 
 
 @pytest.mark.parametrize("changes", [
-    {"event_code": "user_supplied"}, {"schema_version": 2},
+    {"event_code": "user_supplied"}, {"schema_version": 3},
     {"request_id": "secret\npassword"}, {"http_method": "GET?token=secret"},
     {"route_template": "/documents/private.docx?token=secret"},
     {"error_code": "PRIVATE_DOCUMENT_CONTENT"},

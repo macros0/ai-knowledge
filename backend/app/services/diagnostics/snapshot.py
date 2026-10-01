@@ -13,51 +13,13 @@ from app.db.session import session_scope
 from app.models.diagnostics import BundleRequest
 from app.services import health
 from .schema import EventFilter
+from .policy import safe_policy_snapshot
 from .sanitize import _encode_validated_event, sanitize_event, valid_uuid
 from .schema import MAX_EVENT_BYTES
 from .store import SnapshotLease, _is_link
-
-
-_DEPENDENCIES = frozenset({"database", "qdrant", "llm", "embeddings", "pdf"})
-_STATUSES = frozenset({"ok", "down", "degraded", "rate_limited", "unknown"})
-_OP_STATUSES = frozenset({"queued", "running", "paused", "done", "failed", "cancelled", "uploaded", "processing"})
-
-
-def _safe_runtime(value):
-    if not isinstance(value, dict):
-        return {"status": "unknown", "dependencies": {}}
-    status = value.get("status")
-    dependencies = value.get("dependencies")
-    return {
-        "status": status if status in _STATUSES else "unknown",
-        "dependencies": {
-            key: {"status": item.get("status") if isinstance(item, dict) and item.get("status") in _STATUSES else "unknown"}
-            for key, item in (dependencies.items() if isinstance(dependencies, dict) else ())
-            if key in _DEPENDENCIES
-        },
-    }
-
-
-def _safe_operations(value):
-    if not isinstance(value, list):
-        return []
-    result = []
-    for item in value[:100]:
-        if not isinstance(item, dict):
-            continue
-        kind = item.get("kind")
-        identity = item.get("id")
-        status = item.get("status")
-        valid_identity = (isinstance(identity, str) and (
-            (kind == "document" and re.fullmatch(r"[a-f0-9]{16,32}", identity)) or
-            (kind == "job" and re.fullmatch(r"[1-9][0-9]{0,18}", identity)
-             and int(identity) <= 2**63 - 1)
-        ))
-        if not valid_identity:
-            continue
-        result.append({"kind": kind, "id": identity,
-                       "status": status if status in _OP_STATUSES else "unknown"})
-    return result
+from .read_view import attach_frontend
+from .prepare import prepare_in_child
+from .safe_metadata import _safe_operations, _safe_runtime
 
 
 def _metadata(request: BundleRequest):
@@ -81,7 +43,23 @@ def _metadata(request: BundleRequest):
                               .order_by(Job.created_at.desc(), Job.id.desc()).limit(50)).all()
     operations = [{"kind": "document", "id": str(doc_id), "status": status} for doc_id, status in docs]
     operations.extend({"kind": "job", "id": str(job_id), "status": status} for job_id, status in jobs)
-    return runtime, operations
+    with session_scope() as db:
+        if request.session_id is not None:
+            rows = [row for row in [db.get(DiagnosticSession, str(request.session_id))] if row is not None]
+        else:
+            rows = list(db.scalars(select(DiagnosticSession).where(
+                DiagnosticSession.created_at <= request.to_utc,
+                DiagnosticSession.expires_at >= request.from_utc,
+            ).order_by(DiagnosticSession.created_at, DiagnosticSession.id).limit(200)))
+    policies = []
+    for row in rows:
+        safe = safe_policy_snapshot(row.policy_snapshot)
+        created_at = row.created_at.replace(tzinfo=timezone.utc) if row.created_at.tzinfo is None else row.created_at
+        policies.append({"session_id": row.id, "created_at_utc": created_at.astimezone(timezone.utc).isoformat(),
+                         "capture_level": row.capture_level if safe else "legacy" if row.policy_version == 0 else "unknown",
+                         "policy_version": row.policy_version if safe or row.policy_version == 0 else None,
+                         "policy_snapshot": safe})
+    return runtime, operations, policies
 
 
 def _external_safe(path: Path, root: Path):
@@ -164,7 +142,16 @@ def _frontend_copy(root: Path, store, lease, filt, cutoff_at):
     return (target,) if target.exists() else (), counts
 
 
-def _frontend_status(root: Path) -> tuple[dict, str | None]:
+def _counter_history_unknown(started_at, requested_from: datetime | None) -> bool:
+    try:
+        started = datetime.fromisoformat(started_at)
+        return (started.tzinfo is None or requested_from is None
+                or requested_from.astimezone(timezone.utc) < started.astimezone(timezone.utc))
+    except (TypeError, ValueError, AttributeError):
+        return True
+
+
+def _frontend_status(root: Path, requested_from: datetime | None = None) -> tuple[dict, str | None]:
     """Read only bounded counters from Node's atomically replaced status file."""
     source = _external_safe(root / "status.json", root)
     before = source.stat()
@@ -196,9 +183,19 @@ def _frontend_status(root: Path) -> tuple[dict, str | None]:
         if type(number) is not int or not 0 <= number <= 1_000_000_000:
             raise ValueError("Invalid frontend counter")
         counters[f"frontend_{key}"] = number
+    for key in ("sampled_out_slow", "intentional_aggregated", "intentional_sampled"):
+        if key not in value:  # Existing frontend status remains readable.
+            continue
+        number = value[key]
+        if type(number) is not int or not 0 <= number <= 1_000_000_000:
+            raise ValueError("Invalid frontend sampling counter")
+        counters[f"frontend_{key}"] = number
+    counters["frontend_counters_unknown"] = int(_counter_history_unknown(
+        value.get("started_at_utc"), requested_from))
     if datetime.now(timezone.utc).timestamp() - before.st_mtime > 120:
         return counters, "frontend_status_stale"
-    if not value["running"] or value["storage_degraded"] or any(counters.values()):
+    if not value["running"] or value["storage_degraded"] or any(
+            counters[f"frontend_{key}"] for key in ("dropped", "invalid", "expired_queue", "queued")):
         return counters, "frontend_loss"
     return counters, None
 
@@ -214,6 +211,8 @@ class BundleSnapshot:
     counts: dict
     partial: bool
     gaps: tuple[str, ...]
+    capture_policies: list[dict]
+    normalized: bool = False
 
     def release(self):
         self.lease.release()
@@ -252,7 +251,7 @@ def collect_snapshot(request: BundleRequest, *, cutoff_at: datetime, store,
                     counts[key] = counts.get(key, 0) + value
                 counts["events"] = counts.get("events", 0) + frontend_counts["frontend_events"]
                 try:
-                    status_counts, status_gap = _frontend_status(frontend_root)
+                    status_counts, status_gap = _frontend_status(frontend_root, request.from_utc)
                     counts.update(status_counts)
                     if status_gap:
                         gaps.append(status_gap)
@@ -266,12 +265,16 @@ def collect_snapshot(request: BundleRequest, *, cutoff_at: datetime, store,
         else:
             gaps.append("frontend_unavailable")
         try:
-            runtime_raw, operations_raw = provider(request)
+            metadata = provider(request)
+            runtime_raw, operations_raw = metadata[:2]
+            policies_raw = metadata[2] if len(metadata) > 2 else []
             runtime = _safe_runtime(runtime_raw)
             operations = _safe_operations(operations_raw)
+            policies = [item for item in policies_raw[:200] if isinstance(item, dict)] if isinstance(policies_raw, list) else []
         except Exception:
             runtime = {"status": "unknown", "dependencies": {}}
             operations = []
+            policies = []
             gaps.append("metadata_unavailable")
         if recorder_status is not None:
             try:
@@ -282,6 +285,8 @@ def collect_snapshot(request: BundleRequest, *, cutoff_at: datetime, store,
                 if type(sampled) is not int or not 0 <= sampled <= 1_000_000_000:
                     raise ValueError("Invalid recorder counter")
                 counts["recorder_sampled_success"] = sampled
+                counts["recorder_counters_unknown"] = int(_counter_history_unknown(
+                    status.get("started_at_utc"), request.from_utc))
                 for key in ("dropped", "invalid", "expired_queue", "storage_errors", "drain_timeouts"):
                     value = status.get(key, 0)
                     if type(value) is not int or not 0 <= value <= 1_000_000_000:
@@ -296,7 +301,113 @@ def collect_snapshot(request: BundleRequest, *, cutoff_at: datetime, store,
         if counts.get("invalid", 0) or counts.get("truncated", 0):
             gaps.append("invalid_input")
         return BundleSnapshot(store, lease, cutoff_at, paths, runtime, operations,
-                              counts, bool(gaps), tuple(gaps))
+                              counts, bool(gaps), tuple(gaps), policies)
     except Exception:
         lease.release()
+        raise
+
+
+@dataclass
+class PreparedLease:
+    store: object
+    view: object
+    directory: Path
+    released: bool = False
+
+    def release(self):
+        if self.released:
+            return
+        try:
+            self.store.delete_tree(self.directory)
+        finally:
+            self.view.release()
+            self.released = True
+
+
+def collect_prepared_snapshot(request: BundleRequest, *, cutoff_at: datetime, store, job_id: str,
+                              frontend_root: Path | None = None, metadata_provider=None,
+                              recorder_status=None, recorder_barrier=None, on_child=None) -> BundleSnapshot:
+    """Gather bounded metadata in parent; scan/filter source prefixes in child."""
+    if cutoff_at.tzinfo is None:
+        raise ValueError("Cutoff must be timezone-aware")
+    cutoff_at = cutoff_at.astimezone(timezone.utc)
+    filt = EventFilter(
+        from_utc=request.from_utc, to_utc=min(request.to_utc, cutoff_at) if request.to_utc else cutoff_at,
+        session_id=str(request.session_id) if request.session_id else None,
+        request_id=str(request.request_id) if request.request_id else None,
+        operation_id=str(request.operation_id) if request.operation_id else None,
+        doc_id=request.doc_id,
+    )
+    gaps = []
+    if recorder_barrier is not None:
+        try:
+            if recorder_barrier() is not True:
+                gaps.append("recorder_loss")
+        except Exception:
+            gaps.append("recorder_loss")
+    view = store.pin_read_view(filt, cutoff_at)
+    directory = store.root / "snapshots" / job_id
+    try:
+        if frontend_root is not None:
+            attach_frontend(view, frontend_root)
+            gaps.extend(view.initial_gaps)
+        else:
+            gaps.append("frontend_unavailable")
+        provider = metadata_provider or _metadata
+        try:
+            metadata = provider(request)
+            runtime_raw, operations_raw = metadata[:2]
+            policies_raw = metadata[2] if len(metadata) > 2 else []
+            runtime = _safe_runtime(runtime_raw)
+            operations = _safe_operations(operations_raw)
+            policies = [item for item in policies_raw[:200] if isinstance(item, dict)] if isinstance(policies_raw, list) else []
+        except Exception:
+            runtime = {"status": "unknown", "dependencies": {}}
+            operations = []
+            policies = []
+            gaps.append("metadata_unavailable")
+        coverage_from = request.from_utc
+        if coverage_from is None and request.session_id is not None:
+            for item in policies:
+                if item.get("session_id") == str(request.session_id):
+                    try:
+                        coverage_from = datetime.fromisoformat(item["created_at_utc"])
+                    except (KeyError, TypeError, ValueError):
+                        pass
+                    break
+        prepared = prepare_in_child(store, view, job_id, frontend_root=frontend_root, on_child=on_child)
+        counts = dict(prepared.counts)
+        gaps.extend(prepared.gaps)
+        if frontend_root is not None:
+            try:
+                front_counts, front_gap = _frontend_status(frontend_root, coverage_from)
+                counts.update(front_counts)
+                if front_gap:
+                    gaps.append(front_gap)
+            except (OSError, ValueError, TypeError):
+                gaps.append("frontend_status_unavailable")
+        if recorder_status is not None:
+            try:
+                status = recorder_status()
+                counts["recorder_counters_unknown"] = int(_counter_history_unknown(
+                    status.get("started_at_utc"), coverage_from))
+                for key in ("dropped", "invalid", "expired_queue", "storage_errors", "drain_timeouts",
+                            "aggregated_success", "sampled_out_traces", "sampled_out_slow"):
+                    value = status.get(key, 0)
+                    if type(value) is not int or not 0 <= value <= 1_000_000_000:
+                        raise ValueError("Invalid recorder counter")
+                    counts[f"recorder_{key}"] = value
+                if any(counts[f"recorder_{key}"] for key in (
+                        "dropped", "invalid", "expired_queue", "storage_errors", "drain_timeouts")):
+                    gaps.append("recorder_loss")
+            except Exception:
+                gaps.append("recorder_status_unavailable")
+        lease = PreparedLease(store, view, prepared.directory)
+        return BundleSnapshot(store, lease, cutoff_at, prepared.paths, runtime, operations,
+                              counts, bool(gaps), tuple(dict.fromkeys(gaps)), policies, True)
+    except Exception:
+        try:
+            store.delete_tree(directory)
+        finally:
+            view.release()
         raise

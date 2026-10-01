@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import { diagnosticActions, diagnosticBundleRequest, diagnosticGapKey, diagnosticReasonKey, diagnosticStatusKey, remainingSeconds, updateDiagnosticView } from "../src/lib/diagnostics.mjs";
 
 test("stopped, expired, degraded and unknown status have distinct actions", () => {
-  const base = { capabilities: { capture: true, bundle: true, download: true }, runtime: { available: true },
+  const base = { capabilities: { capture: true, bundle: true, download: true,
+    capture_levels: ["standard", "detailed"], policy_version: 1 }, runtime: { available: true },
     session: { session: null }, recorder: { storage_degraded: false } };
   assert.equal(diagnosticActions(base).canStart, true);
+  assert.equal(diagnosticActions({ ...base, capabilities: { capture: true } }).canStart, false);
   assert.equal(diagnosticActions({ ...base, session: { session: { status: "active" } } }).canStop, true);
   assert.equal(diagnosticActions({ ...base, session: { session: { status: "stopped", stop_reason: "expired" } } }).sessionState, "expired");
   assert.equal(diagnosticActions({ ...base, recorder: { storage_degraded: true } }).canStart, false);

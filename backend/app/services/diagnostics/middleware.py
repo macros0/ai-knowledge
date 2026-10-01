@@ -5,8 +5,30 @@ from uuid import uuid4
 from starlette.responses import JSONResponse
 
 from .context import bind_context, canonical_request_id
-from .recorder import emit_event
+from .recorder import begin_trace, emit_event
 from .schema import DiagnosticContext, ROUTE_TEMPLATES
+
+
+_PARAMETER_ROUTES = tuple((template, template.split("/")) for template in sorted(ROUTE_TEMPLATES)
+                          if "{" in template)
+
+
+def _route_template(scope):
+    route = getattr(scope.get("route"), "path", None)
+    if route in ROUTE_TEMPLATES:
+        return route
+    # An inner router may resolve a copied ASGI scope. Infer only a template
+    # from the existing allowlist; never return a raw path or parameter value.
+    path = scope.get("path", "")
+    if path in ROUTE_TEMPLATES:
+        return path
+    parts = path.split("/")
+    for template, pattern in _PARAMETER_ROUTES:
+        if len(parts) == len(pattern) and all(
+                actual == expected or (expected.startswith("{") and expected.endswith("}") and actual)
+                for actual, expected in zip(parts, pattern)):
+            return template
+    return "/unknown"
 
 
 class DiagnosticContextMiddleware:
@@ -38,6 +60,8 @@ class DiagnosticContextMiddleware:
             await send(message)
 
         with bind_context(context):
+            if scope.get("path") not in {"/health", "/health/ready", "/api/admin/diagnostics/status"}:
+                begin_trace(context)
             try:
                 await self.app(scope, receive, send_correlated)
             except Exception as exc:
@@ -50,8 +74,7 @@ class DiagnosticContextMiddleware:
                     "code": "internal_error", "request_id": request_id,
                 })(scope, receive, send_correlated)
             finally:
-                route = getattr(scope.get("route"), "path", "/unknown")
-                fields = {"route_template": route if route in ROUTE_TEMPLATES else "/unknown",
+                fields = {"route_template": _route_template(scope),
                           "duration_ms": max(0, (time.monotonic() - started) * 1000)}
                 method = scope.get("method")
                 if method in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}:

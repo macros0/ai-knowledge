@@ -19,8 +19,9 @@ def test_document_session_metadata_selects_target_without_unrelated_operations(s
         db.add(Document(id=target, filename="target.pdf", status="processing"))
         db.add(Job(job_type="test", status="running"))
     session = service.start("document", 5, actor(), doc_id=target)
-    _, operations = _metadata(BundleRequest(session_id=UUID(session.id)))
+    _, operations, policies = _metadata(BundleRequest(session_id=UUID(session.id)))
     assert operations == [{"kind": "document", "id": target, "status": "processing"}]
+    assert [row["session_id"] for row in policies] == [session.id]
 
 
 def test_numeric_job_id_survives_operation_metadata_validation():

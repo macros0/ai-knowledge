@@ -1,5 +1,7 @@
 """The exported archive is a fixed, bounded, revalidated support artifact."""
 import json
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -13,6 +15,16 @@ from app.services.diagnostics.schema import DiagnosticLimits
 from app.services.diagnostics.snapshot import collect_snapshot
 from app.services.diagnostics.store import DiagnosticStore
 from app.services.diagnostics.sanitize import encode_event
+
+
+def test_zip_worker_import_does_not_load_sql_metadata_stack():
+    result = subprocess.run(
+        [sys.executable, "-c", "import sys; import app.services.diagnostics.bundle_worker; "
+         "assert 'app.services.diagnostics.snapshot' not in sys.modules; "
+         "assert 'sqlalchemy' not in sys.modules"],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def limits(**changes):
@@ -55,8 +67,8 @@ def test_bundle_manifest_and_crc(tmp_path):
                     "snapshots/runtime.json", "snapshots/operations.json",
                 ]
                 manifest = json.loads(zip_file.read("manifest.json"))
-                assert manifest["format_version"] == 1
-                assert manifest["backend_schema_version"] == 1
+                assert manifest["format_version"] == 2
+                assert manifest["backend_schema_version"] == 2
                 assert manifest["frontend_build_ids"] == ["unknown"]
                 assert manifest["counter_scopes"]["recorder"] == "backend_process"
                 assert manifest["counts"]["events"] == 1

@@ -31,8 +31,21 @@ search load was measured on Linux CT 102. Its p95 latency exceeds the original
 target, and optimization is tracked separately in
 `docs/superpowers/plans/2026-09-28-admin-diagnostics-performance.md`.
 `docs/ADMIN_DIAGNOSTICS.md` explains
-operator steps and limits. Logs already produced by older raw-dump code are
-outside this sanitizer and require separate handling.
+operator steps and limits. The capture-level change adds an immutable, server
+selected policy snapshot (`app/services/diagnostics/policy.py`) and a versioned
+Node control projection. Unknown projection versions fail closed for detailed
+capture. `read_view.py` pins bounded segment prefixes; `prepare_worker.py`
+revalidates selected events in a separate process and requests quota credits
+from the parent before writing normalized component files. The parent keeps
+SQL audit and bundle publication. The new negative tests are
+`test_diagnostics_policy_contract.py`, `test_diagnostics_admission.py`,
+`test_diagnostics_read_view.py`, `test_diagnostics_worker_protocol.py`,
+`test_diagnostics_prepare_worker.py`, and
+`frontend/test/diagnosticPolicy.test.mjs`; execution status and remaining Linux
+checks are recorded in
+`docs/superpowers/reports/2026-09-28-admin-diagnostics-levels-performance.md`.
+Logs already produced by older raw-dump code are outside this sanitizer and
+require separate handling.
 
 ## Local Qwen deployment (2026-09-27)
 

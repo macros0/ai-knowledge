@@ -155,3 +155,24 @@ def test_offline_container_state_gap_is_explicit(tmp_path, monkeypatch):
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["partial"] is True
         assert "container_state_unavailable" in manifest["gaps"]
+
+
+def test_offline_reads_safe_policy_projection_without_database(tmp_path):
+    from app.services.diagnostics.control import write_projection
+    root, output = tmp_path / "spool", tmp_path / "support.zip"
+    now = _seed(root)
+    session_id = str(uuid4())
+    policy = {"level": "standard", "version": 1, "aggregate_interval_ms": 5000,
+              "success_limit_per_second": 20, "trace_limit_per_second": 20,
+              "slow_limit_per_second": 20, "max_inflight_traces": 512,
+              "slow_thresholds_ms": {"http_search": 1000, "qdrant_db": 250,
+                                     "embeddings_proxy": 1000, "llm_chat": 30000, "pdf": 5000}}
+    with DiagnosticStore(root, DiagnosticLimits()) as store:
+        write_projection(store, boot_id=str(uuid4()), active={"id": session_id,
+            "scope": "system", "expires_at": now + timedelta(minutes=5),
+            "policy_snapshot": policy}, now=now, revision=1)
+    assert collect_diagnostics.main(_args(root, output, now)) == 0
+    with ZipFile(output) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+    assert manifest["capture_policies"][0]["session_id"] == session_id
+    assert manifest["coverage_modes"]["sessions"][session_id] == "aggregated"

@@ -186,6 +186,37 @@ def test_route_templates_never_contain_actual_path(monkeypatch):
     assert "CANARY" not in repr(events)
 
 
+@pytest.mark.parametrize("path,expected", [
+    ("/api/search", "/api/search"),
+    ("/api/documents/CANARY_PRIVATE_ID/chunks", "/api/documents/{doc_id}/chunks"),
+    ("/CANARY_PRIVATE_PATH", "/unknown"),
+])
+def test_route_template_survives_inner_scope_copy(monkeypatch, path, expected):
+    from types import SimpleNamespace
+    from app.services.diagnostics import middleware
+
+    events = []
+    monkeypatch.setattr(middleware, "emit_event", lambda *args, **kwargs: events.append(kwargs))
+
+    async def app(scope, receive, send):
+        inner_scope = dict(scope)
+        inner_scope["route"] = SimpleNamespace(path=expected)
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def receive():
+        raise AssertionError("No request body should be read")
+
+    async def send(message):
+        pass
+
+    asyncio.run(middleware.DiagnosticContextMiddleware(app)(
+        {"type": "http", "method": "POST", "path": path, "headers": []}, receive, send))
+    assert events[-1]["fields"]["route_template"] == expected
+    assert "CANARY" not in json.dumps(events[-1]["fields"])
+    assert "CANARY" not in repr(events)
+
+
 def test_pipeline_resume_gets_new_operation_and_parent_request(queue_pipeline):
     from app.services.diagnostics.context import bind_context, current_context
     p = queue_pipeline

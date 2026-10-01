@@ -13,8 +13,10 @@ def atomic_json(store: DiagnosticStore, path, value: dict):
     try:
         store.write_bytes(temporary, encoded)
         os.replace(temporary, store.safe_path(path))
+        store.note_rename(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+        store.note_deleted(temporary)
 
 
 class DeferredControlJournal:
@@ -68,14 +70,37 @@ class DeferredControlJournal:
             try:
                 self.store.write_bytes(temporary, encoded)
                 os.replace(temporary, self.path)
+                self.store.note_rename(temporary, self.path)
             finally:
                 temporary.unlink(missing_ok=True)
+                self.store.note_deleted(temporary)
 
 
-def write_projection(store: DiagnosticStore, *, boot_id: str, active: dict | None, now: datetime):
-    value = {"schema_version": 1, "boot_id": boot_id, "active": False,
-             "lease_until": now.timestamp() + 10}
-    if active and active["scope"] in {"system", "interface"}:
-        value.update(active=True, session_id=active["id"], scope=active["scope"],
-                     deadline=active["expires_at"].timestamp())
-    atomic_json(store, store.root / "control/capture.json", value)
+def write_projection(store: DiagnosticStore, *, boot_id: str, active: dict | None,
+                     now: datetime, revision: int = 0) -> bool:
+    # Serialize the small control projection independently of the hot session
+    # selector. A delayed heartbeat/start cannot revive a stopped revision.
+    with store._projection_lock:
+        current = store._projection_revision
+        if current is not None and current[0] == boot_id and revision < current[1]:
+            return False
+        value = {"schema_version": 2, "boot_id": boot_id, "active": False,
+                 "revision": revision, "lease_until": now.timestamp() + 10}
+        if active and active["scope"] in {"system", "interface"}:
+            source = active.get("policy_snapshot") or {}
+            thresholds = source.get("slow_thresholds_ms")
+            keys = ("aggregate_interval_ms", "success_limit_per_second",
+                    "trace_limit_per_second", "slow_limit_per_second", "max_inflight_traces")
+            threshold_keys = ("http_search", "qdrant_db", "embeddings_proxy", "llm_chat", "pdf")
+            if (source.get("level") in {"standard", "detailed"} and source.get("version") == 1
+                    and all(type(source.get(key)) is int and source[key] > 0 for key in keys)
+                    and isinstance(thresholds, dict)
+                    and all(type(thresholds.get(key)) is int and thresholds[key] > 0 for key in threshold_keys)):
+                policy = {"level": source["level"], "version": 1,
+                          **{key: source[key] for key in keys},
+                          "slow_thresholds_ms": {key: thresholds[key] for key in threshold_keys}}
+                value.update(active=True, session_id=active["id"], scope=active["scope"],
+                             deadline=active["expires_at"].timestamp(), policy=policy)
+        atomic_json(store, store.root / "control/capture.json", value)
+        store._projection_revision = (boot_id, revision)
+        return True

@@ -46,7 +46,10 @@ def operation_span(*, stage=None):
         if not outcome.failed:
             if stage:
                 finish_stage(stage, started, counts=outcome.counts)
-            emit_event("operation_finished", fields={"duration_ms": elapsed_ms(started), "counts": outcome.counts})
+            fields = {"duration_ms": elapsed_ms(started), "counts": outcome.counts}
+            if stage:
+                fields["stage"] = stage
+            emit_event("operation_finished", fields=fields)
     finally:
         _outcome.reset(token)
 

@@ -154,7 +154,7 @@ def test_corrupt_and_old_schema_lines_rejected(tmp_path):
         store.append(encoded(), stream="baseline")
         path = next((tmp_path / "spool/events/baseline").glob("*.jsonl"))
         old = json.loads(encoded())
-        old["schema_version"] = 2
+        old["schema_version"] = 3
         with path.open("ab") as handle:
             handle.write(b"garbage\n" + json.dumps(old).encode() + b"\n")
         snapshot = store.snapshot(EventFilter(), datetime.now(timezone.utc))

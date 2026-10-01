@@ -1,0 +1,68 @@
+{
+  "valid": [
+    {
+      "schema_version": 2,
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "boot_id": "22222222-2222-4222-8222-222222222222",
+      "timestamp_utc": "2026-09-29T00:00:00+00:00",
+      "component": "frontend",
+      "origin": "server",
+      "level": "INFO",
+      "event_code": "success_aggregate",
+      "route_template": "/api/search",
+      "outcome": "success",
+      "window_start_utc": "2026-09-29T00:00:00+00:00",
+      "window_end_utc": "2026-09-29T00:00:05+00:00",
+      "counts": {
+        "count": 2,
+        "duration_sum_us": 52000,
+        "duration_max_us": 42000,
+        "le_10ms": 1,
+        "le_50ms": 1,
+        "le_250ms": 0,
+        "le_1000ms": 0,
+        "le_5000ms": 0,
+        "le_30000ms": 0,
+        "gt_30000ms": 0
+      }
+    },
+    {
+      "schema_version": 2,
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "boot_id": "22222222-2222-4222-8222-222222222222",
+      "timestamp_utc": "2026-09-29T00:00:00+00:00",
+      "component": "frontend",
+      "origin": "server",
+      "level": "INFO",
+      "event_code": "operation_summary",
+      "stage": "search",
+      "duration_ms": 42,
+      "outcome": "success",
+      "counts": {
+        "processed": 2
+      }
+    },
+    {
+      "schema_version": 2,
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "boot_id": "22222222-2222-4222-8222-222222222222",
+      "timestamp_utc": "2026-09-29T00:00:00+00:00",
+      "component": "frontend",
+      "origin": "server",
+      "level": "INFO",
+      "event_code": "operation_failed",
+      "error_code": "internal_error"
+    }
+  ],
+  "invalid_changes": [
+    {
+      "query": "CANARY_PRIVATE"
+    },
+    {
+      "schema_version": 3
+    },
+    {
+      "outcome": "failed"
+    }
+  ]
+}

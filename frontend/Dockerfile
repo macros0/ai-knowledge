@@ -2,6 +2,9 @@
 FROM node:20-alpine AS build
 ARG OKF_BUILD_REVISION=unknown
 ENV NEXT_PUBLIC_APP_REVISION=${OKF_BUILD_REVISION}
+# Next freezes rewrites() during build. Match the runtime Compose endpoint so
+# the published /health rewrite reaches the backend service after deployment.
+ENV BACKEND_URL=http://backend:8000
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

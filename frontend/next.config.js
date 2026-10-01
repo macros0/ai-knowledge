@@ -11,6 +11,8 @@ module.exports = {
     proxyClientMaxBodySize: "100mb",
   },
   async rewrites() {
+    // Next resolves this at image build time; Dockerfile sets the Compose
+    // service URL for production, while local dev uses the host fallback.
     const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:18000";
     return [
       {

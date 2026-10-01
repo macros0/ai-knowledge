@@ -1,5 +1,6 @@
 """Bundle publication is audited, rate-limited and crash-safe."""
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -161,7 +162,7 @@ def test_shutdown_terminates_active_builder_without_publishing(queue, monkeypatc
     assert spawned.wait(10)
     with queue._condition:
         assert queue._child is not None
-    assert queue.store.reserved_bytes > 0
+    assert queue.store.reserved_bytes == 0  # Prepare child stalled before requesting credit.
     queue.shutdown(timeout_seconds=5)
     assert queue.wait_idle(10)
     with session_scope() as db:
@@ -171,6 +172,195 @@ def test_shutdown_terminates_active_builder_without_publishing(queue, monkeypatc
     assert not (queue.store.root / "bundles" / (submitted.id + ".zip")).exists()
     assert not (queue.store.root / "bundles" / (submitted.id + ".part")).exists()
     assert queue.store.reserved_bytes == 0
+
+
+@pytest.mark.parametrize("termination", ["kill", "shutdown"])
+@pytest.mark.parametrize("cleanup_failure", [False, True])
+def test_active_prepare_after_write_releases_pins_and_credits(queue, monkeypatch, termination, cleanup_failure):
+    """Terminate a real child after it wrote credited bytes, before commit."""
+    import threading
+    import app.services.diagnostics.prepare as prepare_module
+    from app.services.diagnostics.sanitize import encode_event
+
+    now = datetime.now(timezone.utc).isoformat()
+    boot_id = str(uuid4())
+    for _ in range(700):
+        assert queue.store.append(encode_event({
+            "schema_version": 1, "event_id": str(uuid4()), "boot_id": boot_id,
+            "timestamp_utc": now, "component": "backend", "origin": "server",
+            "level": "ERROR", "event_code": "operation_failed", "error_code": "internal_error",
+        }), stream="baseline")
+    written = threading.Event()
+    proceed = threading.Event()
+    writer_reserved = queue.store.reserved_bytes
+    writer_reservations = set(queue.store._reservations)
+    real_commit = prepare_module.QuotaBroker.commit
+    real_delete = queue.store.delete_tree
+
+    def delete_tree(path):
+        if cleanup_failure and Path(path).parent == queue.store.root / "snapshots":
+            raise PermissionError("Synthetic cleanup denial")
+        return real_delete(path)
+
+    monkeypatch.setattr(queue.store, "delete_tree", delete_tree)
+
+    def paused_commit(broker, grant_id, actual_bytes):
+        if not written.is_set():
+            assert actual_bytes > 0
+            written.set()
+            assert proceed.wait(15), "Test did not release the worker checkpoint"
+            if cleanup_failure:
+                raise prepare_module.FrameError("Synthetic termination before commit")
+        return real_commit(broker, grant_id, actual_bytes)
+
+    monkeypatch.setattr(prepare_module.QuotaBroker, "commit", paused_commit)
+    submitted = queue.submit(request(), actor())
+    queue.start()
+    try:
+        assert written.wait(15), "Real prepare child did not write its first credited block"
+        child = queue._child
+        assert child is not None and child.poll() is None
+        assert queue.store._pins
+        assert queue.store.reserved_bytes > writer_reserved
+        assert any(path.stat().st_size > 0 for path in
+                   (queue.store.root / "snapshots" / submitted.id).glob("*.jsonl"))
+        if termination == "kill":
+            child.kill()
+        else:
+            queue.shutdown(timeout_seconds=0.1)
+        child.wait(timeout=5)
+        proceed.set()
+        assert queue.wait_idle(10)
+        with session_scope() as db:
+            row = db.get(DiagnosticBundle, submitted.id)
+            assert row.status == "failed"
+            assert row.sha256 is None
+        assert queue.store.reserved_bytes == writer_reserved
+        assert set(queue.store._reservations) == writer_reservations
+        assert not queue.store._pins
+        directory = queue.store.root / "snapshots" / submitted.id
+        if cleanup_failure:
+            assert directory.exists()
+            for path in directory.glob("*.jsonl"):
+                assert queue.store._index.size(path) == path.stat().st_size
+            real_delete(directory)
+        else:
+            assert not directory.exists()
+        assert not (queue.store.root / "bundles" / (submitted.id + ".part")).exists()
+        assert not (queue.store.root / "bundles" / (submitted.id + ".zip")).exists()
+    finally:
+        proceed.set()
+        queue.shutdown()
+
+
+@pytest.mark.parametrize("termination", ["kill", "shutdown"])
+def test_active_zip_after_compressed_write_releases_resources(queue, monkeypatch, termination):
+    import subprocess
+    import sys
+    import time
+    import app.services.diagnostics.bundle_queue as module
+    from app.services.diagnostics.sanitize import encode_event
+
+    assert queue.store.append(encode_event({
+        "schema_version": 1, "event_id": str(uuid4()), "boot_id": str(uuid4()),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "component": "backend", "origin": "server", "level": "ERROR",
+        "event_code": "operation_failed", "error_code": "internal_error",
+    }), stream="baseline")
+    writer_reserved = queue.store.reserved_bytes
+    checkpoint = queue.store.root.parent / "zip-checkpoint"
+    real_popen = subprocess.Popen
+    code = f'''from pathlib import Path
+import time
+from zipfile import ZipFile
+from app.services.diagnostics import bundle_worker
+original = ZipFile.writestr
+def checkpoint_write(archive, *args, **kwargs):
+    result = original(archive, *args, **kwargs)
+    archive.fp.flush()
+    Path({str(checkpoint)!r}).touch()
+    time.sleep(30)
+    return result
+ZipFile.writestr = checkpoint_write
+raise SystemExit(bundle_worker.main())
+'''
+
+    def spawn(command, **options):
+        if command[-1] == "app.services.diagnostics.bundle_worker":
+            command = [sys.executable, "-c", code]
+        return real_popen(command, **options)
+
+    monkeypatch.setattr(module.subprocess, "Popen", spawn)
+    submitted = queue.submit(request(), actor())
+    queue.start()
+    try:
+        deadline = time.monotonic() + 15
+        while not checkpoint.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert checkpoint.exists(), "Real ZIP writer did not reach its compressed-write checkpoint"
+        child = queue._child
+        assert child is not None and child.poll() is None
+        partial = queue.store.root / "bundles" / (submitted.id + ".part")
+        assert partial.stat().st_size > 0
+        assert queue.store._pins
+        assert queue.store.reserved_bytes > writer_reserved
+        if termination == "kill":
+            child.kill()
+        else:
+            queue.shutdown(timeout_seconds=0.1)
+        child.wait(timeout=5)
+        assert queue.wait_idle(10)
+        with session_scope() as db:
+            row = db.get(DiagnosticBundle, submitted.id)
+            assert row.status == "failed"
+            assert row.sha256 is None
+        assert queue.store.reserved_bytes == writer_reserved
+        assert not queue.store._pins
+        assert not partial.exists()
+        assert not (queue.store.root / "bundles" / (submitted.id + ".zip")).exists()
+        assert not (queue.store.root / "snapshots" / submitted.id).exists()
+    finally:
+        queue.shutdown()
+
+
+def test_zip_worker_uses_spawn_without_parent_fork(queue, monkeypatch):
+    import os
+    import subprocess
+    import app.services.diagnostics.bundle_queue as module
+
+    real_popen = subprocess.Popen
+    worker_options = []
+    posix_spawned = []
+
+    if os.name == "posix":
+        original_spawn = real_popen._posix_spawn
+
+        def record_spawn(self, *args, **kwargs):
+            if self.args[-1] == "app.services.diagnostics.bundle_worker":
+                posix_spawned.append(True)
+            return original_spawn(self, *args, **kwargs)
+
+        monkeypatch.setattr(real_popen, "_posix_spawn", record_spawn)
+
+    def observe(command, **options):
+        if command[-1] == "app.services.diagnostics.bundle_worker":
+            worker_options.append(options)
+        return real_popen(command, **options)
+
+    monkeypatch.setattr(module.subprocess, "Popen", observe)
+    submitted = queue.submit(request(), actor())
+    queue.start()
+    assert queue.wait_idle(15)
+    with session_scope() as db:
+        assert db.get(DiagnosticBundle, submitted.id).status == "ready"
+    assert len(worker_options) == 1
+    if os.name == "posix":
+        options = worker_options[0]
+        assert "cwd" not in options
+        assert options["close_fds"] is False
+        assert str(Path(__file__).resolve().parents[1]) in options["env"]["PYTHONPATH"].split(os.pathsep)
+        assert posix_spawned == [True]
+    queue.shutdown()
 
 
 def test_shutdown_releases_reservations_for_queued_bundles(queue):

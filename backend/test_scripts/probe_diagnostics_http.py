@@ -36,9 +36,9 @@ class Client:
             raw = response.read()
             return json.loads(raw) if response.headers.get_content_type() == "application/json" else raw
 
-    def login(self):
+    def login(self, username="demo.admin"):
         self.call("GET", "/api/auth/me")
-        self.call("POST", "/api/auth/simulate", {"username": "demo.admin"})
+        self.call("POST", "/api/auth/simulate", {"username": username})
 
 
 def series(client, warmup_seconds, requests, *, on_samples_start=None):

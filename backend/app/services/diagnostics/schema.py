@@ -1,4 +1,4 @@
-"""Diagnostics v1 contracts. This module does not load config, DB or workers."""
+"""Versioned diagnostics contracts. This module does not load config, DB or workers."""
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -86,7 +86,7 @@ BASE_FIELDS = frozenset({
 ERROR_FIELDS = frozenset({"error_code", "exception_type", "frames"})
 HTTP_FIELDS = frozenset({"route_template", "http_method", "http_status", "duration_ms"})
 OPERATION_FIELDS = frozenset({"stage", "chunk_index", "retry_index", "counts", "duration_ms"})
-EVENT_FIELDS = {
+EVENT_FIELDS_V1 = {
     "server_started": frozenset({"build_id"}), "server_stopped": frozenset(),
     "server_start_failed": ERROR_FIELDS,
     "log_warning": ERROR_FIELDS, "log_error": ERROR_FIELDS,
@@ -108,6 +108,24 @@ EVENT_FIELDS = {
         "source_event_code", "first_timestamp_utc", "last_timestamp_utc", "dependency",
     }),
 }
+EVENT_FIELDS_V2 = {
+    **EVENT_FIELDS_V1,
+    "operation_summary": frozenset({"stage", "duration_ms", "counts", "outcome"}),
+    "success_aggregate": frozenset({
+        "route_template", "stage", "dependency", "outcome", "window_start_utc",
+        "window_end_utc", "counts",
+    }),
+}
+# Kept for internal callers that still explicitly handle v1.
+EVENT_FIELDS = EVENT_FIELDS_V1
+AGGREGATE_COUNT_KEYS = frozenset({
+    "count", "duration_sum_us", "duration_max_us", "le_10ms", "le_50ms",
+    "le_250ms", "le_1000ms", "le_5000ms", "le_30000ms", "gt_30000ms",
+})
+AGGREGATE_BUCKET_KEYS = (
+    "le_10ms", "le_50ms", "le_250ms", "le_1000ms", "le_5000ms",
+    "le_30000ms", "gt_30000ms",
+)
 COUNT_KEYS = frozenset({
     "processed", "total", "concepts", "chunks", "points", "attempts", "repeats",
     "dropped", "invalid", "truncated", "bytes", "omitted_frames", "expired_queue",

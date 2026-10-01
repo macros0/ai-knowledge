@@ -15,7 +15,9 @@
     "timestamp_utc"
   ],
   "events": {
-    "server_started": ["build_id"],
+    "server_started": [
+      "build_id"
+    ],
     "server_stopped": [],
     "server_start_failed": [
       "error_code",
@@ -607,5 +609,43 @@
     "app/services/trash.py",
     "app/services/ui_dictionary.py",
     "app/services/vector_store.py"
+  ],
+  "eventsV2": {
+    "operation_summary": [
+      "stage",
+      "duration_ms",
+      "counts",
+      "outcome"
+    ],
+    "success_aggregate": [
+      "route_template",
+      "stage",
+      "dependency",
+      "outcome",
+      "window_start_utc",
+      "window_end_utc",
+      "counts"
+    ]
+  },
+  "aggregateCounts": [
+    "count",
+    "duration_sum_us",
+    "duration_max_us",
+    "le_10ms",
+    "le_50ms",
+    "le_250ms",
+    "le_1000ms",
+    "le_5000ms",
+    "le_30000ms",
+    "gt_30000ms"
+  ],
+  "aggregateBucketKeys": [
+    "le_10ms",
+    "le_50ms",
+    "le_250ms",
+    "le_1000ms",
+    "le_5000ms",
+    "le_30000ms",
+    "gt_30000ms"
   ]
 }
