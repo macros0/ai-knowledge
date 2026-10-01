@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "scope": "controlled stale-poll mechanism; historical attribution unconfirmed",
+  "source_sha256": "1660003697679e159a1945f81da4d1a902a5f26aaf52638c90e8925228273e2d",
+  "unguarded": {
+    "expected": 7328,
+    "admitted": 7312,
+    "captured": 7312,
+    "active_after_late_poll": false,
+    "dropped": 0,
+    "invalid": 0,
+    "expired_queue": 0
+  },
+  "guarded": {
+    "expected": 7328,
+    "admitted": 7328,
+    "captured": 7328,
+    "active_after_late_poll": true,
+    "dropped": 0,
+    "invalid": 0,
+    "expired_queue": 0
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "rows": 24,
+  "requests": 57917,
+  "failed_gates": [],
+  "max_p95_overhead_pct": 10.453682492300675,
+  "max_p95_delta_ms": 12.44606007821858,
+  "max_backend_rss_growth_mib": 1.48828125,
+  "max_frontend_rss_growth_mib": 1.7890625,
+  "baseline_p95_ms": {
+    "1": [
+      63.247334910556674,
+      72.70797900855541,
+      73.81059299223125
+    ],
+    "8": [
+      128.9366059936583,
+      119.05909795314074,
+      130.01606101170182
+    ]
+  },
+  "baseline_spread_pct": {
+    "1": 16.701507022569338,
+    "8": 9.202961593807402
+  },
+  "max_p95_growth_vs_fastest_baseline_pct": 24.523422433675314,
+  "conservative_check_diagnostic_only": true,
+  "phase_summary": {
+    "prepare": {
+      "min_samples": 5,
+      "max_p95_ms": 562.8321429248899
+    },
+    "zip": {
+      "min_samples": 4,
+      "max_p95_ms": 180.56696304120123
+    }
+  }
+}

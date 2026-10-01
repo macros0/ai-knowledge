@@ -1,0 +1,5721 @@
+{
+  "bundle_poll_interval_seconds": 3,
+  "image_ids": {
+    "backend": "sha256:b51d0b122dc243d67417f4bd520d67f8629a08981ff63124e9dd296a6fe52d8d",
+    "frontend": "sha256:d2541f58d4b9af9c945d2f87214ebb7e4a8c71024084f549668c974c18d8c585"
+  },
+  "rows": [
+    {
+      "bundle": null,
+      "capture_counts_pass": null,
+      "capture_search_counts": null,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 65.81471299999976,
+        "frontend": 18.561331000000003
+      },
+      "elapsed_seconds": 60.04405304999091,
+      "expected_capture_search_calls": null,
+      "expected_capture_settings_calls": null,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 0,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 0
+      },
+      "host_samples": [
+        {
+          "at_monotonic": 754265.172782202,
+          "cpu_idle_ticks": 292164125,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 0.0,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301294984
+        },
+        {
+          "at_monotonic": 754266.173966174,
+          "cpu_idle_ticks": 292164304,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 0.72,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301295375
+        },
+        {
+          "at_monotonic": 754267.19187283,
+          "cpu_idle_ticks": 292164472,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 0.72,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301295778
+        },
+        {
+          "at_monotonic": 754268.207837381,
+          "cpu_idle_ticks": 292164653,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 3.67,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301296175
+        },
+        {
+          "at_monotonic": 754269.208576569,
+          "cpu_idle_ticks": 292164813,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 3.67,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301296566
+        },
+        {
+          "at_monotonic": 754270.224593261,
+          "cpu_idle_ticks": 292165019,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 6.09,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301296964
+        },
+        {
+          "at_monotonic": 754271.241974355,
+          "cpu_idle_ticks": 292165210,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 6.09,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301297365
+        },
+        {
+          "at_monotonic": 754272.245374695,
+          "cpu_idle_ticks": 292165354,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 7.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301297761
+        },
+        {
+          "at_monotonic": 754273.247902199,
+          "cpu_idle_ticks": 292165530,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 7.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301298151
+        },
+        {
+          "at_monotonic": 754274.266252787,
+          "cpu_idle_ticks": 292165711,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 9.6,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301298548
+        },
+        {
+          "at_monotonic": 754275.266318587,
+          "cpu_idle_ticks": 292165896,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 9.6,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301298940
+        },
+        {
+          "at_monotonic": 754276.277670552,
+          "cpu_idle_ticks": 292166115,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 10.39,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301299343
+        },
+        {
+          "at_monotonic": 754277.297889863,
+          "cpu_idle_ticks": 292166289,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 10.39,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301299741
+        },
+        {
+          "at_monotonic": 754278.314380937,
+          "cpu_idle_ticks": 292166479,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 11.59,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301300137
+        },
+        {
+          "at_monotonic": 754279.315850785,
+          "cpu_idle_ticks": 292166661,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 11.59,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301300528
+        },
+        {
+          "at_monotonic": 754280.317269754,
+          "cpu_idle_ticks": 292166824,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.39,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301300921
+        },
+        {
+          "at_monotonic": 754281.329405383,
+          "cpu_idle_ticks": 292167044,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.39,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301301316
+        },
+        {
+          "at_monotonic": 754282.33166669,
+          "cpu_idle_ticks": 292167200,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301301708
+        },
+        {
+          "at_monotonic": 754283.351487976,
+          "cpu_idle_ticks": 292167381,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301302109
+        },
+        {
+          "at_monotonic": 754284.369435962,
+          "cpu_idle_ticks": 292167574,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.82,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301302505
+        },
+        {
+          "at_monotonic": 754285.387550121,
+          "cpu_idle_ticks": 292167796,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.82,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301302908
+        },
+        {
+          "at_monotonic": 754286.40289616,
+          "cpu_idle_ticks": 292167980,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.67,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301303304
+        },
+        {
+          "at_monotonic": 754287.423255913,
+          "cpu_idle_ticks": 292168164,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.67,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301303704
+        },
+        {
+          "at_monotonic": 754288.425226154,
+          "cpu_idle_ticks": 292168352,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.09,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301304100
+        },
+        {
+          "at_monotonic": 754289.426717354,
+          "cpu_idle_ticks": 292168532,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.09,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301304493
+        },
+        {
+          "at_monotonic": 754290.441291853,
+          "cpu_idle_ticks": 292168729,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.62,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301304896
+        },
+        {
+          "at_monotonic": 754291.441856281,
+          "cpu_idle_ticks": 292168913,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.62,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301305290
+        },
+        {
+          "at_monotonic": 754292.46108705,
+          "cpu_idle_ticks": 292169087,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.51,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301305691
+        },
+        {
+          "at_monotonic": 754293.480408386,
+          "cpu_idle_ticks": 292169260,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.51,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301306089
+        },
+        {
+          "at_monotonic": 754294.48250401,
+          "cpu_idle_ticks": 292169451,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.14,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301306484
+        },
+        {
+          "at_monotonic": 754295.496769038,
+          "cpu_idle_ticks": 292169677,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.14,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301306883
+        },
+        {
+          "at_monotonic": 754296.497822787,
+          "cpu_idle_ticks": 292169866,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301307273
+        },
+        {
+          "at_monotonic": 754297.516890409,
+          "cpu_idle_ticks": 292170049,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301307674
+        },
+        {
+          "at_monotonic": 754298.534669116,
+          "cpu_idle_ticks": 292170243,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.98,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301308069
+        },
+        {
+          "at_monotonic": 754299.550662683,
+          "cpu_idle_ticks": 292170438,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.98,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301308465
+        },
+        {
+          "at_monotonic": 754300.565908196,
+          "cpu_idle_ticks": 292170662,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.98,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301308864
+        },
+        {
+          "at_monotonic": 754301.582725865,
+          "cpu_idle_ticks": 292170825,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.98,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301309262
+        },
+        {
+          "at_monotonic": 754302.583959995,
+          "cpu_idle_ticks": 292171004,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.98,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301309651
+        },
+        {
+          "at_monotonic": 754303.603185153,
+          "cpu_idle_ticks": 292171180,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.98,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301310051
+        },
+        {
+          "at_monotonic": 754304.606138675,
+          "cpu_idle_ticks": 292171362,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.35,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301310436
+        },
+        {
+          "at_monotonic": 754305.618152016,
+          "cpu_idle_ticks": 292171588,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.35,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301310836
+        },
+        {
+          "at_monotonic": 754306.635313584,
+          "cpu_idle_ticks": 292171777,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301311232
+        },
+        {
+          "at_monotonic": 754307.654821351,
+          "cpu_idle_ticks": 292171966,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301311634
+        },
+        {
+          "at_monotonic": 754308.672233446,
+          "cpu_idle_ticks": 292172156,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.12,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301312030
+        },
+        {
+          "at_monotonic": 754309.684281264,
+          "cpu_idle_ticks": 292172366,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.12,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301312428
+        },
+        {
+          "at_monotonic": 754310.685472881,
+          "cpu_idle_ticks": 292172572,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301312820
+        },
+        {
+          "at_monotonic": 754311.705462215,
+          "cpu_idle_ticks": 292172741,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301313221
+        },
+        {
+          "at_monotonic": 754312.709895493,
+          "cpu_idle_ticks": 292172922,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301313610
+        },
+        {
+          "at_monotonic": 754313.728052244,
+          "cpu_idle_ticks": 292173091,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.48,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301314006
+        },
+        {
+          "at_monotonic": 754314.747532759,
+          "cpu_idle_ticks": 292173288,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.48,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301314400
+        },
+        {
+          "at_monotonic": 754315.763727918,
+          "cpu_idle_ticks": 292173508,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.03,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301314800
+        },
+        {
+          "at_monotonic": 754316.780806334,
+          "cpu_idle_ticks": 292173701,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.03,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301315203
+        },
+        {
+          "at_monotonic": 754317.784527979,
+          "cpu_idle_ticks": 292173883,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.21,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301315593
+        },
+        {
+          "at_monotonic": 754318.787621212,
+          "cpu_idle_ticks": 292174072,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.21,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301315985
+        },
+        {
+          "at_monotonic": 754319.796856684,
+          "cpu_idle_ticks": 292174297,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.99,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301316386
+        },
+        {
+          "at_monotonic": 754320.800015495,
+          "cpu_idle_ticks": 292174486,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.99,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301316776
+        },
+        {
+          "at_monotonic": 754321.801495994,
+          "cpu_idle_ticks": 292174661,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.17,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301317169
+        },
+        {
+          "at_monotonic": 754322.822159177,
+          "cpu_idle_ticks": 292174837,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.17,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301317566
+        },
+        {
+          "at_monotonic": 754323.845370172,
+          "cpu_idle_ticks": 292175007,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301317969
+        },
+        {
+          "at_monotonic": 754324.853845667,
+          "cpu_idle_ticks": 292175235,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301318364
+        },
+        {
+          "at_monotonic": 754325.873264191,
+          "cpu_idle_ticks": 292175428,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.2,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301318762
+        },
+        {
+          "at_monotonic": 754326.892243892,
+          "cpu_idle_ticks": 292175617,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.2,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301319159
+        },
+        {
+          "at_monotonic": 754327.910034652,
+          "cpu_idle_ticks": 292175797,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301319556
+        },
+        {
+          "at_monotonic": 754328.929438829,
+          "cpu_idle_ticks": 292175990,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301319954
+        },
+        {
+          "at_monotonic": 754329.94274375,
+          "cpu_idle_ticks": 292176217,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.06,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301320351
+        },
+        {
+          "at_monotonic": 754330.959372592,
+          "cpu_idle_ticks": 292176407,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.06,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301320751
+        },
+        {
+          "at_monotonic": 754331.973371452,
+          "cpu_idle_ticks": 292176592,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.23,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301321146
+        },
+        {
+          "at_monotonic": 754332.973628473,
+          "cpu_idle_ticks": 292176750,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.23,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301321537
+        },
+        {
+          "at_monotonic": 754333.974919974,
+          "cpu_idle_ticks": 292176916,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301321929
+        },
+        {
+          "at_monotonic": 754334.986594537,
+          "cpu_idle_ticks": 292177139,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301322328
+        },
+        {
+          "at_monotonic": 754335.98931718,
+          "cpu_idle_ticks": 292177334,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.39,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301322724
+        },
+        {
+          "at_monotonic": 754336.991411502,
+          "cpu_idle_ticks": 292177521,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.39,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301323116
+        },
+        {
+          "at_monotonic": 754338.011744874,
+          "cpu_idle_ticks": 292177706,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.31,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301323519
+        },
+        {
+          "at_monotonic": 754339.029537999,
+          "cpu_idle_ticks": 292177914,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.31,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301323918
+        },
+        {
+          "at_monotonic": 754340.049766267,
+          "cpu_idle_ticks": 292178131,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301324316
+        },
+        {
+          "at_monotonic": 754341.050089286,
+          "cpu_idle_ticks": 292178322,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301324709
+        },
+        {
+          "at_monotonic": 754342.065577651,
+          "cpu_idle_ticks": 292178516,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301325108
+        },
+        {
+          "at_monotonic": 754343.084114091,
+          "cpu_idle_ticks": 292178675,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301325507
+        },
+        {
+          "at_monotonic": 754344.101372547,
+          "cpu_idle_ticks": 292178879,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.11,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301325906
+        },
+        {
+          "at_monotonic": 754345.12017305,
+          "cpu_idle_ticks": 292179067,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.11,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301326306
+        },
+        {
+          "at_monotonic": 754346.120563881,
+          "cpu_idle_ticks": 292179261,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.27,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301326702
+        },
+        {
+          "at_monotonic": 754347.140556521,
+          "cpu_idle_ticks": 292179445,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.27,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301327097
+        },
+        {
+          "at_monotonic": 754348.142373223,
+          "cpu_idle_ticks": 292179627,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301327488
+        },
+        {
+          "at_monotonic": 754349.152024714,
+          "cpu_idle_ticks": 292179846,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301327885
+        },
+        {
+          "at_monotonic": 754350.1712075,
+          "cpu_idle_ticks": 292180042,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.15,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301328285
+        },
+        {
+          "at_monotonic": 754351.185789153,
+          "cpu_idle_ticks": 292180232,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.15,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301328682
+        },
+        {
+          "at_monotonic": 754352.191303842,
+          "cpu_idle_ticks": 292180419,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.3,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301329075
+        },
+        {
+          "at_monotonic": 754353.206489459,
+          "cpu_idle_ticks": 292180585,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.3,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301329476
+        },
+        {
+          "at_monotonic": 754354.222637326,
+          "cpu_idle_ticks": 292180801,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.24,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301329877
+        },
+        {
+          "at_monotonic": 754355.226713801,
+          "cpu_idle_ticks": 292180975,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.24,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301330269
+        }
+      ],
+      "max_ms": 403.07430597022176,
+      "measurement_peak_rss_bytes": {
+        "backend": 455991296,
+        "backend_child": 28975104,
+        "frontend": 208982016
+      },
+      "mode": "baseline",
+      "p50_ms": 78.33197544096038,
+      "p95_ms": 94.26192194223404,
+      "p99_ms": 383.5715699242428,
+      "peak_rss_bytes": {
+        "backend": 455991296,
+        "backend_child": 28975104,
+        "frontend": 208982016
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 476975,
+        "boot_id": "f5e8815e-e8d4-4205-8c9c-e9ef6709ba88",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66706075648,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T10:44:21.382144+00:00",
+        "policy_omitted": 247179,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 0,
+        "reserved_bytes": 65280,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 482834,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T08:03:19.179918+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 118124350,
+        "written": 21227
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 0,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -2162688,
+        "invalid": 0,
+        "policy_omitted": 0,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": 0,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 0,
+        "written": 0
+      },
+      "repeat": 1,
+      "requests": 5144,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": null,
+      "slowest_intervals": [
+        {
+          "duration_ms": 391.3490860722959,
+          "finished": 754353.767877612,
+          "started": 754353.376528526
+        },
+        {
+          "duration_ms": 391.40151790343225,
+          "finished": 754353.768764937,
+          "started": 754353.377363419
+        },
+        {
+          "duration_ms": 392.80168002005666,
+          "finished": 754300.145563393,
+          "started": 754299.752761713
+        },
+        {
+          "duration_ms": 392.9919289657846,
+          "finished": 754343.85032081,
+          "started": 754343.457328881
+        },
+        {
+          "duration_ms": 393.3003289857879,
+          "finished": 754343.851387954,
+          "started": 754343.458087625
+        },
+        {
+          "duration_ms": 393.4225260745734,
+          "finished": 754324.670175967,
+          "started": 754324.276753441
+        },
+        {
+          "duration_ms": 393.6550379730761,
+          "finished": 754319.790355889,
+          "started": 754319.396700851
+        },
+        {
+          "duration_ms": 394.2739509511739,
+          "finished": 754353.77032551,
+          "started": 754353.376051559
+        },
+        {
+          "duration_ms": 394.8535079834983,
+          "finished": 754324.6721274,
+          "started": 754324.277273892
+        },
+        {
+          "duration_ms": 394.97537491843104,
+          "finished": 754324.672801871,
+          "started": 754324.277826496
+        },
+        {
+          "duration_ms": 395.5684680258855,
+          "finished": 754334.445926798,
+          "started": 754334.05035833
+        },
+        {
+          "duration_ms": 395.846928935498,
+          "finished": 754353.7721775,
+          "started": 754353.376330571
+        },
+        {
+          "duration_ms": 395.88917000219226,
+          "finished": 754353.772808175,
+          "started": 754353.376919005
+        },
+        {
+          "duration_ms": 397.4000869784504,
+          "finished": 754334.447915082,
+          "started": 754334.050514995
+        },
+        {
+          "duration_ms": 397.504580905661,
+          "finished": 754343.85605219,
+          "started": 754343.458547609
+        },
+        {
+          "duration_ms": 398.55401997920126,
+          "finished": 754319.794231361,
+          "started": 754319.395677341
+        },
+        {
+          "duration_ms": 399.6703509474173,
+          "finished": 754343.857884111,
+          "started": 754343.45821376
+        },
+        {
+          "duration_ms": 400.5390490638092,
+          "finished": 754343.859363807,
+          "started": 754343.458824758
+        },
+        {
+          "duration_ms": 402.1391689311713,
+          "finished": 754334.45210188,
+          "started": 754334.049962711
+        },
+        {
+          "duration_ms": 403.07430597022176,
+          "finished": 754334.452702367,
+          "started": 754334.049628061
+        }
+      ],
+      "spool_bytes_growth": 0,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 85.67043260249699,
+      "warmup_seconds": 30,
+      "workload_distribution": "search (1/1/1 queries)"
+    },
+    {
+      "bundle": {
+        "api_observed_building": true,
+        "build_seconds": 3.3064016109565273,
+        "observed_building": true,
+        "overlapping_requests": 208,
+        "phase_latencies": {
+          "prepare": {
+            "max_ms": 125.16549800056964,
+            "observed_seconds": 2.2821979169966653,
+            "p50_ms": 90.29059851309285,
+            "p95_ms": 105.7103939820081,
+            "p99_ms": 125.11078105308115,
+            "requests": 184
+          },
+          "zip": {
+            "max_ms": 119.34142804238945,
+            "observed_seconds": 0.27441034791991115,
+            "p50_ms": 94.07864656532183,
+            "p95_ms": 111.71773995738477,
+            "p99_ms": 119.34142804238945,
+            "requests": 32
+          }
+        },
+        "phases": [
+          {
+            "closed": true,
+            "finished": 754388.678703173,
+            "phase": "prepare",
+            "pid": 2553274,
+            "started": 754386.396505256
+          },
+          {
+            "closed": true,
+            "finished": 754388.973927456,
+            "phase": "zip",
+            "pid": 2553388,
+            "started": 754388.699517108
+          }
+        ],
+        "poll_interval_seconds": 3,
+        "poll_requests": 2,
+        "size_bytes": 37018,
+        "status": "ready"
+      },
+      "capture_counts_pass": true,
+      "capture_search_counts": {
+        "backend_operations": 7368,
+        "backend_qdrant": 7368,
+        "backend_requests": 7368,
+        "frontend_requests": 7368
+      },
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 68.1296169999996,
+        "frontend": 18.128526
+      },
+      "elapsed_seconds": 60.00052438490093,
+      "expected_capture_search_calls": 7368,
+      "expected_capture_settings_calls": 0,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 4900,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 12
+      },
+      "host_samples": [
+        {
+          "at_monotonic": 754356.104716041,
+          "cpu_idle_ticks": 292181239,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.84,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301330617
+        },
+        {
+          "at_monotonic": 754357.108130268,
+          "cpu_idle_ticks": 292181432,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.84,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301331011
+        },
+        {
+          "at_monotonic": 754358.115939278,
+          "cpu_idle_ticks": 292181625,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.5,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301331405
+        },
+        {
+          "at_monotonic": 754359.123870384,
+          "cpu_idle_ticks": 292181804,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.5,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301331802
+        },
+        {
+          "at_monotonic": 754360.129750845,
+          "cpu_idle_ticks": 292182024,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.23,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301332198
+        },
+        {
+          "at_monotonic": 754361.135701162,
+          "cpu_idle_ticks": 292182212,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.23,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301332588
+        },
+        {
+          "at_monotonic": 754362.141844433,
+          "cpu_idle_ticks": 292182402,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.37,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301332983
+        },
+        {
+          "at_monotonic": 754363.154864992,
+          "cpu_idle_ticks": 292182593,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.37,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301333380
+        },
+        {
+          "at_monotonic": 754364.162046652,
+          "cpu_idle_ticks": 292182775,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.84,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301333776
+        },
+        {
+          "at_monotonic": 754365.167379208,
+          "cpu_idle_ticks": 292182959,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.84,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301334170
+        },
+        {
+          "at_monotonic": 754366.172868629,
+          "cpu_idle_ticks": 292183150,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.69,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301334566
+        },
+        {
+          "at_monotonic": 754367.177393014,
+          "cpu_idle_ticks": 292183339,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.69,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301334954
+        },
+        {
+          "at_monotonic": 754368.17859455,
+          "cpu_idle_ticks": 292183529,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301335349
+        },
+        {
+          "at_monotonic": 754369.185380331,
+          "cpu_idle_ticks": 292183712,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301335746
+        },
+        {
+          "at_monotonic": 754370.187713066,
+          "cpu_idle_ticks": 292183933,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.43,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301336140
+        },
+        {
+          "at_monotonic": 754371.190844123,
+          "cpu_idle_ticks": 292184127,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.43,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301336537
+        },
+        {
+          "at_monotonic": 754372.197849931,
+          "cpu_idle_ticks": 292184320,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.53,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301336934
+        },
+        {
+          "at_monotonic": 754373.204321701,
+          "cpu_idle_ticks": 292184510,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.53,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301337324
+        },
+        {
+          "at_monotonic": 754374.20910006,
+          "cpu_idle_ticks": 292184682,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.62,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301337719
+        },
+        {
+          "at_monotonic": 754375.215467888,
+          "cpu_idle_ticks": 292184866,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.62,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301338118
+        },
+        {
+          "at_monotonic": 754376.221153661,
+          "cpu_idle_ticks": 292185060,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301338513
+        },
+        {
+          "at_monotonic": 754377.222121423,
+          "cpu_idle_ticks": 292185244,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301338898
+        },
+        {
+          "at_monotonic": 754378.222641996,
+          "cpu_idle_ticks": 292185435,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301339289
+        },
+        {
+          "at_monotonic": 754379.241784714,
+          "cpu_idle_ticks": 292185657,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301339686
+        },
+        {
+          "at_monotonic": 754380.245491811,
+          "cpu_idle_ticks": 292185848,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301340078
+        },
+        {
+          "at_monotonic": 754381.246409055,
+          "cpu_idle_ticks": 292186044,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301340473
+        },
+        {
+          "at_monotonic": 754382.249732536,
+          "cpu_idle_ticks": 292186233,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.65,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301340867
+        },
+        {
+          "at_monotonic": 754383.262677507,
+          "cpu_idle_ticks": 292186426,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.65,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301341258
+        },
+        {
+          "at_monotonic": 754384.278787581,
+          "cpu_idle_ticks": 292186640,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301341656
+        },
+        {
+          "at_monotonic": 754385.286917394,
+          "cpu_idle_ticks": 292186788,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301342050
+        },
+        {
+          "at_monotonic": 754386.290120712,
+          "cpu_idle_ticks": 292186977,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301342447
+        },
+        {
+          "at_monotonic": 754387.305317941,
+          "cpu_idle_ticks": 292187090,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301342844
+        },
+        {
+          "at_monotonic": 754388.319377218,
+          "cpu_idle_ticks": 292187200,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.65,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301343248
+        },
+        {
+          "at_monotonic": 754389.324246023,
+          "cpu_idle_ticks": 292187350,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.65,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301343644
+        },
+        {
+          "at_monotonic": 754390.342938035,
+          "cpu_idle_ticks": 292187559,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.9,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301344043
+        },
+        {
+          "at_monotonic": 754391.353165826,
+          "cpu_idle_ticks": 292187753,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.9,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301344437
+        },
+        {
+          "at_monotonic": 754392.358458173,
+          "cpu_idle_ticks": 292187949,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.73,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301344835
+        },
+        {
+          "at_monotonic": 754393.363419297,
+          "cpu_idle_ticks": 292188137,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.73,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301345222
+        },
+        {
+          "at_monotonic": 754394.369376758,
+          "cpu_idle_ticks": 292188321,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.78,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301345619
+        },
+        {
+          "at_monotonic": 754395.369383572,
+          "cpu_idle_ticks": 292188520,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.78,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301346011
+        },
+        {
+          "at_monotonic": 754396.379341448,
+          "cpu_idle_ticks": 292188690,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301346407
+        },
+        {
+          "at_monotonic": 754397.382666773,
+          "cpu_idle_ticks": 292188880,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301346799
+        },
+        {
+          "at_monotonic": 754398.384433849,
+          "cpu_idle_ticks": 292189071,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301347193
+        },
+        {
+          "at_monotonic": 754399.385827118,
+          "cpu_idle_ticks": 292189274,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301347588
+        },
+        {
+          "at_monotonic": 754400.40539882,
+          "cpu_idle_ticks": 292189486,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.06,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301347986
+        },
+        {
+          "at_monotonic": 754401.40645311,
+          "cpu_idle_ticks": 292189674,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.06,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301348377
+        },
+        {
+          "at_monotonic": 754402.41530687,
+          "cpu_idle_ticks": 292189871,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.05,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301348774
+        },
+        {
+          "at_monotonic": 754403.422333919,
+          "cpu_idle_ticks": 292190065,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.05,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301349168
+        },
+        {
+          "at_monotonic": 754404.442580533,
+          "cpu_idle_ticks": 292190273,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.04,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301349568
+        },
+        {
+          "at_monotonic": 754405.450809739,
+          "cpu_idle_ticks": 292190470,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.04,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301349962
+        },
+        {
+          "at_monotonic": 754406.461945634,
+          "cpu_idle_ticks": 292190610,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.03,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301350359
+        },
+        {
+          "at_monotonic": 754407.468588457,
+          "cpu_idle_ticks": 292190799,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.03,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301350754
+        },
+        {
+          "at_monotonic": 754408.478638582,
+          "cpu_idle_ticks": 292190996,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.21,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301351154
+        },
+        {
+          "at_monotonic": 754409.483392213,
+          "cpu_idle_ticks": 292191186,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.21,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301351547
+        },
+        {
+          "at_monotonic": 754410.503458045,
+          "cpu_idle_ticks": 292191393,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.99,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301351948
+        },
+        {
+          "at_monotonic": 754411.510314473,
+          "cpu_idle_ticks": 292191588,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.99,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301352347
+        },
+        {
+          "at_monotonic": 754412.514365658,
+          "cpu_idle_ticks": 292191779,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.81,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301352737
+        },
+        {
+          "at_monotonic": 754413.521808696,
+          "cpu_idle_ticks": 292191976,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.81,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301353127
+        },
+        {
+          "at_monotonic": 754414.524507403,
+          "cpu_idle_ticks": 292192193,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.66,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301353524
+        },
+        {
+          "at_monotonic": 754415.525511496,
+          "cpu_idle_ticks": 292192380,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.66,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301353912
+        },
+        {
+          "at_monotonic": 754416.530231982,
+          "cpu_idle_ticks": 292192522,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.54,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301354309
+        },
+        {
+          "at_monotonic": 754417.535835975,
+          "cpu_idle_ticks": 292192712,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.54,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301354706
+        },
+        {
+          "at_monotonic": 754418.54791811,
+          "cpu_idle_ticks": 292192906,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.17,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301355100
+        },
+        {
+          "at_monotonic": 754419.5684666,
+          "cpu_idle_ticks": 292193125,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.17,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301355502
+        },
+        {
+          "at_monotonic": 754420.578245709,
+          "cpu_idle_ticks": 292193319,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.77,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301355897
+        },
+        {
+          "at_monotonic": 754421.580873758,
+          "cpu_idle_ticks": 292193515,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.77,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301356290
+        },
+        {
+          "at_monotonic": 754422.594074246,
+          "cpu_idle_ticks": 292193709,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301356686
+        },
+        {
+          "at_monotonic": 754423.601849741,
+          "cpu_idle_ticks": 292193899,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301357082
+        },
+        {
+          "at_monotonic": 754424.602314926,
+          "cpu_idle_ticks": 292194115,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301357475
+        },
+        {
+          "at_monotonic": 754425.604317059,
+          "cpu_idle_ticks": 292194308,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301357867
+        },
+        {
+          "at_monotonic": 754426.618886027,
+          "cpu_idle_ticks": 292194467,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.42,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301358260
+        },
+        {
+          "at_monotonic": 754427.629943881,
+          "cpu_idle_ticks": 292194650,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.42,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301358650
+        },
+        {
+          "at_monotonic": 754428.635717474,
+          "cpu_idle_ticks": 292194846,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301359044
+        },
+        {
+          "at_monotonic": 754429.653779552,
+          "cpu_idle_ticks": 292195060,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301359444
+        },
+        {
+          "at_monotonic": 754430.656874679,
+          "cpu_idle_ticks": 292195249,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.54,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301359835
+        },
+        {
+          "at_monotonic": 754431.657901385,
+          "cpu_idle_ticks": 292195442,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.54,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301360229
+        },
+        {
+          "at_monotonic": 754432.662280739,
+          "cpu_idle_ticks": 292195632,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301360617
+        },
+        {
+          "at_monotonic": 754433.669408464,
+          "cpu_idle_ticks": 292195827,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301361012
+        },
+        {
+          "at_monotonic": 754434.688517366,
+          "cpu_idle_ticks": 292196042,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.69,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301361411
+        },
+        {
+          "at_monotonic": 754435.692782898,
+          "cpu_idle_ticks": 292196232,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.69,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301361796
+        },
+        {
+          "at_monotonic": 754436.698496054,
+          "cpu_idle_ticks": 292196414,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.39,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301362194
+        },
+        {
+          "at_monotonic": 754437.706420157,
+          "cpu_idle_ticks": 292196570,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.39,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301362588
+        },
+        {
+          "at_monotonic": 754438.708341582,
+          "cpu_idle_ticks": 292196758,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.04,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301362983
+        },
+        {
+          "at_monotonic": 754439.708981748,
+          "cpu_idle_ticks": 292196972,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.04,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301363377
+        },
+        {
+          "at_monotonic": 754440.716870051,
+          "cpu_idle_ticks": 292197167,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.85,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301363776
+        },
+        {
+          "at_monotonic": 754441.721542875,
+          "cpu_idle_ticks": 292197361,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.85,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301364171
+        },
+        {
+          "at_monotonic": 754442.723908114,
+          "cpu_idle_ticks": 292197552,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.88,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301364561
+        },
+        {
+          "at_monotonic": 754443.727551496,
+          "cpu_idle_ticks": 292197758,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.88,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301364957
+        },
+        {
+          "at_monotonic": 754444.731926802,
+          "cpu_idle_ticks": 292197958,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.72,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301365349
+        },
+        {
+          "at_monotonic": 754445.738832215,
+          "cpu_idle_ticks": 292198151,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.72,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301365741
+        }
+      ],
+      "max_ms": 405.0296969944611,
+      "measurement_peak_rss_bytes": {
+        "backend": 456245248,
+        "backend_child": 29188096,
+        "frontend": 199663616
+      },
+      "mode": "standard",
+      "p50_ms": 81.06931048678234,
+      "p95_ms": 100.89207894634455,
+      "p99_ms": 385.93872997444123,
+      "peak_rss_bytes": {
+        "backend": 456245248,
+        "backend_child": 29188096,
+        "frontend": 199663616
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 498179,
+        "boot_id": "f5e8815e-e8d4-4205-8c9c-e9ef6709ba88",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66702004224,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T10:45:54.792695+00:00",
+        "policy_omitted": 269283,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 0,
+        "reserved_bytes": 78822,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 482834,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T08:03:19.179918+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 118670164,
+        "written": 22206
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 14094,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -2744320,
+        "invalid": 0,
+        "policy_omitted": 14688,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": -10280,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 373696,
+        "written": 648
+      },
+      "repeat": 1,
+      "requests": 4896,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": "daf3bbd3-0f4f-4bec-b723-01f5d668d96f",
+      "slowest_intervals": [
+        {
+          "duration_ms": 397.10733795072883,
+          "finished": 754439.138583613,
+          "started": 754438.741476275
+        },
+        {
+          "duration_ms": 398.05316599085927,
+          "finished": 754429.12155384,
+          "started": 754428.723500674
+        },
+        {
+          "duration_ms": 398.33389199338853,
+          "finished": 754429.122177182,
+          "started": 754428.72384329
+        },
+        {
+          "duration_ms": 398.9354909863323,
+          "finished": 754443.975659822,
+          "started": 754443.576724331
+        },
+        {
+          "duration_ms": 399.0556549979374,
+          "finished": 754434.291265447,
+          "started": 754433.892209792
+        },
+        {
+          "duration_ms": 399.2386100580916,
+          "finished": 754443.975556471,
+          "started": 754443.576317861
+        },
+        {
+          "duration_ms": 399.48043099138886,
+          "finished": 754424.03928914,
+          "started": 754423.639808709
+        },
+        {
+          "duration_ms": 399.57535499706864,
+          "finished": 754399.645376221,
+          "started": 754399.245800866
+        },
+        {
+          "duration_ms": 399.7081230627373,
+          "finished": 754419.404206446,
+          "started": 754419.004498323
+        },
+        {
+          "duration_ms": 399.78725695982575,
+          "finished": 754389.465261217,
+          "started": 754389.06547396
+        },
+        {
+          "duration_ms": 400.2085760002956,
+          "finished": 754419.403396031,
+          "started": 754419.003187455
+        },
+        {
+          "duration_ms": 400.74025897774845,
+          "finished": 754399.647625322,
+          "started": 754399.246885063
+        },
+        {
+          "duration_ms": 401.9552399404347,
+          "finished": 754414.365222047,
+          "started": 754413.963266807
+        },
+        {
+          "duration_ms": 402.1844060625881,
+          "finished": 754424.040358138,
+          "started": 754423.638173732
+        },
+        {
+          "duration_ms": 402.20765105914325,
+          "finished": 754389.466649936,
+          "started": 754389.064442285
+        },
+        {
+          "duration_ms": 402.32413704507053,
+          "finished": 754419.405094221,
+          "started": 754419.002770084
+        },
+        {
+          "duration_ms": 403.2585039967671,
+          "finished": 754399.649530836,
+          "started": 754399.246272332
+        },
+        {
+          "duration_ms": 403.6885800305754,
+          "finished": 754434.295557018,
+          "started": 754433.891868438
+        },
+        {
+          "duration_ms": 403.80393399391323,
+          "finished": 754434.296144059,
+          "started": 754433.892340125
+        },
+        {
+          "duration_ms": 405.0296969944611,
+          "finished": 754389.469268897,
+          "started": 754389.0642392
+        }
+      ],
+      "spool_bytes_growth": 344236,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 81.59928684276755,
+      "warmup_seconds": 30,
+      "workload_distribution": "search (1/1/1 queries)"
+    },
+    {
+      "bundle": {
+        "api_observed_building": true,
+        "build_seconds": 3.240014187991619,
+        "observed_building": true,
+        "overlapping_requests": 208,
+        "phase_latencies": {
+          "prepare": {
+            "max_ms": 126.60191999748349,
+            "observed_seconds": 2.3301450409926474,
+            "p50_ms": 88.38953351369128,
+            "p95_ms": 110.52458093035966,
+            "p99_ms": 122.38185806199908,
+            "requests": 192
+          },
+          "zip": {
+            "max_ms": 104.77248090319335,
+            "observed_seconds": 0.25253913702908903,
+            "p50_ms": 91.5308945113793,
+            "p95_ms": 101.98656597640365,
+            "p99_ms": 104.77248090319335,
+            "requests": 24
+          }
+        },
+        "phases": [
+          {
+            "closed": true,
+            "finished": 754480.720795773,
+            "phase": "prepare",
+            "pid": 2557343,
+            "started": 754478.390650732
+          },
+          {
+            "closed": true,
+            "finished": 754480.97333491,
+            "phase": "zip",
+            "pid": 2557471,
+            "started": 754480.720795773
+          }
+        ],
+        "poll_interval_seconds": 3,
+        "poll_requests": 2,
+        "size_bytes": 36988,
+        "status": "ready"
+      },
+      "capture_counts_pass": true,
+      "capture_search_counts": {
+        "backend_operations": 7392,
+        "backend_qdrant": 7392,
+        "backend_requests": 7392,
+        "frontend_requests": 7392
+      },
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 68.3492469999992,
+        "frontend": 17.831100000000006
+      },
+      "elapsed_seconds": 60.02895896299742,
+      "expected_capture_search_calls": 7392,
+      "expected_capture_settings_calls": 0,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 4925,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 12
+      },
+      "host_samples": [
+        {
+          "at_monotonic": 754448.138308559,
+          "cpu_idle_ticks": 292198913,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.45,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301366698
+        },
+        {
+          "at_monotonic": 754449.143231709,
+          "cpu_idle_ticks": 292199113,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.45,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301367091
+        },
+        {
+          "at_monotonic": 754450.157304113,
+          "cpu_idle_ticks": 292199295,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.55,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301367486
+        },
+        {
+          "at_monotonic": 754451.158478106,
+          "cpu_idle_ticks": 292199519,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.55,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301367882
+        },
+        {
+          "at_monotonic": 754452.163764842,
+          "cpu_idle_ticks": 292199713,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301368278
+        },
+        {
+          "at_monotonic": 754453.168046656,
+          "cpu_idle_ticks": 292199903,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301368671
+        },
+        {
+          "at_monotonic": 754454.172950038,
+          "cpu_idle_ticks": 292200095,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.06,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301369056
+        },
+        {
+          "at_monotonic": 754455.180228235,
+          "cpu_idle_ticks": 292200282,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.06,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301369456
+        },
+        {
+          "at_monotonic": 754456.198143097,
+          "cpu_idle_ticks": 292200509,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.23,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301369856
+        },
+        {
+          "at_monotonic": 754457.207339412,
+          "cpu_idle_ticks": 292200690,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.23,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301370248
+        },
+        {
+          "at_monotonic": 754458.214618652,
+          "cpu_idle_ticks": 292200846,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.37,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301370644
+        },
+        {
+          "at_monotonic": 754459.219045928,
+          "cpu_idle_ticks": 292201037,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.37,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301371036
+        },
+        {
+          "at_monotonic": 754460.224112016,
+          "cpu_idle_ticks": 292201215,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.03,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301371427
+        },
+        {
+          "at_monotonic": 754461.225453305,
+          "cpu_idle_ticks": 292201407,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.03,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301371820
+        },
+        {
+          "at_monotonic": 754462.228240784,
+          "cpu_idle_ticks": 292201629,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.84,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301372220
+        },
+        {
+          "at_monotonic": 754463.232293322,
+          "cpu_idle_ticks": 292201824,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.84,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301372613
+        },
+        {
+          "at_monotonic": 754464.237438654,
+          "cpu_idle_ticks": 292202014,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.05,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301373006
+        },
+        {
+          "at_monotonic": 754465.250770167,
+          "cpu_idle_ticks": 292202197,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.05,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301373401
+        },
+        {
+          "at_monotonic": 754466.269428764,
+          "cpu_idle_ticks": 292202408,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301373800
+        },
+        {
+          "at_monotonic": 754467.281610062,
+          "cpu_idle_ticks": 292202617,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301374195
+        },
+        {
+          "at_monotonic": 754468.290835203,
+          "cpu_idle_ticks": 292202786,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301374596
+        },
+        {
+          "at_monotonic": 754469.296771022,
+          "cpu_idle_ticks": 292202945,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301374986
+        },
+        {
+          "at_monotonic": 754470.302293907,
+          "cpu_idle_ticks": 292203125,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.99,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301375379
+        },
+        {
+          "at_monotonic": 754471.321678946,
+          "cpu_idle_ticks": 292203351,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.99,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301375781
+        },
+        {
+          "at_monotonic": 754472.326273017,
+          "cpu_idle_ticks": 292203540,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301376173
+        },
+        {
+          "at_monotonic": 754473.327965358,
+          "cpu_idle_ticks": 292203738,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301376572
+        },
+        {
+          "at_monotonic": 754474.335789015,
+          "cpu_idle_ticks": 292203926,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.7,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301376966
+        },
+        {
+          "at_monotonic": 754475.341555905,
+          "cpu_idle_ticks": 292204104,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.7,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301377357
+        },
+        {
+          "at_monotonic": 754476.350965115,
+          "cpu_idle_ticks": 292204320,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301377750
+        },
+        {
+          "at_monotonic": 754477.359866447,
+          "cpu_idle_ticks": 292204521,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301378148
+        },
+        {
+          "at_monotonic": 754478.36855185,
+          "cpu_idle_ticks": 292204691,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.58,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301378549
+        },
+        {
+          "at_monotonic": 754479.383506067,
+          "cpu_idle_ticks": 292204776,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.58,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301378949
+        },
+        {
+          "at_monotonic": 754480.399607765,
+          "cpu_idle_ticks": 292204871,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 16.29,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301379352
+        },
+        {
+          "at_monotonic": 754481.411187904,
+          "cpu_idle_ticks": 292205015,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 16.29,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301379747
+        },
+        {
+          "at_monotonic": 754482.411821437,
+          "cpu_idle_ticks": 292205237,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 16.23,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301380141
+        },
+        {
+          "at_monotonic": 754483.421845261,
+          "cpu_idle_ticks": 292205425,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 16.23,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301380536
+        },
+        {
+          "at_monotonic": 754484.429336953,
+          "cpu_idle_ticks": 292205619,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 16.19,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301380932
+        },
+        {
+          "at_monotonic": 754485.43490173,
+          "cpu_idle_ticks": 292205802,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 16.19,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301381324
+        },
+        {
+          "at_monotonic": 754486.435796741,
+          "cpu_idle_ticks": 292205992,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.97,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301381714
+        },
+        {
+          "at_monotonic": 754487.45632362,
+          "cpu_idle_ticks": 292206222,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.97,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301382113
+        },
+        {
+          "at_monotonic": 754488.463831724,
+          "cpu_idle_ticks": 292206387,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.25,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301382509
+        },
+        {
+          "at_monotonic": 754489.469373146,
+          "cpu_idle_ticks": 292206582,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.25,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301382908
+        },
+        {
+          "at_monotonic": 754490.475199411,
+          "cpu_idle_ticks": 292206736,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301383300
+        },
+        {
+          "at_monotonic": 754491.477483953,
+          "cpu_idle_ticks": 292206932,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301383696
+        },
+        {
+          "at_monotonic": 754492.495161112,
+          "cpu_idle_ticks": 292207160,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.1,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301384091
+        },
+        {
+          "at_monotonic": 754493.504545895,
+          "cpu_idle_ticks": 292207352,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.1,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301384486
+        },
+        {
+          "at_monotonic": 754494.512897879,
+          "cpu_idle_ticks": 292207545,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.08,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301384882
+        },
+        {
+          "at_monotonic": 754495.519840575,
+          "cpu_idle_ticks": 292207731,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.08,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301385281
+        },
+        {
+          "at_monotonic": 754496.526274722,
+          "cpu_idle_ticks": 292207925,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.07,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301385674
+        },
+        {
+          "at_monotonic": 754497.546460086,
+          "cpu_idle_ticks": 292208152,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.07,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301386074
+        },
+        {
+          "at_monotonic": 754498.553096727,
+          "cpu_idle_ticks": 292208326,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.51,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301386471
+        },
+        {
+          "at_monotonic": 754499.561426959,
+          "cpu_idle_ticks": 292208519,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.51,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301386862
+        },
+        {
+          "at_monotonic": 754500.575785068,
+          "cpu_idle_ticks": 292208678,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.78,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301387261
+        },
+        {
+          "at_monotonic": 754501.595342281,
+          "cpu_idle_ticks": 292208897,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.78,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301387660
+        },
+        {
+          "at_monotonic": 754502.602128783,
+          "cpu_idle_ticks": 292209098,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.82,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301388052
+        },
+        {
+          "at_monotonic": 754503.607288694,
+          "cpu_idle_ticks": 292209297,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.82,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301388442
+        },
+        {
+          "at_monotonic": 754504.609837308,
+          "cpu_idle_ticks": 292209486,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.85,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301388832
+        },
+        {
+          "at_monotonic": 754505.612203158,
+          "cpu_idle_ticks": 292209668,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.85,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301389229
+        },
+        {
+          "at_monotonic": 754506.631159965,
+          "cpu_idle_ticks": 292209892,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.06,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301389626
+        },
+        {
+          "at_monotonic": 754507.63568972,
+          "cpu_idle_ticks": 292210085,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.06,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301390015
+        },
+        {
+          "at_monotonic": 754508.642842674,
+          "cpu_idle_ticks": 292210271,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301390411
+        },
+        {
+          "at_monotonic": 754509.65381931,
+          "cpu_idle_ticks": 292210448,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301390806
+        },
+        {
+          "at_monotonic": 754510.66148465,
+          "cpu_idle_ticks": 292210620,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301391204
+        },
+        {
+          "at_monotonic": 754511.67128504,
+          "cpu_idle_ticks": 292210812,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301391599
+        },
+        {
+          "at_monotonic": 754512.675842099,
+          "cpu_idle_ticks": 292211026,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.94,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301391999
+        },
+        {
+          "at_monotonic": 754513.682644351,
+          "cpu_idle_ticks": 292211216,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.94,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301392392
+        },
+        {
+          "at_monotonic": 754514.692379534,
+          "cpu_idle_ticks": 292211414,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.95,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301392790
+        },
+        {
+          "at_monotonic": 754515.703326813,
+          "cpu_idle_ticks": 292211591,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.95,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301393187
+        },
+        {
+          "at_monotonic": 754516.707873842,
+          "cpu_idle_ticks": 292211806,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.14,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301393584
+        },
+        {
+          "at_monotonic": 754517.708842637,
+          "cpu_idle_ticks": 292212013,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.14,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301393979
+        },
+        {
+          "at_monotonic": 754518.713118579,
+          "cpu_idle_ticks": 292212201,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301394368
+        },
+        {
+          "at_monotonic": 754519.727301557,
+          "cpu_idle_ticks": 292212371,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301394766
+        },
+        {
+          "at_monotonic": 754520.740009017,
+          "cpu_idle_ticks": 292212557,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.83,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301395158
+        },
+        {
+          "at_monotonic": 754521.742857405,
+          "cpu_idle_ticks": 292212757,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.83,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301395554
+        },
+        {
+          "at_monotonic": 754522.763564233,
+          "cpu_idle_ticks": 292212948,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301395956
+        },
+        {
+          "at_monotonic": 754523.76564063,
+          "cpu_idle_ticks": 292213143,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301396349
+        },
+        {
+          "at_monotonic": 754524.771999911,
+          "cpu_idle_ticks": 292213342,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.73,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301396747
+        },
+        {
+          "at_monotonic": 754525.779103068,
+          "cpu_idle_ticks": 292213518,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.73,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301397141
+        },
+        {
+          "at_monotonic": 754526.798255666,
+          "cpu_idle_ticks": 292213747,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.96,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301397542
+        },
+        {
+          "at_monotonic": 754527.818240691,
+          "cpu_idle_ticks": 292213943,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.96,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301397944
+        },
+        {
+          "at_monotonic": 754528.823913518,
+          "cpu_idle_ticks": 292214133,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.42,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301398335
+        },
+        {
+          "at_monotonic": 754529.839044559,
+          "cpu_idle_ticks": 292214293,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301398731
+        },
+        {
+          "at_monotonic": 754530.841569989,
+          "cpu_idle_ticks": 292214475,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301399125
+        },
+        {
+          "at_monotonic": 754531.85985536,
+          "cpu_idle_ticks": 292214679,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301399526
+        },
+        {
+          "at_monotonic": 754532.862425928,
+          "cpu_idle_ticks": 292214870,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301399921
+        },
+        {
+          "at_monotonic": 754533.873392835,
+          "cpu_idle_ticks": 292215061,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301400316
+        },
+        {
+          "at_monotonic": 754534.881183158,
+          "cpu_idle_ticks": 292215253,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301400709
+        },
+        {
+          "at_monotonic": 754535.889855114,
+          "cpu_idle_ticks": 292215435,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.94,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301401104
+        },
+        {
+          "at_monotonic": 754536.903806612,
+          "cpu_idle_ticks": 292215665,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.94,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301401503
+        },
+        {
+          "at_monotonic": 754537.907674411,
+          "cpu_idle_ticks": 292215854,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301401898
+        }
+      ],
+      "max_ms": 401.2129979673773,
+      "measurement_peak_rss_bytes": {
+        "backend": 456273920,
+        "backend_child": 29175808,
+        "frontend": 210083840
+      },
+      "mode": "standard",
+      "p50_ms": 80.92587703140453,
+      "p95_ms": 99.81251100543886,
+      "p99_ms": 385.3405580157414,
+      "peak_rss_bytes": {
+        "backend": 456273920,
+        "backend_child": 29175808,
+        "frontend": 210083840
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 519457,
+        "boot_id": "f5e8815e-e8d4-4205-8c9c-e9ef6709ba88",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66698305536,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T10:47:26.800162+00:00",
+        "policy_omitted": 291459,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 0,
+        "reserved_bytes": 77776,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 482834,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T08:03:19.179918+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 119217802,
+        "written": 23188
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 14191,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -2437120,
+        "invalid": 0,
+        "policy_omitted": 14784,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": -11759,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 373230,
+        "written": 647
+      },
+      "repeat": 2,
+      "requests": 4928,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": "b497141c-e1e6-48f1-9a26-31fb2547640e",
+      "slowest_intervals": [
+        {
+          "duration_ms": 394.1852389834821,
+          "finished": 754531.469317401,
+          "started": 754531.075132162
+        },
+        {
+          "duration_ms": 394.2091050557792,
+          "finished": 754491.875242086,
+          "started": 754491.481032981
+        },
+        {
+          "duration_ms": 394.40826198551804,
+          "finished": 754536.454701158,
+          "started": 754536.060292896
+        },
+        {
+          "duration_ms": 394.89272399805486,
+          "finished": 754531.469532389,
+          "started": 754531.074639665
+        },
+        {
+          "duration_ms": 394.94107803329825,
+          "finished": 754501.703609024,
+          "started": 754501.308667946
+        },
+        {
+          "duration_ms": 395.1739709591493,
+          "finished": 754506.714106364,
+          "started": 754506.318932393
+        },
+        {
+          "duration_ms": 395.4156700056046,
+          "finished": 754526.490945532,
+          "started": 754526.095529862
+        },
+        {
+          "duration_ms": 395.7064859569073,
+          "finished": 754536.455728926,
+          "started": 754536.06002244
+        },
+        {
+          "duration_ms": 395.728278090246,
+          "finished": 754496.91876696,
+          "started": 754496.523038682
+        },
+        {
+          "duration_ms": 396.1579129099846,
+          "finished": 754491.876932542,
+          "started": 754491.480774629
+        },
+        {
+          "duration_ms": 396.6697279829532,
+          "finished": 754486.858132385,
+          "started": 754486.461462657
+        },
+        {
+          "duration_ms": 396.9448620919138,
+          "finished": 754536.45676027,
+          "started": 754536.059815408
+        },
+        {
+          "duration_ms": 397.0881109125912,
+          "finished": 754481.795633753,
+          "started": 754481.398545642
+        },
+        {
+          "duration_ms": 397.21541793551296,
+          "finished": 754506.714990672,
+          "started": 754506.317775254
+        },
+        {
+          "duration_ms": 397.2629209747538,
+          "finished": 754531.471384609,
+          "started": 754531.074121688
+        },
+        {
+          "duration_ms": 397.30621490161866,
+          "finished": 754506.715994063,
+          "started": 754506.318687848
+        },
+        {
+          "duration_ms": 397.8712729876861,
+          "finished": 754536.457462645,
+          "started": 754536.059591372
+        },
+        {
+          "duration_ms": 398.38385896291584,
+          "finished": 754481.796500708,
+          "started": 754481.398116849
+        },
+        {
+          "duration_ms": 399.5659969514236,
+          "finished": 754496.922848593,
+          "started": 754496.523282596
+        },
+        {
+          "duration_ms": 401.2129979673773,
+          "finished": 754496.924374649,
+          "started": 754496.523161651
+        }
+      ],
+      "spool_bytes_growth": 343800,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 82.09371085441744,
+      "warmup_seconds": 30,
+      "workload_distribution": "search (1/1/1 queries)"
+    },
+    {
+      "bundle": null,
+      "capture_counts_pass": null,
+      "capture_search_counts": null,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 66.10347000000002,
+        "frontend": 15.617834000000002
+      },
+      "elapsed_seconds": 60.01611696300097,
+      "expected_capture_search_calls": null,
+      "expected_capture_settings_calls": null,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 0,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 0
+      },
+      "host_samples": [
+        {
+          "at_monotonic": 754539.492138598,
+          "cpu_idle_ticks": 292216372,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301402528
+        },
+        {
+          "at_monotonic": 754540.511822277,
+          "cpu_idle_ticks": 292216539,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.88,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301402924
+        },
+        {
+          "at_monotonic": 754541.530678538,
+          "cpu_idle_ticks": 292216731,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 12.88,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301403322
+        },
+        {
+          "at_monotonic": 754542.549610637,
+          "cpu_idle_ticks": 292216931,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301403725
+        },
+        {
+          "at_monotonic": 754543.553714775,
+          "cpu_idle_ticks": 292217124,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301404121
+        },
+        {
+          "at_monotonic": 754544.556802979,
+          "cpu_idle_ticks": 292217316,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.51,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301404516
+        },
+        {
+          "at_monotonic": 754545.576304875,
+          "cpu_idle_ticks": 292217508,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.51,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301404918
+        },
+        {
+          "at_monotonic": 754546.579453626,
+          "cpu_idle_ticks": 292217703,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.96,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301405313
+        },
+        {
+          "at_monotonic": 754547.589385131,
+          "cpu_idle_ticks": 292217925,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.96,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301405710
+        },
+        {
+          "at_monotonic": 754548.590724656,
+          "cpu_idle_ticks": 292218118,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.79,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301406098
+        },
+        {
+          "at_monotonic": 754549.593133569,
+          "cpu_idle_ticks": 292218313,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.79,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301406496
+        },
+        {
+          "at_monotonic": 754550.593620397,
+          "cpu_idle_ticks": 292218467,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.19,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301406887
+        },
+        {
+          "at_monotonic": 754551.604226001,
+          "cpu_idle_ticks": 292218688,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.19,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301407282
+        },
+        {
+          "at_monotonic": 754552.620785238,
+          "cpu_idle_ticks": 292218870,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301407679
+        },
+        {
+          "at_monotonic": 754553.638964674,
+          "cpu_idle_ticks": 292219047,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301408081
+        },
+        {
+          "at_monotonic": 754554.643658328,
+          "cpu_idle_ticks": 292219244,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301408481
+        },
+        {
+          "at_monotonic": 754555.645926938,
+          "cpu_idle_ticks": 292219433,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301408871
+        },
+        {
+          "at_monotonic": 754556.656809161,
+          "cpu_idle_ticks": 292219653,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301409268
+        },
+        {
+          "at_monotonic": 754557.657958566,
+          "cpu_idle_ticks": 292219842,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.52,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301409660
+        },
+        {
+          "at_monotonic": 754558.678397333,
+          "cpu_idle_ticks": 292220035,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.42,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301410059
+        },
+        {
+          "at_monotonic": 754559.692768818,
+          "cpu_idle_ticks": 292220236,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.42,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301410460
+        },
+        {
+          "at_monotonic": 754560.707652688,
+          "cpu_idle_ticks": 292220435,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.53,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301410859
+        },
+        {
+          "at_monotonic": 754561.723129691,
+          "cpu_idle_ticks": 292220620,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.53,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301411255
+        },
+        {
+          "at_monotonic": 754562.738874856,
+          "cpu_idle_ticks": 292220814,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.43,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301411654
+        },
+        {
+          "at_monotonic": 754563.746070794,
+          "cpu_idle_ticks": 292220985,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.43,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301412050
+        },
+        {
+          "at_monotonic": 754564.76065417,
+          "cpu_idle_ticks": 292221196,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.71,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301412443
+        },
+        {
+          "at_monotonic": 754565.775386285,
+          "cpu_idle_ticks": 292221403,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.71,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301412844
+        },
+        {
+          "at_monotonic": 754566.794086242,
+          "cpu_idle_ticks": 292221593,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301413239
+        },
+        {
+          "at_monotonic": 754567.812315826,
+          "cpu_idle_ticks": 292221790,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301413638
+        },
+        {
+          "at_monotonic": 754568.81489998,
+          "cpu_idle_ticks": 292221984,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301414028
+        },
+        {
+          "at_monotonic": 754569.826709434,
+          "cpu_idle_ticks": 292222209,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301414430
+        },
+        {
+          "at_monotonic": 754570.834171269,
+          "cpu_idle_ticks": 292222375,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.09,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301414827
+        },
+        {
+          "at_monotonic": 754571.847782415,
+          "cpu_idle_ticks": 292222566,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.09,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301415225
+        },
+        {
+          "at_monotonic": 754572.848606699,
+          "cpu_idle_ticks": 292222760,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.61,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301415615
+        },
+        {
+          "at_monotonic": 754573.860538231,
+          "cpu_idle_ticks": 292222985,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.32,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301416016
+        },
+        {
+          "at_monotonic": 754574.861512756,
+          "cpu_idle_ticks": 292223163,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.32,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301416404
+        },
+        {
+          "at_monotonic": 754575.8744073,
+          "cpu_idle_ticks": 292223352,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.44,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301416797
+        },
+        {
+          "at_monotonic": 754576.892957446,
+          "cpu_idle_ticks": 292223547,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.44,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301417196
+        },
+        {
+          "at_monotonic": 754577.900077656,
+          "cpu_idle_ticks": 292223743,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.54,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301417587
+        },
+        {
+          "at_monotonic": 754578.904788554,
+          "cpu_idle_ticks": 292223971,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.54,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301417984
+        },
+        {
+          "at_monotonic": 754579.925343186,
+          "cpu_idle_ticks": 292224173,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.08,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301418391
+        },
+        {
+          "at_monotonic": 754580.946275462,
+          "cpu_idle_ticks": 292224354,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.08,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301418787
+        },
+        {
+          "at_monotonic": 754581.946759855,
+          "cpu_idle_ticks": 292224537,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.61,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301419181
+        },
+        {
+          "at_monotonic": 754582.95584234,
+          "cpu_idle_ticks": 292224765,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.61,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301419577
+        },
+        {
+          "at_monotonic": 754583.969283436,
+          "cpu_idle_ticks": 292224963,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.14,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301419973
+        },
+        {
+          "at_monotonic": 754584.985319455,
+          "cpu_idle_ticks": 292225133,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.14,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301420371
+        },
+        {
+          "at_monotonic": 754585.999938932,
+          "cpu_idle_ticks": 292225326,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301420772
+        },
+        {
+          "at_monotonic": 754587.015056907,
+          "cpu_idle_ticks": 292225526,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301421171
+        },
+        {
+          "at_monotonic": 754588.032788573,
+          "cpu_idle_ticks": 292225743,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.2,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301421571
+        },
+        {
+          "at_monotonic": 754589.049142059,
+          "cpu_idle_ticks": 292225928,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.2,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301421968
+        },
+        {
+          "at_monotonic": 754590.065521417,
+          "cpu_idle_ticks": 292226123,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.53,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301422365
+        },
+        {
+          "at_monotonic": 754591.067644845,
+          "cpu_idle_ticks": 292226317,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.53,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301422760
+        },
+        {
+          "at_monotonic": 754592.080064696,
+          "cpu_idle_ticks": 292226514,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.43,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301423159
+        },
+        {
+          "at_monotonic": 754593.097550634,
+          "cpu_idle_ticks": 292226713,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.43,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301423553
+        },
+        {
+          "at_monotonic": 754594.110897497,
+          "cpu_idle_ticks": 292226907,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.53,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301423952
+        },
+        {
+          "at_monotonic": 754595.12646213,
+          "cpu_idle_ticks": 292227095,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.53,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301424349
+        },
+        {
+          "at_monotonic": 754596.144801788,
+          "cpu_idle_ticks": 292227272,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.8,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301424749
+        },
+        {
+          "at_monotonic": 754597.156194362,
+          "cpu_idle_ticks": 292227494,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.8,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301425146
+        },
+        {
+          "at_monotonic": 754598.174797,
+          "cpu_idle_ticks": 292227693,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301425547
+        },
+        {
+          "at_monotonic": 754599.192335651,
+          "cpu_idle_ticks": 292227893,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301425948
+        },
+        {
+          "at_monotonic": 754600.211337876,
+          "cpu_idle_ticks": 292228088,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301426345
+        },
+        {
+          "at_monotonic": 754601.230991507,
+          "cpu_idle_ticks": 292228292,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301426744
+        },
+        {
+          "at_monotonic": 754602.232946969,
+          "cpu_idle_ticks": 292228478,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.28,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301427136
+        },
+        {
+          "at_monotonic": 754603.255741074,
+          "cpu_idle_ticks": 292228677,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.28,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301427536
+        },
+        {
+          "at_monotonic": 754604.258998597,
+          "cpu_idle_ticks": 292228875,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.41,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301427922
+        },
+        {
+          "at_monotonic": 754605.276723409,
+          "cpu_idle_ticks": 292229070,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.41,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301428326
+        },
+        {
+          "at_monotonic": 754606.291585727,
+          "cpu_idle_ticks": 292229264,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301428727
+        },
+        {
+          "at_monotonic": 754607.310874168,
+          "cpu_idle_ticks": 292229458,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301429123
+        },
+        {
+          "at_monotonic": 754608.312693346,
+          "cpu_idle_ticks": 292229656,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301429516
+        },
+        {
+          "at_monotonic": 754609.315185711,
+          "cpu_idle_ticks": 292229848,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301429907
+        },
+        {
+          "at_monotonic": 754610.331098471,
+          "cpu_idle_ticks": 292230061,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.7,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301430308
+        },
+        {
+          "at_monotonic": 754611.345800779,
+          "cpu_idle_ticks": 292230265,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.7,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301430705
+        },
+        {
+          "at_monotonic": 754612.356187158,
+          "cpu_idle_ticks": 292230435,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301431106
+        },
+        {
+          "at_monotonic": 754613.375432165,
+          "cpu_idle_ticks": 292230628,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301431502
+        },
+        {
+          "at_monotonic": 754614.396007958,
+          "cpu_idle_ticks": 292230828,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.65,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301431904
+        },
+        {
+          "at_monotonic": 754615.409789526,
+          "cpu_idle_ticks": 292231052,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.65,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301432301
+        },
+        {
+          "at_monotonic": 754616.411763003,
+          "cpu_idle_ticks": 292231222,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.17,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301432690
+        },
+        {
+          "at_monotonic": 754617.412317232,
+          "cpu_idle_ticks": 292231410,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.17,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301433080
+        },
+        {
+          "at_monotonic": 754618.432534458,
+          "cpu_idle_ticks": 292231603,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301433477
+        },
+        {
+          "at_monotonic": 754619.44714135,
+          "cpu_idle_ticks": 292231805,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.68,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301433872
+        },
+        {
+          "at_monotonic": 754620.463283927,
+          "cpu_idle_ticks": 292232023,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.38,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301434270
+        },
+        {
+          "at_monotonic": 754621.477843858,
+          "cpu_idle_ticks": 292232217,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.38,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301434671
+        },
+        {
+          "at_monotonic": 754622.480820274,
+          "cpu_idle_ticks": 292232376,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.67,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301435057
+        },
+        {
+          "at_monotonic": 754623.498896519,
+          "cpu_idle_ticks": 292232576,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.67,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301435458
+        },
+        {
+          "at_monotonic": 754624.507543257,
+          "cpu_idle_ticks": 292232805,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301435860
+        },
+        {
+          "at_monotonic": 754625.526404588,
+          "cpu_idle_ticks": 292232998,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.91,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301436254
+        },
+        {
+          "at_monotonic": 754626.543323023,
+          "cpu_idle_ticks": 292233170,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.56,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301436655
+        },
+        {
+          "at_monotonic": 754627.558743717,
+          "cpu_idle_ticks": 292233357,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.56,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301437048
+        },
+        {
+          "at_monotonic": 754628.574453652,
+          "cpu_idle_ticks": 292233583,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.0,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301437452
+        },
+        {
+          "at_monotonic": 754629.591931314,
+          "cpu_idle_ticks": 292233782,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.0,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301437846
+        }
+      ],
+      "max_ms": 411.5658699302003,
+      "measurement_peak_rss_bytes": {
+        "backend": 456261632,
+        "backend_child": 29159424,
+        "frontend": 276959232
+      },
+      "mode": "baseline",
+      "p50_ms": 78.52017600089312,
+      "p95_ms": 93.28882000409067,
+      "p99_ms": 382.2796680033207,
+      "peak_rss_bytes": {
+        "backend": 456261632,
+        "backend_child": 29159424,
+        "frontend": 276959232
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 519458,
+        "boot_id": "f5e8815e-e8d4-4205-8c9c-e9ef6709ba88",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66695077888,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T10:48:56.699126+00:00",
+        "policy_omitted": 291459,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 0,
+        "reserved_bytes": 65280,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 482834,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T08:03:19.179918+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 119220091,
+        "written": 23192
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 0,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -2166784,
+        "invalid": 0,
+        "policy_omitted": 0,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": 0,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 0,
+        "written": 0
+      },
+      "repeat": 2,
+      "requests": 5176,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": null,
+      "slowest_intervals": [
+        {
+          "duration_ms": 391.8648390099406,
+          "finished": 754615.147662663,
+          "started": 754614.755797824
+        },
+        {
+          "duration_ms": 391.892894054763,
+          "finished": 754624.276969813,
+          "started": 754623.885076919
+        },
+        {
+          "duration_ms": 392.12089707143605,
+          "finished": 754605.885676171,
+          "started": 754605.493555274
+        },
+        {
+          "duration_ms": 392.6041660597548,
+          "finished": 754605.88629833,
+          "started": 754605.493694164
+        },
+        {
+          "duration_ms": 393.01787002477795,
+          "finished": 754610.513270741,
+          "started": 754610.120252871
+        },
+        {
+          "duration_ms": 393.2627459289506,
+          "finished": 754591.943788062,
+          "started": 754591.550525316
+        },
+        {
+          "duration_ms": 393.3040651027113,
+          "finished": 754610.514092648,
+          "started": 754610.120788583
+        },
+        {
+          "duration_ms": 395.24738292675465,
+          "finished": 754615.151673729,
+          "started": 754614.756426346
+        },
+        {
+          "duration_ms": 397.2421799553558,
+          "finished": 754605.891302306,
+          "started": 754605.494060126
+        },
+        {
+          "duration_ms": 397.40584907121956,
+          "finished": 754605.890552078,
+          "started": 754605.493146229
+        },
+        {
+          "duration_ms": 397.9480320122093,
+          "finished": 754615.154076389,
+          "started": 754614.756128357
+        },
+        {
+          "duration_ms": 398.2450100593269,
+          "finished": 754601.468754315,
+          "started": 754601.070509305
+        },
+        {
+          "duration_ms": 398.69475294835865,
+          "finished": 754601.465798319,
+          "started": 754601.067103566
+        },
+        {
+          "duration_ms": 399.6334580006078,
+          "finished": 754605.894109262,
+          "started": 754605.494475804
+        },
+        {
+          "duration_ms": 400.6416170159355,
+          "finished": 754605.895330365,
+          "started": 754605.494688748
+        },
+        {
+          "duration_ms": 400.8716850075871,
+          "finished": 754615.15603737,
+          "started": 754614.755165685
+        },
+        {
+          "duration_ms": 403.4536429680884,
+          "finished": 754605.897269584,
+          "started": 754605.493815941
+        },
+        {
+          "duration_ms": 405.9772379696369,
+          "finished": 754601.473367922,
+          "started": 754601.067390684
+        },
+        {
+          "duration_ms": 406.2020550481975,
+          "finished": 754601.47387618,
+          "started": 754601.067674125
+        },
+        {
+          "duration_ms": 411.5658699302003,
+          "finished": 754601.478240983,
+          "started": 754601.066675113
+        }
+      ],
+      "spool_bytes_growth": 0,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 86.24350027828235,
+      "warmup_seconds": 30,
+      "workload_distribution": "search (1/1/1 queries)"
+    },
+    {
+      "bundle": null,
+      "capture_counts_pass": null,
+      "capture_search_counts": null,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 65.94068500000049,
+        "frontend": 16.492680000000007
+      },
+      "elapsed_seconds": 60.010537797934376,
+      "expected_capture_search_calls": null,
+      "expected_capture_settings_calls": null,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 0,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 0
+      },
+      "host_samples": [
+        {
+          "at_monotonic": 754630.079156189,
+          "cpu_idle_ticks": 292233913,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.1,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301438039
+        },
+        {
+          "at_monotonic": 754631.096764565,
+          "cpu_idle_ticks": 292234106,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.1,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301438437
+        },
+        {
+          "at_monotonic": 754632.11170199,
+          "cpu_idle_ticks": 292234293,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.44,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301438828
+        },
+        {
+          "at_monotonic": 754633.128408332,
+          "cpu_idle_ticks": 292234478,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.44,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301439231
+        },
+        {
+          "at_monotonic": 754634.14778751,
+          "cpu_idle_ticks": 292234690,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.18,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301439633
+        },
+        {
+          "at_monotonic": 754635.151700336,
+          "cpu_idle_ticks": 292234887,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.18,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301440022
+        },
+        {
+          "at_monotonic": 754636.171967279,
+          "cpu_idle_ticks": 292235087,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301440420
+        },
+        {
+          "at_monotonic": 754637.176234394,
+          "cpu_idle_ticks": 292235260,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301440815
+        },
+        {
+          "at_monotonic": 754638.188088195,
+          "cpu_idle_ticks": 292235476,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.45,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301441209
+        },
+        {
+          "at_monotonic": 754639.204119195,
+          "cpu_idle_ticks": 292235670,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.45,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301441609
+        },
+        {
+          "at_monotonic": 754640.221969271,
+          "cpu_idle_ticks": 292235868,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.55,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301442005
+        },
+        {
+          "at_monotonic": 754641.227632519,
+          "cpu_idle_ticks": 292236072,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.55,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301442399
+        },
+        {
+          "at_monotonic": 754642.24419906,
+          "cpu_idle_ticks": 292236267,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.81,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301442795
+        },
+        {
+          "at_monotonic": 754643.262813722,
+          "cpu_idle_ticks": 292236459,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.81,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301443199
+        },
+        {
+          "at_monotonic": 754644.282959319,
+          "cpu_idle_ticks": 292236654,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.48,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301443602
+        },
+        {
+          "at_monotonic": 754645.30237622,
+          "cpu_idle_ticks": 292236849,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.48,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301444001
+        },
+        {
+          "at_monotonic": 754646.318020218,
+          "cpu_idle_ticks": 292237044,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301444399
+        },
+        {
+          "at_monotonic": 754647.330511428,
+          "cpu_idle_ticks": 292237256,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301444795
+        },
+        {
+          "at_monotonic": 754648.349624468,
+          "cpu_idle_ticks": 292237423,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301445196
+        },
+        {
+          "at_monotonic": 754649.364790778,
+          "cpu_idle_ticks": 292237606,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301445590
+        },
+        {
+          "at_monotonic": 754650.38335419,
+          "cpu_idle_ticks": 292237803,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301445990
+        },
+        {
+          "at_monotonic": 754651.399353999,
+          "cpu_idle_ticks": 292238007,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301446391
+        },
+        {
+          "at_monotonic": 754652.412351633,
+          "cpu_idle_ticks": 292238216,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.43,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301446791
+        },
+        {
+          "at_monotonic": 754653.431247211,
+          "cpu_idle_ticks": 292238391,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.43,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301447193
+        },
+        {
+          "at_monotonic": 754654.447285745,
+          "cpu_idle_ticks": 292238590,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.71,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301447592
+        },
+        {
+          "at_monotonic": 754655.462843055,
+          "cpu_idle_ticks": 292238782,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.71,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301447989
+        },
+        {
+          "at_monotonic": 754656.475974659,
+          "cpu_idle_ticks": 292239011,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.58,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301448390
+        },
+        {
+          "at_monotonic": 754657.481998419,
+          "cpu_idle_ticks": 292239191,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.58,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301448779
+        },
+        {
+          "at_monotonic": 754658.485397246,
+          "cpu_idle_ticks": 292239365,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.48,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301449175
+        },
+        {
+          "at_monotonic": 754659.504552258,
+          "cpu_idle_ticks": 292239556,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.48,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301449575
+        },
+        {
+          "at_monotonic": 754660.51721971,
+          "cpu_idle_ticks": 292239769,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301449972
+        },
+        {
+          "at_monotonic": 754661.533845266,
+          "cpu_idle_ticks": 292239981,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301450371
+        },
+        {
+          "at_monotonic": 754662.536868493,
+          "cpu_idle_ticks": 292240165,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301450763
+        },
+        {
+          "at_monotonic": 754663.543421721,
+          "cpu_idle_ticks": 292240333,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.4,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301451155
+        },
+        {
+          "at_monotonic": 754664.5642161,
+          "cpu_idle_ticks": 292240530,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.87,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301451560
+        },
+        {
+          "at_monotonic": 754665.580664541,
+          "cpu_idle_ticks": 292240759,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.87,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301451960
+        },
+        {
+          "at_monotonic": 754666.5958307,
+          "cpu_idle_ticks": 292240955,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.35,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301452353
+        },
+        {
+          "at_monotonic": 754667.614882291,
+          "cpu_idle_ticks": 292241144,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.35,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301452751
+        },
+        {
+          "at_monotonic": 754668.616165637,
+          "cpu_idle_ticks": 292241314,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301453146
+        },
+        {
+          "at_monotonic": 754669.629055922,
+          "cpu_idle_ticks": 292241536,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301453543
+        },
+        {
+          "at_monotonic": 754670.64617119,
+          "cpu_idle_ticks": 292241734,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.56,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301453939
+        },
+        {
+          "at_monotonic": 754671.662973809,
+          "cpu_idle_ticks": 292241928,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.56,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301454337
+        },
+        {
+          "at_monotonic": 754672.68140785,
+          "cpu_idle_ticks": 292242117,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.46,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301454732
+        },
+        {
+          "at_monotonic": 754673.700089642,
+          "cpu_idle_ticks": 292242299,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.46,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301455131
+        },
+        {
+          "at_monotonic": 754674.71099035,
+          "cpu_idle_ticks": 292242522,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.38,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301455528
+        },
+        {
+          "at_monotonic": 754675.726870427,
+          "cpu_idle_ticks": 292242718,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.38,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301455926
+        },
+        {
+          "at_monotonic": 754676.746565629,
+          "cpu_idle_ticks": 292242919,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.49,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301456323
+        },
+        {
+          "at_monotonic": 754677.764271835,
+          "cpu_idle_ticks": 292243107,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.49,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301456726
+        },
+        {
+          "at_monotonic": 754678.775768782,
+          "cpu_idle_ticks": 292243332,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.58,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301457120
+        },
+        {
+          "at_monotonic": 754679.793313625,
+          "cpu_idle_ticks": 292243508,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.58,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301457522
+        },
+        {
+          "at_monotonic": 754680.811924078,
+          "cpu_idle_ticks": 292243702,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301457919
+        },
+        {
+          "at_monotonic": 754681.829711973,
+          "cpu_idle_ticks": 292243896,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.47,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301458321
+        },
+        {
+          "at_monotonic": 754682.844993576,
+          "cpu_idle_ticks": 292244081,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301458719
+        },
+        {
+          "at_monotonic": 754683.857349102,
+          "cpu_idle_ticks": 292244291,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301459118
+        },
+        {
+          "at_monotonic": 754684.876771895,
+          "cpu_idle_ticks": 292244475,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.46,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301459521
+        },
+        {
+          "at_monotonic": 754685.878527759,
+          "cpu_idle_ticks": 292244670,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.46,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301459912
+        },
+        {
+          "at_monotonic": 754686.895519366,
+          "cpu_idle_ticks": 292244869,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.56,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301460308
+        },
+        {
+          "at_monotonic": 754687.910718349,
+          "cpu_idle_ticks": 292245072,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.56,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301460704
+        },
+        {
+          "at_monotonic": 754688.927107625,
+          "cpu_idle_ticks": 292245285,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.46,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301461099
+        },
+        {
+          "at_monotonic": 754689.944094883,
+          "cpu_idle_ticks": 292245453,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.74,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301461500
+        },
+        {
+          "at_monotonic": 754690.945856769,
+          "cpu_idle_ticks": 292245646,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.74,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301461895
+        },
+        {
+          "at_monotonic": 754691.948045925,
+          "cpu_idle_ticks": 292245836,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.78,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301462283
+        },
+        {
+          "at_monotonic": 754692.961725665,
+          "cpu_idle_ticks": 292246052,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.78,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301462682
+        },
+        {
+          "at_monotonic": 754693.978208614,
+          "cpu_idle_ticks": 292246241,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301463081
+        },
+        {
+          "at_monotonic": 754694.997900619,
+          "cpu_idle_ticks": 292246414,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301463479
+        },
+        {
+          "at_monotonic": 754696.000107009,
+          "cpu_idle_ticks": 292246607,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301463870
+        },
+        {
+          "at_monotonic": 754697.013815565,
+          "cpu_idle_ticks": 292246810,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301464264
+        },
+        {
+          "at_monotonic": 754698.030218067,
+          "cpu_idle_ticks": 292247024,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.54,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301464668
+        },
+        {
+          "at_monotonic": 754699.047858786,
+          "cpu_idle_ticks": 292247219,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.54,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301465067
+        },
+        {
+          "at_monotonic": 754700.049137743,
+          "cpu_idle_ticks": 292247396,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.81,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301465459
+        },
+        {
+          "at_monotonic": 754701.067845265,
+          "cpu_idle_ticks": 292247581,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.81,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301465857
+        },
+        {
+          "at_monotonic": 754702.068572109,
+          "cpu_idle_ticks": 292247804,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.66,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301466252
+        },
+        {
+          "at_monotonic": 754703.070410784,
+          "cpu_idle_ticks": 292247982,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.66,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301466643
+        },
+        {
+          "at_monotonic": 754704.090985395,
+          "cpu_idle_ticks": 292248182,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.9,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301467040
+        },
+        {
+          "at_monotonic": 754705.10911288,
+          "cpu_idle_ticks": 292248354,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.9,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301467440
+        },
+        {
+          "at_monotonic": 754706.121873053,
+          "cpu_idle_ticks": 292248574,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301467837
+        },
+        {
+          "at_monotonic": 754707.13701761,
+          "cpu_idle_ticks": 292248774,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301468236
+        },
+        {
+          "at_monotonic": 754708.138474503,
+          "cpu_idle_ticks": 292248956,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301468631
+        },
+        {
+          "at_monotonic": 754709.158580683,
+          "cpu_idle_ticks": 292249144,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301469025
+        },
+        {
+          "at_monotonic": 754710.179049228,
+          "cpu_idle_ticks": 292249346,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.8,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301469424
+        },
+        {
+          "at_monotonic": 754711.18882475,
+          "cpu_idle_ticks": 292249542,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.8,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301469824
+        },
+        {
+          "at_monotonic": 754712.207087878,
+          "cpu_idle_ticks": 292249738,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.65,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301470217
+        },
+        {
+          "at_monotonic": 754713.223303316,
+          "cpu_idle_ticks": 292249929,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.65,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301470617
+        },
+        {
+          "at_monotonic": 754714.228932819,
+          "cpu_idle_ticks": 292250121,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301471007
+        },
+        {
+          "at_monotonic": 754715.247262988,
+          "cpu_idle_ticks": 292250323,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301471409
+        },
+        {
+          "at_monotonic": 754716.265742878,
+          "cpu_idle_ticks": 292250522,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.55,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301471802
+        },
+        {
+          "at_monotonic": 754717.268842774,
+          "cpu_idle_ticks": 292250722,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.55,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301472199
+        },
+        {
+          "at_monotonic": 754718.271096105,
+          "cpu_idle_ticks": 292250908,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301472593
+        },
+        {
+          "at_monotonic": 754719.286896507,
+          "cpu_idle_ticks": 292251101,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301472990
+        }
+      ],
+      "max_ms": 399.0898010088131,
+      "measurement_peak_rss_bytes": {
+        "backend": 456294400,
+        "backend_child": 29192192,
+        "frontend": 245506048
+      },
+      "mode": "baseline",
+      "p50_ms": 79.02652001939714,
+      "p95_ms": 94.43490800913423,
+      "p99_ms": 384.4555979594588,
+      "peak_rss_bytes": {
+        "backend": 456294400,
+        "backend_child": 29192192,
+        "frontend": 245506048
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 519458,
+        "boot_id": "f5e8815e-e8d4-4205-8c9c-e9ef6709ba88",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66691690496,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T10:50:27.564088+00:00",
+        "policy_omitted": 291459,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 0,
+        "reserved_bytes": 65280,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 482834,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T08:03:19.179918+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 119220090,
+        "written": 23192
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 0,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": -2256896,
+        "invalid": 0,
+        "policy_omitted": 0,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": 0,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": -1,
+        "written": 0
+      },
+      "repeat": 3,
+      "requests": 5120,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": null,
+      "slowest_intervals": [
+        {
+          "duration_ms": 391.00512803997844,
+          "finished": 754660.726112565,
+          "started": 754660.335107437
+        },
+        {
+          "duration_ms": 391.081174951978,
+          "finished": 754697.333694257,
+          "started": 754696.942613082
+        },
+        {
+          "duration_ms": 391.34450699202716,
+          "finished": 754701.75447305,
+          "started": 754701.363128543
+        },
+        {
+          "duration_ms": 391.3926910609007,
+          "finished": 754719.656495769,
+          "started": 754719.265103078
+        },
+        {
+          "duration_ms": 391.54624892398715,
+          "finished": 754697.334297129,
+          "started": 754696.94275088
+        },
+        {
+          "duration_ms": 391.6694090003148,
+          "finished": 754678.732805527,
+          "started": 754678.341136118
+        },
+        {
+          "duration_ms": 392.03237497713417,
+          "finished": 754669.579120205,
+          "started": 754669.18708783
+        },
+        {
+          "duration_ms": 392.4081439618021,
+          "finished": 754669.580850287,
+          "started": 754669.188442143
+        },
+        {
+          "duration_ms": 392.4289949936792,
+          "finished": 754669.580348532,
+          "started": 754669.187919537
+        },
+        {
+          "duration_ms": 392.8447029320523,
+          "finished": 754669.579700763,
+          "started": 754669.18685606
+        },
+        {
+          "duration_ms": 393.03017302881926,
+          "finished": 754692.762049875,
+          "started": 754692.369019702
+        },
+        {
+          "duration_ms": 393.774650990963,
+          "finished": 754719.659123717,
+          "started": 754719.265349066
+        },
+        {
+          "duration_ms": 394.06601700466126,
+          "finished": 754692.763361194,
+          "started": 754692.369295177
+        },
+        {
+          "duration_ms": 394.3091291002929,
+          "finished": 754710.744113967,
+          "started": 754710.349804838
+        },
+        {
+          "duration_ms": 394.58878291770816,
+          "finished": 754710.744256464,
+          "started": 754710.349667681
+        },
+        {
+          "duration_ms": 394.70673201140016,
+          "finished": 754678.735166706,
+          "started": 754678.340459974
+        },
+        {
+          "duration_ms": 394.7076740441844,
+          "finished": 754692.762623901,
+          "started": 754692.367916227
+        },
+        {
+          "duration_ms": 394.87848605494946,
+          "finished": 754715.350556485,
+          "started": 754714.955677999
+        },
+        {
+          "duration_ms": 397.1859209705144,
+          "finished": 754710.746729932,
+          "started": 754710.349544011
+        },
+        {
+          "duration_ms": 399.0898010088131,
+          "finished": 754710.749353631,
+          "started": 754710.35026383
+        }
+      ],
+      "spool_bytes_growth": 0,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 85.31834887465774,
+      "warmup_seconds": 30,
+      "workload_distribution": "search (1/1/1 queries)"
+    },
+    {
+      "bundle": {
+        "api_observed_building": true,
+        "build_seconds": 3.2026816259603947,
+        "observed_building": true,
+        "overlapping_requests": 192,
+        "phase_latencies": {
+          "prepare": {
+            "max_ms": 409.16331100743264,
+            "observed_seconds": 2.332848974969238,
+            "p50_ms": 91.7250220081769,
+            "p95_ms": 132.93537904974073,
+            "p99_ms": 406.0750890057534,
+            "requests": 176
+          },
+          "zip": {
+            "max_ms": 116.21745605953038,
+            "observed_seconds": 0.27610543300397694,
+            "p50_ms": 98.27054897323251,
+            "p95_ms": 115.3347110375762,
+            "p99_ms": 116.21745605953038,
+            "requests": 24
+          }
+        },
+        "phases": [
+          {
+            "closed": true,
+            "finished": 754753.889439453,
+            "phase": "prepare",
+            "pid": 2569968,
+            "started": 754751.556590478
+          },
+          {
+            "closed": true,
+            "finished": 754754.165544886,
+            "phase": "zip",
+            "pid": 2570093,
+            "started": 754753.889439453
+          }
+        ],
+        "poll_interval_seconds": 3,
+        "poll_requests": 2,
+        "size_bytes": 36896,
+        "status": "ready"
+      },
+      "capture_counts_pass": true,
+      "capture_search_counts": {
+        "backend_operations": 7384,
+        "backend_qdrant": 7384,
+        "backend_requests": 7384,
+        "frontend_requests": 7384
+      },
+      "concurrency": 8,
+      "corpus_size": 1,
+      "cpu_seconds": {
+        "backend": 68.29658500000005,
+        "frontend": 17.62089900000001
+      },
+      "elapsed_seconds": 60.006822217023,
+      "expected_capture_search_calls": 7384,
+      "expected_capture_settings_calls": 0,
+      "frontend_delta": {
+        "aggregate_overflow": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "intentional_aggregated": 4900,
+        "intentional_sampled": 0,
+        "invalid": 0,
+        "queued": 0,
+        "repeats": 0,
+        "schema_version": 0,
+        "written": 12
+      },
+      "host_samples": [
+        {
+          "at_monotonic": 754721.196620915,
+          "cpu_idle_ticks": 292251630,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.33,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301473743
+        },
+        {
+          "at_monotonic": 754722.200245191,
+          "cpu_idle_ticks": 292251826,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.19,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301474140
+        },
+        {
+          "at_monotonic": 754723.202486088,
+          "cpu_idle_ticks": 292252008,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.19,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301474527
+        },
+        {
+          "at_monotonic": 754724.214891862,
+          "cpu_idle_ticks": 292252200,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.7,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301474923
+        },
+        {
+          "at_monotonic": 754725.218055722,
+          "cpu_idle_ticks": 292252403,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.7,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301475319
+        },
+        {
+          "at_monotonic": 754726.228331636,
+          "cpu_idle_ticks": 292252599,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301475713
+        },
+        {
+          "at_monotonic": 754727.232309569,
+          "cpu_idle_ticks": 292252790,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.57,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301476105
+        },
+        {
+          "at_monotonic": 754728.242061996,
+          "cpu_idle_ticks": 292252969,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.01,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301476497
+        },
+        {
+          "at_monotonic": 754729.248543024,
+          "cpu_idle_ticks": 292253162,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.01,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301476895
+        },
+        {
+          "at_monotonic": 754730.251324972,
+          "cpu_idle_ticks": 292253390,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301477287
+        },
+        {
+          "at_monotonic": 754731.261777049,
+          "cpu_idle_ticks": 292253564,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 13.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301477683
+        },
+        {
+          "at_monotonic": 754732.271960293,
+          "cpu_idle_ticks": 292253744,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.07,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301478078
+        },
+        {
+          "at_monotonic": 754733.292323162,
+          "cpu_idle_ticks": 292253929,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.07,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301478480
+        },
+        {
+          "at_monotonic": 754734.292791674,
+          "cpu_idle_ticks": 292254151,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.42,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301478872
+        },
+        {
+          "at_monotonic": 754735.297330337,
+          "cpu_idle_ticks": 292254328,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.42,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301479269
+        },
+        {
+          "at_monotonic": 754736.30115412,
+          "cpu_idle_ticks": 292254515,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301479665
+        },
+        {
+          "at_monotonic": 754737.305116543,
+          "cpu_idle_ticks": 292254705,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301480059
+        },
+        {
+          "at_monotonic": 754738.307616564,
+          "cpu_idle_ticks": 292254889,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301480451
+        },
+        {
+          "at_monotonic": 754739.32597644,
+          "cpu_idle_ticks": 292255116,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301480852
+        },
+        {
+          "at_monotonic": 754740.337157233,
+          "cpu_idle_ticks": 292255312,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.16,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301481247
+        },
+        {
+          "at_monotonic": 754741.339672463,
+          "cpu_idle_ticks": 292255501,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.16,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301481640
+        },
+        {
+          "at_monotonic": 754742.351198877,
+          "cpu_idle_ticks": 292255674,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.49,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301482040
+        },
+        {
+          "at_monotonic": 754743.370549089,
+          "cpu_idle_ticks": 292255878,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.49,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301482442
+        },
+        {
+          "at_monotonic": 754744.373613536,
+          "cpu_idle_ticks": 292256077,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.59,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301482833
+        },
+        {
+          "at_monotonic": 754745.382193274,
+          "cpu_idle_ticks": 292256270,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.59,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301483231
+        },
+        {
+          "at_monotonic": 754746.389685747,
+          "cpu_idle_ticks": 292256440,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.84,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301483629
+        },
+        {
+          "at_monotonic": 754747.395256787,
+          "cpu_idle_ticks": 292256631,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.84,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301484024
+        },
+        {
+          "at_monotonic": 754748.41479322,
+          "cpu_idle_ticks": 292256846,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.87,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301484426
+        },
+        {
+          "at_monotonic": 754749.428781399,
+          "cpu_idle_ticks": 292257042,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.87,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301484819
+        },
+        {
+          "at_monotonic": 754750.436118442,
+          "cpu_idle_ticks": 292257237,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.71,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301485212
+        },
+        {
+          "at_monotonic": 754751.452121317,
+          "cpu_idle_ticks": 292257432,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.71,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301485614
+        },
+        {
+          "at_monotonic": 754752.468902435,
+          "cpu_idle_ticks": 292257530,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.12,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301486013
+        },
+        {
+          "at_monotonic": 754753.484660143,
+          "cpu_idle_ticks": 292257649,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.12,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301486416
+        },
+        {
+          "at_monotonic": 754754.485195395,
+          "cpu_idle_ticks": 292257783,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.83,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301486807
+        },
+        {
+          "at_monotonic": 754755.488051297,
+          "cpu_idle_ticks": 292257976,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.83,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301487203
+        },
+        {
+          "at_monotonic": 754756.493772178,
+          "cpu_idle_ticks": 292258150,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.67,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301487601
+        },
+        {
+          "at_monotonic": 754757.497933718,
+          "cpu_idle_ticks": 292258343,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.67,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301487995
+        },
+        {
+          "at_monotonic": 754758.517975443,
+          "cpu_idle_ticks": 292258561,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.19,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301488404
+        },
+        {
+          "at_monotonic": 754759.524629177,
+          "cpu_idle_ticks": 292258753,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.19,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301488794
+        },
+        {
+          "at_monotonic": 754760.529735423,
+          "cpu_idle_ticks": 292258951,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.15,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301489188
+        },
+        {
+          "at_monotonic": 754761.534571814,
+          "cpu_idle_ticks": 292259140,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.15,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301489581
+        },
+        {
+          "at_monotonic": 754762.534649857,
+          "cpu_idle_ticks": 292259350,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.12,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301489970
+        },
+        {
+          "at_monotonic": 754763.537414973,
+          "cpu_idle_ticks": 292259526,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 15.12,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301490363
+        },
+        {
+          "at_monotonic": 754764.542647965,
+          "cpu_idle_ticks": 292259721,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301490760
+        },
+        {
+          "at_monotonic": 754765.549645107,
+          "cpu_idle_ticks": 292259909,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.92,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301491149
+        },
+        {
+          "at_monotonic": 754766.5550277,
+          "cpu_idle_ticks": 292260082,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301491543
+        },
+        {
+          "at_monotonic": 754767.573642371,
+          "cpu_idle_ticks": 292260312,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.93,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301491945
+        },
+        {
+          "at_monotonic": 754768.579023932,
+          "cpu_idle_ticks": 292260493,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.58,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301492341
+        },
+        {
+          "at_monotonic": 754769.580805336,
+          "cpu_idle_ticks": 292260676,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.58,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301492732
+        },
+        {
+          "at_monotonic": 754770.589190695,
+          "cpu_idle_ticks": 292260870,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.66,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301493130
+        },
+        {
+          "at_monotonic": 754771.596654424,
+          "cpu_idle_ticks": 292261063,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.66,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301493531
+        },
+        {
+          "at_monotonic": 754772.613797235,
+          "cpu_idle_ticks": 292261293,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.36,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301493932
+        },
+        {
+          "at_monotonic": 754773.61818277,
+          "cpu_idle_ticks": 292261453,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.36,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301494323
+        },
+        {
+          "at_monotonic": 754774.618645951,
+          "cpu_idle_ticks": 292261635,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.83,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301494719
+        },
+        {
+          "at_monotonic": 754775.638517917,
+          "cpu_idle_ticks": 292261835,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.83,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301495114
+        },
+        {
+          "at_monotonic": 754776.6410347,
+          "cpu_idle_ticks": 292262031,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.86,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301495511
+        },
+        {
+          "at_monotonic": 754777.644988546,
+          "cpu_idle_ticks": 292262234,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.86,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301495902
+        },
+        {
+          "at_monotonic": 754778.648858619,
+          "cpu_idle_ticks": 292262419,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301496297
+        },
+        {
+          "at_monotonic": 754779.655384514,
+          "cpu_idle_ticks": 292262614,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301496691
+        },
+        {
+          "at_monotonic": 754780.664731503,
+          "cpu_idle_ticks": 292262811,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301497084
+        },
+        {
+          "at_monotonic": 754781.669265317,
+          "cpu_idle_ticks": 292263039,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301497477
+        },
+        {
+          "at_monotonic": 754782.671879739,
+          "cpu_idle_ticks": 292263236,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301497868
+        },
+        {
+          "at_monotonic": 754783.675556066,
+          "cpu_idle_ticks": 292263420,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301498258
+        },
+        {
+          "at_monotonic": 754784.680443357,
+          "cpu_idle_ticks": 292263594,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301498653
+        },
+        {
+          "at_monotonic": 754785.683108979,
+          "cpu_idle_ticks": 292263819,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301499048
+        },
+        {
+          "at_monotonic": 754786.68524413,
+          "cpu_idle_ticks": 292264006,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301499441
+        },
+        {
+          "at_monotonic": 754787.695753077,
+          "cpu_idle_ticks": 292264179,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.34,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301499835
+        },
+        {
+          "at_monotonic": 754788.702310604,
+          "cpu_idle_ticks": 292264364,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301500230
+        },
+        {
+          "at_monotonic": 754789.712686252,
+          "cpu_idle_ticks": 292264561,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.64,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301500623
+        },
+        {
+          "at_monotonic": 754790.733317252,
+          "cpu_idle_ticks": 292264789,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301501024
+        },
+        {
+          "at_monotonic": 754791.738147001,
+          "cpu_idle_ticks": 292264979,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.89,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301501415
+        },
+        {
+          "at_monotonic": 754792.744503868,
+          "cpu_idle_ticks": 292265178,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.55,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301501811
+        },
+        {
+          "at_monotonic": 754793.746714265,
+          "cpu_idle_ticks": 292265359,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.55,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301502204
+        },
+        {
+          "at_monotonic": 754794.753091162,
+          "cpu_idle_ticks": 292265522,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.81,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301502593
+        },
+        {
+          "at_monotonic": 754795.770657205,
+          "cpu_idle_ticks": 292265753,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.81,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301502996
+        },
+        {
+          "at_monotonic": 754796.781980595,
+          "cpu_idle_ticks": 292265953,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.48,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301503395
+        },
+        {
+          "at_monotonic": 754797.793464788,
+          "cpu_idle_ticks": 292266118,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.48,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301503788
+        },
+        {
+          "at_monotonic": 754798.799929374,
+          "cpu_idle_ticks": 292266308,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301504178
+        },
+        {
+          "at_monotonic": 754799.803825899,
+          "cpu_idle_ticks": 292266494,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.75,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301504573
+        },
+        {
+          "at_monotonic": 754800.823452056,
+          "cpu_idle_ticks": 292266723,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.62,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301504972
+        },
+        {
+          "at_monotonic": 754801.829106678,
+          "cpu_idle_ticks": 292266921,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.62,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301505366
+        },
+        {
+          "at_monotonic": 754802.833411266,
+          "cpu_idle_ticks": 292267119,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.5,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301505764
+        },
+        {
+          "at_monotonic": 754803.8428638,
+          "cpu_idle_ticks": 292267298,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.5,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301506155
+        },
+        {
+          "at_monotonic": 754804.861319192,
+          "cpu_idle_ticks": 292267501,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.77,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301506558
+        },
+        {
+          "at_monotonic": 754805.8756566,
+          "cpu_idle_ticks": 292267693,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.77,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301506954
+        },
+        {
+          "at_monotonic": 754806.887461496,
+          "cpu_idle_ticks": 292267889,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301507347
+        },
+        {
+          "at_monotonic": 754807.8957922,
+          "cpu_idle_ticks": 292268055,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.63,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301507745
+        },
+        {
+          "at_monotonic": 754808.901495756,
+          "cpu_idle_ticks": 292268238,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.88,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301508138
+        },
+        {
+          "at_monotonic": 754809.904410463,
+          "cpu_idle_ticks": 292268452,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.88,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301508536
+        },
+        {
+          "at_monotonic": 754810.924878036,
+          "cpu_idle_ticks": 292268660,
+          "cpu_pressure_full_avg10": 0.0,
+          "cpu_pressure_some_avg10": 14.72,
+          "cpu_steal_ticks": 0,
+          "cpu_total_ticks": 301508941
+        }
+      ],
+      "max_ms": 418.2978350436315,
+      "measurement_peak_rss_bytes": {
+        "backend": 456347648,
+        "backend_child": 29134848,
+        "frontend": 192729088
+      },
+      "mode": "standard",
+      "p50_ms": 82.24987454013899,
+      "p95_ms": 100.93124501872808,
+      "p99_ms": 393.8772400142625,
+      "peak_rss_bytes": {
+        "backend": 456347648,
+        "backend_child": 29134848,
+        "frontend": 193900544
+      },
+      "recorder": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 540708,
+        "boot_id": "f5e8815e-e8d4-4205-8c9c-e9ef6709ba88",
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 66707767296,
+        "invalid": 0,
+        "last_failure": null,
+        "measured_at": "2026-09-30T10:51:59.810774+00:00",
+        "policy_omitted": 313611,
+        "queued": 0,
+        "quota_bytes": 503316480,
+        "repeats": 0,
+        "reserved_bytes": 74776,
+        "running": true,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 482834,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "started_at_utc": "2026-09-30T08:03:19.179918+00:00",
+        "storage_degraded": false,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 119765296,
+        "written": 24171
+      },
+      "recorder_delta": {
+        "aggregate_overflow": 0,
+        "aggregated_success": 14093,
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "free_bytes": 7569408,
+        "invalid": 0,
+        "policy_omitted": 14688,
+        "queued": 0,
+        "quota_bytes": 0,
+        "repeats": 0,
+        "reserved_bytes": -13709,
+        "sampled_out_slow": 0,
+        "sampled_out_traces": 0,
+        "sampled_success": 0,
+        "shutdown_timeout": 0,
+        "storage_errors": 0,
+        "unsafe_paths": 0,
+        "used_bytes": 373939,
+        "written": 649
+      },
+      "repeat": 3,
+      "requests": 4896,
+      "response_equality_pass": true,
+      "response_fingerprints": {
+        "Synthetic diagnostic restore drill": "60056127ca58cd1f10355bc1a0fdebbe1b519f20b32084ed8fba8a4a5516e658",
+        "diagnostic drill document": "251d2799aa3846c0df347b992ca25a01d617a011ca9454017a5b3b941edc67fe",
+        "synthetic document restore": "e36c8bc946b2bc858eab30657417f567f744ac1ba388327e987da4220f10b9a5"
+      },
+      "session_id": "b3cd6525-0d27-457a-b43d-69ba1c9edce5",
+      "slowest_intervals": [
+        {
+          "duration_ms": 403.8810239871964,
+          "finished": 754781.432864586,
+          "started": 754781.028983562
+        },
+        {
+          "duration_ms": 404.0829259902239,
+          "finished": 754804.828244837,
+          "started": 754804.424161911
+        },
+        {
+          "duration_ms": 404.19233904685825,
+          "finished": 754781.432166649,
+          "started": 754781.02797431
+        },
+        {
+          "duration_ms": 404.4420140562579,
+          "finished": 754804.829138273,
+          "started": 754804.424696259
+        },
+        {
+          "duration_ms": 405.2881490206346,
+          "finished": 754767.435831445,
+          "started": 754767.030543296
+        },
+        {
+          "duration_ms": 406.0750890057534,
+          "finished": 754753.391252141,
+          "started": 754752.985177052
+        },
+        {
+          "duration_ms": 406.5756320487708,
+          "finished": 754790.468559426,
+          "started": 754790.061983794
+        },
+        {
+          "duration_ms": 406.66367299854755,
+          "finished": 754772.111326577,
+          "started": 754771.704662904
+        },
+        {
+          "duration_ms": 407.1820500539616,
+          "finished": 754810.041903391,
+          "started": 754809.634721341
+        },
+        {
+          "duration_ms": 407.89631800726056,
+          "finished": 754767.437071415,
+          "started": 754767.029175097
+        },
+        {
+          "duration_ms": 408.02124107722193,
+          "finished": 754804.831823813,
+          "started": 754804.423802572
+        },
+        {
+          "duration_ms": 409.16331100743264,
+          "finished": 754753.395528623,
+          "started": 754752.986365312
+        },
+        {
+          "duration_ms": 410.5124829802662,
+          "finished": 754776.764464594,
+          "started": 754776.353952111
+        },
+        {
+          "duration_ms": 410.6341400183737,
+          "finished": 754758.15714268,
+          "started": 754757.74650854
+        },
+        {
+          "duration_ms": 411.0786529490724,
+          "finished": 754758.158947137,
+          "started": 754757.747868484
+        },
+        {
+          "duration_ms": 411.2109210109338,
+          "finished": 754776.764775409,
+          "started": 754776.353564488
+        },
+        {
+          "duration_ms": 411.48925095330924,
+          "finished": 754772.115329016,
+          "started": 754771.703839765
+        },
+        {
+          "duration_ms": 413.9183530351147,
+          "finished": 754758.160799638,
+          "started": 754757.746881285
+        },
+        {
+          "duration_ms": 414.47848198004067,
+          "finished": 754776.767409819,
+          "started": 754776.352931337
+        },
+        {
+          "duration_ms": 418.2978350436315,
+          "finished": 754776.772677237,
+          "started": 754776.354379402
+        }
+      ],
+      "spool_bytes_growth": 344602,
+      "stopped_before_bundle": false,
+      "throughput_per_second": 81.5907228396954,
+      "warmup_seconds": 30,
+      "workload_distribution": "search (1/1/1 queries)"
+    }
+  ],
+  "schema_version": 3,
+  "scope": "targeted acceptance subset; not the complete HTTP matrix"
+}

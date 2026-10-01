@@ -1,0 +1,11 @@
+{
+  "image_ids": {
+    "backend": "sha256:7dfea1d712ec74ef0fb5bd1430fc78805f4615adb06f11ca40c049165b6487f0",
+    "frontend": "sha256:a37ae1505d48528941a849e8ca7c07e568e6c453bdfa59e52626d5fba35b4799"
+  },
+  "base_backend": "sha256:b51d0b122dc243d67417f4bd520d67f8629a08981ff63124e9dd296a6fe52d8d",
+  "archive_sha256": {
+    "diag-review-backend-v14.tar": "db335de066c3c979392fdbdae729f676d0f157dcd8b131f5a9996711b46cb1ee",
+    "diag-frontend-v11.tar": "9c4fcdebe4f871d4f6dc191ee173a2771ccad13647b533116343ffe611769056"
+  }
+}

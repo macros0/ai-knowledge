@@ -1,0 +1,370 @@
+{
+  "all_duration_requests_pass": true,
+  "all_losses_pass": false,
+  "all_p95_pass": true,
+  "all_rss_pass": false,
+  "all_zip_overlap_pass": true,
+  "decisions": [
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -20480,
+      "baseline_p95_ms": 18.686071038246155,
+      "bundle": true,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 9560064,
+      "losses_pass": true,
+      "measured_p95_ms": 19.245229079388082,
+      "mode": "detailed",
+      "p95_delta_ms": 0.5591580411419272,
+      "p95_overhead_pct": 2.992378868717016,
+      "p95_pass": true,
+      "repeat": 1,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 24891392,
+      "baseline_p95_ms": 18.686071038246155,
+      "bundle": true,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -1212416,
+      "losses_pass": true,
+      "measured_p95_ms": 19.154362031258643,
+      "mode": "standard",
+      "p95_delta_ms": 0.4682909930124879,
+      "p95_overhead_pct": 2.506096610967612,
+      "p95_pass": true,
+      "repeat": 1,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 131072,
+      "baseline_p95_ms": 96.61528002470732,
+      "bundle": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -18305024,
+      "losses_pass": true,
+      "measured_p95_ms": 99.37140194233507,
+      "mode": "detailed",
+      "p95_delta_ms": 2.756121917627752,
+      "p95_overhead_pct": 2.852677047484553,
+      "p95_pass": true,
+      "repeat": 1,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 225280,
+      "baseline_p95_ms": 96.61528002470732,
+      "bundle": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -15335424,
+      "losses_pass": true,
+      "measured_p95_ms": 98.54517504572868,
+      "mode": "standard",
+      "p95_delta_ms": 1.9298950210213661,
+      "p95_overhead_pct": 1.997504970774644,
+      "p95_pass": true,
+      "repeat": 1,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 61440,
+      "baseline_p95_ms": 18.89929606113583,
+      "bundle": true,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 1,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 172032,
+      "losses_pass": false,
+      "measured_p95_ms": 19.12563608493656,
+      "mode": "detailed",
+      "p95_delta_ms": 0.2263400238007307,
+      "p95_overhead_pct": 1.1976108690427534,
+      "p95_pass": true,
+      "repeat": 2,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 4096,
+      "baseline_p95_ms": 18.89929606113583,
+      "bundle": true,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -4685824,
+      "losses_pass": true,
+      "measured_p95_ms": 19.145644968375564,
+      "mode": "standard",
+      "p95_delta_ms": 0.24634890723973513,
+      "p95_overhead_pct": 1.303481920399796,
+      "p95_pass": true,
+      "repeat": 2,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -24576,
+      "baseline_p95_ms": 95.83418094553053,
+      "bundle": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 1130496,
+      "losses_pass": true,
+      "measured_p95_ms": 98.7813149113208,
+      "mode": "detailed",
+      "p95_delta_ms": 2.9471339657902718,
+      "p95_overhead_pct": 3.075243025727259,
+      "p95_pass": true,
+      "repeat": 2,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 24739840,
+      "baseline_p95_ms": 95.83418094553053,
+      "bundle": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -3223552,
+      "losses_pass": true,
+      "measured_p95_ms": 99.28957396186888,
+      "mode": "standard",
+      "p95_delta_ms": 3.4553930163383484,
+      "p95_overhead_pct": 3.605595605081957,
+      "p95_pass": true,
+      "repeat": 2,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -167936,
+      "baseline_p95_ms": 18.790096044540405,
+      "bundle": true,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -1888256,
+      "losses_pass": true,
+      "measured_p95_ms": 19.39584396313876,
+      "mode": "standard",
+      "p95_delta_ms": 0.6057479185983539,
+      "p95_overhead_pct": 3.2237616942589087,
+      "p95_pass": true,
+      "repeat": 3,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 447610880,
+      "baseline_p95_ms": 18.790096044540405,
+      "bundle": true,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -4968448,
+      "losses_pass": true,
+      "measured_p95_ms": 19.225202035158873,
+      "mode": "detailed",
+      "p95_delta_ms": 0.43510599061846733,
+      "p95_overhead_pct": 2.3156134465043943,
+      "p95_pass": true,
+      "repeat": 3,
+      "rss_pass": false,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 25047040,
+      "baseline_p95_ms": 97.42240188643336,
+      "bundle": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -6893568,
+      "losses_pass": true,
+      "measured_p95_ms": 98.2487890869379,
+      "mode": "detailed",
+      "p95_delta_ms": 0.8263872005045414,
+      "p95_overhead_pct": 0.8482517208597162,
+      "p95_pass": true,
+      "repeat": 3,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 196608,
+      "baseline_p95_ms": 97.42240188643336,
+      "bundle": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 3997696,
+      "losses_pass": true,
+      "measured_p95_ms": 98.0708240531385,
+      "mode": "standard",
+      "p95_delta_ms": 0.6484221667051315,
+      "p95_overhead_pct": 0.6655780951295043,
+      "p95_pass": true,
+      "repeat": 3,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    }
+  ],
+  "schema_version": 1
+}

@@ -1,0 +1,57 @@
+{
+  "backend_pid": 31668,
+  "baseline": {
+    "max_ms": 3.6532999999963067,
+    "p50_ms": 2.1435500000279717,
+    "p95_ms": 2.679400000033638,
+    "requests": 200,
+    "rss_bytes": 382361600
+  },
+  "bundles": {
+    "built": 1,
+    "elapsed_seconds": 5.109374600000137,
+    "failed": 0
+  },
+  "capture": {
+    "max_ms": 4.011499999705848,
+    "p50_ms": 2.3008000000572792,
+    "p95_ms": 2.9940999997961626,
+    "requests": 200,
+    "rss_bytes": 383041536
+  },
+  "capture_build": {
+    "max_ms": 10.095999999975902,
+    "p50_ms": 3.3223000000361935,
+    "p95_ms": 5.987399999867193,
+    "requests": 200,
+    "rss_bytes": 383598592
+  },
+  "environment": "isolated TestClient; settings; no external LLM/Qdrant",
+  "p95_build_overhead_pct": 123.46047621825878,
+  "p95_capture_overhead_pct": 11.745166819383957,
+  "recorder": {
+    "boot_id": "86b76877-45e6-44c5-9053-79e2413ad5d4",
+    "drain_timeouts": 0,
+    "dropped": 0,
+    "expired_queue": 0,
+    "free_bytes": 127492386816,
+    "invalid": 0,
+    "last_failure": null,
+    "queued": 0,
+    "quota_bytes": 503316480,
+    "repeats": 0,
+    "reserved_bytes": 0,
+    "running": true,
+    "sampled_success": 22519,
+    "shutdown_timeout": 0,
+    "storage_degraded": false,
+    "storage_errors": 0,
+    "unsafe_paths": 0,
+    "used_bytes": 645001,
+    "written": 1240
+  },
+  "request_count": 200,
+  "scenario": "settings",
+  "schema_version": 1,
+  "warmup_seconds": 30
+}

@@ -1,0 +1,76 @@
+{
+  "first_swap_out": {
+    "at_msk": "2026-10-01T16:56:29.101873+03:00",
+    "mem_available_gib": 3.8204574584960938,
+    "guest101_current_gib": 7.310611724853516
+  },
+  "first_101_high": {
+    "at_msk": "2026-10-01T17:00:15.201480+03:00",
+    "mem_available_gib": 3.1984024047851562,
+    "guest101_current_gib": 7.9324798583984375
+  },
+  "first_102_low": {
+    "at_msk": "2026-10-01T16:56:29.101873+03:00",
+    "mem_available_gib": 3.8204574584960938,
+    "guest101_current_gib": 7.310611724853516
+  },
+  "min_available_at_msk": "2026-10-01T17:02:49.268518+03:00",
+  "stage_windows": [
+    {
+      "stage": "http-1doc-normal-pve-v16-v11-final-20261001",
+      "samples": 822,
+      "swap_out_mib": 0.0,
+      "swap_in_mib": 0.06640625,
+      "min_available_gib": 5.937278747558594,
+      "max_101_current_gib": 5.004974365234375,
+      "max_102_current_gib": 3.9484786987304688,
+      "101_high_delta": 0,
+      "102_low_delta": 0
+    },
+    {
+      "stage": "http-1doc-active-pve-v16-v11-final-20261001",
+      "samples": 1094,
+      "swap_out_mib": 0.0,
+      "swap_in_mib": 0.06640625,
+      "min_available_gib": 5.899131774902344,
+      "max_101_current_gib": 5.005401611328125,
+      "max_102_current_gib": 4.008487701416016,
+      "101_high_delta": 0,
+      "102_low_delta": 0
+    },
+    {
+      "stage": "http-100doc-normal-pve-v16-v11-final-20261001",
+      "samples": 823,
+      "swap_out_mib": 0.0,
+      "swap_in_mib": 0.05078125,
+      "min_available_gib": 6.018169403076172,
+      "max_101_current_gib": 5.006492614746094,
+      "max_102_current_gib": 3.9734268188476562,
+      "101_high_delta": 0,
+      "102_low_delta": 0
+    },
+    {
+      "stage": "http-100doc-active-pve-v16-v11-final-20261001",
+      "samples": 1095,
+      "swap_out_mib": 0.0,
+      "swap_in_mib": 0.2265625,
+      "min_available_gib": 4.1887969970703125,
+      "max_101_current_gib": 6.868751525878906,
+      "max_102_current_gib": 4.011810302734375,
+      "101_high_delta": 0,
+      "102_low_delta": 0
+    },
+    {
+      "stage": "http-100doc-stopped-pve-v16-v11-final-20261001",
+      "samples": 824,
+      "swap_out_mib": 453.56640625,
+      "swap_in_mib": 265.1640625,
+      "min_available_gib": 3.1674652099609375,
+      "max_101_current_gib": 7.936683654785156,
+      "max_102_current_gib": 3.9874801635742188,
+      "101_high_delta": 287,
+      "102_low_delta": 1643
+    }
+  ],
+  "window_uncertainty_seconds": 3
+}

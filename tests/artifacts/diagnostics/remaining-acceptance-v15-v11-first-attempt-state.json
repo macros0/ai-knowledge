@@ -1,0 +1,884 @@
+[
+  {
+    "stage": "native-ttl-quota-final-v15-v11",
+    "started_at": "2026-09-30T14:47:53.240974+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "finished_at": "2026-09-30T14:48:05.621336+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c1-r1-v15-v11",
+    "started_at": "2026-09-30T14:48:05.678472+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T14:52:43.133410+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c1-r1-v15-v11",
+    "started_at": "2026-09-30T14:52:43.175258+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T14:57:20.149269+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c8-r1-v15-v11",
+    "started_at": "2026-09-30T14:57:20.191578+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:01:57.196215+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c8-r1-v15-v11",
+    "started_at": "2026-09-30T15:01:57.237314+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:06:34.238132+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c1-r2-v15-v11",
+    "started_at": "2026-09-30T15:06:34.278967+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:11:11.173999+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c1-r2-v15-v11",
+    "started_at": "2026-09-30T15:11:11.216397+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:15:48.081915+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c8-r2-v15-v11",
+    "started_at": "2026-09-30T15:15:48.123532+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:20:25.229516+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c8-r2-v15-v11",
+    "started_at": "2026-09-30T15:20:25.270655+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:25:02.379476+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c1-r3-v15-v11",
+    "started_at": "2026-09-30T15:25:02.420352+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:29:39.278320+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c1-r3-v15-v11",
+    "started_at": "2026-09-30T15:29:39.319607+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:34:16.231167+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c8-r3-v15-v11",
+    "started_at": "2026-09-30T15:34:16.272760+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:38:53.602927+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c8-r3-v15-v11",
+    "started_at": "2026-09-30T15:38:53.644749+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:43:31.039010+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c1-r1-v15-v11",
+    "started_at": "2026-09-30T15:43:31.081063+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:48:07.945123+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c1-r1-v15-v11",
+    "started_at": "2026-09-30T15:48:07.986540+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:52:44.855420+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c8-r1-v15-v11",
+    "started_at": "2026-09-30T15:52:44.897242+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T15:57:21.956774+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c8-r1-v15-v11",
+    "started_at": "2026-09-30T15:57:21.998527+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:01:58.928489+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c1-r2-v15-v11",
+    "started_at": "2026-09-30T16:01:58.972274+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:06:35.878624+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c1-r2-v15-v11",
+    "started_at": "2026-09-30T16:06:35.923136+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:11:12.810927+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c8-r2-v15-v11",
+    "started_at": "2026-09-30T16:11:12.854909+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:15:49.887661+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c8-r2-v15-v11",
+    "started_at": "2026-09-30T16:15:49.930449+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:20:26.895896+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c1-r3-v15-v11",
+    "started_at": "2026-09-30T16:20:26.937209+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:25:03.868543+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c1-r3-v15-v11",
+    "started_at": "2026-09-30T16:25:03.909774+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:29:40.932504+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c8-r3-v15-v11",
+    "started_at": "2026-09-30T16:29:40.974132+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:34:18.147730+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c8-r3-v15-v11",
+    "started_at": "2026-09-30T16:34:18.188960+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:38:55.353867+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-original-c1-r1-v15-v11",
+    "started_at": "2026-09-30T16:38:55.396782+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:43:32.442210+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-original-c8-r1-v15-v11",
+    "started_at": "2026-09-30T16:43:32.485117+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": false,
+      "observed_losses": {
+        "dropped": 18219,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:48:10.686123+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-original-c1-r2-v15-v11",
+    "started_at": "2026-09-30T16:48:10.727332+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:52:47.878660+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-original-c8-r2-v15-v11",
+    "started_at": "2026-09-30T16:52:47.922030+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": false,
+      "observed_losses": {
+        "dropped": 17903,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T16:57:26.281781+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-original-c1-r3-v15-v11",
+    "started_at": "2026-09-30T16:57:26.323618+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T17:02:03.445539+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-original-c8-r3-v15-v11",
+    "started_at": "2026-09-30T17:02:03.489228+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": false,
+      "observed_losses": {
+        "dropped": 18043,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T17:06:41.729880+00:00"
+  },
+  {
+    "stage": "testclient-settings-original-c1-r1-v15-v11",
+    "started_at": "2026-09-30T17:06:41.772930+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T17:11:18.817354+00:00"
+  },
+  {
+    "stage": "testclient-settings-original-c8-r1-v15-v11",
+    "started_at": "2026-09-30T17:11:18.860900+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T17:15:56.016485+00:00"
+  },
+  {
+    "stage": "testclient-settings-original-c1-r2-v15-v11",
+    "started_at": "2026-09-30T17:15:56.058146+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T17:20:33.191306+00:00"
+  },
+  {
+    "stage": "testclient-settings-original-c8-r2-v15-v11",
+    "started_at": "2026-09-30T17:20:33.232550+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T17:25:10.494099+00:00"
+  },
+  {
+    "stage": "testclient-settings-original-c1-r3-v15-v11",
+    "started_at": "2026-09-30T17:25:10.537264+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T17:29:47.703993+00:00"
+  },
+  {
+    "stage": "testclient-settings-original-c8-r3-v15-v11",
+    "started_at": "2026-09-30T17:29:47.746496+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_loss_counters_known_pass": true,
+      "all_losses_pass": true,
+      "observed_losses": {
+        "dropped": 0,
+        "invalid": 0,
+        "expired_queue": 0,
+        "storage_errors": 0,
+        "drain_timeouts": 0
+      },
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T17:34:25.023171+00:00"
+  },
+  {
+    "stage": "fixed-input-full-v15-v11",
+    "started_at": "2026-09-30T17:34:25.066635+00:00",
+    "status": "failed",
+    "exit_code": 0,
+    "error_type": "MatrixGateError",
+    "failed_gates": [
+      "all_p95_pass"
+    ],
+    "finished_at": "2026-09-30T18:11:22.700419+00:00"
+  }
+]

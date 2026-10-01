@@ -1,0 +1,139 @@
+{
+  "sessions": [
+    {
+      "id": "cede09b7-4c0a-4771-8e9b-d5fc5bafa1f1",
+      "mode": "standard",
+      "status": "stopped",
+      "search_counts": {
+        "backend_requests": 5299,
+        "frontend_requests": 5299,
+        "backend_operations": 5299,
+        "backend_qdrant": 5299
+      },
+      "counts_match": true
+    },
+    {
+      "id": "55e1e2f5-91b3-4c14-831d-c444a97f5e01",
+      "mode": "standard",
+      "status": "stopped",
+      "search_counts": {
+        "backend_requests": 5179,
+        "frontend_requests": 5179,
+        "backend_operations": 5179,
+        "backend_qdrant": 5179
+      },
+      "counts_match": true
+    },
+    {
+      "id": "21b565e8-e9af-4fc9-bc33-826ae393a16f",
+      "mode": "standard",
+      "status": "stopped",
+      "search_counts": {
+        "backend_requests": 5305,
+        "frontend_requests": 5305,
+        "backend_operations": 5305,
+        "backend_qdrant": 5305
+      },
+      "counts_match": true
+    },
+    {
+      "id": "6871faa6-5bc4-4201-8e95-fbaf2485e30c",
+      "mode": "standard",
+      "status": "stopped",
+      "search_counts": {
+        "backend_requests": 5327,
+        "frontend_requests": 5327,
+        "backend_operations": 5327,
+        "backend_qdrant": 5327
+      },
+      "counts_match": true
+    },
+    {
+      "id": "a57b9ef7-0848-4462-9067-f590e31d2c13",
+      "mode": "detailed",
+      "status": "stopped",
+      "search_counts": {
+        "backend_requests": 5375,
+        "frontend_requests": 5375,
+        "backend_operations": 5375,
+        "backend_qdrant": 5375
+      },
+      "counts_match": true
+    },
+    {
+      "id": "0c8f72b4-3cf8-4362-8799-d965bf9b9154",
+      "mode": "detailed",
+      "status": "stopped",
+      "search_counts": {
+        "backend_requests": 5375,
+        "frontend_requests": 5375,
+        "backend_operations": 5375,
+        "backend_qdrant": 5375
+      },
+      "counts_match": true
+    },
+    {
+      "id": "c1f73b5f-c4b6-485e-8ef5-004c431627e2",
+      "mode": "detailed",
+      "status": "stopped",
+      "search_counts": {
+        "backend_requests": 5376,
+        "frontend_requests": 5376,
+        "backend_operations": 5376,
+        "backend_qdrant": 5376
+      },
+      "counts_match": true
+    },
+    {
+      "id": "76864bdb-040e-494c-b476-637c5a4ac7b1",
+      "mode": "detailed",
+      "status": "stopped",
+      "search_counts": {
+        "backend_requests": 4564,
+        "frontend_requests": 4564,
+        "backend_operations": 4564,
+        "backend_qdrant": 4564
+      },
+      "counts_match": true
+    }
+  ],
+  "all_counts_match": true,
+  "runtime_available": true,
+  "active_capture": false,
+  "backend_counters": {
+    "used_bytes": 123670845,
+    "reserved_bytes": 62296,
+    "quota_bytes": 503316480,
+    "free_bytes": 66043748352,
+    "unsafe_paths": 0,
+    "written": 29686,
+    "dropped": 0,
+    "invalid": 0,
+    "repeats": 0,
+    "expired_queue": 0,
+    "storage_errors": 0,
+    "shutdown_timeout": 0,
+    "drain_timeouts": 0,
+    "sampled_success": 0,
+    "aggregated_success": 663116,
+    "sampled_out_traces": 595782,
+    "sampled_out_slow": 0,
+    "policy_omitted": 383193,
+    "aggregate_overflow": 0,
+    "queued": 0
+  },
+  "frontend_counters": {
+    "schema_version": 1,
+    "written": 2193,
+    "dropped": 0,
+    "invalid": 0,
+    "repeats": 0,
+    "expired_queue": 0,
+    "intentional_aggregated": 250937,
+    "intentional_sampled": 0,
+    "sampled_out_slow": 0,
+    "aggregate_overflow": 0,
+    "queued": 0
+  },
+  "diagnostic_only": true
+}

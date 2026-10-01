@@ -1,0 +1,17 @@
+{
+  "stage": "http-100doc-active-pve-v16-v11-final-20261001",
+  "status": "passed",
+  "started_utc": "2026-10-01T13:15:28.877205+00:00",
+  "exit_code": 0,
+  "gates": {
+    "all_p95_pass": true,
+    "all_rss_pass": true,
+    "all_duration_requests_pass": true,
+    "all_losses_pass": true,
+    "all_zip_overlap_pass": true,
+    "all_response_equality_pass": true,
+    "all_capture_counts_pass": true,
+    "all_phase_distributions_pass": true
+  },
+  "finished_utc": "2026-10-01T13:51:59.288339+00:00"
+}

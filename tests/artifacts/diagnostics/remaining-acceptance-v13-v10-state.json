@@ -1,0 +1,420 @@
+[
+  {
+    "stage": "native-ttl-quota-final-v13-v10",
+    "started_at": "2026-09-30T11:03:10.371971+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "finished_at": "2026-09-30T11:03:21.593505+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c1-r1-v13-v10",
+    "started_at": "2026-09-30T11:03:21.637435+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:07:58.528043+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c1-r1-v13-v10",
+    "started_at": "2026-09-30T11:07:58.570097+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:12:35.490600+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c8-r1-v13-v10",
+    "started_at": "2026-09-30T11:12:35.532392+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:17:12.592767+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c8-r1-v13-v10",
+    "started_at": "2026-09-30T11:17:12.634329+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:21:50.075194+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c1-r2-v13-v10",
+    "started_at": "2026-09-30T11:21:50.118102+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:26:27.042730+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c1-r2-v13-v10",
+    "started_at": "2026-09-30T11:26:27.084131+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:31:04.095993+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c8-r2-v13-v10",
+    "started_at": "2026-09-30T11:31:04.138007+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:35:41.227286+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c8-r2-v13-v10",
+    "started_at": "2026-09-30T11:35:41.269518+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:40:18.514745+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c1-r3-v13-v10",
+    "started_at": "2026-09-30T11:40:18.556134+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:44:55.585263+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c1-r3-v13-v10",
+    "started_at": "2026-09-30T11:44:55.626081+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:49:32.587962+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-standard-c8-r3-v13-v10",
+    "started_at": "2026-09-30T11:49:32.629338+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:54:09.766263+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-detailed-c8-r3-v13-v10",
+    "started_at": "2026-09-30T11:54:09.807708+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T11:58:46.914198+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c1-r1-v13-v10",
+    "started_at": "2026-09-30T11:58:46.954986+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:03:23.914033+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c1-r1-v13-v10",
+    "started_at": "2026-09-30T12:03:23.956441+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:08:00.997466+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c8-r1-v13-v10",
+    "started_at": "2026-09-30T12:08:01.038806+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:12:38.076984+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c8-r1-v13-v10",
+    "started_at": "2026-09-30T12:12:38.118126+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:17:15.339622+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c1-r2-v13-v10",
+    "started_at": "2026-09-30T12:17:15.381650+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:21:52.346655+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c1-r2-v13-v10",
+    "started_at": "2026-09-30T12:21:52.388391+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:26:29.459412+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c8-r2-v13-v10",
+    "started_at": "2026-09-30T12:26:29.500601+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:31:06.671310+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c8-r2-v13-v10",
+    "started_at": "2026-09-30T12:31:06.713021+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:35:43.743215+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c1-r3-v13-v10",
+    "started_at": "2026-09-30T12:35:43.784752+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:40:20.797207+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c1-r3-v13-v10",
+    "started_at": "2026-09-30T12:40:20.838911+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:44:57.824971+00:00"
+  },
+  {
+    "stage": "testclient-settings-standard-c8-r3-v13-v10",
+    "started_at": "2026-09-30T12:44:57.866729+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:49:35.498170+00:00"
+  },
+  {
+    "stage": "testclient-settings-detailed-c8-r3-v13-v10",
+    "started_at": "2026-09-30T12:49:35.540331+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": true,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:54:12.543490+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-original-c1-r1-v13-v10",
+    "started_at": "2026-09-30T12:54:12.585836+00:00",
+    "status": "passed",
+    "exit_code": 0,
+    "gates": {
+      "scope": "private TestClient control",
+      "performance_acceptance": false,
+      "all_duration_requests_pass": true,
+      "all_p95_pass": true,
+      "all_private_rss_pass": true,
+      "all_losses_pass": true,
+      "all_bundle_pass": true
+    },
+    "finished_at": "2026-09-30T12:58:49.718194+00:00"
+  },
+  {
+    "stage": "testclient-search_stub-original-c8-r1-v13-v10",
+    "started_at": "2026-09-30T12:58:49.760362+00:00",
+    "status": "failed",
+    "exit_code": 0,
+    "error_type": "MatrixGateError",
+    "failed_gates": [
+      "all_losses_pass"
+    ],
+    "finished_at": "2026-09-30T13:03:28.199715+00:00"
+  }
+]

@@ -1,0 +1,54 @@
+{
+  "diagnostic_only": true,
+  "samples": 370,
+  "metrics_mib": {
+    "rss": {
+      "first": 93.78,
+      "peak": 162.61,
+      "before_gc": 137.22,
+      "after_gc": 89.62
+    },
+    "heapUsed": {
+      "first": 34.67,
+      "peak": 76.7,
+      "before_gc": 51.54,
+      "after_gc": 30.85
+    },
+    "heapTotal": {
+      "first": 36.42,
+      "peak": 106.42,
+      "before_gc": 81.42,
+      "after_gc": 33.42
+    },
+    "external": {
+      "first": 3.49,
+      "peak": 3.65,
+      "before_gc": 3.54,
+      "after_gc": 3.46
+    },
+    "arrayBuffers": {
+      "first": 0.11,
+      "peak": 0.27,
+      "before_gc": 0.15,
+      "after_gc": 0.08
+    },
+    "runner_rss_bytes": {
+      "first": 44.51,
+      "peak": 44.51,
+      "before_gc": 44.51,
+      "after_gc": 44.51
+    },
+    "observer_rss_bytes": {
+      "first": 62.09,
+      "peak": 62.09,
+      "before_gc": 55.11,
+      "after_gc": 55.29
+    },
+    "cgroup_memory_bytes": {
+      "first": 79.65,
+      "peak": 141.68,
+      "before_gc": 115.89,
+      "after_gc": 66.85
+    }
+  }
+}

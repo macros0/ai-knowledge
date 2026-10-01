@@ -1,0 +1,23 @@
+[
+  {
+    "stage": "collect-baseline-r1",
+    "started_at": "2026-09-30T13:37:35.397276+00:00",
+    "status": "passed",
+    "exit_code": null,
+    "gates": {
+      "measurement_collected": true
+    },
+    "finished_at": "2026-09-30T13:39:06.068036+00:00"
+  },
+  {
+    "stage": "collect-standard-r1",
+    "started_at": "2026-09-30T13:39:06.068280+00:00",
+    "status": "failed",
+    "exit_code": null,
+    "error_type": "MatrixGateError",
+    "failed_gates": [
+      "all_capture_counts_pass"
+    ],
+    "finished_at": "2026-09-30T13:40:37.976632+00:00"
+  }
+]

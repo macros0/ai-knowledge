@@ -1,0 +1,157 @@
+{
+  "rows": 18,
+  "requests": 74587,
+  "failed_gates": [
+    "all_p95_pass",
+    "all_rss_pass"
+  ],
+  "max_p95_overhead_pct": 58.49037078412731,
+  "max_backend_rss_growth_mib": 0.203125,
+  "max_frontend_rss_growth_mib": 39.77734375,
+  "failed_cases": [
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -475136,
+      "baseline_p95_ms": 18.705754075199366,
+      "bundle": false,
+      "capture_counts_pass": true,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -7581696,
+      "losses_pass": true,
+      "measured_p95_ms": 29.613102902658284,
+      "mode": "standard",
+      "p95_delta_ms": 10.907348827458918,
+      "p95_overhead_pct": 58.3101263045054,
+      "p95_pass": false,
+      "phase_distributions_pass": true,
+      "repeat": 1,
+      "response_equality_pass": true,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -20480,
+      "baseline_p95_ms": 18.705754075199366,
+      "bundle": false,
+      "capture_counts_pass": true,
+      "concurrency": 1,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -8372224,
+      "losses_pass": true,
+      "measured_p95_ms": 29.64681899175048,
+      "mode": "detailed",
+      "p95_delta_ms": 10.941064916551113,
+      "p95_overhead_pct": 58.49037078412731,
+      "p95_pass": false,
+      "phase_distributions_pass": true,
+      "repeat": 1,
+      "response_equality_pass": true,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": -1228800,
+      "baseline_p95_ms": 95.82694596610963,
+      "bundle": false,
+      "capture_counts_pass": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 41709568,
+      "losses_pass": true,
+      "measured_p95_ms": 97.91686199605465,
+      "mode": "standard",
+      "p95_delta_ms": 2.089916029945016,
+      "p95_overhead_pct": 2.180927304814806,
+      "p95_pass": true,
+      "phase_distributions_pass": true,
+      "repeat": 1,
+      "response_equality_pass": true,
+      "rss_pass": false,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 143360,
+      "baseline_p95_ms": 95.20929702557623,
+      "bundle": false,
+      "capture_counts_pass": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": 36077568,
+      "losses_pass": true,
+      "measured_p95_ms": 98.9425559528172,
+      "mode": "detailed",
+      "p95_delta_ms": 3.7332589272409678,
+      "p95_overhead_pct": 3.921107542930491,
+      "p95_pass": true,
+      "phase_distributions_pass": true,
+      "repeat": 3,
+      "response_equality_pass": true,
+      "rss_pass": false,
+      "zip_overlap_pass": true
+    }
+  ],
+  "baseline_p95_ms": {
+    "1": [
+      18.705754075199366,
+      29.23992194700986,
+      18.45676894299686
+    ],
+    "8": [
+      95.82694596610963,
+      93.79120694939047,
+      95.20929702557623
+    ]
+  }
+}

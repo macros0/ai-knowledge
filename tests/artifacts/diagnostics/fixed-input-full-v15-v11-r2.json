@@ -1,0 +1,1070 @@
+{
+  "build_revision": "admin-diagnostics-20260930-v13",
+  "measurement_seconds": 60,
+  "minimum_request_count": 1000,
+  "phase_scope": "supervised function intervals including parent setup",
+  "records": 20000,
+  "reference_version": "current",
+  "rows": [
+    {
+      "bundle": null,
+      "child_cpu_seconds": 0.0,
+      "concurrency": 1,
+      "cpu_seconds": 3.9251052,
+      "elapsed_seconds": 60.014209649991244,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 323.2810760382563,
+      "mode": "baseline",
+      "p50_ms": 15.856808982789516,
+      "p95_ms": 18.125643022358418,
+      "p99_ms": 22.35362899955362,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 383156224,
+      "peak_process_tree_rss_bytes": 383156224,
+      "phase_latencies": {
+        "prepare": {
+          "observed_seconds": 0,
+          "requests": 0
+        },
+        "zip": {
+          "observed_seconds": 0,
+          "requests": 0
+        }
+      },
+      "repeat": 1,
+      "requests": 3670,
+      "response_equality_pass": true,
+      "throughput_per_second": 61.15218414778433,
+      "with_zip": false
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.5937950540101156,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138450,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.53028,
+      "concurrency": 1,
+      "cpu_seconds": 3.990216135999999,
+      "elapsed_seconds": 60.007837575045414,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 321.82732794899493,
+      "mode": "baseline",
+      "p50_ms": 15.805469069164246,
+      "p95_ms": 18.247590982355177,
+      "p99_ms": 22.447610972449183,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 386576384,
+      "peak_process_tree_rss_bytes": 386576384,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 32.28974901139736,
+          "observed_seconds": 0.8341531669721007,
+          "p50_ms": 17.032836913131177,
+          "p95_ms": 19.57935094833374,
+          "p99_ms": 32.28974901139736,
+          "requests": 47
+        },
+        "zip": {
+          "max_ms": 19.850058015435934,
+          "observed_seconds": 0.7408127650851384,
+          "p50_ms": 16.47024299018085,
+          "p95_ms": 18.205218017101288,
+          "p99_ms": 19.850058015435934,
+          "requests": 45
+        }
+      },
+      "repeat": 1,
+      "requests": 3656,
+      "response_equality_pass": true,
+      "throughput_per_second": 60.9253748800368,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6459330769721419,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138447,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.58428,
+      "concurrency": 1,
+      "cpu_seconds": 3.902603224,
+      "elapsed_seconds": 60.005617615999654,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 343.3039610972628,
+      "mode": "detailed",
+      "p50_ms": 16.128847957588732,
+      "p95_ms": 19.02649598196149,
+      "p99_ms": 24.446079041808844,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 386723840,
+      "peak_process_tree_rss_bytes": 386723840,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 32.281662919558585,
+          "observed_seconds": 0.8800603980198503,
+          "p50_ms": 18.177103018388152,
+          "p95_ms": 20.861265948042274,
+          "p99_ms": 32.281662919558585,
+          "requests": 47
+        },
+        "zip": {
+          "max_ms": 20.35627292934805,
+          "observed_seconds": 0.7467325219186023,
+          "p50_ms": 16.838077921420336,
+          "p95_ms": 19.11541901063174,
+          "p99_ms": 20.35627292934805,
+          "requests": 44
+        }
+      },
+      "repeat": 1,
+      "requests": 3560,
+      "response_equality_pass": true,
+      "throughput_per_second": 59.327778655356695,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6067401979817078,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138449,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5382930000000004,
+      "concurrency": 1,
+      "cpu_seconds": 3.938132739999997,
+      "elapsed_seconds": 60.01016022195108,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 321.1364939343184,
+      "mode": "standard",
+      "p50_ms": 16.20719104539603,
+      "p95_ms": 19.065952976234257,
+      "p99_ms": 22.80964597593993,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 386756608,
+      "peak_process_tree_rss_bytes": 386756608,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 32.393670990131795,
+          "observed_seconds": 0.8398940759943798,
+          "p50_ms": 17.28204102255404,
+          "p95_ms": 20.92297503259033,
+          "p99_ms": 32.393670990131795,
+          "requests": 47
+        },
+        "zip": {
+          "max_ms": 29.29958200547844,
+          "observed_seconds": 0.7481764509575441,
+          "p50_ms": 16.819923010189086,
+          "p95_ms": 20.708578056655824,
+          "p99_ms": 29.29958200547844,
+          "requests": 44
+        }
+      },
+      "repeat": 1,
+      "requests": 3564,
+      "response_equality_pass": true,
+      "throughput_per_second": 59.38994308327686,
+      "with_zip": true
+    },
+    {
+      "bundle": null,
+      "child_cpu_seconds": 0.0,
+      "concurrency": 8,
+      "cpu_seconds": 4.484055493,
+      "elapsed_seconds": 60.07688585203141,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 403.76884292345494,
+      "mode": "baseline",
+      "p50_ms": 74.73048649262637,
+      "p95_ms": 90.58620291762054,
+      "p99_ms": 382.9545299522579,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 387383296,
+      "peak_process_tree_rss_bytes": 387383296,
+      "phase_latencies": {
+        "prepare": {
+          "observed_seconds": 0,
+          "requests": 0
+        },
+        "zip": {
+          "observed_seconds": 0,
+          "requests": 0
+        }
+      },
+      "repeat": 1,
+      "requests": 5360,
+      "response_equality_pass": true,
+      "throughput_per_second": 89.21900534594303,
+      "with_zip": false
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6589360340731218,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138451,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.557238,
+      "concurrency": 8,
+      "cpu_seconds": 4.520724987000001,
+      "elapsed_seconds": 60.017216266016476,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 400.55604407098144,
+      "mode": "baseline",
+      "p50_ms": 75.29051101300865,
+      "p95_ms": 91.71129192691296,
+      "p99_ms": 380.6361199822277,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 390266880,
+      "peak_process_tree_rss_bytes": 390266880,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 130.47332293353975,
+          "observed_seconds": 0.8880976240616292,
+          "p50_ms": 88.58433400746435,
+          "p95_ms": 113.9223329955712,
+          "p99_ms": 130.47332293353975,
+          "requests": 72
+        },
+        "zip": {
+          "max_ms": 103.0827050562948,
+          "observed_seconds": 0.7485888340743259,
+          "p50_ms": 81.86581754125655,
+          "p95_ms": 96.47379710804671,
+          "p99_ms": 103.0827050562948,
+          "requests": 72
+        }
+      },
+      "repeat": 1,
+      "requests": 5328,
+      "response_equality_pass": true,
+      "throughput_per_second": 88.7745272353938,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.5848067320184782,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138448,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5145269999999993,
+      "concurrency": 8,
+      "cpu_seconds": 4.392956844000004,
+      "elapsed_seconds": 60.004248662968166,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 419.4099649321288,
+      "mode": "standard",
+      "p50_ms": 77.55679043475538,
+      "p95_ms": 94.53517908696085,
+      "p99_ms": 385.1558299502358,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 390504448,
+      "peak_process_tree_rss_bytes": 390504448,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 419.4099649321288,
+          "observed_seconds": 0.8142529299948364,
+          "p50_ms": 94.19938101200387,
+          "p95_ms": 415.23010400123894,
+          "p99_ms": 419.4099649321288,
+          "requests": 40
+        },
+        "zip": {
+          "max_ms": 118.62939898855984,
+          "observed_seconds": 0.7497062369948253,
+          "p50_ms": 84.55122692976147,
+          "p95_ms": 100.34429910592735,
+          "p99_ms": 118.62939898855984,
+          "requests": 65
+        }
+      },
+      "repeat": 1,
+      "requests": 5152,
+      "response_equality_pass": true,
+      "throughput_per_second": 85.86058678840811,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6251608820166439,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138448,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5467390000000005,
+      "concurrency": 8,
+      "cpu_seconds": 4.410462445999997,
+      "elapsed_seconds": 60.00312516698614,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 405.24006995838135,
+      "mode": "detailed",
+      "p50_ms": 77.89594598580152,
+      "p95_ms": 95.48270190134645,
+      "p99_ms": 389.70740500371903,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 390529024,
+      "peak_process_tree_rss_bytes": 390529024,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 113.82321896962821,
+          "observed_seconds": 0.8611365410033613,
+          "p50_ms": 91.01734048454091,
+          "p95_ms": 106.63394397124648,
+          "p99_ms": 113.82321896962821,
+          "requests": 72
+        },
+        "zip": {
+          "max_ms": 99.41387898288667,
+          "observed_seconds": 0.7469845130108297,
+          "p50_ms": 84.94564448483288,
+          "p95_ms": 97.28218207601458,
+          "p99_ms": 99.41387898288667,
+          "requests": 72
+        }
+      },
+      "repeat": 1,
+      "requests": 5144,
+      "response_equality_pass": true,
+      "throughput_per_second": 85.7288680495302,
+      "with_zip": true
+    },
+    {
+      "bundle": null,
+      "child_cpu_seconds": 0.0,
+      "concurrency": 1,
+      "cpu_seconds": 3.9458717629999995,
+      "elapsed_seconds": 60.00998307100963,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 320.7097640261054,
+      "mode": "baseline",
+      "p50_ms": 15.728126047179103,
+      "p95_ms": 18.015475943684578,
+      "p99_ms": 20.970272948034108,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 390385664,
+      "peak_process_tree_rss_bytes": 390385664,
+      "phase_latencies": {
+        "prepare": {
+          "observed_seconds": 0,
+          "requests": 0
+        },
+        "zip": {
+          "observed_seconds": 0,
+          "requests": 0
+        }
+      },
+      "repeat": 2,
+      "requests": 3699,
+      "response_equality_pass": true,
+      "throughput_per_second": 61.639744100960414,
+      "with_zip": false
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.612873038975522,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138451,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5532579999999996,
+      "concurrency": 1,
+      "cpu_seconds": 3.934861556999998,
+      "elapsed_seconds": 60.00855993106961,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 325.64413303043693,
+      "mode": "standard",
+      "p50_ms": 16.037698020227253,
+      "p95_ms": 19.018526072613895,
+      "p99_ms": 22.599061019718647,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 392851456,
+      "peak_process_tree_rss_bytes": 392851456,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 21.95252408273518,
+          "observed_seconds": 0.8367006069747731,
+          "p50_ms": 17.52999098971486,
+          "p95_ms": 19.965057028457522,
+          "p99_ms": 21.95252408273518,
+          "requests": 47
+        },
+        "zip": {
+          "max_ms": 25.85478499531746,
+          "observed_seconds": 0.7568315980024636,
+          "p50_ms": 16.85744198039174,
+          "p95_ms": 24.67222500126809,
+          "p99_ms": 25.85478499531746,
+          "requests": 43
+        }
+      },
+      "repeat": 2,
+      "requests": 3577,
+      "response_equality_pass": true,
+      "throughput_per_second": 59.60816263727731,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.594179215026088,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138450,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5340340000000001,
+      "concurrency": 1,
+      "cpu_seconds": 3.8085596170000002,
+      "elapsed_seconds": 60.004744080943055,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 325.30192798003554,
+      "mode": "detailed",
+      "p50_ms": 16.11718302592635,
+      "p95_ms": 25.513150030747056,
+      "p99_ms": 29.854886000975966,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 392859648,
+      "peak_process_tree_rss_bytes": 392859648,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 24.24292906653136,
+          "observed_seconds": 0.839641749043949,
+          "p50_ms": 17.40236289333552,
+          "p95_ms": 19.60754196625203,
+          "p99_ms": 24.24292906653136,
+          "requests": 47
+        },
+        "zip": {
+          "max_ms": 38.99452509358525,
+          "observed_seconds": 0.736667143064551,
+          "p50_ms": 16.794821014627814,
+          "p95_ms": 24.869758053682745,
+          "p99_ms": 38.99452509358525,
+          "requests": 41
+        }
+      },
+      "repeat": 2,
+      "requests": 3421,
+      "response_equality_pass": true,
+      "throughput_per_second": 57.01215882839633,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6171360519947484,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138449,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5599900000000009,
+      "concurrency": 1,
+      "cpu_seconds": 3.9934412449999996,
+      "elapsed_seconds": 60.00381552497856,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 324.4527350179851,
+      "mode": "baseline",
+      "p50_ms": 15.741572016850114,
+      "p95_ms": 18.084740033373237,
+      "p99_ms": 21.5402920730412,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 392859648,
+      "peak_process_tree_rss_bytes": 392859648,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 19.349139998666942,
+          "observed_seconds": 0.8298960700631142,
+          "p50_ms": 17.090852023102343,
+          "p95_ms": 18.97176494821906,
+          "p99_ms": 19.349139998666942,
+          "requests": 48
+        },
+        "zip": {
+          "max_ms": 324.4527350179851,
+          "observed_seconds": 0.7700021689524874,
+          "p50_ms": 16.96690049720928,
+          "p95_ms": 19.08297196496278,
+          "p99_ms": 324.4527350179851,
+          "requests": 28
+        }
+      },
+      "repeat": 2,
+      "requests": 3671,
+      "response_equality_pass": true,
+      "throughput_per_second": 61.179442805130044,
+      "with_zip": true
+    },
+    {
+      "bundle": null,
+      "child_cpu_seconds": 0.0,
+      "concurrency": 8,
+      "cpu_seconds": 4.471145192999998,
+      "elapsed_seconds": 60.01481415703893,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 400.55883408058435,
+      "mode": "baseline",
+      "p50_ms": 75.05428249714896,
+      "p95_ms": 89.25817394629121,
+      "p99_ms": 381.2380089657381,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 392970240,
+      "peak_process_tree_rss_bytes": 392970240,
+      "phase_latencies": {
+        "prepare": {
+          "observed_seconds": 0,
+          "requests": 0
+        },
+        "zip": {
+          "observed_seconds": 0,
+          "requests": 0
+        }
+      },
+      "repeat": 2,
+      "requests": 5368,
+      "response_equality_pass": true,
+      "throughput_per_second": 89.44458256512665,
+      "with_zip": false
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6709202979691327,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138449,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5602989999999988,
+      "concurrency": 8,
+      "cpu_seconds": 4.444543199999998,
+      "elapsed_seconds": 60.3390204020543,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 412.7785940654576,
+      "mode": "standard",
+      "p50_ms": 77.49049150152132,
+      "p95_ms": 95.63563903793693,
+      "p99_ms": 385.16779290512204,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 393019392,
+      "peak_process_tree_rss_bytes": 393019392,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 120.07053196430206,
+          "observed_seconds": 0.8628599849762395,
+          "p50_ms": 87.59948657825589,
+          "p95_ms": 110.54773803334683,
+          "p99_ms": 120.07053196430206,
+          "requests": 72
+        },
+        "zip": {
+          "max_ms": 130.43431309051812,
+          "observed_seconds": 0.7903720650356263,
+          "p50_ms": 93.24059006758034,
+          "p95_ms": 123.94454795867205,
+          "p99_ms": 130.43431309051812,
+          "requests": 71
+        }
+      },
+      "repeat": 2,
+      "requests": 5168,
+      "response_equality_pass": true,
+      "throughput_per_second": 85.6493851833241,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6626580558950081,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138451,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5414300000000019,
+      "concurrency": 8,
+      "cpu_seconds": 4.536445756000006,
+      "elapsed_seconds": 60.0755292349495,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 415.4887259937823,
+      "mode": "baseline",
+      "p50_ms": 75.43587498366833,
+      "p95_ms": 91.97344491258264,
+      "p99_ms": 381.67096208781004,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 393056256,
+      "peak_process_tree_rss_bytes": 393056256,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 117.92221292853355,
+          "observed_seconds": 0.8565515329828486,
+          "p50_ms": 86.98542200727388,
+          "p95_ms": 110.76059099286795,
+          "p99_ms": 117.92221292853355,
+          "requests": 80
+        },
+        "zip": {
+          "max_ms": 140.8041249960661,
+          "observed_seconds": 0.7880449980730191,
+          "p50_ms": 91.69340052176267,
+          "p95_ms": 125.69029489532113,
+          "p99_ms": 140.8041249960661,
+          "requests": 64
+        }
+      },
+      "repeat": 2,
+      "requests": 5312,
+      "response_equality_pass": true,
+      "throughput_per_second": 88.42202586722605,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.643001799006015,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138450,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5604569999999995,
+      "concurrency": 8,
+      "cpu_seconds": 4.4156820440000075,
+      "elapsed_seconds": 60.0839274720056,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 412.14563394896686,
+      "mode": "detailed",
+      "p50_ms": 78.00066948402673,
+      "p95_ms": 94.95819197036326,
+      "p99_ms": 386.5739490138367,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 393064448,
+      "peak_process_tree_rss_bytes": 393064448,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 102.28551493491977,
+          "observed_seconds": 0.8646473219851032,
+          "p50_ms": 88.82918895687908,
+          "p95_ms": 99.86258193384856,
+          "p99_ms": 102.28551493491977,
+          "requests": 72
+        },
+        "zip": {
+          "max_ms": 122.02752905432135,
+          "observed_seconds": 0.7568051669513807,
+          "p50_ms": 89.71560798818246,
+          "p95_ms": 114.10246195737273,
+          "p99_ms": 122.02752905432135,
+          "requests": 64
+        }
+      },
+      "repeat": 2,
+      "requests": 5144,
+      "response_equality_pass": true,
+      "throughput_per_second": 85.6135778140785,
+      "with_zip": true
+    },
+    {
+      "bundle": null,
+      "child_cpu_seconds": 0.0,
+      "concurrency": 1,
+      "cpu_seconds": 3.943202375999988,
+      "elapsed_seconds": 60.01055686501786,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 321.848048013635,
+      "mode": "baseline",
+      "p50_ms": 15.772151527926326,
+      "p95_ms": 18.052647938020527,
+      "p99_ms": 20.337272086180747,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 392916992,
+      "peak_process_tree_rss_bytes": 392916992,
+      "phase_latencies": {
+        "prepare": {
+          "observed_seconds": 0,
+          "requests": 0
+        },
+        "zip": {
+          "observed_seconds": 0,
+          "requests": 0
+        }
+      },
+      "repeat": 3,
+      "requests": 3694,
+      "response_equality_pass": true,
+      "throughput_per_second": 61.555836055794956,
+      "with_zip": false
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.5526101000141352,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138450,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.4884529999999998,
+      "concurrency": 1,
+      "cpu_seconds": 3.9319637880000045,
+      "elapsed_seconds": 60.00503843196202,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 320.54454705212265,
+      "mode": "detailed",
+      "p50_ms": 16.150758019648492,
+      "p95_ms": 19.011312979273498,
+      "p99_ms": 23.664904991164804,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 395386880,
+      "peak_process_tree_rss_bytes": 395386880,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 33.23507192544639,
+          "observed_seconds": 0.7983519280096516,
+          "p50_ms": 17.005700967274606,
+          "p95_ms": 20.295290043577552,
+          "p99_ms": 33.23507192544639,
+          "requests": 45
+        },
+        "zip": {
+          "max_ms": 26.461194036528468,
+          "observed_seconds": 0.7340084209572524,
+          "p50_ms": 16.997034021187574,
+          "p95_ms": 21.537446998991072,
+          "p99_ms": 26.461194036528468,
+          "requests": 42
+        }
+      },
+      "repeat": 3,
+      "requests": 3567,
+      "response_equality_pass": true,
+      "throughput_per_second": 59.445008172847324,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.582140779006295,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138450,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5208249999999985,
+      "concurrency": 1,
+      "cpu_seconds": 4.005182555999994,
+      "elapsed_seconds": 60.008811654057354,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 321.27305399626493,
+      "mode": "baseline",
+      "p50_ms": 15.753124956972897,
+      "p95_ms": 17.942594015039504,
+      "p99_ms": 21.357586956582963,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 395390976,
+      "peak_process_tree_rss_bytes": 395390976,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 21.006664959713817,
+          "observed_seconds": 0.8244573730044067,
+          "p50_ms": 16.834162990562618,
+          "p95_ms": 20.29445895459503,
+          "p99_ms": 21.006664959713817,
+          "requests": 48
+        },
+        "zip": {
+          "max_ms": 17.615977907553315,
+          "observed_seconds": 0.7402134420117363,
+          "p50_ms": 16.350872057955712,
+          "p95_ms": 17.262852052226663,
+          "p99_ms": 17.615977907553315,
+          "requests": 46
+        }
+      },
+      "repeat": 3,
+      "requests": 3675,
+      "response_equality_pass": true,
+      "throughput_per_second": 61.241006090670076,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.5728899140376598,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138453,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.511842999999999,
+      "concurrency": 1,
+      "cpu_seconds": 3.9539701220000154,
+      "elapsed_seconds": 60.000096253002994,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 324.7883530566469,
+      "mode": "standard",
+      "p50_ms": 16.17005607113242,
+      "p95_ms": 19.028826034627855,
+      "p99_ms": 21.932826028205454,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 395390976,
+      "peak_process_tree_rss_bytes": 395390976,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 29.020402929745615,
+          "observed_seconds": 0.8152003049617633,
+          "p50_ms": 17.241068999283016,
+          "p95_ms": 20.688054035417736,
+          "p99_ms": 29.020402929745615,
+          "requests": 45
+        },
+        "zip": {
+          "max_ms": 22.70694205071777,
+          "observed_seconds": 0.7397708310745656,
+          "p50_ms": 17.228891025297344,
+          "p95_ms": 19.869651994667947,
+          "p99_ms": 22.70694205071777,
+          "requests": 42
+        }
+      },
+      "repeat": 3,
+      "requests": 3573,
+      "response_equality_pass": true,
+      "throughput_per_second": 59.54990446904778,
+      "with_zip": true
+    },
+    {
+      "bundle": null,
+      "child_cpu_seconds": 0.0,
+      "concurrency": 8,
+      "cpu_seconds": 4.473067942,
+      "elapsed_seconds": 60.05007786699571,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 402.56975207012147,
+      "mode": "baseline",
+      "p50_ms": 75.39649348473176,
+      "p95_ms": 91.53305005747825,
+      "p99_ms": 384.17680095881224,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 395505664,
+      "peak_process_tree_rss_bytes": 395505664,
+      "phase_latencies": {
+        "prepare": {
+          "observed_seconds": 0,
+          "requests": 0
+        },
+        "zip": {
+          "observed_seconds": 0,
+          "requests": 0
+        }
+      },
+      "repeat": 3,
+      "requests": 5328,
+      "response_equality_pass": true,
+      "throughput_per_second": 88.7259465641482,
+      "with_zip": false
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6124683549860492,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138451,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5318130000000032,
+      "concurrency": 8,
+      "cpu_seconds": 4.401077193999981,
+      "elapsed_seconds": 60.0768032950582,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 415.4374930076301,
+      "mode": "standard",
+      "p50_ms": 78.0836064950563,
+      "p95_ms": 94.57232197746634,
+      "p99_ms": 391.3359889993444,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 395542528,
+      "peak_process_tree_rss_bytes": 395542528,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 415.4374930076301,
+          "observed_seconds": 0.8370283970143646,
+          "p50_ms": 86.37744100997224,
+          "p95_ms": 409.60799308959395,
+          "p99_ms": 415.4374930076301,
+          "requests": 56
+        },
+        "zip": {
+          "max_ms": 415.4374930076301,
+          "observed_seconds": 0.7585857718950137,
+          "p50_ms": 90.53378103999421,
+          "p95_ms": 408.6401710519567,
+          "p99_ms": 415.4374930076301,
+          "requests": 64
+        }
+      },
+      "repeat": 3,
+      "requests": 5128,
+      "response_equality_pass": true,
+      "throughput_per_second": 85.35740450127811,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.6147125309798867,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138450,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5336929999999995,
+      "concurrency": 8,
+      "cpu_seconds": 4.559950281999988,
+      "elapsed_seconds": 60.06037091999315,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 401.12672408577055,
+      "mode": "baseline",
+      "p50_ms": 75.36880549741909,
+      "p95_ms": 90.45819891616702,
+      "p99_ms": 382.5374520383775,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 395542528,
+      "peak_process_tree_rss_bytes": 395542528,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 100.83629796281457,
+          "observed_seconds": 0.8554155660094693,
+          "p50_ms": 86.32672147359699,
+          "p95_ms": 96.7104519950226,
+          "p99_ms": 100.83629796281457,
+          "requests": 72
+        },
+        "zip": {
+          "max_ms": 95.67946603056043,
+          "observed_seconds": 0.7402976059820503,
+          "p50_ms": 84.18496052036062,
+          "p95_ms": 93.35911192465574,
+          "p99_ms": 95.67946603056043,
+          "requests": 72
+        }
+      },
+      "repeat": 3,
+      "requests": 5328,
+      "response_equality_pass": true,
+      "throughput_per_second": 88.71074084936085,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 1.577007323037833,
+        "events": 20000,
+        "input_bytes": 7580000,
+        "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+        "output_bytes": 138450,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 1.5110220000000005,
+      "concurrency": 8,
+      "cpu_seconds": 4.41685932499999,
+      "elapsed_seconds": 60.067479508928955,
+      "input_bytes": 7580000,
+      "input_sha256": "62d0f9188ecaee669fae70d46ce8b830de5454a98b32206eda4a48cc9946d534",
+      "max_ms": 416.5707880165428,
+      "mode": "detailed",
+      "p50_ms": 77.83664151793346,
+      "p95_ms": 94.75877496879548,
+      "p99_ms": 385.43040095828474,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 395542528,
+      "peak_process_tree_rss_bytes": 395542528,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 413.2683629868552,
+          "observed_seconds": 0.7940125080058351,
+          "p50_ms": 90.98104550503194,
+          "p95_ms": 407.44970506057143,
+          "p99_ms": 413.2683629868552,
+          "requests": 40
+        },
+        "zip": {
+          "max_ms": 108.88639697805047,
+          "observed_seconds": 0.7610017820261419,
+          "p50_ms": 87.17822848120704,
+          "p95_ms": 101.83627193327993,
+          "p99_ms": 108.88639697805047,
+          "requests": 66
+        }
+      },
+      "repeat": 3,
+      "requests": 5168,
+      "response_equality_pass": true,
+      "throughput_per_second": 86.03657157333834,
+      "with_zip": true
+    }
+  ],
+  "rss_scope": "private supervisor and child, not live backend/frontend trees",
+  "schema_version": 1,
+  "scope": "private same-input algorithm control; no API publication",
+  "warmup_seconds": 30
+}

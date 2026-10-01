@@ -1,0 +1,185 @@
+{
+  "build_revision": "admin-diagnostics-20260930-v13",
+  "phase_scope": "supervised function intervals including parent setup",
+  "rows": [
+    {
+      "bundle": null,
+      "child_cpu_seconds": 0.0,
+      "concurrency": 8,
+      "cpu_seconds": 0.7088956580000003,
+      "elapsed_seconds": 10.049895863980055,
+      "input_bytes": 386000,
+      "input_sha256": "65ecffba3174f540782eb175024c76b0edbc2b827085904f9639664a984b3d74",
+      "max_ms": 402.44333702139556,
+      "mode": "baseline",
+      "p50_ms": 83.03555799648166,
+      "p95_ms": 99.88674090709537,
+      "p99_ms": 378.4103370271623,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 383438848,
+      "peak_process_tree_rss_bytes": 383438848,
+      "phase_latencies": {
+        "prepare": {
+          "observed_seconds": 0,
+          "requests": 0
+        },
+        "zip": {
+          "observed_seconds": 0,
+          "requests": 0
+        }
+      },
+      "repeat": 1,
+      "requests": 824,
+      "response_equality_pass": true,
+      "throughput_per_second": 81.99089932397287,
+      "with_zip": false
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 0.5430903979577124,
+        "events": 1000,
+        "input_bytes": 386000,
+        "input_sha256": "65ecffba3174f540782eb175024c76b0edbc2b827085904f9639664a984b3d74",
+        "output_bytes": 9320,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 0.529904,
+      "concurrency": 8,
+      "cpu_seconds": 0.7321329849999998,
+      "elapsed_seconds": 10.077358392998576,
+      "input_bytes": 386000,
+      "input_sha256": "65ecffba3174f540782eb175024c76b0edbc2b827085904f9639664a984b3d74",
+      "max_ms": 397.7554099401459,
+      "mode": "baseline",
+      "p50_ms": 80.80792153486982,
+      "p95_ms": 97.95195795595646,
+      "p99_ms": 385.1061590248719,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 384663552,
+      "peak_process_tree_rss_bytes": 384663552,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 102.40023897495121,
+          "observed_seconds": 0.27549261099193245,
+          "p50_ms": 89.53435200965032,
+          "p95_ms": 101.22391092590988,
+          "p99_ms": 102.40023897495121,
+          "requests": 24
+        },
+        "zip": {
+          "max_ms": 101.03279002942145,
+          "observed_seconds": 0.2657824270427227,
+          "p50_ms": 90.34734801389277,
+          "p95_ms": 99.31622201111168,
+          "p99_ms": 101.03279002942145,
+          "requests": 31
+        }
+      },
+      "repeat": 1,
+      "requests": 848,
+      "response_equality_pass": true,
+      "throughput_per_second": 84.14903657581168,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 0.5457671249751002,
+        "events": 1000,
+        "input_bytes": 386000,
+        "input_sha256": "65ecffba3174f540782eb175024c76b0edbc2b827085904f9639664a984b3d74",
+        "output_bytes": 9326,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 0.530844,
+      "concurrency": 8,
+      "cpu_seconds": 0.7093030449999995,
+      "elapsed_seconds": 10.03438486799132,
+      "input_bytes": 386000,
+      "input_sha256": "65ecffba3174f540782eb175024c76b0edbc2b827085904f9639664a984b3d74",
+      "max_ms": 404.8848750535399,
+      "mode": "standard",
+      "p50_ms": 82.45686301961541,
+      "p95_ms": 101.90204007085413,
+      "p99_ms": 385.52313996478915,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 384708608,
+      "peak_process_tree_rss_bytes": 384708608,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 115.03553297370672,
+          "observed_seconds": 0.2775448029860854,
+          "p50_ms": 97.6125985616818,
+          "p95_ms": 114.74437697324902,
+          "p99_ms": 115.03553297370672,
+          "requests": 24
+        },
+        "zip": {
+          "max_ms": 115.03553297370672,
+          "observed_seconds": 0.2665408420143649,
+          "p50_ms": 96.06123605044559,
+          "p95_ms": 112.53722407855093,
+          "p99_ms": 115.03553297370672,
+          "requests": 24
+        }
+      },
+      "repeat": 1,
+      "requests": 816,
+      "response_equality_pass": true,
+      "throughput_per_second": 81.32038094362495,
+      "with_zip": true
+    },
+    {
+      "bundle": {
+        "crc_pass": true,
+        "elapsed_seconds": 0.5358606480294839,
+        "events": 1000,
+        "input_bytes": 386000,
+        "input_sha256": "65ecffba3174f540782eb175024c76b0edbc2b827085904f9639664a984b3d74",
+        "output_bytes": 9323,
+        "status": "ready"
+      },
+      "child_cpu_seconds": 0.5172560000000002,
+      "concurrency": 8,
+      "cpu_seconds": 0.7143980919999997,
+      "elapsed_seconds": 10.071710739051923,
+      "input_bytes": 386000,
+      "input_sha256": "65ecffba3174f540782eb175024c76b0edbc2b827085904f9639664a984b3d74",
+      "max_ms": 396.42128499690443,
+      "mode": "detailed",
+      "p50_ms": 83.10608094325289,
+      "p95_ms": 105.19488400314003,
+      "p99_ms": 378.02408600691706,
+      "peak_child_rss_bytes": 0,
+      "peak_parent_rss_bytes": 384737280,
+      "peak_process_tree_rss_bytes": 384737280,
+      "phase_latencies": {
+        "prepare": {
+          "max_ms": 112.19050001818687,
+          "observed_seconds": 0.266952040954493,
+          "p50_ms": 89.57082353299484,
+          "p95_ms": 111.85345402918756,
+          "p99_ms": 112.19050001818687,
+          "requests": 24
+        },
+        "zip": {
+          "max_ms": 99.02468393556774,
+          "observed_seconds": 0.26731806294992566,
+          "p50_ms": 88.06677348911762,
+          "p95_ms": 98.08835398871452,
+          "p99_ms": 99.02468393556774,
+          "requests": 32
+        }
+      },
+      "repeat": 1,
+      "requests": 824,
+      "response_equality_pass": true,
+      "throughput_per_second": 81.81331070252374,
+      "with_zip": true
+    }
+  ],
+  "rss_scope": "private supervisor and child, not live backend/frontend trees",
+  "schema_version": 1,
+  "scope": "private same-input algorithm control; no API publication"
+}

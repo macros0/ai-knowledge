@@ -1,0 +1,22 @@
+{
+  "requests": 100,
+  "elapsed_seconds": 2.0443940910045058,
+  "capture": false,
+  "zip": false,
+  "settings": {
+    "log_statement": "none",
+    "log_duration": "off",
+    "log_min_duration_statement": "-1",
+    "logging_collector": "off",
+    "synchronous_commit": "on",
+    "fsync": "on",
+    "full_page_writes": "on",
+    "track_io_timing": "off"
+  },
+  "wal_delta": {
+    "wal_records": 182,
+    "wal_fpi": 1,
+    "wal_bytes": 8161
+  },
+  "diagnostic_only": true
+}

@@ -1,0 +1,113 @@
+{
+  "all_capture_counts_pass": true,
+  "all_duration_requests_pass": true,
+  "all_losses_pass": true,
+  "all_p95_pass": true,
+  "all_phase_distributions_pass": true,
+  "all_response_equality_pass": true,
+  "all_rss_pass": true,
+  "all_zip_overlap_pass": true,
+  "decisions": [
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 253952,
+      "baseline_p95_ms": 94.26192194223404,
+      "bundle": true,
+      "capture_counts_pass": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -9318400,
+      "losses_pass": true,
+      "measured_p95_ms": 100.89207894634455,
+      "mode": "standard",
+      "p95_delta_ms": 6.630157004110515,
+      "p95_overhead_pct": 7.033759621593161,
+      "p95_pass": true,
+      "phase_distributions_pass": true,
+      "repeat": 1,
+      "response_equality_pass": true,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 12288,
+      "baseline_p95_ms": 93.28882000409067,
+      "bundle": true,
+      "capture_counts_pass": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -66875392,
+      "losses_pass": true,
+      "measured_p95_ms": 99.81251100543886,
+      "mode": "standard",
+      "p95_delta_ms": 6.5236910013481975,
+      "p95_overhead_pct": 6.99300409316157,
+      "p95_pass": true,
+      "phase_distributions_pass": true,
+      "repeat": 2,
+      "response_equality_pass": true,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    },
+    {
+      "backend_losses": {
+        "drain_timeouts": 0,
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0,
+        "storage_errors": 0
+      },
+      "backend_rss_growth_bytes": 53248,
+      "baseline_p95_ms": 94.43490800913423,
+      "bundle": true,
+      "capture_counts_pass": true,
+      "concurrency": 8,
+      "corpus_size": 1,
+      "duration_requests_pass": true,
+      "frontend_losses": {
+        "dropped": 0,
+        "expired_queue": 0,
+        "invalid": 0
+      },
+      "frontend_rss_growth_bytes": -51605504,
+      "losses_pass": true,
+      "measured_p95_ms": 100.93124501872808,
+      "mode": "standard",
+      "p95_delta_ms": 6.496337009593844,
+      "p95_overhead_pct": 6.879169098110927,
+      "p95_pass": true,
+      "phase_distributions_pass": true,
+      "repeat": 3,
+      "response_equality_pass": true,
+      "rss_pass": true,
+      "zip_overlap_pass": true
+    }
+  ],
+  "schema_version": 1,
+  "scope": "targeted acceptance subset; not the complete HTTP matrix"
+}
