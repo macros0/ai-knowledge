@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import ContentViewer from "@/components/ContentViewer";
+import DocumentMarkupButton from "@/components/DocumentMarkupButton";
 import { DownloadIcon } from "@/components/icons";
 import { backendFetch } from "@/lib/backendFetch";
 import { serverTranslator } from "@/i18n/server";
@@ -56,6 +57,7 @@ export default async function OkfFilePage({ params }) {
       <div className="okf-doc-bar">
         <span className="okf-doc-name">{doc.filename}</span>
         <div className="okf-doc-actions">
+          <DocumentMarkupButton docId={docId} />
           <Link className="okf-doc-open" href={`/documents/${docId}/fulltext${conceptQuery}`}>
             {t("sourceLocation.openInDocument")} →
           </Link>

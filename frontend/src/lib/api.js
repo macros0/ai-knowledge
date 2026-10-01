@@ -260,6 +260,10 @@ export function bulkReviewTags(tagIds) {
   });
 }
 
+export function getDocument(docId) {
+  return request(`/documents/${encodeURIComponent(docId)}`);
+}
+
 export function updateDocumentTags(docId, tags, canonicalLocale) {
   return request(`/documents/${docId}/tags`, {
     method: "PATCH",

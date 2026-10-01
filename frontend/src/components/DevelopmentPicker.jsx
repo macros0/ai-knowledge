@@ -17,7 +17,7 @@ import { useI18n } from "@/i18n/LocaleContext";
  * Поиск — строго по первым символам номера разработки (префикс).
  * onChange вызывается с id разработки (number) или null («без разработки»).
  */
-export default function DevelopmentPicker({ developments, value, suggestion = null, onChange }) {
+export default function DevelopmentPicker({ developments, value, suggestion = null, onChange, disabled = false, portalContainer = null, currentDocument = null }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -25,10 +25,14 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
   const popupRef = useRef(null); // попап (в портале)
   const inputRef = useRef(null);
 
-  const current = developments.find((d) => d.id === Number(value)) || null;
+  const current = developments.find((d) => d.id === Number(value)) ||
+    (value != null && currentDocument?.development_id === value ? {
+      id: value, number: currentDocument.development_number || String(value), name: currentDocument.development_name,
+    } : null);
   const suggestionNumber = String(suggestion?.number || "").trim();
 
   const openPopup = () => {
+    if (disabled) return;
     setQuery(suggestionNumber);
     setOpen(true);
   };
@@ -64,6 +68,7 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
   }, [developments, q]);
 
   const pick = (devId) => {
+    if (disabled) return;
     onChange(devId);
     setOpen(false);
     setQuery("");
@@ -73,7 +78,9 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
     <span className="dev-picker" ref={rootRef}>
       {current ? (
         <span className="dev-picker-assigned">
-          <Link
+          {portalContainer || disabled ? <span className="dev-picker-link">
+            {current.number}{current.display_name || current.name ? ` · ${current.display_name || current.name}` : ""}
+          </span> : <Link
             className="dev-picker-link"
             href={`/developments/${current.id}`}
             title={t("dev.title", { name: (current.display_name || current.name) || "" })}
@@ -81,10 +88,11 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
             <LinkIcon size={12} />
             {current.number}
             {current.display_name || current.name ? ` · ${current.display_name || current.name}` : ""}
-          </Link>
+          </Link>}
           <button
             type="button"
             className="tag-edit-toggle"
+            disabled={disabled}
             onClick={openPopup}
             title={t("dev.changeTitle")}
             aria-label={t("dev.changeAria")}
@@ -95,6 +103,7 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
       ) : (
         <button
           type="button"
+          disabled={disabled}
           className={`dev-picker-trigger${suggestion ? " dev-picker-trigger-suggestion" : ""}`}
           onClick={openPopup}
           title={suggestion ? t("dev.suggestionTitle") : t("dev.assignTitle")}
@@ -104,12 +113,18 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
             : t("dev.none")}
         </button>
       )}
-      {open &&
+      {open && !disabled &&
         createPortal(
           <div
             className="dev-picker-pop"
             ref={popupRef}
             onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault(); e.stopPropagation(); setOpen(false);
+                rootRef.current?.querySelector("button")?.focus();
+              }
+            }}
           >
             <input
               ref={inputRef}
@@ -117,9 +132,6 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
               placeholder={t("dev.searchPlaceholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setOpen(false);
-              }}
             />
             <ul className="dev-picker-list">
               <li>
@@ -138,7 +150,7 @@ export default function DevelopmentPicker({ developments, value, suggestion = nu
               {filtered.length === 0 && <li className="dev-picker-empty">{t("dev.notFound")}</li>}
             </ul>
           </div>,
-          document.body
+          portalContainer || document.body
         )}
     </span>
   );

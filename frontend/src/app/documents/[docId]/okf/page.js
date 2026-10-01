@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { DownloadIcon, FileTextIcon } from "@/components/icons";
 import OkfFileList from "@/components/OkfFileList";
 import DocumentSources from "@/components/DocumentSources";
+import DocumentMarkupButton from "@/components/DocumentMarkupButton";
 import { backendFetch } from "@/lib/backendFetch";
 import { serverTranslator } from "@/i18n/server";
 
@@ -38,6 +39,7 @@ export default async function OkfListPage({ params, searchParams }) {
           <div className="okf-doc-name">{doc.filename}</div>
         </div>
         <div className="okf-doc-actions">
+          <DocumentMarkupButton docId={docId} />
           <Link
             className="download-btn"
             href={`/documents/${docId}/fulltext`}

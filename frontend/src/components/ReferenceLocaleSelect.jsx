@@ -13,6 +13,8 @@ export default function ReferenceLocaleSelect({
   labelKey = "reference.originalLanguage",
   editLabelKey = "reference.editLanguage",
   collapseLabelKey = "reference.collapseLanguage",
+  portalContainer = null,
+  activeLocales,
 }) {
   const { t, locale } = useI18n();
   const [active, setActive] = useState([]);
@@ -21,17 +23,18 @@ export default function ReferenceLocaleSelect({
   // UI language as if it described the reference.
   const selectedLocale = value || "und";
   useEffect(() => {
+    if (activeLocales) return;
     let cancelled = false;
     listActiveLocales().then((items) => { if (!cancelled) setActive(items); }).catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [activeLocales]);
   return (
     <span className="reference-locale-select">
       {editing ? (
         <>
           <span>{t(labelKey)}</span>{" "}
           <SearchableSelect
-            options={buildLocaleOptions(selectedLocale, active, locale).map((option) => ({
+            options={buildLocaleOptions(selectedLocale, activeLocales || active, locale).map((option) => ({
               value: option.code,
               label: option.label,
               searchText: `${option.code} ${option.label}`,
@@ -42,6 +45,7 @@ export default function ReferenceLocaleSelect({
               setEditing(false);
             }}
             disabled={disabled}
+            portalContainer={portalContainer}
             searchPlaceholder={t("docs.localeSearchPlaceholder")}
             emptyLabel={t("docs.empty")}
             ariaLabel={t(labelKey)}

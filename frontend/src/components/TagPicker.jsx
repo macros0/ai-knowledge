@@ -18,6 +18,8 @@ export default function TagPicker({
   collapsible = false,
   defaultExpanded = false,
   onCollapse,
+  disabled = false,
+  portalContainer = null,
 }) {
   const { t, tc } = useI18n();
   const dictionary = useTagDictionary();
@@ -111,6 +113,7 @@ export default function TagPicker({
   };
 
   const addTag = (value) => {
+    if (disabled) return;
     const v = value.trim();
     if (v && !selected.includes(v)) onChange([...selected, v]);
     setInput("");
@@ -119,7 +122,7 @@ export default function TagPicker({
     if (v && collapsible) collapse();
   };
 
-  const removeTag = (tag) => onChange(selected.filter((t) => t !== tag));
+  const removeTag = (tag) => { if (!disabled) onChange(selected.filter((t) => t !== tag)); };
 
   const onKeyDown = (e) => {
     if (e.key === "ArrowDown") {
@@ -134,6 +137,7 @@ export default function TagPicker({
       if (open && active >= 0 && filtered[active]) addTag(filtered[active].name);
       else addTag(input);
     } else if (e.key === "Escape") {
+      if (open) { e.preventDefault(); e.stopPropagation(); }
       if (collapsible) collapse();
       else setOpen(false);
     } else {
@@ -150,7 +154,7 @@ export default function TagPicker({
       <div className="tag-chips">
         {selected.map((t) => (
           <span key={t} className={`tag-chip${editing ? "" : " tag-chip-readonly"}`}
-            onClick={editing ? () => removeTag(t) : undefined}>
+            onClick={editing && !disabled ? () => removeTag(t) : undefined}>
             {displayOf(t)}
           </span>
         ))}
@@ -159,6 +163,7 @@ export default function TagPicker({
         <input
           id={inputId}
           ref={inputRef}
+          disabled={disabled}
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
@@ -166,7 +171,7 @@ export default function TagPicker({
             setActive(-1);
           }}
           onKeyDown={onKeyDown}
-          onFocus={() => setOpen(true)}
+          onFocus={() => { if (!disabled) setOpen(true); }}
           onBlur={(e) => {
             // Moving to the collapse button must not commit the draft.
             if (e.relatedTarget === toggleRef.current) {
@@ -185,7 +190,7 @@ export default function TagPicker({
           aria-controls={listId}
           aria-activedescendant={open && active >= 0 ? `${listId}-opt-${active}` : undefined}
         />
-        {open &&
+        {open && !disabled &&
           createPortal(
             <ul
               className="tag-combobox-list"
@@ -218,11 +223,12 @@ export default function TagPicker({
                 </li>
               ))}
             </ul>,
-            document.body
+            portalContainer || document.body
           )}
       </div>}
       {collapsible && (
         <button type="button" className="tag-edit-toggle" ref={toggleRef}
+          disabled={disabled}
           aria-label={t(editing ? "tags.picker.collapse" : "tags.picker.addLabel")}
           aria-expanded={editing} aria-controls={editing ? inputId : undefined}
           onMouseDown={(e) => e.preventDefault()}
