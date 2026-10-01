@@ -11,6 +11,10 @@ from test_scripts.analyze_diagnostics_matrix import analyze
 def test_backend_loss_evidence_must_be_present_and_numeric(bad):
     baseline = {"corpus_size": 1, "concurrency": 1, "repeat": 1, "mode": "baseline",
                 "p95_ms": 10, "peak_rss_bytes": {"backend": 100, "frontend": 100}}
+    baseline.update(warmup_seconds=30, elapsed_seconds=60, requests=1000,
+        recorder_delta=dict.fromkeys(("dropped", "invalid", "expired_queue", "storage_errors", "drain_timeouts"), 0),
+        frontend_delta=dict.fromkeys(("dropped", "invalid", "expired_queue"), 0),
+        response_equality_pass=True, response_fingerprints={"query": "sha"})
     losses = dict.fromkeys(("dropped", "invalid", "expired_queue", "storage_errors", "drain_timeouts"), 0)
     row = {**baseline, "mode": "standard", "warmup_seconds": 30, "elapsed_seconds": 60,
            "requests": 1000, "recorder_delta": losses,
@@ -99,6 +103,10 @@ def test_matrix_rejects_missing_node_counters_and_zip_queue_only_overlap():
     baseline = {"corpus_size": 1, "concurrency": 1, "repeat": 1,
                 "mode": "baseline", "p95_ms": 10.0,
                 "peak_rss_bytes": {"backend": 100, "frontend": 100}, "bundle": None}
+    baseline.update(warmup_seconds=30, elapsed_seconds=60, requests=1000,
+        recorder_delta=dict.fromkeys(("dropped", "invalid", "expired_queue", "storage_errors", "drain_timeouts"), 0),
+        frontend_delta=dict.fromkeys(("dropped", "invalid", "expired_queue"), 0),
+        response_equality_pass=True, response_fingerprints={"query": "sha"})
     captured = {**baseline, "mode": "detailed", "p95_ms": 10.5,
                 "warmup_seconds": 30, "elapsed_seconds": 60, "requests": 1000,
                 "recorder_delta": {}, "frontend_delta": {},
@@ -218,3 +226,35 @@ def test_unknown_second_vm_check_retains_conservative_rss():
 def test_missing_container_rss_cannot_be_reported_as_zero():
     with pytest.raises(RuntimeError, match="Container RSS unavailable"):
         http_probe._address_space_rss(101, [101], rss_reader=lambda pid: None)
+
+
+@pytest.mark.parametrize("alive", [True, None])
+def test_live_or_unknown_child_rss_is_never_zero(alive):
+    with pytest.raises(RuntimeError, match="Child RSS unavailable"):
+        http_probe._address_space_rss(101, [101, 102],
+            rss_reader=lambda pid: 100 if pid == 101 else None,
+            vm_compare=lambda left, right: False, process_alive=lambda pid: alive)
+
+
+def test_confirmed_exited_child_may_be_omitted():
+    result = http_probe._address_space_rss(101, [101, 102],
+        rss_reader=lambda pid: 100 if pid == 101 else None,
+        vm_compare=lambda left, right: False, process_alive=lambda pid: False)
+    assert result["total"] == result["raw_total"] == 100
+    assert result["descendants"] == 0
+
+
+def test_child_read_retries_transient_exec_gap_before_measuring():
+    readings = iter((100, None, 200))
+    result = http_probe._address_space_rss(101, [101, 102], rss_reader=lambda pid: next(readings),
+        vm_compare=lambda left, right: False, process_alive=lambda pid: True)
+    assert result["total"] == result["raw_total"] == 300
+    assert result["descendants"] == 200
+
+
+def test_unreadable_live_child_after_vm_transition_is_not_zero():
+    readings = iter((100, 100, None, None))
+    comparisons = iter((True, False))
+    with pytest.raises(RuntimeError, match="Child RSS unavailable"):
+        http_probe._address_space_rss(101, [101, 102], rss_reader=lambda pid: next(readings),
+            vm_compare=lambda left, right: next(comparisons), process_alive=lambda pid: True)

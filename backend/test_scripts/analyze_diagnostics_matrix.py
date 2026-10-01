@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 BACKEND_LOSS_KEYS = ("dropped", "invalid", "expired_queue", "storage_errors", "drain_timeouts")
@@ -14,11 +15,45 @@ def loss_counters(value, keys=BACKEND_LOSS_KEYS):
     return {key: value[key] for key in keys}
 
 
+class BaselineEvidenceError(ValueError):
+    def __init__(self, failed_gates):
+        self.failed_gates = sorted(failed_gates)
+        super().__init__("Invalid baseline evidence: " + ", ".join(self.failed_gates))
+
+
+def validate_references(rows):
+    failed = set()
+    references = [row for row in rows if row["mode"] == "baseline" and not row.get("bundle")]
+    if not references:
+        raise BaselineEvidenceError({"all_duration_requests_pass"})
+    def number(value, minimum):
+        return type(value) in (int, float) and math.isfinite(value) and value >= minimum
+    for row in references:
+        if not (number(row.get("warmup_seconds"), 30) and number(row.get("elapsed_seconds"), 60)
+                and type(row.get("requests")) is int and row["requests"] >= 1000):
+            failed.add("all_duration_requests_pass")
+        losses = loss_counters(row.get("recorder_delta"))
+        frontend = loss_counters(row.get("frontend_delta"), FRONTEND_LOSS_KEYS)
+        if losses is None or any(losses.values()) or frontend is None or any(frontend.values()):
+            failed.add("all_losses_pass")
+        if row.get("response_equality_pass") is not True or not row.get("response_fingerprints"):
+            failed.add("all_response_equality_pass")
+        if not number(row.get("p95_ms"), 0) or row["p95_ms"] <= 0:
+            failed.add("all_p95_pass")
+        rss = row.get("peak_rss_bytes")
+        if not isinstance(rss, dict) or any(type(rss.get(role)) is not int or rss[role] <= 0
+                                            for role in ("backend", "frontend")):
+            failed.add("all_rss_pass")
+    if failed:
+        raise BaselineEvidenceError(failed)
+
+
 def analyze(normal, *, bundle=None):
     if bundle is not None and (not normal.get("image_ids") or not bundle.get("image_ids")
                                or normal["image_ids"] != bundle["image_ids"]):
         raise ValueError("Cannot compare bundles across unknown or different image IDs")
     rows = normal["rows"]
+    validate_references(rows + (bundle["rows"] if bundle is not None else []))
     baselines = {(r["corpus_size"], r["concurrency"], r["repeat"]): r
                  for r in rows if r["mode"] == "baseline"}
     if bundle is not None:

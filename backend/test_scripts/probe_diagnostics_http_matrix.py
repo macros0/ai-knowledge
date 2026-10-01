@@ -69,13 +69,35 @@ def _same_vm(left, right):
     return None if result < 0 else result == 0
 
 
-def _address_space_rss(pid, members, *, rss_reader=_rss_bytes, vm_compare=_same_vm):
+def _process_alive(pid, proc_root=Path("/proc")):
+    try:
+        state = (proc_root / str(pid) / "stat").read_text().rsplit(")", 1)[1].split()[0]
+        return state not in {"Z", "X"}
+    except FileNotFoundError:
+        return False
+    except (OSError, IndexError):
+        return None
+
+
+def _address_space_rss(pid, members, *, rss_reader=_rss_bytes, vm_compare=_same_vm,
+                       process_alive=_process_alive):
     """Conservative RSS sum, deduplicating only proven identical address spaces.
 
     Bracket child reads with VM comparisons: exec can change the VM while RSS
     is read. On a transition reread the now-distinct child. Unknown comparisons
     retain raw RSS; they never classify a real worker as an empty process.
     """
+    def read(member):
+        reading = rss_reader(member)
+        if reading is None:
+            reading = rss_reader(member)
+        if reading is None:
+            if member == pid:
+                raise RuntimeError("Container RSS unavailable")
+            if process_alive(member) is not False:
+                raise RuntimeError("Child RSS unavailable")
+        return reading
+
     representatives = {}
     raw = {}
     unknown = shared = 0
@@ -84,10 +106,10 @@ def _address_space_rss(pid, members, *, rss_reader=_rss_bytes, vm_compare=_same_
         initial = {}
         for other in representatives:
             initial[other] = vm_compare(other, member)
-        reading = rss_reader(member)
-        if member == pid and reading is None:
-            raise RuntimeError("Container RSS unavailable")
-        value = reading or 0
+        reading = read(member)
+        if reading is None:  # Confirmed exited/zombie child, not an unreadable live worker.
+            continue
+        value = reading
         raw[member] = value
         for other, before in initial.items():
             if before is None:
@@ -100,7 +122,7 @@ def _address_space_rss(pid, members, *, rss_reader=_rss_bytes, vm_compare=_same_
                 if after is None:
                     unknown += 1
                 else:
-                    value = rss_reader(member) or 0
+                    value = read(member) or 0
         if representative is None:
             representatives[member] = value
         else:
@@ -131,7 +153,8 @@ def _tree_members(pid, proc_root):
 
 def _tree_rss_sample(pid, proc_root=Path("/proc")):
     return _address_space_rss(pid, _tree_members(pid, proc_root),
-                              rss_reader=lambda member: _rss_bytes(member, proc_root))
+                              rss_reader=lambda member: _rss_bytes(member, proc_root),
+                              process_alive=lambda member: _process_alive(member, proc_root))
 
 
 def _tree_rss_bytes(pid, proc_root=Path("/proc")):
@@ -153,7 +176,8 @@ def _cgroup_rss_sample(pid, *, proc_root=Path("/proc"), cgroup_root=Path("/sys/f
             raise ValueError("Container PID missing from cgroup")
     except (OSError, ValueError, StopIteration):
         members = _tree_members(pid, proc_root)
-    return _address_space_rss(pid, members, rss_reader=lambda member: _rss_bytes(member, proc_root))
+    return _address_space_rss(pid, members, rss_reader=lambda member: _rss_bytes(member, proc_root),
+                              process_alive=lambda member: _process_alive(member, proc_root))
 
 
 def _cgroup_rss_bytes(pid, *, proc_root=Path("/proc"), cgroup_root=Path("/sys/fs/cgroup")):

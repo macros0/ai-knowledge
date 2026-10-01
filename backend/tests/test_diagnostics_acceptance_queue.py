@@ -210,3 +210,24 @@ def test_baseline_flags_require_both_components_off(monkeypatch, frontend_matche
     else:
         with pytest.raises(RuntimeError, match="frontend baseline"):
             live.baseline_flags(client, False)
+
+
+@pytest.mark.parametrize("bundle", [False, True])
+@pytest.mark.parametrize("field,bad,gate", [
+    ("warmup_seconds", 0, "all_duration_requests_pass"),
+    ("elapsed_seconds", 0.01, "all_duration_requests_pass"),
+    ("requests", 1, "all_duration_requests_pass"),
+    ("recorder_delta", {"dropped": 999}, "all_losses_pass"),
+    ("frontend_delta", None, "all_losses_pass"),
+    ("response_equality_pass", False, "all_response_equality_pass"),
+    ("p95_ms", float("nan"), "all_p95_pass"),
+    ("peak_rss_bytes", {"backend": None, "frontend": 100}, "all_rss_pass"),
+])
+def test_invalid_reference_series_cannot_pass_release_matrix(tmp_path, bundle, field, bad, gate):
+    data = matrix_fixture(bundle=bundle)
+    reference = next(row for row in data["rows"] if row["mode"] == "baseline" and not row["bundle"])
+    reference[field] = bad
+    output = tmp_path / "invalid-reference.json"
+    output.write_text(json.dumps(data))
+    with pytest.raises(queue.MatrixGateError, match=gate):
+        queue.validate_matrix(output, 1, bundle=bundle)

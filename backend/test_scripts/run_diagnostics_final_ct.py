@@ -6,10 +6,10 @@ import subprocess
 import time
 
 if __package__:
-    from .analyze_diagnostics_matrix import analyze
+    from .analyze_diagnostics_matrix import BaselineEvidenceError, analyze
     from .analyze_diagnostics_controls import analyze_testclient, analyze_fixed, analyze_storm
 else:
-    from analyze_diagnostics_matrix import analyze
+    from analyze_diagnostics_matrix import BaselineEvidenceError, analyze
     from analyze_diagnostics_controls import analyze_testclient, analyze_fixed, analyze_storm
 
 ROOT = Path("/opt/okf-diag-levels-20260929")
@@ -88,7 +88,10 @@ def validate_matrix(output, corpus, *, bundle=False, stopped=False):
             or any(not isinstance(value, str) or not value or value == "unknown" for value in images.values())):
         raise RuntimeError("Unknown matrix image IDs")
     reference = {**data, "rows": [row for row in rows if not row.get("bundle")]}
-    result = analyze(reference, bundle=data) if bundle else analyze(data)
+    try:
+        result = analyze(reference, bundle=data) if bundle else analyze(data)
+    except BaselineEvidenceError as exc:
+        raise MatrixGateError(exc.failed_gates) from exc
     output.with_name(output.stem + "-analysis.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n")
     failed = [key for key in MATRIX_GATES if result.get(key) is not True]
