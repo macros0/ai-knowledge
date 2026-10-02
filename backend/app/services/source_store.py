@@ -6,7 +6,15 @@ from sqlalchemy import select
 from app.db.models import DocumentSource
 
 
-def fetch_source_paths(session, pairs: set[tuple[str, str]]) -> dict[tuple[str, str], list[dict]]:
+def load_source_rows(session, doc_ids: set[str]) -> list[DocumentSource]:
+    """Load provenance once in the caller's canonical read snapshot."""
+    if not doc_ids:
+        return []
+    return list(session.scalars(select(DocumentSource).where(DocumentSource.doc_id.in_(doc_ids))))
+
+
+def fetch_source_paths(session, pairs: set[tuple[str, str]], *,
+                       rows: list[DocumentSource] | None = None) -> dict[tuple[str, str], list[dict]]:
     """Batch-read complete ancestry in the caller's canonical read snapshot.
 
     Only allowlisted display metadata leaves storage. Broken trees yield no
@@ -14,9 +22,8 @@ def fetch_source_paths(session, pairs: set[tuple[str, str]]) -> dict[tuple[str, 
     """
     if not pairs:
         return {}
-    rows = session.scalars(select(DocumentSource).where(
-        DocumentSource.doc_id.in_({doc_id for doc_id, _ in pairs})
-    )).all()
+    if rows is None:
+        rows = load_source_rows(session, {doc_id for doc_id, _ in pairs})
     nodes = {(row.doc_id, row.source_id): row for row in rows}
     paths = {}
     for doc_id, source_id in pairs:
@@ -120,13 +127,17 @@ def _validate_tree(rows: list[dict]) -> None:
             current = by_id[current].get("parent_source_id")
 
 
-def fetch_source_trees(session, doc_ids: set[str]) -> dict[str, list[dict]]:
+def fetch_source_trees(session, doc_ids: set[str], *,
+                       rows: list[DocumentSource] | None = None) -> dict[str, list[dict]]:
     """Raw provenance in the caller snapshot; never use this as public source_path."""
     trees = {doc_id: [] for doc_id in doc_ids}
     if not doc_ids:
         return trees
-    rows = session.scalars(select(DocumentSource).where(DocumentSource.doc_id.in_(doc_ids)))
+    if rows is None:
+        rows = load_source_rows(session, doc_ids)
     for row in rows:
+        if row.doc_id not in trees:
+            continue
         trees[row.doc_id].append({
             'source_id': row.source_id, 'parent_source_id': row.parent_source_id,
             'kind': row.kind, 'metadata': row.metadata_json,

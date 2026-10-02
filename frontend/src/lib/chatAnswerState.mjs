@@ -1,3 +1,13 @@
+import { reconcileChatSources } from "./chatRenderState.mjs";
+
+export function toggleChatSources(messages, index, open) {
+  const current = messages[index];
+  if (!current || (current.sourcesTouched && current.sourcesOpen === open)) return messages;
+  const next = [...messages];
+  next[index] = { ...current, sourcesOpen: open, sourcesTouched: true };
+  return next;
+}
+
 export function searchLimitWarning(reached, sourceCount, depth, maxDepth = 500) {
   // The backend flag also covers capped candidates before merging and filtering.
   // Only a full result list warrants advising the user to raise its limit.
@@ -35,10 +45,13 @@ export function applyAnswerEvent(messages, event) {
   if (event.type === "delta") {
     changed = { ...current, text: (current.text || "") + event.text };
   } else if (event.type === "sources") {
+    const sources = reconcileChatSources(current.sources, event.sources || []);
+    const sourcesOpen = current.sourcesTouched ? current.sourcesOpen : sources.length > 0;
+    if (sources === current.sources && sourcesOpen === current.sourcesOpen) return messages;
     changed = {
       ...current,
-      sources: event.sources || [],
-      sourcesOpen: current.sourcesTouched ? current.sourcesOpen : (event.sources || []).length > 0,
+      sources,
+      sourcesOpen,
     };
   } else if (event.type === "progress") {
     changed = event.phase === "retrieval"

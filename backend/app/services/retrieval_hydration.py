@@ -5,16 +5,28 @@ import logging
 from pathlib import Path
 from time import perf_counter
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import and_, func, or_, select, tuple_
 
 from app.db.models import Document, DocumentChunk, DocumentGenerationState, OkfConcept
 from app.db.session import session_scope
 from app.services.glossary.matching import group_form_matches
 from app.services.glossary.types import MatchGroup
-from app.services.source_store import fetch_source_paths, fetch_source_trees
+from app.services.source_store import fetch_source_paths, fetch_source_trees, load_source_rows
 from app.services.mail_scope import MailMode, MAIL_SCOPE_VERSION, build_mail_scope_map, mail_scope_allowed
 
 logger = logging.getLogger(__name__)
+
+
+def _concept_pair_condition(pairs, *, dialect_name="postgresql"):
+    """Keep exact document/slug pairs without PostgreSQL's large tuple-IN OR."""
+    if dialect_name == "sqlite":
+        # One OR per document exceeds SQLite's expression depth during widening.
+        return tuple_(OkfConcept.doc_id, OkfConcept.slug).in_(sorted(pairs))
+    grouped = {}
+    for doc_id, slug in pairs:
+        grouped.setdefault(doc_id, set()).add(slug)
+    return or_(*(and_(OkfConcept.doc_id == doc_id, OkfConcept.slug.in_(sorted(slugs)))
+                 for doc_id, slugs in sorted(grouped.items())))
 
 
 def _dedupe_pairs(pairs: list[tuple]) -> list[tuple]:
@@ -82,7 +94,8 @@ def _chunk_pairs_needed_for_merge(
     return [pair for pair in chunk_pairs if pair not in skip]
 
 
-def _verify_mail_identities(hits, session, *, mail_mode, active_generations, timings):
+def _verify_mail_identities(hits, session, *, mail_mode, active_generations, timings,
+                            source_rows=None, source_load_ms=0.0):
     """Read every identity before text pruning, in the caller's locked snapshot."""
     started = perf_counter()
     original = {id(hit): (hit.payload.get("mail_scope"), hit.payload.get("mail_scope_version"))
@@ -110,7 +123,7 @@ def _verify_mail_identities(hits, session, *, mail_mode, active_generations, tim
         concepts = {(doc_id, slug): (source_id, index) for doc_id, slug, source_id, index
                     in session.execute(select(OkfConcept.doc_id, OkfConcept.slug,
                         OkfConcept.source_id, OkfConcept.chunk_index).where(
-                        tuple_(OkfConcept.doc_id, OkfConcept.slug).in_(concept_pairs)))}
+                        _concept_pair_condition(concept_pairs, dialect_name=session.get_bind().dialect.name)))}
     chunk_pairs.update((doc_id, index) for (doc_id, _), (_, index) in concepts.items()
                        if index is not None)
     chunks = {}
@@ -119,7 +132,7 @@ def _verify_mail_identities(hits, session, *, mail_mode, active_generations, tim
             select(DocumentChunk.doc_id, DocumentChunk.chunk_index, DocumentChunk.source_id)
             .where(tuple_(DocumentChunk.doc_id, DocumentChunk.chunk_index).in_(chunk_pairs)))}
     doc_ids = {hit.payload.get("doc_id") for hit in hits if hit.payload.get("doc_id")}
-    trees = fetch_source_trees(session, doc_ids)
+    trees = fetch_source_trees(session, doc_ids, rows=source_rows)
     maps = {doc_id: build_mail_scope_map(tree) for doc_id, tree in trees.items()}
     allowed, unknown, missing, mismatch, broken = [], 0, 0, 0, 0
     for hit in hits:
@@ -155,7 +168,7 @@ def _verify_mail_identities(hits, session, *, mail_mode, active_generations, tim
             payload["source_id"] = source_id
         if mail_scope_allowed(scope, mail_mode) and (verified or mail_mode == "all"):
             allowed.append(hit)
-    elapsed = round((perf_counter() - started) * 1000, 3)
+    elapsed = round((perf_counter() - started) * 1000 + source_load_ms, 3)
     if timings is not None:
         timings["classification_ms"] = elapsed
     if mail_mode != "all":
@@ -184,8 +197,13 @@ def _enrich_retrieval_hits_in_session(
         active_generations = dict(session.execute(select(
             DocumentGenerationState.doc_id, DocumentGenerationState.active_generation_id,
         ).where(DocumentGenerationState.doc_id.in_({hit.payload.get("doc_id") for hit in hits}))).all())
+    source_started = perf_counter()
+    source_rows = load_source_rows(session, {hit.payload.get("doc_id") for hit in hits
+                                            if hit.payload.get("doc_id")})
+    source_load_ms = (perf_counter() - source_started) * 1000
     hits = _verify_mail_identities(hits, session, mail_mode=mail_mode,
-                                  active_generations=active_generations, timings=timings)
+                                  active_generations=active_generations, timings=timings,
+                                  source_rows=source_rows, source_load_ms=source_load_ms)
     concept_pairs: list[tuple[str, str]] = []
     chunk_pairs: list[tuple[str, int]] = []
     for hit in hits:
@@ -220,7 +238,7 @@ def _enrich_retrieval_hits_in_session(
                 OkfConcept.content if full_text else func.substr(OkfConcept.content, 1, max_concept_chars),
                 OkfConcept.source_id,
                 OkfConcept.chunk_index,
-            ).where(tuple_(OkfConcept.doc_id, OkfConcept.slug).in_(concept_pairs))
+            ).where(_concept_pair_condition(concept_pairs, dialect_name=session.get_bind().dialect.name))
         ).all()
         concept_contents = {
             (doc_id, slug): content for doc_id, slug, content, _source_id, _chunk_index in rows
@@ -290,7 +308,7 @@ def _enrich_retrieval_hits_in_session(
     paths = fetch_source_paths(session, {
         (hit.payload["doc_id"], hit.payload["source_id"])
         for hit in hits if hit.payload.get("doc_id") and hit.payload.get("source_id")
-    })
+    }, rows=source_rows)
     for hit in hits:
         key = (hit.payload.get("doc_id"), hit.payload.get("source_id"))
         if key in paths:

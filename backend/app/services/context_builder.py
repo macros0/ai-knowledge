@@ -16,6 +16,7 @@ from app.services.glossary.matching import (
     DomainMatchCache,
     matched_domain_terms,
     title_matched_domain_terms,
+    preserve_domain_matches,
 )
 from app.services.glossary.normalization import normalize_query_with_mapping
 from app.services.glossary.types import MatchGroup
@@ -43,6 +44,24 @@ REVIEW_KIND = "review"
 # deterministic result avoids tokenizing the query repeatedly without changing
 # retrieval, ranking, or filtering semantics.
 LexicalMatchCache = dict[tuple[str, str, str], list[str]]
+
+
+def _full_match_evidence(hit: Hit | None, title: str, content: str,
+                         groups: tuple[MatchGroup, ...]) -> list[str]:
+    if not groups or hit is None or hit.payload.get('_canonical_verified') is not True:
+        return []
+    if hit.payload.get('content', '') == content:
+        return []
+    return preserve_domain_matches(f"{title}\n{hit.payload.get('content', '')}",
+                                   f"{title}\n{content}", groups)
+
+
+def _use_concept_content(block: dict) -> dict:
+    result = {**block, 'content': block['concept_content'], '_evidence': block.get('_concept_evidence')}
+    result.pop('_full_domain_matches', None)
+    if block.get('_concept_domain_matches'):
+        result['_full_domain_matches'] = block['_concept_domain_matches']
+    return result
 
 
 def _is_review_hit(hit: Hit) -> bool:
@@ -310,6 +329,14 @@ def merge_and_format(
                 "mail_fragment": source_hit.payload.get("mail_fragment") if source_hit else None,
             }
         )
+        preserved = _full_match_evidence(evidence_hit, merged_title, content, exact_groups)
+        if preserved:
+            merged[-1]['_full_domain_matches'] = preserved
+        if merged[-1]['concept_content']:
+            preserved_concept = _full_match_evidence(primary_concept, merged_title,
+                                                    merged[-1]['concept_content'], exact_groups)
+            if preserved_concept:
+                merged[-1]['_concept_domain_matches'] = preserved_concept
 
         # Сиблинг-концепты группы (все концепты кроме primary: основные
         # «проигравшие» primary + замечания). Группа (doc_id, chunk_index)
@@ -343,6 +370,9 @@ def merge_and_format(
                     "mail_fragment": concept.payload.get("mail_fragment"),
                 }
             )
+            preserved = _full_match_evidence(concept, merged[-1]['title'], sibling_content, exact_groups)
+            if preserved:
+                merged[-1]['_full_domain_matches'] = preserved
 
     # Глобальный порядок по fused score: сиблинг с низким score не должен
     # стоять выше первичного блока другой группы с более сильным попаданием.
@@ -353,8 +383,7 @@ def merge_and_format(
     for block in merged:
         if limit_total_chars and total_chars >= settings.chat_max_context_chars:
             break
-        if exact_groups and not any(group_form_matches(
-            f"{block['title']}\n{block['content']}", group) for group in exact_groups):
+        if exact_groups and not matched_domain_terms(block, exact_groups):
             continue
         limited.append(block)
         if limit_total_chars:
@@ -602,7 +631,7 @@ def drop_partial_title_matches(
                 continue
             concept_content = m.get("concept_content")
             if concept_content:
-                m = {**m, "content": concept_content, "_evidence": m.get("_concept_evidence")}
+                m = _use_concept_content(m)
             out.append(m)
         return out
 
@@ -625,7 +654,7 @@ def drop_partial_title_matches(
     for m in full:
         concept_content = m.get("concept_content")
         if concept_content:
-            m = {**m, "content": concept_content, "_evidence": m.get("_concept_evidence")}
+            m = _use_concept_content(m)
         out.append(m)
     return out
 

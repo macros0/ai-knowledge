@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from collections import OrderedDict
 from functools import lru_cache
+from hashlib import sha256
 import re
 from threading import RLock
 
@@ -76,7 +77,7 @@ def _form_pattern(forms: tuple[str, ...], boundary_mode: str) -> re.Pattern:
     alternatives = sorted({normalize_alias(form) for form in forms if normalize_alias(form)}, key=len, reverse=True)
     branches = []
     for form in alternatives:
-        if boundary_mode == "identifier":
+        if boundary_mode in {"identifier", "infotype"}:
             branches.append(re.escape(form) + r"(?![.:-]*[\w/])")
         else:
             after = r"(?!\w)" if form[-1].isalnum() or form[-1] == "_" else ""
@@ -120,13 +121,48 @@ def _scan_normalized_spans(normalized: str, forms: tuple[str, ...], boundary_mod
     while (match := pattern.search(normalized, position)) is not None:
         start, end = match.span(1)
         position = start + 1
-        if boundary_mode == "identifier":
+        if boundary_mode in {"identifier", "infotype"}:
             valid = technical_span_boundary(normalized, start, end)
         else:
             valid = not (start and (normalized[start - 1].isalnum() or normalized[start - 1] == "_")
                          and (normalized[start].isalnum() or normalized[start] == "_"))
         if valid:
             yield start, end
+    if boundary_mode == "infotype":
+        yield from _infotype_reference_spans(normalized, forms)
+
+
+@lru_cache(maxsize=128)
+def _infotype_reference_patterns(forms: tuple[str, ...]):
+    """Derive context references only from admitted prefix+four-digit forms."""
+    patterns = []
+    separator = r"(?:\s*,\s*(?:(?:и|или|and|or)\s+)?|\s+(?:и|или|and|or)\s+)"
+    code = r"[0-9]{4}(?![.:-]*[\w/])"
+    for form in dict.fromkeys(normalize_alias(form) for form in forms):
+        parsed = re.fullmatch(r"([a-zа-яё][a-zа-яё \-]*?)([0-9]{4})", form)
+        if parsed is None:
+            continue
+        prefix, number = parsed.groups()
+        qualified = (re.compile(r"(?<!\w)\w+_" + re.escape(form))
+                     if prefix in {"it", "ит"} else None)
+        coordinated = re.compile(re.escape(prefix) + code + r"(?:" + separator + code + r")+")
+        patterns.append((number, qualified, coordinated))
+    return tuple(patterns)
+
+
+def _infotype_reference_spans(normalized: str, forms: tuple[str, ...]):
+    for number, qualified, coordinated in _infotype_reference_patterns(forms):
+        if qualified is not None:
+            for match in qualified.finditer(normalized):
+                if technical_span_boundary(normalized, *match.span()):
+                    yield match.span()
+        for match in coordinated.finditer(normalized):
+            if not technical_span_boundary(normalized, *match.span()):
+                continue
+            for code in re.finditer(r"[0-9]{4}", match.group()):
+                if code.group() == number:
+                    # Retain the prefix and preceding list items in excerpts.
+                    yield match.start(), match.start() + code.end()
 
 
 def _contains_system_infotype(text: str, group: MatchGroup) -> bool:
@@ -192,7 +228,30 @@ def matched_domain_terms(
     if not groups:
         return []
     text = f"{item.get('title', '')}\n{item.get('content', '')}"
+    preserved = item.get('_full_domain_matches') or ()
+    if preserved:
+        return [f"{group.original_name} via {_via_form(group)}" for group in groups
+                if _group_evidence_key(group) in preserved or group_form_matches(text, group)]
     return _cached_domain_terms(text, groups, cache)
+
+
+@lru_cache(maxsize=128)
+def _evidence_key(identity: tuple) -> str:
+    return sha256(repr(identity).encode('utf-8')).hexdigest()
+
+
+def _group_evidence_key(group: MatchGroup) -> str:
+    # A saved match cannot grant removed forms, changed boundaries or a new
+    # registry revision. Store only a digest, never another copy of full text.
+    return _evidence_key((group.term_id, group.canonical, group.kind, group.term_version,
+                          group.source_revision, _unique_forms(group)))
+
+
+def preserve_domain_matches(full_text: str, excerpt_text: str,
+                            groups: Iterable[MatchGroup]) -> list[str]:
+    """Retain canonical matches whose complete source span exceeds the excerpt."""
+    return [_group_evidence_key(group) for group in groups
+            if not group_form_matches(excerpt_text, group) and group_form_matches(full_text, group)]
 
 
 def title_matched_domain_terms(
@@ -212,12 +271,17 @@ def group_form_matches(text: str, group: MatchGroup) -> bool:
     """Whether ``text`` contains one complete form of ``group``."""
     return _contains_complete_form(
         text, _unique_forms(group),
-        boundary_mode="identifier" if group.kind.startswith("sap_") else "phrase",
+        boundary_mode=("infotype" if group.kind == "sap_infotype" else
+                       "identifier" if group.kind.startswith("sap_") else "phrase"),
     )
 
 
 def exact_excerpt(text: str, max_chars: int, groups: Iterable[MatchGroup] = ()) -> str:
-    """Clip only after matching; keep a complete admitted form in the excerpt."""
+    """Prefer a complete form; show its end if the shared prefix cannot fit.
+
+    The caller preserves the full canonical match separately in that case.
+    The excerpt always remains a bounded contiguous slice of the source.
+    """
     groups = tuple(groups)
     head = text[:max_chars]
     if len(text) <= max_chars or not groups:
@@ -238,12 +302,16 @@ def exact_excerpt(text: str, max_chars: int, groups: Iterable[MatchGroup] = ()) 
     )
     mapped = None if same_offsets else normalize_query_with_mapping(text)
     spans = []
+    oversized = []
     for group in groups:
-        boundary = 'identifier' if group.kind.startswith('sap_') else 'phrase'
+        boundary = ('infotype' if group.kind == 'sap_infotype' else
+                    'identifier' if group.kind.startswith('sap_') else 'phrase')
         for start, end in _normalized_spans(normalized, _unique_forms(group), boundary):
             source_start, source_end = (start, end) if mapped is None else mapped.source_span(start, end)
             if source_end - source_start <= max_chars:
                 spans.append((source_start, source_end))
+            else:
+                oversized.append((source_start, source_end))
     # Boundaries belong to the original text. A clipped PA3000 must never
     # become an apparent PA30 at the end of a snippet.
     left = 0
@@ -253,6 +321,11 @@ def exact_excerpt(text: str, max_chars: int, groups: Iterable[MatchGroup] = ()) 
             left = max(0, start - min(80, max_chars - (end - start)))
             while left < start and not technical_span_boundary(text, left, len(text)):
                 left += 1
+    elif oversized:
+        start, end = min(oversized)
+        left = max(start, end - max_chars)
+        while left < end and not technical_span_boundary(text, left, len(text)):
+            left += 1
     right = min(len(text), left + max_chars)
     while right > left and not technical_span_boundary(text, 0, right):
         right -= 1
