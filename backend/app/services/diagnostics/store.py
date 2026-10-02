@@ -7,13 +7,13 @@ import json
 import os
 from pathlib import Path
 import shutil
-import stat
 import threading
 import time
 from uuid import uuid4
 
 from .sanitize import _encode_validated_event, encode_event, sanitize_event, valid_uuid
 from .segment_index import ReconcileResult, SegmentIndex
+from .paths import _is_link, assert_no_links, canonical_root  # noqa: F401 - _is_link is re-exported
 from .read_view import ReadViewLease, SegmentDescriptor, read_event_page as page_from_view
 from .schema import DiagnosticLimits, EventFilter, MAX_EVENT_BYTES
 
@@ -82,19 +82,9 @@ class CleanupResult:
     unsafe_paths: int = 0
 
 
-def _is_link(path: Path) -> bool:
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError:
-        return False
-    return stat.S_ISLNK(metadata.st_mode) or bool(
-        getattr(metadata, "st_file_attributes", 0) & 0x400
-    )  # Windows FILE_ATTRIBUTE_REPARSE_POINT includes junctions.
-
-
 class DiagnosticStore:
     def __init__(self, root: Path, limits: DiagnosticLimits):
-        self.root = Path(root).absolute()
+        self.root = canonical_root(root)
         self.limits = limits
         self._mutex = threading.RLock()
         self._projection_lock = threading.Lock()
@@ -119,10 +109,8 @@ class DiagnosticStore:
         path = Path(os.path.abspath(path))
         if not path.is_relative_to(self.root):
             raise ValueError("Diagnostic path escapes root")
-        # Include root and its parents: resolving first would hide a junction.
-        for part in (path, *path.parents):
-            if _is_link(part):
-                raise ValueError("Diagnostic path contains a link")
+        # Check up to root itself: resolving the path first would hide a junction.
+        assert_no_links(path, self.root)
         return path
 
     def open(self):

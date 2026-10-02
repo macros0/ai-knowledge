@@ -2,7 +2,6 @@
 from datetime import datetime, timezone
 import logging
 import os
-from pathlib import Path
 import threading
 import time
 from uuid import uuid4
@@ -11,6 +10,7 @@ from app import config
 from .browser import DiagnosticBrowserService, set_browser_service
 from .bundle_queue import DiagnosticBundleQueue
 from .control import write_projection
+from .paths import canonical_root
 from .raw_debug import sweep_raw_debug
 from .recorder import DiagnosticRecorder, set_recorder
 from .sessions import DiagnosticSessionService
@@ -36,7 +36,7 @@ class DiagnosticRuntime:
         self._maintenance_thread = None
         self._handler_installed = False
         configured_frontend = os.getenv("OKF_FRONTEND_DIAGNOSTICS_DIR")
-        self.frontend_root = Path(configured_frontend).absolute() if configured_frontend else None
+        self.frontend_root = canonical_root(configured_frontend) if configured_frontend else None
         try:
             self.store = DiagnosticStore(settings.diagnostics_dir, settings.diagnostics_limits())
             self.sessions = DiagnosticSessionService(self.store, settings, boot_id=self.boot_id)

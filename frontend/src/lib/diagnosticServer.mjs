@@ -17,6 +17,22 @@ export const setServerRecorder = (recorder) => { globalThis[recorderSlot] = reco
 export const emitServerEvent = (eventCode, fields = {}, exception = null) => currentRecorder()?.emit(eventCode, fields, exception) || false;
 export const serverRecorderStatus = () => currentRecorder()?.status() || { running: false, storage_degraded: true };
 
+// Resolve operator-owned links above a location (macOS /var and /tmp are links)
+// while keeping the final component unresolved, so a linked spool or control
+// file is still refused. Missing ancestors are created later by mkdir.
+async function canonicalLocation(filename) {
+  const absolute = path.resolve(filename), missing = [path.basename(absolute)];
+  let parent = path.dirname(absolute);
+  for (;;) {
+    try { return path.join(await fs.realpath(parent), ...missing); }
+    catch (error) {
+      if (error.code !== "ENOENT" || path.dirname(parent) === parent) throw error;
+      missing.unshift(path.basename(parent));
+      parent = path.dirname(parent);
+    }
+  }
+}
+
 export class DiagnosticServerRecorder {
   constructor({ root, controlPath, budgetBytes = 20 * 1048576, segmentBytes = 5 * 1048576,
     minFreeBytes = 2 * 1024 * 1048576, queueSize = 256, baselineSeconds = 7 * 86400,
@@ -39,10 +55,12 @@ export class DiagnosticServerRecorder {
     this.startedAtUtc = new Date(this.now()).toISOString();
   }
 
-  async _checkAbsolute(filename) {
-    const absolute = path.resolve(filename), base = path.parse(absolute).root;
+  // Links are refused from base downward; base is canonicalized in start().
+  async _checkAbsolute(filename, base) {
+    const absolute = path.resolve(filename), relative = path.relative(base, absolute);
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error("Unsafe diagnostic path");
     let current = base;
-    for (const part of absolute.slice(base.length).split(path.sep).filter(Boolean)) {
+    for (const part of ["", ...relative.split(path.sep).filter(Boolean)]) {
       current = path.join(current, part);
       try {
         if ((await fs.lstat(current)).isSymbolicLink()) throw new Error("Unsafe diagnostic path");
@@ -52,9 +70,7 @@ export class DiagnosticServerRecorder {
   }
 
   async _safe(filename) {
-    const absolute = path.resolve(filename), relative = path.relative(this.root, absolute);
-    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error("Unsafe diagnostic path");
-    return this._checkAbsolute(absolute);
+    return this._checkAbsolute(filename, this.root);
   }
 
   async _inventory(directory = this.root) {
@@ -136,7 +152,9 @@ export class DiagnosticServerRecorder {
     if (this.running) return true;
     try {
       if (!this.root) return false;
-      await this._checkAbsolute(this.root);
+      this.root = await canonicalLocation(this.root);
+      if (this.controlPath) this.controlPath = await canonicalLocation(this.controlPath);
+      await this._checkAbsolute(this.root, this.root);
       await fs.mkdir(this.root, { recursive: true, mode: 0o2770 });
       const marker = await this._safe(path.join(this.root, "writer.json"));
       const handle = await fs.open(marker, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW || 0), 0o660);
@@ -191,7 +209,7 @@ export class DiagnosticServerRecorder {
     const ticket = {};
     this.controlRefreshTicket = ticket;
     try {
-      await this._checkAbsolute(this.controlPath);
+      await this._checkAbsolute(this.controlPath, path.dirname(this.controlPath));
       if ((await fs.stat(this.controlPath)).size > 4096) throw new Error("Oversized control");
       const value = JSON.parse(await fs.readFile(this.controlPath, "utf8"));
       if (this.controlRefreshTicket !== ticket) return;

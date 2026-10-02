@@ -16,7 +16,8 @@ from .schema import EventFilter
 from .policy import safe_policy_snapshot
 from .sanitize import _encode_validated_event, sanitize_event, valid_uuid
 from .schema import MAX_EVENT_BYTES
-from .store import SnapshotLease, _is_link
+from .paths import assert_no_links
+from .store import SnapshotLease
 from .read_view import attach_frontend
 from .prepare import prepare_in_child
 from .safe_metadata import _safe_operations, _safe_runtime
@@ -67,9 +68,7 @@ def _external_safe(path: Path, root: Path):
     root = Path(os.path.abspath(root))
     if not path.is_relative_to(root):
         raise ValueError("Frontend diagnostic path escapes root")
-    for part in (path, *path.parents):
-        if _is_link(part):
-            raise ValueError("Frontend diagnostic path contains a link")
+    assert_no_links(path, root)
     return path
 
 

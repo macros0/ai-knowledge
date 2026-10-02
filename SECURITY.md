@@ -15,6 +15,10 @@ safe event and states that SQL reconciliation remains pending. The backend
 writer lock, independent quotas, free-space reserve and TTL bound retained
 diagnostic data. Production uses separate backend/frontend bind mounts; the
 frontend sees only its spool and a read-only control projection.
+Link checks cover the spool root and everything below it; links above the
+configured root are resolved once at startup (`diagnostics/paths.py`,
+`canonicalLocation` in `diagnosticServer.mjs`), so a linked spool or a link
+created inside it is still refused.
 
 Negative tests are in `backend/tests/test_diagnostics_schema.py`,
 `test_diagnostic_client_api.py`, `test_diagnostics_bundle.py`,
@@ -460,6 +464,19 @@ does not corrupt data.
   active tokens because encryption at rest is delegated to infrastructure.
 
 ## 7. Security change log
+
+### 2026-10-02 — Diagnostics: link checks bounded by the spool root
+Change: the backend store, bundle/prepare workers and the Node spool rejected a
+symbolic link or junction anywhere in the absolute path, including system
+ancestors. On macOS (`/var`, `/tmp` are links) and on hosts with a linked
+deployment directory, diagnostics failed closed and the frontend suite failed.
+Now ancestors above the configured root are canonicalized at startup, while the
+root itself and every path inside it are still checked with `lstat`; the
+frontend control file and its directory are checked the same way. Tests:
+`test_links_above_root_are_resolved_but_linked_root_is_refused` and the Node
+test "links above the spool are resolved while a linked spool itself is
+refused". The operator scripts `prepare_diagnostics_dirs.py` and
+`collect_diagnostics.py` keep the stricter whole-path rule.
 
 ### 2026-09-27 — Local stack startup on macOS/Linux
 Change: `scripts/start-all.sh` / `stop-all.sh` start and stop the local development stack on

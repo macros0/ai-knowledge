@@ -110,12 +110,14 @@ def test_frontend_control_lease_is_refreshed_within_ten_seconds(tmp_path):
         runtime.stop()
 
 
-def test_multiworker_start_is_rejected_before_uvicorn(tmp_path):
+def test_multiworker_start_is_rejected_before_uvicorn(tmp_path, capsys):
     from app import diagnostic_entrypoint
     called = []
     result = diagnostic_entrypoint.main(["--workers", "2"], settings=settings(tmp_path),
                                          runner=lambda *_args, **_kwargs: called.append(True))
     assert result == 1
     assert called == []
+    # Operators see the reason in the container log, not a silent exit code.
+    assert "Diagnostics require a single backend worker" in capsys.readouterr().err
     content = b"".join(path.read_bytes() for path in (tmp_path / "diagnostics/events").rglob("*.jsonl"))
     assert b"server_start_failed" in content

@@ -378,6 +378,26 @@ test("symlink or Windows junction inside spool refuses writing", async (t) => {
   assert.equal(recorder.status().storage_degraded, true);
 });
 
+test("links above the spool are resolved while a linked spool itself is refused", async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "okf-diagnostics-ancestor-"));
+  t.after(async () => { setServerRecorder(null); await rm(base, { recursive: true, force: true }); });
+  const real = path.join(base, "real"); await mkdir(real);
+  const alias = path.join(base, "alias"); await symlink(real, alias, "junction");
+  const recorder = new DiagnosticServerRecorder({ root: path.join(alias, "spool"),
+    controlPath: path.join(alias, "capture.json"), ...options });
+  t.after(() => recorder.stop());
+  assert.equal(await recorder.start(), true);
+  recorder.emit("proxy_failed", {}); await recorder.flush();
+  assert.equal((await events(path.join(real, "spool"))).some((event) => event.event_code === "proxy_failed"), true);
+
+  const target = path.join(base, "target"); await mkdir(target);
+  const linkedSpool = path.join(base, "linked-spool"); await symlink(target, linkedSpool, "junction");
+  const refused = new DiagnosticServerRecorder({ root: linkedSpool, ...options });
+  t.after(() => refused.stop());
+  assert.equal(await refused.start(), false);
+  assert.deepEqual(await readdir(target), []);
+});
+
 test("client abort is distinguished from backend timeout", async (t) => {
   const { recorder, spool } = await setup(t); setServerRecorder(recorder);
   const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });

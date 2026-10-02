@@ -39,7 +39,7 @@ for (const scenario of ["older stop", "older start", "older read failure"]) {
     let first = true;
     fs.readFile = async (...args) => {
       const value = await readFile(...args);
-      if (args[0] === controlPath && first) {
+      if (args[0] === recorder.controlPath && first) {
         first = false; reached(); await paused;
         if (scenario === "older read failure") throw Object.assign(new Error("synthetic"), { code: "EIO" });
       }

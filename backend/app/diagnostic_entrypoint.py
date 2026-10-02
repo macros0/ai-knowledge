@@ -2,6 +2,8 @@
 import argparse
 import importlib
 import os
+import sys
+import traceback
 
 from app.services.diagnostics import runtime as diagnostics_runtime
 
@@ -25,6 +27,10 @@ def main(argv=None, *, settings=None, runner=None) -> int:
     except Exception as exc:
         if runtime.available:
             runtime.recorder.emit("server_start_failed", exception=exc)
+        # The journal above stays content-free. The container log still has to
+        # say why the process exited; print directly instead of logging so the
+        # recorder's log handler does not record a duplicate event.
+        traceback.print_exception(exc, file=sys.stderr)
         return 1
     finally:
         runtime.stop()

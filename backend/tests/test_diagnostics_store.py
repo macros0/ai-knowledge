@@ -141,6 +141,28 @@ def test_symlink_junction_and_path_escape_rejected(tmp_path):
         assert sentinel.read_text() == "PRIVATE"
 
 
+def test_links_above_root_are_resolved_but_linked_root_is_refused(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    target = tmp_path / "target"
+    target.mkdir()
+    linked_root = tmp_path / "linked-spool"
+    try:
+        alias.symlink_to(real, target_is_directory=True)
+        linked_root.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("Symbolic links are unavailable on this host")
+    # macOS keeps temporary directories behind /var -> /private/var.
+    with DiagnosticStore(alias / "spool", limits()) as store:
+        assert store.root == real.resolve() / "spool"
+        assert store.append(encoded(), stream="baseline")
+        assert list((real / "spool" / "events" / "baseline").iterdir())
+    with pytest.raises(ValueError):
+        DiagnosticStore(linked_root, limits())
+    assert list(target.iterdir()) == []
+
+
 def test_disk_full_and_permission_error_do_not_escape(tmp_path, monkeypatch):
     import shutil
     with DiagnosticStore(tmp_path / "spool", limits(min_free_bytes=1)) as store:

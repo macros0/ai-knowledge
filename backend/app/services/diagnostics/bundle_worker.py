@@ -10,7 +10,7 @@ from .bundle import BundleTooLarge, build_bundle
 from .sanitize import valid_uuid
 from .schema import DiagnosticLimits
 from .safe_metadata import _safe_operations, _safe_runtime
-from .store import _is_link
+from .paths import assert_no_links
 
 MAX_INPUT_BYTES = 4 * 1048576
 
@@ -22,8 +22,9 @@ class WorkerPathStore:
 
     def safe_path(self, path):
         path = Path(os.path.abspath(path))
-        if not path.is_relative_to(self.root) or any(_is_link(part) for part in (path, *path.parents)):
+        if not path.is_relative_to(self.root):
             raise ValueError("Unsafe bundle worker path")
+        assert_no_links(path, self.root)
         return path
 
 

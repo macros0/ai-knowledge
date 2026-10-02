@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 import json
 import os
 import re
-import stat
 from pathlib import Path
 
+from .paths import assert_no_links
 from .sanitize import sanitize_event
 from .schema import EventFilter, MAX_EVENT_BYTES
 
@@ -64,13 +64,7 @@ def _safe_external(path: Path, root: Path) -> Path:
     root = Path(os.path.abspath(root))
     if not path.is_relative_to(root):
         raise ValueError("Frontend diagnostic path escapes root")
-    for part in (path, *path.parents):
-        try:
-            metadata = part.lstat()
-        except FileNotFoundError:
-            continue
-        if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & 0x400:
-            raise ValueError("Frontend diagnostic path contains link")
+    assert_no_links(path, root)
     return path
 
 

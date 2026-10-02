@@ -101,6 +101,18 @@ def test_session_and_bundle_lifecycle_with_fresh_role_check(api):
     assert client.get(f"/api/admin/diagnostics/bundles/{bundle_id}/download").status_code == 410
 
 
+def test_document_session_for_missing_document_is_not_found(api):
+    client, _ = api
+    login(client, "demo.admin")
+    response = client.post("/api/admin/diagnostics/sessions",
+                           json={"scope": "document", "doc_id": "0" * 32, "minutes": 5})
+    assert response.status_code == 404, response.text
+    assert response.json()["code"] == "document_not_found"
+    # The rejected start leaves no active session behind.
+    started = client.post("/api/admin/diagnostics/sessions", json={"scope": "interface", "minutes": 5})
+    assert started.status_code == 201, started.text
+
+
 def test_manual_stop_waits_for_accepted_capture_event(api):
     client, _ = api
     login(client, "demo.admin")
