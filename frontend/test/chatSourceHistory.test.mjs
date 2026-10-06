@@ -45,6 +45,7 @@ function load(name) {
 const noop = () => {};
 const message = {
   role: "assistant", text: "Answer [200]", attemptId: "history", responseMode: "documents", sourcesOpen: true,
+  sourceGroupsOpen: { doc: true },
   selectedSourceIndexes: [200], sources: Array.from({ length: 200 }, (_, i) => ({
     source_index: i + 1, doc_id: "doc", source_slug: `source-${i + 1}`, title: `Source ${i + 1}`,
     filename: "Document.docx", point_type: "concept", score: 0.9, selectable: true,
@@ -62,7 +63,7 @@ test("old automatic source lists defer rows while keeping document and selection
   assert.ok(html.includes(t("ux.sourcesSummary",{documents:1,fragments:200})));
   assert.ok(html.includes(t("chat.answerSelected", { count: 1 })));
 });
-test("latest answer renders every source including the selected last fragment", () => {
+test("manually expanded latest answer renders every source including the selected last fragment", () => {
   const html = render(message, true);
   assert.equal((html.match(/class="source-link"/g) ?? []).length, 200);
   assert.ok(html.includes("Source 200"));
@@ -90,7 +91,7 @@ test("legacy sources keep global citation numbers after document grouping withou
     {doc_id:"a", title:"A3", filename:"A.docx"},
   ];
   const html = renderToStaticMarkup(React.createElement(load("ChatSources").default, {
-    sources, open:true, selectionEnabled:true, onToggle:noop,
+    sources, open:true, selectionEnabled:true, onToggle:noop, expandedGroups:{a:true,b:true},
   }));
   assert.match(html, /<li value="1">/);
   assert.match(html, /<li value="3">/);
@@ -99,11 +100,29 @@ test("legacy sources keep global citation numbers after document grouping withou
   assert.equal(sources.some(source => source.source_index > 0),false);
 });
 
-test("saved group expansion survives component remount and overrides selected auto-open", () => {
+test("saved group expansion survives component remount", () => {
   const closed=render({...message,sourceGroupsOpen:{doc:false}},true);
   assert.equal((closed.match(/class="source-link"/g) ?? []).length,0);
   const opened=render({...message,selectedSourceIndexes:[],sourceGroupsOpen:{doc:true}},true);
   assert.equal((opened.match(/class="source-link"/g) ?? []).length,200);
+});
+
+test("document fragments all start collapsed, including small groups and selected fragments", () => {
+  const sources = [
+    { ...message.sources[0], doc_id: "a", filename: "Single.docx" },
+    ...message.sources.slice(1,3).map(source => ({ ...source, doc_id: "b", filename: "Small.docx" })),
+    ...message.sources.slice(3,23).map(source => ({ ...source, doc_id: "c", filename: "Selected.docx" })),
+  ];
+  const html = renderToStaticMarkup(React.createElement(load("ChatSources").default, {
+    sources, open:true, selectedIndexes:[23], selectionEnabled:true, onToggle:noop,
+  }));
+  assert.equal((html.match(/class="source-link"/g) ?? []).length, 0);
+  assert.equal((html.match(/class="source-document-group"/g) ?? []).length, 3);
+  assert.equal((html.match(/<details[^>]* open=""/g) ?? []).length, 1);
+  assert.ok(html.includes("Single.docx"));
+  assert.ok(html.includes("Small.docx"));
+  assert.ok(html.includes("Selected.docx"));
+  assert.ok(html.includes('aria-checked="mixed"'));
 });
 
 test("saved rating view renders global order, original citation numbers, scores and selection", () => {

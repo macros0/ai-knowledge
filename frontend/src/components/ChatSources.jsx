@@ -100,7 +100,7 @@ export default memo(function ChatSources({sources=[],selectedIndexes=[],selectio
       </div>
       {sourceView === "rating" ? <ol className="source-rating-list" style={{"--source-number-digits":String(Math.max(...displaySources.map(s=>s.display_index))).length}}>
         {displaySources.map(source=><ChatSourceRow key={source.display_index} source={source} selected={selectedSources.has(source.source_index)} selectable={availableIndexes.has(source.source_index)} responseMode={responseMode} onSelect={onSelect} showDocument/>)}
-      </ol> : groups.map(group=><SourceGroup key={group.doc_id} group={group} selectedSources={selectedSources} availableIndexes={availableIndexes} responseMode={responseMode} onSelect={onSelect} expanded={groupStates[group.doc_id] ?? (group.sources.length <= 10 || group.sources.some(s=>selectedSources.has(s.source_index)))} onToggle={expanded=>toggleGroup(group.doc_id,expanded)}/>)}
+      </ol> : groups.map(group=><SourceGroup key={group.doc_id} group={group} selectedSources={selectedSources} availableIndexes={availableIndexes} responseMode={responseMode} onSelect={onSelect} expanded={groupStates[group.doc_id] ?? false} onToggle={expanded=>toggleGroup(group.doc_id,expanded)}/>)}
     </div>}
   </details>;
 });
