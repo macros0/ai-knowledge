@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import {runDocumentUploadBatch} from "../src/lib/documentUploadBatch.mjs";
+import {friendlyApiError,ApiError} from "../src/lib/api.js";
+import {createTranslator} from "../src/i18n/core.js";
+import ru from "../src/i18n/locales/ru.js";
 import { bulkCapabilities, selectionLimit } from "../src/lib/documentBulkLimits.mjs";
 
 test("admin can select 1000 for export without enabling 50-doc mutations", () => {
@@ -49,9 +53,15 @@ test("document and export errors use the stable storage-full code for localizati
   assert.match(en, /"apiError\.storage_full"/);
 });
 
-test("upload UI stops the batch and shows the localized storage-full cause", async () => {
-  const batch = await readFile(new URL("../src/lib/documentUploadBatch.mjs", import.meta.url), "utf8");
-  const hook = await readFile(new URL("../src/hooks/useDocumentUpload.js", import.meta.url), "utf8");
-  assert.match(batch, /error\.code === "storage_full"/);
-  assert.match(hook, /apiError\.storage_full/);
+test("upload results stop at storage full and retain a localized reason", async () => {
+ const states=[],sent=[];
+ await runDocumentUploadBatch([{name:"a.pdf"},{name:"b.pdf"}],{
+  uploadOne:async file=>{sent.push(file.name);throw Object.assign(new Error(),{code:"storage_full",status:507});},
+  onItemState:(file,state,details)=>states.push({name:file.name,state,...details}),
+ });
+ assert.deepEqual(sent,["a.pdf"]);
+ assert.equal(states.find(x=>x.name === "a.pdf" && x.state === "failed").errorCode,"storage_full");
+ const last=states.at(-1); assert.equal(last.state,"not-sent");
+ const {t}=createTranslator("ru",ru);
+ assert.equal(friendlyApiError(new ApiError("",{code:last.errorCode}),t),ru["apiError.storage_full"]);
 });

@@ -3,12 +3,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
+import Modal from "./Modal";
+import { retryRequestOptions, freshSourceSearchOptions, chatNetworkScopeOptions } from "@/lib/chatComposer.mjs";
 import { applyAnswerEvent, toggleChatSources } from "@/lib/chatAnswerState.mjs";
 import { createChatDeltaBuffer, reconcileChatSources } from "@/lib/chatRenderState.mjs";
 import { updateSelection, selectableSources } from "@/lib/chatSourceSelection.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
 import { addScopeDocuments, scopeRequestIds, SEARCH_SCOPE_MAX_DOCUMENTS } from "@/lib/chatSearchScope.mjs";
 import { attachChatScroll } from "@/lib/chatScrollPosition.mjs";
+import ChatFilters, {ChatFilterSummary} from "./ChatFilters";
+import {buildChatFilterSummary} from "@/lib/chatFilterSummary.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
 import ModulePicker from "./ModulePicker";
@@ -35,11 +39,12 @@ export default function ChatPanel() {
   const { messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
     responseMode, setResponseMode, selectedTopK, setSelectedTopK, showCustom, setShowCustom, customValue, setCustomValue,
     showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue, moduleFilter, setModuleFilter, devFilter, setDevFilter,
-    sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen } = useChat();
+    sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen, draftQuery,setDraftQuery } = useChat();
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [scopeNotice, setScopeNotice] = useState(null);
+  const [editQuestion,setEditQuestion]=useState(null);
   const [modules, setModules] = useState([]);
   const [developments, setDevelopments] = useState([]);
   const [localeFacets, setLocaleFacets] = useState([]);
@@ -202,7 +207,8 @@ export default function ChatPanel() {
     return depth;
   }, [customDepthValue, normalizeDepth, setCustomDepthValue, setSearchDepth]);
 
-  const sendQuestion = useCallback(async (q, requestOptions, glossary = useGlossary) => {
+  const sendQuestion = useCallback(async (q, requestOptions, glossary = requestOptions.requestUseGlossary ?? useGlossary) => {
+    requestOptions = {...requestOptions,requestUseGlossary:glossary};
     stopCurrent();
     const attemptId = crypto.randomUUID();
     const targetSessionId = sessionId || crypto.randomUUID();
@@ -234,8 +240,7 @@ export default function ChatPanel() {
         {
           responseMode: requestOptions.responseMode,
           searchDepth: requestOptions.requestSearchDepth,
-          sourceSelection: requestOptions.requestSourceSelection,
-          searchDocIds: requestOptions.requestDocIds,
+          ...chatNetworkScopeOptions(requestOptions),
           attemptId,
           signal: controller.signal,
           onProgress: (event) => {
@@ -259,14 +264,18 @@ export default function ChatPanel() {
         return copy;
       });
     } catch (err) {
+      const selectionUnavailable = Boolean(requestOptions.requestSourceSelection && err.status === 422 && err.code === "invalid_request");
       deltaBuffer.discard();
       if (activeRequestRef.current?.id !== attemptId) return;
       setMessages((items) => {
         if (items.at(-1)?.attemptId !== attemptId) return items;
         const copy = [...items];
         copy[copy.length - 1] = {
-          ...copy.at(-1), text: controller.signal.aborted ? t("chat.answerStopped") : t("chat.errorPrefix", { message: friendlyApiError(err, t) }),
+          ...copy.at(-1), text: controller.signal.aborted ? t("chat.answerStopped") : selectionUnavailable ? t("ux.selectedSourcesUnavailable") : t("chat.errorPrefix", { message: friendlyApiError(err, t) }),
           stopped: controller.signal.aborted,
+          failed:!controller.signal.aborted,
+          selectionUnavailable,
+          retryable:err.status === 0 || err.status >= 500 || (err.status == null && !err.code),
           requestId: err.requestId, localReportId: err.localReportId,
         };
         return copy;
@@ -283,10 +292,11 @@ export default function ChatPanel() {
   const send = useCallback(async (q) => {
     if (searchScopeEnabled && !searchScopeDocuments.length) return;
     const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestSearchDepth: showCustomDepth ? applyCustomDepth() : searchDepth, requestMode: selectedMode, requestSourceLocale: sourceLocale, responseMode: settings.response_modes?.includes(responseMode) ? responseMode : null, requestDocIds: scopeRequestIds(searchScopeDocuments, searchScopeEnabled) };
+    setDraftQuery("");
     await sendQuestion(q, requestOptions);
   }, [applyCustomDepth, effectiveTags, mailMode, responseMode, searchDepth, searchScopeDocuments,
       searchScopeEnabled, selectedMode, selectedTopK, sendQuestion, settings.response_modes,
-      showCustomDepth, sourceLocale]);
+      showCustomDepth, sourceLocale, setDraftQuery]);
 
   const selectSources = useCallback((messageIndex, indexes, checked) => {
     setMessages((items) => items.map((message, index) => index === messageIndex ? {
@@ -297,7 +307,7 @@ export default function ChatPanel() {
   const answerSelected = useCallback((message) => sendQuestion(message.query, {
     requestMailMode: message.requestMailMode, requestTags: message.requestTags,
     requestTopK: message.requestTopK, requestMode: message.requestMode,
-    requestSearchDepth: message.requestSearchDepth, requestSourceLocale: message.requestSourceLocale,
+    requestSearchDepth: message.requestSearchDepth, requestSourceLocale: message.requestSourceLocale, requestDocIds:message.requestDocIds,
     responseMode: "full", requestSourceSelection: {
       attempt_id: message.attemptId, indexes: [...(message.selectedSourceIndexes ?? [])],
     },
@@ -321,18 +331,38 @@ export default function ChatPanel() {
     await sendQuestion(q, requestOptions, false);
   }, [effectiveTags, responseMode, searchDepth, selectedMode, selectedTopK, sendQuestion, settings.response_modes, sourceLocale]);
 
-  const retryAnswer = useCallback((message) => sendQuestion(message.query, {
-    requestMailMode: message.requestMailMode, requestTags: message.requestTags,
-    requestTopK: message.requestTopK, requestMode: message.requestMode,
-    requestSearchDepth: message.requestSearchDepth, requestSourceSelection: message.requestSourceSelection,
-    requestDocIds: message.requestDocIds, requestSourceLocale: message.requestSourceLocale,
-    responseMode: message.responseMode,
-  }), [sendQuestion]);
+  const retryAnswer = useCallback((message) => sendQuestion(message.query,retryRequestOptions(message)),[sendQuestion]);
+  const refreshSourceSearch = useCallback((message) => sendQuestion(message.query,freshSourceSearchOptions(message)),[sendQuestion]);
+  const applyEditQuestion = (question) => {
+    setDraftQuery(question);
+    setEditQuestion(null);
+    requestAnimationFrame(()=>document.getElementById("chat-question")?.focus());
+  };
+  const editAnswer = (message) => {
+    if(draftQuery.trim() && draftQuery !== message.query) setEditQuestion(message.query);
+    else applyEditQuestion(message.query);
+  };
 
   const toggleSources = useCallback((index, open) => setMessages((items) => toggleChatSources(items, index, open)), [setMessages]);
 
+  const toggleSourceGroup=useCallback((index,id,expanded)=>setMessages(items=>items.map((message,i)=>i === index ? {...message,sourceGroupsOpen:{...message.sourceGroupsOpen,[id]:expanded}} : message)),[setMessages]);
+
+  const filterSummary=buildChatFilterSummary({tags,moduleFilter,development:developments.find(d=>d.id === devFilter) || (devFilter ? {id:devFilter} : null),sourceLocale,mailMode,searchScopeEnabled,searchScopeDocuments});
+  const removeFilter=(id)=>{
+    if(id === "scope") setSearchScopeEnabled(false);
+    else if(id.startsWith("tag:")) setTags(items=>items.filter(tag=>tag !== id.slice(4)));
+    else if(id === "module") setModuleFilter("");
+    else if(id === "development") setDevFilter(null);
+    else if(id === "locale") setSourceLocale("");
+    else if(id === "mail") setMailMode("all");
+  };
+  const clearSearchFilters=()=>{setTags([]);setModuleFilter("");setDevFilter(null);setSourceLocale("");setMailMode("all");setSearchScopeEnabled(false);setScopeNotice(null);};
   return (
     <section className="panel">
+      {editQuestion !== null && <Modal title={t("ux.replaceDraftTitle")} onClose={()=>setEditQuestion(null)} footer={<>
+        <button type="button" className="modal-btn" onClick={()=>setEditQuestion(null)}>{t("common.cancel")}</button>
+        <button type="button" className="modal-btn" onClick={()=>applyEditQuestion(editQuestion)}>{t("ux.replaceDraft")}</button>
+      </>}><p>{t("ux.replaceDraftHint")}</p></Modal>}
       <div className="chat-toolbar">
         {settings.response_modes?.length > 0 && (
           <div className="mode-picker chat-response-modes" role="radiogroup" aria-label={t("chat.responseModeLabel")}>
@@ -373,13 +403,14 @@ export default function ChatPanel() {
       <div className="chat-log-frame">
       <div className="chat-log" ref={logRef}>
       <div className="chat-log-content">
+        {messages.length === 0 && <div className="chat-empty-start"><p>{t("ux.chatWelcome")}</p><div className="chat-examples">{["process","compare","explain"].map(key=><button type="button" className="btn ghost" key={key} disabled={Boolean(draftQuery.trim())} onClick={()=>{setDraftQuery(t(`ux.example.${key}`));requestAnimationFrame(()=>document.getElementById("chat-question")?.focus());}}>{t(`ux.example.${key}`)}</button>)}</div></div>}
         {messages.map((message, index) => <ChatMessageView key={index} message={message} index={index}
           isLatest={index === lastAssistantIndex}
           isPending={pending && index === messages.length - 1} actionsPending={pending}
           isCopied={copiedIndex === index} searchDepthMax={settings.search_depth_max}
-          onCopy={copyAnswer} onSelect={selectSources} onAnswerSelected={answerSelected}
-          onAddToScope={addSelectedToScope} onRetry={retryAnswer} onRepeatWithoutGlossary={repeatWithoutGlossary}
-          onStop={stopCurrent} onToggleSources={toggleSources} />)}
+          onEdit={editAnswer} onCopy={copyAnswer} onSelect={selectSources} onAnswerSelected={answerSelected}
+          onAddToScope={addSelectedToScope} onRetry={retryAnswer} onRefreshSearch={refreshSourceSearch} onRepeatWithoutGlossary={repeatWithoutGlossary}
+          onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} />)}
       </div>
       </div>
       <ChatRequestNavigation messages={messages} logRef={logRef} />
@@ -469,6 +500,8 @@ export default function ChatPanel() {
         )}
       </div>}
       </details>
+      <ChatFilterSummary summary={filterSummary} onRemove={removeFilter}/>
+      <ChatFilters summary={filterSummary} onRemove={removeFilter} onClear={clearSearchFilters}>
       <TagPicker
         label={t("chat.tagsLabel")}
         placeholder={t("chat.tagsPlaceholder")}
@@ -513,7 +546,8 @@ export default function ChatPanel() {
         <span id="chat-mail-hint" className="chat-mail-hint">{t("chat.mailModeHint")}</span>
         <span id="chat-mail-unknown-hint" className="chat-mail-hint">{mailMode !== "all" ? t("chat.mailModeUnknownHint") : ""}</span>
       </div>
-      <ChatComposer disabled={searchScopeEnabled && searchScopeDocuments.length === 0} onSubmit={send} />
+      </ChatFilters>
+      <ChatComposer value={draftQuery} onChange={setDraftQuery} disabled={searchScopeEnabled && searchScopeDocuments.length === 0} onSubmit={send} />
     </section>
   );
 }

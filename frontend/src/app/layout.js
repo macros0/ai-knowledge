@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import KnowledgeProfile from "@/components/KnowledgeProfile";
+import { DocumentUploadProvider } from "@/context/DocumentUploadContext";
 import { ChatProvider } from "@/context/ChatContext";
 import { DocumentFiltersProvider } from "@/context/DocumentFiltersContext";
 import { ToastProvider } from "@/components/Toast";
@@ -77,6 +78,7 @@ export default async function RootLayout({ children }) {
           <ThemeProvider>
             <AuthProvider>
               <ToastProvider>
+                <DocumentUploadProvider>
                 <ChatProvider>
                   <div className="app-shell">
                     <header className="topbar">
@@ -104,6 +106,7 @@ export default async function RootLayout({ children }) {
                     </main>
                   </div>
                 </ChatProvider>
+                </DocumentUploadProvider>
               </ToastProvider>
             </AuthProvider>
           </ThemeProvider>

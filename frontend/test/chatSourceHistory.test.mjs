@@ -59,7 +59,7 @@ function render(m, isLatest) {
 test("old automatic source lists defer rows while keeping document and selection actions", () => {
   const html = render(message, false);
   assert.equal((html.match(/class="source-link"/g) ?? []).length, 0);
-  assert.ok(html.includes("Document.docx"));
+  assert.ok(html.includes(t("ux.sourcesSummary",{documents:1,fragments:200})));
   assert.ok(html.includes(t("chat.answerSelected", { count: 1 })));
 });
 test("latest answer renders every source including the selected last fragment", () => {
@@ -81,4 +81,27 @@ test("opening an automatically collapsed old list records user intent even when 
   assert.equal((render(changed[0], false).match(/class="source-link"/g) ?? []).length, 200);
   assert.equal(changed[1], items[1]);
   assert.equal(answerState.toggleChatSources(changed, 0, true), changed);
+});
+
+test("legacy sources keep global citation numbers after document grouping without gaining selection", () => {
+  const sources = [
+    {doc_id:"a", title:"A1", filename:"A.docx"},
+    {doc_id:"b", title:"B2", filename:"B.docx", source_index:null},
+    {doc_id:"a", title:"A3", filename:"A.docx"},
+  ];
+  const html = renderToStaticMarkup(React.createElement(load("ChatSources").default, {
+    sources, open:true, selectionEnabled:true, onToggle:noop,
+  }));
+  assert.match(html, /<li value="1">/);
+  assert.match(html, /<li value="3">/);
+  assert.match(html, /<li value="2">/);
+  assert.equal(html.includes('class="source-select"'),false);
+  assert.equal(sources.some(source => source.source_index > 0),false);
+});
+
+test("saved group expansion survives component remount and overrides selected auto-open", () => {
+  const closed=render({...message,sourceGroupsOpen:{doc:false}},true);
+  assert.equal((closed.match(/class="source-link"/g) ?? []).length,0);
+  const opened=render({...message,selectedSourceIndexes:[],sourceGroupsOpen:{doc:true}},true);
+  assert.equal((opened.match(/class="source-link"/g) ?? []).length,200);
 });

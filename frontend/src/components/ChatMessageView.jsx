@@ -9,12 +9,12 @@ import { CheckIcon, CopyIcon } from "./icons";
 import ErrorReference from "./ErrorReference";
 import AppliedTerms from "./AppliedTerms";
 import ChatAnswer from "./ChatAnswer";
-import ChatSources, { ChatSourceDocuments } from "./ChatSources";
+import ChatSources from "./ChatSources";
 
 const EMPTY = [];
 
 export default memo(function ChatMessageView({ message: m, index, isLatest = true, isPending, actionsPending, isCopied, searchDepthMax,
-  onCopy, onSelect, onAnswerSelected, onAddToScope, onRetry, onRepeatWithoutGlossary, onStop, onToggleSources }) {
+  onEdit, onRefreshSearch, onCopy, onSelect, onAnswerSelected, onAddToScope, onRetry, onRepeatWithoutGlossary, onStop, onToggleSources, onToggleSourceGroup }) {
   const { t } = useI18n();
   const sources = m.sources ?? EMPTY;
   const selectedIndexes = m.selectedSourceIndexes ?? EMPTY;
@@ -48,9 +48,8 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
                 m.text
               )}
             </div>
-            {m.role === "assistant" && availableSources.length > 0 && (
+            {m.role === "assistant" && availableSources.length > 0 && selectedIndexes.length > 0 && (
               <div className="source-selection-actions">
-                <button type="button" className="btn ghost" onClick={() => select( availableSources.map((source) => source.source_index), true)}>{t("chat.selectAllSources")}</button>
                 <button type="button" className="btn ghost" onClick={() => select( m.sources.map((source) => source.source_index), false)} disabled={!m.selectedSourceIndexes?.length}>{t("chat.clearSourceSelection")}</button>
                 <button type="button" className="btn" disabled={actionsPending || !m.selectedSourceIndexes?.length} onClick={() => onAnswerSelected(m)}>
                   {t("chat.answerSelected", { count: m.selectedSourceIndexes?.length ?? 0 })}
@@ -59,8 +58,6 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
                 <span className="meta">{t("chat.selectionDescription")}</span>
               </div>
             )}
-            {m.role === "assistant" && <ChatSourceDocuments sources={sources} selectedIndexes={selectedIndexes}
-              selectionEnabled={selectionEnabled} onSelect={select} />}
             {m.role === "assistant" && m.requestSourceSelection && (
               <div className="meta">{t("chat.selectedAnswerContext", { count: m.requestSourceSelection.indexes.length })}</div>
             )}
@@ -90,9 +87,11 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
             {m.role === "assistant" && isPending && (
               <button type="button" className="btn ghost" onClick={onStop}>{t("chat.stopAnswer")}</button>
             )}
-            {m.role === "assistant" && m.stopped && (
-              <button type="button" className="btn ghost" onClick={() => onRetry(m)}>{t("chat.restartAnswer")}</button>
+            {m.role === "assistant" && (m.stopped || (m.failed && m.retryable)) && (
+              <button type="button" className="btn ghost" disabled={actionsPending} onClick={() => onRetry(m)}>{t("chat.restartAnswer")}</button>
             )}
+            {m.role === "assistant" && m.selectionUnavailable && <button type="button" className="btn ghost" disabled={actionsPending} onClick={()=>onRefreshSearch(m)}>{t("ux.searchAgain")}</button>}
+            {m.role === "assistant" && (m.failed || m.stopped) && <button type="button" className="btn ghost" disabled={actionsPending} onClick={()=>onEdit(m)}>{t("ux.editQuestion")}</button>}
             {m.role === "assistant" && <ErrorReference requestId={m.requestId} localReportId={m.localReportId} />}
             {m.role === "assistant" && <AppliedTerms status={m.expansion_status} appliedTerms={m.applied_terms} />}
             {m.role === "assistant" && m.applied_terms?.length > 0 && (
@@ -101,7 +100,8 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
               </button>
             )}
             <ChatSources sources={sources} selectedIndexes={selectedIndexes} selectionEnabled={selectionEnabled}
-              responseMode={m.responseMode} open={sourcesOpen} onSelect={select} onToggle={toggle} />
+              responseMode={m.responseMode} open={sourcesOpen} onSelect={select} onToggle={toggle}
+              expandedGroups={m.sourceGroupsOpen} onToggleGroup={onToggleSourceGroup ? (id,expanded)=>onToggleSourceGroup(index,id,expanded) : undefined} />
             {m.role === "assistant" && m.uploadHint && (!m.sources || m.sources.length === 0) && (
               <div className="chat-upload-hint">
                 {t("chat.noSources")}{" "}

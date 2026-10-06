@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { CiteLink, documentHref, remarkCiteLinks, sourceHref } from "@/lib/chatSources";
-import { inModelContext } from "@/lib/chatSourceContext.mjs";
-import { groupSourcesByDocument, searchLimitWarning } from "@/lib/chatAnswerState.mjs";
+import {useState} from "react";
+import ChatSources from "./ChatSources";
+import { CiteLink, remarkCiteLinks } from "@/lib/chatSources";
+import { searchLimitWarning } from "@/lib/chatAnswerState.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 import MarkdownViewer from "./MarkdownViewer";
 import AppliedTerms from "./AppliedTerms";
@@ -14,59 +14,9 @@ export function fmtDate(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
-export function SourceBadges({ sources, responseMode }) {
-  const { t } = useI18n();
-  if (!sources || sources.length === 0) return null;
-  if (responseMode === "documents") {
-    return (
-      <div className="history-sources">
-        {groupSourcesByDocument(sources).map((group) => (
-          <div key={group.doc_id} className="history-document-group">
-            {documentHref(group.source) ? (
-              <Link href={documentHref(group.source)}>{group.filename}</Link>
-            ) : group.filename}
-            <ul>
-              {group.sources.map((source, index) => (
-                <li key={source.source_index ?? index}>
-                  {sourceHref(source) ? <Link href={sourceHref(source)}>{source.title}</Link> : source.title}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="history-sources">
-      {sources.map((s, i) => {
-        const href = sourceHref(s);
-        const label = (
-          <>
-            {s.title || s.filename}
-            {" "}<span className="meta">{t(inModelContext(s) ? "chat.sourceInContext" : "chat.sourceSearchOnly")}</span>
-            {s.development_number && (
-              <span className="source-dev-badge" title={s.development_name || t("chat.developmentTitle")}>
-                {s.development_number}
-              </span>
-            )}
-            {s.development_module && (
-              <span className="source-dev-badge source-module-badge">{s.development_module}</span>
-            )}
-          </>
-        );
-        return href ? (
-          <Link key={i} className="history-source history-source-link" href={href}>
-            {label}
-          </Link>
-        ) : (
-          <span key={i} className="history-source">
-            {label}
-          </span>
-        );
-      })}
-    </div>
-  );
+export function SourceBadges({sources,responseMode}) {
+  const [open,setOpen]=useState(false);
+  return <ChatSources sources={sources || []} responseMode={responseMode} open={open} onToggle={setOpen}/>;
 }
 
 export function HistoryMessage({ m, userLabel }) {

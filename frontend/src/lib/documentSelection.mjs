@@ -7,3 +7,8 @@ export function selectionScopeKey(filters) {
 export function shouldApplySelectionResult(requestScope, currentScope, requestVersion, currentVersion) {
   return requestScope === currentScope && requestVersion === currentVersion;
 }
+
+// Server data follows the debounced query; immediate input only invalidates selection.
+export function documentRequestScopeKey(filters, search) {
+  return selectionScopeKey({...filters, searchInput:search});
+}

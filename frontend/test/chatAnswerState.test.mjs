@@ -62,3 +62,12 @@ test("a warning names the result limit only when the displayed fragments fill it
   assert.equal(searchLimitWarning(false, 8, 200), null);
   assert.equal(searchLimitWarning(false, 200, 200), null);
 });
+
+test("grouped sources preserve all 500 stable citation indexes including search-only",()=>{
+ const sources=Array.from({length:500},(_,i)=>({doc_id:`doc-${i%8}`,source_index:i+1,in_model_context:i<40}));
+ const groups=groupSourcesByDocument(sources);
+ assert.equal(groups.length,8);
+ assert.equal(groups.reduce((n,g)=>n+g.sources.length,0),500);
+ assert.deepEqual(groups.flatMap(g=>g.sources.map(s=>s.source_index)).sort((a,b)=>a-b),Array.from({length:500},(_,i)=>i+1));
+ assert.equal(groups.flatMap(g=>g.sources).filter(s=>!s.in_model_context).length,460);
+});

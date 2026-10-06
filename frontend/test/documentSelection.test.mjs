@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectionScopeKey, shouldApplySelectionResult } from "../src/lib/documentSelection.mjs";
+import { selectionScopeKey, documentRequestScopeKey, shouldApplySelectionResult } from "../src/lib/documentSelection.mjs";
 
 test("selection scope changes with filters and immediate search input, not page/sort/group", () => {
   const base = { searchInput: "SAP", status: "done", uploader: "alice" };
@@ -16,4 +16,14 @@ test("late selection responses cannot restore old filters or a manually cleared 
   assert.equal(shouldApplySelectionResult("old", "new", 1, 1), false);
   assert.equal(shouldApplySelectionResult("same", "same", 1, 2), false);
   assert.equal(shouldApplySelectionResult("same", "same", 2, 2), true);
+});
+
+test("request scope waits for debounced search while selection invalidates immediately", () => {
+  const filters = {searchInput:"SAP", status:"done", uploader:"alice"};
+  const before = documentRequestScopeKey(filters,"SAP");
+  const typing = {...filters,searchInput:"SAP payroll"};
+  assert.equal(documentRequestScopeKey(typing,"SAP"),before);
+  assert.notEqual(selectionScopeKey(typing),before);
+  assert.equal(documentRequestScopeKey(typing,"SAP payroll"),selectionScopeKey(typing));
+  assert.notEqual(documentRequestScopeKey({...typing,status:"failed"},"SAP"),before);
 });

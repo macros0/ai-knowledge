@@ -11,13 +11,15 @@ import { bumpTagVersion, useTagDictionary } from "@/lib/tagDictionary";
 import { buildLocaleOptions, facetOptions } from "@/lib/sourceLocales.mjs";
 import { buildCompactDocumentMeta, countActiveDocumentFilters, resetDocumentFilters, resolveDocumentFilterParams } from "@/lib/documentLayout.mjs";
 import { DownloadIcon, EyeIcon, LinkIcon, RefreshIcon, TrashIcon } from "./icons";
+import AsyncContentState from "./AsyncContentState";
+import { resolveAsyncContentState } from "@/lib/asyncContentState.mjs";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import { useChat } from "@/context/ChatContext";
 import { useDocumentFilters } from "@/context/DocumentFiltersContext";
 import { selectionLimit } from "@/lib/documentBulkLimits.mjs";
-import { selectionScopeKey, shouldApplySelectionResult } from "@/lib/documentSelection.mjs";
+import { selectionScopeKey, documentRequestScopeKey, shouldApplySelectionResult } from "@/lib/documentSelection.mjs";
 import SelectionBar from "./SelectionBar";
 import PreviewModal from "./PreviewModal";
 import Modal from "./Modal";
@@ -104,7 +106,7 @@ function buildGroups(docs, groupBy, locale, t) {
   });
 }
 
-export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
+export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload }) {
   const router = useRouter();
   const urlParams = useSearchParams();
   const { savedView, rememberFilters } = useDocumentFilters();
@@ -116,6 +118,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const [tagLocales, setTagLocales] = useState({});
   const [docs, setDocs] = useState([]);
   const [total, setTotal] = useState(0);
+  const [fetchState, setFetchState] = useState({pending:true, hasLoaded:false, error:null, scope:null});
+  const [dataScope, setDataScope] = useState(null);
   const [regenerating, setRegenerating] = useState({});
   const [cancelingUpdates, setCancelingUpdates] = useState({});
   const [cancelUpdateDoc, setCancelUpdateDoc] = useState(null);
@@ -238,10 +242,17 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   const resolvedUploader =
     selectedUploader === "__me__" ? user?.username ?? "" : selectedUploader;
 
-  const selectionScope = selectionScopeKey({
+  const scopeFilters = {
     searchInput, uploader: resolvedUploader, problem: problemOnly, module: moduleFilter,
     development: devFilter, tag: tagFilter, status: statusFilter, from: dateFrom, to: dateTo, locale: localeFilter,
-  });
+  };
+  const selectionScope = selectionScopeKey(scopeFilters);
+  const requestScope = documentRequestScopeKey(scopeFilters, search);
+  const searchPending = searchInput.trim() !== search;
+  const dataScopeKey = JSON.stringify([requestScope, sortKey, page, groupBy]);
+  const dataCurrent = !searchPending && dataScope === dataScopeKey;
+  const currentDataScope = useRef(dataScopeKey);
+  const latestLoad = useRef(null);
   const [selectedScope, setSelectedScope] = useState(selectionScope);
   const currentSelectionScope = useRef(selectionScope);
   useLayoutEffect(() => {
@@ -261,7 +272,10 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
   };
 
   const load = useCallback(async () => {
+    if (currentDataScope.current !== dataScopeKey) return latestLoad.current?.();
     const seq = ++loadSeq.current;
+    clearTimeout(timer.current);
+    setFetchState(previous => ({...previous, pending:true, error:null, scope:dataScopeKey}));
     try {
       const result = await listDocuments({
         uploader: resolvedUploader || undefined,
@@ -280,9 +294,11 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         limit: groupBy ? undefined : PAGE_SIZE,
         offset: groupBy ? 0 : page * PAGE_SIZE,
       });
-      if (seq !== loadSeq.current || !mounted.current) return;
+      if (seq !== loadSeq.current || !mounted.current || currentDataScope.current !== dataScopeKey) return;
       setDocs(result.documents);
       setTotal(result.total);
+      setDataScope(dataScopeKey);
+      setFetchState({pending:false, hasLoaded:true, error:null, scope:dataScopeKey});
       const busy = result.documents.some((d) => BUSY_STATUSES.includes(d.status) || d.update_cancelling);
       if (busy && mounted.current) {
         timer.current = setTimeout(load, 1500);
@@ -290,10 +306,15 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     } catch (err) {
       // Бэкенд недоступен/ошибка сети: не оставляем список «молча пустым» —
       // показываем ошибку и не ломаем поллинг (следующий эффект перезапустит load).
-      if (seq !== loadSeq.current || !mounted.current) return;
-      showToast({ ...apiToast(err, t, { type: "error" }), message: t("docs.loadError", { message: friendlyApiError(err, t) }) });
+      if (seq !== loadSeq.current || !mounted.current || currentDataScope.current !== dataScopeKey) return;
+      setFetchState(previous => ({...previous, pending:false, error:err, scope:dataScopeKey}));
     }
-  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, localeFilter, search, sortKey, page, groupBy, t]);
+  }, [resolvedUploader, problemOnly, moduleFilter, devFilter, tagFilter, statusFilter, dateFrom, dateTo, localeFilter, search, sortKey, page, groupBy, t, dataScopeKey]);
+
+  useLayoutEffect(() => {
+    currentDataScope.current = dataScopeKey;
+    latestLoad.current = load;
+  }, [dataScopeKey, load]);
 
   const loadUploaders = useCallback(async () => {
     try {
@@ -363,9 +384,15 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     return params.toString();
   }, [search, chosenUploader, moduleFilter, tagFilter, devFilter, problemOnly, statusFilter, dateFrom, dateTo, localeFilter, sortKey, page, groupBy]);
 
+  const urlView=urlParams.get("view");
+  const prefillPending=urlParams.has("upload_dev") || urlParams.has("upload_module");
   useEffect(() => {
-    router.replace(documentQuery ? `/?${documentQuery}` : "/", { scroll: false });
-  }, [documentQuery, router]);
+    if(prefillPending) return;
+    const params=new URLSearchParams(documentQuery);
+    if(["upload","trash"].includes(urlView)) params.set("view",urlView);
+    const target=params.size ? `/?${params}` : "/";
+    router.replace(target, { scroll: false });
+  }, [documentQuery, router, urlView, prefillPending]);
 
   useEffect(() => {
     // Сохраняем и ещё не отправленную debounce-поиском строку: быстрый
@@ -550,7 +577,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     }
   };
 
-  const selectedIds = Object.keys(selected);
+  const selectedIds = dataCurrent ? Object.keys(selected) : [];
 
   useEffect(() => {
     selectionVersion.current += 1;
@@ -917,6 +944,8 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
     );
   };
 
+  const contentState = resolveAsyncContentState({pending:searchPending || fetchState.scope !== dataScopeKey || fetchState.pending, hasLoaded:fetchState.hasLoaded, hasData:docs.length > 0, hasFilters:activeFilterCount > 0 || Boolean(resolvedUploader), error:fetchState.error});
+  const listBlocked = !dataCurrent;
   return (
     <>
       {cancelUpdateDoc && (
@@ -1120,7 +1149,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           </div>
         )}
       </div>
-      {canEdit && <div className="document-selection-controls">
+      {canEdit && !listBlocked && <div className="document-selection-controls">
         <button type="button" className="bulk-tag-btn" onClick={selectPage} disabled={!docs.length}>
           {t(groupBy ? "selection.selectShown" : "selection.selectPage")}
         </button>
@@ -1128,7 +1157,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
           {t(allByFilterOn ? "selection.clear" : "selection.selectResults")}
         </button>
       </div>}
-      {canEdit && selectedIds.length > 0 && <SelectionBar
+      {canEdit && !listBlocked && selectedIds.length > 0 && <SelectionBar
         selectedIds={selectedIds}
         canDelete={isAdmin}
         canExport={exportEnabled}
@@ -1139,8 +1168,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
         onExport={exportSelected}
         onEditTags={() => setTagActionIds([...selectedIds])}
       />}
+      <AsyncContentState state={contentState} error={fetchState.error} message={fetchState.error ? t("docs.loadError", {message:friendlyApiError(fetchState.error,t)}) : null} onRetry={load} onReset={clearDocumentFilters} onUpload={canEdit ? onOpenUpload : null} emptyMessage={canEdit ? t("ux.documentsEmpty") : t("ux.documentsEmptyViewer")} />
       {groupBy ? (
-        <div className="document-groups">
+        <div className="document-groups" inert={listBlocked ? true : undefined} aria-busy={fetchState.pending}>
           {groups.map((g) => (
             <section key={g.key} className="document-group">
               <h3 className="document-group-header">
@@ -1149,24 +1179,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash }) {
               <ul className="document-list">{g.docs.map((doc) => renderDoc(doc))}</ul>
             </section>
           ))}
-          {groups.length === 0 && <li className="document-empty">{t("docs.empty")}</li>}
+
         </div>
       ) : (
-        <ul className="document-list">
+        <ul className="document-list" inert={listBlocked ? true : undefined} aria-busy={fetchState.pending}>
           {docs.map((doc) => renderDoc(doc))}
-          {docs.length === 0 &&
-            (total > 0 ||
-              search ||
-              problemOnly ||
-              statusFilter ||
-              moduleFilter ||
-              devFilter ||
-              tagFilter ||
-              localeFilter ||
-              dateFrom ||
-              dateTo) && (
-              <li className="document-empty">{t("docs.empty")}</li>
-            )}
+
         </ul>
       )}
       {!groupBy && totalPages > 1 && (

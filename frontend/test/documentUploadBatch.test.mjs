@@ -69,3 +69,32 @@ test("unmounting the page stops the remaining batch", async () => {
   });
   assert.deepEqual(calls, ["a.pdf"]);
 });
+
+test("per-file results distinguish uncertain transport and files not sent after storage full", async()=>{
+  const events=[];
+  await runDocumentUploadBatch([file("a.pdf"),file("b.pdf"),file("c.pdf")],{
+    uploadOne:async f=>{throw Object.assign(new Error(),f.name === "a.pdf" ? {status:0} : {code:"storage_full",status:507});},
+    onItemState:(f,state)=>events.push([f.name,state]),
+  });
+  assert.deepEqual(events,[["a.pdf","uploading"],["a.pdf","uncertain"],["b.pdf","uploading"],["b.pdf","failed"],["c.pdf","not-sent"]]);
+});
+test("owner invalidation prevents late results and later network sends", async()=>{
+  let active=true; const published=[];const calls=[];
+  await runDocumentUploadBatch([file("a.pdf"),file("b.pdf")],{
+    isActive:()=>active,
+    uploadOne:async f=>{calls.push(f.name);active=false;return {id:"a"};},
+    onItemState:(f,state)=>published.push(state), onUploaded:doc=>published.push(doc.id),
+  });
+  assert.deepEqual(calls,["a.pdf"]);
+  assert.deepEqual(published,["uploading"]);
+});
+
+test("a consent decision cannot send another request after owner invalidation",async()=>{
+ let active=true;const calls=[];
+ await runDocumentUploadBatch([file("a.pdf")],{
+  isActive:()=>active,
+  uploadOne:async(f,allow)=>{calls.push(allow);if(!allow)throw conflict("similar_document");return {id:"a"};},
+  reviewUpload:async()=>{active=false;return true;},
+ });
+ assert.deepEqual(calls,[false]);
+});

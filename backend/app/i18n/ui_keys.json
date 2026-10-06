@@ -1643,5 +1643,65 @@
     "name"
   ],
   "upload.uploadedCount": [],
-  "upload.uploadedUpToDuplicate": []
+  "upload.uploadedUpToDuplicate": [],
+  "ux.chatWelcome": [],
+  "ux.clearUploadResults": [],
+  "ux.closeNotification": [],
+  "ux.documentWarning": [],
+  "ux.documentsEmpty": [],
+  "ux.documentsEmptyViewer": [],
+  "ux.editQuestion": [],
+  "ux.example.compare": [],
+  "ux.example.explain": [],
+  "ux.example.process": [],
+  "ux.filterDevelopment": [
+    "name"
+  ],
+  "ux.filterLocale": [
+    "name"
+  ],
+  "ux.filterModule": [
+    "name"
+  ],
+  "ux.filterTag": [
+    "name"
+  ],
+  "ux.filteredEmpty": [],
+  "ux.loadFailed": [],
+  "ux.loading": [],
+  "ux.notifications": [],
+  "ux.openDocument": [],
+  "ux.processingStatus": [],
+  "ux.questionKeys": [],
+  "ux.questionLabel": [],
+  "ux.refreshStatus": [],
+  "ux.refreshing": [],
+  "ux.removeFilter": [
+    "name"
+  ],
+  "ux.replaceDraft": [],
+  "ux.replaceDraftHint": [],
+  "ux.replaceDraftTitle": [],
+  "ux.replaceUploadResults": [],
+  "ux.retryUpload": [],
+  "ux.scopeAll": [],
+  "ux.searchAgain": [],
+  "ux.searchFilters": [],
+  "ux.selectedSourcesUnavailable": [],
+  "ux.sourcesSummary": [
+    "documents",
+    "fragments"
+  ],
+  "ux.statusUnknown": [],
+  "ux.uploadKeepTab": [],
+  "ux.uploadResults": [],
+  "ux.uploadState.awaiting-review": [],
+  "ux.uploadState.failed": [],
+  "ux.uploadState.not-sent": [],
+  "ux.uploadState.pending": [],
+  "ux.uploadState.skipped": [],
+  "ux.uploadState.uncertain": [],
+  "ux.uploadState.uploaded": [],
+  "ux.uploadState.uploading": [],
+  "ux.uploadUncertainHint": []
 }

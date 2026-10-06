@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import UploadBatchResults from "./UploadBatchResults";
 import TagPicker from "./TagPicker";
 import SearchableSelect from "./SearchableSelect";
 import UploadZone from "./UploadZone";
@@ -41,6 +42,7 @@ export default function DocumentUploadPanel({ upload, tags, onTagsChange, develo
           </div>
           {uploadModule && developmentId == null && <p className="upload-module-hint">{t("docs.uploadModuleHint", { module: uploadModule })}</p>}
         </div>}
+        <UploadBatchResults upload={upload}/>
       </div>
   );
 }

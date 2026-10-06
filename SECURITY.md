@@ -1135,3 +1135,13 @@ preserves whole source rows and headers, without rewriting canonical chunks.
 Integration 2026-10-01: the diagnostic allowlist includes the registered chat
 errors, search-scope route and normalized attempt cancellation template.
 Arbitrary error codes and raw attempt parameters remain excluded.
+
+## Client draft and upload ownership (2026-10-06)
+
+Chat state, drafts, upload File objects and per-file results are scoped to the
+current authenticated owner in memory. A change of auth mode or user remounts
+these providers. An old upload may finish on the server, but late results do
+not enter the new owner's UI and remaining files are not dispatched. Duplicate
+and similar-file consent remains per file and per attempt. This client boundary
+does not replace API authorization or cancel processing of accepted documents.
+Drafts and File objects are not persisted in local storage or included in URLs.

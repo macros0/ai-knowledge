@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import ChatHistoryPanel from "@/components/ChatHistoryPanel";
 import { serverTranslator } from "@/i18n/server";
 
@@ -7,5 +8,5 @@ export async function generateMetadata() {
 }
 
 export default function ChatHistoryPage() {
-  return <ChatHistoryPanel />;
+  return <Suspense fallback={null}><ChatHistoryPanel /></Suspense>;
 }

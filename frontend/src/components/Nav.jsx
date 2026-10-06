@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {activeNavigationHref} from "@/lib/navigationState.mjs";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -48,10 +49,11 @@ export default function Nav() {
 
   const overflowItems = mode === "disabled" ? overflowRoleItems : overflowRoleItems.filter((it) => hasRole(...it.roles));
 
+  const activeHref=activeNavigationHref(pathname,[...items,...overflowItems]);
   const renderItem = (it) => {
-    const active = it.exact ? pathname === it.href : pathname.startsWith(it.href);
+    const active = activeHref === it.href;
     return (
-      <Link key={it.href} href={it.href} className={`tab${active ? " active" : ""}`}>
+      <Link key={it.href} href={it.href} aria-current={active ? "page" : undefined} className={`tab${active ? " active" : ""}`}>
         {it.label}
       </Link>
     );
@@ -73,7 +75,8 @@ export default function Nav() {
               <Link
                 key={it.href}
                 href={it.href}
-                className={`tab${(it.exact ? pathname === it.href : pathname.startsWith(it.href)) ? " active" : ""}`}
+                aria-current={activeHref === it.href ? "page" : undefined}
+                className={`tab${activeHref === it.href ? " active" : ""}`}
                 onClick={() => setMoreOpen(false)}
               >
                 {it.label}

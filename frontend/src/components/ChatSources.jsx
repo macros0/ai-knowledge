@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import Link from "next/link";
 import { documentHref, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
@@ -21,7 +21,7 @@ const ChatSourceRow = memo(function ChatSourceRow({ source: s, selected, selecta
   const href = sourceHref(s);
   const badge = s.point_type === "chunk" ? "\u{1F4E6}" : "\u{1F4C4}";
   return (
-                      <li>
+                      <li value={s.display_index ?? s.source_index}>
                         {selectable && (
                           <SelectionCheckbox state={selected ? "all" : "none"}
                             label={t("chat.selectFragment", { index: s.source_index, name: s.title })}
@@ -37,7 +37,6 @@ const ChatSourceRow = memo(function ChatSourceRow({ source: s, selected, selecta
                         ) : (
                           s.title
                         )}
-                        {t("chat.relevance", { pct: (s.score * 100).toFixed(0) })}
                         {" "}<span className="meta">{t(responseMode === "documents" ? "chat.sourceFound" : inModelContext(s) ? "chat.sourceInContext" : "chat.sourceSearchOnly")}</span>
                         {s.development_number && (
                           <span
@@ -57,56 +56,35 @@ const ChatSourceRow = memo(function ChatSourceRow({ source: s, selected, selecta
   );
 });
 
-export const ChatSourceDocuments = memo(function ChatSourceDocuments({ sources, selectedIndexes, selectionEnabled, onSelect }) {
-  const { t } = useI18n();
-  const selectedSources = useMemo(() => new Set(selectedIndexes), [selectedIndexes]);
-  const availableIndexes = useMemo(() => new Set(selectionEnabled
-    ? sources.filter((source) => source.selectable === true && Number.isInteger(source.source_index)).map((source) => source.source_index)
-    : []), [sources, selectionEnabled]);
-  const groups = useMemo(() => groupSourcesByDocument(sources), [sources]);
-  return <>
-            {sources?.length > 0 && (
-              <ul className="chat-document-list">
-                {groups.map((group) => (
-                  <li key={group.doc_id}>
-                    {group.sources.some((source) => availableIndexes.has(source.source_index)) && <SelectionCheckbox state={selectionState(selectedSources, group.sources.filter((source) => availableIndexes.has(source.source_index)).map((source) => source.source_index))}
-                      label={t("chat.selectDocument", { name: group.filename })}
-                      onChange={(checked) => onSelect(group.sources.map((source) => source.source_index), checked)} />}
-                    {documentHref(group.source) ? (
-                      <Link href={documentHref(group.source)}>{group.filename}</Link>
-                    ) : group.filename}
-                    <span className="meta"> · {group.sources.length} {t("chat.fragments")}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-  </>;
+const SourceGroup=memo(function SourceGroup({group,selectedSources,availableIndexes,responseMode,onSelect,expanded,onToggle}) {
+  const {t}=useI18n();
+  const indexes=group.sources.filter(s=>availableIndexes.has(s.source_index)).map(s=>s.source_index);
+  return <div className="source-document-group">
+    <div className="source-group-header">
+      {indexes.length>0 && <SelectionCheckbox state={selectionState(selectedSources,indexes)} label={t("chat.selectDocument",{name:group.filename})} onChange={checked=>onSelect(indexes,checked)}/>}
+      {documentHref(group.source) ? <Link href={documentHref(group.source)}>{group.filename}</Link> : <span>{group.filename}</span>}
+    </div>
+    <details open={expanded} onToggle={e=>{if(e.currentTarget.open !== expanded)onToggle(e.currentTarget.open);}}>
+      <summary>{group.sources.length} {t("chat.fragments")}</summary>
+      {expanded && <ol style={{"--source-number-digits":String(Math.max(...group.sources.map(s=>s.display_index || s.source_index || 1))).length}}>{group.sources.map((source,index)=><ChatSourceRow
+        key={source.source_index ?? index} source={source} selected={selectedSources.has(source.source_index)} selectable={availableIndexes.has(source.source_index)} responseMode={responseMode} onSelect={onSelect}/>)}</ol>}
+    </details>
+  </div>;
 });
-
-export default memo(function ChatSources({ sources, selectedIndexes, selectionEnabled, responseMode, open, onSelect, onToggle }) {
-  const { t } = useI18n();
-  const selectedSources = useMemo(() => new Set(selectedIndexes), [selectedIndexes]);
-  const availableIndexes = useMemo(() => new Set(selectionEnabled
-    ? sources.filter((source) => source.selectable === true && Number.isInteger(source.source_index)).map((source) => source.source_index)
-    : []), [sources, selectionEnabled]);
-  return <>
-            {sources && sources.length > 0 && (
-              <details
-                className="sources"
-                open={Boolean(open)}
-                onToggle={(event) => {
-                  // Controlled updates also emit toggle; only record a user change.
-                  if (event.currentTarget.open !== Boolean(open)) onToggle(event.currentTarget.open);
-                }}
-              >
-                <summary>{t("chat.sources")}</summary>
-                {open && <ol style={{ "--source-number-digits": String(sources.length).length }}>
-                  {sources.map((source, index) => <ChatSourceRow
-                    key={source.source_index ?? JSON.stringify([source.doc_id, source.source_slug ?? source.filepath, source.chunk_index, source.point_type, index])}
-                    source={source} selected={selectedSources.has(source.source_index)}
-                    selectable={availableIndexes.has(source.source_index)} responseMode={responseMode} onSelect={onSelect} />)}
-                </ol>}
-              </details>
-            )}
-  </>;
+export default memo(function ChatSources({sources=[],selectedIndexes=[],selectionEnabled=false,responseMode,open,onSelect=()=>{},onToggle,expandedGroups,onToggleGroup}) {
+  const {t}=useI18n();
+  const [localGroups,setLocalGroups]=useState({});
+  const groupStates=expandedGroups || localGroups;
+  const toggleGroup=onToggleGroup || ((id,expanded)=>setLocalGroups(previous=>({...previous,[id]:expanded})));
+  const selectedSources=useMemo(()=>new Set(selectedIndexes),[selectedIndexes]);
+  const availableIndexes=useMemo(()=>new Set(selectionEnabled ? sources.filter(s=>s.selectable === true && Number.isInteger(s.source_index)).map(s=>s.source_index) : []),[sources,selectionEnabled]);
+  const groups=useMemo(()=>groupSourcesByDocument(sources.map((s,index)=>({...s,display_index:s.source_index ?? index+1}))),[sources]);
+  if(!sources.length)return null;
+  return <details className="sources" open={Boolean(open)} onToggle={e=>{if(e.currentTarget.open !== Boolean(open))onToggle(e.currentTarget.open);}}>
+    <summary>{t("ux.sourcesSummary",{documents:groups.length,fragments:sources.length})}</summary>
+    {open && <div className="source-groups">
+      {availableIndexes.size>0 && <button type="button" className="btn ghost" onClick={()=>onSelect([...availableIndexes],true)}>{t("chat.selectAllSources")}</button>}
+      {groups.map(group=><SourceGroup key={group.doc_id} group={group} selectedSources={selectedSources} availableIndexes={availableIndexes} responseMode={responseMode} onSelect={onSelect} expanded={groupStates[group.doc_id] ?? (group.sources.length <= 10 || group.sources.some(s=>selectedSources.has(s.source_index)))} onToggle={expanded=>toggleGroup(group.doc_id,expanded)}/>)}
+    </div>}
+  </details>;
 });
