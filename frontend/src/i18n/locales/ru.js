@@ -693,6 +693,7 @@ export default {
   "chat.selectDocument": "Выбрать документ: {name}",
   "chat.selectFragment": "Выбрать фрагмент {index}: {name}",
   "chat.selectAllSources": "Выбрать все",
+  "chat.toggleAllSources": "Выбрать / снять все",
   "chat.clearSourceSelection": "Снять выбор",
   "chat.answerSelected": "Сформировать ответ по выбранным ({count})",
   "chat.selectionDescription": "Ответ на исходный вопрос по выбранным найденным фрагментам",

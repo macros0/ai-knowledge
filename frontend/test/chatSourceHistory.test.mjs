@@ -17,6 +17,7 @@ import ru from "../src/i18n/locales/ru.js";
 
 const require = createRequire(import.meta.url);
 const modules = new Map();
+const selectionControls = [];
 const t = createTranslator("ru", ru).t;
 function load(name) {
   if (modules.has(name)) return modules.get(name);
@@ -26,6 +27,14 @@ function load(name) {
   }).code;
   const compiledModule = { exports: {} };
   const resolve = (id) => {
+    if (id === "react/jsx-runtime") {
+      const runtime = require(id);
+      const capture = (create) => (type, props, key) => {
+        if (type === "button" && props.className?.includes("source-select-all")) selectionControls.push(props);
+        return create(type, props, key);
+      };
+      return { ...runtime, jsx:capture(runtime.jsx), jsxs:capture(runtime.jsxs) };
+    }
     if (id === "@/i18n/LocaleContext") return { useI18n: () => ({ t, locale: "ru" }) };
     if (id === "@/lib/chatAnswerState.mjs") return answerState;
     if (id === "@/lib/chatSourceSelection.mjs") return selection;
@@ -150,4 +159,45 @@ test("answers without a saved view use the chat preference after navigation", ()
   }));
   assert.ok(html.includes('class="source-rating-list"'));
   assert.equal((html.match(/class="source-link"/g) ?? []).length, 200);
+});
+
+test("select-all control changes its action and pressed state only when every available source is selected", () => {
+  const sources = [
+    ...message.sources.slice(0,2),
+    { ...message.sources[2], selectable:false },
+  ];
+  for (const [selectedIndexes, pressed, label] of [
+    [[], false, t("chat.selectAllSources")],
+    [[1], false, t("chat.selectAllSources")],
+    [[1,2], true, t("chat.clearSourceSelection")],
+  ]) {
+    const html = renderToStaticMarkup(React.createElement(load("ChatSources").default, {
+      sources, open:true, selectedIndexes, selectionEnabled:true, onToggle:noop,
+    }));
+    const button = html.match(/<button[^>]*class="[^"]*source-select-all[^"]*"[^>]*>[^<]*<\/button>/)?.[0];
+    assert.ok(button, "selection action is present for available sources");
+    assert.ok(button.includes(`aria-pressed="${pressed}"`));
+    assert.ok(button.includes(`>${t("chat.toggleAllSources")}</button>`));
+    assert.ok(button.includes(`title="${label}"`));
+  }
+});
+
+test("select-all click selects a partial selection and the second click clears it in either view", () => {
+  const sources = [...message.sources.slice(0,2), { ...message.sources[2], selectable:false }];
+  for (const view of ["documents", "rating"]) {
+    let selectedIndexes = [1];
+    const onSelect = (indexes, checked) => {
+      selectedIndexes = selection.updateSelection(selectedIndexes, indexes, checked, sources);
+    };
+    const draw = () => renderToStaticMarkup(React.createElement(load("ChatSources").default, {
+      sources, view, open:true, selectedIndexes, selectionEnabled:true, onToggle:noop, onSelect,
+    }));
+    draw();
+    assert.ok(selectionControls.at(-1), "select-all action was rendered");
+    selectionControls.at(-1).onClick();
+    assert.deepEqual(selectedIndexes, [1,2]);
+    draw();
+    selectionControls.at(-1).onClick();
+    assert.deepEqual(selectedIndexes, []);
+  }
 });

@@ -642,6 +642,7 @@
   "chat.thinking": [],
   "chat.threadDeleted": [],
   "chat.title": [],
+  "chat.toggleAllSources": [],
   "chat.topkDetailed": [],
   "chat.topkLabel": [],
   "chat.topkOther": [],

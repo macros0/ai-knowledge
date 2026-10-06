@@ -693,6 +693,7 @@ export default {
   "chat.selectDocument": "Select document: {name}",
   "chat.selectFragment": "Select excerpt {index}: {name}",
   "chat.selectAllSources": "Select all",
+  "chat.toggleAllSources": "Select / clear all",
   "chat.clearSourceSelection": "Clear selection",
   "chat.answerSelected": "Generate answer using selected ({count})",
   "chat.selectionDescription": "Answer the original question using the selected search excerpts",

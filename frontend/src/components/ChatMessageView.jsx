@@ -51,7 +51,6 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
             </div>
             {m.role === "assistant" && availableSources.length > 0 && selectedIndexes.length > 0 && (
               <div className="source-selection-actions">
-                <button type="button" className="btn ghost" onClick={() => select( m.sources.map((source) => source.source_index), false)} disabled={!m.selectedSourceIndexes?.length}>{t("chat.clearSourceSelection")}</button>
                 <button type="button" className="btn" disabled={actionsPending || !m.selectedSourceIndexes?.length} onClick={() => onAnswerSelected(m)}>
                   {t("chat.answerSelected", { count: m.selectedSourceIndexes?.length ?? 0 })}
                 </button>

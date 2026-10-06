@@ -85,6 +85,7 @@ export default memo(function ChatSources({sources=[],selectedIndexes=[],selectio
   const toggleGroup=onToggleGroup || ((id,expanded)=>setLocalGroups(previous=>({...previous,[id]:expanded})));
   const selectedSources=useMemo(()=>new Set(selectedIndexes),[selectedIndexes]);
   const availableIndexes=useMemo(()=>new Set(selectionEnabled ? sources.filter(s=>s.selectable === true && Number.isInteger(s.source_index)).map(s=>s.source_index) : []),[sources,selectionEnabled]);
+  const allSelected=availableIndexes.size>0 && selectionState(selectedSources,[...availableIndexes]) === "all";
   const displaySources=useMemo(()=>sourcesForView(sources,sourceView),[sources,sourceView]);
   const groups=useMemo(()=>groupSourcesByDocument(displaySources),[displaySources]);
   if(!sources.length)return null;
@@ -96,7 +97,7 @@ export default memo(function ChatSources({sources=[],selectedIndexes=[],selectio
           <button type="button" className="btn ghost" aria-pressed={sourceView === "documents"} onClick={()=>changeView("documents")}>{t("chat.sourceViewDocuments")}</button>
           <button type="button" className="btn ghost" aria-pressed={sourceView === "rating"} onClick={()=>changeView("rating")}>{t("chat.sourceViewRating")}</button>
         </div>
-        {availableIndexes.size>0 && <button type="button" className="btn ghost" onClick={()=>onSelect([...availableIndexes],true)}>{t("chat.selectAllSources")}</button>}
+        {availableIndexes.size>0 && <button type="button" className="btn ghost source-select-all" aria-pressed={allSelected} title={t(allSelected ? "chat.clearSourceSelection" : "chat.selectAllSources")} onClick={()=>onSelect([...availableIndexes],!allSelected)}>{t("chat.toggleAllSources")}</button>}
       </div>
       {sourceView === "rating" ? <ol className="source-rating-list" style={{"--source-number-digits":String(Math.max(...displaySources.map(s=>s.display_index))).length}}>
         {displaySources.map(source=><ChatSourceRow key={source.display_index} source={source} selected={selectedSources.has(source.source_index)} selectable={availableIndexes.has(source.source_index)} responseMode={responseMode} onSelect={onSelect} showDocument/>)}

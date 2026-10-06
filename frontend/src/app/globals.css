@@ -4938,7 +4938,7 @@ main {
 .source-groups { min-width:0; }
 .source-view-toolbar, .source-view-switch { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .source-view-toolbar { margin:8px 0; }
-.source-view-switch .btn[aria-pressed="true"] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 18%,var(--panel)); color:var(--text); }
+.source-view-switch .btn[aria-pressed="true"], .source-select-all[aria-pressed="true"] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 18%,var(--panel)); color:var(--text); }
 .source-rating { display:inline-block; margin-left:8px; font-variant-numeric:tabular-nums; }
 .source-document-name { overflow-wrap:anywhere; }
 .sources > summary { cursor:pointer; }
