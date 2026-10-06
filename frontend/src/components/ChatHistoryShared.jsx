@@ -1,6 +1,7 @@
 "use client";
 
 import {useState} from "react";
+import {useChat} from "@/context/ChatContext";
 import ChatSources from "./ChatSources";
 import { CiteLink, remarkCiteLinks } from "@/lib/chatSources";
 import { searchLimitWarning } from "@/lib/chatAnswerState.mjs";
@@ -16,7 +17,8 @@ export function fmtDate(iso) {
 
 export function SourceBadges({sources,responseMode}) {
   const [open,setOpen]=useState(false);
-  return <ChatSources sources={sources || []} responseMode={responseMode} open={open} onToggle={setOpen}/>;
+  const {sourceView,setSourceView}=useChat();
+  return <ChatSources sources={sources || []} responseMode={responseMode} open={open} onToggle={setOpen} view={sourceView} onViewChange={setSourceView}/>;
 }
 
 export function HistoryMessage({ m, userLabel }) {

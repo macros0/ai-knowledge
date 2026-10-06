@@ -1273,6 +1273,11 @@
   "ux.example.compare": "How do these solution options differ?",
   "ux.example.explain": "Explain the term and cite the sources.",
   "ux.sourcesSummary": "Sources: {documents} documents, {fragments} fragments",
+  "chat.sourceView": "Source view",
+  "chat.sourceViewDocuments": "By document",
+  "chat.sourceViewRating": "By rating",
+  "chat.sourceRating": "Rating: {score}",
+  "chat.sourceRatingHint": "Score relative to the highest ranked search result. This is not the probability of a correct answer.",
   "ux.selectedSourcesUnavailable": "The saved source selection is unavailable. Search again.",
   "ux.searchAgain": "Find sources again",
   "ux.refreshStatus": "Refresh processing status"

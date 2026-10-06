@@ -4,7 +4,7 @@ import { memo, useMemo, useState } from "react";
 import Link from "next/link";
 import { documentHref, sourceHref } from "@/lib/chatSources";
 import { inModelContext } from "@/lib/chatSourceContext.mjs";
-import { groupSourcesByDocument } from "@/lib/chatAnswerState.mjs";
+import { groupSourcesByDocument, sourcesForView } from "@/lib/chatAnswerState.mjs";
 import { selectionState } from "@/lib/chatSourceSelection.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 
@@ -16,7 +16,7 @@ function SelectionCheckbox({ state, label, onChange }) {
 }
 
 
-const ChatSourceRow = memo(function ChatSourceRow({ source: s, selected, selectable, responseMode, onSelect }) {
+const ChatSourceRow = memo(function ChatSourceRow({ source: s, selected, selectable, responseMode, onSelect, showDocument = false }) {
   const { t } = useI18n();
   const href = sourceHref(s);
   const badge = s.point_type === "chunk" ? "\u{1F4E6}" : "\u{1F4C4}";
@@ -37,6 +37,7 @@ const ChatSourceRow = memo(function ChatSourceRow({ source: s, selected, selecta
                         ) : (
                           s.title
                         )}
+                        {Number.isFinite(s.score) && <span className="source-rating meta" title={t("chat.sourceRatingHint")}>{t("chat.sourceRating", { score: s.score.toFixed(4) })}</span>}
                         {" "}<span className="meta">{t(responseMode === "documents" ? "chat.sourceFound" : inModelContext(s) ? "chat.sourceInContext" : "chat.sourceSearchOnly")}</span>
                         {s.development_number && (
                           <span
@@ -51,6 +52,9 @@ const ChatSourceRow = memo(function ChatSourceRow({ source: s, selected, selecta
                             {s.development_module}
                           </span>
                         )}
+                        {showDocument && <div className="source-document-name meta">
+                          {documentHref(s) ? <Link href={documentHref(s)}>{s.filename || s.title}</Link> : s.filename || s.title}
+                        </div>}
                         {s.snippet && <div className="source-snippet">{s.snippet}</div>}
                       </li>
   );
@@ -71,20 +75,32 @@ const SourceGroup=memo(function SourceGroup({group,selectedSources,availableInde
     </details>
   </div>;
 });
-export default memo(function ChatSources({sources=[],selectedIndexes=[],selectionEnabled=false,responseMode,open,onSelect=()=>{},onToggle,expandedGroups,onToggleGroup}) {
+export default memo(function ChatSources({sources=[],selectedIndexes=[],selectionEnabled=false,responseMode,open,onSelect=()=>{},onToggle,expandedGroups,onToggleGroup,view,onViewChange}) {
   const {t}=useI18n();
   const [localGroups,setLocalGroups]=useState({});
+  const [localView,setLocalView]=useState("documents");
+  const sourceView=view ?? localView;
+  const changeView=onViewChange || setLocalView;
   const groupStates=expandedGroups || localGroups;
   const toggleGroup=onToggleGroup || ((id,expanded)=>setLocalGroups(previous=>({...previous,[id]:expanded})));
   const selectedSources=useMemo(()=>new Set(selectedIndexes),[selectedIndexes]);
   const availableIndexes=useMemo(()=>new Set(selectionEnabled ? sources.filter(s=>s.selectable === true && Number.isInteger(s.source_index)).map(s=>s.source_index) : []),[sources,selectionEnabled]);
-  const groups=useMemo(()=>groupSourcesByDocument(sources.map((s,index)=>({...s,display_index:s.source_index ?? index+1}))),[sources]);
+  const displaySources=useMemo(()=>sourcesForView(sources,sourceView),[sources,sourceView]);
+  const groups=useMemo(()=>groupSourcesByDocument(displaySources),[displaySources]);
   if(!sources.length)return null;
   return <details className="sources" open={Boolean(open)} onToggle={e=>{if(e.currentTarget.open !== Boolean(open))onToggle(e.currentTarget.open);}}>
     <summary>{t("ux.sourcesSummary",{documents:groups.length,fragments:sources.length})}</summary>
     {open && <div className="source-groups">
-      {availableIndexes.size>0 && <button type="button" className="btn ghost" onClick={()=>onSelect([...availableIndexes],true)}>{t("chat.selectAllSources")}</button>}
-      {groups.map(group=><SourceGroup key={group.doc_id} group={group} selectedSources={selectedSources} availableIndexes={availableIndexes} responseMode={responseMode} onSelect={onSelect} expanded={groupStates[group.doc_id] ?? (group.sources.length <= 10 || group.sources.some(s=>selectedSources.has(s.source_index)))} onToggle={expanded=>toggleGroup(group.doc_id,expanded)}/>)}
+      <div className="source-view-toolbar">
+        <div className="source-view-switch" role="group" aria-label={t("chat.sourceView")}>
+          <button type="button" className="btn ghost" aria-pressed={sourceView === "documents"} onClick={()=>changeView("documents")}>{t("chat.sourceViewDocuments")}</button>
+          <button type="button" className="btn ghost" aria-pressed={sourceView === "rating"} onClick={()=>changeView("rating")}>{t("chat.sourceViewRating")}</button>
+        </div>
+        {availableIndexes.size>0 && <button type="button" className="btn ghost" onClick={()=>onSelect([...availableIndexes],true)}>{t("chat.selectAllSources")}</button>}
+      </div>
+      {sourceView === "rating" ? <ol className="source-rating-list" style={{"--source-number-digits":String(Math.max(...displaySources.map(s=>s.display_index))).length}}>
+        {displaySources.map(source=><ChatSourceRow key={source.display_index} source={source} selected={selectedSources.has(source.source_index)} selectable={availableIndexes.has(source.source_index)} responseMode={responseMode} onSelect={onSelect} showDocument/>)}
+      </ol> : groups.map(group=><SourceGroup key={group.doc_id} group={group} selectedSources={selectedSources} availableIndexes={availableIndexes} responseMode={responseMode} onSelect={onSelect} expanded={groupStates[group.doc_id] ?? (group.sources.length <= 10 || group.sources.some(s=>selectedSources.has(s.source_index)))} onToggle={expanded=>toggleGroup(group.doc_id,expanded)}/>)}
     </div>}
   </details>;
 });

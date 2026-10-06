@@ -5,7 +5,7 @@ import Link from "next/link";
 import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
 import Modal from "./Modal";
 import { retryRequestOptions, freshSourceSearchOptions, chatNetworkScopeOptions } from "@/lib/chatComposer.mjs";
-import { applyAnswerEvent, toggleChatSources } from "@/lib/chatAnswerState.mjs";
+import { applyAnswerEvent, toggleChatSources, changeChatSourceView } from "@/lib/chatAnswerState.mjs";
 import { createChatDeltaBuffer, reconcileChatSources } from "@/lib/chatRenderState.mjs";
 import { updateSelection, selectableSources } from "@/lib/chatSourceSelection.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
@@ -39,7 +39,7 @@ export default function ChatPanel() {
   const { messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
     responseMode, setResponseMode, selectedTopK, setSelectedTopK, showCustom, setShowCustom, customValue, setCustomValue,
     showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue, moduleFilter, setModuleFilter, devFilter, setDevFilter,
-    sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen, draftQuery,setDraftQuery } = useChat();
+    sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen, draftQuery,setDraftQuery,sourceView,setSourceView } = useChat();
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const [copiedIndex, setCopiedIndex] = useState(null);
@@ -344,6 +344,10 @@ export default function ChatPanel() {
   };
 
   const toggleSources = useCallback((index, open) => setMessages((items) => toggleChatSources(items, index, open)), [setMessages]);
+  const changeSourceView = useCallback((index, view) => {
+    setSourceView(view);
+    setMessages(items => changeChatSourceView(items, index, view));
+  }, [setMessages, setSourceView]);
 
   const toggleSourceGroup=useCallback((index,id,expanded)=>setMessages(items=>items.map((message,i)=>i === index ? {...message,sourceGroupsOpen:{...message.sourceGroupsOpen,[id]:expanded}} : message)),[setMessages]);
 
@@ -407,10 +411,10 @@ export default function ChatPanel() {
         {messages.map((message, index) => <ChatMessageView key={index} message={message} index={index}
           isLatest={index === lastAssistantIndex}
           isPending={pending && index === messages.length - 1} actionsPending={pending}
-          isCopied={copiedIndex === index} searchDepthMax={settings.search_depth_max}
+          isCopied={copiedIndex === index} searchDepthMax={settings.search_depth_max} sourceView={sourceView}
           onEdit={editAnswer} onCopy={copyAnswer} onSelect={selectSources} onAnswerSelected={answerSelected}
           onAddToScope={addSelectedToScope} onRetry={retryAnswer} onRefreshSearch={refreshSourceSearch} onRepeatWithoutGlossary={repeatWithoutGlossary}
-          onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} />)}
+          onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} onSourceViewChange={changeSourceView} />)}
       </div>
       </div>
       <ChatRequestNavigation messages={messages} logRef={logRef} />

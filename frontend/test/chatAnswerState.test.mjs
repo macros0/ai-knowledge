@@ -1,6 +1,46 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { groupSourcesByDocument, applyAnswerEvent, searchLimitWarning } from "../src/lib/chatAnswerState.mjs";
+import * as answerState from "../src/lib/chatAnswerState.mjs";
+
+test("rating view preserves citations and stable ties without mutating source evidence", () => {
+  assert.equal(typeof answerState.sourcesForView, "function");
+  const sources = Object.freeze([
+    Object.freeze({ doc_id: "a", title: "First", source_index: 1, score: 0.2 }),
+    Object.freeze({ doc_id: "b", title: "Best", source_index: 2, score: 1 }),
+    Object.freeze({ doc_id: "a", title: "Equal", source_index: 3, score: 1 }),
+    Object.freeze({ doc_id: "c", title: "Legacy", score: 0.5 }),
+    Object.freeze({ doc_id: "d", title: "Missing", score: null }),
+  ]);
+  const ranked = answerState.sourcesForView(sources, "rating");
+  assert.deepEqual(ranked.map(s => s.title), ["Best", "Equal", "Legacy", "First", "Missing"]);
+  assert.deepEqual(ranked.map(s => s.display_index), [2, 3, 4, 1, 5]);
+  assert.equal(ranked[2].source_index, undefined);
+  assert.deepEqual(answerState.sourcesForView(sources, "documents").map(s => s.title), ["First", "Best", "Equal", "Legacy", "Missing"]);
+  assert.equal(sources[0].display_index, undefined);
+});
+
+test("source view stored in the answer survives streaming and manual collapse", () => {
+  assert.equal(typeof answerState.changeChatSourceView, "function");
+  const selection = [2];
+  const messages = [{ role: "assistant", attemptId: "a", selectedSourceIndexes: selection,
+    sourceGroupsOpen: { doc: false }, sourcesOpen: true, sources: [{ source_index: 2, score: 1 }] }];
+  const ranked = answerState.changeChatSourceView(messages, 0, "rating");
+  const streamed = applyAnswerEvent(ranked, { attemptId: "a", type: "delta", text: "Answer [2]" });
+  assert.equal(streamed[0].sourceView, "rating");
+  assert.equal(streamed[0].selectedSourceIndexes, selection);
+  assert.deepEqual(streamed[0].sourceGroupsOpen, { doc: false });
+  assert.equal(answerState.changeChatSourceView(ranked, 0, "rating"), ranked);
+  assert.equal(answerState.changeChatSourceView(ranked, 0, "invalid"), ranked);
+  assert.equal(answerState.changeChatSourceView(ranked, 9, "documents"), ranked);
+});
+
+test("explicit document view stays pinned when the chat preference changes elsewhere", () => {
+  const messages = [{ role: "assistant", attemptId: "a", sources: [{ source_index: 1 }] }];
+  const grouped = answerState.changeChatSourceView(messages, 0, "documents");
+  assert.equal(grouped[0].sourceView, "documents");
+  assert.equal(answerState.changeChatSourceView(grouped, 0, "documents"), grouped);
+});
 
 test("groups every fragment under one document without losing source order", () => {
   const sources = [

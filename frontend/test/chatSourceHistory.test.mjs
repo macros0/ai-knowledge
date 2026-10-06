@@ -105,3 +105,30 @@ test("saved group expansion survives component remount and overrides selected au
   const opened=render({...message,selectedSourceIndexes:[],sourceGroupsOpen:{doc:true}},true);
   assert.equal((opened.match(/class="source-link"/g) ?? []).length,200);
 });
+
+test("saved rating view renders global order, original citation numbers, scores and selection", () => {
+  const sources = [
+    { ...message.sources[0], title: "LOW", filename: "A.docx", doc_id: "a", score: 0.2512 },
+    { ...message.sources[1], title: "HIGH", filename: "B.docx", doc_id: "b", score: 1 },
+    { ...message.sources[2], title: "TIE", filename: "A.docx", doc_id: "a", score: 1 },
+  ];
+  const html = render({ ...message, sources, selectedSourceIndexes: [2], sourceView: "rating", sourceGroupsOpen: { a: false, b: false } }, true);
+  assert.ok(html.indexOf("HIGH") < html.indexOf("TIE"));
+  assert.ok(html.indexOf("TIE") < html.indexOf("LOW"));
+  assert.match(html, /<li value="2">/);
+  assert.match(html, /<li value="1">/);
+  assert.ok(html.includes("0.2512"));
+  assert.ok(html.includes("1.0000"));
+  assert.ok(html.includes("A.docx"));
+  assert.ok(html.includes("B.docx"));
+  assert.match(html, /aria-label="[^"]*2[^"]*HIGH[^"]*"[^>]*checked=""/);
+  assert.ok(!html.includes('class="source-document-group"'));
+});
+
+test("answers without a saved view use the chat preference after navigation", () => {
+  const html = renderToStaticMarkup(React.createElement(load("ChatMessageView").default, {
+    message, index: 0, isLatest: true, sourceView: "rating", onSelect: noop, onToggleSources: noop,
+  }));
+  assert.ok(html.includes('class="source-rating-list"'));
+  assert.equal((html.match(/class="source-link"/g) ?? []).length, 200);
+});

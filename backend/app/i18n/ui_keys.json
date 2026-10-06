@@ -626,7 +626,14 @@
   ],
   "chat.sourceFound": [],
   "chat.sourceInContext": [],
+  "chat.sourceRating": [
+    "score"
+  ],
+  "chat.sourceRatingHint": [],
   "chat.sourceSearchOnly": [],
+  "chat.sourceView": [],
+  "chat.sourceViewDocuments": [],
+  "chat.sourceViewRating": [],
   "chat.sources": [],
   "chat.stopAnswer": [],
   "chat.synthesizing": [],

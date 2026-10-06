@@ -35,6 +35,7 @@ export function ChatProvider({ children }) {
 function ChatState({ children }) {
   const { t } = useI18n();
   const [messages, setMessages] = useState([]);
+  const [sourceView, setSourceView] = useState("documents");
   const [draftQuery,setDraftQuery]=useState("");
   const [tags, setTags] = useState([]);
   const [pending, setPending] = useState(false);
@@ -100,11 +101,11 @@ function ChatState({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ draftQuery,setDraftQuery,messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
+    () => ({ sourceView,setSourceView,draftQuery,setDraftQuery,messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
       responseMode, setResponseMode, selectedTopK: selectedTopK ?? settings.top_k_default, setSelectedTopK,
       showCustom, setShowCustom, customValue, setCustomValue, showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue,
       moduleFilter, setModuleFilter, devFilter, setDevFilter, sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen }),
-    [draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled,
+    [sourceView, draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled,
       responseMode, selectedTopK, showCustom, customValue, showCustomDepth, customDepthValue, moduleFilter, devFilter, sourceLocale, searchSettingsOpen]
   );
 

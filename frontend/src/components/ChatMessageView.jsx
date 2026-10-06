@@ -13,8 +13,8 @@ import ChatSources from "./ChatSources";
 
 const EMPTY = [];
 
-export default memo(function ChatMessageView({ message: m, index, isLatest = true, isPending, actionsPending, isCopied, searchDepthMax,
-  onEdit, onRefreshSearch, onCopy, onSelect, onAnswerSelected, onAddToScope, onRetry, onRepeatWithoutGlossary, onStop, onToggleSources, onToggleSourceGroup }) {
+export default memo(function ChatMessageView({ message: m, index, isLatest = true, isPending, actionsPending, isCopied, searchDepthMax, sourceView,
+  onEdit, onRefreshSearch, onCopy, onSelect, onAnswerSelected, onAddToScope, onRetry, onRepeatWithoutGlossary, onStop, onToggleSources, onToggleSourceGroup, onSourceViewChange }) {
   const { t } = useI18n();
   const sources = m.sources ?? EMPTY;
   const selectedIndexes = m.selectedSourceIndexes ?? EMPTY;
@@ -24,6 +24,7 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
   const sourcesOpen = Boolean(m.sourcesOpen) && (m.sourcesTouched || isLatest);
   const select = useCallback((indexes, checked) => onSelect(index, indexes, checked), [index, onSelect]);
   const toggle = useCallback((open) => onToggleSources(index, open), [index, onToggleSources]);
+  const changeSourceView = useCallback((view) => onSourceViewChange?.(index, view), [index, onSourceViewChange]);
   return (
           <div className={`msg ${m.role}`} data-request-index={m.role === "user" ? index : undefined}>
             <div className="role-row">
@@ -101,6 +102,7 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
             )}
             <ChatSources sources={sources} selectedIndexes={selectedIndexes} selectionEnabled={selectionEnabled}
               responseMode={m.responseMode} open={sourcesOpen} onSelect={select} onToggle={toggle}
+              view={m.sourceView ?? sourceView} onViewChange={onSourceViewChange ? changeSourceView : undefined}
               expandedGroups={m.sourceGroupsOpen} onToggleGroup={onToggleSourceGroup ? (id,expanded)=>onToggleSourceGroup(index,id,expanded) : undefined} />
             {m.role === "assistant" && m.uploadHint && (!m.sources || m.sources.length === 0) && (
               <div className="chat-upload-hint">
