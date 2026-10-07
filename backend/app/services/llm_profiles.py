@@ -35,6 +35,18 @@ class Classification(BaseModel):
     extraction_mode: Literal["per_row", "whole"]
 
 
+class SourceAssessmentItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_index: int
+    label: Literal["relevant", "partial", "irrelevant", "uncertain"]
+    evidence_quote: str | None
+
+
+class SourceAssessmentJSON(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    items: list[SourceAssessmentItem]
+
+
 class Development(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     dev_number: str | None
@@ -43,6 +55,7 @@ class Development(BaseModel):
 
 
 ADAPTERS = {
+    "source_assessment": TypeAdapter(SourceAssessmentJSON),
     "generation": TypeAdapter(list[GeneratedConcept]),
     "classification": TypeAdapter(Classification),
     "development": TypeAdapter(Development),

@@ -6,6 +6,7 @@ import { runInNewContext } from "node:vm";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transformSync } from "next/dist/build/swc/index.js";
+import * as assessment from "../src/lib/chatSourceAssessment.mjs";
 import * as answerState from "../src/lib/chatAnswerState.mjs";
 import * as selection from "../src/lib/chatSourceSelection.mjs";
 import * as context from "../src/lib/chatSourceContext.mjs";
@@ -36,6 +37,7 @@ function load(name) {
       return { ...runtime, jsx:capture(runtime.jsx), jsxs:capture(runtime.jsxs) };
     }
     if (id === "@/i18n/LocaleContext") return { useI18n: () => ({ t, locale: "ru" }) };
+    if (id === "@/lib/chatSourceAssessment.mjs") return assessment;
     if (id === "@/lib/chatAnswerState.mjs") return answerState;
     if (id === "@/lib/chatSourceSelection.mjs") return selection;
     if (id === "@/lib/chatSourceContext.mjs") return context;
@@ -43,7 +45,7 @@ function load(name) {
     if (id === "@/lib/glossaryUi.mjs") return glossary;
     if (id === "@/lib/diagnosticIdentifiers.mjs") return identifiers;
     if (id === "next/link") return function Link({ children, ...props }) { return React.createElement("a", props, children); };
-    if (["./ChatSources", "./icons", "./ErrorReference", "./AppliedTerms"].includes(id)) return load(id.slice(2));
+    if (["./ChatSourceAssessment", "./ChatSources", "./icons", "./ErrorReference", "./AppliedTerms"].includes(id)) return load(id.slice(2));
     if (id === "./ChatAnswer") return { __esModule: true, default: ({ text }) => React.createElement("p", {}, text) };
     return require(id);
   };

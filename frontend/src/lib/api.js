@@ -500,6 +500,10 @@ export function search(query, tags = [], topK = 5, mode = "hybrid", useGlossary 
 
 export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = null, sourceLocale = "", useGlossary = true, mailMode = "all", onText = null, onSources = null, options = {}) {
   const body = { query, locale: currentUiLocale(), tags, top_k: topK, mode, use_glossary: useGlossary, mail_mode: mailMode };
+  if (typeof options.assessSources === "boolean") body.assess_sources = options.assessSources;
+  if (options.locale) body.locale = options.locale;
+  if (options.dense != null) body.dense = options.dense;
+  if (options.bm25 != null) body.bm25 = options.bm25;
   if (options.responseMode) body.response_mode = options.responseMode;
   if (options.searchDepth != null) body.search_depth = options.searchDepth;
   if (options.attemptId) body.attempt_id = options.attemptId;
@@ -513,6 +517,8 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
     body.source_locales = [sourceLocale];
     body.include_unknown_source_locale = false;
   }
+  if (options.sourceLocales != null) body.source_locales = options.sourceLocales;
+  if (options.includeUnknownSourceLocale != null) body.include_unknown_source_locale = options.includeUnknownSourceLocale;
   return request(
     onText ? "/chat/stream" : "/chat",
     {

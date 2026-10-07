@@ -6,14 +6,11 @@
 // именно парсинг (mdast), а не отрисовка DOM, поэтому кап по уже построенному
 // AST не помогает — режем ТЕКСТ до парсинга.
 //
-// Таблицу длиннее `maxRows` строк режем: markdown-часть сохраняет шапку +
-// разделитель + первые `maxRows` строк (валидная GFM-таблица), а хвост
-// выносится в отдельную часть `tableRemainder`. Хвост нарезается на чанки по
-// `maxRows` строк — каждый чанк с повторённой шапкой/разделителем образует
-// свою маленькую GFM-таблицу. Парсинг многих маленьких таблиц линеен и дёшев
-// (~1 с на 4300 строк) в отличие от суперлинейного парсинга одной гигантской
-// (~20 с), поэтому рендер остаётся настоящей таблицей без зависания. Остальной
-// текст остаётся без вырезок.
+// Размер каждой части ограничивается числом строк, ячеек и символов.
+// Это учитывает широкие таблицы даже с небольшим числом строк. Превью и
+// части хвоста сохраняют целые строки, шапку и исходные номера строк.
+// ContentViewer раскрывает части хвоста отдельно, чтобы подсветка одного
+// фрагмента не запускала разбор всех остальных строк.
 //
 // Функция чистая и детерминированная (одинаковый вход → одинаковый выход на
 // сервере и клиенте) — никаких платформозависимых API. Разбиение по "\n",
@@ -22,6 +19,8 @@
 // контент (remark всё равно нормализует переносы, raw-режим не трогается).
 
 export const LARGE_TABLE_MAX_ROWS = 300;
+const MAX_TABLE_CELLS = 2000;
+const MAX_TABLE_CHARS = 32768;
 
 const PIPE_RE = /^\s{0,3}\|/;
 const SEP_RE = /^\s{0,3}\|[\s:|-]+\|?\s*$/;
@@ -39,7 +38,7 @@ function chunkRows(header, sep, rows, chunkSize) {
 
 export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
   const text = markdown == null ? "" : String(markdown);
-  const cap = Number.isFinite(maxRows) && maxRows >= 0 ? Math.max(1, Math.floor(maxRows)) : LARGE_TABLE_MAX_ROWS;
+  const rowCap = Number.isFinite(maxRows) && maxRows >= 0 ? Math.max(1, Math.floor(maxRows)) : LARGE_TABLE_MAX_ROWS;
   const lines = text.split("\n");
 
   const parts = [];
@@ -70,6 +69,14 @@ export function splitLargeTables(markdown, maxRows = LARGE_TABLE_MAX_ROWS) {
       return;
     }
     const dataRows = block.length - 2;
+    // Bound parsing work for wide tables as well as tall ones. Counting all
+    // pipes is conservative when cells contain escaped pipes.
+    const columns = (block[0].match(/\|/g) || []).length + 1;
+    const maxRowChars = block.slice(2).reduce((size, row) => Math.max(size, row.length + 1), 1);
+    const cap = Math.max(1, Math.min(rowCap,
+      Math.floor(MAX_TABLE_CELLS / columns) - 2,
+      Math.floor((MAX_TABLE_CHARS - block[0].length - block[1].length - 2) / maxRowChars),
+    ));
     if (dataRows <= cap) {
       buffer.push(...block);
       bufferLines.push(...blockLines);

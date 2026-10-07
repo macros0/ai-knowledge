@@ -236,3 +236,27 @@ def test_selected_authorship_never_expands_to_entire_shared_chunk(monkeypatch, k
     else:
         assert 'Иван Петров' in answer
         assert 'Выдуманное имя' not in prompts[0]
+
+
+@pytest.mark.parametrize('requested', [None, True, False])
+def test_explicit_selection_skips_assessment_even_when_enabled(found, monkeypatch, requested):
+    import json
+    from app.api import chat as api
+    from app.config import Settings
+    client, search, _ = found
+    monkeypatch.setattr(api, 'get_settings', lambda: Settings(_env_file=None,
+        auth_provider='disabled', source_assessment_enabled=True,
+        source_assessment_default_enabled=True))
+    monkeypatch.setattr(api, 'get_assessor', lambda *a: pytest.fail('selected sources assessed'))
+    payload = selected_request(search, [1, 3])
+    if requested is not None:
+        payload['assess_sources'] = requested
+    response = client.post('/api/chat/stream', json=payload)
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert not any(e.get('phase') == 'source_assessment' for e in events)
+    assert events[-1]['type'] == 'result', events
+    data = events[-1]['data']
+    assert data['answer'] == 'Ответ [1]'
+    assert len(data['sources']) == 2
+    assert data['source_assessment']['status'] == 'disabled'
+    assert data['source_assessment']['reason_code'] == 'explicit_selection'

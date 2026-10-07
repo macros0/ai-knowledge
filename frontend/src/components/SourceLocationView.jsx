@@ -9,6 +9,7 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
   const { t } = useI18n();
   const current = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [expandedChunks, setExpandedChunks] = useState(() => new Set());
   const spans = location?.spans || [];
   const selectedIndex = Math.min(activeIndex, Math.max(0, spans.length - 1));
   const targetChunk = chunks.find(({ chunk_index }) => chunk_index === location?.chunk_index);
@@ -64,6 +65,15 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
         const sourceId = chunk.source_id || "root";
         const source = sourcesById.get(sourceId);
         const startsSource = index === 0 || sourceId !== (visibleChunks[index - 1].source_id || "root");
+        const isTarget = chunk.chunk_index === targetChunk.chunk_index;
+        const deferred = showAll && !isTarget;
+        const content = (!deferred || expandedChunks.has(chunk.chunk_index)) && (
+          <>
+            {(startsSource || isTarget) && <MailMetadata source={source} />}
+            <ContentViewer text={chunk.content} docId={docId} sourceSpans={isTarget ? spans : []}
+              preserveLineBreaks={source?.kind === "mail" || source?.metadata?.mail === true} />
+          </>
+        );
         return (
         <div
           key={chunk.chunk_index}
@@ -71,10 +81,26 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
           id={`source-chunk-${chunk.chunk_index}`}
           className={`source-location-chunk${chunk.chunk_index === targetChunk.chunk_index ? " is-source-target" : ""}`}
         >
-          {showAll && <h2 className="source-chunk-heading">{t("okf.page.chunkH1", { index: chunk.chunk_index + 1 })}</h2>}
-          {startsSource && <MailMetadata source={source} />}
-          <ContentViewer text={chunk.content} docId={docId} sourceSpans={chunk.chunk_index === targetChunk.chunk_index ? spans : []}
-            preserveLineBreaks={source?.kind === "mail" || source?.metadata?.mail === true} />
+          {deferred ? (
+            <details onToggle={(event) => {
+              const open = event.currentTarget.open;
+              setExpandedChunks((previous) => {
+                if (previous.has(chunk.chunk_index) === open) return previous;
+                const next = new Set(previous);
+                if (open) next.add(chunk.chunk_index);
+                else next.delete(chunk.chunk_index);
+                return next;
+              });
+            }}>
+              <summary className="source-chunk-heading">{t("okf.page.chunkH1", { index: chunk.chunk_index + 1 })}</summary>
+              {content}
+            </details>
+          ) : (
+            <>
+              {showAll && <h2 className="source-chunk-heading">{t("okf.page.chunkH1", { index: chunk.chunk_index + 1 })}</h2>}
+              {content}
+            </>
+          )}
         </div>
         );
       })}

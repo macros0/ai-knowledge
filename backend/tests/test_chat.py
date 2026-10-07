@@ -536,3 +536,33 @@ def test_chat_source_list_is_not_cut_by_model_context_budget(monkeypatch, profil
     assert len(prompts) == 1
     assert "ЭЛН блок 0" in prompts[0]
     assert "ЭЛН блок 1" not in prompts[0]
+
+def test_full_mode_answers_from_verified_subset_without_replaying_batch(monkeypatch):
+    import json
+    from app.api import chat as api
+    _patch_retrieval(monkeypatch, api, hits=[{'id': 'p1'}])
+    blocks = [{**_block(), 'doc_id': 'doc-a', 'content': 'AAA ' * 90},
+              {**_block(), 'doc_id': 'doc-b', 'content': 'BBB ' * 90}]
+    monkeypatch.setattr(api, 'merge_and_format', lambda *a, **k: blocks)
+    monkeypatch.setattr(api, 'format_context', lambda items, **kw: '\n'.join(
+        f'<context_block id="{b["_source_index"]}">{b["content"]}</context_block>' for b in items))
+    monkeypatch.setattr(api.ChatTokenBudget, 'fits', lambda *a, **k: True)
+    requests = []
+    def complete(system, user):
+        requests.append((system, user))
+        if system == api._FACT_INSTRUCTIONS:
+            source, quote = (1, 'AAA') if 'AAA' in user else (2, 'BBB')
+            return json.dumps({'facts': [
+                {'source': source, 'quote': quote, 'text': quote},
+                {'source': source, 'quote': 'invented', 'text': 'unsupported'}]})
+        assert [fact['quote'] for fact in json.loads(user)['facts']] == ['AAA', 'BBB']
+        return 'A [1], B [2]'
+    monkeypatch.setattr(api._get_llm(), 'chat', complete)
+    client = make_client(monkeypatch)
+    monkeypatch.setattr(api, 'get_settings', lambda: Settings(_env_file=None,
+        auth_provider='disabled', chat_max_context_chars=550))
+    response = client.post('/api/chat', json={'query': 'сравни', 'response_mode': 'full'})
+    assert response.status_code == 200, response.text
+    assert response.json()['answer'] == 'A [1], B [2]'
+    assert all(source['in_model_context'] and source['cited'] for source in response.json()['sources'])
+    assert len(requests) == 3

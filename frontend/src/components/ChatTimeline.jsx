@@ -8,7 +8,7 @@ import {captureChatViewport, restoreChatViewport} from "@/lib/chatScrollPosition
 import {fmtDate, HistoryMessage} from "./ChatHistoryShared";
 import ChatRequestNavigation from "./ChatRequestNavigation";
 
-function TimelineTurn({turn, previewHeight, expanded, onToggle, onInteract, renderMessage, pending}) {
+function TimelineTurn({turn, previewHeight, expanded, onToggle, onExpand, onInteract, renderMessage, pending, actionsPending, onContinueWithoutAssessment}) {
   const {t} = useI18n();
   const contentRef = useRef(null);
   const pointerFocusRef = useRef(false);
@@ -33,7 +33,11 @@ function TimelineTurn({turn, previewHeight, expanded, onToggle, onInteract, rend
   const collapsed = overflow && !expanded && !pending;
   const question = turn.messages.find(({message}) => message.role === "user")?.message;
   const questionText = question?.text ?? question?.content ?? "";
-  return <article className="chat-timeline-turn" data-chat-turn={turn.key}>
+  return <article className={`chat-timeline-turn${pending ? " working" : ""}`} data-chat-turn={turn.key} aria-busy={pending || undefined}>
+    {pending && <div className="chat-turn-working-status" role="status">
+      <span className="chat-turn-working-indicator" aria-hidden="true" />
+      {t("chat.requestInProgress")}
+    </div>}
     {turn.historical && <div className="chat-history-date meta">
       <span>{t("chat.recentHistory")} · {fmtDate(turn.created_at)}</span>
       <Link href={`/chat/history?session=${encodeURIComponent(turn.session_id)}`}>{t("chat.openHistoryThread")}</Link>
@@ -43,11 +47,18 @@ function TimelineTurn({turn, previewHeight, expanded, onToggle, onInteract, rend
       onPointerUpCapture={() => {pointerFocusRef.current = false;}}
       onPointerCancelCapture={() => {pointerFocusRef.current = false;}}
       onFocusCapture={() => {if (collapsed && !pointerFocusRef.current) onToggle(); else onInteract();}}
-      onClickCapture={collapsed ? onToggle : onInteract}
+      onClickCapture={(event) => {
+        const details = event.target.closest("summary")?.parentElement;
+        if (details?.matches("details.sources, .source-document-group details")) {
+          if (!details.open) onExpand();
+          else onInteract();
+        } else if (collapsed) onToggle();
+        else onInteract();
+      }}
       style={{"--chat-preview-height": `${previewHeight}px`}}>
       <div ref={contentRef}>
         {turn.messages.map(({message, index}, i) => turn.historical
-          ? <HistoryMessage key={i} m={message}/>
+          ? <HistoryMessage key={i} m={message} actionsPending={actionsPending} onContinueWithoutAssessment={onContinueWithoutAssessment ? m => onContinueWithoutAssessment(m, turn.session_id) : undefined}/>
           : renderMessage(message, index))}
       </div>
     </div>
@@ -58,7 +69,7 @@ function TimelineTurn({turn, previewHeight, expanded, onToggle, onInteract, rend
 }
 
 export default function ChatTimeline({turns, pending, recentHistory, onLoadOlder, renderMessage, empty,
-  logRef, scrollPositionRef, sessionId, messageCount, view, setView}) {
+  logRef, scrollPositionRef, sessionId, messageCount, view, setView, onContinueWithoutAssessment}) {
   const {t} = useI18n();
   const contentRef = useRef(null);
   const [layout, setLayout] = useState(() => view.layout ?? {height: 400, width: 700, heights: {}});
@@ -68,9 +79,12 @@ export default function ChatTimeline({turns, pending, recentHistory, onLoadOlder
   const start = requestedStart < 0 ? autoStart : Math.min(autoStart, requestedStart);
   const visible = turns.slice(start);
   const visibleKeys = visible.map(turn => turn.key).join(",");
-  const remember = useCallback(() => {
+  const remember = useCallback(({forceBottom = false} = {}) => {
+    const saved = scrollPositionRef.current;
+    const previous = !forceBottom && saved?.sessionId === sessionId && saved?.messageCount === messageCount
+      ? saved : null;
     if (logRef.current) scrollPositionRef.current = {
-      ...captureChatViewport(logRef.current), sessionId, messageCount,
+      ...captureChatViewport(logRef.current, previous), sessionId, messageCount,
     };
   }, [logRef, scrollPositionRef, sessionId, messageCount]);
 
@@ -78,8 +92,9 @@ export default function ChatTimeline({turns, pending, recentHistory, onLoadOlder
     const log = logRef.current;
     const saved = scrollPositionRef.current;
     const sameChat = saved?.sessionId === sessionId;
-    restoreChatViewport(log, sameChat ? saved : null, {forceBottom: saved?.messageCount !== messageCount});
-    remember();
+    const forceBottom = !sameChat || saved?.messageCount !== messageCount;
+    restoreChatViewport(log, sameChat ? saved : null, {forceBottom});
+    remember({forceBottom});
     log.addEventListener("scroll", remember, {passive: true});
     return () => { log.removeEventListener("scroll", remember); };
   }, [visibleKeys, layout.height, layout.width, view.expanded, sessionId, messageCount, logRef, scrollPositionRef, remember]);
@@ -132,12 +147,18 @@ export default function ChatTimeline({turns, pending, recentHistory, onLoadOlder
     }
   };
   const olderAvailable = start > 0 || recentHistory.nextBeforeId != null;
-  const renderedTurns = visible.map(turn => <TimelineTurn key={turn.key} turn={turn}
+  const renderedTurns = visible.map(turn => <TimelineTurn actionsPending={pending} onContinueWithoutAssessment={onContinueWithoutAssessment} key={turn.key} turn={turn}
     previewHeight={Math.max(160, layout.height * .8)} expanded={view.expanded[turn.key]}
     pending={pending && turn.key === turns.at(-1)?.key} renderMessage={renderMessage}
     onInteract={() => {
       rememberReader();
       setView(current => current.startKey === visible[0]?.key ? current : {...current, startKey: visible[0]?.key});
+    }}
+    onExpand={() => {
+      rememberReader();
+      setView(current => current.expanded[turn.key] && current.startKey === visible[0]?.key
+        ? current
+        : {...current, startKey: visible[0]?.key, expanded: {...current.expanded, [turn.key]: true}});
     }}
     onToggle={() => {
       rememberReader();

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
         env_file=str(Path(__file__).resolve().parent.parent.parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     app_name: str = "OKF Knowledge Service"
@@ -230,6 +231,56 @@ class Settings(BaseSettings):
     embedding_timeout_seconds: float = 30.0
     embedding_retry_attempts: int = 1
     embedding_retry_backoff_seconds: float = 2.0
+
+    # Optional, one-call source relevance policy. Deployment rollout is explicit.
+    source_assessment_enabled: bool = False
+    source_assessment_default_enabled: bool = True
+    source_assessment_backend: Literal["llm"] = "llm"
+    source_assessment_sample_size: int = Field(default=5, ge=1, le=20)
+    source_assessment_llm_model: str = ""
+    source_assessment_llm_base_url: str = ""
+    source_assessment_llm_api_key: str = Field(default="", repr=False)
+    source_assessment_llm_profile: Literal["", "standard", "local_qwen"] = ""
+    source_assessment_timeout_seconds: float = Field(default=8, ge=1, le=600)
+    source_assessment_max_chars_per_fragment: int = Field(default=2400, ge=256, le=8000)
+    source_assessment_max_total_chars: int = Field(default=12000, ge=1000, le=40000)
+    source_assessment_max_input_tokens: int = Field(default=8192, ge=1024, le=32768)
+    source_assessment_max_output_tokens: int = Field(default=1024, ge=128, le=2048)
+
+    @field_validator("source_assessment_sample_size", "source_assessment_max_chars_per_fragment",
+                     "source_assessment_max_total_chars", "source_assessment_max_input_tokens",
+                     "source_assessment_max_output_tokens", mode="before")
+    @classmethod
+    def strict_assessment_integer(cls, value):
+        # Env values are strings; reject booleans, floats and coercive forms.
+        if isinstance(value, str) and value.isascii() and value.isdecimal():
+            return int(value)
+        if type(value) is not int:
+            raise ValueError("source_assessment integer field must be an integer")
+        return value
+
+    @model_validator(mode="after")
+    def validate_source_assessment(self):
+        from urllib.parse import urlsplit
+        if self.source_assessment_sample_size * 256 > self.source_assessment_max_total_chars:
+            raise ValueError("source_assessment_max_total_chars is too small for sample_size")
+        base = self.source_assessment_llm_base_url
+        if self.source_assessment_llm_api_key and not base:
+            raise ValueError("source_assessment_llm_api_key requires source_assessment_llm_base_url")
+        if base:
+            try:
+                parsed = urlsplit(base)
+                valid = (parsed.scheme in {"http", "https"} and parsed.hostname
+                         and not parsed.username and not parsed.password
+                         and not parsed.query and not parsed.fragment and not any(c.isspace() for c in base))
+                parsed.port
+            except ValueError:
+                valid = False
+            if not valid:
+                raise ValueError("Invalid source_assessment_llm_base_url")
+        if "://" in self.source_assessment_llm_model or "@" in self.source_assessment_llm_model:
+            raise ValueError("Invalid source_assessment_llm_model")
+        return self
 
     llm_model: str = "ollama/qwen2.5:14b"
     llm_profile: Literal["standard", "local_qwen"] = "standard"

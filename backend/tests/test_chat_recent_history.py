@@ -152,9 +152,13 @@ def test_preserves_sources_citations_and_legacy_provenance(client):
     assert assistant["sources"][0]["source_index"] is None
     assert assistant["sources"][1]["selectable"] is True
     assert assistant["sources"][1]["cited"] is True
-    assert assistant["retrieval_metadata"] == {
-        "source_blocks": [{"source_index": 2, "text": "saved excerpt"}],
-    }
+    assert assistant["retrieval_metadata"] == {}
+    # Public history omits internal excerpts; selected-source replay retains them.
+    from app.db.models import ChatMessage
+    from app.db.session import session_scope
+    with session_scope() as session:
+        stored = session.query(ChatMessage).filter_by(session_id=sid, role="assistant").one()
+        assert stored.retrieval_metadata["source_blocks"] == [{"source_index": 2, "text": "saved excerpt"}]
 
 
 def test_default_page_has_ten_latest_questions(client):

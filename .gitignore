@@ -27,6 +27,7 @@ next-env.d.ts
 .docker-ux-llm.override.yml
 
 # Runtime data
+/data/qdrant/
 /data/uploads/*
 /data/okf_bundles/*
 /data/staging/*
@@ -80,6 +81,7 @@ data/exports/*
 
 # Maintained test outputs and disposable test runtime data
 tests/artifacts/
+tests/artifacts/reranker/
 tests/tmp/
 !tests/artifacts/
 !tests/artifacts/diagnostics/

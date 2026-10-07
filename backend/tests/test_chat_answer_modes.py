@@ -110,3 +110,64 @@ def test_fast_skips_oversized_first_row_and_uses_later_row():
     assert len(batches) == 1
     assert "| 002 | есть |" in batches[0][0]["content"]
     assert "x" * 100 not in batches[0][0]["content"]
+
+
+def test_chat_reports_model_503_as_dependency_failure(monkeypatch):
+    import httpx
+    from types import SimpleNamespace
+    from app.api import chat as api
+    from app.api.errors import ApiError
+    from app.config import Settings
+    from app.models.schemas import ChatRequest
+
+    def unavailable(url, **kwargs):
+        return httpx.Response(503, json={"error": "model unavailable"}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr("app.services.chat_token_budget.httpx.post", unavailable)
+    monkeypatch.setattr(api, "_get_llm", lambda: SimpleNamespace(model="test"))
+    with pytest.raises(ApiError) as caught:
+        api._answer_mode(ChatRequest(query="проверка", response_mode="fast"), [_block(1, 50)], [],
+                         Settings(_env_file=None, llm_profile="local_qwen"), {}, {}, {})
+    assert caught.value.code == "dependency_unavailable"
+    assert caught.value.status_code == 503
+
+
+def test_invalid_citation_keeps_actual_context_coverage(monkeypatch):
+    from types import SimpleNamespace
+    from app.api import chat as api
+    from app.api.errors import ApiError
+    from app.config import Settings
+    from app.models.schemas import ChatRequest, ChatSource
+    from app.services.llm_profiles import request_scope
+
+    blocks = [_block(1, 100), _block(2, 1000)]
+    sources = [ChatSource(title=f'source {i}', filepath=f'{i}.md', doc_id=str(i), score=1, tags=[], in_model_context=False)
+               for i in (1, 2)]
+    monkeypatch.setattr(api, '_get_llm', lambda: SimpleNamespace(model='test', chat=lambda *a: 'Answer [2]'))
+    monkeypatch.setattr(api, 'ChatTokenBudget', lambda *a: SimpleNamespace(fits=lambda *a, **k: True))
+    published = []
+    with request_scope(on_sources=published.append), pytest.raises(ApiError) as caught:
+        api._answer_mode(ChatRequest(query='question', response_mode='fast'), blocks, sources,
+            Settings(_env_file=None, chat_max_context_chars=500), {}, {}, {})
+    assert caught.value.code == 'chat_evidence_invalid'
+    assert len(published) == 1
+    assert published[0][0]['in_model_context'] is True
+    assert published[0][0]['submitted_parts'] == published[0][0]['completed_parts'] == 1
+    assert published[0][0]['cited'] is False
+    assert published[0][1]['in_model_context'] is False
+
+def test_fact_validation_keeps_verified_facts_when_one_quote_is_invented():
+    import json
+    from app.api.chat import _verified_facts
+    valid = {'source': 1, 'quote': 'БВР — база расчёта', 'text': 'БВР используется как база.'}
+    raw = json.dumps({'facts': [valid,
+        {'source': 1, 'quote': 'несуществующая цитата', 'text': 'неподтверждённый факт'},
+        {'source': 99, 'quote': 'БВР — база расчёта', 'text': 'чужая ссылка'}]}, ensure_ascii=False)
+    assert _verified_facts(raw, {1: 'БВР — база расчёта для СУРВ.'}) == [valid]
+
+
+def test_fact_validation_still_rejects_entirely_unverified_output():
+    from app.api.chat import _verified_facts
+    with pytest.raises(ValueError):
+        _verified_facts('{"facts":[{"source":1,"quote":"invented","text":"unsupported"}]}', {1: 'original'})
+    assert _verified_facts('{"facts":[]}', {1: 'original'}) == []

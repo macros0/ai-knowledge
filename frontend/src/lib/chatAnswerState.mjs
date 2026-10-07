@@ -1,3 +1,4 @@
+import { applyAssessmentOutcome } from "./chatSourceAssessment.mjs";
 import { reconcileChatSources } from "./chatRenderState.mjs";
 
 export function sourcesForView(sources = [], view = "documents") {
@@ -67,10 +68,10 @@ export function applyAnswerEvent(messages, event) {
   }
   let changed;
   if (event.type === "delta") {
-    changed = { ...current, text: (current.text || "") + event.text };
+    changed = { ...current, text: (current.text || "") + event.text, hasStreamedText: true };
   } else if (event.type === "sources") {
     const sources = reconcileChatSources(current.sources, event.sources || []);
-    const sourcesOpen = current.sourcesTouched ? current.sourcesOpen : sources.length > 0;
+    const sourcesOpen = current.sourcesTouched ? current.sourcesOpen : current.sourceAssessment?.decision === "reject" ? false : sources.length > 0;
     if (sources === current.sources && sourcesOpen === current.sourcesOpen) return messages;
     changed = {
       ...current,
@@ -78,7 +79,9 @@ export function applyAnswerEvent(messages, event) {
       sourcesOpen,
     };
   } else if (event.type === "progress") {
-    changed = event.phase === "retrieval"
+    changed = event.phase === "source_assessment"
+      ? {...applyAssessmentOutcome(current, event.source_assessment ?? {status: event.status}), progress: event}
+      : event.phase === "retrieval"
       ? { ...current, requestSearchDepth: event.search_depth, searchLimitReached: event.search_limit_reached }
       : { ...current, progress: event };
   } else {

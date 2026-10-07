@@ -11,12 +11,16 @@ export function attachChatScroll(element, position, chat) {
   };
 }
 
-export function captureChatViewport(element) {
+export function captureChatViewport(element, previous = null) {
   const origin = element.getBoundingClientRect().top;
   const first = [...element.querySelectorAll("[data-chat-turn]")]
     .find(node => node.getBoundingClientRect().bottom > origin);
   return {top: element.scrollTop,
-    atBottom: element.scrollHeight - element.clientHeight - element.scrollTop <= 4,
+    // A layout measurement at the same scroll offset must not undo an explicit
+    // reader position just because the unexpanded content currently fits.
+    atBottom: previous?.atBottom === false && previous.top === element.scrollTop
+      ? false
+      : element.scrollHeight - element.clientHeight - element.scrollTop <= 4,
     anchor: first ? {key: first.dataset.chatTurn, offset: first.getBoundingClientRect().top - origin} : null};
 }
 

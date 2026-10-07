@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import MarkdownViewer from "./MarkdownViewer";
 import { useI18n } from "@/i18n/LocaleContext";
 import { splitLargeTables } from "@/lib/largeTableSplit";
@@ -12,6 +12,7 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false, s
   const { t, tc } = useI18n();
   const [mode, setMode] = useState("render");
   const [expanded, setExpanded] = useState({});
+  const [expandedSegments, setExpandedSegments] = useState({});
 
   const parts = useMemo(() => (mode === "render" ? splitLargeTables(text) : []), [mode, text]);
   const highlightedLines = useMemo(
@@ -19,20 +20,12 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false, s
     [sourceSpans, text],
   );
 
-  useEffect(() => {
-    if (!highlightedLines.length || !parts.length) return;
-    setExpanded((previous) => {
-      const next = { ...previous };
-      parts.forEach((part, index) => {
-        if (part.type !== "tableRemainder") return;
-        const containsEvidence = (part.chunkLineMaps || []).some((lineMap) =>
-          highlightedLines.some(([from, to]) => lineMap.some((line) => line >= from && line <= to))
-        );
-        if (containsEvidence) next[index] = true;
-      });
-      return next;
-    });
-  }, [highlightedLines, parts]);
+  const evidenceSegments = useMemo(() => parts.map(part =>
+    part.type === "tableRemainder" ? (part.chunkLineMaps || []).map(lineMap =>
+      // Repeated headers are already visible in the preview.
+      highlightedLines.some(([from, to]) => lineMap.slice(2).some(line => line >= from && line <= to))
+    ) : []
+  ), [highlightedLines, parts]);
 
   if (!text) return null;
 
@@ -56,7 +49,7 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false, s
         <div className="content-viewer-body">
           {parts.map((part, i) => {
             if (part.type === "tableRemainder") {
-              const open = !!expanded[i];
+              const open = expanded[i] ?? evidenceSegments[i]?.some(Boolean);
               return (
                 <div key={i} className="table-remainder-block">
                   <div className="table-remainder-note">
@@ -65,7 +58,7 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false, s
                   <button
                     className="view-mode-toggle"
                     onClick={() =>
-                      setExpanded((prev) => ({ ...prev, [i]: !prev[i] }))
+                      setExpanded((prev) => ({ ...prev, [i]: !open }))
                     }
                   >
                     {open
@@ -73,9 +66,21 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false, s
                       : tc("content.showRemainingRows", part.remainingRows)}
                   </button>
                   {open &&
-                    part.chunks.map((chunk, j) => (
-                      <MarkdownViewer key={j} text={chunk} docId={docId} lineMap={part.chunkLineMaps?.[j]} highlightedLines={highlightedLines} />
-                    ))}
+                    part.chunks.map((chunk, j) => {
+                      const key = `${i}:${j}`;
+                      const segmentOpen = expandedSegments[key] ?? evidenceSegments[i]?.[j] ?? false;
+                      const from = part.shownRows * (j + 1) + 1;
+                      const to = from + (part.chunkLineMaps?.[j]?.length ?? chunk.split("\n").length) - 3;
+                      return (
+                        <details key={j} className="table-segment" open={segmentOpen} onToggle={event => {
+                          const open = event.currentTarget.open;
+                          setExpandedSegments(previous => previous[key] === open ? previous : {...previous, [key]: open});
+                        }}>
+                          <summary>{t("content.tableRowsRange", {from, to})}</summary>
+                          {segmentOpen && <MarkdownViewer text={chunk} docId={docId} lineMap={part.chunkLineMaps?.[j]} highlightedLines={highlightedLines} />}
+                        </details>
+                      );
+                    })}
                 </div>
               );
             }

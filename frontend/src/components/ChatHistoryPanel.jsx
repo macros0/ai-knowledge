@@ -7,9 +7,12 @@ import {resolveAsyncContentState} from "@/lib/asyncContentState.mjs";
 import {fmtDate,HistoryMessage} from "./ChatHistoryShared";
 import {useToast} from "./Toast";
 import {useI18n} from "@/i18n/LocaleContext";
+import {useChat} from "@/context/ChatContext";
+import {historyAssessmentMessage} from "@/lib/chatSourceAssessment.mjs";
 import Modal from "./Modal";
 import AsyncContentState from "./AsyncContentState";
 export default function ChatHistoryPanel() {
+  const {pending, setQueuedAssessmentRetry}=useChat();
   const {showToast}=useToast(); const {t,tc}=useI18n();
   const router=useRouter(); const params=useSearchParams();
   const session=params.get("session") || "";
@@ -63,7 +66,11 @@ export default function ChatHistoryPanel() {
       </div>
       <AsyncContentState state={current?.error ? "error" : !current || current.pending ? "loading" : "ready"}
         error={current?.error} message={current?.error ? t("chat.openThreadError",{message:friendlyApiError(current.error,t)}) : null} onRetry={()=>setRevision(n=>n+1)} />
-      {current?.data && <div className="chat-log history-log">{current.data.messages.map((m,i)=><HistoryMessage key={i} m={m}/>)}</div>}
+      {current?.data && <div className="chat-log history-log">{current.data.messages.map((m,i)=><HistoryMessage key={i} m={m} actionsPending={pending} onContinueWithoutAssessment={message => {
+        if (pending) return;
+        setQueuedAssessmentRetry(historyAssessmentMessage(message, current.data.session_id));
+        router.push("/chat");
+      }}/>)}</div>}
     </div> : <>
       <AsyncContentState state={resolveAsyncContentState({...listState,hasData:sessions.length>0})}
         error={listState.error} message={listState.error ? t("chat.historyLoadError",{message:friendlyApiError(listState.error,t)}) : null}

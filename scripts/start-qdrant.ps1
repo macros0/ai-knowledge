@@ -13,9 +13,9 @@
     on this machine those fall into the Windows Hyper-V/WSL excluded port
     range (netsh interface ipv4 show excludedportrange) and cannot be bound
     (os error 10013). Ports above the dynamic TCP range (1024-15000) are not
-    reserved by HNS, so 16333/16334 are stable. Storage lives in the
-    directory next to qdrant.exe (./storage), so data is preserved between
-    runs.
+    reserved by HNS, so 16333/16334 are stable. Persistent storage lives in
+    repository data/qdrant/storage. Existing installations in the old Temp
+    directory remain supported until their data is migrated.
 
 .EXAMPLE
     .\scripts\start-qdrant.ps1
@@ -33,7 +33,8 @@ $HealthUrl = "http://localhost:$HttpPort/collections"
 # Версия бинаря должна быть совместима со storage-форматом данных
 # (README: только ±1 минор). Текущий storage написан Qdrant 1.19.0.
 $Version = '1.19.0'
-$Known = "C:\Users\alexey\AppData\Local\Temp\opencode\qdrant\v$Version\qdrant.exe"
+$Known = Join-Path $env:LOCALAPPDATA "Programs\Qdrant\v$Version\qdrant.exe"
+$LegacyKnown = "C:\Users\alexey\AppData\Local\Temp\opencode\qdrant\v$Version\qdrant.exe"
 $SearchRoots = @(
     "$env:USERPROFILE\Downloads",
     "$env:USERPROFILE\Desktop",
@@ -44,6 +45,7 @@ $SearchRoots = @(
 
 function Find-QdrantExe {
     if (Test-Path -LiteralPath $Known) { return $Known }
+    if (Test-Path -LiteralPath $LegacyKnown) { return $LegacyKnown }
     foreach ($root in $SearchRoots) {
         if (-not (Test-Path -LiteralPath $root)) { continue }
         $hit = Get-ChildItem -LiteralPath $root -Recurse -Depth 4 -Filter 'qdrant.exe' -ErrorAction SilentlyContinue |
@@ -51,14 +53,22 @@ function Find-QdrantExe {
             Select-Object -First 1
         if ($hit) { return $hit.FullName }
     }
-    throw "qdrant $Version не найден. Скачайте: https://github.com/qdrant/qdrant/releases (x86_64-pc-windows-msvc) и распакуйте в каталог с v$Version."
+    throw "qdrant $Version не найден. Скачайте: https://github.com/qdrant/qdrant/releases (x86_64-pc-windows-msvc) и распакуйте в $([IO.Path]::GetDirectoryName($Known))."
 }
 
 $Exe = Find-QdrantExe
 
 # Рабочий каталог — корень, где лежит ./storage (данные коллекций).
-$StorageRoot = 'C:\Users\alexey\AppData\Local\Temp\opencode\qdrant'
-$WorkDir = if (Test-Path -LiteralPath (Join-Path $StorageRoot 'storage')) { $StorageRoot } else { Split-Path -Parent $Exe }
+$StorageRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'data\qdrant'
+$LegacyStorageRoot = 'C:\Users\alexey\AppData\Local\Temp\opencode\qdrant'
+$WorkDir = if (Test-Path -LiteralPath $StorageRoot) {
+    $StorageRoot
+} elseif (Test-Path -LiteralPath (Join-Path $LegacyStorageRoot 'storage')) {
+    $LegacyStorageRoot
+} else {
+    New-Item -ItemType Directory -Path $StorageRoot -Force | Out-Null
+    $StorageRoot
+}
 $LogDir = "$env:TEMP\opencode"
 $PidFile = Join-Path $LogDir 'qdrant.pid'
 

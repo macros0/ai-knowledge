@@ -86,3 +86,31 @@ test('history resizing follows the bottom only when the reader was already there
   scrolling.restoreChatViewport(area, reading);
   assert.equal(area.scrollTop, 100);
 });
+
+
+test('first source expansion keeps explicit reader intent through the short initial layout', () => {
+  const area = new ScrollArea();
+  area.scrollHeight = area.clientHeight;
+  area.getBoundingClientRect = () => ({top: 0});
+  area.querySelectorAll = () => [];
+  const reader = {...scrolling.captureChatViewport(area), atBottom: false};
+  const layoutSnapshot = scrolling.captureChatViewport(area, reader);
+  assert.equal(layoutSnapshot.atBottom, false);
+  area.scrollHeight = 3000;
+  scrolling.restoreChatViewport(area, layoutSnapshot);
+  assert.equal(area.scrollTop, 0);
+});
+
+test('an actual scroll to the bottom restores following after reader intent', () => {
+  const area = new ScrollArea();
+  area.getBoundingClientRect = () => ({top: 0});
+  area.querySelectorAll = () => [];
+  area.scrollTop = 100;
+  const reader = scrolling.captureChatViewport(area);
+  area.scrollTop = area.scrollHeight;
+  const bottom = scrolling.captureChatViewport(area, reader);
+  assert.equal(bottom.atBottom, true);
+  area.scrollHeight += 300;
+  scrolling.restoreChatViewport(area, bottom);
+  assert.equal(area.scrollTop, area.scrollHeight - area.clientHeight);
+});

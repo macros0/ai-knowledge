@@ -12,6 +12,9 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 def get_chat_settings(settings: Settings = Depends(get_settings)) -> ChatSettingsOut:
     default_mode = settings.search_mode_default if settings.search_mode_default in SEARCH_MODES else "hybrid"
     return ChatSettingsOut(
+        source_assessment={"available": settings.source_assessment_enabled,
+                           "default_enabled": settings.source_assessment_enabled and settings.source_assessment_default_enabled,
+                           "sample_size": settings.source_assessment_sample_size},
         knowledge_profile=settings.knowledge_profile,
         top_k_min=settings.chat_top_k_min,
         top_k_max=settings.chat_top_k_max,

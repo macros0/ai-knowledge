@@ -94,8 +94,12 @@ UI: http://localhost:16300
   (`SSO_REDIRECT_URI`/`SSO_POST_LOGOUT_REDIRECT_URI` в `.env`, дефолт `config.py`) указывают на
   `http://localhost:16300`; **при смене порта frontend обязательно обновить redirect URIs клиента
   в Keycloak** (docker-volume `keycloak-data`, вне git).
-- **Qdrant — локальный бинарь (не Docker): `%TEMP%\opencode\qdrant\v1.19.0\qdrant.exe`, данные в
-  `%TEMP%\opencode\qdrant\storage` (сохраняются между запусками). Слушает порты 16333 (REST) /
+- **Qdrant — локальный бинарь (не Docker): `%LOCALAPPDATA%\Programs\Qdrant\v1.19.0\qdrant.exe`, данные в
+  `data\qdrant\storage` относительно корня репозитория. Старые установки в
+  `%TEMP%\opencode\qdrant` поддерживаются, если постоянного каталога ещё нет.
+  Temp не подходит для постоянного хранения: 06.10.2026 обнаружено отсутствие бинарника
+  и части файлов индекса; для восстановления используется `backend/scripts/reindex.py`
+  из PostgreSQL при остановленном backend. Слушает порты 16333 (REST) /
   16334 (gRPC), НЕ дефолтные 6333/6334**: порт 6333 попал в исключённый диапазон Windows
   Hyper-V/WSL (проверить: `netsh interface ipv4 show excludedportrange protocol=tcp`) — bind
   падает с `os error 10013`. Резервации меняются от загрузки к загрузке, поэтому выбраны порты

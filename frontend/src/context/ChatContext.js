@@ -1,12 +1,14 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {readAssessmentPreference, writeAssessmentPreference} from "@/lib/chatSourceAssessment.mjs";
 import { useAuth } from "./AuthContext";
 import { getChatSettings, listRecentChatTurns } from "@/lib/api";
 import {createRecentHistoryLoader, EMPTY_RECENT_HISTORY} from "@/lib/chatRecentHistory.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 
 const FALLBACK_SETTINGS = {
+  source_assessment: {available: false, default_enabled: false, sample_size: 5},
   knowledge_profile: null,
   top_k_min: 1,
   top_k_max: 10,
@@ -36,6 +38,7 @@ export function ChatProvider({ children }) {
 function ChatState({ children }) {
   const { t } = useI18n();
   const [messages, setMessages] = useState([]);
+  const [queuedAssessmentRetry, setQueuedAssessmentRetry] = useState(null);
   const [sourceView, setSourceView] = useState("documents");
   const [draftQuery,setDraftQuery]=useState("");
   const [tags, setTags] = useState([]);
@@ -53,6 +56,13 @@ function ChatState({ children }) {
   }, [historyLoader]);
   const scrollPositionRef = useRef(null);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
+  const [assessSources, setAssessmentValue] = useState(null);
+  const assessmentChosen = useRef(false);
+  const setAssessSources = useCallback((enabled) => {
+    assessmentChosen.current = true;
+    setAssessmentValue(enabled);
+    try { writeAssessmentPreference(window.localStorage, enabled); } catch { /* Storage access may throw. */ }
+  }, []);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
   const [responseMode, setResponseMode] = useState("fast");
   const [selectedTopK, setSelectedTopK] = useState(null);
@@ -101,6 +111,11 @@ function ChatState({ children }) {
         if (!cancelled) {
           const merged = { ...FALLBACK_SETTINGS, ...data };
           setSettings(merged);
+          if (!assessmentChosen.current) {
+            let preference = merged.source_assessment.default_enabled;
+            try { preference = readAssessmentPreference(window.localStorage, preference); } catch { /* Use server default. */ }
+            setAssessmentValue(preference);
+          }
           setSelectedMode((prev) => {
             const modes = merged.search_modes ?? [];
             return modes.includes(prev) ? prev : merged.search_mode_default;
@@ -114,11 +129,11 @@ function ChatState({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({recentHistory, historyLoader, timelineView, setTimelineView, sourceView,setSourceView,draftQuery,setDraftQuery,messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
+    () => ({queuedAssessmentRetry, setQueuedAssessmentRetry, assessSources: assessSources ?? settings.source_assessment.default_enabled, setAssessSources, recentHistory, historyLoader, timelineView, setTimelineView, sourceView,setSourceView,draftQuery,setDraftQuery,messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
       responseMode, setResponseMode, selectedTopK: selectedTopK ?? settings.top_k_default, setSelectedTopK,
       showCustom, setShowCustom, customValue, setCustomValue, showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue,
       moduleFilter, setModuleFilter, devFilter, setDevFilter, sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen }),
-    [recentHistory, historyLoader, timelineView, startNewChat, sourceView, draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled,
+    [queuedAssessmentRetry, assessSources, setAssessSources, recentHistory, historyLoader, timelineView, startNewChat, sourceView, draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled,
       responseMode, selectedTopK, showCustom, customValue, showCustomDepth, customDepthValue, moduleFilter, devFilter, sourceLocale, searchSettingsOpen]
   );
 

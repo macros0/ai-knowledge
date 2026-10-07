@@ -234,6 +234,7 @@ class ChatSourceSelection(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    assess_sources: bool | None = Field(default=None, strict=True)
     mail_mode: Literal["all", "exclude", "only"] = "all"
     response_mode: Literal["documents", "fast", "full"] | None = None
     attempt_id: str | None = None
@@ -277,7 +278,33 @@ class ChatRequest(BaseModel):
     )
 
 
+class SourceAssessmentCapabilities(BaseModel):
+    available: bool = False
+    default_enabled: bool = False
+    sample_size: int = 5
+
+
+class SourceAssessmentLabelOut(BaseModel):
+    source_index: int
+    label: Literal["relevant", "partial", "irrelevant", "uncertain"]
+
+
+class SourceAssessmentOut(BaseModel):
+    schema_version: int = 1
+    status: Literal["disabled", "skipped", "completed", "unavailable", "cancelled"]
+    decision: Literal["allow", "reject", "uncertain"] | None = None
+    reason_code: str | None = None
+    requested_count: int = 0
+    sampled_count: int = 0
+    assessed_count: int = 0
+    source_indexes: list[int] = Field(default_factory=list)
+    items: list[SourceAssessmentLabelOut] = Field(default_factory=list)
+    truncated_indexes: list[int] = Field(default_factory=list)
+    duration_ms: float = 0
+
+
 class ChatSettingsOut(BaseModel):
+    source_assessment: SourceAssessmentCapabilities = Field(default_factory=SourceAssessmentCapabilities)
     knowledge_profile: str = "Основной контур"
     response_modes: list[str] = Field(default_factory=lambda: ["documents", "fast", "full"])
     search_depth_default: int = 40
@@ -333,6 +360,7 @@ class ChatSource(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    source_assessment: SourceAssessmentOut | None = None
     query: str
     answer: str
     sources: list[ChatSource]

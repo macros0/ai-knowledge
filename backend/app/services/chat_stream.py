@@ -23,6 +23,16 @@ async def stream_chat(work, *, context=None, independent_calls: bool = False, cu
     events = queue.Queue()
     cancel = threading.Event()
     attempt_ref = None
+    draft_parts = []
+
+    def retain_draft(error_code=None):
+        if attempt_ref is None or current_user is None or not draft_parts:
+            return
+        try:
+            chat_history.retain_attempt_draft(attempt_ref, current_user, "".join(draft_parts),
+                error_code=error_code, request_id=context.request_id)
+        except Exception as exc:
+            logger.warning("Could not retain chat draft (%s)", type(exc).__name__)
 
     def emit_start(ref):
         nonlocal attempt_ref
@@ -32,6 +42,7 @@ async def stream_chat(work, *, context=None, independent_calls: bool = False, cu
     def emit(text):
         if cancel.is_set():
             raise LLMCancelled()
+        draft_parts.append(text)
         events.put({"type": "delta", "text": text})
 
     def emit_sources(sources):
@@ -53,10 +64,11 @@ async def stream_chat(work, *, context=None, independent_calls: bool = False, cu
             if not cancel.is_set():
                 events.put({"type": "result", "data": result.model_dump(mode="json")})
         except LLMCancelled:
-            pass
+            retain_draft()
         except Exception as exc:
             # Neither provider response bodies nor exception text cross the UI boundary.
             code = exc.code if isinstance(exc, ApiError) else public_error_code(exc)
+            retain_draft(code)
             events.put({"type": "error", "code": code,
                         "status": exc.status_code if isinstance(exc, ApiError) else 503,
                         "request_id": context.request_id})
@@ -91,6 +103,8 @@ async def stream_chat(work, *, context=None, independent_calls: bool = False, cu
                     yield '{"type":"ping"}\n'
                     ping_at = time.monotonic() + 5
                 await asyncio.sleep(.05)
+                continue
+            if cancel.is_set():
                 continue
             event_seq += 1
             if attempt_ref is not None:

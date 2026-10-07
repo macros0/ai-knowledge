@@ -92,7 +92,7 @@ test("a pointer click expands the preview after release so its target does not m
   preview.onFocusCapture();
   assert.equal(view.expanded["history:5"], undefined, "Pointer focus must not move the button before mouseup");
   preview.onPointerUpCapture();
-  preview.onClickCapture();
+  preview.onClickCapture({target: {closest: () => null}});
   assert.equal(view.expanded["history:5"], true);
 });
 
@@ -144,4 +144,18 @@ test("initial history retry starts at the latest answer even if the error screen
   area.scrollHeight = 2000;
   scroll.restoreChatViewport(area, position.current);
   assert.equal(area.scrollTop, 2000);
+});
+
+
+test("opening document sources expands its dialog even before overflow is measured", () => {
+  let view = {startKey: null, expanded: {}};
+  render({turns: turns.slice(4), view, setView: update => {view = update(view);}});
+  const event = {target: {closest: () => ({parentElement: {open: false, matches: () => true}})}};
+  previews[0].onClickCapture(event);
+  assert.equal(view.expanded["history:5"], true);
+  const expandedView = view;
+  previews[0].onClickCapture(event);
+  assert.equal(view, expandedView, "repeated expansion must never collapse the dialog");
+  render({turns: turns.slice(4), view});
+  assert.equal(previews[0].className.includes("limited"), false);
 });

@@ -9,12 +9,13 @@ import { CheckIcon, CopyIcon } from "./icons";
 import ErrorReference from "./ErrorReference";
 import AppliedTerms from "./AppliedTerms";
 import ChatAnswer from "./ChatAnswer";
+import ChatSourceAssessment from "./ChatSourceAssessment";
 import ChatSources from "./ChatSources";
 
 const EMPTY = [];
 
 export default memo(function ChatMessageView({ message: m, index, isLatest = true, isPending, actionsPending, isCopied, searchDepthMax, sourceView,
-  onEdit, onRefreshSearch, onCopy, onSelect, onAnswerSelected, onAddToScope, onRetry, onRepeatWithoutGlossary, onStop, onToggleSources, onToggleSourceGroup, onSourceViewChange }) {
+  onEdit, onRefreshSearch, onCopy, onSelect, onAnswerSelected, onAddToScope, onRetry, onRepeatWithoutGlossary, onContinueWithoutAssessment, onStop, onToggleSources, onToggleSourceGroup, onSourceViewChange }) {
   const { t } = useI18n();
   const sources = m.sources ?? EMPTY;
   const selectedIndexes = m.selectedSourceIndexes ?? EMPTY;
@@ -42,13 +43,19 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
                 </button>
               )}
             </div>
-            <div className="bubble">
+            {(m.role !== "assistant" || m.text || isPending) && <div className="bubble">
               {m.role === "assistant" ? (
-                <ChatAnswer text={m.text} sources={sources} />
+                <ChatAnswer text={m.text || (isPending ? t("chat.thinking") : "")} sources={sources} />
               ) : (
                 m.text
               )}
-            </div>
+            </div>}
+            {m.role === "assistant" && m.failureNotice && (
+              <div className="meta" role={m.failed ? "alert" : "status"}>
+                {m.hasStreamedText && <div>{t("chat.retainedAnswerNotice")}</div>}
+                <div>{m.failureNotice}</div>
+              </div>
+            )}
             {m.role === "assistant" && availableSources.length > 0 && selectedIndexes.length > 0 && (
               <div className="source-selection-actions">
                 <button type="button" className="btn" disabled={actionsPending || !m.selectedSourceIndexes?.length} onClick={() => onAnswerSelected(m)}>
@@ -64,12 +71,12 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
             {m.role === "assistant" && m.requestDocIds != null && (
               <div className="meta">{t("chat.scopeUsed", { count: m.requestDocIds.length })}</div>
             )}
-            {m.role === "assistant" && searchLimitWarning(m.searchLimitReached, m.sources?.length ?? 0, m.requestSearchDepth, searchDepthMax) && (
+            {m.role === "assistant" && m.sourceAssessment?.decision !== "reject" && searchLimitWarning(m.searchLimitReached, m.sources?.length ?? 0, m.requestSearchDepth, searchDepthMax) && (
               <div className="meta" role="status">
                 {t(searchLimitWarning(m.searchLimitReached, m.sources?.length ?? 0, m.requestSearchDepth, searchDepthMax), { depth: m.requestSearchDepth })}
               </div>
             )}
-            {m.role === "assistant" && m.responseMode === "fast" && m.sources?.length > 0 && (
+            {m.role === "assistant" && m.responseMode === "fast" && m.sourceAssessment?.decision !== "reject" && m.sources?.length > 0 && (
               <div className="meta" role="status">
                 {t("chat.fastCoverage", {
                   used: m.sources.filter((source) => source.in_model_context).length,
@@ -77,7 +84,7 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
                 })}
               </div>
             )}
-            {m.role === "assistant" && m.progress?.phase && isPending && (
+            {m.role === "assistant" && m.progress?.phase && m.progress.phase !== "source_assessment" && isPending && (
               <div className="chat-progress" role="status">
                 {m.progress.phase === "synthesis"
                   ? t("chat.synthesizing")
@@ -99,6 +106,9 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
                 {t("chat.glossary.repeatWithout")}
               </button>
             )}
+            {m.role === "assistant" && !m.stopped && <ChatSourceAssessment outcome={m.sourceAssessment} candidateCount={sources.length}
+              responseMode={m.responseMode} pending={actionsPending} onShowCandidates={() => toggle(true)}
+              onContinueWithoutAssessment={onContinueWithoutAssessment ? () => onContinueWithoutAssessment(m) : undefined} />}
             <ChatSources sources={sources} selectedIndexes={selectedIndexes} selectionEnabled={selectionEnabled}
               responseMode={m.responseMode} open={sourcesOpen} onSelect={select} onToggle={toggle}
               view={m.sourceView ?? sourceView} onViewChange={onSourceViewChange ? changeSourceView : undefined}

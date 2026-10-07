@@ -7,7 +7,10 @@ import { CiteLink, remarkCiteLinks } from "@/lib/chatSources";
 import { searchLimitWarning } from "@/lib/chatAnswerState.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 import MarkdownViewer from "./MarkdownViewer";
+import ChatSourceAssessment from "./ChatSourceAssessment";
 import AppliedTerms from "./AppliedTerms";
+import ErrorReference from "./ErrorReference";
+import {ApiError, friendlyApiError} from "@/lib/api";
 
 export function fmtDate(iso) {
   if (!iso) return "—";
@@ -21,7 +24,8 @@ export function SourceBadges({sources,responseMode}) {
   return <ChatSources sources={sources || []} responseMode={responseMode} open={open} onToggle={setOpen} view={sourceView} onViewChange={setSourceView}/>;
 }
 
-export function HistoryMessage({ m, userLabel }) {
+export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, actionsPending }) {
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const { t } = useI18n();
   const youLabel = userLabel ?? t("chat.you");
   const attempt = m.retrieval_metadata?.answer_attempt;
@@ -29,7 +33,7 @@ export function HistoryMessage({ m, userLabel }) {
     m.role === "assistant" ? (
       <MarkdownViewer
         className="okf-markdown chat-markdown"
-        text={attempt && attempt.status !== "completed"
+        text={attempt && attempt.status !== "completed" && !m.content
           ? t(attempt.status === "stopped" ? "chat.answerStopped" : "chat.answerIncomplete")
           : m.content}
         remarkPlugins={[remarkCiteLinks]}
@@ -44,13 +48,20 @@ export function HistoryMessage({ m, userLabel }) {
     <div className={`msg ${m.role}`}>
       <div className="role">{m.role === "user" ? youLabel : t("chat.assistant")}</div>
       <div className="bubble history-bubble">{content}</div>
+      {m.role === "assistant" && attempt && attempt.status !== "completed" && m.content && (
+        <div className="meta" role={attempt.status === "failed" ? "alert" : "status"}>
+          <div>{t("chat.retainedAnswerNotice")}</div>
+          {attempt.error_code && <div>{t("chat.errorPrefix", {message: friendlyApiError(new ApiError("", {code: attempt.error_code}), t)})}</div>}
+        </div>
+      )}
+      {m.role === "assistant" && attempt?.retained_draft && <ErrorReference requestId={attempt.request_id} />}
       {m.role === "assistant" && m.retrieval_metadata?.source_selection && (
         <div className="meta">{t("chat.selectedAnswerContext", { count: m.retrieval_metadata.source_selection.indexes.length })}</div>
       )}
       {m.role === "assistant" && m.retrieval_metadata?.search_doc_ids != null && (
         <div className="meta">{t("chat.scopeUsed", { count: m.retrieval_metadata.search_doc_ids.length })}</div>
       )}
-      {m.role === "assistant" && searchLimitWarning(m.retrieval_metadata?.search_limit_reached, m.sources?.length ?? 0, m.retrieval_metadata?.search_depth) && (
+      {m.role === "assistant" && m.retrieval_metadata?.source_assessment?.decision !== "reject" && searchLimitWarning(m.retrieval_metadata?.search_limit_reached, m.sources?.length ?? 0, m.retrieval_metadata?.search_depth) && (
         <div className="meta" role="status">
           {t(searchLimitWarning(m.retrieval_metadata.search_limit_reached, m.sources?.length ?? 0, m.retrieval_metadata.search_depth), { depth: m.retrieval_metadata.search_depth })}
         </div>
@@ -58,7 +69,11 @@ export function HistoryMessage({ m, userLabel }) {
       {m.role === "assistant" && m.retrieval_metadata && (
         <AppliedTerms status={m.retrieval_metadata.expansion_status} appliedTerms={m.retrieval_metadata.applied_terms} />
       )}
-      <SourceBadges sources={m.sources} responseMode={attempt?.mode} />
+      {m.role === "assistant" && (!attempt || attempt.status === "completed") && <ChatSourceAssessment
+        outcome={m.retrieval_metadata?.source_assessment} candidateCount={m.sources?.length ?? 0}
+        responseMode={attempt?.mode} pending={actionsPending} onShowCandidates={() => setSourcesOpen(true)}
+        onContinueWithoutAssessment={onContinueWithoutAssessment ? () => onContinueWithoutAssessment(m) : undefined} />}
+      <ChatSources sources={m.sources || []} responseMode={attempt?.mode} open={sourcesOpen} onToggle={setSourcesOpen} />
     </div>
   );
 }

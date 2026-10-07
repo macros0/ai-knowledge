@@ -1139,6 +1139,45 @@ Integration 2026-10-01: the diagnostic allowlist includes the registered chat
 errors, search-scope route and normalized attempt cancellation template.
 Arbitrary error codes and raw attempt parameters remain excluded.
 
+
+### File-material candidate 05.10.2026 — scoped proof, release OPEN
+
+Task3a.5 продолжен в локальном `audit-v11-files`, image `sha256:bde6a8d1b6e7bd133938a5719f6c9281fcc822f936d8ad5aa64422f3b933a4b7`. Подготовка defaults/passfile/CA/CRL выполняется отдельным owned helper; source file I/O не выполняется в denial DB worker. Все фазы используют исходный абсолютный WORK_SECONDS=4s; helper defaults/prepare ограничены min(1s, remaining budget), cleanup укладывается в общий предел0,5s, HTTP target<5s сохранён. IPC32KiB; passfile1MiB, CA/CRL по4MiB, максимум3 copied files/9MiB. Материалы принадлежат attempt до connection.close, источники не удаляются, новый attempt не использует cache.
+
+Поддержаны в выбранном Linux proof: explicit/env/default HOME passfile, original hostname/port при hostaddr, escaped colon/backslash, password precedence/first-match, missing и Unix mode0644 ignore, default HOME CA, реальный SCRAM/SQL/commit/response→DB→stdout и Unix socket. FIFO/nonregular/oversize/обнаруженная rotation получают fixed unsupported-profile отказ до native connect; mTLS/client key/encrypted key, sslrootcert=system, sslcrldir и sslkeylogfile также отказывают заранее, TLS не ослабляется. Штатный TLS verify-full и отрицательные hostname/CA случаи сохранены.
+
+Defaults helper использует опубликованный ABI PQconndefaults/PQconninfoFree из закреплённого psycopg_binary.libs без импорта всего Psycopg; проверяет libpq build и однозначность library, native defaults parity PASS. Четыре параллельных defaults на2CPU: первоначально четыре timeout1.003s, после устранения тяжёлого импорта0.255–0.260s; численные budgets/acceptance thresholds не повышались. SQLAlchemy adapters остаются в parent. Helper не импортирует app settings и не выполняет SQL; PG values передаются только в private stdin, не argv/inherited environment/logs.
+
+SQLAlchemy NullPool может поглотить DBAPI close exception. Поэтому владелец denial attempt отдельно закрывает tracked connection и проверяет cleanup, сигнализируя failure ровно один раз. Incomplete cleanup quarantines slot; quarantined материалы не запускают второй helper. Реальная PG/NullPool regression подтвердила quarantine и сохранение уже committed immutable event после post-commit cleanup failure. Не утверждать rollback подтверждённого commit.
+
+Свежие проверки этого snapshot: required Linux all **68 PASS/0 SKIP**, network/lifecycle **24 PASS/0 SKIP**, PG faults/capacity **31 PASS/0 SKIP**, whole PGDATA/WAL/cold-start **2 PASS/0 SKIP**. Native Windows focused **101 PASS/6 SKIP** (все6 — POSIX FIFO/default HOME cases); Psycopg3.3.6/libpq180004, основной venv не обновлён. Linux Psycopg3.3.6/libpq180006/SQLAlchemy2.1.3; **274/274 packaged source hashes matched**. Scoped Ruff PASS. Required profile runner сохраняет16 исходных cases; теперь19 PG profiles+14service/startup+8protocol+19file-material+8file-lifecycle=68; default all68, regular66 диагностический, blocked2. Неявные source files заменены attempt-private snapshot/missing paths до native connect.
+
+Исходные13/3, service35/2, первый file snapshot Windows failure, network21/3 и22/2, а также NullPool/repeated-cleanup RED66/2 сохранены в private evidence. DNS instrument теперь идентифицирует только exact resolver helper: новые file children не считаются resolver и не могут преждевременно отметить фазу SIGTERM. HTTP<5s, max4, число bursts и fault thresholds не изменены. Owned контейнеры/network/socket volume удалены после проверки identities; runtime вне этих disposable fixtures не обновлён.
+
+**Открыто:** реальный projected Secret/symlink-generation rotation и multi-file consistency; Windows default paths/protected temp ACL и proof actual helper interpreter reap; точные N/N+1/truncated/nonzero/blocked-stdin IPC edges; blocked regular filesystem metadata/read (тест stalled helper подтверждает kill/reap, не NFS/CSI); file-phase burst/cancel/SIGTERM и ресурсы/tmp recovery после SIGKILL; local temp creation/owner marker fault и cleanup deadline extremes; GSS/SSPI/LDAP/OpenSSL-provider profiles. mTLS/system trust/CRL-directory остаются scoped unsupported. Full backend/coverage/project/Compose и dependency gate этого snapshot, новый home projected-Secret/HTTPS/backup/restore и hosted CI **не выполнены**. Домашний audit-v7 не обновлён. Новый freeze не является commit/publication или полной release приёмкой. Составные C/C.1/D/E сохраняются OPEN; дизайн и ранний config/startup path реализованы в указанном объёме.
+
+
+### File rotation/lifecycle candidate (05.10.2026)
+
+V13 проверяет generation/missing input consistency; changed file set получает фиксированный отказ. Windows snapshot directory получает protected DACL до secret copy: только current token user/SYSTEM/Administrators; ошибки ACL не допускают fallback. На выбранном native Windows runtime подтверждены directory/copy ACL и actual interpreter reap. Required Linux profile86/network24/PG31/storage2 PASS, native114PASS/8POSIX SKIP. Synthetic projected layout и injected metadata/read faults не являются proof реальных Kubernetes mounts/NFS/CSI. Parent temp/marker creation, крайние cleanup faults/SIGKILL, actual CA/CRL rotation и новый full release/home/hosted CI остаются OPEN. Подробности: [отчёт](docs/superpowers/reports/2026-10-04-audit-outbox-acceptance.md#file-rotation-и-lifecycle-05102026--scoped-proof-release-open).
+
+
+### Bounded temp/owner candidate (05.10.2026)
+
+V14 создаёт private directory/owner только в bounded helper; parent не делает temp filesystem probes/marker writes. Выбранный temp root должен быть writable: Unix TMPDIR/TEMP/TMP или/tmp, Windows TEMP/TMP илиSYSTEMROOT/Temp; silent fallback отсутствует. Missing directory подтверждает очистку, markerless/foreign directory не удаляется. Incomplete create/prepare/DNS/cleanup сохраняет owner в private process quarantine registry и удерживает slot без retry. Parent SIGKILL уничтожает registry, operational orphan cleanup требует отдельного proof. Локально profiles100/network24/PG31/storage2 PASS, native127PASS/9POSIX SKIP; actual Secret/NFS/CSI, remaining cleanup edges и full release/home/CI OPEN. [Отчёт](docs/superpowers/reports/2026-10-04-audit-outbox-acceptance.md#bounded-temp-creation-и-cleanup-ownership-05102026--scoped-proof-release-open).
+
+
+### Cleanup edge candidate (05.10.2026)
+
+V16: exact regular32-byte owner guard, bounded marker/unlink/rmdir faults, нулевой абсолютный deadline и IPC close failure проверены. Неуспешная очистка сохраняет owner/slot; после удаления marker и failed rmdir каталог остаётся markerless/quarantined, автоматического retry/marker repair нет. Общий cleanup≤.5s сохранён, рабочая/reap доля .4/.1s (v15 .25/.25 приводила к раннему timeout в нагрузке); меньший reap reserve не отменяет quarantine при неполном завершении. Work4s/helper1s/HTTP<5s/admission4 прежние.
+
+Controlled parent SIGKILL/external ownership witness — fixture-only, не product orphan recovery. Не очищать общий Temp по prefix/age: private registry не переживает parent death. Требуются separate ownership/lifetime/authorization proof и actual Kubernetes Secret/private temp tests, включая emptyDir container restart versus Pod delete. Scoped Linux120/network24/PG31/storage2, native144PASS/12POSIX SKIP и selected10×26PASS подтверждены; full release/home/hosted CI, actual CSI/NFS и remaining profiles OPEN. Домашний v7 не обновлён. [Отчёт](docs/superpowers/reports/2026-10-04-audit-outbox-acceptance.md#cleanup-edges-и-budget-05102026--scoped-proof-release-open).
+
+
+### Selected actual Secret/temp proof (05.10.2026)
+
+На unchanged v16 выполнен отдельный домашний kind Pod proof: actual read-only projected Secret без subPath, UID/GID/fsGroup1000, read-only root/private memory emptyDir64Mi. Explicit/default paths, coherent CA/CRL rotation sampling, old snapshot hashes, CRL removal/reappearance и container-restart versus new-Pod temp lifetime PASS;274 running source hashes matched. Synthetic file bytes — не native TLS/CRL/auth proof. Direct0440 passfile сохраняет ignore semantics; test-only0600 staging принимает bytes, не реализует dynamic synchronizer. Product chart temp/projection/passfile configuration и operational orphan recovery, remaining profiles/full release/home app upgrade/CI OPEN. Работающее приложение не обновлено. [Отчёт](docs/superpowers/reports/2026-10-04-audit-outbox-acceptance.md#actual-projected-secret-и-emptydir-05102026--selected-file-proof).
+
 ## Client draft and upload ownership (2026-10-06)
 
 Chat state, drafts, upload File objects and per-file results are scoped to the
@@ -1163,3 +1202,14 @@ source-map-js to 1.2.2, within Next/PostCSS dependency ranges. This removes
 GHSA-vfj7-8cjw-p6xm, GHSA-wq5f-xc86-pv6w and GHSA-68fv-2mgg-jv7q from the
 installed dependency graph. The audit includes production, development,
 optional and peer dependencies; the existing audit gate is unchanged.
+
+## Optional source assessment connection (2026-10-07)
+
+The assessor uses a server-only settings snapshot. An explicit assessor URL never
+inherits the primary API key and defaults to the standard profile. Keys, URLs,
+prompts, raw provider responses and evidence quotes are excluded from assessment
+API/history output. Stored policy snapshots and canonical selection evidence are
+redacted from public history. A new provider is an explicit deployment choice;
+there is no automatic fallback. Source text remains untrusted prompt data and
+canonical document visibility is checked again before publishing assessed sources.
+The assessment preference alone may be persisted in browser localStorage.

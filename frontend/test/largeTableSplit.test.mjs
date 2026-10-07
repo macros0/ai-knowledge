@@ -185,3 +185,24 @@ test("некорректный maxRows падает на дефолтный ка
   assert.equal(parts.length, 2);
   assert.equal(parts[1].remainingRows, 1);
 });
+
+test('wide tables have bounded cell counts per parsed part and preserve every row', () => {
+  const original = table(180, 80);
+  const parts = splitLargeTables(original);
+  const preview = parts.find(p => p.tablePreview);
+  assert.ok(preview, 'wide tables must split even below 300 rows');
+  const remainder = parts.find(p => p.type === 'tableRemainder');
+  const pieces = [preview.text, ...remainder.chunks];
+  assert.ok(pieces.every(text => text.split('\n').length * 180 <= 2000));
+  assert.deepEqual(pieces.flatMap(text => text.split('\n').slice(2)), original.split('\n').slice(2));
+  assert.deepEqual([preview.lineMap, ...remainder.chunkLineMaps].flatMap(lines => lines.slice(2)),
+    Array.from({length:80},(_,i)=>i+3));
+});
+
+test('long table rows bound parsed text size without splitting or losing rows',()=>{
+ const rows=Array.from({length:20},(_,i)=>`| ${i} | ${'x'.repeat(10000)} |`);
+ const md=['| Number | Text |','| --- | --- |',...rows].join('\n');
+ const parts=splitLargeTables(md);const pieces=[parts[0].text,...parts[1].chunks];
+ assert.ok(pieces.every(text=>text.length<=32768));
+ assert.deepEqual(pieces.flatMap(text=>text.split('\n').slice(2)),rows);
+});

@@ -6,6 +6,8 @@ import json
 import logging
 import re
 import threading
+import time
+from dataclasses import replace
 import uuid
 from dataclasses import asdict
 from functools import lru_cache
@@ -62,6 +64,10 @@ from app.services.glossary.snapshot import GlossaryMigrationRequiredError
 from app.services.generation_store import lock_generation_read
 from app.services.ui_dictionary import localized_message
 from app.services.chat_source_selection import snapshot_blocks, restore_blocks
+from app.services.source_assessment.config import resolve_assessment_config, resolve_assessment_connection
+from app.services.source_assessment.factory import get_assessor
+from app.services.source_assessment.service import assess_sources
+from app.services.source_assessment.types import AssessmentOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +154,7 @@ def _verified_facts(raw: str, source_text: dict[int, str]) -> list[dict]:
     if not isinstance(parsed, dict) or not isinstance(parsed.get("facts"), list):
         raise ValueError("Invalid evidence JSON")
     facts = parsed["facts"]
+    verified = []
     for fact in facts:
         index = fact.get("source") if isinstance(fact, dict) else None
         quote = fact.get("quote") if isinstance(fact, dict) else None
@@ -155,8 +162,11 @@ def _verified_facts(raw: str, source_text: dict[int, str]) -> list[dict]:
                 not isinstance(quote, str) or not quote or
                 quote not in source_text[index] or
                 not isinstance(fact.get("text"), str) or not fact["text"].strip()):
-            raise ValueError("Evidence quote does not match source")
-    return facts
+            continue
+        verified.append(fact)
+    if facts and not verified:
+        raise ValueError("Evidence quote does not match source")
+    return verified
 
 
 def _fact_groups(facts: list[dict], counter: ChatTokenBudget, output_tokens: int) -> list[list[dict]]:
@@ -340,6 +350,80 @@ def search_scope(req: ChatSearchScopeRequest, current_user: User = Depends(requi
     return _search_scope_documents(req.doc_ids)
 
 
+def _assessment_request_snapshot(req, settings, config):
+    requested = req.assess_sources
+    effective = req.source_selection is None and req.response_mode != "documents" and settings.source_assessment_enabled and (
+        settings.source_assessment_default_enabled if requested is None else requested)
+    return {"requested_enabled": requested, "effective_enabled": effective,
+            "sample_size": config.sample_size, "policy_version": config.policy_version,
+            "backend": config.backend, "model_id": config.model_id,
+            "config_fingerprint": config.config_fingerprint}
+
+
+def _run_source_assessment(req, blocks, sources, settings, attempt_ref, config, current_user):
+    snapshot = _assessment_request_snapshot(req, settings, config)
+    effective = snapshot["effective_enabled"]
+    metadata = {"source_assessment_request": snapshot,
+                "source_assessment_replay": {"requested_enabled": req.assess_sources},
+                "chat_request": req.model_dump(exclude={"session_id", "attempt_id"})}
+    serialized = [s.model_dump(mode="json") for s in sources]
+    if attempt_ref:
+        chat_history.save_attempt_sources(attempt_ref, current_user,
+            serialized, retrieval_metadata=metadata)
+    cancel = request_state().get("cancel")
+    deadline = time.monotonic() + config.timeout_seconds
+    parent = request_state().get("deadline")
+    if parent is not None:
+        deadline = min(deadline, parent)
+    # Retrieval is already complete. Publish its validated snapshot before the
+    # potentially slow assessment, including explicitly selected sources.
+    on_sources = request_state().get("on_sources")
+    if effective and blocks and on_sources:
+        _validate_final_source_state(blocks)
+        on_sources(serialized)
+    on_progress = request_state().get("on_progress")
+    if effective and blocks and on_progress:
+        on_progress({"phase": "source_assessment", "status": "running"})
+    adapter = get_assessor(config, resolve_assessment_connection(settings)) if effective and blocks else None
+    try:
+        outcome = assess_sources(req.query, req.locale, blocks, enabled=effective,
+            config=config, assessor=adapter, deadline=deadline, cancel=cancel)
+    except LLMCancelled:
+        outcome = AssessmentOutcome(status="cancelled", requested_count=config.sample_size)
+        if attempt_ref:
+            chat_history.save_attempt_sources(attempt_ref, current_user, serialized,
+                retrieval_metadata={"source_assessment": outcome.public().model_dump(mode="json")})
+        raise
+    if req.source_selection is not None and outcome.status == "disabled":
+        outcome = replace(outcome, reason_code="explicit_selection")
+    elif req.response_mode == "documents" and outcome.status == "disabled":
+        outcome = replace(outcome, reason_code="documents_mode")
+    elif not settings.source_assessment_enabled and outcome.status == "disabled":
+        outcome = replace(outcome, reason_code="deployment_disabled")
+    # Recheck canonical visibility/generation before publishing assessed sources.
+    if effective and blocks:
+        _validate_final_source_state(blocks)
+    public = outcome.public()
+    metadata["source_assessment"] = public.model_dump(mode="json")
+    metadata["source_assessment_metrics"] = {"backend": outcome.backend, "model_id": outcome.model_id,
+        "policy_version": outcome.policy_version, "completion_count": outcome.completion_count,
+        "queue_ms": outcome.queue_ms, "input_tokens": outcome.input_tokens, "output_tokens": outcome.output_tokens,
+        "duration_ms": outcome.duration_ms, "truncation_count": len(outcome.truncated_indexes)}
+    if attempt_ref:
+        chat_history.save_attempt_sources(attempt_ref, current_user, serialized,
+            retrieval_metadata=metadata)
+    if effective and blocks and on_progress:
+        on_progress({"phase": "source_assessment", "status": public.status,
+                     "source_assessment": public.model_dump(mode="json")})
+    return public, metadata
+
+
+def _assessment_reject_answer(req, outcome):
+    if req.locale.lower().startswith("en"):
+        return f"Search did not provide sufficiently relevant sources. Assessed the first {outcome.sampled_count} fragments."
+    return f"Поиск не дал достаточно релевантных источников. Проверены первые {outcome.sampled_count} фрагментов."
+
+
 def _answer_selected(req, current_user, settings, attempt_ref):
     saved = chat_history.read_attempt_sources(req.session_id, current_user, req.source_selection.attempt_id)
     if saved is None:
@@ -365,14 +449,17 @@ def _answer_selected(req, current_user, settings, attempt_ref):
                              'attempt_id': req.source_selection.attempt_id, 'indexes': indexes}}
     chat_history.save_attempt_sources(attempt_ref, current_user,
         [source.model_dump(mode='json') for source in sources], retrieval_metadata=selected_metadata)
+    source_assessment, assessment_metadata = _run_source_assessment(req, merged, sources, settings,
+        attempt_ref, resolve_assessment_config(settings), current_user)
     on_sources = request_state().get('on_sources')
     if on_sources:
         on_sources([source.model_dump(mode='json') for source in sources])
-    answer = _answer_mode(req, merged, sources, settings, (), {}, {},
-                          attempt_ref=attempt_ref, current_user=current_user)
+    answer = (_assessment_reject_answer(req, source_assessment) if source_assessment.decision == "reject" else
+        _answer_mode(req, merged, sources, settings, (), {}, {},
+                     attempt_ref=attempt_ref, current_user=current_user))
     _validate_final_source_state(merged)
     return ChatResponse(query=req.query, answer=answer, sources=sources, session_id=attempt_ref.session_id,
-                        response_mode='full', attempt_id=attempt_ref.attempt_id)
+                        response_mode='full', attempt_id=attempt_ref.attempt_id, source_assessment=source_assessment)
 
 
 def _filtered_chat_blocks(hits, req, settings, exact_groups):
@@ -394,6 +481,12 @@ def _filtered_chat_blocks(hits, req, settings, exact_groups):
 
 
 def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_ref=None) -> ChatResponse:
+    assessment_config = resolve_assessment_config(settings)
+    if attempt_ref:
+        chat_history.save_attempt_sources(attempt_ref, current_user, [], retrieval_metadata={
+            "source_assessment_request": _assessment_request_snapshot(req, settings, assessment_config),
+            "source_assessment_replay": {"requested_enabled": req.assess_sources},
+            "chat_request": req.model_dump(exclude={"session_id", "attempt_id"})})
     if req.source_selection:
         return _answer_selected(req, current_user, settings, attempt_ref)
     scope_ids = None
@@ -483,6 +576,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
                       if not req.locale.lower().startswith('en') else
                       'No sources found in the search scope. Adjust your question, filters, or the scope documents.')
         sources: list[ChatSource] = []
+        source_assessment, assessment_metadata = _run_source_assessment(req, [], sources, settings,
+            attempt_ref, assessment_config, current_user)
         on_sources = request_state().get("on_sources")
         if on_sources:
             on_sources([])
@@ -543,10 +638,17 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
                 retrieval_metadata={**retrieval_summary, "mail_mode": req.mail_mode,
                                     "source_blocks": snapshot_blocks(merged)},
             )
+        source_assessment, assessment_metadata = _run_source_assessment(req, merged, sources, settings,
+            attempt_ref, assessment_config, current_user)
+        if source_assessment.decision == "reject":
+            for source in sources:
+                source.in_model_context = False
         if on_sources:
             on_sources([source.model_dump(mode="json") for source in sources])
 
-        if req.response_mode is not None:
+        if source_assessment.decision == "reject":
+            answer = _assessment_reject_answer(req, source_assessment)
+        elif req.response_mode is not None:
             for index, block in enumerate(merged, 1):
                 block["_source_index"] = index
             answer = _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lexical_cache,
@@ -580,6 +682,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         for term in plan.applied_terms
     ]
     retrieval_metadata = {
+        **assessment_metadata,
         **retrieval_summary,
         "schema_version": 1,
         "mail_mode": req.mail_mode,
@@ -630,6 +733,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
         query=req.query,
         answer=answer,
         sources=sources,
+        source_assessment=source_assessment,
         **retrieval_summary,
         response_mode=req.response_mode,
         attempt_id=attempt_ref.attempt_id if attempt_ref else None,
@@ -713,7 +817,7 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
                 render=pack_render,
             )
     except ChatBudgetUnavailable as exc:
-        raise ApiError(status_code=503, code=errors.CHAT_BUDGET_UNAVAILABLE, detail="Бюджет модели недоступен") from exc
+        raise ApiError(status_code=503, code=exc.code, detail="Бюджет модели недоступен") from exc
     except EvidenceTooLarge as exc:
         raise ApiError(status_code=422, code=errors.CHAT_EVIDENCE_TOO_LARGE, detail="Фрагмент не помещается в контекст") from exc
 
@@ -807,6 +911,8 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
                 allowed_indices = {block["_source_index"] for block in batch}
                 cited_indices = {int(item) for item in re.findall(r"\[(\d+)\]", answer)}
                 if not cited_indices.issubset(allowed_indices):
+                    # Generation used this batch even when its citation check fails.
+                    mark(batch)
                     raise ValueError("Answer cited source outside model context")
                 for index in cited_indices:
                     sources[index - 1].cited = True
@@ -915,7 +1021,7 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
     except LLMBusyError as exc:
         raise _busy("Все слоты генерации ответа заняты. Повторите попытку позже.", exc.retry_after) from exc
     except ChatBudgetUnavailable as exc:
-        raise ApiError(status_code=503, code=errors.CHAT_BUDGET_UNAVAILABLE,
+        raise ApiError(status_code=503, code=exc.code,
                        detail="Бюджет модели недоступен") from exc
     except EvidenceTooLarge as exc:
         raise ApiError(status_code=422, code=errors.CHAT_EVIDENCE_TOO_LARGE,

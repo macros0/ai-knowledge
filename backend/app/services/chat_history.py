@@ -127,6 +127,26 @@ def finish_attempt(ref: AttemptRef, user, *, status: str, answer: str) -> bool:
         return True
 
 
+def retain_attempt_draft(ref: AttemptRef, user, answer: str, *, error_code: str | None = None,
+                         request_id: str | None = None) -> bool:
+    """Keep generated text as a failed/stopped draft without changing terminal status."""
+    if not answer.strip():
+        return False
+    with session_scope() as s:
+        message = _attempt_message(s, ref, user)
+        metadata = message.retrieval_metadata or {}
+        attempt = metadata.get("answer_attempt", {})
+        if attempt.get("status") not in {"failed", "stopped"} or message.content:
+            return False
+        message.content = answer
+        message.retrieval_metadata = {**metadata, "answer_attempt": {
+            **attempt, "retained_draft": True,
+            **({"error_code": error_code} if error_code else {}),
+            **({"request_id": request_id} if request_id else {}),
+        }}
+        return True
+
+
 def attempt_status(ref: AttemptRef, user) -> str:
     with session_scope() as s:
         message = _attempt_message(s, ref, user)
@@ -383,13 +403,20 @@ def list_recent_turns(
                 "role": message.role,
                 "content": message.content,
                 "sources": message.sources or [],
-                "retrieval_metadata": message.retrieval_metadata,
+                "retrieval_metadata": public_retrieval_metadata(message.retrieval_metadata),
                 "created_at": message.created_at,
             })
         return {
             "turns": [turn for turn in turns.values() if turn["messages"]],
             "next_before_id": questions[-1].id if has_more else None,
         }
+
+
+def public_retrieval_metadata(metadata):
+    if metadata is None:
+        return None
+    return {k: deepcopy(v) for k, v in metadata.items()
+            if k not in {"source_assessment_request", "source_assessment_metrics", "source_blocks"}}
 
 
 def get_thread(session_id: str, user_id: str | None = None, *, check_owner: bool = True) -> dict | None:
@@ -423,7 +450,7 @@ def get_thread(session_id: str, user_id: str | None = None, *, check_owner: bool
                     "role": m.role,
                     "content": m.content,
                     "sources": m.sources or [],
-                    "retrieval_metadata": m.retrieval_metadata,
+                    "retrieval_metadata": public_retrieval_metadata(m.retrieval_metadata),
                     "created_at": m.created_at,
                 }
                 for m in messages

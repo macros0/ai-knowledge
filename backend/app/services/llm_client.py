@@ -19,7 +19,7 @@ import httpx
 import litellm
 from json_repair import repair_json
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.services import gen_quality
 from app.services import llm_profiles
 from app.services.llm_scheduler import LLMCancelled, local_scheduler
@@ -161,7 +161,7 @@ def _inflight_leave() -> None:
         _inflight -= 1
 
 
-def _acquire_slot(interactive: bool, max_wait: float):
+def _acquire_slot(interactive: bool, max_wait: float, *, cancel=None):
     """Занимает слот параллельности; возвращает идемпотентную функцию освобождения.
 
     Слот освобождает ПОТОК вызова по своему завершению, а не вызывающий по
@@ -185,7 +185,17 @@ def _acquire_slot(interactive: bool, max_wait: float):
     if not semaphore.acquire(blocking=False):
         waited = time.monotonic()
         if max_wait > 0:
-            got = semaphore.acquire(timeout=max_wait)
+            if cancel is None:
+                got = semaphore.acquire(timeout=max_wait)
+            else:
+                got = False
+                deadline = time.monotonic() + max_wait
+                while time.monotonic() < deadline:
+                    if cancel.is_set():
+                        raise LLMCancelled()
+                    if semaphore.acquire(timeout=min(.1, max(0, deadline - time.monotonic()))):
+                        got = True
+                        break
         else:
             # Нулевое ожидание: интерактивный вызов не ждёт, фоновый ждёт без предела.
             got = False if interactive else semaphore.acquire()
@@ -250,8 +260,8 @@ def _retry_after(exc: Exception) -> float | None:
 
 
 class LLMClient:
-    def __init__(self, interactive: bool = False, *, model: str | None = None):
-        self.settings = get_settings()
+    def __init__(self, interactive: bool = False, *, model: str | None = None, settings: Settings | None = None):
+        self.settings = settings if settings is not None else get_settings()
         self.interactive = interactive
         self.local = self.settings.llm_profile == "local_qwen"
         # Интерактивному чату — своя модель (LLM_CHAT_MODEL), если задана;
@@ -261,6 +271,19 @@ class LLMClient:
             if interactive and self.settings.llm_chat_model
             else self.settings.llm_model
         )
+
+    def assess_json_once(self, system: str, user: str, *, max_tokens: int, timeout_seconds: float) -> dict:
+        deadline = time.monotonic() + llm_profiles.remaining(timeout_seconds)
+        with llm_profiles.request_scope(on_text=None, single_pass=True, deadline=deadline):
+            text, reason = self._complete_once(system, user, max_tokens=max_tokens,
+                idle_timeout=timeout_seconds, task="source_assessment")
+        if reason == "length":
+            raise LLMTruncationError("Source assessment output truncated")
+        # json.loads rejects trailing JSON and incomplete structures. No repair/salvage.
+        result = json.loads(text)
+        if not isinstance(result, dict):
+            raise ValueError("Source assessment must be an object")
+        return result
 
     def chat(self, system: str, user: str, max_tokens: int | None = None) -> str:
         attempts = self.settings.llm_interactive_retry_attempts
@@ -371,6 +394,7 @@ class LLMClient:
         cancelled = threading.Event()
         request = llm_profiles.request_state()
         external_cancel = request.get("cancel")
+        assessment_metrics = request.get("assessment_metrics") if task == "source_assessment" else None
         emit = request.get("on_text") if self.interactive and task is None else None
         idle = max(0.0, idle_timeout if idle_timeout is not None else self.settings.llm_stream_idle_timeout_seconds)
         total = max(0.0, self.settings.llm_max_total_timeout_seconds)
@@ -399,21 +423,33 @@ class LLMClient:
             thread_start = time.monotonic()
             stream = None
             try:
+                if cancelled.is_set() or (external_cancel is not None and external_cancel.is_set()):
+                    raise LLMCancelled()
+                if task == "source_assessment" and time.monotonic() >= call_deadline:
+                    raise LLMTimeoutError("Source assessment deadline exceeded")
+                if assessment_metrics is not None:
+                    assessment_metrics["completion_count"] += 1
                 stream = litellm.completion(
                     model=self.model,
                     api_base=_completion_api_base(
                         self.model, self.settings.llm_base_url
                     ),
-                    api_key=self.settings.llm_api_key or None,
+                    # A non-secret placeholder prevents LiteLLM from inheriting ambient
+                    # credentials for an explicitly isolated keyless endpoint.
+                    api_key=(self.settings.llm_api_key or "source-assessment-local-no-key")
+                    if task == "source_assessment" and self.settings.source_assessment_llm_base_url
+                    else self.settings.llm_api_key or None,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
                     ],
-                    temperature=self.settings.llm_temperature,
+                    temperature=0 if task == "source_assessment" else self.settings.llm_temperature,
                     max_tokens=limit,
                     stream=True,
                     timeout=http_timeout or None,
                     **(llm_profiles.completion_options(task, self.settings) if self.local else {}),
+                    **({"num_retries": 0, "max_retries": 0,
+                        "stream_options": {"include_usage": True}} if task == "source_assessment" else {}),
                 )
                 container["stream"] = stream
                 for chunk in stream:
@@ -425,11 +461,16 @@ class LLMClient:
                     # байту и держит соединение сколько угодно. Без этого предела
                     # такой поток удерживал бы слот параллельности бесконечно.
                     if total and (time.monotonic() - thread_start >= total or
-                                  (self.local and time.monotonic() >= call_deadline)):
+                                  ((self.local or task == "source_assessment") and time.monotonic() >= call_deadline)):
                         raise LLMTimeoutError("LLM call deadline exceeded")
                     if not self.local:
                         with lock:
                             container["last_activity"] = time.monotonic()
+                    if assessment_metrics is not None:
+                        usage = getattr(chunk, "usage", None)
+                        if usage is not None:
+                            assessment_metrics["input_tokens"] = getattr(usage, "prompt_tokens", None)
+                            assessment_metrics["output_tokens"] = getattr(usage, "completion_tokens", None)
                     reason = _stream_finish_reason(chunk)
                     if reason:
                         with lock:
@@ -457,6 +498,7 @@ class LLMClient:
                     release_slot()
                 container["done"].set()
 
+        queue_start = time.monotonic()
         if self.local:
             try:
                 release_slot = local_scheduler.acquire(
@@ -470,8 +512,12 @@ class LLMClient:
                 if self.interactive
                 else total
             )
-            release_slot = _acquire_slot(self.interactive, slot_wait)
-        if self.local and (time.monotonic() >= call_deadline or
+            release_slot = _acquire_slot(self.interactive,
+                min(slot_wait, max(0, call_deadline - time.monotonic())) if task == "source_assessment" else slot_wait,
+                **({"cancel": external_cancel} if task == "source_assessment" else {}))
+        if assessment_metrics is not None:
+            assessment_metrics["queue_ms"] = round((time.monotonic() - queue_start) * 1000, 2)
+        if (self.local or task == "source_assessment") and (time.monotonic() >= call_deadline or
                            (external_cancel is not None and external_cancel.is_set())):
             release_slot()
             if external_cancel is not None and external_cancel.is_set():
@@ -498,7 +544,7 @@ class LLMClient:
                 active_timeout = idle if started else first_timeout
                 if active_timeout and now - last >= active_timeout:
                     raise LLMTimeoutError(f"Нет данных от LLM за {active_timeout:.0f}s")
-                if total and (now - start >= total or (self.local and now >= call_deadline)):
+                if total and (now - start >= total or ((self.local or task == "source_assessment") and now >= call_deadline)):
                     raise LLMTimeoutError(f"LLM вызов превысил {total:.0f}s")
                 container["done"].wait(timeout=0.1)
         except (LLMTimeoutError, LLMCancelled):
