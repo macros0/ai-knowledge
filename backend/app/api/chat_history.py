@@ -11,6 +11,8 @@
   - GET /chat/admin/history/{user_id}/{sid}   — тред пользователя (+ audit
     chat_history_view — только здесь, при открытии содержимого конкретного треда).
 """
+from uuid import UUID
+
 from app.api import errors
 from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, Query, Request
@@ -20,6 +22,7 @@ from app.auth.service import require_role, require_user
 from app.models.schemas import (
     ChatAdminUserListOut,
     ChatHistoryListOut,
+    ChatHistoryRecentOut,
     ChatHistoryThreadOut,
 )
 from app.services import audit, chat_history
@@ -40,6 +43,22 @@ def list_own_history(
     """Список собственных тредов (активные, не удалённые). Audit-записи нет."""
     sessions, total = chat_history.list_sessions(user.user_id, limit=limit, offset=offset)
     return {"sessions": sessions, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/history/recent", response_model=ChatHistoryRecentOut)
+def get_recent_own_history(
+    user: User = Depends(require_user),
+    limit: int = Query(default=10, ge=1, le=20),
+    before_id: int | None = Query(default=None, gt=0),
+    exclude_session_id: UUID | None = Query(default=None),
+):
+    """Недавние вопросы владельца и сохранённые ответы из активных сессий."""
+    return chat_history.list_recent_turns(
+        user.user_id,
+        limit=limit,
+        before_id=before_id,
+        exclude_session_id=str(exclude_session_id) if exclude_session_id is not None else None,
+    )
 
 
 @router.get("/history/{session_id}", response_model=ChatHistoryThreadOut)

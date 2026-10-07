@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./AuthContext";
-import { getChatSettings } from "@/lib/api";
+import { getChatSettings, listRecentChatTurns } from "@/lib/api";
+import {createRecentHistoryLoader, EMPTY_RECENT_HISTORY} from "@/lib/chatRecentHistory.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 
 const FALLBACK_SETTINGS = {
@@ -40,6 +41,16 @@ function ChatState({ children }) {
   const [tags, setTags] = useState([]);
   const [pending, setPending] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [recentHistory, setRecentHistory] = useState(EMPTY_RECENT_HISTORY);
+  const [timelineView, setTimelineView] = useState({startKey: null, expanded: {}});
+  const [historyLoader] = useState(() => createRecentHistoryLoader({
+    fetchPage: listRecentChatTurns, onChange: setRecentHistory,
+  }));
+  useEffect(() => { historyLoader.setSessionId(sessionId); }, [historyLoader, sessionId]);
+  useEffect(() => {
+    historyLoader.activate();
+    return () => historyLoader.dispose();
+  }, [historyLoader]);
   const scrollPositionRef = useRef(null);
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
@@ -72,14 +83,16 @@ function ChatState({ children }) {
 
   // «Новый чат»: сбрасывает ленту и UUID треда — следующее сообщение откроет
   // новую сессию истории (Этап 6).
-  const startNewChat = () => {
+  const startNewChat = useCallback(() => {
     scrollPositionRef.current = null;
     setMessages([]);
+    historyLoader.clear();
+    setTimelineView({startKey: null, expanded: {}});
     setDraftQuery("");
     setSessionId(null);
     setSearchScopeDocuments([]);
     setSearchScopeEnabled(false);
-  };
+  }, [historyLoader]);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,11 +114,11 @@ function ChatState({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ sourceView,setSourceView,draftQuery,setDraftQuery,messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
+    () => ({recentHistory, historyLoader, timelineView, setTimelineView, sourceView,setSourceView,draftQuery,setDraftQuery,messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
       responseMode, setResponseMode, selectedTopK: selectedTopK ?? settings.top_k_default, setSelectedTopK,
       showCustom, setShowCustom, customValue, setCustomValue, showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue,
       moduleFilter, setModuleFilter, devFilter, setDevFilter, sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen }),
-    [sourceView, draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled,
+    [recentHistory, historyLoader, timelineView, startNewChat, sourceView, draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled,
       responseMode, selectedTopK, showCustom, customValue, showCustomDepth, customDepthValue, moduleFilter, devFilter, sourceLocale, searchSettingsOpen]
   );
 

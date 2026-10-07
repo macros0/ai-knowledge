@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+test('history and new questions share stable scroll marks based on the rendered timeline', async () => {
+  const { timelineRequestNavigation } = await import('../src/lib/chatRequestNavigation.mjs');
+  const elements = [
+    {dataset: {chatTurn: 'history:31'}, getBoundingClientRect: () => ({top: -350})},
+    {dataset: {chatTurn: 'live:0'}, getBoundingClientRect: () => ({top: 250})},
+  ];
+  const log = {scrollTop: 450, clientHeight: 400, scrollHeight: 1200,
+    getBoundingClientRect: () => ({top: 100}),
+    querySelectorAll: selector => {assert.equal(selector, '[data-chat-turn]'); return elements;},
+  };
+  const result = timelineRequestNavigation(log);
+  assert.deepEqual(result.markers.map(({index, top, target}) => ({index, top, target})), [
+    {index: 'history:31', top: 0, target: 0}, {index: 'live:0', top: 600, target: 600},
+  ]);
+  assert.equal(result.activeIndex, 'history:31');
+  log.scrollTop = 800;
+  assert.equal(timelineRequestNavigation(log).activeIndex, 'live:0');
+});
+
 test('request markers follow actual message positions and identify the visible request', async () => {
   const { requestNavigation } = await import('../src/lib/chatRequestNavigation.mjs');
   const requests = [{ index: 0, top: 0 }, { index: 2, top: 800 }, { index: 4, top: 1600 }];

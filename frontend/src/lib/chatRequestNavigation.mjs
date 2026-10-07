@@ -1,3 +1,12 @@
+export function timelineRequestNavigation(log) {
+  const origin = log.getBoundingClientRect().top;
+  const requests = Array.from(log.querySelectorAll("[data-chat-turn]"), element => ({
+    index: element.dataset.chatTurn,
+    top: element.getBoundingClientRect().top - origin + log.scrollTop,
+  }));
+  return {...requestNavigation(requests, log.scrollTop, log.clientHeight, log.scrollHeight), viewportHeight: log.clientHeight};
+}
+
 export function requestNavigation(requests, scrollTop, viewportHeight, contentHeight) {
   const maxScroll = Math.max(0, contentHeight - viewportHeight);
   const markers = requests.map((request) => ({

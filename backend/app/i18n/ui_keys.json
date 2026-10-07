@@ -491,6 +491,7 @@
     "total"
   ],
   "chat.clearSourceSelection": [],
+  "chat.collapseDialog": [],
   "chat.copied": [],
   "chat.copy": [],
   "chat.copyAnswer": [],
@@ -509,6 +510,7 @@
   "chat.errorPrefix": [
     "message"
   ],
+  "chat.expandDialog": [],
   "chat.fastCoverage": [
     "found",
     "used"
@@ -534,6 +536,7 @@
     "question"
   ],
   "chat.loading": [],
+  "chat.loadingRecentHistory": [],
   "chat.localeLabel": [],
   "chat.mailModeAll": [],
   "chat.mailModeExclude": [],
@@ -555,10 +558,13 @@
   "chat.noHistory": [],
   "chat.noSources": [],
   "chat.noSourcesMailFilter": [],
+  "chat.openHistoryThread": [],
   "chat.openThreadError": [
     "message"
   ],
   "chat.queryPlaceholder": [],
+  "chat.recentHistory": [],
+  "chat.recentHistoryError": [],
   "chat.relevance": [
     "pct"
   ],
@@ -624,6 +630,7 @@
   "chat.sessionsLoadError": [
     "message"
   ],
+  "chat.showPrevious": [],
   "chat.sourceFound": [],
   "chat.sourceInContext": [],
   "chat.sourceRating": [

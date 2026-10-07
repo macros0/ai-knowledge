@@ -369,6 +369,18 @@ class ChatHistoryMessageOut(BaseModel):
     created_at: datetime
 
 
+class ChatHistoryRecentTurnOut(BaseModel):
+    id: int
+    session_id: str
+    created_at: datetime
+    messages: list[ChatHistoryMessageOut]
+
+
+class ChatHistoryRecentOut(BaseModel):
+    turns: list[ChatHistoryRecentTurnOut]
+    next_before_id: int | None = None
+
+
 class ChatHistorySessionOut(BaseModel):
     session_id: str
     title: str

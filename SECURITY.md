@@ -195,6 +195,9 @@ only the session list and one's own history is not logged. An owner sees only th
 history: `session_id` is validated on the backend and bound to the current `user_id`
 (`app/services/chat_history.py`), so a foreign thread cannot be substituted
 (`store_turn`/`get_thread` raise `ChatOwnershipError`).
+  The bounded recent preview (`GET /chat/history/recent`) queries only the current
+  owner's active, non-deleted threads. Its message cursor and optional excluded
+  session cannot widen access; pagination does not delete stored history.
 
 ## 3. Network topology
 

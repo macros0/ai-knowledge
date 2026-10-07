@@ -568,6 +568,13 @@ export function getChatThread(sessionId) {
   return request(`/chat/history/${encodeURIComponent(sessionId)}`);
 }
 
+export function listRecentChatTurns({limit = 10, beforeId, excludeSessionId} = {}) {
+  const qs = new URLSearchParams({limit: String(limit)});
+  if (beforeId != null) qs.set("before_id", String(beforeId));
+  if (excludeSessionId) qs.set("exclude_session_id", excludeSessionId);
+  return request(`/chat/history/recent?${qs}`);
+}
+
 export function deleteChatSession(sessionId) {
   return request(`/chat/history/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
 }

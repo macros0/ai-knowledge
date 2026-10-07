@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { chat, cancelChatAttempt, friendlyApiError, getSourceLocaleFacets, listAttributeValues, listDevelopments } from "@/lib/api";
 import Modal from "./Modal";
@@ -10,7 +10,7 @@ import { createChatDeltaBuffer, reconcileChatSources } from "@/lib/chatRenderSta
 import { updateSelection, selectableSources } from "@/lib/chatSourceSelection.mjs";
 import { facetOptions } from "@/lib/sourceLocales.mjs";
 import { addScopeDocuments, scopeRequestIds, SEARCH_SCOPE_MAX_DOCUMENTS } from "@/lib/chatSearchScope.mjs";
-import { attachChatScroll } from "@/lib/chatScrollPosition.mjs";
+import {chatFeedTurns} from "@/lib/chatRecentHistory.mjs";
 import ChatFilters, {ChatFilterSummary} from "./ChatFilters";
 import {buildChatFilterSummary} from "@/lib/chatFilterSummary.mjs";
 import TagPicker from "./TagPicker";
@@ -22,9 +22,9 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/i18n/LocaleContext";
 import SearchableSelect from "./SearchableSelect";
 import ChatSearchScope from "./ChatSearchScope";
-import ChatRequestNavigation from "./ChatRequestNavigation";
 import ChatComposer from "./ChatComposer";
 import ChatMessageView from "./ChatMessageView";
+import ChatTimeline from "./ChatTimeline";
 
 function getPresetLabel(preset, settings, t) {
   if (preset === settings.top_k_default) return t("chat.topkStandard");
@@ -39,8 +39,9 @@ export default function ChatPanel() {
   const { messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
     responseMode, setResponseMode, selectedTopK, setSelectedTopK, showCustom, setShowCustom, customValue, setCustomValue,
     showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue, moduleFilter, setModuleFilter, devFilter, setDevFilter,
-    sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen, draftQuery,setDraftQuery,sourceView,setSourceView } = useChat();
-  const { user } = useAuth();
+    sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen, draftQuery,setDraftQuery,sourceView,setSourceView,
+    recentHistory, historyLoader, timelineView, setTimelineView } = useChat();
+  const { user, mode: authMode, loading: authLoading } = useAuth();
   const { t, locale } = useI18n();
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [scopeNotice, setScopeNotice] = useState(null);
@@ -53,6 +54,13 @@ export default function ChatPanel() {
   const stopCurrentRef = useRef(null);
   const copyTimerRef = useRef(null);
   const lastAssistantIndex = messages.findLastIndex((message) => message.role === "assistant");
+  const turns = useMemo(() => chatFeedTurns(recentHistory.turns, messages, sessionId), [recentHistory.turns, messages, sessionId]);
+
+  useEffect(() => {
+    if (authLoading || (!user && authMode !== "disabled")) return;
+    historyLoader.activate();
+    historyLoader.load();
+  }, [authLoading, user, authMode, historyLoader]);
 
   useEffect(() => {
     return () => {
@@ -107,11 +115,6 @@ export default function ChatPanel() {
     }
     return null;
   }, [developments, modules, t]);
-
-  useLayoutEffect(() => {
-    if (!logRef.current) return;
-    return attachChatScroll(logRef.current, scrollPositionRef, { sessionId, messageCount: messages.length });
-  }, [messages.length, sessionId, scrollPositionRef]);
 
   const copyAnswer = useCallback(async (index, text) => {
     try {
@@ -210,6 +213,8 @@ export default function ChatPanel() {
   const sendQuestion = useCallback(async (q, requestOptions, glossary = requestOptions.requestUseGlossary ?? useGlossary) => {
     requestOptions = {...requestOptions,requestUseGlossary:glossary};
     stopCurrent();
+    const visibleStart = logRef.current?.querySelector("[data-chat-turn]")?.dataset.chatTurn ?? null;
+    setTimelineView(current => ({...current, startKey: visibleStart}));
     const attemptId = crypto.randomUUID();
     const targetSessionId = sessionId || crypto.randomUUID();
     if (!sessionId) setSessionId(targetSessionId);
@@ -285,9 +290,13 @@ export default function ChatPanel() {
       if (activeRequestRef.current?.id === attemptId) {
         activeRequestRef.current = null;
         setPending(false);
+        const log = logRef.current;
+        if (log && log.scrollHeight - log.clientHeight - log.scrollTop < 80) {
+          setTimelineView(current => ({...current, startKey: null}));
+        }
       }
     }
-  }, [resolveUploadHint, sessionId, setMessages, setPending, setSessionId, stopCurrent, t, useGlossary]);
+  }, [resolveUploadHint, sessionId, setMessages, setPending, setSessionId, setTimelineView, stopCurrent, t, useGlossary]);
 
   const send = useCallback(async (q) => {
     if (searchScopeEnabled && !searchScopeDocuments.length) return;
@@ -362,7 +371,7 @@ export default function ChatPanel() {
   };
   const clearSearchFilters=()=>{setTags([]);setModuleFilter("");setDevFilter(null);setSourceLocale("");setMailMode("all");setSearchScopeEnabled(false);setScopeNotice(null);};
   return (
-    <section className="panel">
+    <section className="panel chat-panel">
       {editQuestion !== null && <Modal title={t("ux.replaceDraftTitle")} onClose={()=>setEditQuestion(null)} footer={<>
         <button type="button" className="modal-btn" onClick={()=>setEditQuestion(null)}>{t("common.cancel")}</button>
         <button type="button" className="modal-btn" onClick={()=>applyEditQuestion(editQuestion)}>{t("ux.replaceDraft")}</button>
@@ -392,7 +401,7 @@ export default function ChatPanel() {
             type="button"
             className="btn ghost"
             onClick={() => { stopCurrent(); startNewChat(); setScopeNotice(null); }}
-            disabled={messages.length === 0 && searchScopeDocuments.length === 0 && !searchScopeEnabled}
+            disabled={messages.length === 0 && recentHistory.turns.length === 0 && searchScopeDocuments.length === 0 && !searchScopeEnabled && recentHistory.status !== "loading"}
             title={t("chat.newChatTitle")}
           >
             {t("chat.newChat")}
@@ -405,19 +414,17 @@ export default function ChatPanel() {
         refreshKey={messages.length} />}
       {scopeNotice && <div className="meta" role="status">{t(scopeNotice.key, scopeNotice)}</div>}
       <div className="chat-log-frame">
-      <div className="chat-log" ref={logRef}>
-      <div className="chat-log-content">
-        {messages.length === 0 && <div className="chat-empty-start"><p>{t("ux.chatWelcome")}</p><div className="chat-examples">{["process","compare","explain"].map(key=><button type="button" className="btn ghost" key={key} disabled={Boolean(draftQuery.trim())} onClick={()=>{setDraftQuery(t(`ux.example.${key}`));requestAnimationFrame(()=>document.getElementById("chat-question")?.focus());}}>{t(`ux.example.${key}`)}</button>)}</div></div>}
-        {messages.map((message, index) => <ChatMessageView key={index} message={message} index={index}
+      <ChatTimeline turns={turns} pending={pending} recentHistory={recentHistory} onLoadOlder={historyLoader.load}
+        logRef={logRef} scrollPositionRef={scrollPositionRef} sessionId={sessionId} messageCount={messages.length}
+        view={timelineView} setView={setTimelineView}
+        empty={<div className="chat-empty-start"><p>{t("ux.chatWelcome")}</p><div className="chat-examples">{["process","compare","explain"].map(key=><button type="button" className="btn ghost" key={key} disabled={Boolean(draftQuery.trim())} onClick={()=>{setDraftQuery(t(`ux.example.${key}`));requestAnimationFrame(()=>document.getElementById("chat-question")?.focus());}}>{t(`ux.example.${key}`)}</button>)}</div></div>}
+        renderMessage={(message, index) => <ChatMessageView key={index} message={message} index={index}
           isLatest={index === lastAssistantIndex}
           isPending={pending && index === messages.length - 1} actionsPending={pending}
           isCopied={copiedIndex === index} searchDepthMax={settings.search_depth_max} sourceView={sourceView}
           onEdit={editAnswer} onCopy={copyAnswer} onSelect={selectSources} onAnswerSelected={answerSelected}
           onAddToScope={addSelectedToScope} onRetry={retryAnswer} onRefreshSearch={refreshSourceSearch} onRepeatWithoutGlossary={repeatWithoutGlossary}
-          onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} onSourceViewChange={changeSourceView} />)}
-      </div>
-      </div>
-      <ChatRequestNavigation messages={messages} logRef={logRef} />
+          onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} onSourceViewChange={changeSourceView} />}/>
       </div>
       <details className="search-settings" open={searchSettingsOpen} onToggle={(event) => setSearchSettingsOpen(event.currentTarget.open)}>
         <summary>{t("chat.searchSettings")}</summary>

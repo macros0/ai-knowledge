@@ -27,7 +27,8 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import aliased
 
 from app.config import get_settings
 from app.db.models import ChatMessage, ChatSession
@@ -305,6 +306,90 @@ def list_sessions(user_id: str, limit: int | None = None, offset: int = 0) -> tu
         )
         counts = _message_counts(s, [r.id for r in rows])
         return [_session_to_dict(r, counts.get(r.id, 0)) for r in rows], total
+
+
+def list_recent_turns(
+    user_id: str,
+    *,
+    limit: int = 10,
+    before_id: int | None = None,
+    exclude_session_id: str | None = None,
+) -> dict:
+    """Keyset page of own questions, paired up to the next user in the same session.
+
+    Read at most limit+1 question headers, then batch only their message ranges.
+    Global message IDs keep pages stable when timestamps tie or new turns arrive.
+    """
+    with session_scope() as s:
+        query = (
+            select(ChatMessage.id, ChatMessage.session_id, ChatMessage.created_at)
+            .join(ChatSession, ChatMessage.session_id == ChatSession.id)
+            .where(
+                ChatSession.user_id == user_id,
+                ChatSession.deleted_at.is_(None),
+                ChatMessage.role == "user",
+            )
+        )
+        if before_id is not None:
+            query = query.where(ChatMessage.id < before_id)
+        if exclude_session_id is not None:
+            query = query.where(ChatSession.id != exclude_session_id)
+        questions = s.execute(query.order_by(ChatMessage.id.desc()).limit(limit + 1)).all()
+        has_more = len(questions) > limit
+        questions = questions[:limit]
+        if not questions:
+            return {"turns": [], "next_before_id": None}
+
+        # A different session's question cannot terminate this turn. The boundary
+        # must also include newer questions outside the requested cursor page.
+        next_question = aliased(ChatMessage)
+        next_id = (
+            select(func.min(next_question.id))
+            .where(
+                next_question.session_id == ChatMessage.session_id,
+                next_question.role == "user",
+                next_question.id > ChatMessage.id,
+            )
+            .correlate(ChatMessage)
+            .scalar_subquery()
+        )
+        ranges = (
+            select(ChatMessage.id, ChatMessage.session_id, next_id.label("next_id"))
+            .where(ChatMessage.id.in_([question.id for question in questions]))
+            .subquery()
+        )
+        messages = s.execute(
+            select(ranges.c.id, ChatMessage)
+            .join(ranges, and_(
+                ChatMessage.session_id == ranges.c.session_id,
+                ChatMessage.id >= ranges.c.id,
+                or_(ranges.c.next_id.is_(None), ChatMessage.id < ranges.c.next_id),
+            ))
+            .join(ChatSession, ChatMessage.session_id == ChatSession.id)
+            .where(ChatSession.user_id == user_id, ChatSession.deleted_at.is_(None))
+            .order_by(ranges.c.id.asc(), ChatMessage.id.asc())
+        ).all()
+        turns = {
+            question.id: {
+                "id": question.id,
+                "session_id": question.session_id,
+                "created_at": question.created_at,
+                "messages": [],
+            }
+            for question in reversed(questions)
+        }
+        for question_id, message in messages:
+            turns[question_id]["messages"].append({
+                "role": message.role,
+                "content": message.content,
+                "sources": message.sources or [],
+                "retrieval_metadata": message.retrieval_metadata,
+                "created_at": message.created_at,
+            })
+        return {
+            "turns": [turn for turn in turns.values() if turn["messages"]],
+            "next_before_id": questions[-1].id if has_more else None,
+        }
 
 
 def get_thread(session_id: str, user_id: str | None = None, *, check_owner: bool = True) -> dict | None:

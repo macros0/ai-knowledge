@@ -1,25 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { groupRequestMarkers, requestNavigation } from "@/lib/chatRequestNavigation.mjs";
+import { groupRequestMarkers, timelineRequestNavigation } from "@/lib/chatRequestNavigation.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 
-export default function ChatRequestNavigation({ messages, logRef }) {
+export default function ChatRequestNavigation({ turns, logRef }) {
   const { t } = useI18n();
   const [navigation, setNavigation] = useState({ markers: [], activeIndex: null });
   const [expandedGroup, setExpandedGroup] = useState(null);
+  const turnKeys = turns.map(turn => turn.key).join(",");
 
   useEffect(() => {
     const log = logRef.current;
     if (!log) return;
     let frame;
     const measure = () => {
-      const origin = log.getBoundingClientRect().top;
-      const requests = Array.from(log.querySelectorAll("[data-request-index]"), (element) => ({
-        index: Number(element.dataset.requestIndex),
-        top: element.getBoundingClientRect().top - origin + log.scrollTop,
-      }));
-      setNavigation({ ...requestNavigation(requests, log.scrollTop, log.clientHeight, log.scrollHeight), viewportHeight: log.clientHeight });
+      setNavigation(timelineRequestNavigation(log));
     };
     const schedule = () => {
       cancelAnimationFrame(frame);
@@ -35,12 +31,16 @@ export default function ChatRequestNavigation({ messages, logRef }) {
       observer.disconnect();
       log.removeEventListener("scroll", schedule);
     };
-  }, [messages.length, logRef]);
+  }, [turnKeys, logRef]);
 
   if (!navigation.markers.length) return null;
   const groups = groupRequestMarkers(navigation.markers, Math.max(0, navigation.viewportHeight - 12));
   const ordinals = new Map(navigation.markers.map((marker, index) => [marker.index, index + 1]));
-  const requestLabel = (marker) => t("chat.jumpToRequest", { number: ordinals.get(marker.index), question: messages[marker.index]?.text ?? "" });
+  const questions = new Map(turns.map(turn => {
+    const message = turn.messages.find(item => item.message.role === "user")?.message;
+    return [turn.key, message?.text ?? message?.content ?? ""];
+  }));
+  const requestLabel = (marker) => t("chat.jumpToRequest", { number: ordinals.get(marker.index), question: questions.get(marker.index) ?? "" });
   const jump = (marker) => {
     logRef.current?.scrollTo({ top: marker.target, behavior: "smooth" });
     setExpandedGroup(null);
