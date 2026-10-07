@@ -12,3 +12,11 @@ test("refresh and refresh failure retain existing rows", () => {
   assert.equal(resolveAsyncContentState({ hasData:true, error: new Error() }), "stale-error");
   assert.equal(resolveAsyncContentState({ hasData:true, hasLoaded:true }), "ready");
 });
+test("background status polling keeps the loaded list ready", () => {
+  assert.equal(resolveAsyncContentState({ hasData:true, hasLoaded:true, pending:true, background:true }), "ready");
+  assert.equal(resolveAsyncContentState({ pending:true, background:true }), "loading");
+});
+test("manual refresh and background failures remain visible", () => {
+  assert.equal(resolveAsyncContentState({ hasData:true, hasLoaded:true, pending:true, background:false }), "refreshing");
+  assert.equal(resolveAsyncContentState({ hasData:true, hasLoaded:true, background:true, error:new Error("poll failed") }), "stale-error");
+});

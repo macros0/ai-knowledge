@@ -271,11 +271,11 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
     setFilterSelectedIds([]);
   };
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ background = false } = {}) => {
     if (currentDataScope.current !== dataScopeKey) return latestLoad.current?.();
     const seq = ++loadSeq.current;
     clearTimeout(timer.current);
-    setFetchState(previous => ({...previous, pending:true, error:null, scope:dataScopeKey}));
+    setFetchState(previous => ({...previous, pending:true, background, error:null, scope:dataScopeKey}));
     try {
       const result = await listDocuments({
         uploader: resolvedUploader || undefined,
@@ -301,7 +301,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
       setFetchState({pending:false, hasLoaded:true, error:null, scope:dataScopeKey});
       const busy = result.documents.some((d) => BUSY_STATUSES.includes(d.status) || d.update_cancelling);
       if (busy && mounted.current) {
-        timer.current = setTimeout(load, 1500);
+        timer.current = setTimeout(() => load({ background: true }), 1500);
       }
     } catch (err) {
       // Бэкенд недоступен/ошибка сети: не оставляем список «молча пустым» —
@@ -944,7 +944,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
     );
   };
 
-  const contentState = resolveAsyncContentState({pending:searchPending || fetchState.scope !== dataScopeKey || fetchState.pending, hasLoaded:fetchState.hasLoaded, hasData:docs.length > 0, hasFilters:activeFilterCount > 0 || Boolean(resolvedUploader), error:fetchState.error});
+  const contentState = resolveAsyncContentState({pending:searchPending || fetchState.scope !== dataScopeKey || fetchState.pending, hasLoaded:fetchState.hasLoaded, hasData:docs.length > 0, hasFilters:activeFilterCount > 0 || Boolean(resolvedUploader), error:fetchState.error, background:fetchState.background && dataCurrent});
   const listBlocked = !dataCurrent;
   return (
     <>
