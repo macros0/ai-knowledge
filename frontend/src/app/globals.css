@@ -4339,6 +4339,10 @@ main {
 .chat-toolbar-actions .chat-scope-toggle { min-width: 0; }
 
 .history-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -4402,12 +4406,15 @@ main {
 }
 
 .history-thread {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
 .history-thread-head {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -4424,7 +4431,8 @@ main {
 }
 
 .history-log {
-  max-height: 60vh;
+  min-height: 0;
+  scrollbar-gutter: stable;
 }
 
 .history-bubble {
