@@ -2,6 +2,7 @@
 
 import { appliedTermsSummary } from "@/lib/glossaryUi.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
+import ChatDisclosureSummary from "./ChatDisclosureSummary";
 
 export default function AppliedTerms({ status = "disabled", appliedTerms = [] }) {
   const { t } = useI18n();
@@ -13,8 +14,9 @@ export default function AppliedTerms({ status = "disabled", appliedTerms = [] })
       {status === "unavailable" ? (
         <span>{t("chat.glossary.unavailable")}</span>
       ) : (
-        <details>
-          <summary>{t("chat.glossary.count", { count: items.length })}</summary>
+        <details className="chat-disclosure">
+          <ChatDisclosureSummary showLabel={t("chat.glossary.showForms")} hideLabel={t("chat.glossary.collapseForms")} meta={t("chat.glossary.count", { count: items.length })} />
+          <div className="chat-disclosure-content">
           <ul>
             {items.map((item) => (
               <li key={`${item.canonical}-${item.matched.join("|")}`}>
@@ -24,6 +26,7 @@ export default function AppliedTerms({ status = "disabled", appliedTerms = [] })
               </li>
             ))}
           </ul>
+          </div>
         </details>
       )}
       {status === "limited" && <span className="applied-terms-note">{t("chat.glossary.limited")}</span>}

@@ -12,6 +12,7 @@ import { facetOptions } from "@/lib/sourceLocales.mjs";
 import { addScopeDocuments, scopeRequestIds, SEARCH_SCOPE_MAX_DOCUMENTS } from "@/lib/chatSearchScope.mjs";
 import {chatFeedTurns} from "@/lib/chatRecentHistory.mjs";
 import ChatFilters, {ChatFilterSummary} from "./ChatFilters";
+import ChatDisclosureSummary from "./ChatDisclosureSummary";
 import {buildChatFilterSummary} from "@/lib/chatFilterSummary.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
@@ -450,8 +451,9 @@ export default function ChatPanel() {
           onAddToScope={addSelectedToScope} onRetry={retryAnswer} onRefreshSearch={refreshSourceSearch} onRepeatWithoutGlossary={repeatWithoutGlossary}
           onContinueWithoutAssessment={continueWithoutAssessment} onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} onSourceViewChange={changeSourceView} />}/>
       </div>
-      <details className="search-settings" open={searchSettingsOpen} onToggle={(event) => setSearchSettingsOpen(event.currentTarget.open)}>
-        <summary>{t("chat.searchSettings")}</summary>
+      <details className="search-settings chat-disclosure" open={searchSettingsOpen} onToggle={(event) => setSearchSettingsOpen(event.currentTarget.open)}>
+        <ChatDisclosureSummary showLabel={t("chat.showSearchSettings")} hideLabel={t("chat.collapseSearchSettings")} />
+        <div className="chat-disclosure-content">
         {settings.response_modes?.length > 0 && (
           <div className="topk-picker">
             <span className="topk-label" title={t("chat.searchDepthDescription")}>{t("chat.searchDepthLabel")}</span>
@@ -538,6 +540,7 @@ export default function ChatPanel() {
           />
         )}
       </div>}
+        </div>
       </details>
       <ChatFilterSummary summary={filterSummary} onRemove={removeFilter}/>
       <ChatFilters summary={filterSummary} onRemove={removeFilter} onClear={clearSearchFilters}>

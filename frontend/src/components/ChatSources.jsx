@@ -61,7 +61,8 @@ const ChatSourceRow = memo(function ChatSourceRow({ source: s, selected, selecta
 });
 
 const SourceGroup=memo(function SourceGroup({group,selectedSources,availableIndexes,responseMode,onSelect,expanded,onToggle}) {
-  const {t}=useI18n();
+  const {t,tc}=useI18n();
+  const toggleLabel=tc(expanded ? "chat.collapseDocumentFragments" : "chat.showDocumentFragments", group.sources.length);
   const indexes=group.sources.filter(s=>availableIndexes.has(s.source_index)).map(s=>s.source_index);
   return <div className="source-document-group">
     <div className="source-group-header">
@@ -69,7 +70,7 @@ const SourceGroup=memo(function SourceGroup({group,selectedSources,availableInde
       {documentHref(group.source) ? <Link href={documentHref(group.source)}>{group.filename}</Link> : <span>{group.filename}</span>}
     </div>
     <details open={expanded} onToggle={e=>{if(e.currentTarget.open !== expanded)onToggle(e.currentTarget.open);}}>
-      <summary>{group.sources.length} {t("chat.fragments")}</summary>
+      <summary aria-label={`${toggleLabel}: ${group.filename}`}><span className="source-toggle-action">{toggleLabel}</span></summary>
       {expanded && <ol style={{"--source-number-digits":String(Math.max(...group.sources.map(s=>s.display_index || s.source_index || 1))).length}}>{group.sources.map((source,index)=><ChatSourceRow
         key={source.source_index ?? index} source={source} selected={selectedSources.has(source.source_index)} selectable={availableIndexes.has(source.source_index)} responseMode={responseMode} onSelect={onSelect}/>)}</ol>}
     </details>
@@ -90,7 +91,7 @@ export default memo(function ChatSources({sources=[],selectedIndexes=[],selectio
   const groups=useMemo(()=>groupSourcesByDocument(displaySources),[displaySources]);
   if(!sources.length)return null;
   return <details className="sources" open={Boolean(open)} onToggle={e=>{if(e.currentTarget.open !== Boolean(open))onToggle(e.currentTarget.open);}}>
-    <summary>{t("ux.sourcesSummary",{documents:groups.length,fragments:sources.length})}</summary>
+    <summary><span className="source-toggle-action">{t(open ? "chat.collapseAllSources" : "chat.showSources")}</span>{" "}<span className="source-toggle-counts">{t("chat.sourceCounts",{documents:groups.length,fragments:sources.length})}</span></summary>
     {open && <div className="source-groups">
       <div className="source-view-toolbar">
         <div className="source-view-switch" role="group" aria-label={t("chat.sourceView")}>

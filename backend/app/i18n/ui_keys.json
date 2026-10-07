@@ -480,7 +480,6 @@
   "chat.adminHint": [],
   "chat.answerIncomplete": [],
   "chat.answerSelected": [],
-  "chat.retainedAnswerNotice": [],
   "chat.answerStopped": [],
   "chat.askFirst": [],
   "chat.assessment.allow": [],
@@ -502,7 +501,11 @@
     "total"
   ],
   "chat.clearSourceSelection": [],
+  "chat.collapseAllSources": [],
   "chat.collapseDialog": [],
+  "chat.collapseDocumentFragments": [],
+  "chat.collapseSearchFilters": [],
+  "chat.collapseSearchSettings": [],
   "chat.copied": [],
   "chat.copy": [],
   "chat.copyAnswer": [],
@@ -527,11 +530,13 @@
     "used"
   ],
   "chat.fragments": [],
+  "chat.glossary.collapseForms": [],
   "chat.glossary.count": [],
   "chat.glossary.disabled": [],
   "chat.glossary.infotypeRule": [],
   "chat.glossary.limited": [],
   "chat.glossary.repeatWithout": [],
+  "chat.glossary.showForms": [],
   "chat.glossary.title": [],
   "chat.glossary.toggle": [],
   "chat.glossary.unavailable": [],
@@ -583,6 +588,7 @@
     "first",
     "last"
   ],
+  "chat.requestInProgress": [],
   "chat.requestNavigation": [],
   "chat.responseMode.documents.description": [],
   "chat.responseMode.documents.label": [],
@@ -593,12 +599,14 @@
   "chat.responseModeLabel": [],
   "chat.restartAnswer": [],
   "chat.resultsLabel": [],
+  "chat.retainedAnswerNotice": [],
   "chat.scopeAddSelected": [],
   "chat.scopeAdded": [],
   "chat.scopeAllUnavailable": [],
   "chat.scopeAvailable": [],
   "chat.scopeChecking": [],
   "chat.scopeClear": [],
+  "chat.scopeCollapseDocuments": [],
   "chat.scopeDescription": [],
   "chat.scopeEditList": [],
   "chat.scopeEmpty": [],
@@ -612,6 +620,7 @@
   "chat.scopeRemoveDocument": [
     "name"
   ],
+  "chat.scopeShowDocuments": [],
   "chat.scopeSomeUnavailable": [],
   "chat.scopeTitle": [],
   "chat.scopeUnavailable": [],
@@ -641,7 +650,15 @@
   "chat.sessionsLoadError": [
     "message"
   ],
+  "chat.showDocumentFragments": [],
   "chat.showPrevious": [],
+  "chat.showSearchFilters": [],
+  "chat.showSearchSettings": [],
+  "chat.showSources": [],
+  "chat.sourceCounts": [
+    "documents",
+    "fragments"
+  ],
   "chat.sourceFound": [],
   "chat.sourceInContext": [],
   "chat.sourceRating": [
@@ -657,7 +674,6 @@
   "chat.synthesizing": [],
   "chat.tagsLabel": [],
   "chat.tagsPlaceholder": [],
-  "chat.requestInProgress": [],
   "chat.thinking": [],
   "chat.threadDeleted": [],
   "chat.title": [],
@@ -705,7 +721,10 @@
   "content.showRaw": [],
   "content.showRemainingRows": [],
   "content.showRender": [],
-  "content.tableRowsRange": ["from", "to"],
+  "content.tableRowsRange": [
+    "from",
+    "to"
+  ],
   "content.tableTruncated": [
     "shown"
   ],

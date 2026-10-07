@@ -19,6 +19,7 @@ import ru from "../src/i18n/locales/ru.js";
 const require = createRequire(import.meta.url);
 const modules = new Map();
 const selectionControls = [];
+let currentLocale = "ru";
 const t = createTranslator("ru", ru).t;
 function load(name) {
   if (modules.has(name)) return modules.get(name);
@@ -36,7 +37,7 @@ function load(name) {
       };
       return { ...runtime, jsx:capture(runtime.jsx), jsxs:capture(runtime.jsxs) };
     }
-    if (id === "@/i18n/LocaleContext") return { useI18n: () => ({ t, locale: "ru" }) };
+    if (id === "@/i18n/LocaleContext") return { useI18n: () => ({ ...createTranslator(currentLocale), locale: currentLocale }) };
     if (id === "@/lib/chatSourceAssessment.mjs") return assessment;
     if (id === "@/lib/chatAnswerState.mjs") return answerState;
     if (id === "@/lib/chatSourceSelection.mjs") return selection;
@@ -45,7 +46,7 @@ function load(name) {
     if (id === "@/lib/glossaryUi.mjs") return glossary;
     if (id === "@/lib/diagnosticIdentifiers.mjs") return identifiers;
     if (id === "next/link") return function Link({ children, ...props }) { return React.createElement("a", props, children); };
-    if (["./ChatSourceAssessment", "./ChatSources", "./icons", "./ErrorReference", "./AppliedTerms"].includes(id)) return load(id.slice(2));
+    if (["./ChatSourceAssessment", "./ChatSources", "./icons", "./ErrorReference", "./AppliedTerms", "./ChatDisclosureSummary"].includes(id)) return load(id.slice(2));
     if (id === "./ChatAnswer") return { __esModule: true, default: ({ text }) => React.createElement("p", {}, text) };
     return require(id);
   };
@@ -71,7 +72,7 @@ function render(m, isLatest) {
 test("old automatic source lists defer rows while keeping document and selection actions", () => {
   const html = render(message, false);
   assert.equal((html.match(/class="source-link"/g) ?? []).length, 0);
-  assert.ok(html.includes(t("ux.sourcesSummary",{documents:1,fragments:200})));
+  assert.ok(html.includes(t("chat.sourceCounts",{documents:1,fragments:200})));
   assert.ok(html.includes(t("chat.answerSelected", { count: 1 })));
 });
 test("manually expanded latest answer renders every source including the selected last fragment", () => {
@@ -202,4 +203,56 @@ test("select-all click selects a partial selection and the second click clears i
     selectionControls.at(-1).onClick();
     assert.deepEqual(selectedIndexes, []);
   }
+});
+
+test("source disclosures name the action and the document whose fragments they hide", () => {
+  const sources = message.sources.slice(0, 2).map(s => ({...s, filename: "Document.docx"}));
+  try {
+    for (const [locale, showAll, hideAll, showFragments, hideFragments] of [
+      ["ru", "Показать источники", "Свернуть все источники", "Показать 2 фрагмента", "Свернуть 2 фрагмента"],
+      ["en", "Show sources", "Collapse all sources", "Show 2 fragments", "Collapse 2 fragments"],
+    ]) {
+      currentLocale = locale;
+      const draw = (open, expanded) => renderToStaticMarkup(React.createElement(load("ChatSources").default, {
+        sources, open, expandedGroups:{doc:expanded}, onToggle:noop,
+      }));
+      const closed = draw(false, true);
+      assert.ok(closed.includes(showAll), "Closed answer names what opening it reveals");
+      assert.ok(!closed.includes("Document.docx"));
+      const groupClosed = draw(true, false);
+      assert.ok(groupClosed.includes(hideAll), "Outer action explicitly covers all sources");
+      assert.ok(groupClosed.includes(showFragments));
+      assert.ok(groupClosed.includes('aria-label="' + showFragments + ': Document.docx"'));
+      assert.ok(groupClosed.includes("Document.docx"), "Closing fragments keeps the document visible");
+      assert.equal((groupClosed.match(/class="source-link"/g) ?? []).length, 0);
+      const groupOpen = draw(true, true);
+      assert.ok(groupOpen.includes(hideFragments));
+      assert.ok(groupOpen.includes('aria-label="' + hideFragments + ': Document.docx"'));
+      assert.equal((groupOpen.match(/class="source-link"/g) ?? []).length, 2);
+    }
+  } finally { currentLocale = "ru"; }
+});
+
+
+test("glossary disclosures in saved answers identify the hidden forms and retain warnings", () => {
+  for (const locale of ["ru", "en"]) {
+    currentLocale = locale;
+    try {
+      const html = render({ ...message, sources: [], expansion_status: "limited", applied_terms: [
+        { canonical: "bvr", matched_texts: ["БВР"], display_name: "Базовое вознаграждение", added_forms: ["базовое вознаграждение"] },
+      ] }, false);
+      const summary = html.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1] ?? "";
+      assert.ok(summary.includes(locale === "ru" ? "Показать обозначения" : "Show glossary forms"));
+      assert.ok(summary.includes(locale === "ru" ? "Свернуть обозначения" : "Collapse glossary forms"));
+      assert.ok(summary.includes(createTranslator(locale).t("chat.glossary.count", { count: 1 })));
+      assert.ok(html.includes("БВР → <b>Базовое вознаграждение</b>"));
+      assert.ok(html.indexOf(createTranslator(locale).t("chat.glossary.limited")) > html.indexOf("</details>"));
+    } finally { currentLocale = "ru"; }
+  }
+});
+
+test("an unavailable glossary keeps its status visible without an empty disclosure", () => {
+  const html = renderToStaticMarkup(React.createElement(load("AppliedTerms").default, {status:"unavailable"}));
+  assert.ok(html.includes(t("chat.glossary.unavailable")));
+  assert.ok(!html.includes("<details"));
 });

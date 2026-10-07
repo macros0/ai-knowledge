@@ -5,6 +5,7 @@ import Link from "next/link";
 import { friendlyApiError, getChatSearchScope } from "@/lib/api";
 import { documentHref } from "@/lib/chatSources";
 import { useI18n } from "@/i18n/LocaleContext";
+import ChatDisclosureSummary from "./ChatDisclosureSummary";
 
 export default function ChatSearchScope({ documents, onRemove, onClear, refreshKey }) {
   const { t } = useI18n();
@@ -37,8 +38,9 @@ export default function ChatSearchScope({ documents, onRemove, onClear, refreshK
       </div>
       <p className="meta">{t(documents.length ? "chat.scopeDescription" : "chat.scopeEmptyActive")}</p>
       {documents.length > 0 && (
-        <details className="chat-scope-details">
-          <summary>{t("chat.scopeEditList")}</summary>
+        <details className="chat-scope-details chat-disclosure">
+          <ChatDisclosureSummary showLabel={t("chat.scopeShowDocuments")} hideLabel={t("chat.scopeCollapseDocuments")} />
+          <div className="chat-disclosure-content">
           <ul className="chat-scope-documents">
             {documents.map((document) => {
               const item = availability.get(document.doc_id);
@@ -55,6 +57,7 @@ export default function ChatSearchScope({ documents, onRemove, onClear, refreshK
           <div className="chat-scope-actions">
             <button type="button" className="btn ghost" onClick={() => setRevision((value) => value + 1)}>{t("chat.scopeRefresh")}</button>
             <button type="button" className="btn ghost" onClick={onClear}>{t("chat.scopeClear")}</button>
+          </div>
           </div>
         </details>
       )}

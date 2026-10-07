@@ -1,10 +1,11 @@
 "use client";
 import {useI18n} from "@/i18n/LocaleContext";
+import ChatDisclosureSummary from "./ChatDisclosureSummary";
 export default function ChatFilters({summary,onClear,children}) {
   const {t}=useI18n();
-  return <details className="chat-filters">
-    <summary>{t("ux.searchFilters")}</summary>
-    <div className="chat-filter-controls">{children}<button type="button" className="btn ghost" onClick={onClear} disabled={!summary.some(x=>x.removable)}>{t("docs.resetFilters")}</button></div>
+  return <details className="chat-filters chat-disclosure">
+    <ChatDisclosureSummary showLabel={t("chat.showSearchFilters")} hideLabel={t("chat.collapseSearchFilters")} />
+    <div className="chat-filter-controls chat-disclosure-content">{children}<button type="button" className="btn ghost" onClick={onClear} disabled={!summary.some(x=>x.removable)}>{t("docs.resetFilters")}</button></div>
   </details>;
 }
 export function ChatFilterSummary({summary,onRemove}) {
