@@ -1,4 +1,5 @@
 """Тесты журнала ИБ (audit_log): append-only, enum action_type, фильтры."""
+import json
 from pathlib import Path
 
 import pytest
@@ -130,6 +131,17 @@ class TestAuditService:
 
     def test_action_types_enum_frozen(self):
         assert ACTION_TYPES == EXPECTED_ACTION_TYPES
+
+    def test_action_types_have_bundled_ui_translations(self):
+        dictionary_dir = Path(__file__).resolve().parents[1] / "app" / "i18n"
+        manifest = json.loads((dictionary_dir / "ui_keys.json").read_text(encoding="utf-8"))
+        english = json.loads((dictionary_dir / "ui_en.json").read_text(encoding="utf-8"))
+        missing = sorted(
+            action for action in ACTION_TYPES
+            if f"security.action.{action}" not in manifest
+            or not english.get(f"security.action.{action}")
+        )
+        assert not missing, f"Audit actions lack UI translations: {missing}"
 
 
 def test_record_uses_user_attributes():
