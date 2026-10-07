@@ -20,6 +20,12 @@
   },
   "devDependencies": {
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.3.8"
+    "eslint-config-next": "^16.3.8",
+    "fast-glob": "file:tooling/eslint-root-glob"
+  },
+  "overrides": {
+    "@next/eslint-plugin-next": {
+      "fast-glob": "$fast-glob"
+    }
   }
 }

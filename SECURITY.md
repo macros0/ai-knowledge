@@ -1148,3 +1148,18 @@ not enter the new owner's UI and remaining files are not dispatched. Duplicate
 and similar-file consent remains per file and per attempt. This client boundary
 does not replace API authorization or cancel processing of accepted documents.
 Drafts and File objects are not persisted in local storage or included in URLs.
+
+
+## Dependency audit remediation (2026-10-07)
+
+The frontend lock removes the vulnerable braces/micromatch chain from the Next
+ESLint plugin using a scoped local rootDir glob adapter. The Next version and
+ESLint rules are preserved; regression tests cover glob discovery and an
+actual internal-link diagnostic. Unsupported glob options fail explicitly.
+The adapter is copied before npm ci in the frontend image build.
+
+The same lock updates sharp to 0.35.5 (bundled libvips packages 1.3.4) and
+source-map-js to 1.2.2, within Next/PostCSS dependency ranges. This removes
+GHSA-vfj7-8cjw-p6xm, GHSA-wq5f-xc86-pv6w and GHSA-68fv-2mgg-jv7q from the
+installed dependency graph. The audit includes production, development,
+optional and peer dependencies; the existing audit gate is unchanged.
