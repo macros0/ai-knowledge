@@ -639,12 +639,12 @@ class TestGenerateChunkTruncation:
                 self.classifier_calls = 0
 
             def chat_json(self, system, user, doc_id="unknown", chunk_idx=0,
-                          salvage_truncated=False, single_object=False):
+                          salvage_truncated=False, single_object=False, task="generation"):
                 if single_object:
+                    assert task == "table_classification"
                     self.classifier_calls += 1
                     return {"concept_per_row": True, "title_col": 0,
-                            "description_cols": [1], "concept_type": "reference",
-                            "extraction_mode": "per_row"}
+                            "concept_type": "reference", "extraction_mode": "per_row"}
                 return []
 
         settings = Settings(data_dir=tmp_path, okf_max_chunk_chars=180,

@@ -23,6 +23,8 @@ def file_digest(path: Path) -> str:
 
 def artifact_manifest(settings, doc_id: str, generation_id: str) -> dict[str, str]:
     paths = generation_paths(settings, doc_id, generation_id)
+    from app.services.table_quality import validate_table_quality_artifact
+    validate_table_quality_artifact(paths.bundle)
     result = {}
     for name, root in (("attachments", paths.attachments), ("bundle", paths.bundle)):
         _check_tree(root)

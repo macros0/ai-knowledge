@@ -455,11 +455,15 @@ class FakeClassifierLLM:
         chunk_idx=0,
         salvage_truncated=False,
         single_object=False,
+        task=None,
     ):
         self.call_count += 1
         if not self._responses:
             raise RuntimeError("no more mock responses")
-        return self._responses.pop(0)
+        answer = dict(self._responses.pop(0))
+        answer.pop("description_cols", None)
+        answer.setdefault("extraction_mode", "per_row")
+        return answer
 
 
 # Перечень с ПОВТОРЯЮЩИМИСЯ значениями в title-колонке (инцидент 03.09.2026:
@@ -506,8 +510,8 @@ class TestDedupByKeyNotTitle:
         assert "Таблица-перечень извлечена программно: 5 строк" in remainder
 
 
-    def test_identical_full_duplicates_collapsed(self, tmp_path, monkeypatch):
-        """Идентичные строки (title+content) — настоящий дубль, схлопывается."""
+    def test_identical_physical_rows_keep_distinct_source_spans(self, tmp_path, monkeypatch):
+        """Идентичные значения в разных физических строках сохраняются."""
         table = """# Справочник ДП
 
 | Номер ДП | Группа | Наименование |
@@ -521,8 +525,9 @@ class TestDedupByKeyNotTitle:
 """
         concepts, _ = self._extract(tmp_path, monkeypatch, table, title_col=1)
         rows = [c for c in concepts if "table-row" in (c.tags or [])]
-        # 6 строк данных, из них одна точная копия другой → 5 концептов
-        assert len(rows) == 5, f"дубликат не схлопнулся: {len(rows)}"
+        # 6 физических строк, включая повтор значений, имеют своё происхождение.
+        assert len(rows) == 6
+        assert rows[0].source_spans != rows[1].source_spans
 
 
 def test_large_directory_preserves_rows_when_llm_classifies_it_as_whole(tmp_path, monkeypatch):
@@ -603,12 +608,12 @@ def test_large_directory_override_keeps_repeated_rows(tmp_path, monkeypatch):
     assert [c.title for c in row_concepts][-20:] == [f"Person {i:03d}" for i in range(20)]
 
 
-class TestClassifierNoneTolerance:
+class TestClassifierInvalidFields:
     """Ответ классификатора с null-полями не должен ронять классификацию
     (инцидент 03.09.2026: "title_col": null → int(None) → TypeError →
     ненужный fallback на XML-эвристику)."""
 
-    def test_null_title_col_and_description_cols_use_defaults(self, tmp_path, monkeypatch):
+    def test_null_fields_cause_explicit_fallback(self, tmp_path, monkeypatch):
         monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
         s = get_settings()
         monkeypatch.setattr(s, "okf_field_table_min_rows", 5)
@@ -621,10 +626,9 @@ class TestClassifierNoneTolerance:
         concepts, _ = extract_table_concepts(
             DUPLICATE_TITLE_TABLE, chunk_index=1, llm=llm, use_llm_classify=True
         )
-        # title_col=None → дефолт 0 (первая колонка: Номер ДП) — без исключения
-        rows = [c for c in concepts if "table-row" in (c.tags or [])]
-        assert len(rows) == 5
-        assert {c.title for c in rows} == {"31", "32", "33", "54", "55"}
+        from app.services import gen_quality
+        assert not concepts
+        assert gen_quality.CLASSIFIER_FALLBACK in {e["event"] for e in gen_quality.drain()}
 
 
 class TestLLMClassifier:
@@ -645,12 +649,12 @@ class TestLLMClassifier:
                 chunk_idx=0,
                 salvage_truncated=False,
                 single_object=False,
+                task=None,
             ):
                 self.single_object = single_object
                 return {
                     "concept_per_row": True,
                     "title_col": 0,
-                    "description_cols": [4],
                     "concept_type": "reference",
                     "extraction_mode": "per_row",
                 }
@@ -820,6 +824,7 @@ class TestLLMClassifier:
                 chunk_idx=0,
                 salvage_truncated=False,
                 single_object=False,
+                task=None,
             ):
                 self.call_count += 1
                 raise RuntimeError("LLM unavailable")
@@ -947,7 +952,7 @@ class TestLLMClassifier:
         assert "S05" in overview.content
         assert "Аннулирование" in overview.content
 
-    def test_dedup_skips_duplicate_titles(self, tmp_path, monkeypatch):
+    def test_whole_tables_keep_physical_occurrences(self, tmp_path, monkeypatch):
         """Дедуп: концепты с одинаковым title из разных таблиц — только первый."""
         monkeypatch.setattr("app.services.field_table.get_settings", lambda: get_settings())
         s = get_settings()
@@ -961,6 +966,7 @@ class TestLLMClassifier:
         # chunk с двумя одинаковыми таблицами под одинаковым заголовком
         chunk = "## Справочник кодов\n\n" + FIELD_TABLE.strip() + "\n\n## Справочник кодов\n\n" + FIELD_TABLE.strip()
         concepts, _r = extract_table_concepts(chunk, chunk_index=1, llm=llm, use_llm_classify=True)
-        # dedup: только 2 концепта (по одному на таблицу, но второй дубликат пропущен)
+        # Physical tables retain separate source spans even with identical content.
         whole_concepts = [c for c in concepts if c.tags and "table-whole" in c.tags]
-        assert len(whole_concepts) == 1  # второй пропущен дедупом
+        assert len(whole_concepts) == 2
+        assert whole_concepts[0].source_spans != whole_concepts[1].source_spans

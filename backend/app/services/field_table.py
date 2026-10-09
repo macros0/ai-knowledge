@@ -28,6 +28,9 @@ from typing import Protocol
 from app.config import get_settings
 from app.models.schemas import Concept, SourceSpan
 from app.services.source_evidence import span_for_lines
+from app.services import gen_quality
+from app.services.llm_scheduler import LLMCancelled
+from app.services.table_quality import LegacyTableLocator, TableQualityReport, classifier_cause
 from app.services.sparse import TOKEN_EXTRA_LETTERS, TOKEN_EXTRA_LETTERS_UPPER
 
 logger = logging.getLogger(__name__)
@@ -456,6 +459,7 @@ class _ClassifierLLM(Protocol):
         chunk_idx: int = 0,
         salvage_truncated: bool = False,
         single_object: bool = False,
+        task: str | None = None,
     ) -> list | dict: ...
 
 
@@ -545,7 +549,8 @@ def detect_tables(text: str) -> list[RawTableBlock]:
 
 # Версия схемы классификатора. Бампить при изменении TableClassification
 # (добавление/удаление/переименование полей) — старый кэш инвалидируется.
-CLASSIFIER_CACHE_VERSION = "1.0"
+CLASSIFIER_CACHE_VERSION = "2.0"
+CLASSIFICATION_PREVIEW_ROWS = 5
 
 
 def _get_prompt_hash() -> str:
@@ -559,8 +564,26 @@ def _get_prompt_hash() -> str:
     return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16]
 
 
+def _classification_user(header: list[str], raw_rows: list[str]) -> str:
+    preview = "| " + " | ".join(header) + " |\n"
+    preview += "| " + " | ".join("---" for _ in header) + " |\n"
+    preview += "".join(row + "\n" for row in raw_rows[:CLASSIFICATION_PREVIEW_ROWS])
+    return f"Заголовок таблицы: {header}\n\nПервые строки:\n\n{preview}\nКлассифицируй таблицу."
+
+
+def _validate_classification(cls: TableClassification, header: list[str]) -> TableClassification:
+    from app.services.llm_profiles import TableClassificationResult
+    TableClassificationResult.model_validate({
+        "concept_per_row": cls.concept_per_row, "title_col": cls.title_col,
+        "concept_type": cls.concept_type, "extraction_mode": cls.extraction_mode,
+    })
+    if not 0 <= cls.title_col < len(header):
+        raise ValueError("Table title column is outside the source columns")
+    return cls
+
+
 def _build_cache_key(header: list[str], raw_rows: list[str]) -> str:
-    """Составной cache-key: version + prompt_hash + model + header + rows[:2].
+    """Составной cache-key: version + prompt_hash + model + complete transmitted preview.
 
     Инвалидируется автоматически при:
       - правке okf_table_classifier.md (p_hash);
@@ -571,8 +594,8 @@ def _build_cache_key(header: list[str], raw_rows: list[str]) -> str:
         "v": CLASSIFIER_CACHE_VERSION,
         "p_hash": _get_prompt_hash(),
         "model": get_settings().llm_model,
-        "header": header,
-        "rows": raw_rows[:2],
+        "task": "table_classification",
+        "preview": _classification_user(header, raw_rows),
     }
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -643,46 +666,19 @@ def _llm_classify_table(
     cached = _load_cached_classification(key)
     if cached is not None:
         logger.debug("Кэш-попадание классификации таблицы %s", key[:12])
-        return cached
+        return _validate_classification(cached, header)
 
     from app.prompts.store import get_store
 
     store = get_store()
     system = store.get("okf_table_classifier")
-    sample_rows = raw_rows[:5]
-    table_preview = "| " + " | ".join(header) + " |\n"
-    table_preview += "| " + " | ".join("---" for _ in header) + " |\n"
-    for r in sample_rows:
-        table_preview += r + "\n"
-    user = f"Заголовок таблицы: {header}\n\nПервые строки:\n\n{table_preview}\n\nКлассифицируй таблицу."
+    from app.services.llm_profiles import TableClassificationResult
     raw = llm.chat_json(
-        system,
-        user,
-        doc_id=doc_id,
-        chunk_idx=chunk_idx,
-        single_object=True,
+        system, _classification_user(header, raw_rows), doc_id=doc_id,
+        chunk_idx=chunk_idx, single_object=True, task="table_classification",
     )
-    if isinstance(raw, dict):
-        mode = str(raw.get("extraction_mode") or "per_row")
-        if mode not in ("per_row", "whole"):
-            mode = "per_row"
-        # None-толерантность: модель шлёт "title_col": null / "description_cols":
-        # null (инцидент 03.09.2026: int(None) → TypeError → ненужный fallback
-        # на XML-эвристику). None → дефолты.
-        raw_title_col = raw.get("title_col")
-        cls = TableClassification(
-            concept_per_row=bool(raw.get("concept_per_row", False)),
-            title_col=int(raw_title_col) if raw_title_col is not None else 0,
-            description_cols=[
-                int(x)
-                for x in (raw.get("description_cols") or [])
-                if isinstance(x, (int, str)) and str(x).strip() != ""
-            ],
-            concept_type=str(raw.get("concept_type") or "reference"),
-            extraction_mode=mode,
-        )
-    else:
-        raise ValueError(f"LLM-классификатор вернул не dict: {type(raw)}")
+    result = TableClassificationResult.model_validate(raw)
+    cls = _validate_classification(TableClassification(**result.model_dump()), header)
     _save_cached_classification(key, cls)
     logger.info("Таблица классифицирована LLM: concept_per_row=%s title_col=%d type=%s",
                 cls.concept_per_row, cls.title_col, cls.concept_type)
@@ -742,8 +738,10 @@ def build_row_concepts(
         cells = _parse_row_cells(raw)
         if not cells:
             continue
-        title_idx = cls.title_col if 0 <= cls.title_col < len(cells) else 0
-        row_title = cells[title_idx].strip() if cells[title_idx].strip() else "?"
+        title_idx = cls.title_col
+        # A valid source column may be absent in a ragged Markdown row.
+        # Keep that row and its evidence; never substitute another column.
+        row_title = (cells[title_idx].strip() if title_idx < len(cells) else "") or "?"
         content_lines = ["| Свойство | Значение |", "|---|---|"]
         for ci, val in enumerate(cells):
             col_name = header[ci] if ci < len(header) and header[ci] else f"Колонка {ci}"
@@ -884,18 +882,25 @@ def _extract_with_llm_classify(
     ) -> None:
         for concept in build_row_concepts(block, classification, code, lines=lines):
             key = _dedup_key(concept)
-            if key in seen_keys and not (preserve_duplicate_rows and "table-row" in concept.tags):
+            if key in seen_keys and not (preserve_duplicate_rows and ({"table-row", "table-whole"} & set(concept.tags))):
                 logger.debug("Дедуп: пропущен дубликат title=%r", concept.title)
                 continue
             seen_keys.add(key)
             concepts.append(concept)
         extracted_blocks.append((block, f"[Таблица-перечень извлечена программно: {len(block.raw_rows)} строк]"))
 
+    def record_report(block, ordinal, method, cause=None, covered=None):
+        gen_quality.record_table_report(TableQualityReport(
+            table_ref=LegacyTableLocator(source_id="root", chunk_index=max(0, chunk_index or 0), table_ordinal=ordinal),
+            method=method, cause_code=cause, input_rows=len(block.raw_rows), covered_rows=covered,
+        ))
+
     for bi, b in enumerate(blocks):
         code = codes[bi]
         record_col = _large_record_title_column(b)
         try:
             cls = _llm_classify_table(b.header, b.raw_rows, llm, doc_id, chunk_index or 0)
+            method = "llm_" + cls.extraction_mode if cls.concept_per_row else "llm_generation"
             if (not cls.concept_per_row or cls.extraction_mode == "whole") and record_col is not None:
                 logger.warning(
                     "[%s] Чанк %s: большая таблица (%d строк) извлекается построчно, "
@@ -909,17 +914,17 @@ def _extract_with_llm_classify(
                     concept_type=cls.concept_type,
                     extraction_mode="per_row",
                 )
+                method = "deterministic_rows"
             if cls.concept_per_row:
-                add_row_concepts(b, cls, code, preserve_duplicate_rows=record_col is not None)
-            # если concept_per_row=False — таблица остаётся LLM (не извлекаем)
+                add_row_concepts(b, cls, code, preserve_duplicate_rows=True)
+            record_report(b, bi, method, covered=len(b.raw_rows) if cls.concept_per_row else None)
+            # concept_per_row=False leaves the table for generation; coverage is unknown.
+        except LLMCancelled:
+            raise
         except Exception as e:
-            logger.warning("LLM-классификатор ошибся (%s), fallback для таблицы чанка %s", e, chunk_index)
-            from app.services import gen_quality
-
-            gen_quality.record(
-                gen_quality.CLASSIFIER_FALLBACK,
-                f"chunk {chunk_index}: LLM-классификатор таблиц упал ({e})",
-            )
+            cause = classifier_cause(e)
+            logger.warning("Классификатор таблицы чанка %s: %s; резервный метод", chunk_index, cause)
+            gen_quality.record(gen_quality.CLASSIFIER_FALLBACK, cause)
             if record_col is not None:
                 add_row_concepts(b, TableClassification(
                     concept_per_row=True,
@@ -927,6 +932,7 @@ def _extract_with_llm_classify(
                     description_cols=[i for i in range(len(b.header)) if i != record_col],
                     extraction_mode="per_row",
                 ), code, preserve_duplicate_rows=True)
+                record_report(b, bi, "deterministic_rows", cause, len(b.raw_rows))
                 continue
             # fallback: проверить как таблицу полей XML
             if _is_field_table(b.header, b.raw_rows):
@@ -943,13 +949,16 @@ def _extract_with_llm_classify(
                 if len(rows) >= _min_rows():
                     for c in build_field_concepts(rows, code, row_spans):
                         key = _dedup_key(c)
-                        if key not in seen_keys:
+                        if key not in seen_keys or "field" in c.tags:
                             seen_keys.add(key)
                             concepts.append(c)
                     ov = build_overview_concept(rows, code, [span_for_lines(chunk, b.start, b.end)])
                     if ov:
                         concepts.append(ov)
                     extracted_blocks.append((b, f"[Таблица полей извлечена программно: {len(rows)} полей]"))
+                    record_report(b, bi, "heuristic_xml", "content_omitted" if len(rows) < len(b.raw_rows) else cause, len(rows))
+                    continue
+            record_report(b, bi, "llm_generation", cause)
     # заменить извлечённые таблицы на stub. Итерация в обратном порядке:
     # замена блока меняет длину lines, поэтому индексы следующих (в обратном
     # порядке — уже обработанных) блоков не сдвигаются.

@@ -1213,3 +1213,17 @@ redacted from public history. A new provider is an explicit deployment choice;
 there is no automatic fallback. Source text remains untrusted prompt data and
 canonical document visibility is checked again before publishing assessed sources.
 The assessment preference alone may be persisted in browser localStorage.
+
+## Table quality artifacts (R1)
+
+`app/services/table_quality.py` stores `table-quality.json` under the isolated
+candidate generation bundle before publication. Strict models allow only legacy
+source/chunk/table locators, methods, safe cause codes and counts; no cell text,
+prompts or provider exceptions are stored in this artifact. Markdown row coverage
+does not certify original cells or headers; unknown counts remain null.
+`generation_artifacts.artifact_manifest` validates and hashes the report, and the
+existing publication verifier rejects missing or changed files before the active
+pointer can commit. Retention/deletion follows the existing generation lifecycle.
+No new HTTP route or access grant is introduced. Raw corpus manifests and detailed
+read-only probe results are local operator data in ignored `data/table-eval/`;
+they contain source values and must not be committed or exposed as public reports.

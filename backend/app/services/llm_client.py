@@ -606,10 +606,10 @@ class LLMClient:
         max_attempts = max(1, settings.llm_truncation_retry_attempts + 1)
         base = max(1, settings.llm_max_tokens)
         task = task or ("classification" if single_object else "generation")
-        if self.local:
+        if self.local or task == "table_classification":
             base = llm_profiles.token_limit(settings, task)
         multiplier = max(1.0, settings.llm_truncation_max_tokens_multiplier)
-        cap = max(base, settings.llm_max_tokens_cap) if task == "generation" or not self.local else base
+        cap = max(base, settings.llm_max_tokens_cap) if task == "generation" or (not self.local and task != "table_classification") else base
         max_tokens = base
         for attempt in range(max_attempts):
             text, finish_reason = self._complete_with_retries(
@@ -634,7 +634,7 @@ class LLMClient:
                     salvage_truncated=salvage_truncated,
                     single_object=single_object,
                 )
-                return llm_profiles.validate_result(task, result) if self.local else result
+                return llm_profiles.validate_result(task, result) if self.local or task == "table_classification" else result
             except LLMTruncationError:
                 if attempt == max_attempts - 1 or (self.local and max_tokens >= cap):
                     raise

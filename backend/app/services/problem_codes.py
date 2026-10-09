@@ -41,7 +41,13 @@ UNSUPPORTED_RTF_BODY = "unsupported_rtf_body"
 # поиск по сырым фрагментам для этого документа недоступен.
 INDEX_PARTIAL_FAILURE = "index_partial_failure"
 
+TABLE_CONTENT_OMITTED = "table_content_omitted"
+
 PROBLEM_MESSAGES: dict[str, str] = {
+    TABLE_CONTENT_OMITTED: (
+        "Часть строк или ячеек таблицы не сохранена. Проверьте исходный файл "
+        "и запустите полную перегенерацию документа."
+    ),
     NO_CONCEPTS: (
         "Не извлечено ни одного концепта: документ ищется только по чанкам. "
         "Проверьте содержимое или переиндексируйте."

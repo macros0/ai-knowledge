@@ -35,6 +35,14 @@ class Classification(BaseModel):
     extraction_mode: Literal["per_row", "whole"]
 
 
+class TableClassificationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    concept_per_row: bool
+    title_col: int
+    concept_type: Literal["concept", "procedure", "reference", "note"]
+    extraction_mode: Literal["per_row", "whole"]
+
+
 class SourceAssessmentItem(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     source_index: int
@@ -58,6 +66,7 @@ ADAPTERS = {
     "source_assessment": TypeAdapter(SourceAssessmentJSON),
     "generation": TypeAdapter(list[GeneratedConcept]),
     "classification": TypeAdapter(Classification),
+    "table_classification": TypeAdapter(TableClassificationResult),
     "development": TypeAdapter(Development),
     "translation": TypeAdapter(list[str]),
 }
@@ -104,6 +113,7 @@ def token_limit(settings, task):
     return {
         "chat": settings.llm_chat_max_tokens,
         "classification": settings.llm_classification_max_tokens,
+        "table_classification": settings.llm_classification_max_tokens,
         "development": settings.llm_classification_max_tokens,
         "translation": settings.llm_translation_max_tokens,
     }.get(task, settings.llm_max_tokens)

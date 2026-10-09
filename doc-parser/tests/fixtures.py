@@ -370,3 +370,37 @@ def make_pdf_scanned_like(path: Path) -> Path:
     c.rect(72, 72, 468, 648, stroke=1, fill=1)
     c.save()
     return path
+
+
+def make_table_acceptance_xlsx(path: Path, width: int = 316) -> Path:
+    """Only synthetic values: wide rows plus a deliberately ambiguous sheet."""
+    from datetime import datetime
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    wide = workbook.active
+    wide.title = 'Wide'
+    wide.append([f'Column {i}' for i in range(width)])
+    wide.append(['record-001', *[f'edge-{i}' for i in range(1, width)]])
+    repeated = ['repeat-key', *[f'repeated-{i}' for i in range(1, width)]]
+    wide.append(repeated)
+    wide.append(repeated)
+    wide.append([None] * width)
+    wide.append(['hidden-key', *[0 for _ in range(1, width)]])
+    wide.row_dimensions[6].hidden = True
+    complex_sheet = workbook.create_sheet('Ambiguous')
+    complex_sheet.append(['Report heading'])
+    complex_sheet.merge_cells('A1:C1')
+    complex_sheet.append(['Code', 'Values', 'Values', 'Text', 'Date'])
+    complex_sheet.append(['001', 0, False, 'pipe | <b>x</b>\nnext', datetime(2026, 10, 9)])
+    complex_sheet.append(['=1+1', '#DIV/0!', None, 'long-' + 'x' * 16000])
+    complex_sheet['B4'].data_type = 'e'
+    complex_sheet.append(['hidden', 0, False])
+    complex_sheet.row_dimensions[5].hidden = True
+    complex_sheet.append([])
+    complex_sheet.append(['Second table', 'Value'])
+    complex_sheet.append(['Code', 'Text'])
+    complex_sheet.append(['002', 'independent region'])
+    workbook.save(path)
+    workbook.close()
+    return path

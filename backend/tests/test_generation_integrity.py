@@ -69,3 +69,31 @@ def test_replaying_publication_does_not_require_old_preparation_manifest(pipelin
     (paths.uploads_root / "publication.json").unlink()
     pipeline._publish_prepared_generation(DOC_ID, expected[0], StagingStore(DOC_ID))
     assert _published_snapshot(pipeline) == expected
+
+
+@pytest.mark.parametrize('damage', ['change', 'remove'])
+def test_damaged_table_quality_report_preserves_active_generation(pipeline_env, monkeypatch, damage):
+    from app.services import gen_quality
+    from app.services.table_quality import LegacyTableLocator, TableQualityReport
+    pipeline, _, _ = pipeline_env
+    generate = pipeline.okf_generator.generate_chunk
+    def with_report(*args, **kwargs):
+        gen_quality.record_table_report(TableQualityReport(
+            table_ref=LegacyTableLocator(source_id='root', chunk_index=0, table_ordinal=0),
+            method='llm_per_row', input_rows=1, covered_rows=1,
+        ))
+        return generate(*args, **kwargs)
+    monkeypatch.setattr(pipeline.okf_generator, 'generate_chunk', with_report)
+    pipeline, candidate = _prepare_second(pipeline_env, monkeypatch)
+    previous = _published_snapshot(pipeline)
+    path = generation_paths(pipeline.settings, DOC_ID, candidate).bundle / 'table-quality.json'
+    assert path.is_file()
+    if damage == 'remove':
+        path.unlink()
+    else:
+        data = json.loads(path.read_text(encoding='utf-8'))
+        data['reports'][0]['covered_rows'] = 0
+        path.write_text(json.dumps(data), encoding='utf-8')
+    with pytest.raises(ValueError):
+        pipeline._publish_prepared_generation(DOC_ID, candidate, StagingStore(DOC_ID))
+    assert _published_snapshot(pipeline) == previous

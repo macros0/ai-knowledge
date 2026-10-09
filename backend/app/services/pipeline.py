@@ -44,6 +44,7 @@ from app.services.errors import (
 from app.services import gen_quality
 from app.services.generation_files import generation_paths, merge_legacy_backfill_files, prepare_generation_paths
 from app.services.generation_artifacts import artifact_manifest, file_digest
+from app.services.table_quality import bind_table_reports, has_content_omission, reports_from_chunks, write_table_quality_report
 from app.services.generation_publication import _merge_tags, publish_prepared_document
 from app.services.generation_store import (
     lock_document_write, mark_generation_ready, prepare_generation_attempt,
@@ -171,6 +172,8 @@ def _generation_problem(chunks_data: dict) -> str | None:
     }
     if gen_quality.LLM_SALVAGE in events:
         return problem_codes.LLM_PARTIAL_RESULT
+    if has_content_omission(chunks_data):
+        return problem_codes.TABLE_CONTENT_OMITTED
     if gen_quality.CLASSIFIER_FALLBACK in events:
         return problem_codes.LLM_CLASSIFIER_FALLBACK
     return None
@@ -858,7 +861,7 @@ class Pipeline:
                             concepts = self.okf_generator.generate_chunk(chunk, filename, i + 1, total, doc_id=doc_id)
                         # Телеметрия деградации этого чанка (salvage JSON,
                         # fallback классификатора) — до любых других вызовов.
-                        degradation = gen_quality.drain()
+                        degradation = bind_table_reports(gen_quality.drain(), chunk_source_ids[i], i)
                         finish_stage("generate", generation_started, chunk_index=i,
                                      retry_index=chunk_attempt - 1, counts={"concepts": len(concepts or [])})
                         if self._abort_events.get(doc_id, threading.Event()).is_set():
@@ -1230,6 +1233,9 @@ class Pipeline:
             parse_warnings=parse_warnings or [],
             **locale_fields,
         )
+        table_reports = reports_from_chunks(chunks_data)
+        if table_reports:
+            write_table_quality_report(paths.bundle, table_reports)
         prepared = {
             "doc_id": doc_id, "generation_id": generation_id,
             "concepts": [item.model_dump(mode="json") for item in okf_docs],

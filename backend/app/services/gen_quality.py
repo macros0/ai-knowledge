@@ -26,7 +26,8 @@ LLM_SALVAGE = "llm_salvage"
 # (потенциально менее точное извлечение).
 CLASSIFIER_FALLBACK = "classifier_fallback"
 
-KNOWN_EVENTS = {LLM_SALVAGE, CLASSIFIER_FALLBACK}
+TABLE_QUALITY = "table_quality"
+KNOWN_EVENTS = {LLM_SALVAGE, CLASSIFIER_FALLBACK, TABLE_QUALITY}
 
 
 def has_salvage(events: list[dict] | None) -> bool:
@@ -53,6 +54,16 @@ def record(event: str, detail: str = "") -> None:
         events = []
         _local.events = events
     events.append({"event": event, "detail": detail})
+
+
+def record_table_report(report) -> None:
+    from app.services.table_quality import TableQualityReport
+    validated = TableQualityReport.model_validate(report)
+    events = getattr(_local, "events", None)
+    if events is None:
+        events = []
+        _local.events = events
+    events.append({"event": TABLE_QUALITY, "report": validated.model_dump(mode="json")})
 
 
 def drain() -> list[dict]:

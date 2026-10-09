@@ -111,3 +111,7 @@ tests/tmp/pytest-runs/*
 .ruff_cache/
 backend/.coverage
 backend/htmlcov/
+
+# Local table corpus, source values and acceptance evidence
+/data/table-eval/
+/.superpowers/
