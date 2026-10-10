@@ -1,0 +1,9 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: okf-kube
+networking:
+  apiServerAddress: "127.0.0.1"
+nodes:
+  - role: control-plane
+# The VM disk and off-VM backups persist independently of disposable kind nodes.
+# Verify CIDRs against LAN/VPN before creation; use a version approved by the target platform.

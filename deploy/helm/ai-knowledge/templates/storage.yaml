@@ -1,0 +1,66 @@
+{{- range $name := list "postgres" "qdrant" }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "okf.labels" $ | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector: {matchLabels: {okf-role: {{ $name }}}}
+  template:
+    metadata:
+      labels:
+        okf-role: {{ $name }}
+        {{- include "okf.labels" $ | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ ternary 999 1000 (eq $name "postgres") }}
+        runAsGroup: {{ ternary 999 1000 (eq $name "postgres") }}
+        fsGroup: {{ ternary 999 1000 (eq $name "postgres") }}
+        seccompProfile: {type: RuntimeDefault}
+      {{- with $.Values.images.pullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ index $.Values.storage (printf "%sImage" $name) | quote }}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          {{- if eq $name "postgres" }}
+          env:
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - {name: POSTGRES_USER, value: okf}
+            - {name: POSTGRES_DB, value: okf_knowledge}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ $.Values.secrets.existingSecret | quote }}, key: POSTGRES_PASSWORD}}
+          ports: [{containerPort: 5432}]
+          readinessProbe: {exec: {command: [pg_isready, -U, okf, -d, okf_knowledge]}, periodSeconds: 5}
+          volumeMounts: [{name: storage, mountPath: /var/lib/postgresql/data}]
+          {{- else }}
+          workingDir: /qdrant/storage
+          command: [/qdrant/qdrant]
+          args: [--config-path, /qdrant/config/production.yaml]
+          env:
+            - {name: QDRANT__TELEMETRY_DISABLED, value: "true"}
+            - {name: QDRANT__STORAGE__STORAGE_PATH, value: /qdrant/storage/data}
+            - {name: QDRANT__STORAGE__SNAPSHOTS_PATH, value: /qdrant/storage/snapshots}
+          ports: [{containerPort: 6333}]
+          readinessProbe: {httpGet: {path: /readyz, port: 6333}, periodSeconds: 5}
+          volumeMounts: [{name: storage, mountPath: /qdrant/storage}]
+          {{- end }}
+          resources: {{ toYaml (index $.Values.resources $name) | nindent 12 }}
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ (index $.Values.persistence $name).existingClaim | quote }}
+{{- end }}

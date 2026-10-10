@@ -1,0 +1,82 @@
+deployment:
+  environment: home
+  mode: compact
+application:
+  enabled: true
+  replicas: 1
+runtime:
+  environment: production
+  workers: 1
+  auditStdoutMode: disabled
+  config: {}
+trust:
+  existingConfigMap: ""
+secrets:
+  existingSecret: ""
+persistence:
+  data: {existingClaim: ""}
+  diagnostics: {existingClaim: ""}
+  postgres: {existingClaim: ""}
+  qdrant: {existingClaim: ""}
+storage:
+  mode: bundled
+  postgresImage: postgres:17@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675
+  qdrantImage: qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
+images:
+  backend: {repository: okf-backend, digest: "", tag: "", pullPolicy: IfNotPresent}
+  frontend: {repository: okf-frontend, digest: "", tag: "", pullPolicy: IfNotPresent}
+  stub: {repository: okf-model-stub, digest: "", tag: "", pullPolicy: IfNotPresent}
+  pullSecrets: []
+models:
+  mode: stub
+security:
+  uid: 1000
+  gid: 1000
+terminationGracePeriodSeconds: 60
+probes:
+  backend:
+    startup: {initialDelaySeconds: 0, periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 60}
+    liveness: {initialDelaySeconds: 0, periodSeconds: 10, timeoutSeconds: 2, failureThreshold: 3}
+    readiness: {initialDelaySeconds: 0, periodSeconds: 10, timeoutSeconds: 8, failureThreshold: 3}
+  frontend:
+    startup: {initialDelaySeconds: 0, periodSeconds: 5, timeoutSeconds: 1, failureThreshold: 60}
+    liveness: {initialDelaySeconds: 0, periodSeconds: 10, timeoutSeconds: 1, failureThreshold: 3}
+    readiness: {initialDelaySeconds: 0, periodSeconds: 5, timeoutSeconds: 1, failureThreshold: 3}
+resources:
+  backend:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "2", memory: 2Gi}
+  frontend:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  postgres:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  qdrant:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 768Mi}
+  stub:
+    requests: {cpu: 50m, memory: 32Mi}
+    limits: {cpu: 500m, memory: 128Mi}
+gateway:
+  enabled: false
+  hostname: ""
+  namespace: gateway-system
+  name: https
+  certificateSecret: ""
+  apiVersion: gateway.networking.k8s.io/v1
+  requestTimeout: 300s
+  backendRequestTimeout: 300s
+  allowUnboundedTimeouts: false
+  trafficPolicy: {enabled: false, adapter: kgateway, streamIdleSeconds: 60}
+  redirect: true
+vault:
+  enabled: false
+  mount: ""
+  path: ""
+  authRef: default
+networkPolicy:
+  enabled: true
+  externalEgress: []
+nodeSelector: {}
+tolerations: []

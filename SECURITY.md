@@ -1227,3 +1227,17 @@ pointer can commit. Retention/deletion follows the existing generation lifecycle
 No new HTTP route or access grant is introduced. Raw corpus manifests and detailed
 read-only probe results are local operator data in ignored `data/table-eval/`;
 they contain source values and must not be committed or exposed as public reports.
+
+
+## Compact Kubernetes main integration
+
+Home/CI compact uses one replica/worker, stopped serialized maintenance and
+preserved auth/roles/CSRF from main. PROD requires a production/live profile;
+fake embeddings are forbidden there. Runtime public trust is mounted read-only,
+private build credentials are BuildKit secrets, and source CA keys stay outside
+images. Synthetic IdP/application TLS leaves have separate single-host SANs.
+Restore is manual into new claims; automatic CLI/library restore is disabled.
+Explicit DR rotates APP_SECRET_KEY before startup and clears all server sessions
+plus persisted OIDC flows where present. The current signed-cookie OIDC flow
+state is invalidated by rotation. Ordinary upgrades preserve the key. Unknown
+node/writers stop operations for manual diagnosis; no automatic resume is claimed.

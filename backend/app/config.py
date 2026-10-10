@@ -122,6 +122,8 @@ class Settings(BaseSettings):
     # слабый/дефолтный APP_SECRET_KEY или AUTH_SESSION_HTTPS_ONLY=false → ValueError
     # на старте, а не молчаливый запуск в незащищённом режиме.
     environment: str = "development"
+    deployment_tier: Literal["local", "home", "ci", "dev", "test", "prod"] = "local"
+    model_mode: Literal["live", "stub", "unavailable"] = "live"
     app_secret_key: str = "dev-secret-change-me"
     # Время жизни signed-cookie сессии (секунды).
     auth_session_ttl_seconds: int = 28800
@@ -764,6 +766,17 @@ class Settings(BaseSettings):
                     "разработки) даёт роль любой одноимённой группе в любой ветке "
                     "дерева IdP; выбирайте его, только если имена групп уникальны."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_deployment_profile(self):
+        if self.deployment_tier == "prod":
+            if self.model_mode != "live":
+                raise ValueError("PROD requires MODEL_MODE=live")
+            if self.embedding_provider == "fake":
+                raise ValueError("PROD forbids EMBEDDING_PROVIDER=fake")
+            if self.environment != "production":
+                raise ValueError("PROD requires ENVIRONMENT=production")
         return self
 
     @field_validator("data_dir", mode="before")

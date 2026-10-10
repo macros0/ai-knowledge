@@ -1,0 +1,5 @@
+images:
+  backend: {repository: okf-backend, tag: kube-smoke, pullPolicy: IfNotPresent}
+  frontend: {repository: okf-frontend, tag: kube-smoke, pullPolicy: IfNotPresent}
+  stub: {repository: okf-model-stub, tag: kube-smoke, pullPolicy: IfNotPresent}
+models: {mode: stub}

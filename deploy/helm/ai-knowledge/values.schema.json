@@ -1,0 +1,316 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "deployment",
+    "application",
+    "runtime",
+    "storage",
+    "models",
+    "secrets",
+    "persistence",
+    "images",
+    "probes",
+    "trust"
+  ],
+  "properties": {
+    "deployment": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "enum": [
+            "home",
+            "ci",
+            "dev",
+            "test",
+            "prod"
+          ]
+        },
+        "mode": {
+          "const": "compact"
+        }
+      }
+    },
+    "application": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "replicas": {
+          "const": 1
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "enum": [
+            "development",
+            "production"
+          ]
+        },
+        "workers": {
+          "const": 1
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "properties": {
+            "KEYCLOAK_TOKEN_ENDPOINT_AUTH_METHOD": {
+              "type": "string",
+              "enum": [
+                "client_secret_basic",
+                "client_secret_post",
+                "none"
+              ]
+            }
+          }
+        },
+        "auditStdoutMode": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "durable"
+          ]
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "const": "bundled"
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "stub",
+            "live",
+            "unavailable"
+          ]
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "required": [
+        "data",
+        "diagnostics",
+        "postgres",
+        "qdrant"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "existingClaim"
+        ],
+        "properties": {
+          "existingClaim": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "$ref": "#/definitions/image"
+        },
+        "frontend": {
+          "$ref": "#/definitions/image"
+        },
+        "stub": {
+          "$ref": "#/definitions/image"
+        }
+      }
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 30
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "gid": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "probes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend",
+        "frontend"
+      ],
+      "properties": {
+        "backend": {
+          "$ref": "#/definitions/containerProbes"
+        },
+        "frontend": {
+          "$ref": "#/definitions/containerProbes"
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "required": [
+        "requestTimeout",
+        "backendRequestTimeout",
+        "allowUnboundedTimeouts",
+        "trafficPolicy"
+      ],
+      "properties": {
+        "requestTimeout": {
+          "type": "string",
+          "pattern": "^([0-9]{1,5}(ms|s|m|h))$",
+          "maxLength": 32
+        },
+        "backendRequestTimeout": {
+          "type": "string",
+          "pattern": "^([0-9]{1,5}(ms|s|m|h))$",
+          "maxLength": 32
+        },
+        "allowUnboundedTimeouts": {
+          "type": "boolean"
+        },
+        "trafficPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "adapter",
+            "streamIdleSeconds"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "adapter": {
+              "const": "kgateway"
+            },
+            "streamIdleSeconds": {
+              "type": "integer",
+              "minimum": 10
+            }
+          }
+        }
+      }
+    },
+    "trust": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "existingConfigMap"
+      ],
+      "properties": {
+        "existingConfigMap": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "image": {
+      "type": "object",
+      "required": [
+        "repository"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^$|^sha256:[a-f0-9]{64}$"
+        },
+        "tag": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_.-]*$"
+        },
+        "pullPolicy": {
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "probeTiming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initialDelaySeconds",
+        "periodSeconds",
+        "timeoutSeconds",
+        "failureThreshold"
+      ],
+      "properties": {
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "containerProbes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "startup",
+        "liveness",
+        "readiness"
+      ],
+      "properties": {
+        "startup": {
+          "$ref": "#/definitions/probeTiming"
+        },
+        "liveness": {
+          "$ref": "#/definitions/probeTiming"
+        },
+        "readiness": {
+          "$ref": "#/definitions/probeTiming"
+        }
+      }
+    }
+  }
+}
