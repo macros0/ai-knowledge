@@ -28,7 +28,8 @@ from docparser.blocks import Block
 # v21 escapes plain mail, preserves mixed MIME bodies, diagnoses decoding and
 # alternatives, bounds MSG remainder sources and retains native sender identity.
 # v22 resolves root named MAPI properties for protected embedded MSG messages.
-PARSER_VERSION = "mail-sources-v22"
+# v23 retains the full canonical text instead of clipping the root/child aggregate.
+PARSER_VERSION = "mail-sources-v23"
 
 
 def parser_version_for_mail_mode(mail_enabled: bool) -> str:

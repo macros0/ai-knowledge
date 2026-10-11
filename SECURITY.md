@@ -1227,3 +1227,16 @@ pointer can commit. Retention/deletion follows the existing generation lifecycle
 No new HTTP route or access grant is introduced. Raw corpus manifests and detailed
 read-only probe results are local operator data in ignored `data/table-eval/`;
 they contain source values and must not be committed or exposed as public reports.
+
+### 2026-10-09 — Preserve the complete extracted text
+
+The parser no longer clips the root and admitted attachments at an aggregate
+2,000,000 Unicode characters. This cutoff discarded already-extracted evidence
+before chunking and did not bound extraction memory. OS worker memory/time/slot
+limits, the 16 MiB worker JSON response ceiling, ZIP preflight and attachment/MIME
+byte/node/depth admission remain in force. A response exceeding the transport
+ceiling fails parsing rather than publishing a text prefix. More retained text
+means more chunked LLM/index work; existing queue and LLM admission still apply.
+Parser contract `mail-sources-v23` rejects resume checkpoints from the clipped
+layout. Published legacy incomplete results keep their warning until a successful
+regeneration replaces them.

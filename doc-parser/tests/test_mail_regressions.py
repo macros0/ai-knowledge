@@ -9,7 +9,7 @@ from docparser.source_model import PARSER_VERSION, ParseContext
 
 
 def test_mail_parser_contract_version_marks_current_semantics():
-    assert PARSER_VERSION == "mail-sources-v22"
+    assert PARSER_VERSION == "mail-sources-v23"
 
 
 @pytest.mark.parametrize("to_kind,cc_kind,bcc_kind", [(1, 2, 3), ("TO", "CC", "BCC")])

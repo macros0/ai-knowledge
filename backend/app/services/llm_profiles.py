@@ -3,7 +3,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from typing import Literal
 
 from app.services.llm_scheduler import LLMCancelled
@@ -38,7 +38,7 @@ class Classification(BaseModel):
 class TableClassificationResult(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     concept_per_row: bool
-    title_col: int
+    title_col: int = Field(ge=0)
     concept_type: Literal["concept", "procedure", "reference", "note"]
     extraction_mode: Literal["per_row", "whole"]
 
