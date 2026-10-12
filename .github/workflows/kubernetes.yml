@@ -47,6 +47,7 @@ jobs:
           kind load docker-image --name okf-kube okf-backend:kube-smoke okf-frontend:kube-smoke okf-model-stub:kube-smoke
           python3 scripts/kubernetes/lab.py --context kind-okf-kube --namespace okf-ci --values-output "$RUNNER_TEMP/ci.values.yaml"
           python3 scripts/kubernetes/lifecycle.py deploy --context kind-okf-kube --namespace okf-ci --expected-tier ci --values "$RUNNER_TEMP/ci.values.yaml" --backup-root "$RUNNER_TEMP/backups"
+          kubectl --context kind-okf-kube -n okf-ci exec deployment/application -c backend -- python scripts/seed_backup_fixture.py --confirm-ci-fixture
           python3 scripts/kubernetes/smoke.py --context kind-okf-kube --namespace okf-ci --synthetic-fixture
           kubectl --context kind-okf-kube -n okf-ci rollout restart deployment/application
           python3 scripts/kubernetes/smoke.py --context kind-okf-kube --namespace okf-ci --synthetic-fixture
