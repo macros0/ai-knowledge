@@ -83,3 +83,33 @@ backup выполнен на остановленной source-копии без
 Новый install/update/HTTPS smoke использовал default профиль с моделями stub.
 Live model quality, PROD, HA, активная старая cookie после DR и GitHub CI не приняты
 этим прогоном. Ручной restore принят ранее на frozen kit, не повторён на этих images.
+
+
+## 12.10.2026 — Первый TEST pilot, bundled
+
+Подтверждено пользователем: PostgreSQL и Qdrant входят в нашу поставку; external
+storage этому заказчику не требуется. В clean Kubernetes worktree объединён
+committed main `e2f6d94` (R1 full-text fix). Единственный append conflict SECURITY.md
+разрешён сохранением обоих разделов. Shared dirty main не менялся.
+
+Добавлены [TEST example](../../../deploy/kubernetes/profiles/test-bundled.values.example.yaml)
+и [один путь пилота](../../KUBERNETES_TEST_PILOT.md). Пример содержит placeholders,
+не разрешает target deploy; models live, production auth, bundled storage,
+отдельные PG/Qdrant StatefulSets, один application/worker, четыре existing PVC.
+
+Проверки конечного локального кода до commit:
+- Helm 4.3.0 Windows archive checksum PASS; TEST lint/render PASS.
+- R1 owning + compact/chart/model/profile contracts с общим conftest:
+  **129 PASS / 0 SKIP**, 153.41 с. Тесты/код не менялись во время прогона.
+- Полный doc-parser: **398 PASS / 1 SKIP**, 12.84 с.
+- check-project: npm audit/ESLint/Ruff PASS, frontend **492 PASS / 1 SKIP**.
+- Независимый read-only review follow-up delta: **0 Critical / 0 Important**;
+  R1 paths совпадают с `e2f6d94`, команды/secret/CA/auth/egress/restore согласованы.
+
+Свежий единый full backend/coverage, Docker builds и kind acceptance для нового
+HEAD должны выполнить hosted CI; старые images/build proofs относятся к 10.10.
+Actual customer admission/PVC/route/IdP/models/CA/egress и restore provisioning
+здесь не проверены. Target runtime Secrets, release digests и HTTPS/SSO inputs
+должны быть предоставлены оператором окруженческой копии. Публикация кандидатной
+ветки/PR требует отдельного разрешения на конкретный outgoing range; main merge
+и target rollout выполняются после своих gates.

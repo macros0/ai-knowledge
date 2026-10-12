@@ -14,6 +14,7 @@ from app.models.schemas import Concept, OkfDocument
 from app.prompts.store import get_store
 from app.services.comment_concepts import extract_comment_concepts
 from app.services.field_table import extract_table_concepts
+from app.services.table_projection import compact_markdown_tables
 from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMClient, LLMTruncationError
 from app.services.llm_profiles import generation_budget
@@ -246,6 +247,7 @@ class OKFGenerator:
             raise
 
     def _build_prompt(self, chunk: str, filename: str, index: int, total: int) -> str:
+        chunk = compact_markdown_tables(chunk)
         if total <= 1:
             return self.prompts.format("okf_user", filename=filename, content=chunk)
         return self.prompts.format("okf_chunk", filename=filename, index=index, total=total, content=chunk)

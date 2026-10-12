@@ -31,7 +31,6 @@ MAX_ATTACHMENT_DEPTH = 3  # уровней вложенности: уровни 
 MAX_ATTACHMENT_PAYLOAD = 50 * 1024 * 1024   # 50 МБ — одно вложение (payload или сырое)
 MAX_TOTAL_PAYLOAD = 200 * 1024 * 1024       # 200 МБ — суммарно распакованных вложений на документ
 MAX_ATTACHMENT_NODES = 1_000                # включает маленькие MIME/MSG части
-MAX_TEXT_CHARS = 2_000_000                  # канонический текст одного документа до индексации
 
 PROGID_EXT = {
     "Excel.Sheet.12": ".xlsx",
@@ -56,11 +55,9 @@ class AttachmentBudget:
         self,
         total: int = MAX_TOTAL_PAYLOAD,
         max_nodes: int = MAX_ATTACHMENT_NODES,
-        max_text_chars: int | None = None,
     ):
         self.remaining = total
         self.remaining_nodes = max_nodes
-        self.remaining_text = MAX_TEXT_CHARS if max_text_chars is None else max_text_chars
 
     def reserve_node(self) -> bool:
         if self.remaining_nodes <= 0:
@@ -74,13 +71,6 @@ class AttachmentBudget:
             return False
         self.remaining -= size
         return True
-
-    def consume_text(self, char_count: int) -> int:
-        """Reserve canonical Unicode characters and return the permitted prefix length."""
-        permitted = min(max(char_count, 0), self.remaining_text)
-        self.remaining_text -= permitted
-        return permitted
-
 
 
 class AttachmentStorageError(RuntimeError):

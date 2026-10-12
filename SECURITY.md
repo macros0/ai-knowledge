@@ -1228,10 +1228,22 @@ No new HTTP route or access grant is introduced. Raw corpus manifests and detail
 read-only probe results are local operator data in ignored `data/table-eval/`;
 they contain source values and must not be committed or exposed as public reports.
 
+### 2026-10-09 — Preserve the complete extracted text
+
+The parser no longer clips the root and admitted attachments at an aggregate
+2,000,000 Unicode characters. This cutoff discarded already-extracted evidence
+before chunking and did not bound extraction memory. OS worker memory/time/slot
+limits, the 16 MiB worker JSON response ceiling, ZIP preflight and attachment/MIME
+byte/node/depth admission remain in force. A response exceeding the transport
+ceiling fails parsing rather than publishing a text prefix. More retained text
+means more chunked LLM/index work; existing queue and LLM admission still apply.
+Parser contract `mail-sources-v23` rejects resume checkpoints from the clipped
+layout. Published legacy incomplete results keep their warning until a successful
+regeneration replaces them.
 
 ## Compact Kubernetes main integration
 
-Home/CI compact uses one replica/worker, stopped serialized maintenance and
+Compact/bundled uses one replica/worker, stopped serialized maintenance and
 preserved auth/roles/CSRF from main. PROD requires a production/live profile;
 fake embeddings are forbidden there. Runtime public trust is mounted read-only,
 private build credentials are BuildKit secrets, and source CA keys stay outside
@@ -1241,3 +1253,10 @@ Explicit DR rotates APP_SECRET_KEY before startup and clears all server sessions
 plus persisted OIDC flows where present. The current signed-cookie OIDC flow
 state is invalidated by rotation. Ordinary upgrades preserve the key. Unknown
 node/writers stop operations for manual diagnosis; no automatic resume is claimed.
+
+
+TEST pilot ships PostgreSQL/Qdrant with the application release in separate
+StatefulSets/PVCs. Its example uses production auth protections and live model
+mode; real endpoints, immutable image digests, public CA, role mapping and narrow
+egress rules must be supplied for the target. Example placeholders do not authorize
+a deployment. Target route/SSO/admission and fresh hosted CI remain release gates.

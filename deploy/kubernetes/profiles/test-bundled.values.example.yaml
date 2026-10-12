@@ -1,0 +1,50 @@
+# TEMPLATE ONLY: replace example.invalid, replace-* and zero digests before deployment.
+# Credentials belong only in an existing protected runtime Secret.
+deployment: {environment: test, mode: compact}
+storage: {mode: bundled}
+application: {enabled: true, replicas: 1}
+runtime:
+  environment: production
+  workers: 1
+  config:
+    AUTH_PROVIDER: keycloak_oidc
+    AUTH_SESSION_HTTPS_ONLY: "true"
+    KEYCLOAK_URL: https://identity.example.invalid
+    KEYCLOAK_REALM: replace-realm
+    KEYCLOAK_CLIENT_ID: replace-client
+    KEYCLOAK_GROUP_PATH_MODE: full_path
+    AUTH_ROLE_GROUPS: '{"/replace/viewer":"viewer","/replace/editor":"editor","/replace/admin":"admin"}'
+    SSO_REDIRECT_URI: https://knowledge.example.invalid/api/auth/callback
+    SSO_POST_LOGOUT_REDIRECT_URI: https://knowledge.example.invalid/
+    LLM_PROFILE: standard
+    LLM_MODEL: openai/replace-model
+    LLM_BASE_URL: https://models.example.invalid/v1
+    EMBEDDING_MODEL: openai/replace-embedding-model
+    EMBEDDING_API_BASE: https://embeddings.example.invalid/v1
+    # Match the real embedding model before creating the first collection.
+    EMBEDDING_DIMENSIONS: "1024"
+models: {mode: live}
+secrets: {existingSecret: replace-runtime-secret}
+persistence:
+  data: {existingClaim: replace-data-pvc}
+  diagnostics: {existingClaim: replace-diagnostics-pvc}
+  postgres: {existingClaim: replace-postgres-pvc}
+  qdrant: {existingClaim: replace-qdrant-pvc}
+images:
+  backend:
+    repository: registry.example.invalid/team/okf-backend
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    tag: ""
+  frontend:
+    repository: registry.example.invalid/team/okf-frontend
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    tag: ""
+trust: {existingConfigMap: replace-public-roots}
+gateway:
+  # Target platform owns the HTTPS route to frontend:3000. No home IdP/bootstrap.
+  enabled: false
+  namespace: replace-gateway-namespace
+networkPolicy:
+  enabled: true
+  # Supply narrow target IdP/LLM/embeddings egress in the private target overlay.
+  externalEgress: []

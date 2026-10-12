@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Protocol
 
 from app.config import get_settings
+from app.services.table_projection import compact_table_columns
 from app.models.schemas import Concept, SourceSpan
 from app.services.source_evidence import span_for_lines
 from app.services import gen_quality
@@ -565,6 +566,7 @@ def _get_prompt_hash() -> str:
 
 
 def _classification_user(header: list[str], raw_rows: list[str]) -> str:
+    header, raw_rows = compact_table_columns(header, raw_rows)
     preview = "| " + " | ".join(header) + " |\n"
     preview += "| " + " | ".join("---" for _ in header) + " |\n"
     preview += "".join(row + "\n" for row in raw_rows[:CLASSIFICATION_PREVIEW_ROWS])
@@ -662,6 +664,7 @@ def _llm_classify_table(
     Возвращает TableClassification. При ошибке LLM/невалидном ответе бросает
     исключение — вызывающий код откатывается на fallback-эвристику.
     """
+    header, raw_rows = compact_table_columns(header, raw_rows)
     key = _build_cache_key(header, raw_rows)
     cached = _load_cached_classification(key)
     if cached is not None:
@@ -700,7 +703,9 @@ def build_row_concepts(
     if not cls.concept_per_row:
         return []
     tag = code or "table"
-    header = block.header
+    # Compact derived content only. Evidence offsets still use the original
+    # source lines; projection preserves row count and prefix column indices.
+    header, raw_rows = compact_table_columns(block.header, block.raw_rows)
 
     # whole: один концепт на всю таблицу
     if cls.extraction_mode == "whole":
@@ -708,7 +713,7 @@ def build_row_concepts(
         title = heading or (header[0] if header else "Таблица")
         content_lines = ["| " + " | ".join(header) + " |"]
         content_lines.append("| " + " | ".join("---" for _ in header) + " |")
-        for raw in block.raw_rows:
+        for raw in raw_rows:
             content_lines.append(raw.strip())
         content = "\n".join(content_lines)
         return [
@@ -731,7 +736,7 @@ def build_row_concepts(
     concepts: list[Concept] = []
     source_text = "\n".join(lines) if lines is not None else None
     row_line = block.start + 2
-    for raw in block.raw_rows:
+    for raw in raw_rows:
         next_line = row_line + raw.count("\n") + 1
         row_span = span_for_lines(source_text, row_line, next_line) if source_text is not None else None
         row_line = next_line
@@ -762,7 +767,7 @@ def build_row_concepts(
     heading = _find_table_heading(lines, block.start) if lines else None
     overview_title = heading or f"Перечень: {header[0] if header else 'таблица'}"
     overview_lines = [overview_title + ".", ""]
-    for raw in block.raw_rows:
+    for raw in raw_rows:
         cells = _parse_row_cells(raw)
         # показывать все непустые колонки через " — ", не только title_col —
         # иначе теряются коды (01, 02) при title_col=1 (наименование)

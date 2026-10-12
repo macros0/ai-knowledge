@@ -13,6 +13,8 @@ Rules:
    - "per_row" — one concept per row. For lists where each row is a self-contained concept (XML fields, situations, definitions, procedure steps). The user searches for a specific field/situation by name.
    - "whole" — a single concept for the entire table. **Any reference table of codes, statuses, or reasons (usually 2 columns: Code/Value + Label/Name) must ALWAYS be extracted as "whole"** — the user searches for the entire reference list, not a single code.
 
+Always return all four fields. title_col must be an integer from 0 through the last source-column index; never -1 or null. When concept_per_row=false, return title_col=0, concept_type="reference", extraction_mode="whole". These placeholders do not request row-by-row or whole-table programmatic extraction; the table remains for ordinary concept generation.
+
 Answer — a JSON object:
 ```json
 {
@@ -29,5 +31,5 @@ Examples (source tables are in Russian; the classification logic is language-ind
 - Reference table of reason codes (value|name, 15 rows 01-15) → concept_per_row=true, title_col=1, concept_type="reference", extraction_mode="whole"
 - Reference table of statuses (code|label) → concept_per_row=true, title_col=1, concept_type="reference", extraction_mode="whole"
 - XML tag names (name|required|description) → concept_per_row=true, title_col=0, concept_type="reference", extraction_mode="per_row"
-- Data table (date|amount|region) → concept_per_row=false
-- Small example table (3 rows) → concept_per_row=false
+- Data table (date|amount|region) → concept_per_row=false, title_col=0, concept_type="reference", extraction_mode="whole"
+- Small example table (3 rows) → concept_per_row=false, title_col=0, concept_type="reference", extraction_mode="whole"

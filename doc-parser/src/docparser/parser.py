@@ -56,11 +56,6 @@ def parse_document(
         raise ParseError(f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}")
     for block in blocks:
         block.meta.setdefault("source_id", source_id)
-    # The shared budget is applied only by the root dispatcher. Nested calls
-    # share the same object but must not debit already-produced child blocks a
-    # second time when their parent returns them.
-    if depth == 0:
-        blocks = _limit_canonical_text(blocks, budget, context)
     return blocks
 
 
@@ -77,25 +72,3 @@ def parse_document_result(
         blocks=blocks, sources=context.sources, warnings=context.warnings,
         parser_version=context.parser_version,
     )
-
-
-def _limit_canonical_text(blocks: list[Block], budget, context: ParseContext) -> list[Block]:
-    """Keep a bounded canonical text projection without losing source metadata."""
-    limited: list[Block] = []
-    warned = False
-    for block in blocks:
-        permitted = budget.consume_text(len(block.text))
-        if permitted == len(block.text):
-            limited.append(block)
-            continue
-        if permitted:
-            limited.append(Block(block.type, block.text[:permitted], block.level, dict(block.meta)))
-        elif block.type in {"attachment", "image"}:
-            # These blocks carry registered original bytes and source links.
-            # Keep their metadata while excluding their human label from the
-            # bounded canonical text projection.
-            limited.append(Block(block.type, "", block.level, dict(block.meta)))
-        if not warned:
-            context.warn(block.meta.get("source_id", "root"), "text_limit_exceeded")
-            warned = True
-    return limited

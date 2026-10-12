@@ -13,3 +13,16 @@
 Полный backend прогон собран до review fix: coverage 88.67%, 1 устаревший public-profile FAIL;
 после fix весь изменённый модуль 31 PASS. Обязательный fresh hosted CI — перед merge,
 а не новая матрица домашней приёмки. Push и main merge отдельны.
+
+
+## Продолжение 12.10: первый TEST pilot
+
+Подтверждено пользователем: PG/Qdrant входят в нашу поставку, bundled; внешние
+хранилища этому заказчику не нужны. Scope — current-main sync, один TEST example
+и короткая инструкция. Целевое развёртывание требует actual platform inputs.
+
+- [x] Свести main e2f6d94 с Kubernetes candidate, сохранив оба security раздела.
+- [x] Проверить owning R1/parser/compact contracts, TEST render и check-project;
+  один review follow-up delta, focused merge commit. Hosted CI — на конечном HEAD.
+- [ ] Перед публикацией показать точный outgoing range и получить разрешение
+  на push/PR согласно прежнему разделению commit/push/merge.
