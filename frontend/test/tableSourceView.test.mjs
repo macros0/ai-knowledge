@@ -7,6 +7,9 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {transformSync} from 'next/dist/build/swc/index.js';
 import {sourceHref} from '../src/lib/chatSourceLinks.mjs';
+import * as tableStatus from '../src/lib/tableSourceStatus.mjs';
+import {createTranslator} from '../src/i18n/core.js';
+import ru from '../src/i18n/locales/ru.js';
 
 const require = createRequire(import.meta.url);
 const ref = {generation_id:'a'.repeat(32),source_id:'root/0',table_id:'b'.repeat(32),row_number:7,columns:[2,316]};
@@ -61,6 +64,52 @@ function compileTableView(file, overrides) {
  runInNewContext(code,{module:mod,exports:mod.exports,URLSearchParams,require:id=>id in overrides?overrides[id]:require(id)});
  return mod.exports.default;
 }
+
+function renderReadableRows(rows) {
+ const View=compileTableView('../src/components/TableSourceView.jsx',{
+  '@/i18n/LocaleContext':{useI18n:()=>({t:createTranslator('ru',ru).t})},
+  '@/lib/tableSourceStatus.mjs':tableStatus,
+  '@/lib/api':{},
+ });
+ return renderToStaticMarkup(React.createElement(View,{docId:'doc',tableRefs:[{...ref,row_number:254,columns:[3,4,10]}],initialData:{
+  descriptor:{sheet_name:'Виды оплат',cell_range:{min_row:1,max_row:613,min_column:1,max_column:156}},
+  quality:{complete:true,header_status:'verified',row_count:613,cell_count:22556},rows,
+ }}));
+}
+
+test('every row pairs values with field names and keeps coordinates in a closed source disclosure',()=>{
+ const html=renderReadableRows({columns:[{index:3,letter:'C',header_path:['Код ВО Босс']},{index:4,letter:'D',header_path:['Код ВО SAP']}],
+  rows:[{row_number:254,cells:{3:{address:'C254',display_text:'311'},4:{address:'D254',display_text:'7001'}}},
+        {row_number:255,cells:{3:{address:'C255',display_text:'311'},4:{address:'D255',display_text:'7002'}}}],continuation:[]});
+ const cards=[...html.matchAll(/<article\b[^>]*>([\s\S]*?)<\/article>/g)].map(match=>match[1]);
+ assert.equal(cards.length,2,'both the selected row and its neighbour need readable cards');
+ for(const [index,card] of cards.entries()) {
+  assert.match(card,/<dt[^>]*>Код ВО Босс<\/dt>\s*<dd[^>]*>[\s\S]*?311/);
+  assert.match(card,/<dt[^>]*>Код ВО SAP<\/dt>\s*<dd[^>]*>[\s\S]*?700[12]/);
+  const source=card.match(/<details\b([^>]*)>([\s\S]*?)<\/details>/);
+  assert.ok(source,'source coordinates must remain available');
+  assert.doesNotMatch(source[1],/\bopen\b/,'coordinates should be hidden initially');
+  assert.match(source[2],new RegExp(`C${254+index}`));
+  assert.doesNotMatch(card.replace(source[0],''),/C25[45]|D25[45]/,'technical addresses must not precede the values');
+ }
+ assert.match(html,/<summary[^>]*>Исходная таблица<\/summary>/);
+});
+
+test('long field text remains complete and escaped inside a closed disclosure with its continuation action',()=>{
+ const content='Алгоритм расчёта. '.repeat(80)+'<script>TAIL</script>';
+ const html=renderReadableRows({columns:[{index:10,letter:'J',header_path:['Описание алгоритма расчёта']}],
+  rows:[{row_number:254,cells:{10:{address:'J254',display_text:content}}}],
+  continuation:[{row_number:254,column:10,next_text_start:1500}]});
+ const card=html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/)?.[1];
+ assert.ok(card,'long text needs the same readable row view');
+ const disclosure=card.match(/<details\b([^>]*)>([\s\S]*?)<\/details>/);
+ assert.ok(disclosure);
+ assert.doesNotMatch(disclosure[1],/\bopen\b/);
+ assert.match(disclosure[2],/Алгоритм расчёта\./);
+ assert.match(disclosure[2],/&lt;script&gt;TAIL&lt;\/script&gt;/);
+ assert.match(disclosure[2],/Продолжение ячейки/);
+ assert.doesNotMatch(html,/<script>/);
+});
 
 const longRef={...ref,row_number:2,columns:[2],text_start:1000,text_end:5000};
 const longDescriptor={descriptor:{sheet_name:'Sheet',cell_range:{min_row:1,max_row:3,min_column:1,max_column:2}},quality:{complete:true}};

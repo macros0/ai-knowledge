@@ -79,32 +79,78 @@ export default function TableSourceView({ docId, tableRefs = [], initialData = n
     classifier_output_truncated: "tables.classifierTruncated",
     classifier_invalid_result: "tables.classifierInvalid",
   }[quality.classifier_cause];
-  return <section className="table-source-view" style={{ minWidth: 0, maxWidth: "100%" }} aria-label={t("tables.title")}>
+  const fieldLabel = column => column.header_path?.filter(Boolean).join(" / ").trim()
+    || t("tables.column", { column: column.letter || columnLetter(column.index) });
+  const fieldText = (row, column) => {
+    const cell = row.cells[String(column.index)];
+    return cell?.state === "formula_missing" ? t("tables.formulaMissing")
+      : (cell?.display_text || "") + (extraCells[`${row.row_number}:${column.index}`] || "");
+  };
+  const renderValue = (row, column) => {
+    const continuation = page.continuation?.find(item => item.row_number === row.row_number && item.column === column.index);
+    return <>
+      <div className="table-source-value">{fieldText(row, column) || <span className="table-source-empty">{t("tables.emptyCell")}</span>}</div>
+      {continuation?.next_text_start != null && <button type="button" className="btn" disabled={busy} onClick={() => moreCell(continuation)}>{t("tables.moreCell")}</button>}
+    </>;
+  };
+  return <section className="table-source-view" aria-label={t("tables.title")}>
     <h2>{descriptor.sheet_name}</h2>
-    <p>{columnLetter(descriptor.cell_range.min_column)}{descriptor.cell_range.min_row}:{columnLetter(descriptor.cell_range.max_column)}{descriptor.cell_range.max_row}</p>
-    <p role="status">{t(status)}</p>
-    {causeKey && <p>{t(causeKey)}</p>}
-    <p>{t("tables.coverage", { rows: quality.row_count ?? "?", cells: quality.cell_count ?? "?" })}</p>
-    {page.projection && <p>{t("tables.projection")}</p>}
+    <p className="table-source-status" role="status">{t(status)}</p>
+    <details className="table-source-meta">
+      <summary>{t("tables.about")}</summary>
+      <p>{columnLetter(descriptor.cell_range.min_column)}{descriptor.cell_range.min_row}:{columnLetter(descriptor.cell_range.max_column)}{descriptor.cell_range.max_row}</p>
+      {causeKey && <p>{t(causeKey)}</p>}
+      <p>{t("tables.coverage", { rows: quality.row_count ?? "?", cells: quality.cell_count ?? "?" })}</p>
+      {page.projection && <p>{t("tables.projection")}</p>}
+    </details>
     {error && <p role="alert">{t("tables.unavailable")}</p>}
-    <div tabIndex={0} role="region" aria-label={t("tables.scrollArea")} style={{ overflowX: "auto", maxWidth: "100%" }}>
-      <table style={{ borderCollapse: "collapse" }}>
+    <div className="table-source-cards">
+      {page.rows.map(row => <article key={row.row_number} className={`table-source-card${row.row_number === ref.row_number ? " is-selected" : ""}`} aria-label={t("tables.rowNumber", { row: row.row_number })}>
+        <header className="table-source-card-header">
+          <h3>{t("tables.rowNumber", { row: row.row_number })}</h3>
+          {row.row_number === ref.row_number && <span className="table-source-selected">{t("tables.selectedRow")}</span>}
+        </header>
+        <dl className="table-source-fields">
+          {columns.map(column => {
+            const value = fieldText(row, column);
+            const continuation = page.continuation?.some(item => item.row_number === row.row_number && item.column === column.index && item.next_text_start != null);
+            const long = value.length > 320 || value.split("\n").length > 4 || continuation;
+            const isTarget = row.row_number === ref.row_number && wanted.has(column.index);
+            return <div key={column.index} className={`table-source-field${long ? " is-long" : ""}${isTarget ? " is-target" : ""}`}>
+              <dt>{fieldLabel(column)}</dt>
+              <dd>{long ? <details className="table-source-long-value">
+                <summary><span className="table-source-expand table-source-show">{t("tables.showText")}</span><span className="table-source-expand table-source-hide">{t("tables.hideText")}</span><span className="table-source-preview">{value.slice(0, 160)}{value.length > 160 ? "…" : ""}</span></summary>
+                {renderValue(row, column)}
+              </details> : renderValue(row, column)}</dd>
+            </div>;
+          })}
+        </dl>
+        <details className="table-source-coordinates">
+          <summary>{t("tables.source")}</summary>
+          <p>{descriptor.sheet_name} · {t("tables.rowNumber", { row: row.row_number })}</p>
+          <dl>{columns.map(column => <div key={column.index}><dt>{fieldLabel(column)}</dt><dd>{row.cells[String(column.index)]?.address || `${column.letter || columnLetter(column.index)}${row.row_number}`}</dd></div>)}</dl>
+        </details>
+      </article>)}
+    </div>
+    <details className="table-source-original">
+      <summary>{t("tables.originalTable")}</summary>
+      <div className="table-source-scroll" tabIndex={0} role="region" aria-label={t("tables.scrollArea")}>
+      <table>
         <thead><tr><th>{t("tables.row")}</th>{columns.map(column => <th key={column.index} scope="col">{column.letter}: {column.header_path?.join(" / ")}</th>)}</tr></thead>
         <tbody>{page.rows.map(row => <tr key={row.row_number}>
           <th scope="row">{row.row_number}</th>
           {columns.map(column => {
-            const cell = row.cells[String(column.index)];
-            const continuation = page.continuation?.find(item => item.row_number === row.row_number && item.column === column.index);
             const isTarget = row.row_number === ref.row_number && wanted.has(column.index);
-            return <td key={column.index} style={{ verticalAlign: "top", minWidth: 160, maxWidth: 360, overflowWrap: "anywhere", padding: 8, background: isTarget ? "var(--accent-soft, #fff4ce)" : undefined }}>
-              {cell && <><small>{cell.address}</small><div style={{ whiteSpace: "pre-wrap" }}>{cell.state === "formula_missing" ? t("tables.formulaMissing") : cell.display_text}{extraCells[`${row.row_number}:${column.index}`] || ""}</div></>}
-              {continuation?.next_text_start != null && <button type="button" disabled={busy} onClick={() => moreCell(continuation)}>{t("tables.moreCell")}</button>}
+            return <td key={column.index} className={isTarget ? "is-target" : undefined}>
+              <small>{row.cells[String(column.index)]?.address}</small>
+              <div className="table-source-original-value">{renderValue(row, column)}</div>
             </td>;
           })}
         </tr>)}</tbody>
       </table>
-    </div>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+      </div>
+    </details>
+    <div className="table-source-actions">
       {page.next_column == null && originalColumns && !columnPage && <button type="button" disabled={busy} onClick={() => load({ from_row: rowNumber, from_column: descriptor.cell_range.min_column })}>{t("tables.moreColumns")}</button>}
       {page.next_column != null && <button type="button" disabled={busy} onClick={() => load({ from_row: rowNumber, from_column: page.next_column })}>{t("tables.moreColumns")}</button>}
       {columnPage && <button type="button" disabled={busy} onClick={() => { setColumnPage(null); setExtraCells({}); }}>{t("tables.selectedCells")}</button>}
