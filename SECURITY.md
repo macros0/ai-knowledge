@@ -1241,6 +1241,26 @@ Parser contract `mail-sources-v23` rejects resume checkpoints from the clipped
 layout. Published legacy incomplete results keep their warning until a successful
 regeneration replaces them.
 
+## Compact Kubernetes main integration
+
+Compact/bundled uses one replica/worker, stopped serialized maintenance and
+preserved auth/roles/CSRF from main. PROD requires a production/live profile;
+fake embeddings are forbidden there. Runtime public trust is mounted read-only,
+private build credentials are BuildKit secrets, and source CA keys stay outside
+images. Synthetic IdP/application TLS leaves have separate single-host SANs.
+Restore is manual into new claims; automatic CLI/library restore is disabled.
+Explicit DR rotates APP_SECRET_KEY before startup and clears all server sessions
+plus persisted OIDC flows where present. The current signed-cookie OIDC flow
+state is invalidated by rotation. Ordinary upgrades preserve the key. Unknown
+node/writers stop operations for manual diagnosis; no automatic resume is claimed.
+
+
+TEST pilot ships PostgreSQL/Qdrant with the application release in separate
+StatefulSets/PVCs. Its example uses production auth protections and live model
+mode; real endpoints, immutable image digests, public CA, role mapping and narrow
+egress rules must be supplied for the target. Example placeholders do not authorize
+a deployment. Target route/SSO/admission and fresh hosted CI remain release gates.
+
 ## Canonical tables and saved table evidence
 
 Canonical XLSX descriptors/rows belong to one document generation, including

@@ -451,6 +451,11 @@ def create_app() -> FastAPI:
             }),
         )
 
+    @app.get("/health/live")
+    def health_live() -> dict:
+        """Process liveness; dependency outages must not cause restart storms."""
+        return {"status": "alive"}
+
     @app.get("/health")
     def health() -> dict:
         return public_view(get_health())

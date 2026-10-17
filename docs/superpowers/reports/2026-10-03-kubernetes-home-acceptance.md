@@ -1,5 +1,7 @@
 # Домашняя приёмка первой Kubernetes-поставки
 
+> Текущий объём и результат 10.10.2026 описаны в разделе «Компактный домашний этап — 10.10.2026» в конце отчёта. Ранние OPEN/FAIL и private-кандидаты сохраняются как история, не являются критериями этой поставки.
+
 Дата: 03.10.2026. Статус: compact bundled реализован и проверен на домашнем kind;
 целевые DEV/TEST/PROD ещё не проверены. Конфигурация доступа пока отсутствует.
 Этап 1 целиком не закрыт; реплики frontend, API и workers остаются этапами 2–5
@@ -317,3 +319,110 @@ containerd image alias: восстановлена только ссылка н�
 с тем же pinned digest. Образ не скачивался и версия не менялась. Node container
 и PVC идентичности сохранены; Pod/PVC не удалялись. Эта готовность не заменяет
 функциональную проверку UI/login, backup/restore или отказоустойчивости.
+
+
+### Домашний стенд: ресурсы и producer (08.10.2026)
+
+VM:8 vCPU,10 ГиБ RAM, диск100 ГиБ, автостарт включён. CPU изменён обычной
+остановкой/запуском; сохранены UID узлов, контейнеры двух kind-кластеров и PVC/PV
+bindings. До повтора: свободно4,35 CPU по requests, около4,5 ГиБ RAM и57 ГиБ
+диска, Pending-подов нет. Первый FAIL900с сохранён: writer был Unschedulable
+с Insufficient cpu до выполнения действий; штатная очистка подтверждена.
+
+Отдельный повтор на точном компоненте475 прошёл за632.75с при прежних900с:
+full native export/completion/retirement/publication смешанного корпуса.
+Namespace, PVC/PV и wrapper удалены штатно; отсутствие проверено отдельно,
+одноразовый kubeconfig удалён. UID/replicas действующих приложений и UID/PV
+существующих PVC сохранены. Это model-free producer proof; UI, LLM/embedding,
+restore и физическое отключение питания этим прогоном не проверены.
+
+
+### Домашний полный контроллер 553 и оставшаяся интеграция
+
+На домашней VM (8 CPU, 10 ГиБ RAM, диск 100 ГиБ) единая нативная цепочка 553 прошла исходный gate: wrapper 660,36 / 900 с, контроллер 589,65 с, 10309 native чтений. Настоящие условные stop/start, source SQL/retirement, публикация архива, reader SQL/Foreground retirement, выбранные backend/frontend Ready и backend SQL/HTTP, completed и единственный Orphan unlock выполнены в одном контроллере. Данные стенда: 2 документа, 4 чанка, 4 концепта, 8 точек Qdrant; вызовов моделей нет. Это функциональная проверка на малом корпусе, не оценка production нагрузки.
+
+Перед запуском проверены существующие frontend root/platform/config и все 12 слоёв на узле; добавлена только отсутствующая закреплённая canonical CRI ссылка без импорта или перезаписи других ссылок. Все прежние image targets/labels, UID/replicas приложений и PVC сохранены. После теста namespace/PVC/PV, wrapper и owned handoff-том штатно удалены, временный kubeconfig удалён; новым независимым чтением подтверждено отсутствие namespace/wrapper/тома/kubeconfig. Source/tools и архив/журналы/storage UID сохранялись до штатной очистки.
+
+С настоящим общим backend conftest дополнительно прошли 228 проверок на отдельном полном snapshot 1742: новые storage/reader/pipeline и прежние TLS/CA/checkpoint/probe/schema сценарии. В тесте отсутствия новых файлов сравнивается полный набор уже существовавших путей, включая вложенные, вместо предположения пустого tmp_path. Это focused проверка, не полный backend gate и не 180-секундный platform gate. Полный Linux backend набор с production dependencies превысил исходный safety limit 7200 с (FAILED); позднее завершение используется только для диагностики. Прежний общий Windows422 FAILED и ограничения Windows symlink сохраняются.
+
+Установленный Helm, независимое защищённое происхождение, обычный backup CLI и полные T3/T4 остаются открытыми. Следующий интеграционный этап должен читать настоящее Helm поколение, проверять его against текущих полных native templates и отдельно получать genuine ownership ACK до первых эффектов. Текущие byte integrity результаты не подтверждают publisher/restore permission. Рабочий runtime сохраняет принятый набор 475; клиентские credentials или изменения внешних кластеров для этих проверок не использовались.
+
+
+### Проверка установленного поколения: состояние на 08.10.2026
+
+Первый кандидат 562 не принят: Windows с прежним полным набором 136 модулей и дополнительной проверкой loader превысил исходные 180 с (180,02 с, FAILED). Полный Linux backend snapshot 1742 превысил первоначальный safety limit 7200 с; исходный gate FAILED, позднее завершение оставлено только для диагностики. Прежние FAILED не заменяются частичными результатами.
+
+Независимое целостное ревью обнаружило четыре Important: устаревший остаток deadline после последнего полного fence; выдача первого source receipt из GET после потерянного CREATE ACK; публичный отпечаток потенциально приватных values; неполная проверка native reader CAS ACK. Подготовлены исправления и причинные RED-проверки; связанный focused набор прошёл 626 проверок. Повторное ревью дополнительно проверяет типы ownerReferences и все точки выдачи genuine ACK receipts. Полные новые Windows/Linux gates, actual Helm/native и домашняя цепочка ещё не приняты.
+
+Проверка защищённых values сохраняет точное сравнение файлов, дескрипторов и байтов только в памяти; публичный values_sha256 установлен в null. Потерянный или неподтверждённый ответ оставляет запись и lock для пассивного наблюдения, без повторного эффекта. Исходные deadlines и проверки namespace, UID/RV, TLS, HBA, Pod/PVC/PV и writer policy сохраняются. Рабочий runtime остаётся на 475; обычный TLS backup CLI, archive origin, restore authorization и полный T3/T4 остаются открытыми.
+
+
+### Кандидат 562: единая проверка ACK и актуальные платформенные результаты
+
+Независимое ревью точного нового кандидата: Critical0/Important0/Minor0; R1–R5 закрыты, 22 причинные проверки passed. Owning набор — 585 passed. Все нативные ConfigMap-подтверждения проверяют типизированные поля, UID и новый RV; свежий финальный кадр должен совпадать. Неизвестный ответ не даёт разрешения на повтор эффекта. Публичный fingerprint приватного values отсутствует; точное сравнение bytes/descriptor выполняется только в памяти.
+
+Linux: 4048 passed / 5 skipped, 137 явных модулей плюс loader; wrapper 167,59 / 180 с, source guard и обычная очистка собственного контейнера/тома подтверждены. Windows: полный непересекающийся набор 136 модулей плюс loader выполнен в двух процессах с отдельными временными каталогами, 4014 собранных cases, wrapper 122,69 / 180 с; оба source guards и неизменность инструментов подтверждены. Старые однопроцессные Windows FAILED180,02 и FAILED180,01 сохранены. Двухпроцессная организация проверяет полный набор; результат однопроцессной производительности остаётся FAILED.
+
+Старый полный Linux1742 поздно завершился: 84 failed / 9629 passed / 34 skipped, 11425,21 с. Исходный safety7200 FAILED не изменён. Собственные контейнер и три тома штатно удалены, независимое отсутствие подтверждено. Причина ошибок spawn доказана: незащищённый тестовый main повторно копировал Helm в дочернем процессе, получая PermissionError. Новый guarded-main стенд на полном snapshot1751 прошёл 3 реальные spawn-проверки за18,09 с (wrapper21,89), с фактическим общим conftest; код парсера не изменён.
+
+Профилирование ещё 11 настоящих citation-тестов с общим conftest: passed; SQLite create_all занял12,738 с, execute12,244 с, около1,2 с на новую схему. Полный новый backend-набор пока не запускался. Следующий узкий этап: проверить атомарное создание отсутствующей SQLite-схемы одной транзакцией, включая rollback при ошибке и сохранность уже существующих таблиц; отдельная БД каждого теста, PostgreSQL, лимиты и свежие проверки сохраняются. После этого — общий backend gate и настоящие installed-entry native/home сценарии.
+
+Рабочий runtime остаётся475; новый кандидат562 не интегрирован. Обычный CLI, защищённое происхождение, restore и полные T3/T4 остаются OPEN. Этот раздел уточняет состояние предыдущих записей, не заменяя исторические FAILED.
+
+
+### Полный backend и следующий installed Helm proof — 08.10.2026
+
+Полный неизменяемый Linux-набор backend1752 прошёл: **10054 PASS, 34 SKIP**, 142 предупреждения; pytest1922,59 с, wrapper1932,58 с при исходных7200 с,2Gi/2CPU. Использован настоящий общий conftest, свежая отдельная SQLite БД каждого теста, реальные spawn-процессы parser supervisor и прежний pinned backend image. Контейнер и три собственных тома штатно удалены, независимая проверка отсутствия и source/tools SHA PASS. Исторические full1742/Windows422 FAILED сохраняются; Linux PASS не заменяет полный Windows gate или hosted CI.
+
+SQLite init_db создаёт отсутствующие таблицы одной реальной транзакцией: при ошибке новые таблицы откатываются, существующие таблицы/строки сохраняются; повтор идемпотентен. PostgreSQL path не менялся. Независимое ревью:0Critical/0Important/0Minor;5 owning Windows и16 focused Linux PASS. На настоящих citation fixtures время setup снизилось с≈1,2 до≈0,05–0,06 с без кеширования схемы или переиспользования тестовой БД. Изменение пока находится в проверенном кандидате, рабочий runtime475 не обновлён.
+
+Следующий native proof использует настоящий общий chart, Helm install storage→upgrade application и genuine begin_backup_installed_operation ACK перед первым эффектом; затем полный backup/reader/start/completed/unlock. Исходные900 с и ресурсы сохраняются. До запуска найден и воспроизведён один Important в R2-сценарии: сырой container state и произвольный seed JSON попадали в диагностику. R2 не запускался. Отдельный R3 выводит только фиксированные состояния, флаги и проверенные счётчики; неизвестные/неполные записи отклоняются.10 owning tests и фактический синтетический seed protocol PASS; независимое ревью R3 ещё выполняется. Это исправление приёмочного сценария, не изменение рабочего приложения.
+
+Домашняя VM имеет8vCPU/10Gi RAM/100Gi disk и включённый автостарт; при свежей проверке доступно≈4,3Gi RAM и57Gi disk. Оба существующих кластера и приложения сохранены. Native/home installed-entry, защищённое происхождение, ordinary CLI, restore, полные T3/T4 и release acceptance остаются открытыми.
+
+
+### Installed Helm: внешний CA и контрольные проверки — 08.10.2026
+
+Фактический R3 native остановился до seed: production-конфигурация по умолчанию запрещает отключённую аутентификацию. В отдельной синтетической проверке отказ воспроизведён; корректный confidential OIDC и HTTPS проходят Settings без ослабления production guards. R4 с этой конфигурацией успешно создал тестовые данные и запустил приложение через общий Helm chart, но отказался на genuine installed-entry factory до первого backup-эффекта. Точная причина этого фактического отказа пока не подтверждена. Оба FAILED сохранены; собственные namespace/PV, контейнеры и тома штатно удалены.
+
+Независимо воспроизведён дефект проверки внешнего HTTP CA: при trust.existingConfigMap общий chart ссылается на существующий immutable ConfigMap и не включает его в Helm manifest. Проверка ошибочно требовала встроенный объект. Новый кандидат сохраняет обязательные свежие проверки выбранного внешнего CA, PEM, размера, UID/RV, immutable и ссылок frontend; встроенный CA при наличии продолжает сравниваться. Изменены только runtime-проверка и её тесты; 46 owning tests PASS, независимое ревью 0 Critical / 0 Important / 0 Minor. Рабочий runtime475 не обновлён.
+
+Для этого точного кандидата Windows: 4007 PASS / 19 SKIP, два процесса, полный непересекающийся набор, wrapper130,86 / 180 с. Linux R4: 4060 PASS / 5 SKIP, но wrapper195,38 / 180 с — временной gate FAILED, результат сохранён. Один контрольный Linux R5 выполнен без параллельной тестовой нагрузки с теми же исходниками, инструментами, всеми 137 модулями и исходными512Mi/1CPU/180 с: 4060 PASS / 5 SKIP, pytest166,50 с, wrapper169,19 с; source guard и штатное удаление контейнера/тома подтверждены. Это успешный контрольный прогон, а не доказательство причины прежнего замедления.
+
+Следующий R6 использует тот же проверенный сценарий с ограниченной диагностикой только координат исходников, без locals, сообщений исключений и приватных значений. До выполнения требуется независимая проверка coordinator и свежая готовность локального кластера. Домашний сценарий дополнительно требует фактический R6 PASS, сохраняет все существующие PVC UID/PV bindings и replicas; временный kubeconfig удаляется только после точной проверки собственной файловой идентичности и подтверждения отсутствующего/завершённого тестового контейнера. Неизвестное или живое состояние сохраняет credential и завершает очистку отказом. Домашний запуск ещё не выполнялся. Защищённое происхождение, ordinary CLI, restore, полный T3/T4 и release acceptance остаются OPEN.
+
+
+## Компактный домашний этап — 10.10.2026
+
+Пользователь изменил обязательный результат: **рабочий домашний Kubernetes-стенд и комплект для переноса; приёмка PROD отдельно**. [Новый план](../plans/2026-10-03-kubernetes-rollout.md) заменяет прежнюю очередь. Исторические OPEN/FAIL, private582 и более широкие release gates выше сохранены; эти кандидаты не приняты этим прогоном.
+
+Применён standalone operator snapshot домашнего набора 04.10, chart 0.1.0 с baseline `f551f5f` и актуальными home helpers. Snapshot не равен текущему HEAD. SHA-256 каждого поставляемого файла и OCI image digests зафиксированы в `manifest.json`. Текущий большой lifecycle в Kubernetes worktree и изменения других задач не заменялись. Две необходимые правки ограничены kit: раздельные single-host TLS leaf IdP/приложения и запрет automatic restore CLI/library до cluster calls. Зависимость kit закреплена на фактически использованном PyYAML 6.0.1.
+
+| Результат | Фактическая проверка |
+|---|---|
+| Чистая домашняя копия | Отдельные новые namespaces/PVC, bundled PG/Qdrant, миграция перед первым стартом, application 2/2 Ready; измерены ресурсы VM (около 10 GiB RAM, 56 GiB свободного диска перед прогоном). Существующие установки сохранены. |
+| HTTPS/OIDC и права | Нативный probe: trust/negative trust, redirect, anonymous denial, code flow, четыре роли и unmapped denial, cookies/CSRF, upload, generation, sources/BM25, chat stream, RP/IdP logout — PASS. |
+| Браузер | Изолированный Chromium с default HTTP/2 и установленным публичным CA, TLS verification включена: вход → UI upload DOCX → «Готов» → поиск документа → содержимое → быстрый stub-ответ → открытие источника — PASS. Домашние DNS/VPN/Windows trust не менялись. |
+| Пересоздание application Pod | Rollout restart/status — PASS; прежние PVC сохранились. Контрольный документ затем прошёл content/integrity backup и восстановление. |
+| Одно обновление | Frontend `kube-smoke` → `audit-v3`, backend `audit-v16-cleanup-budget` сохранён; schema, число документов и APP_SECRET_KEY не изменились. Длительность deploy 83.17 с. |
+| Отказ миграции | Настоящий одноразовый Job с exit 42 через обычную deploy/migrate последовательность: Job Failed, приложение остановлено, lock сохранён, schema/документы неизменны. Собственный terminal Job и lock разобраны вручную; обычный повторный deploy прошёл. |
+| Непустой backup | Format 2: PG/Qdrant/files/totals/release/trust; strict content integrity и checksums — PASS. Источник оставлен остановленным, копия сохранена вне VM на Windows. SHA-256 закрытого архива `5d17517a9ab054d07255242ada122efb962c09502a269960de40a4ae93e5277d`. |
+| Restore | Новый namespace, новые четыре PVC, прежний image/model/storage/public trust; PG single transaction, Qdrant/files, точное равенство totals, strict verify-content; outbox hold, новая key и очистка auth_sessions/oidc_login_flows до первого старта. 82.75 с для импорта/проверки/migrate/start. Application 2/2 Ready, новый login, поиск/источник/chat — PASS. Исходные PVC/копия сохранены. |
+| Перенос образов | Шесть images экспортированы в OCI; archive SHA-256 `63508cacbffa83b84743742e7f07fe24445112f147c02200cad85d5a66a73575` совпадает на VM и Windows. `docker load` — PASS; импорт в image cache второго kind через `ctr --platform linux/amd64` — PASS для всех шести refs. Workloads второго kind не менялись. |
+| Автономные проверки kit | 31 helper tests — PASS (включая TLS SAN isolation, CLI restore early refusal, публичный CA fixture). Full backend/CI suite не запускалась. Helm lint/render выбранного профиля проверены отдельно. |
+
+Браузер сначала воспроизвёл auth-navigation 404 с общим двуххостовым сертификатом. HTTP/1 Chromium control прошёл; после отдельного single-SAN leaf для каждого hostname обычный HTTP/2 Chromium прошёл полный UI сценарий. Это минимальная правка фактического отказа; TLS verification не отключалась. NetworkPolicy enforcement этим прогоном не подтверждён.
+
+Restore test helper сначала остановился **до импорта** из-за bytes/string assertion. После исправления проверены пустая БД, точные claims, Ready node и отсутствие application/operation actors; известный собственный pre-import lock освобождён явно. Это разбор одного наблюдаемого случая, не automatic recovery. Default `kind load image-archive` попытался импортировать все платформы и отказал на отсутствующем non-amd64 blob; документирован и проверен явный amd64 import. Обе неудачные попытки сохранены в закрытых evidence logs.
+
+Восстановленная копия работает; source application оставлен остановленным после final backup. Это не пользовательский локальный Windows стек и не прежние домашние установки. Сертификаты синтетического стенда действуют семь дней. Публичный kit не содержит backup, паролей, CA private key, credentials или production endpoints.
+
+[Один путь установки и обслуживания](../../KUBERNETES_COMPACT_HOME.md), [ручной restore](../../KUBERNETES_COMPACT_RESTORE.md). Локальные артефакты этой приёмки находятся в игнорируемом `.superpowers/sdd/2026-10-03-kubernetes-rollout/minimal-20261010/`: `package/manifest.json`, `package/SHA256SUMS`, `compact-home-kit-20261010.tar.gz`, закрытый `backup-off-vm.tar.gz` и evidence. Manifest/архив kit можно передавать; backup передавать только как отдельно защищённые данные.
+
+Ограничения: stub вместо реальных LLM/embeddings; replay активной восстановленной cookie не проверен, поскольку в backup обе auth-таблицы были пустыми (очистка и свежий ключ до старта/новый login проверены). Измеренные интервалы не являются SLA/полным RTO. Кластерные prerequisites Gateway API/kgateway установлены заранее и не входят в images archive; полный air-gap/clean-cluster bootstrap не принят. Обезличенные manual cells объединяют фактически проверенные шаги, целиком на третьем target не запускались. PROD, нагрузки, HA, external mode, универсальный crash recovery, platform PKI и реальные модели требуют отдельной приёмки. Интеграция в main, коммит, push и публикация не выполнялись.
+
+
+Итоговое независимое read-only review: Critical нет. Замечание о python-docx воспроизведено в чистом Windows venv (1 failed / 26 passed); после явного `tests/requirements.txt` — 31 passed / 0 failed. Различие kind contexts переоценено как существенное из-за cluster-scoped prerequisites; regression-проверка сначала FAILED, после единого `kind-home` — PASS. Linux host не имел pytest и venv/ensurepip; этот факт сохранён, зависимости не ставились в системный Python, OS packages не менялись. Exact распакованный kit на Linux прошёл help/lint/render/preflight с PyYAML 6.0.1. Minor отложен: готовая команда интерактивного браузера для оператора не входит в kit; UI smoke фактически выполнен в отдельном Chromium Pod с доверенным CA.
+
+
+**Этап закрыт.** В публичном archive 33 manifest files плюс `manifest.json` и `SHA256SUMS`; размер 795268113 байт. SHA-256 `compact-home-kit-20261010.tar.gz`: `6313c0a2442c33abfcf28fb48e2406467e0262502fc82c48a57623d1b6a962a8`. Проверены allowlist архива, checksums, относительные ссылки и compile трёх manual Python cells. Private/evidence/backup и исторические tooling/tests в архив не входят. Временные Chromium Pods этой проверки удалены штатно; application восстановленной копии Ready, source остаётся остановленным, node Ready. Четыре задачи нового плана закрыты без открытия следующего этапа.

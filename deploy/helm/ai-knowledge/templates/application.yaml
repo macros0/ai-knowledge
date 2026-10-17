@@ -1,0 +1,144 @@
+{{- if .Values.application.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: application
+  labels:
+    {{- include "okf.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {okf-role: application}
+  template:
+    metadata:
+      labels:
+        okf-role: application
+        {{- include "okf.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.security.uid }}
+        runAsGroup: {{ .Values.security.gid }}
+        fsGroup: {{ .Values.security.gid }}
+        seccompProfile: {type: RuntimeDefault}
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: diagnostic-directories
+          image: {{ include "okf.image" (dict "image" .Values.images.backend "tier" .Values.deployment.environment) | quote }}
+          command: [python, -c, "from pathlib import Path; [Path('/diagnostics/'+p).mkdir(parents=True,exist_ok=True) for p in ('backend/control','frontend')]"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: diagnostics, mountPath: /diagnostics}]
+      containers:
+        {{- $tlsContainer := "backend" }}
+        - name: backend
+          image: {{ include "okf.image" (dict "image" .Values.images.backend "tier" .Values.deployment.environment) | quote }}
+          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          ports: [{name: backend, containerPort: 8000}]
+          envFrom:
+            - configMapRef: {name: runtime}
+            - secretRef: {name: {{ .Values.secrets.existingSecret | quote }}}
+          env:
+            - {name: DEPLOYMENT_TIER, value: {{ .Values.deployment.environment | quote }}}
+            - {name: MODEL_MODE, value: {{ .Values.models.mode | quote }}}
+            - {name: ENVIRONMENT, value: {{ .Values.runtime.environment | quote }}}
+            - {name: EMBEDDING_PROVIDER, value: {{ ternary "fake" "http" (eq .Values.models.mode "stub") | quote }}}
+            - {name: UVICORN_WORKERS, value: "1"}
+            - {name: STORAGE_MODE, value: bundled}
+            - {name: DATA_DIR, value: /data}
+            - {name: QDRANT_URL, value: "http://qdrant:6333"}
+            {{- if eq .Values.models.mode "stub" }}
+            - {name: LLM_PROFILE, value: "local_qwen"}
+            - {name: LLM_BASE_URL, value: "http://model-stub:8000/v1"}
+            - {name: LLM_MODEL, value: "openai/test-stub"}
+            - {name: LLM_CHAT_MODEL, value: "openai/test-stub"}
+            - {name: SEARCH_MODE_DEFAULT, value: "bm25"}
+            {{- else if eq .Values.models.mode "unavailable" }}
+            - {name: LLM_BASE_URL, value: "http://127.0.0.1:1/v1"}
+            - {name: EMBEDDING_API_BASE, value: "http://127.0.0.1:1"}
+            {{- end }}
+            - {name: DIAGNOSTICS_DIR, value: /diagnostics/backend}
+            - {name: OKF_FRONTEND_DIAGNOSTICS_DIR, value: /diagnostics/frontend}
+            {{- if .Values.trust.existingConfigMap }}
+            {{- if eq $tlsContainer "backend" }}
+            - {name: SSL_CERT_FILE, value: /etc/okf/trust/ca-bundle.crt}
+            - {name: REQUESTS_CA_BUNDLE, value: /etc/okf/trust/ca-bundle.crt}
+            {{- else }}
+            - {name: NODE_EXTRA_CA_CERTS, value: /etc/okf/trust/ca-bundle.crt}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.trust.existingConfigMap }}
+            - {name: runtime-trust, mountPath: /etc/okf/trust, readOnly: true}
+            {{- end }}
+            - {name: data, mountPath: /data}
+            - {name: diagnostics, mountPath: /diagnostics/backend, subPath: backend}
+            - {name: diagnostics, mountPath: /diagnostics/frontend, subPath: frontend, readOnly: true}
+          startupProbe:
+            httpGet: {path: /health/live, port: 8000}
+            {{- include "okf.probeTiming" .Values.probes.backend.startup | nindent 12 }}
+          livenessProbe:
+            httpGet: {path: /health/live, port: 8000}
+            {{- include "okf.probeTiming" .Values.probes.backend.liveness | nindent 12 }}
+          readinessProbe:
+            httpGet: {path: /health/ready, port: 8000}
+            {{- include "okf.probeTiming" .Values.probes.backend.readiness | nindent 12 }}
+          resources: {{ toYaml .Values.resources.backend | nindent 12 }}
+        {{- $tlsContainer = "frontend" }}
+        - name: frontend
+          image: {{ include "okf.image" (dict "image" .Values.images.frontend "tier" .Values.deployment.environment) | quote }}
+          imagePullPolicy: {{ .Values.images.frontend.pullPolicy }}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          ports: [{name: frontend, containerPort: 3000}]
+          env:
+            - {name: BACKEND_URL, value: "http://backend:8000"}
+            - {name: OKF_FRONTEND_DIAGNOSTICS_DIR, value: /diagnostics/frontend}
+            - {name: OKF_DIAGNOSTICS_CONTROL_PATH, value: /diagnostics/control/capture.json}
+            {{- if .Values.trust.existingConfigMap }}
+            {{- if eq $tlsContainer "backend" }}
+            - {name: SSL_CERT_FILE, value: /etc/okf/trust/ca-bundle.crt}
+            - {name: REQUESTS_CA_BUNDLE, value: /etc/okf/trust/ca-bundle.crt}
+            {{- else }}
+            - {name: NODE_EXTRA_CA_CERTS, value: /etc/okf/trust/ca-bundle.crt}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.trust.existingConfigMap }}
+            - {name: runtime-trust, mountPath: /etc/okf/trust, readOnly: true}
+            {{- end }}
+            - {name: diagnostics, mountPath: /diagnostics/frontend, subPath: frontend}
+            - {name: diagnostics, mountPath: /diagnostics/control, subPath: backend/control, readOnly: true}
+          startupProbe:
+            tcpSocket: {port: 3000}
+            {{- include "okf.probeTiming" .Values.probes.frontend.startup | nindent 12 }}
+          readinessProbe:
+            tcpSocket: {port: 3000}
+            {{- include "okf.probeTiming" .Values.probes.frontend.readiness | nindent 12 }}
+          livenessProbe:
+            tcpSocket: {port: 3000}
+            {{- include "okf.probeTiming" .Values.probes.frontend.liveness | nindent 12 }}
+          resources: {{ toYaml .Values.resources.frontend | nindent 12 }}
+      volumes:
+        {{- if .Values.trust.existingConfigMap }}
+        - name: runtime-trust
+          configMap:
+            name: {{ .Values.trust.existingConfigMap | quote }}
+            items: [{key: ca-bundle.crt, path: ca-bundle.crt}]
+        {{- end }}
+        - {name: data, persistentVolumeClaim: {claimName: {{ .Values.persistence.data.existingClaim | quote }}}}
+        - {name: diagnostics, persistentVolumeClaim: {claimName: {{ .Values.persistence.diagnostics.existingClaim | quote }}}}
+{{- end }}

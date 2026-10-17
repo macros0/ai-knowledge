@@ -1,0 +1,60 @@
+name: Compact Kubernetes
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  compact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pinned Helm, kind and kubectl
+        shell: bash
+        run: |
+          curl -fsSLo /tmp/helm-v4.3.0-linux-amd64.tar.gz https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz
+          curl -fsSLo /tmp/helm.sha256 https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz.sha256sum
+          (cd /tmp && sha256sum -c helm.sha256)
+          tar -xzf /tmp/helm-v4.3.0-linux-amd64.tar.gz -C /tmp
+          sudo install /tmp/linux-amd64/helm /usr/local/bin/helm
+          curl -fsSLo /tmp/kind-linux-amd64 https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64
+          curl -fsSLo /tmp/kind.sha256 https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64.sha256sum
+          (cd /tmp && sha256sum -c kind.sha256)
+          sudo install /tmp/kind-linux-amd64 /usr/local/bin/kind
+          curl -fsSLo /tmp/kubectl https://dl.k8s.io/release/v1.37.0/bin/linux/amd64/kubectl
+          curl -fsSLo /tmp/kubectl.sha256 https://dl.k8s.io/release/v1.37.0/bin/linux/amd64/kubectl.sha256
+          echo "$(cat /tmp/kubectl.sha256)  /tmp/kubectl" | sha256sum -c -
+          sudo install /tmp/kubectl /usr/local/bin/kubectl
+      - name: Dependencies and compact contracts
+        run: |
+          pip install -e ./doc-parser
+          pip install -r backend/requirements.txt -r scripts/kubernetes/requirements.txt
+          cd backend
+          python -m pytest tests/test_deployment_profile.py tests/test_kubernetes_chart.py tests/test_kubernetes_model_profile.py tests/test_model_stub_contract.py tests/test_kubernetes_compact_compact_cli.py tests/test_kubernetes_compact_home_access.py tests/test_kubernetes_compact_host_tls.py tests/test_kubernetes_session_cleanup.py -q
+      - name: Build source images
+        run: |
+          docker build -f backend/Dockerfile --build-arg OKF_BUILD_REVISION="$GITHUB_SHA" -t okf-backend:kube-smoke .
+          docker build -f frontend/Dockerfile --build-arg OKF_BUILD_REVISION="$GITHUB_SHA" -t okf-frontend:kube-smoke frontend
+          docker build -f backend/test_scripts/model_stub/Dockerfile -t okf-model-stub:kube-smoke backend/test_scripts/model_stub
+      - name: Isolated install and persistent restart smoke
+        run: |
+          kind create cluster --name okf-kube --image kindest/node:v1.37.0 --config deploy/kubernetes/lab/kind.yaml --wait 120s
+          kind load docker-image --name okf-kube okf-backend:kube-smoke okf-frontend:kube-smoke okf-model-stub:kube-smoke
+          python3 scripts/kubernetes/lab.py --context kind-okf-kube --namespace okf-ci --values-output "$RUNNER_TEMP/ci.values.yaml"
+          python3 scripts/kubernetes/lifecycle.py deploy --context kind-okf-kube --namespace okf-ci --expected-tier ci --values "$RUNNER_TEMP/ci.values.yaml" --backup-root "$RUNNER_TEMP/backups"
+          kubectl --context kind-okf-kube -n okf-ci exec deployment/application -c backend -- python scripts/seed_backup_fixture.py --confirm-ci-fixture
+          python3 scripts/kubernetes/smoke.py --context kind-okf-kube --namespace okf-ci --synthetic-fixture
+          kubectl --context kind-okf-kube -n okf-ci rollout restart deployment/application
+          python3 scripts/kubernetes/smoke.py --context kind-okf-kube --namespace okf-ci --synthetic-fixture
+          python3 scripts/kubernetes/lifecycle.py backup --context kind-okf-kube --namespace okf-ci --expected-tier ci --values "$RUNNER_TEMP/ci.values.yaml" --backup-root "$RUNNER_TEMP/backups"
+      - name: Safe failure summary
+        if: failure()
+        run: kubectl --context kind-okf-kube get pods,jobs,pvc -A
+      - name: Remove disposable cluster
+        if: always()
+        run: kind delete cluster --name okf-kube

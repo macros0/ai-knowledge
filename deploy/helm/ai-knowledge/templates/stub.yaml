@@ -1,0 +1,40 @@
+{{- if eq .Values.models.mode "stub" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-stub
+  labels:
+    {{- include "okf.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector: {matchLabels: {okf-role: model-stub}}
+  template:
+    metadata:
+      labels:
+        okf-role: model-stub
+        {{- include "okf.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, seccompProfile: {type: RuntimeDefault}}
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: model-stub
+          image: {{ include "okf.image" (dict "image" .Values.images.stub "tier" .Values.deployment.environment) | quote }}
+          imagePullPolicy: {{ .Values.images.stub.pullPolicy }}
+          ports: [{containerPort: 8000}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          readinessProbe: {httpGet: {path: /health/live, port: 8000}}
+          resources: {{ toYaml .Values.resources.stub | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-stub
+  labels:
+    {{- include "okf.labels" . | nindent 4 }}
+spec:
+  selector: {okf-role: model-stub}
+  ports: [{port: 8000, targetPort: 8000}]
+{{- end }}

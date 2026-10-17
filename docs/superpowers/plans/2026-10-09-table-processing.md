@@ -1063,3 +1063,31 @@ P/run-final-after-A-live-v1.py допускается только после о
 Independent review: citation join и failure/persistence gaps исправлены; passive HTTP probe получил реальный whole-process deadline через отдельный suspended→owned job→resume GET-only child, включая slow-drip response body. Owned local services.close вызывается из внешнего finally. Любая ошибка job/stream cleanup сохраняет отрицательный PID/birth/exit receipt и запрещает последующий ложный idle success. 32 focused Windows tests passed, включая реальные harmless timeout/slow-drip дети и RED→GREEN successful JSON→cleanup error. Residual Critical/Important в проверенной области нет. Actual passive Qwen metadata GET подтвердил served model/idle и завершение только своего child; generation requests=0.
 
 Evidence P/final-A-live-preparation-v1-proof.json, frozen20-file local graph. Все763runtime/release/coreSHA unchanged; read-only quality19-file graph unchanged. Own private ports17451/17453/16400 closed; actual PID20468/birth134364051810212317 STILL_ACTIVE и pinned nightentrySHA совпали. Подготовка A15 завершена; actual C13, four fresh RSS, after-A export/import/A20/19×3/15HTTPanswers/manual semantic review, growth/capacity/final audit ещё OPEN. Следующий формальный запуск по существующему controller:15.10.2026 01:00МСК.
+
+
+## Историческое уточнение R1 из main (09.10.2026)
+
+Следующая запись сохраняет исходные ограничения R1 на указанную дату; текущая приёмка R2 и версия парсера приведены в начале плана.
+
+### Уточнение после R1: полный текст без символного потолка (09.10.2026)
+
+По отдельному решению пользователя удалено обрезание канонического текста в
+2 млн символов. Дополнительный UI warning/подтверждение не вводятся; объём
+работы виден по чанкам. Парсер v23 сохраняет полный текст под прежними
+resource/container guards. Read-only supervised parse контрольного оригинала
+подтверждает 5 042 229 символов без warnings, включая root/1 и root/2.
+Историческая публикация выше остаётся неполной до успешной перегенерации.
+Полная новая генерация/индексация и оставшиеся original/retrieval/R2 gates
+этим изменением не объявляются принятыми. Проверки и границы — в R1 report.
+
+### Уточнение после R1: компактное представление пустого XLSX-хвоста (10.10.2026)
+
+При продолжении текущего v23 checkpoint каноническая XLSX-проекция сохраняется.
+В классификаторе/обычной LLM-генерации и производных table-концептах исключается
+только полностью пустой непрерывный правый хвост колонок; проверяется вся
+таблица, а не только пять preview rows. Индексы retained prefix, source spans и
+канонические hashes сохраняются. Непрямоугольная/неоднозначная/многострочная
+разметка не преобразуется. Изменение used-range XLSX-парсера отложено до этапа,
+допускающего новую полную генерацию. Это уточнение не закрывает T6/R2 целиком:
+общие cell/text/token budgets и структурная таблица остаются отдельной работой.
+Проверки и текущие границы приёмки — в follow-up R1 report.

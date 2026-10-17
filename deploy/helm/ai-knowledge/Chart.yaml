@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ai-knowledge
+description: Compact knowledge service with bundled persistent storage
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.31.0-0"

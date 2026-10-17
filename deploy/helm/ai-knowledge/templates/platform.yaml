@@ -1,0 +1,59 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: {{ .Values.gateway.apiVersion }}
+kind: ListenerSet
+metadata: {name: frontend-listeners}
+spec:
+  parentRef: {name: {{ .Values.gateway.name | quote }}, namespace: {{ .Values.gateway.namespace | quote }}, kind: Gateway, group: gateway.networking.k8s.io}
+  listeners:
+    - name: https-frontend
+      protocol: HTTPS
+      port: 443
+      hostname: {{ .Values.gateway.hostname | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs: [{name: {{ .Values.gateway.certificateSecret | quote }}}]
+      allowedRoutes: {namespaces: {from: Same}}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: frontend}
+spec:
+  parentRefs: [{name: frontend-listeners, kind: ListenerSet, group: gateway.networking.k8s.io}]
+  hostnames: [{{ .Values.gateway.hostname | quote }}]
+  rules:
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      timeouts: {request: {{ .Values.gateway.requestTimeout | quote }}, backendRequest: {{ .Values.gateway.backendRequestTimeout | quote }}}
+      backendRefs: [{name: frontend, port: 3000}]
+{{- if .Values.gateway.redirect }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: frontend-redirect}
+spec:
+  parentRefs: [{name: {{ .Values.gateway.name | quote }}, namespace: {{ .Values.gateway.namespace | quote }}, kind: Gateway, group: gateway.networking.k8s.io, sectionName: http}]
+  hostnames: [{{ .Values.gateway.hostname | quote }}]
+  rules:
+    - filters: [{type: RequestRedirect, requestRedirect: {scheme: https, port: 443, statusCode: 301}}]
+{{- end }}
+{{- end }}
+{{- if .Values.gateway.trafficPolicy.enabled }}
+---
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: TrafficPolicy
+metadata: {name: frontend-stream}
+spec:
+  targetRefs: [{group: gateway.networking.k8s.io, kind: HTTPRoute, name: frontend}]
+  timeouts: {streamIdle: {{ printf "%ds" (int .Values.gateway.trafficPolicy.streamIdleSeconds) | quote }}}
+{{- end }}
+{{- if .Values.vault.enabled }}
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata: {name: runtime}
+spec:
+  vaultAuthRef: {{ .Values.vault.authRef | quote }}
+  mount: {{ required "vault.mount required" .Values.vault.mount | quote }}
+  path: {{ required "vault.path required" .Values.vault.path | quote }}
+  type: kv-v2
+  destination: {create: true, name: {{ .Values.secrets.existingSecret | quote }}, overwrite: false, type: Opaque}
+{{- end }}

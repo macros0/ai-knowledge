@@ -1,4 +1,6 @@
-FROM python:3.12-slim
+# syntax=docker/dockerfile:1
+ARG PYTHON_IMAGE=python:3.12-slim
+FROM ${PYTHON_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -15,10 +17,25 @@ ENV OKF_BUILD_REVISION=${OKF_BUILD_REVISION}
 
 WORKDIR /app
 
+# Optional public CA and private pip configuration are supplied by BuildKit.
+# Package credentials are mounted only for RUN and never copied into the image.
+ARG CA_BUNDLE_REVISION=none
+RUN --mount=type=secret,id=corporate_ca,required=false \
+    test -n "${CA_BUNDLE_REVISION}" && \
+    if [ -s /run/secrets/corporate_ca ]; then \
+      test "${CA_BUNDLE_REVISION}" != none && \
+      cp /run/secrets/corporate_ca /usr/local/share/ca-certificates/corporate.crt && \
+      chmod 0644 /usr/local/share/ca-certificates/corporate.crt && update-ca-certificates; \
+    fi
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    PIP_CERT=/etc/ssl/certs/ca-certificates.crt
+
 COPY backend/requirements.txt ./backend/requirements.txt
 COPY doc-parser ./doc-parser
 COPY THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN --mount=type=secret,id=pip_config,target=/etc/pip.conf,required=false \
+    pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e ./doc-parser && \
     pip install --no-cache-dir -r backend/requirements.txt && \
     python -c "import importlib.metadata as m, importlib.util; assert m.version('pypdfium2'); assert importlib.util.find_spec('pymupdf') is None; assert importlib.util.find_spec('fitz') is None"

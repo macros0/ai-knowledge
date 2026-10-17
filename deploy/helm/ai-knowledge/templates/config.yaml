@@ -1,0 +1,36 @@
+{{- include "okf.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime
+  labels:
+    {{- include "okf.labels" . | nindent 4 }}
+data:
+  ENVIRONMENT: {{ .Values.runtime.environment | quote }}
+  DATA_DIR: /data
+  STORAGE_MODE: bundled
+  QDRANT_URL: http://qdrant:6333
+  DEPLOYMENT_TIER: {{ .Values.deployment.environment | quote }}
+  MODEL_MODE: {{ .Values.models.mode | quote }}
+  UVICORN_WORKERS: "1"
+  AUDIT_STDOUT_MODE: {{ .Values.runtime.auditStdoutMode | quote }}
+  {{- if eq .Values.models.mode "stub" }}
+  EMBEDDING_PROVIDER: fake
+  LLM_MODEL: openai/test-stub
+  LLM_CHAT_MODEL: openai/test-stub
+  LLM_BASE_URL: http://model-stub:8000/v1
+  SEARCH_MODE_DEFAULT: bm25
+  {{- else }}
+  EMBEDDING_PROVIDER: http
+  {{- end }}
+  {{- range $key, $value := .Values.runtime.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: application
+  labels:
+    {{- include "okf.labels" . | nindent 4 }}
+automountServiceAccountToken: false
