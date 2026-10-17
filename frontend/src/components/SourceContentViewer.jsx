@@ -32,6 +32,7 @@ function ChunkContent({chunk, docId, preserveLineBreaks, initiallyVisible}) {
   return (
     <div ref={container} className="source-content-chunk" data-chunk-index={chunk.chunk_index}
       aria-busy={!ready} style={ready ? undefined : {minHeight: 160}}>
+      {chunk.table_refs?.length > 0 && <a href={`/documents/${encodeURIComponent(docId)}/tables/${chunk.table_refs[0].table_id}?generation_id=${chunk.table_refs[0].generation_id}&source_id=${encodeURIComponent(chunk.table_refs[0].source_id)}&row=${chunk.table_refs[0].row_number}`}>{t("tables.title")}</a>}
       {ready ? <ContentViewer text={chunk.content} docId={docId} preserveLineBreaks={preserveLineBreaks} />
         : <p className="source-chunk-heading">{t("okf.page.chunkH1", {index: chunk.chunk_index + 1})}</p>}
     </div>

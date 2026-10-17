@@ -1,4 +1,4 @@
-"""Actual container boundaries and a shared Unicode text projection budget."""
+"""Actual container byte/node/depth boundaries and complete Unicode text."""
 import zipfile
 from email.message import EmailMessage
 from pathlib import Path
@@ -126,7 +126,7 @@ def test_attachment_node_boundary_and_retained_bytes(tmp_path, format_name, coun
 
 @pytest.mark.parametrize("format_name", ["eml", "msg"])
 @pytest.mark.parametrize("size", [9, 10, 11])
-def test_unicode_text_boundary_uses_codepoints_not_utf16(tmp_path, format_name, size):
+def test_unicode_mail_text_is_preserved(tmp_path, format_name, size):
     body = "😀Ж" * 6
     body = body[:size]
     path = tmp_path / f"unicode.{format_name}"
@@ -137,28 +137,22 @@ def test_unicode_text_boundary_uses_codepoints_not_utf16(tmp_path, format_name, 
     else:
         path.write_bytes(unicode_msg(subject="", body=body))
     context = ParseContext(path.name)
-    budget = AttachmentBudget(max_text_chars=10)
-    blocks = parse_document(path, context=context, budget=budget)
-    assert "".join(block.text for block in blocks) == body[:10]
-    assert budget.remaining_text == 10 - min(size, 10)
-    assert context.warnings == ([{"code": "text_limit_exceeded", "source_id": "root"}] if size > 10 else [])
+    blocks = parse_document(path, context=context)
+    assert "".join(block.text for block in blocks) == body
+    assert context.warnings == []
 
 
 @pytest.mark.parametrize("format_name", FORMATS)
-@pytest.mark.parametrize("offset", [-1, 0, 1])
-def test_sibling_text_budget_debited_once_and_originals_retained(tmp_path, format_name, offset):
+def test_sibling_text_and_originals_retained(tmp_path, format_name):
     children = [b"From: child@example.test\r\n\r\nFIRST EVIDENCE\r\n",
                 b"From: child@example.test\r\n\r\nSECOND EVIDENCE\r\n"]
     path = _container(tmp_path / f"parent.{format_name}", children, names=["first.eml", "second.eml"])
-    full = parse_document(path, budget=AttachmentBudget(), attachments_dir=tmp_path / "baseline")
-    full_size = sum(len(block.text) for block in full)
-    budget = AttachmentBudget(max_text_chars=full_size + offset)
     context = ParseContext(path.name)
-    limited = parse_document(path, budget=budget, context=context, attachments_dir=tmp_path / "limited")
-    assert sum(len(block.text) for block in limited) == min(full_size, full_size + offset)
-    assert budget.remaining_text == max(offset, 0)
-    assert bool(context.warnings) is (offset < 0)
-    markers = [block for block in limited if block.type == "attachment"]
+    blocks = parse_document(path, context=context, attachments_dir=tmp_path / "attachments")
+    assert any("FIRST EVIDENCE" in block.text for block in blocks)
+    assert any("SECOND EVIDENCE" in block.text for block in blocks)
+    assert context.warnings == []
+    markers = [block for block in blocks if block.type == "attachment"]
     assert [Path(block.meta["saved_path"]).read_bytes() for block in markers] == children
     assert [source.source_id for source in context.sources] == ["root", "root/0", "root/1"]
 

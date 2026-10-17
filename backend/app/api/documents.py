@@ -12,6 +12,7 @@ from typing import Annotated, Literal
 
 from sqlalchemy import func, or_, select
 
+from app.api.tables import router as table_router
 from app.api import errors
 from app.services.errors import ConflictError, DomainError
 from app.services.artifact_response import OpenedFileResponse
@@ -1885,3 +1886,7 @@ def _find_concept_in_staging(staging: StagingStore, slug: str) -> tuple[Concept,
             except Exception:
                 continue
     return None
+
+
+# Tables share the document source authorization boundary.
+router.include_router(table_router)

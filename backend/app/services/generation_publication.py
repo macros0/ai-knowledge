@@ -36,6 +36,21 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
 
             if canonical_rows_digest(session, doc_id) != prepared["canonical_base_hash"]:
                 raise GenerationConflict("Canonical document changed before repair publication")
+        from app.services.generation_files import generation_paths
+        from app.services.table_store import verify_table_publication
+        verify_table_publication(session, doc_id, generation_id,
+            generation_paths(settings, doc_id, generation_id).bundle,
+            [item.get('metadata', {}) for item in prepared['concepts']])
+        verify_table_publication(session, doc_id, generation_id,
+            generation_paths(settings, doc_id, generation_id).bundle, prepared['chunks'])
+        manifest_version = prepared.get("chunk_projection_version")
+        version = generation.chunk_projection_version
+        if (manifest_version is not None and type(manifest_version) is not int) or manifest_version != version:
+            raise GenerationIntegrityError()
+        chunk_identities = None
+        if version is not None:
+            from app.services.chunk_projection_publication import verify_chunk_projection_publication
+            chunk_identities = verify_chunk_projection_publication(session, doc_id, generation_id, prepared["chunks"])
         vector_store.verify_generation_points(doc_id, generation_id, prepared["point_ids"])
         okf_docs = [OkfDocument.model_validate(item) for item in prepared["concepts"]]
         sources = prepared["sources"]
@@ -48,15 +63,30 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
             concept_point_id(doc_id, Path(item.filepath).stem, generation_id=generation_id): scope
             for item, scope in zip(okf_docs, concept_scopes)
         }
-        chunk_mapping = {
-            chunk_point_id(doc_id, row["chunk_index"], generation_id=generation_id): scope
-            for row, scope in zip(prepared["chunks"], chunk_scopes)
-        }
+        if chunk_identities is None:
+            chunk_mapping = {
+                chunk_point_id(doc_id, row["chunk_index"], generation_id=generation_id): scope
+                for row, scope in zip(prepared["chunks"], chunk_scopes)
+            }
+        else:
+            scope_by_index = {row["chunk_index"]: scope for row, scope in zip(prepared["chunks"], chunk_scopes)}
+            chunk_mapping = {pid: scope_by_index[identity["chunk_index"]] for pid, identity in chunk_identities.items()}
         ids = set(prepared["point_ids"])
         if (len(ids) != len(prepared["point_ids"]) or len(concept_mapping) != len(okf_docs)
-                or len(chunk_mapping) != len(prepared["chunks"])
-                or ids not in (set(concept_mapping), set(concept_mapping) | set(chunk_mapping))):
+                or (chunk_identities is None and len(chunk_mapping) != len(prepared["chunks"]))
+                or (chunk_identities is None and ids not in (set(concept_mapping), set(concept_mapping) | set(chunk_mapping)))
+                or (chunk_identities is not None and ids != set(concept_mapping) | set(chunk_mapping))):
             raise GenerationIntegrityError()
+        if chunk_identities is not None:
+            identities = {
+                concept_point_id(doc_id, Path(item.filepath).stem, generation_id=generation_id): {
+                    "point_type": "concept", "slug": Path(item.filepath).stem,
+                    "source_id": item.metadata.get("source_id"), "chunk_index": item.metadata.get("chunk_index"),
+                    "chunk_fragment": None,
+                } for item in okf_docs
+            }
+            identities.update(chunk_identities)
+            vector_store.verify_generation_projection_points(doc_id, generation_id, identities)
         expected_scopes = {**concept_mapping, **chunk_mapping}
         vector_store.patch_mail_scopes({pid: expected_scopes[pid] for pid in ids})
         effects = prepared.get("parse_effects") or {}

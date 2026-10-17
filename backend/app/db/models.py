@@ -15,6 +15,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Computed
+from app.db.table_cells_projection import TableCellsProjection
 
 from sqlalchemy import (
     JSON,
@@ -411,6 +414,7 @@ class OkfConcept(Base):
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     # Проверенные диапазоны в исходном DocumentChunk.content; null для старых концептов.
     source_spans: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    table_refs: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     # Провенанс генерации (Этап 2b, PostgreSQL SSOT): отличает момент/модель/промпт
     # создания конкретной версии концепта от времени SQL INSERT (`created_at`).
@@ -486,6 +490,8 @@ class DocumentGeneration(Base):
     base_generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     phase: Mapped[str] = mapped_column(String(16), nullable=False, default="preparing")
     legacy_cleanup_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    table_schema_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chunk_projection_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     publication_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -529,8 +535,9 @@ class DocumentChunk(Base):
     )
     # NULL сохраняет совместимость с историческими плоскими чанками.
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    table_refs: Mapped[list | None] = mapped_column(JSON, nullable=True)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    section_title: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    section_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[str] = mapped_column(Text, default="")
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     char_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -991,4 +998,72 @@ class UiDictionary(Base):
 
     __table_args__ = (
         UniqueConstraint("locale", "version", name="uq_ui_dictionaries_locale_version"),
+    )
+
+
+class DocumentTable(Base):
+    """Immutable canonical structure belonging to exactly one generation."""
+    __tablename__ = "document_tables"
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(ForeignKey("document_generations.id", ondelete="CASCADE"), primary_key=True)
+    table_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    descriptor: Mapped[dict] = mapped_column(JSON, nullable=False)
+    quality: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class DocumentTableRow(Base):
+    __tablename__ = "document_table_rows"
+    doc_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    table_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    row_number: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cells: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # Keep canonical JSON bytes; PostgreSQL reads the generated binary projection.
+    # SQLite's generated column is virtual, and neither dialect loads it with rows.
+    cells_projection: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB(), 'postgresql'), Computed(TableCellsProjection()), deferred=True, nullable=True)
+    __mapper_args__ = {'eager_defaults': False}
+    hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    __table_args__ = (
+        ForeignKeyConstraint(["doc_id", "generation_id", "table_id"],
+                             ["document_tables.doc_id", "document_tables.generation_id", "document_tables.table_id"],
+                             ondelete="CASCADE", name="fk_document_table_rows_table"),
+    )
+
+
+class DocumentChunkProjection(Base):
+    """Verified derived representation of one immutable canonical source chunk."""
+    __tablename__ = "document_chunk_projections"
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(ForeignKey("document_generations.id", ondelete="CASCADE"), primary_key=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    title_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    projection_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    fragment_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    __table_args__ = (
+        CheckConstraint("chunk_index >= 0 AND fragment_count >= 0 AND version > 0", name="ck_chunk_projection_bounds"),
+    )
+
+
+class DocumentChunkFragment(Base):
+    """Bounded canonical-derived text, never sourced from a Qdrant payload."""
+    __tablename__ = "document_chunk_fragments"
+    doc_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    point_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    descriptor: Mapped[dict] = mapped_column(JSON, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    text_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(["doc_id", "generation_id", "chunk_index"],
+            ["document_chunk_projections.doc_id", "document_chunk_projections.generation_id", "document_chunk_projections.chunk_index"], ondelete="CASCADE"),
+        CheckConstraint("ordinal >= 0", name="ck_chunk_fragment_ordinal"),
     )

@@ -307,15 +307,29 @@ class LLMClient:
             raise ValueError("LLM returned no final content")
         return text
 
-    def _complete_with_retries(self, system: str, user: str, max_tokens: int | None = None, attempts: int | None = None, idle_timeout: float | None = None, task: str | None = None) -> tuple[str, str | None]:
+    def _complete_with_retries(self, system: str, user: str, max_tokens: int | None = None, attempts: int | None = None, idle_timeout: float | None = None, task: str | None = None, validate=None) -> tuple[str, str | None]:
         attempts = max(1, attempts if attempts is not None else self.settings.llm_retry_attempts)
         backoff = max(0.0, self.settings.llm_retry_backoff_seconds)
         last_exc: Exception | None = None
+        correct_identity = False
         for attempt in range(1, attempts + 1):
             llm_profiles.remaining(self.settings.llm_max_total_timeout_seconds)
             try:
-                return self._complete_once(system, user, max_tokens=max_tokens, idle_timeout=idle_timeout,
-                                           **({"task": task} if task else {}))
+                request_system = system
+                if correct_identity:
+                    request_system += (
+                        "\nПредыдущий ответ нарушил требования к ID концептов. "
+                        "Повтори извлечение из того же исходного материала: "
+                        "каждая запись должна иметь непустой уникальный id. "
+                        "Сохрани все отдельные факты; не пропускай записи и не выдумывай данные."
+                    )
+                text, reason = self._complete_once(
+                    request_system, user, max_tokens=max_tokens, idle_timeout=idle_timeout,
+                    **({"task": task} if task else {}),
+                )
+                if validate is not None:
+                    validate(text, reason)
+                return text, reason
             except LLMBusyError:
                 raise
             except LLMTimeoutError as exc:
@@ -338,6 +352,8 @@ class LLMClient:
                 last_exc = exc
                 if not self._is_retryable(exc):
                     raise
+                if isinstance(exc, llm_profiles.LLMConceptIdentityError):
+                    correct_identity = True
                 delay = _retry_after(exc) or backoff * (2 ** (attempt - 1))
                 logger.warning(
                     "LLM вызов не удался (попытка %d/%d): %s — повтор через %.1f с",
@@ -560,7 +576,7 @@ class LLMClient:
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
-        if isinstance(exc, LLMTimeoutError):
+        if isinstance(exc, (LLMTimeoutError, llm_profiles.LLMConceptIdentityError)):
             return True
         if isinstance(exc, (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, httpx.RemoteProtocolError, ConnectionError)):
             return True
@@ -612,9 +628,22 @@ class LLMClient:
         cap = max(base, settings.llm_max_tokens_cap) if task == "generation" or (not self.local and task != "table_classification") else base
         max_tokens = base
         for attempt in range(max_attempts):
-            text, finish_reason = self._complete_with_retries(
-                system, user, max_tokens=max_tokens, **({"task": task} if self.local else {}))
+            validated = {}
+            def validate_generation(text, reason):
+                result = _parse_json(
+                    text, finish_reason=reason, doc_id=doc_id, chunk_idx=chunk_idx,
+                    salvage_truncated=False, single_object=single_object,
+                )
+                validated["result"] = llm_profiles.validate_result(task, result)
             try:
+                text, finish_reason = self._complete_with_retries(
+                    system, user, max_tokens=max_tokens,
+                    **({"task": task} if self.local else {}),
+                    **({"validate": validate_generation}
+                       if self.local and task == "generation" and not salvage_truncated else {}),
+                )
+                if "result" in validated:
+                    return validated["result"]
                 if self.local and task == "generation" and salvage_truncated:
                     fragment = _response_json_fragment(text)
                     closed = _top_level_close_pos(fragment)

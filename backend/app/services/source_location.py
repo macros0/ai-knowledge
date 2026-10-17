@@ -30,6 +30,7 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
                 OkfConcept.source_spans,
                 OkfConcept.title,
                 OkfConcept.content,
+                OkfConcept.table_refs,
             ).where(
                 OkfConcept.doc_id == doc_id,
                 OkfConcept.slug == slug,
@@ -37,7 +38,10 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
         ).first()
         if concept is None:
             return None
-        chunk_index, stored_spans, concept_title, concept_content = concept
+        chunk_index, stored_spans, concept_title, concept_content, table_refs = concept
+        if table_refs:
+            return SourceLocationOut(status='exact', chunk_index=chunk_index,
+                                     source_id=table_refs[0]['source_id'], table_refs=table_refs)
         if chunk_index is None:
             return SourceLocationOut(status="unavailable")
         chunk = session.execute(
@@ -153,8 +157,8 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
 def get_document_text_chunks(doc_id: str) -> list[DocumentTextChunkOut]:
     with session_scope() as session:
         rows = session.execute(
-            select(DocumentChunk.chunk_index, DocumentChunk.source_id, DocumentChunk.content)
+            select(DocumentChunk.chunk_index, DocumentChunk.source_id, DocumentChunk.content, DocumentChunk.table_refs)
             .where(DocumentChunk.doc_id == doc_id)
             .order_by(DocumentChunk.chunk_index)
         ).all()
-    return [DocumentTextChunkOut(chunk_index=index, source_id=source_id, content=content or "") for index, source_id, content in rows]
+    return [DocumentTextChunkOut(chunk_index=index, source_id=source_id, content=content or "", table_refs=refs or []) for index, source_id, content, refs in rows]

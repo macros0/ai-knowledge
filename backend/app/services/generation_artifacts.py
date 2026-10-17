@@ -1,4 +1,5 @@
 """Verify prepared artifacts before switching the canonical publication."""
+import codecs
 import hashlib
 import json
 from pathlib import Path
@@ -34,15 +35,39 @@ def artifact_manifest(settings, doc_id: str, generation_id: str) -> dict[str, st
     return result
 
 
+def _read_hashed_json(path: Path, expected_hash: str | None) -> dict:
+    """Decode bounded byte blocks, hashing exactly the bytes consumed once.
+
+    JSON still needs the complete decoded text. Joining decoder pieces before
+    parsing releases them, avoiding both an additional raw document and UTF-8
+    decoder over-allocation for large strings containing astral characters.
+    Preserve json.loads(bytes) encoding and surrogate handling, including BOMs.
+    """
+    if not expected_hash:
+        raise GenerationIntegrityError()
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        prefix = stream.read(4)
+        digest.update(prefix)
+        decoder = codecs.getincrementaldecoder(json.detect_encoding(prefix))(errors="surrogatepass")
+        pieces = [decoder.decode(prefix)]
+        while chunk := stream.read(64 * 1024):
+            digest.update(chunk)
+            pieces.append(decoder.decode(chunk))
+        pieces.append(decoder.decode(b"", final=True))
+    if digest.hexdigest() != expected_hash:
+        raise GenerationIntegrityError()
+    decoded = "".join(pieces)
+    del pieces
+    return json.loads(decoded)
+
+
 def load_verified_publication(settings, doc_id: str, generation_id: str, expected_hash: str | None) -> dict:
     try:
         paths = generation_paths(settings, doc_id, generation_id)
         manifest_path = paths.uploads_root / "publication.json"
         _reject_links(manifest_path)
-        raw = manifest_path.read_bytes()
-        if not expected_hash or hashlib.sha256(raw).hexdigest() != expected_hash:
-            raise GenerationIntegrityError()
-        prepared = json.loads(raw)
+        prepared = _read_hashed_json(manifest_path, expected_hash)
         if prepared.get("doc_id") != doc_id or prepared.get("generation_id") != generation_id:
             raise GenerationIntegrityError()
         actual = artifact_manifest(settings, doc_id, generation_id)

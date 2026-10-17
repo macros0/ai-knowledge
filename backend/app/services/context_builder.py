@@ -64,6 +64,11 @@ def _use_concept_content(block: dict) -> dict:
     return result
 
 
+def _hit_excerpt(hit, limit, exact_groups):
+    content = hit.payload.get("content", "")
+    return content if hit.payload.get("table_refs") else exact_excerpt(content, limit, exact_groups)
+
+
 def _is_review_hit(hit: Hit) -> bool:
     return REVIEW_TAG in (hit.payload.get("tags") or [])
 
@@ -95,7 +100,7 @@ def resolve_branches(
 def _block_mail_provenance(primary, hits):
     from app.services.chat_source_selection import excerpt_reference
     fields = ("doc_id", "source_id", "chunk_index", "generation_id", "mail_scope",
-              "_canonical_verified", "point_type", "slug")
+              "_canonical_verified", "point_type", "slug", "chunk_fragment")
     components = [{key: hit.payload.get(key) for key in fields} for hit in hits]
     if primary and primary.payload.get("mail_fragment"):
         components.append(primary.payload.get("_mail_fragment_component") or {})
@@ -103,10 +108,17 @@ def _block_mail_provenance(primary, hits):
     if primary and primary.payload.get("mail_fragment"):
         fragment = primary.payload["mail_fragment"]
         mail_evidence = excerpt_reference(Hit('', 0., {
-            **primary.payload, 'point_type': 'chunk', 'content': fragment['content'],
+            **primary.payload, 'content': fragment['content'],
+            '_mail_chunk': primary.payload.get('point_type') == 'concept',
             'chunk_index': fragment['chunk_index'],
         }), fragment['content'])
     return {
+        "table_refs": primary.payload.get("table_refs") or [],
+        **({"_table_identifier_cells": primary.payload.get("_table_identifier_cells", [])}
+           if primary.payload.get("table_refs") else {}),
+        **({"_table_cell_states": primary.payload["_table_cell_states"]}
+           if primary.payload.get("table_refs") and primary.payload.get("_table_cell_states")
+           and primary.payload.get("_canonical_verified") is True else {}),
         "_mail_evidence": mail_evidence,
         "mail_scope": primary.payload.get("mail_scope", "unknown") if primary else "unknown",
         "generation_id": primary.payload.get("generation_id") if primary else None,
@@ -149,7 +161,7 @@ def filter_mail_scope_blocks(blocks: list[dict], *, mail_mode: MailMode) -> list
 def merge_and_format(
     hits: list[Hit], settings: Settings | None = None, filename_lookup: dict[str, str] | None = None,
     *, exact_groups: tuple[MatchGroup, ...] = (), mail_mode: MailMode = "all",
-    limit_total_chars: bool = True,
+    limit_total_chars: bool = True, query: str = "",
 ) -> list[dict]:
     """Группировка по (doc_id, chunk_index), merge концепт+чанк.
 
@@ -196,6 +208,10 @@ def merge_and_format(
         doc_id = hit.payload.get("doc_id", "")
         chunk_idx = hit.payload.get("chunk_index")
         key = (doc_id, chunk_idx) if mail_mode == "all" else (doc_id, chunk_idx, hit.payload.get("source_id"))
+        if hit.payload.get("chunk_fragment") is not None:
+            key = (*key, "chunk_fragment", hit.payload.get("generation_id"), hit.point_id)
+        if hit.payload.get("table_refs"):
+            key = (*key, "table", json.dumps(hit.payload["table_refs"], sort_keys=True))
         groups.setdefault(key, []).append(hit)
 
     merged: list[dict] = []
@@ -254,7 +270,7 @@ def merge_and_format(
             chunk = chunks_in_group[0]
             primary = primary_concept
             merged_title = primary.payload.get("title", "")
-            concept_content_value = exact_excerpt(primary.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
+            concept_content_value = _hit_excerpt(primary, settings.chat_concept_max_chars, exact_groups)
             # Многотемный чанк: несколько ОСНОВНЫХ концептов делят один chunk_index —
             # сырой чанк начинается с чужой темы, заголовок от концепта не совпадает
             # с телом (напр. «Infotypes (English)» поверх японской статьи YEA Retro).
@@ -267,7 +283,7 @@ def merge_and_format(
                 content = concept_content_value
                 evidence_hit = primary
             else:
-                content = exact_excerpt(chunk.payload.get("content", ""), settings.chat_chunk_max_chars, exact_groups)
+                content = _hit_excerpt(chunk, settings.chat_chunk_max_chars, exact_groups)
                 evidence_hit = chunk
             if not merged_title:
                 section_title = chunk.payload.get("section_title", "")
@@ -280,7 +296,7 @@ def merge_and_format(
         elif primary_concept is not None:
             concept = primary_concept
             merged_title = concept.payload.get("title", "Без названия")
-            content = exact_excerpt(concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
+            content = _hit_excerpt(concept, settings.chat_concept_max_chars, exact_groups)
             evidence_hit = concept
             point_type = CONCEPT_TYPE
             kind = "concept"
@@ -291,7 +307,7 @@ def merge_and_format(
                 merged_title = section_title
             else:
                 merged_title = f"{source_filename} (Раздел {chunk_idx + 1})" if chunk_idx is not None else source_filename
-            content = exact_excerpt(chunk.payload.get("content", ""), settings.chat_chunk_max_chars, exact_groups)
+            content = _hit_excerpt(chunk, settings.chat_chunk_max_chars, exact_groups)
             evidence_hit = chunk
             point_type = CHUNK_TYPE
             kind = "chunk"
@@ -303,13 +319,13 @@ def merge_and_format(
                 "content": content,
                 "_evidence": excerpt_reference(evidence_hit, content),
                 "_concept_evidence": excerpt_reference(primary_concept,
-                    exact_excerpt(primary_concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups))
+                    _hit_excerpt(primary_concept, settings.chat_concept_max_chars, exact_groups))
                     if primary_concept else None,
                 # Собственный контент репрезентативного концепта: сырой чанк
                 # содержит чужие подразделы раздела, выжимка — только про объект.
                 # Используется точным фильтром (drop_partial_title_matches).
                 "concept_content": (
-                    exact_excerpt(primary_concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
+                    _hit_excerpt(primary_concept, settings.chat_concept_max_chars, exact_groups)
                     if chunks_in_group and primary_concept is not None
                     else None
                 ),
@@ -347,7 +363,7 @@ def merge_and_format(
         # отдельным блоком. Замечания получают kind="review" (иммунитет
         # анти-шумового фильтра — см. drop_unmatched_blocks).
         for concept in sibling_concepts:
-            sibling_content = exact_excerpt(concept.payload.get("content", ""), settings.chat_concept_max_chars, exact_groups)
+            sibling_content = _hit_excerpt(concept, settings.chat_concept_max_chars, exact_groups)
             if not sibling_content:
                 continue
             merged.append(
@@ -378,6 +394,9 @@ def merge_and_format(
     # стоять выше первичного блока другой группы с более сильным попаданием.
     # Stable sort сохраняет очерёдность равных (группа остаётся компактной).
     merged.sort(key=lambda b: b["score"], reverse=True)
+    if query:
+        from app.services.table_retrieval import prioritize_table_identifier_matches
+        merged = prioritize_table_identifier_matches(merged, query)
     limited = []
     total_chars = 0
     for block in merged:
@@ -793,6 +812,8 @@ def limit_context(
         if size([*limited, block]) <= max_chars:
             limited.append(block)
             continue
+        if block.get("table_refs"):
+            break  # Atomic table fragment: exclude it if the whole piece cannot fit.
         fragment = block.get("mail_fragment")
         if not limited and not fragment and strict:
             def content_prefix(end):

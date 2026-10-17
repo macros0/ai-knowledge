@@ -18,6 +18,10 @@ from app.db.models import (
     Development,
     Document,
     DocumentChunk,
+    DocumentChunkFragment,
+    DocumentChunkProjection,
+    DocumentTable,
+    DocumentTableRow,
     DocumentGeneration,
     DocumentGenerationState,
     DocumentUpdateAttempt,
@@ -602,7 +606,7 @@ class DocumentRegistry:
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
             lock_document_write(s, doc_id)
-            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentGeneration, DocumentGenerationState):
+            for model in (DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             doc = s.get(Document, doc_id)
             if doc is None:
@@ -625,7 +629,7 @@ class DocumentRegistry:
             doc = s.get(Document, doc_id)
             if doc is None or doc.deleted_at is None:
                 return False
-            for model in (OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentGeneration, DocumentGenerationState):
+            for model in (DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             s.delete(doc)
             return True

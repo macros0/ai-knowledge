@@ -32,10 +32,14 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
     settings = get_settings()
     generator = OKFGenerator()
     with session_scope() as s:
-        lock_generation_read(s, [doc_id])
+        active_generations = lock_generation_read(s, [doc_id])
         doc = s.get(Document, doc_id)
         if doc is None:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
+        from app.services.chunk_projection_maintenance import generation_projection_version, verified_chunk_parts
+        from app.db.models import DocumentChunkProjection
+        generation_id = active_generations.get(doc_id)
+        projection_version = generation_projection_version(s, doc_id, generation_id)
         filename = doc.filename or ""
         global_tags = [item.tag_rel.canonical_text for item in doc.tags_rel]
         concept_rows = (
@@ -64,8 +68,28 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
             .all()
         )
 
+        projection_metadata = []
+        if projection_version is not None:
+            for row in chunk_rows:
+                if row.table_refs:
+                    projection_metadata.append({'index':row.chunk_index,'route':'table'})
+                    continue
+                # Validate one canonical source and bounded stored parts at a
+                # time; portable reconstruction uses full title/raw text/version.
+                for _part in verified_chunk_parts(s,doc_id,generation_id,row,64):
+                    pass
+                parent=s.get(DocumentChunkProjection,(doc_id,generation_id,row.chunk_index))
+                projection_metadata.append({'index':row.chunk_index,'route':'generic',
+                    'source_hash':parent.source_hash,'title_hash':parent.title_hash,
+                    'projection_hash':parent.projection_hash,'fragment_count':parent.fragment_count})
         dest_dir.mkdir(parents=True, exist_ok=True)
         files: list[str] = []
+        if active_generations.get(doc_id):
+            from app.services.table_store import export_generation_tables
+            manifest = export_generation_tables(s, doc_id, active_generations[doc_id], dest_dir)
+            if manifest["tables"]:
+                files.extend("tables/" + entry["rows_file"] for entry in manifest["tables"])
+                files.append("tables/manifest.json")
 
         # Вложения: бинарники копируются из uploads/<doc_id>/attachments/.
         attachments_meta: list[dict] = []
@@ -106,11 +130,18 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
                     "size": len((c.content or "").encode("utf-8")),
                     "concepts_count": concept_counts.get(c.chunk_index, 0),
                     "source_id": c.source_id,
+                    "section_title": c.section_title or "",
+                    "table_refs": c.table_refs,
                 }
             )
             files.append(f"chunks/{f.name}")
         write_json_atomic(chunks_dir / "manifest.json", chunks_manifest)
         files.append("chunks/manifest.json")
+        if projection_version is not None:
+            write_json_atomic(chunks_dir / 'projection.json', {
+                'chunk_projection_version':projection_version, 'chunks':projection_metadata,
+            })
+            files.append('chunks/projection.json')
 
     if source_rows:
         serialized_sources = [
@@ -144,6 +175,7 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
             tags=list(c.tags or []),
             content=c.content or "",
             relations=list(c.relations or []),
+            table_refs=c.table_refs or [],
         )
         for c in concept_rows
     ]

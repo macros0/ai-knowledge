@@ -32,6 +32,7 @@ from .pdf_provider import (
 from .source_model import PARSER_VERSION, ParseContext, ParseResult, SourceNode
 
 __all__ = [
+    "TableCell", "TableColumn", "TableDescriptor", "TableRow", "TableSink", "TableSummary",
     "SUPPORTED_EXTENSIONS",
     "ArchiveLimitError",
     "Block",
@@ -52,3 +53,5 @@ __all__ = [
 ]
 
 __version__ = "0.1.0"
+
+from .table_model import TableCell, TableColumn, TableDescriptor, TableRow, TableSink, TableSummary

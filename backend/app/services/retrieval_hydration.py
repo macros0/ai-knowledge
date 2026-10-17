@@ -4,6 +4,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from time import perf_counter
+import json
+import re
+from types import SimpleNamespace
 
 from sqlalchemy import and_, func, or_, select, tuple_
 
@@ -11,10 +14,23 @@ from app.db.models import Document, DocumentChunk, DocumentGenerationState, OkfC
 from app.db.session import session_scope
 from app.services.glossary.matching import group_form_matches
 from app.services.glossary.types import MatchGroup
-from app.services.source_store import fetch_source_paths, fetch_source_trees, load_source_rows
+from app.services.source_store import fetch_source_paths, fetch_source_trees, load_source_display_rows
 from app.services.mail_scope import MailMode, MAIL_SCOPE_VERSION, build_mail_scope_map, mail_scope_allowed
 
 logger = logging.getLogger(__name__)
+
+
+
+def _canonical_table_value(doc_id, source_id, content, refs, *, encoded=False):
+    if encoded and refs is not None:
+        if refs.lstrip().startswith('[') and not re.fullmatch(r'\[\s*\]', refs.strip()):
+            return SimpleNamespace(doc_id=doc_id,source_id=source_id,content=content,
+                                   table_refs=refs,table_refs_json=True)
+        refs=json.loads(refs)
+    if not refs:
+        return None
+    return SimpleNamespace(doc_id=doc_id,source_id=source_id,content=content,
+                           table_refs=refs,table_refs_json=False)
 
 
 def _concept_pair_condition(pairs, *, dialect_name="postgresql"):
@@ -190,6 +206,7 @@ def _enrich_retrieval_hits_in_session(
     mail_mode: MailMode = "all",
     active_generations: dict | None = None,
     timings: dict | None = None,
+    query: str = "",
 ) -> list:
     """Hydrate concept and chunk hits using an already-open DB session."""
     mail_scope_allowed("unknown", mail_mode)
@@ -197,13 +214,21 @@ def _enrich_retrieval_hits_in_session(
         active_generations = dict(session.execute(select(
             DocumentGenerationState.doc_id, DocumentGenerationState.active_generation_id,
         ).where(DocumentGenerationState.doc_id.in_({hit.payload.get("doc_id") for hit in hits}))).all())
+    original_chunk_identities = {id(hit): (hit.payload.get('generation_id'), hit.payload.get('source_id')) for hit in hits}
     source_started = perf_counter()
-    source_rows = load_source_rows(session, {hit.payload.get("doc_id") for hit in hits
+    source_rows = load_source_display_rows(session, {hit.payload.get("doc_id") for hit in hits
                                             if hit.payload.get("doc_id")})
     source_load_ms = (perf_counter() - source_started) * 1000
     hits = _verify_mail_identities(hits, session, mail_mode=mail_mode,
                                   active_generations=active_generations, timings=timings,
                                   source_rows=source_rows, source_load_ms=source_load_ms)
+    paths = fetch_source_paths(session, {
+        (hit.payload["doc_id"], hit.payload["source_id"])
+        for hit in hits if hit.payload.get("doc_id") and hit.payload.get("source_id")
+    }, rows=source_rows)
+    from app.services.chunk_projection_retrieval import hydrate_chunk_projection_hits
+    hits = hydrate_chunk_projection_hits(hits, session, active_generations=active_generations,
+        original=original_chunk_identities, source_paths=paths)
     concept_pairs: list[tuple[str, str]] = []
     chunk_pairs: list[tuple[str, int]] = []
     for hit in hits:
@@ -217,7 +242,7 @@ def _enrich_retrieval_hits_in_session(
             slug = _concept_slug(hit)
             if doc_id and slug:
                 concept_pairs.append((doc_id, slug))
-        elif point_type == "chunk":
+        elif point_type == "chunk" and payload.get("chunk_fragment") is None:
             chunk_index = payload.get("chunk_index")
             if doc_id and chunk_index is not None:
                 chunk_pairs.append((doc_id, int(chunk_index)))
@@ -225,8 +250,15 @@ def _enrich_retrieval_hits_in_session(
     concept_pairs = _dedupe_pairs(concept_pairs)
     chunk_pairs = _dedupe_pairs(chunk_pairs)
 
-    if not concept_pairs and not chunk_pairs:
-        return hits
+    canonical_tables = {}
+    from sqlalchemy import case, cast, String, and_, literal_column
+    encoded_refs = session.get_bind().dialect.name == 'postgresql'
+    def refs_column(model):
+        return cast(model.table_refs, String) if encoded_refs else model.table_refs
+    def canonical_content(model, maximum):
+        if full_text: return model.content
+        has_refs = and_(model.table_refs.is_not(None),cast(model.table_refs,String) != literal_column("'null'"),cast(model.table_refs,String) != literal_column("'[]'"))
+        return case((has_refs,model.content),else_=func.substr(model.content,1,maximum))
 
     concept_contents: dict[tuple[str, str], str] = {}
     chunk_contents: dict[tuple[str, int], dict] = {}
@@ -235,18 +267,22 @@ def _enrich_retrieval_hits_in_session(
             select(
                 OkfConcept.doc_id,
                 OkfConcept.slug,
-                OkfConcept.content if full_text else func.substr(OkfConcept.content, 1, max_concept_chars),
+                canonical_content(OkfConcept,max_concept_chars),
                 OkfConcept.source_id,
                 OkfConcept.chunk_index,
+                refs_column(OkfConcept),
             ).where(_concept_pair_condition(concept_pairs, dialect_name=session.get_bind().dialect.name))
         ).all()
         concept_contents = {
-            (doc_id, slug): content for doc_id, slug, content, _source_id, _chunk_index in rows
+            (doc_id, slug): content for doc_id, slug, content, _source_id, _chunk_index, _refs in rows
         }
         concept_source_ids = {
-            (doc_id, slug): source_id for doc_id, slug, _content, source_id, _chunk_index in rows
+            (doc_id, slug): source_id for doc_id, slug, _content, source_id, _chunk_index, _refs in rows
         }
-        concept_chunk_indices = {(doc_id, slug): index for doc_id, slug, _, _, index in rows}
+        concept_chunk_indices = {(doc_id, slug): index for doc_id, slug, _, _, index, _refs in rows}
+        canonical_tables.update({(doc,"concept",slug):value
+            for doc,slug,content,source,_index,refs in rows
+            if (value := _canonical_table_value(doc,source,content,refs,encoded=encoded_refs)) is not None})
     else:
         concept_source_ids = {}
         concept_chunk_indices = {}
@@ -259,9 +295,10 @@ def _enrich_retrieval_hits_in_session(
             select(
                 DocumentChunk.doc_id,
                 DocumentChunk.chunk_index,
-                DocumentChunk.content if full_text else func.substr(DocumentChunk.content, 1, max_chunk_chars),
+                canonical_content(DocumentChunk,max_chunk_chars),
                 DocumentChunk.section_title,
                 DocumentChunk.source_id,
+                refs_column(DocumentChunk),
             ).where(
                 tuple_(DocumentChunk.doc_id, DocumentChunk.chunk_index).in_(
                     needed_chunk_pairs
@@ -274,8 +311,13 @@ def _enrich_retrieval_hits_in_session(
                 "section_title": section_title or "",
                 "source_id": source_id,
             }
-            for doc_id, chunk_index, content, section_title, source_id in rows
+            for doc_id, chunk_index, content, section_title, source_id, _refs in rows
         }
+
+    if needed_chunk_pairs:
+        canonical_tables.update({(doc,"chunk",index):value
+            for doc,index,content,_title,source,refs in rows
+            if (value := _canonical_table_value(doc,source,content,refs,encoded=encoded_refs)) is not None})
 
     for hit in hits:
         payload = hit.payload
@@ -290,7 +332,7 @@ def _enrich_retrieval_hits_in_session(
                 payload["source_id"] = concept_source_ids[key]
             if not payload.get("filepath"):
                 payload["filepath"] = f"{doc_id}/{slug}.md"
-        elif point_type == "chunk":
+        elif point_type == "chunk" and payload.get("chunk_fragment") is None:
             chunk_index = payload.get("chunk_index")
             key = (doc_id, int(chunk_index)) if chunk_index is not None else None
             if key in chunk_contents:
@@ -305,10 +347,6 @@ def _enrich_retrieval_hits_in_session(
                     doc_id,
                     chunk_index,
                 )
-    paths = fetch_source_paths(session, {
-        (hit.payload["doc_id"], hit.payload["source_id"])
-        for hit in hits if hit.payload.get("doc_id") and hit.payload.get("source_id")
-    }, rows=source_rows)
     for hit in hits:
         key = (hit.payload.get("doc_id"), hit.payload.get("source_id"))
         if key in paths:
@@ -319,7 +357,7 @@ def _enrich_retrieval_hits_in_session(
     for hit in hits:
         payload = hit.payload
         path = payload.get("source_path") or []
-        if mail_mode == "exclude" or not path or not path[-1].get("mail"):
+        if payload.get("chunk_fragment") is not None or mail_mode == "exclude" or not path or not path[-1].get("mail"):
             continue
         doc_id = payload.get("doc_id")
         index = (concept_chunk_indices.get((doc_id, _concept_slug(hit)))
@@ -334,6 +372,7 @@ def _enrich_retrieval_hits_in_session(
                 .in_(set(mail_keys.values())))).all()
         fragments = {(doc_id, index, source_id): content for doc_id, index, source_id, content in rows}
         for hit in hits:
+            payload = hit.payload
             key = mail_keys.get(hit.point_id)
             if key in fragments:
                 hit.payload["mail_fragment"] = {"chunk_index": key[1], "content": fragments[key]}
@@ -341,8 +380,12 @@ def _enrich_retrieval_hits_in_session(
                     "doc_id": key[0], "chunk_index": key[1], "source_id": key[2],
                     "generation_id": hit.payload.get("generation_id"),
                     "mail_scope": hit.payload["mail_scope"], "_canonical_verified": True,
+                    "point_type": payload.get("point_type", "chunk"),
+                    "slug": payload.get("slug"),
+                    "_mail_chunk": payload.get("point_type") == "concept",
                 }
-    return hits
+    from app.services.table_retrieval import hydrate_table_fragments
+    return hydrate_table_fragments(hits, {"session": session, "active_generations": active_generations, "canonical_values": canonical_tables, "query": query})
 
 
 def enrich_retrieval_hits(hits: list) -> list:
@@ -375,6 +418,7 @@ def load_visible_retrieval_hits(
     exact_groups: tuple[MatchGroup, ...] = (),
     mail_mode: MailMode = "all",
     hydrate_all_chunks: bool = False,
+    query: str = "",
 ) -> tuple[list, dict]:
     """Read visibility, active generation and canonical text consistently.
 
@@ -454,7 +498,7 @@ def load_visible_retrieval_hits(
             max_chunk_chars=chunk_chars,
             full_text=bool(exact_groups), mail_mode=mail_mode,
             hydrate_all_chunks=hydrate_all_chunks,
-            active_generations=active_generations, timings=timings,
+            active_generations=active_generations, timings=timings, query=query,
         )
         visible = _filter_exact_hits(visible, exact_groups)
         if timings is not None:

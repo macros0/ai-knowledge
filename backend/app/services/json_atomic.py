@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
 
 
@@ -16,10 +17,16 @@ def write_json_atomic(path: Path, data: object, indent: int | None = 2) -> None:
     """Атомарно записывает data как UTF-8 JSON в path (tmp → os.replace)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
-    payload = json.dumps(data, ensure_ascii=False, indent=indent)
+    tmp = None
     try:
-        tmp.write_text(payload, encoding="utf-8")
+        # Unique files isolate concurrent writers; close before replace on Windows.
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.tmp-", delete=False,
+        ) as stream:
+            tmp = Path(stream.name)
+            json.dump(data, stream, ensure_ascii=False, indent=indent)
         os.replace(tmp, path)
     finally:
-        tmp.unlink(missing_ok=True)
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)

@@ -154,3 +154,41 @@ def test_transport_timeout_reports_timeout_cause(table_settings):
     field_table.extract_table_concepts(chunk, llm=SimpleNamespace(chat_json=fail), use_llm_classify=True)
     report = next(e['report'] for e in gen_quality.drain() if e['event'] == 'table_quality')
     assert report['cause_code'] == 'classifier_timeout'
+
+
+def test_non_row_prompt_examples_fit_the_strict_classifier_contract():
+    import re
+    from app.prompts.okf import TABLE_CLASSIFIER_PROMPT
+
+    examples = [line.split("→", 1)[1] for line in TABLE_CLASSIFIER_PROMPT.splitlines()
+                if "→ concept_per_row=false" in line]
+    assert len(examples) >= 2
+    for example in examples:
+        answer = {key: json.loads(value) for key, value in re.findall(
+            r'(\w+)=(true|false|-?\d+|"[^"\n]*")', example)}
+        result = llm_profiles.TableClassificationResult.model_validate(answer)
+        classification = field_table.TableClassification(**result.model_dump())
+        field_table._validate_classification(classification, ['Debit', 'Credit', 'Amount'])
+        assert result.concept_per_row is False
+
+
+def test_non_row_classification_preserves_the_table_without_fallback(table_settings):
+    answer = {**ANSWER, 'concept_per_row': False, 'title_col': 0, 'extraction_mode': 'whole'}
+    chunk = '| Debit | Credit | Amount |\n|---|---|---|\n| 32 | 96 | 5000 |'
+    concepts, remainder = field_table.extract_table_concepts(
+        chunk, llm=SimpleNamespace(chat_json=lambda *a, **k: answer), use_llm_classify=True)
+    assert not concepts
+    assert remainder == chunk
+    events = gen_quality.drain()
+    assert gen_quality.CLASSIFIER_FALLBACK not in {e['event'] for e in events}
+    report = next(e['report'] for e in events if e['event'] == 'table_quality')
+    assert report['method'] == 'llm_generation' and report['cause_code'] is None
+    assert report['covered_rows'] is None
+
+
+@pytest.mark.parametrize('per_row', [False, True])
+def test_structured_classifier_rejects_negative_title_column(per_row):
+    from pydantic import ValidationError
+    answer = {**ANSWER, 'concept_per_row': per_row, 'title_col': -1}
+    with pytest.raises(ValidationError):
+        llm_profiles.validate_result('table_classification', answer)

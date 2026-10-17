@@ -192,6 +192,9 @@ def test_dev_mail_repair_is_additive_idempotent_and_does_not_stamp(migration_db)
     assert "source_id" not in {column["name"] for column in inspect(engine).get_columns("document_chunks")}
     assert migrate(engine, apply=True)["ready"] is True
     _assert_legacy(engine, before)
+    title_type = next(column['type'] for column in inspect(engine).get_columns('document_chunks')
+                      if column['name'] == 'section_title')
+    assert getattr(title_type, 'length', None) == 1024
     again = migrate(engine, apply=True)
     assert again["ready"] is True and again["applied"] is False
     assert again["alembic_versions"] == [BEFORE_MAIL]
@@ -210,3 +213,23 @@ def test_dev_mail_repair_refuses_incompatible_existing_column_before_writes(migr
     with pytest.raises(ValueError, match="incompatible drift"):
         migrate(engine, apply=True)
     assert "document_sources" not in inspect(engine).get_table_names()
+
+
+@pytest.mark.parametrize('kind', ['integer', 'short_string'])
+def test_dev_mail_repair_refuses_unknown_title_type_before_writes(migration_db, kind):
+    from alembic.operations import Operations
+    from sqlalchemy import Integer, String
+    from scripts.migrate_mail_schema import migrate
+    config, engine = migration_db
+    command.upgrade(config, BEFORE_MAIL)
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        with operations.batch_alter_table('document_chunks') as batch:
+            batch.alter_column('section_title', existing_type=String(1024),
+                               type_=Integer() if kind == 'integer' else String(32),
+                               postgresql_using='section_title::integer' if kind == 'integer' else 'section_title::varchar(32)')
+    report = migrate(engine)
+    assert report['conflicts'] and not report['ready']
+    with pytest.raises(ValueError, match='incompatible drift'):
+        migrate(engine, apply=True)
+    assert 'document_sources' not in inspect(engine).get_table_names()

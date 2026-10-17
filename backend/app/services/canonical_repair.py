@@ -43,9 +43,19 @@ def _canonical_rows(session, doc_id: str) -> dict:
     ):
         fields = [attr.key for attr in inspect(model).column_attrs if attr.key not in {"id", "doc_id", "created_at"}]
         rows[name] = [
-            {"metadata" if key == "metadata_json" else key: deepcopy(getattr(row, key)) for key in fields}
+            {"metadata" if key == "metadata_json" else key: deepcopy(getattr(row, key)) for key in fields if key != "table_refs" or getattr(row,key)}
             for row in session.query(model).filter_by(doc_id=doc_id).order_by(order).all()
         ]
+    state = session.get(DocumentGenerationState, doc_id)
+    active = session.get(DocumentGeneration, state.active_generation_id) if state and state.active_generation_id else None
+    version = active.chunk_projection_version if active else None
+    if version is not None:
+        from app.services.chunk_index_projection import CURRENT_CHUNK_PROJECTION_VERSION
+        from app.services.generation_artifacts import GenerationIntegrityError
+        if type(version) is not int or version != CURRENT_CHUNK_PROJECTION_VERSION:
+            raise GenerationIntegrityError()
+        rows['chunk_projection_version'] = version
+    # Preserve old NULL-format repair fingerprints/ready manifests.
     return rows
 
 
@@ -80,6 +90,7 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
         if not changed or dry_run:
             return {"changed": changed, "generation_id": None, "dry_run": dry_run}
         generation = begin_generation(session, doc_id)
+        generation.chunk_projection_version = before.get("chunk_projection_version")
         generation_id, base_id = generation.id, generation.base_generation_id
         dev = session.get(Development, document.development_id) if document.development_id else None
         metadata = {"global_tags": global_tags, "source_locale": document.source_locale,
@@ -92,6 +103,32 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
     try:
         with session_scope() as session:
             paths = prepare_generation_paths(session, settings, doc_id, generation_id)
+            if base_id:
+                from app.services.table_store import clone_generation_tables
+                clone_generation_tables(session, doc_id, base_id, generation_id, paths.bundle)
+                base_generation = session.get(DocumentGeneration,base_id)
+                session.get(DocumentGeneration,generation_id).table_schema_version = base_generation.table_schema_version
+                # Ref IDs change together with the copied canonical table version.
+                for row in [*proposal['concepts'], *proposal['chunks']]:
+                    for ref in row.get('table_refs') or []:
+                        if ref['generation_id'] != base_id:
+                            raise ValueError('Repair table ref differs from active generation')
+                        ref['generation_id'] = generation_id
+                from app.services.generation_files import generation_paths
+                quality_path = generation_paths(settings,doc_id,base_id).bundle / 'table-quality.json'
+                _reject_links(quality_path)
+                if quality_path.is_file():
+                    quality = json.loads(quality_path.read_text(encoding='utf8'))
+                    for report in quality['reports']:
+                        if report['table_ref']['kind'] == 'table':
+                            report['table_ref']['generation_id'] = generation_id
+                    write_json_atomic(paths.bundle / 'table-quality.json', quality)
+        if before.get("chunk_projection_version") is not None:
+            from app.services.chunk_projection_store import materialize_chunk_projection
+            for row in proposal['chunks']:
+                if not row.get('table_refs'):
+                    materialize_chunk_projection(doc_id, generation_id, row['chunk_index'],
+                        row['section_title'] or '', row['content'] or '', source_id=row.get('source_id'), batch_size=64)
         with session_scope() as session:
             # Shared publication locks keep the candidate alive while allowing
             # concurrent readers of the old version during slow embedding calls.
@@ -108,7 +145,8 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
             _copy_artifacts(settings, doc_id, base_id, generation_id, paths, proposal)
             docs = _write_bundle(generator, doc_id, filename, paths, proposal)
             point_ids = _index_candidate(settings, vector_store, embedder, doc_id, filename,
-                                         generation_id, docs, proposal["chunks"], metadata, sources=proposal["sources"])
+                                         generation_id, docs, proposal["chunks"], metadata, sources=proposal["sources"],
+                                         chunk_projection_version=before.get("chunk_projection_version"), projection_session=session)
             vector_store.verify_generation_points(doc_id, generation_id, sorted(point_ids))
             effects = {}
             if proposal["chunks"] != before["chunks"]:
@@ -126,6 +164,8 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
                 "parse_effects": effects, "point_ids": sorted(point_ids),
                 "artifacts": artifact_manifest(settings, doc_id, generation_id),
             }
+            if before.get("chunk_projection_version") is not None:
+                prepared["chunk_projection_version"] = before["chunk_projection_version"]
             publication = paths.uploads_root / "publication.json"
             # Snapshot provenance includes datetimes; use the same JSON form as
             # Pydantic manifests so restored publication does not need ORM rows.
@@ -194,7 +234,7 @@ def _write_bundle(generator, doc_id, filename, paths, proposal):
         doc_id, filename,
         [Concept(id=row["slug"], title=row["title"], type=row["type"], content=row["content"],
                  tags=row.get("tags") or [], relations=row.get("relations") or [],
-                 source_spans=row.get("source_spans") or []) for row in concepts],
+                 source_spans=row.get("source_spans") or [], table_refs=row.get("table_refs") or []) for row in concepts],
         attachments=proposal["attachments"], global_tags=proposal["global_tags"],
         bundle_root=paths.bundle, slugs=[row["slug"] for row in concepts],
         chunk_of_slug={row["slug"]: row["chunk_index"] for row in concepts if row["chunk_index"] is not None},
@@ -216,7 +256,7 @@ def _write_bundle(generator, doc_id, filename, paths, proposal):
         chunk["char_count"] = len(text)
         (chunks_dir / f"chunk_{chunk['chunk_index']:02d}.md").write_bytes(text.encode("utf-8"))
         manifest.append({"index": chunk["chunk_index"], "size": len(text.encode("utf-8")),
-                         "source_id": chunk.get("source_id"),
+                         "source_id": chunk.get("source_id"), "table_refs": chunk.get("table_refs") or [],
                          "concepts_count": sum(row["chunk_index"] == chunk["chunk_index"] for row in concepts)})
     write_json_atomic(chunks_dir / "manifest.json", manifest)
     if proposal["sources"]:
@@ -231,7 +271,7 @@ def _write_bundle(generator, doc_id, filename, paths, proposal):
 
 
 def _index_candidate(settings, store, embedder, doc_id, filename, generation_id, docs, chunks, metadata,
-                     *, sources=None):
+                     *, sources=None, chunk_projection_version=None, projection_session=None):
     from app.services.mail_scope import build_record_mail_scopes
 
     concept_scopes, chunk_scopes = build_record_mail_scopes(
@@ -239,14 +279,27 @@ def _index_candidate(settings, store, embedder, doc_id, filename, generation_id,
     )
     store.ensure_collection()
     expected = set()
-    if docs:
+    for offset in range(0, len(docs), 64):
+        batch = docs[offset:offset + 64]
         vectors = embedder.embed_texts([
-            f"{doc.metadata['title']}\n{doc.content[:settings.okf_max_concept_chars]}" for doc in docs
+            f"{doc.metadata['title']}\n{doc.content[:settings.okf_max_concept_chars]}" for doc in batch
         ])
-        store.index_concepts(doc_id, docs, vectors, dev_tags=metadata["dev_tags"],
+        store.index_concepts(doc_id, batch, vectors, dev_tags=metadata["dev_tags"],
                              source_locale=metadata["source_locale"], generation_id=generation_id,
-                             mail_scopes=concept_scopes)
-        expected.update(concept_point_id(doc_id, Path(doc.filepath).stem, generation_id=generation_id) for doc in docs)
+                             mail_scopes=concept_scopes[offset:offset + 64])
+        expected.update(concept_point_id(doc_id, Path(doc.filepath).stem, generation_id=generation_id) for doc in batch)
+    if chunk_projection_version is not None:
+        from app.services.chunk_index_projection import CURRENT_CHUNK_PROJECTION_VERSION
+        from app.services.chunk_projection_indexing import index_generation_chunk_projections
+        from app.services.generation_artifacts import GenerationIntegrityError
+        if (type(chunk_projection_version) is not int
+                or chunk_projection_version != CURRENT_CHUNK_PROJECTION_VERSION
+                or not settings.search_index_chunks_enabled):
+            raise GenerationIntegrityError()
+        expected.update(index_generation_chunk_projections(store, embedder, doc_id, generation_id,
+            filename, chunks, chunk_scopes, metadata["global_tags"], batch_size=64,
+            dev_tags=metadata["dev_tags"], source_locale=metadata["source_locale"], projection_session=projection_session))
+        return expected
     if chunks and settings.search_index_chunks_enabled:
         texts = [row["content"] for row in chunks]
         titles = [row["section_title"] or "" for row in chunks]

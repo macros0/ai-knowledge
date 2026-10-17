@@ -622,6 +622,16 @@ class Pipeline:
             return self._process_bound(doc_id, filepath, filename, user_tags, resume,
                                        fresh_table_cache=fresh_table_cache)
 
+    def _prepare_generation_attempt(self, session, doc_id: str, *, resume: bool):
+        # A request cannot choose its representation; only trusted server settings can.
+        if getattr(self.settings, "chunk_index_projection_enabled", False) is True:
+            from app.services.chunk_index_projection import CURRENT_CHUNK_PROJECTION_VERSION
+            return prepare_generation_attempt(
+                session, doc_id, resume=resume,
+                chunk_projection_version=CURRENT_CHUNK_PROJECTION_VERSION,
+            )
+        return prepare_generation_attempt(session, doc_id, resume=resume)
+
     def _process_bound(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
         *, fresh_table_cache: bool = False,
@@ -632,7 +642,7 @@ class Pipeline:
         source_file_hash = _sha256_file(filepath)
         staging = StagingStore(doc_id)
         with session_scope() as session:
-            generation = prepare_generation_attempt(session, doc_id, resume=resume)
+            generation = self._prepare_generation_attempt(session, doc_id, resume=resume)
             generation_id, phase = generation.id, generation.phase
             if phase == "preparing":
                 paths = prepare_generation_paths(session, self.settings, doc_id, generation_id)
@@ -646,6 +656,7 @@ class Pipeline:
                 checkpoint, ParseContext(filename, mail_enabled=self.settings.mail_import_enabled).parser_version,
             )
             validate_resume_source_file_hash(checkpoint, source_file_hash)
+            del checkpoint
             self._publish_prepared_generation(doc_id, generation_id, staging)
             return
         # Вложения (бинарники) пишутся парсером в uploads/<doc_id>/attachments/ —
@@ -657,7 +668,12 @@ class Pipeline:
         # rejected checkpoints. A successful publish moves it out of this scope.
         with tempfile.TemporaryDirectory(prefix=".attachments-attempt-", dir=paths.uploads_root) as attempt:
             parse_attachments_dir = Path(attempt)
-            parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled)
+            from app.services.table_pipeline import reset_candidate_tables
+            from app.services.table_store import GenerationTableSink
+            if self.settings.table_structure_enabled:
+                reset_candidate_tables(doc_id, generation_id)
+            table_sink = GenerationTableSink(doc_id, generation_id) if self.settings.table_structure_enabled else None
+            parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled, table_sink=table_sink)
             parse_started = start_stage("parse")
             if self.settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
                 supervised = parse_document_supervised(
@@ -668,10 +684,17 @@ class Pipeline:
                     max_memory_mb=self.settings.parser_max_memory_mb,
                     max_concurrent=self.settings.parser_max_concurrent,
                     mail_enabled=self.settings.mail_import_enabled,
+                    table_mode=self.settings.table_structure_enabled,
                 )
+                if self.settings.table_structure_enabled:
+                    spool = parse_attachments_dir / ".tables-spool"
+                    # Spool uses the portable format with a private directory name.
+                    from app.services.table_pipeline import import_parser_spool
+                    import_parser_spool(doc_id, generation_id, spool)
                 blocks, parse_context.sources = supervised
                 parse_warnings = list(supervised.warnings)
                 parser_version = supervised.parser_version
+                del supervised
             else:
                 blocks = parse_document(
                     filepath,
@@ -699,9 +722,12 @@ class Pipeline:
                 if not (block.type == "heading" and (block.meta or {}).get("mail"))
                 and _IMAGE_LINK_RE.sub("", blocks_to_markdown([block])).strip()
             }
+            text_source_ids.update((b.meta or {}).get("source_id", "root") for b in blocks
+                                   if (b.meta or {}).get("table_descriptor"))
             # Keep mail subjects in canonical text for display/search and stable
             # evidence offsets, but metadata alone must never trigger generation.
-            has_text = bool(text_source_ids) if blocks else bool(_IMAGE_LINK_RE.sub("", indexable_markdown).strip())
+            has_blocks = bool(blocks)
+            has_text = bool(text_source_ids) if has_blocks else bool(_IMAGE_LINK_RE.sub("", indexable_markdown).strip())
 
             # Автоопределение номера разработки: только на «свежем» проходе и если
             # regex по имени файла (на этапе upload) ничего не нашёл. Non-fatal —
@@ -744,6 +770,9 @@ class Pipeline:
             write_json_atomic(effects_path, parse_effects)
 
             source_chunks = chunk_blocks_by_source(blocks, self.okf_generator)
+            from app.services.table_pipeline import build_table_source_chunks
+            structural_chunks = build_table_source_chunks(doc_id, generation_id, self.settings, self.okf_generator)
+            source_chunks.extend(structural_chunks)
             # Preview/test adapters can supply canonical markdown independently of
             # parser blocks. Such legacy callers retain the old root-only contract.
             if not source_chunks and indexable_markdown:
@@ -752,6 +781,7 @@ class Pipeline:
                     for chunk in self.okf_generator.chunk_text(indexable_markdown)
                     if chunk
                 ]
+            legacy_chunk_count = len(source_chunks) - len(structural_chunks)
             # Source offsets and their SHA-256 are persisted against staging text.
             # Canonicalize here, before both LLM evidence resolution and file write:
             # otherwise MSG bodies with CRLF get a span hash for one string and a
@@ -769,9 +799,10 @@ class Pipeline:
             attachment_shares: list[float] = []
             if self.settings.okf_attachment_tag_enabled:
                 attachment_shares = attachment_shares_by_source(blocks, self.okf_generator)
-                if len(attachment_shares) != total:
+                if len(attachment_shares) != legacy_chunk_count:
                     # Legacy preview/test adapters supply markdown without blocks.
                     attachment_shares = self.okf_generator.attachment_shares(markdown, attach_spans)
+                attachment_shares.extend(1.0 if item["source_id"] != "root" else 0.0 for item in structural_chunks)
             # Сброс residue телеметрии: события от dev-детекции и пр. не должны
             # приписываться первому чанку.
             gen_quality.drain()
@@ -779,26 +810,29 @@ class Pipeline:
                 manifest = staging.load()
                 validate_resume_parser_version(manifest, parser_version)
                 validate_resume_source_file_hash(manifest, source_file_hash)
-                # Never mix a reusable checkpoint with a new chunk layout. An
-                # empty checkpoint has no chunk text or concepts to preserve and
-                # can safely start from this fresh layout.
-                has_reusable_checkpoint = bool(manifest.get("processed_chunks")) or any(
-                    staging.dir.glob("chunk_*.md")
-                )
-                if has_reusable_checkpoint and (
-                    total != manifest.get("total_chunks") or any(
-                        not (staging.dir / f"chunk_{i:02d}.md").is_file()
-                        or not _same_checkpoint_chunk(staging.dir / f"chunk_{i:02d}.md", chunk)
-                        or (
-                            (manifest.get("chunks_data", {}).get(str(i)) or {}).get("source_id", "root")
-                            != chunk_source_ids[i]
-                        )
-                        for i, chunk in enumerate(chunks)
+                # Preparation can stop between writing a raw chunk and committing
+                # its metadata batch. Missing unprocessed inputs may be replayed;
+                # completed chunks and every already-written input must still match.
+                processed = set(manifest.get("processed_chunks", []))
+                has_reusable_checkpoint = bool(processed) or any(staging.dir.glob("chunk_*.md"))
+                def incompatible_chunk(index, chunk):
+                    path = staging.dir / f"chunk_{index:02d}.md"
+                    info = manifest.get("chunks_data", {}).get(str(index)) or {}
+                    exists = path.is_file()
+                    return (
+                        index in processed and not exists
+                        or exists and not _same_checkpoint_chunk(path, chunk)
+                        or (index in processed or "source_id" in info)
+                        and info.get("source_id", "root") != chunk_source_ids[index]
                     )
+                if has_reusable_checkpoint and (
+                    total != manifest.get("total_chunks")
+                    or any(incompatible_chunk(i, chunk) for i, chunk in enumerate(chunks))
                 ):
                     raise DomainError("Изменилась разбивка документа на чанки", code=codes.PARTIAL_REGENERATION_UNAVAILABLE)
                 done = len(manifest.get("processed_chunks", [])) if manifest else 0
                 logger.info("Resume документа %s: продолжено с %d/%d чанков", doc_id, done, total)
+                del incompatible_chunk, manifest, processed
             else:
                 if resume:
                     logger.warning(
@@ -822,11 +856,18 @@ class Pipeline:
                 _rebase_attachment_paths(blocks, parse_attachments_dir, attachments_dir)
         source_rows = _source_rows(parse_context.sources, blocks, doc_root, parser_version=parser_version)
         attachments = _collect_attachments(blocks, doc_root)
+        # Only durable source/attachment DTOs are needed beyond parsing.
+        del blocks, filtered_blocks, markdown, indexable_markdown, parse_context
         self.registry.update(doc_id, status="splitting", total_chunks=total, processed_chunks=len(staging.processed_chunks))
 
-        for i, chunk in enumerate(chunks):
-            staging.save_chunk_text(i, chunk)
-            staging.set_chunk_source(i, chunk_source_ids[i])
+        def source_metadata(chunks, source_chunks):
+            for i, chunk in enumerate(chunks):
+                staging.save_chunk_text(i, chunk)
+                yield {'index': i, 'source_id': chunk_source_ids[i],
+                       'table_refs': source_chunks[i].get('table_refs'),
+                       'table_title': source_chunks[i].get('table_title', '')}
+
+        staging.set_chunks_metadata(source_metadata(chunks, source_chunks))
 
         max_chunk_retries = max(1, self.settings.llm_chunk_retry_attempts)
         chunk_backoff = self.settings.llm_chunk_retry_backoff_seconds
@@ -851,7 +892,12 @@ class Pipeline:
                         generation_started = start_stage("generate", chunk_index=i, retry_index=chunk_attempt - 1)
                         gen_quality.drain()
                         self.registry.update(doc_id, current_chunk=i + 1)
-                        if not has_text or (blocks and chunk_source_ids[i] not in text_source_ids):
+                        if source_chunks[i].get("table_refs"):
+                            from app.models.schemas import Concept, TableRef
+                            concepts = [Concept(id=source_chunks[i]["fragment_id"], title=source_chunks[i]["table_title"],
+                                type=source_chunks[i].get("concept_type", "reference"), content=chunk,
+                                table_refs=[TableRef.model_validate(r) for r in source_chunks[i]["table_refs"]])]
+                        elif not has_text or (has_blocks and chunk_source_ids[i] not in text_source_ids):
                             concepts = []
                         elif chunk_source_ids[i] in mail_source_ids:
                             concepts = self.okf_generator.generate_chunk(
@@ -932,6 +978,10 @@ class Pipeline:
                 )
             return
 
+        # Every input and reference is durable in staging before finalization.
+        # Release the parser projections before loading their verified copies.
+        del chunks, source_chunks, structural_chunks, source_metadata
+
         self.registry.update(doc_id, status="indexing")
         try:
             self._finalize(
@@ -984,12 +1034,16 @@ class Pipeline:
         parse_warnings: list[dict] | None = None,
         has_text: bool | None = None,
     ) -> None:
-        checkpoint = staging.load() or {}
-        generation_id = checkpoint.get("generation_id")
+        generation_id = staging.generation_id
         with session_scope() as session:
             if generation_id is None:
-                generation_id = prepare_generation_attempt(session, doc_id, resume=True).id
+                generation_id = self._prepare_generation_attempt(session, doc_id, resume=True).id
             paths = prepare_generation_paths(session, self.settings, doc_id, generation_id)
+            projection_version = session.get(DocumentGeneration, generation_id).chunk_projection_version
+        if projection_version not in {None, 1}:
+            raise ValueError("Unsupported chunk projection version")
+        if projection_version == 1 and not self.settings.search_index_chunks_enabled:
+            raise ValueError("Projection format requires complete chunk indexing")
         staging.bind_generation(generation_id)
         indexing_started = start_stage("index")
         # Денормализованная проекция разработки (номер/название/модуль) в payload
@@ -1061,6 +1115,7 @@ class Pipeline:
                     "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
                     "char_count": len(text),
                     "source_id": info.get("source_id"),
+                    "table_refs": info.get("table_refs"),
                 }
             )
 
@@ -1171,49 +1226,57 @@ class Pipeline:
             source_rows or [], [doc.metadata for doc in okf_docs], chunk_rows,
         )
         keep_point_ids: set[str] = set()
+        # Bound the vectors and validated Qdrant objects to one provider batch.
+        # All point IDs are accumulated before cleanup/publication, so a failed
+        # later batch preserves the active generation and the whole checkpoint.
+        index_batch_size = max(1, min(self.settings.embedding_batch_size, 256))
         if okf_docs:
             cap = self.settings.okf_max_concept_chars
-            # Dense-эмбеддинг строится из title + content: title содержит коды/номера
-            # разделов (например, "12410"), которые иначе не попадали в вектор и
-            # концепт не находился по поиску по коду.
-            vectors = self.embedder.embed_texts(
-                [f"{doc.metadata.get('title', '')}\n{doc.content[:cap]}" for doc in okf_docs]
-            )
-            # Upsert-before-delete: сначала записываем новые точки, потом удаляем
-            # осиротевшие старые. point_id детерминирован (uuid5 от filepath),
-            # поэтому upsert идемпотентно перезаписывает совпадающие точки.
-            # Если Qdrant отвалится между upsert и cleanup, новые точки уже на месте.
-            concept_point_ids = self.vector_store.index_concepts(
-                doc_id, okf_docs, vectors, dev_tags=dev_tags, source_locale=effective_locale,
-                generation_id=generation_id, mail_scopes=concept_scopes,
-            )
-            keep_point_ids = set(concept_point_ids)
-
-        # Чанки индексируются ВСЕГДА, включая документы без концептов: dual-index
-        # даёт документу поисковую представленность через chunk-ветку (BM25/dense
-        # по сырому тексту), даже когда LLM не создала ни одного концепта.
-        # Этап 2b: текст чанков берётся из chunk_rows (в памяти), а не из бандла.
-        if self.settings.search_index_chunks_enabled:
-            chunk_count = len(chunk_rows)
-            if chunk_count:
-                chunk_texts = [r["content"] for r in chunk_rows]
-                chunk_section_titles = [r["section_title"] or "" for r in chunk_rows]
-                cap = self.settings.okf_max_chunk_index_chars
-                embed_inputs = []
-                for st, t in zip(chunk_section_titles, chunk_texts):
-                    embed_inputs.append(f"{st}\n{t[:cap]}" if st else t[:cap])
-                chunk_vectors = self.embedder.embed_texts(embed_inputs)
-                chunk_point_ids = self.vector_store.index_chunks(
-                    doc_id, filename, chunk_texts, global_tags, chunk_vectors,
-                    section_titles=chunk_section_titles, dev_tags=dev_tags,
-                    source_locale=effective_locale,
-                    source_ids=[row.get("source_id") for row in chunk_rows],
-                    generation_id=generation_id, mail_scopes=chunk_scopes,
+            for start in range(0, len(okf_docs), index_batch_size):
+                batch = okf_docs[start:start + index_batch_size]
+                vectors = self.embedder.embed_texts(
+                    [f"{doc.metadata.get('title', '')}\n{doc.content[:cap]}" for doc in batch]
                 )
-                keep_point_ids |= chunk_point_ids
-                logger.info("[%s] Проиндексировано %d чанков", doc_id, len(chunk_texts))
-            elif chunks_meta:
-                problem = problem or problem_codes.INDEX_PARTIAL_FAILURE
+                keep_point_ids.update(self.vector_store.index_concepts(
+                    doc_id, batch, vectors, dev_tags=dev_tags, source_locale=effective_locale,
+                    generation_id=generation_id,
+                    mail_scopes=concept_scopes[start:start + index_batch_size],
+                ))
+                del vectors
+
+        if projection_version == 1:
+            from app.services.chunk_projection_indexing import index_generation_chunk_projections
+            keep_point_ids.update(index_generation_chunk_projections(
+                self.vector_store, self.embedder, doc_id, generation_id, filename, chunk_rows, chunk_scopes,
+                global_tags, batch_size=index_batch_size, dev_tags=dev_tags, source_locale=effective_locale,
+            ))
+        else:
+            # Both ordinary chunks and structural fragments keep their original
+            # global indices/source scopes across every bounded indexing batch.
+            if self.settings.search_index_chunks_enabled:
+                chunk_count = len(chunk_rows)
+                if chunk_count:
+                    cap = self.settings.okf_max_chunk_index_chars
+                    for start in range(0, chunk_count, index_batch_size):
+                        batch = chunk_rows[start:start + index_batch_size]
+                        chunk_texts = [row["content"] for row in batch]
+                        chunk_section_titles = [row["section_title"] or "" for row in batch]
+                        embed_inputs = [f"{title}\n{text[:cap]}" if title else text[:cap]
+                                        for title, text in zip(chunk_section_titles, chunk_texts)]
+                        chunk_vectors = self.embedder.embed_texts(embed_inputs)
+                        keep_point_ids.update(self.vector_store.index_chunks(
+                            doc_id, filename, chunk_texts, global_tags, chunk_vectors,
+                            section_titles=chunk_section_titles, dev_tags=dev_tags,
+                            source_locale=effective_locale,
+                            source_ids=[row.get("source_id") for row in batch],
+                            chunk_indices=[row["chunk_index"] for row in batch],
+                            generation_id=generation_id,
+                            mail_scopes=chunk_scopes[start:start + index_batch_size],
+                        ))
+                        del chunk_vectors
+                    logger.info("[%s] Проиндексировано %d чанков", doc_id, chunk_count)
+                elif chunks_meta:
+                    problem = problem or problem_codes.INDEX_PARTIAL_FAILURE
 
         # Очистка осиротевших старых точек (после успешного upsert новых).
         # Удаляются только точки doc_id, чьи point_id не вошли в новый набор.
@@ -1233,7 +1296,9 @@ class Pipeline:
             parse_warnings=parse_warnings or [],
             **locale_fields,
         )
-        table_reports = reports_from_chunks(chunks_data)
+        from app.services.table_pipeline import prepare_table_artifacts
+        structural_reports = prepare_table_artifacts(doc_id, generation_id, paths.bundle)
+        table_reports = reports_from_chunks(chunks_data) + structural_reports
         if table_reports:
             write_table_quality_report(paths.bundle, table_reports)
         prepared = {
@@ -1247,15 +1312,22 @@ class Pipeline:
             "artifacts": artifact_manifest(self.settings, doc_id, generation_id),
             "point_ids": sorted(keep_point_ids),
         }
+        if projection_version is not None:
+            prepared["chunk_projection_version"] = projection_version
         publication_path = paths.uploads_root / "publication.json"
         write_json_atomic(publication_path, prepared)
         with session_scope() as session:
-            mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication_path))
+            mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication_path),
+                                  table_schema_version=1 if self.settings.table_structure_enabled else None)
         finish_stage("index", indexing_started, counts={"concepts": len(okf_docs), "chunks": len(chunk_rows), "points": len(keep_point_ids)})
+        indexed_concept_count = len(okf_docs)
+        # Publication verifies and reloads its committed JSON artifact. Keeping
+        # the generating objects as well would duplicate the whole document.
+        del prepared, concepts, okf_docs, chunk_rows, chunk_files, chunks_data, manifest, chunk_rows_by_index
         self._publish_prepared_generation(doc_id, generation_id, staging)
         logger.info(
             "Документ %s обработан: %d OKF-концептов, %d чанков%s",
-            filename, len(okf_docs), total_chunks,
+            filename, indexed_concept_count, total_chunks,
             f" (problem={problem})" if problem else "",
         )
 

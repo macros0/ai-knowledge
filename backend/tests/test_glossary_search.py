@@ -245,7 +245,7 @@ def test_search_prepares_once_and_passes_expanded_vectors_and_filters(monkeypatc
     assert search_call["tags"] == ["tag"]
     assert search_call["source_locales"] == ["de"]
     assert search_call["include_unknown_source_locale"] is True
-    assert hydration_calls == [{"max_concept_chars": 300, "max_chunk_chars": 300}]
+    assert hydration_calls == [{"query": "original", "max_concept_chars": 300, "max_chunk_chars": 300}]
     assert response.expansion_status == "applied"
 
 

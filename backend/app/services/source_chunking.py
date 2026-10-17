@@ -14,7 +14,9 @@ def indexable_blocks(blocks: list) -> list:
     """
     return [
         block for block in blocks
-        if (getattr(block, "meta", {}) or {}).get("extraction_status") != "skipped_disabled"
+        if not (getattr(block, "meta", {}) or {}).get("table_descriptor")
+        and not (getattr(block, "meta", {}) or {}).get("structural_table_heading")
+        and (getattr(block, "meta", {}) or {}).get("extraction_status") != "skipped_disabled"
         and not (
             getattr(block, "type", None) == "attachment"
             and (getattr(block, "meta", {}) or {}).get("attachment") is True

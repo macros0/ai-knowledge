@@ -5,6 +5,7 @@ import { friendlyApiError, getDocumentSources } from "@/lib/api";
 import { canDownloadSource, sourceAncestors, sourceDepth, sourceDownloadUrl, sourceHasChildren, sourceStatusKey, sourceLocationKey, sourceWarningKeys, visibleSourceIds } from "@/lib/sourceTree.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 import MailMetadata from "./MailMetadata";
+import DocumentTables from "./DocumentTables";
 
 function sourceMeta(source, t) {
   const meta = source.metadata || {};
@@ -118,6 +119,7 @@ export default function DocumentSources({ docId, focusedSourceId = null }) {
           })}
         </ol>
       )}
+      <DocumentTables docId={docId} />
     </section>
   );
 }

@@ -3,7 +3,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from typing import Literal
 
 from app.services.llm_scheduler import LLMCancelled
@@ -38,7 +38,7 @@ class Classification(BaseModel):
 class TableClassificationResult(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     concept_per_row: bool
-    title_col: int
+    title_col: int = Field(ge=0)
     concept_type: Literal["concept", "procedure", "reference", "note"]
     extraction_mode: Literal["per_row", "whole"]
 
@@ -139,12 +139,16 @@ def completion_options(task=None, settings=None):
     return options
 
 
+class LLMConceptIdentityError(ValueError):
+    """A complete generation response has unusable concept identifiers."""
+
+
 def validate_result(task, value):
     ADAPTERS[task].validate_python(value, strict=True)
     if task == "generation":
         ids = [item["id"] for item in value]
         if any(not item.strip() for item in ids) or len(ids) != len(set(ids)):
-            raise ValueError("Concept ids must be nonempty and unique")
+            raise LLMConceptIdentityError("Concept ids must be nonempty and unique")
         known = set(ids)
         for item in value:
             if not item["title"].strip() or not item["content"].strip():

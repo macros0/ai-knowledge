@@ -464,10 +464,10 @@ def _answer_selected(req, current_user, settings, attempt_ref):
 
 def _filtered_chat_blocks(hits, req, settings, exact_groups):
     hits, doc_lookup = load_visible_retrieval_hits(
-        hits, mail_mode=req.mail_mode, **({'exact_groups': exact_groups} if exact_groups else {}))
+        hits, mail_mode=req.mail_mode, query=req.query, **({'exact_groups': exact_groups} if exact_groups else {}))
     filenames = {doc_id: (doc or {}).get('filename', '') for doc_id, doc in doc_lookup.items()}
     merged = merge_and_format(hits, settings, filename_lookup=filenames,
-        exact_groups=exact_groups, mail_mode=req.mail_mode, limit_total_chars=False) if hits else []
+        exact_groups=exact_groups, mail_mode=req.mail_mode, limit_total_chars=False, query=req.query) if hits else []
     # Preserve the legacy API's top_k contract; the three modes count final fragments.
     if req.response_mode is None:
         merged = merged[:req.top_k]
@@ -622,6 +622,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
                     source_slug=m.get("source_slug"),
                     source_id=m.get("source_id"),
                     source_path=m.get("source_path"),
+                    table_refs=m.get("table_refs") or [],
                     in_model_context=index < len(context_blocks) if req.response_mode is None else False,
                     source_index=index + 1 if req.response_mode is not None else None,
                     selectable=bool(attempt_ref and m.get('_evidence')),

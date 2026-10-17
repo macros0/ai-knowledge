@@ -79,7 +79,16 @@ def _generation(session, doc_id: str, generation_id: str) -> DocumentGeneration:
     return generation
 
 
-def begin_generation(session, doc_id: str) -> DocumentGeneration:
+def _validate_requested_chunk_projection_version(version: int | None) -> None:
+    if version is None:
+        return
+    from app.services.chunk_index_projection import CURRENT_CHUNK_PROJECTION_VERSION
+    if type(version) is not int or version != CURRENT_CHUNK_PROJECTION_VERSION:
+        raise GenerationConflict("Unsupported chunk projection version")
+
+
+def begin_generation(session, doc_id: str, *, chunk_projection_version: int | None = None) -> DocumentGeneration:
+    _validate_requested_chunk_projection_version(chunk_projection_version)
     state = _locked_state(session, doc_id)
     if state.candidate_generation_id is not None:
         raise GenerationConflict("Document already has a candidate generation")
@@ -88,6 +97,7 @@ def begin_generation(session, doc_id: str) -> DocumentGeneration:
         doc_id=doc_id,
         base_generation_id=state.active_generation_id,
         phase="preparing",
+        chunk_projection_version=chunk_projection_version,
     )
     session.add(generation)
     state.candidate_generation_id = generation.id
@@ -95,23 +105,33 @@ def begin_generation(session, doc_id: str) -> DocumentGeneration:
     return generation
 
 
-def prepare_generation_attempt(session, doc_id: str, *, resume: bool) -> DocumentGeneration:
-    """Resume a candidate, or replace only an unpublished attempt on regenerate."""
+def prepare_generation_attempt(session, doc_id: str, *, resume: bool,
+                               chunk_projection_version: int | None = None) -> DocumentGeneration:
+    """Choose a format only for a new candidate; keep a resumed format immutable."""
+    _validate_requested_chunk_projection_version(chunk_projection_version)
     state = _locked_state(session, doc_id)
     if state.candidate_generation_id:
         generation = _generation(session, doc_id, state.candidate_generation_id)
         if resume:
             return generation
         abandon_generation(session, doc_id, generation.id)
-    return begin_generation(session, doc_id)
+    if chunk_projection_version is None:
+        return begin_generation(session, doc_id)
+    return begin_generation(session, doc_id, chunk_projection_version=chunk_projection_version)
 
 
-def mark_generation_ready(session, doc_id: str, generation_id: str, *, publication_hash: str | None = None) -> None:
+def mark_generation_ready(session, doc_id: str, generation_id: str, *, publication_hash: str | None = None, table_schema_version: int | None = None) -> None:
     """Called only after all immutable files and search points were verified."""
     state = _locked_state(session, doc_id)
     generation = _generation(session, doc_id, generation_id)
     if state.candidate_generation_id != generation_id or generation.phase not in {"preparing", "ready"}:
         raise GenerationConflict("Generation is not the current preparing candidate")
+    from app.services.table_store import verify_generation_tables
+    verify_generation_tables(session, doc_id, generation_id)
+    from app.services.chunk_projection_publication import verify_generation_chunk_projections
+    verify_generation_chunk_projections(session, doc_id, generation_id)
+    if table_schema_version is not None:
+        generation.table_schema_version = table_schema_version
     generation.phase = "ready"
     generation.publication_hash = publication_hash
     session.flush()
@@ -131,6 +151,10 @@ def publish_generation(session, doc_id: str, generation_id: str) -> bool:
         raise GenerationConflict("Only the current ready generation can be published")
     if generation.base_generation_id != state.active_generation_id:
         raise GenerationConflict("The active generation changed after this attempt began")
+    from app.services.table_store import verify_generation_tables
+    verify_generation_tables(session, doc_id, generation_id)
+    from app.services.chunk_projection_publication import verify_generation_chunk_projections
+    verify_generation_chunk_projections(session, doc_id, generation_id)
     if state.active_generation_id is not None:
         previous = _generation(session, doc_id, state.active_generation_id)
         if previous.phase != "active":

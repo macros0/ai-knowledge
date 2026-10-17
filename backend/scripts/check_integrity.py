@@ -186,6 +186,17 @@ def check_doc(
             .all()
         )
 
+        from app.services.chunk_projection_maintenance import generation_projection_version, active_chunk_point_ids
+        from app.services.generation_artifacts import GenerationIntegrityError
+        chunk_points_expected = db_chunks
+        try:
+            if generation_projection_version(s,doc_id,generation_id) is not None:
+                chunk_points_expected = sum(1 for index, _ in chunk_rows
+                    for _identity in active_chunk_point_ids(s,doc_id,generation_id,index,64))
+        except GenerationIntegrityError:
+            chunk_points_expected = None
+            issues.append('Canonical chunk projection is incomplete or unsupported')
+
         # БД vs метаданные документа
         if total_chunks and db_chunks != total_chunks:
             issues.append(f"document_chunks={db_chunks} != documents.total_chunks={total_chunks}")
@@ -197,8 +208,9 @@ def check_doc(
             try:
                 q_chunks = _qdrant_count(vector_store, doc_id, "chunk", generation_id)
                 qdrant_points = q_chunks
-                if db_chunks != q_chunks:
-                    issues.append(f"document_chunks={db_chunks} != Qdrant chunk-точек={q_chunks}")
+                if chunk_points_expected is not None and chunk_points_expected != q_chunks:
+                    label = 'expected chunk-точек' if chunk_points_expected != db_chunks else 'document_chunks'
+                    issues.append(f"{label}={chunk_points_expected} != Qdrant chunk-точек={q_chunks}")
             except Exception:
                 qdrant_unavailable = True
             try:
@@ -245,6 +257,7 @@ def check_doc(
             "ok": not issues,
             "qdrant_unavailable": qdrant_unavailable,
             "db_chunks": db_chunks,
+            "chunk_points_expected": chunk_points_expected,
             "db_concepts": db_concepts,
             "qdrant_points": qdrant_points,
         }

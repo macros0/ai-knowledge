@@ -30,6 +30,7 @@ def pipeline_env(tmp_path, monkeypatch):
     modules = (
         "app.config", "app.services.pipeline", "app.services.staging", "app.services.embedder",
         "app.services.llm_client", "app.services.okf_generator", "app.services.vector_store",
+        "app.services.table_classification",
         "app.api.documents", "app.services.export_okf", "app.services.deduplication", "app.services.dev_detector",
     )
     # Import before replacing app.config.get_settings: a lazy module import
@@ -618,3 +619,32 @@ def test_pipeline_mail_scopes_use_candidate_tree(pipeline_env):
     assert rows
     assert {row.payload['mail_scope'] for row in rows} == {'mail'}
     assert all(row.payload['mail_scope_version'] == 1 for row in rows)
+
+
+
+def test_resume_replays_interrupted_chunk_preparation_without_replacing_active(pipeline_env, monkeypatch):
+    import app.services.pipeline as module
+    pipeline, source, write = pipeline_env
+    pipeline.settings.okf_attachment_tag_enabled = False
+    pipeline.settings.llm_chunk_retry_attempts = 1
+    pipeline.settings.llm_chunk_retry_backoff_seconds = 0
+    previous = _published_snapshot(pipeline)[0]
+    write('Updated evidence for preparation recovery.')
+    # Two deterministic mail source chunks; neither has completed generation.
+    monkeypatch.setattr(module, 'chunk_blocks_by_source', lambda *_a, **_k: [
+        {'source_id': 'root', 'content': 'Updated evidence first part.'},
+        {'source_id': 'root', 'content': 'Updated evidence second part.'},
+    ])
+    original = StagingStore.set_chunks_metadata
+    def interrupted_preparation(store, entries):
+        next(iter(entries))  # First .md written, its metadata batch not committed.
+        raise OSError('interrupted preparation')
+    monkeypatch.setattr(StagingStore, 'set_chunks_metadata', interrupted_preparation)
+    with pytest.raises(OSError, match='interrupted preparation'):
+        pipeline._process(DOC_ID, source, 'decision.eml', [], resume=False)
+    assert _published_snapshot(pipeline)[0] == previous
+    assert StagingStore(DOC_ID).processed_chunks == []
+    monkeypatch.setattr(StagingStore, 'set_chunks_metadata', original)
+    pipeline._process(DOC_ID, source, 'decision.eml', [], resume=True)
+    assert pipeline.registry.get(DOC_ID)['status'] == 'done'
+    assert _published_snapshot(pipeline)[0] != previous

@@ -1227,3 +1227,55 @@ pointer can commit. Retention/deletion follows the existing generation lifecycle
 No new HTTP route or access grant is introduced. Raw corpus manifests and detailed
 read-only probe results are local operator data in ignored `data/table-eval/`;
 they contain source values and must not be committed or exposed as public reports.
+
+### 2026-10-09 — Preserve the complete extracted text
+
+The parser no longer clips the root and admitted attachments at an aggregate
+2,000,000 Unicode characters. This cutoff discarded already-extracted evidence
+before chunking and did not bound extraction memory. OS worker memory/time/slot
+limits, the 16 MiB worker JSON response ceiling, ZIP preflight and attachment/MIME
+byte/node/depth admission remain in force. A response exceeding the transport
+ceiling fails parsing rather than publishing a text prefix. More retained text
+means more chunked LLM/index work; existing queue and LLM admission still apply.
+Parser contract `mail-sources-v23` rejects resume checkpoints from the clipped
+layout. Published legacy incomplete results keep their warning until a successful
+regeneration replaces them.
+
+## Canonical tables and saved table evidence
+
+Canonical XLSX descriptors/rows belong to one document generation, including
+nested source identity. They contain original cell text, formula/cache state,
+formats and coordinates. Apply the document access boundary, trash state and
+generation visibility to every descriptor/row endpoint and export. Candidates
+are never public. An explicit retired generation can serve existing evidence
+until normal generation cleanup removes it; never redirect it to a newer cell.
+Generation cleanup and hard purge must remove canonical rows and portable table
+artifacts together. Backup/restore must include SQL tables, uploads/OKF artifacts
+and the matching Qdrant collection. Schema migration does not migrate documents.
+
+Chat table snapshots contain bounded cell text plus a digest and generation refs.
+Treat them as business content with the existing chat access/retention rules,
+including backup and deletion. Counts-only table-quality reports must not contain
+cell text or raw provider errors. Private parser spools are bounded temporary
+candidate artifacts and cleaned on success/failure by generation lifecycle.
+Neither formulas, macros, external links nor model-supplied code are executed.
+Table HTML remains escaped data. Migration manifests contain identifiers and
+versions, not cell values or authentication material; migration apply uses the
+existing authenticated admin queue with rate limits and four-eyes.
+
+
+## Производные части обычных чанков (R2)
+
+Materialized `document_chunk_projections`/`document_chunk_fragments` — производные данные того же документа и поколения, с теми же ACL, trash и source/mail scopes. Их текст не берётся из payload Qdrant. Reader вызывается после document ACL и в canonical snapshot, сверяет active generation, nullable version marker, source/content/title hashes, complete parent, part descriptor/ID и representation hash. Неизвестная версия, несогласованные части и отсутствующий canonical source отклоняются; payload не выбирает budget, range или algorithm. Выбор ограничен256 parts на один вызов, полное воспроизведение source в hot path запрещено выбранным контрактом.
+
+Удаление документа и cleanup неактивного поколения удаляют parents/parts в соответствующей области. PostgreSQL применяет FK CASCADE; для существующего SQLite FK-off режима предусмотрены явные scoped deletes. Нельзя удалять materialized данные active/candidate поколения как очистку старого. Migration061 оставляет legacy versions NULL и запрещает downgrade при наличии generation с новым marker, чтобы откат не уничтожил необходимое представление. Новая публикация и portable restore обязаны проверить полный набор по canonical source до переключения active pointer. В текущей рабочей ветке readers/maintenance и private writer marker1 интегрированы; public writer управляется CHUNK_INDEX_PROJECTION_ENABLED=false по умолчанию; доверенный сервер выбирает1 только для новых кандидатов при включении. Resume сохраняет исходный NULL/1, входные payload формат не выбирают.
+
+
+Maintenance point membership uses an unnamed temporary SQLite database for opaque
+point IDs only. No cell text, prompt, payload, secret or source filename is copied
+into that index. Its pager and ingestion buffer are bounded; selection still uses
+the existing server filters and exact point IDs. A context manager closes the
+connection on normal return, scroll failure and writer failure; SQLite owns the
+temporary database lifecycle. This derived working index is not a backup, durable
+publication artifact or source of authorization. Document/generation/source scope
+checks in the callers remain mandatory.

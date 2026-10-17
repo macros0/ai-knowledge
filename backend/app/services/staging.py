@@ -17,10 +17,15 @@ processed_chunks). При финализации концепты читаютс
 from __future__ import annotations
 
 import json
+import re
+from hashlib import sha256
 import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+
+from sqlalchemy import select, update, func, cast, literal, Text
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 
 from app.config import get_settings
 from app.db.models import DocumentStaging
@@ -58,7 +63,7 @@ class StagingStore:
         self._lock = _staging_lock(doc_id)
 
     def exists(self) -> bool:
-        return self.load() is not None
+        return self._load_raw() is not None
 
     def create(
         self,
@@ -85,7 +90,7 @@ class StagingStore:
         self._write(manifest)
         return manifest
 
-    def load(self) -> dict | None:
+    def _load_raw(self) -> dict | None:
         with session_scope() as s:
             row = s.get(DocumentStaging, self.doc_id)
             if row is None:
@@ -104,7 +109,64 @@ class StagingStore:
                 "generation_id": row.generation_id,
             }
 
+    def _reference_bytes(self, filename: str) -> bytes:
+        match = re.fullmatch(r"table_refs_([a-f0-9]{64})\.json", filename)
+        if match is None:
+            raise ValueError("Invalid staging table reference filename")
+        path = self.dir / filename
+        if path.is_symlink():
+            raise ValueError("Invalid staging table reference file")
+        with path.open("rb") as handle:
+            payload = handle.read(4 * 1024 * 1024 + 1)
+        if len(payload) > 4 * 1024 * 1024:
+            raise ValueError("Staging table reference file exceeds size limit")
+        if sha256(payload).hexdigest() != match.group(1):
+            raise ValueError("Staging table reference checksum mismatch")
+        return payload
+
+    def _pack_info(self, info: dict) -> dict:
+        result = dict(info)
+        if "table_refs" not in result:
+            return result
+        result.pop("table_refs_file", None)
+        if not result["table_refs"]:
+            return result
+        payload = json.dumps(result["table_refs"], ensure_ascii=False, indent=None).encode("utf8")
+        if len(payload) > 4 * 1024 * 1024:
+            raise ValueError("Staging table reference file exceeds size limit")
+        filename = f"table_refs_{sha256(payload).hexdigest()}.json"
+        path = self.dir / filename
+        # Files are immutable and content addressed: a failed DB commit cannot
+        # alter the references used by the previous durable checkpoint.
+        if path.exists():
+            self._reference_bytes(filename)
+        else:
+            write_json_atomic(path, result["table_refs"], indent=None)
+        result.pop("table_refs")
+        result["table_refs_file"] = filename
+        return result
+
+    def _unpack_info(self, info: dict) -> dict:
+        result = dict(info)
+        filename = result.pop("table_refs_file", None)
+        if filename is not None:
+            if "table_refs" in result:
+                raise ValueError("Conflicting staging table reference representations")
+            refs = json.loads(self._reference_bytes(filename))
+            if not isinstance(refs, list):
+                raise ValueError("Invalid staging table references")
+            result["table_refs"] = refs
+        return result
+
+    def load(self) -> dict | None:
+        manifest = self._load_raw()
+        if manifest is not None:
+            manifest["chunks_data"] = {index: self._unpack_info(info)
+                                        for index, info in manifest["chunks_data"].items()}
+        return manifest
+
     def _write(self, manifest: dict) -> None:
+        packed = {index: self._pack_info(info) for index, info in manifest.get("chunks_data", {}).items()}
         with session_scope() as s:
             row = s.get(DocumentStaging, self.doc_id)
             if row is None:
@@ -114,22 +176,82 @@ class StagingStore:
             row.processed_chunks = list(manifest.get("processed_chunks", []))
             row.used_slugs = list(manifest.get("used_slugs", []))
             row.global_tags = list(manifest.get("global_tags", []))
-            row.chunks_data = dict(manifest.get("chunks_data", {}))
+            row.chunks_data = packed
             row.parser_version = manifest.get("parser_version")
             row.source_file_hash = manifest.get("source_file_hash")
             row.generation_id = manifest.get("generation_id")
             row.status = manifest.get("status", "in_progress")
 
     @property
+    def generation_id(self) -> str | None:
+        """Read the attempt pointer without hydrating table coverage metadata."""
+        with session_scope() as session:
+            return session.scalar(select(DocumentStaging.generation_id).where(
+                DocumentStaging.doc_id == self.doc_id))
+
+    @property
     def processed_chunks(self) -> list[int]:
-        manifest = self.load()
-        if not manifest:
-            return []
-        return sorted(manifest.get("processed_chunks", []))
+        # The per-chunk resume check must not hydrate all table coverage refs.
+        with session_scope() as session:
+            processed = session.scalar(select(DocumentStaging.processed_chunks).where(
+                DocumentStaging.doc_id == self.doc_id))
+        return sorted(processed or [])
+
+    def _load_checkpoint(self, index: int) -> dict | None:
+        with session_scope() as session:
+            row = session.execute(select(DocumentStaging.processed_chunks,
+                DocumentStaging.used_slugs, DocumentStaging.global_tags,
+                DocumentStaging.chunks_data[str(index)].label('chunk_info')).where(
+                DocumentStaging.doc_id == self.doc_id)).mappings().one_or_none()
+        if row is None:
+            return None
+        return {'processed_chunks': row['processed_chunks'] or [],
+                'used_slugs': row['used_slugs'] or [], 'global_tags': row['global_tags'] or [],
+                'chunks_data': {str(index): self._unpack_info(row['chunk_info'] or {})}}
+
+    def _write_checkpoint(self, index: int, manifest: dict) -> None:
+        # Patch only this entry inside SQL. Returning the whole coverage map to
+        # Python on every fragment made wide-table checkpointing quadratic.
+        info = json.dumps(self._pack_info(manifest['chunks_data'][str(index)]), ensure_ascii=False)
+        with session_scope() as session:
+            if session.get_bind().dialect.name == 'postgresql':
+                base = func.coalesce(func.nullif(cast(DocumentStaging.chunks_data, JSONB),
+                    cast(literal('null'), JSONB)), cast(literal('{}'), JSONB))
+                patched = func.jsonb_set(base, cast([str(index)], ARRAY(Text)),
+                                         cast(literal(info), JSONB), True)
+            else:
+                base = func.coalesce(func.nullif(DocumentStaging.chunks_data, 'null'), '{}')
+                patched = func.json_set(base, f'$."{index}"', func.json(info))
+            session.execute(update(DocumentStaging).where(DocumentStaging.doc_id == self.doc_id).values(
+                processed_chunks=manifest['processed_chunks'], used_slugs=manifest['used_slugs'],
+                chunks_data=patched, status='in_progress'))
+
+    def set_chunks_metadata(self, entries) -> None:
+        """Checkpoint source metadata in bounded batches; preserve completed work.
+
+        An interrupted input leaves earlier batches durable. Preparation can
+        safely replay those entries before resume continues generation.
+        """
+        from itertools import islice
+        source = iter(entries)
+        while batch := list(islice(source, 256)):
+            with self._lock:
+                manifest = self._load_raw()
+                if manifest is None:
+                    raise ValueError('Cannot prepare chunk metadata without staging')
+                for entry in batch:
+                    index = str(entry['index'])
+                    info = dict(manifest['chunks_data'].get(index) or {})
+                    info['source_id'] = entry['source_id']
+                    if entry.get('table_refs'):
+                        info['table_refs'] = entry['table_refs']
+                        info['table_title'] = entry.get('table_title', '')
+                    manifest['chunks_data'][index] = info
+                self._write(manifest)
 
     def bind_generation(self, generation_id: str) -> None:
         with self._lock:
-            manifest = self.load()
+            manifest = self._load_raw()
             if manifest is None:
                 raise ValueError("Cannot bind a generation without staging")
             manifest["generation_id"] = generation_id
@@ -140,7 +262,7 @@ class StagingStore:
 
     @property
     def partial_chunks(self) -> list[int]:
-        return partial_chunk_indices((self.load() or {}).get("chunks_data", {}))
+        return partial_chunk_indices((self._load_raw() or {}).get("chunks_data", {}))
 
     def save_chunk_text(self, index: int, text: str) -> None:
         """Сохраняет сырой текст чанка (LLM-вход) для просмотра в UI.
@@ -157,12 +279,21 @@ class StagingStore:
     def set_chunk_source(self, index: int, source_id: str) -> None:
         """Сохраняет происхождение чанка до первого LLM-вызова."""
         with self._lock:
-            manifest = self.load() or self.create(index + 1, global_tags=[])
+            manifest = self._load_raw() or self.create(index + 1, global_tags=[])
             chunks_data = dict(manifest.get("chunks_data", {}))
             info = dict(chunks_data.get(str(index)) or {})
             info["source_id"] = source_id
             chunks_data[str(index)] = info
             manifest["chunks_data"] = chunks_data
+            self._write(manifest)
+
+    def set_chunk_table_refs(self, index: int, refs: list[dict], *, title: str = "") -> None:
+        with self._lock:
+            manifest = self._load_raw()
+            info = dict(manifest["chunks_data"].get(str(index)) or {})
+            info["table_refs"] = refs
+            info["table_title"] = title
+            manifest["chunks_data"][str(index)] = info
             self._write(manifest)
 
     def append_chunk(
@@ -188,7 +319,7 @@ class StagingStore:
         последующая догенерация не возвращала удалённые пользователем теги.
         """
         with self._lock:
-            manifest = self.load() or self.create(index + 1, global_tags=[])
+            manifest = self._load_checkpoint(index) or self.create(index + 1, global_tags=[])
             processed = list(manifest.get("processed_chunks", []))
             if index not in processed:
                 processed.append(index)
@@ -201,7 +332,7 @@ class StagingStore:
             chunk_file = f"chunk_{index:02d}.json"
             write_json_atomic(self.dir / chunk_file, [c.model_dump() for c in concepts])
             previous_info = chunks_data.get(str(index)) or {}
-            info = {}
+            info = {k: previous_info[k] for k in ("table_refs", "table_title") if k in previous_info}
             if previous_info.get("source_id"):
                 info["source_id"] = previous_info["source_id"]
             info.update({"file": chunk_file, "concepts_count": len(concepts), "slugs": slugs})
@@ -219,11 +350,11 @@ class StagingStore:
                     "status": "in_progress",
                 }
             )
-            self._write(manifest)
+            self._write_checkpoint(index, manifest)
             return slugs
 
     def concepts(self) -> list[Concept]:
-        manifest = self.load()
+        manifest = self._load_raw()
         if not manifest:
             return []
         result: list[Concept] = []
@@ -247,7 +378,7 @@ class StagingStore:
         return result
 
     def slugs(self) -> list[str]:
-        manifest = self.load() or {}
+        manifest = self._load_raw() or {}
         slugs: list[str] = []
         for index in sorted(int(k) for k in manifest.get("chunks_data", {})):
             info = manifest["chunks_data"][str(index)]

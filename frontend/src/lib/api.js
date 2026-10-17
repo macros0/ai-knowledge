@@ -1046,3 +1046,19 @@ export function translationPending(locale, entities) {
     `/tags/translations/pending?locale=${encodeURIComponent(locale)}&entities=${encodeURIComponent(entities.join(","))}`
   ).then((data) => data.pending ?? {});
 }
+
+
+export function getDocumentTables(docId, generationId) {
+  const query = generationId ? `?generation_id=${encodeURIComponent(generationId)}` : "";
+  return request(`/documents/${encodeURIComponent(docId)}/tables${query}`);
+}
+export function getDocumentTable(docId, tableId, generationId, sourceId) {
+  const query = new URLSearchParams({ generation_id: generationId });
+  if (sourceId) query.set("source_id", sourceId);
+  return request(`/documents/${encodeURIComponent(docId)}/tables/${encodeURIComponent(tableId)}?${query}`);
+}
+export function getDocumentTableRows(docId, tableId, generationId, options = {}) {
+  const query = new URLSearchParams({ generation_id: generationId });
+  for (const [key, value] of Object.entries(options)) if (value != null) query.set(key, String(value));
+  return request(`/documents/${encodeURIComponent(docId)}/tables/${encodeURIComponent(tableId)}/rows?${query}`);
+}

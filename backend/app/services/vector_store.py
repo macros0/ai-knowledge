@@ -125,6 +125,7 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "doc_id": "keyword",
     "generation_id": "keyword",
     "chunk_index": "integer",
+    "chunk_fragment_group": "keyword",
     "slug": "keyword",
     "type": "keyword",
     "tags": "keyword",
@@ -146,6 +147,9 @@ RETRIEVAL_PAYLOAD_FIELDS = (
     "doc_id",
     "generation_id",
     "chunk_index",
+    "source_id",
+    "chunk_fragment",
+    "chunk_fragment_group",
     "slug",
     "filepath",
     "title",
@@ -719,6 +723,47 @@ class VectorStore:
         for tags, ids in groups.items():
             _qdrant_call(self.client.set_payload, collection_name=self.collection, payload={"tags": list(tags)}, points=ids)
 
+    def index_chunk_projection_fragments(self, doc_id: str, fragments: list[dict], global_tags: list[str],
+                                         vectors: list[list[float]], *, generation_id: str,
+                                         dev_tags: list[str] | None = None, source_locale: str | None = None) -> set[str]:
+        """Index exactly the same bounded representation for dense and sparse."""
+        from app.services.chunk_index_projection import chunk_fragment_point_id_from_descriptor, chunk_fragment_group_id, digest, measure
+        if not generation_id or len(fragments)!=len(vectors) or len(fragments)>256:
+            raise ValueError("Invalid fragment indexing batch")
+        scopes=_validated_mail_scopes([item.get("mail_scope") for item in fragments],len(fragments))
+        points=[]
+        point_ids=set()
+        for item,vector,scope in zip(fragments,vectors,scopes):
+            index=item.get("chunk_index")
+            source=item.get("source_id")
+            descriptor=item.get("chunk_fragment")
+            content=item.get("content")
+            if type(index) is not int or index<0 or not isinstance(content,str) or measure(content)>2000:
+                raise ValueError("Invalid generic fragment representation")
+            if source is not None and (not isinstance(source,str) or not source or len(source)>255):
+                raise ValueError("Invalid generic source")
+            if descriptor is None:
+                point_id=chunk_point_id(doc_id,index,generation_id=generation_id)
+            else:
+                point_id=chunk_fragment_point_id_from_descriptor(doc_id,index,generation_id,source,descriptor)
+                if digest(content)!=descriptor["text_hash"]:
+                    raise ValueError("Fragment representation changed")
+            if point_id in point_ids:
+                raise ValueError("Duplicate fragment identity")
+            point_ids.add(point_id)
+            payload={"point_type":CHUNK_POINT_TYPE,"doc_id":doc_id,"generation_id":generation_id,
+                     "chunk_index":index,"source_id":source,"mail_scope":scope,"mail_scope_version":MAIL_SCOPE_VERSION,
+                     "tags":global_tags or [],"dev_tags":dev_tags or [],"source_locale":source_locale}
+            if descriptor is not None:
+                payload["chunk_fragment"]=descriptor
+                payload["chunk_fragment_group"]=chunk_fragment_group_id(doc_id,generation_id,source,index)
+            points.append(qm.PointStruct(id=point_id,vector={"":vector,SPARSE_VECTOR_NAME:to_sparse_vector(content)},payload=payload))
+        if points:
+            stats=self._upsert_batches(points,doc_id=doc_id,mode="chunk-fragment")
+            if stats["failed_batches"]:
+                raise VectorStoreError("Qdrant: не удалось завершить индексацию частей чанков.") from stats["failure"]
+        return point_ids
+
     def verify_generation_points(self, doc_id: str, generation_id: str, point_ids: list[str]) -> None:
         """A ready checkpoint cannot publish a missing or foreign search point."""
         from app.services.generation_artifacts import GenerationIntegrityError
@@ -735,6 +780,47 @@ class VectorStore:
                 for point in points
             ):
                 raise GenerationIntegrityError()
+
+    def verify_generation_projection_points(self, doc_id: str, generation_id: str, expected: dict[str, dict]) -> None:
+        """Check the entire candidate set and canonical-bound payload identities."""
+        from app.services.generation_artifacts import GenerationIntegrityError
+        from app.services.chunk_index_projection import chunk_fragment_point_id_from_descriptor
+        remaining = set(expected)
+        offset = None
+        seen_offsets = set()
+        while True:
+            points, next_offset = _qdrant_call(
+                self.client.scroll, collection_name=self.collection,
+                scroll_filter=qm.Filter(must=[qm.FieldCondition(key="generation_id", match=qm.MatchValue(value=generation_id))]),
+                limit=UPSERT_BATCH_SIZE,offset=offset,
+                with_payload=["doc_id","generation_id","point_type","slug","source_id","chunk_index","chunk_fragment","chunk_fragment_group"],with_vectors=False,
+            )
+            for point in points:
+                identity=str(point.id)
+                payload=point.payload or {}
+                if identity not in remaining or payload.get("doc_id")!=doc_id or payload.get("generation_id")!=generation_id:
+                    raise GenerationIntegrityError()
+                for key,value in expected[identity].items():
+                    actual=payload.get(key)
+                    if actual!=value or type(actual) is not type(value):
+                        raise GenerationIntegrityError()
+                descriptor=payload.get("chunk_fragment")
+                if descriptor is not None:
+                    try:
+                        checked_id=chunk_fragment_point_id_from_descriptor(doc_id,payload.get("chunk_index"),generation_id,payload.get("source_id"),descriptor)
+                    except (ValueError,TypeError,KeyError) as exc:
+                        raise GenerationIntegrityError() from exc
+                    if checked_id != identity:
+                        raise GenerationIntegrityError()
+                remaining.remove(identity)
+            if next_offset is None:
+                break
+            if not points or str(next_offset) in seen_offsets:
+                raise GenerationIntegrityError()
+            seen_offsets.add(str(next_offset))
+            offset=next_offset
+        if remaining:
+            raise GenerationIntegrityError()
 
     def delete_generation_points(self, doc_id: str, generation_id: str | None) -> None:
         """Delete one generation; explicit None selects only legacy points."""
@@ -968,21 +1054,56 @@ class VectorStore:
 
     # --- Ветки композитного поиска ---
 
+    def _search_branch_candidates(self, query, query_filter, top_k, *, using=None):
+        """Keep one leader per original chunk before spending slots on extra parts.
+
+        Ordinary collections retain their single query and original ordering.
+        Each server response is bounded by top_k; weights and the branch budget
+        are unchanged. Grouping metadata is bound at generation publication.
+        """
+        kwargs = dict(collection_name=self.collection, query=query,
+                      query_filter=query_filter, limit=top_k,
+                      with_payload=_retrieval_payload_selector())
+        if using is not None:
+            kwargs['using'] = using
+        raw = _qdrant_call(self.client.query_points, **kwargs).points
+        if not any((point.payload or {}).get('chunk_fragment') is not None for point in raw):
+            return raw
+        grouped = _qdrant_call(
+            self.client.query_points_groups, **kwargs,
+            group_by='chunk_fragment_group', group_size=1,
+        ).groups
+        if not grouped:
+            # Compatibility for isolated pre-grouping candidates. G5 must
+            # restore their metadata before they qualify for default rollout.
+            return raw
+        ordinary_filter = qm.Filter(must=[
+            *([query_filter] if query_filter is not None else []),
+            qm.IsEmptyCondition(is_empty=qm.PayloadField(key='chunk_fragment')),
+        ])
+        ordinary = _qdrant_call(
+            self.client.query_points, **{**kwargs, 'query_filter': ordinary_filter},
+        ).points
+        leaders = [point for group in grouped for point in group.hits] + list(ordinary)
+        leaders.sort(key=lambda point: point.score or 0.0, reverse=True)
+        selected, seen = [], set()
+        for point in [*leaders, *raw]:
+            identity = str(point.id)
+            if identity not in seen:
+                seen.add(identity)
+                selected.append(point)
+                if len(selected) >= top_k:
+                    break
+        return selected
+
     def search_dense(
         self, vector: list[float], query_filter: qm.Filter | None, top_k: int
     ) -> list[Hit]:
-        """Семантический поиск по dense-вектору (по всем точкам: концепты + чанки)."""
-        results = _qdrant_call(
-            self.client.query_points,
-            collection_name=self.collection,
-            query=vector,
-            query_filter=query_filter,
-            limit=top_k,
-            with_payload=_retrieval_payload_selector(),
-        )
+        """Семантический поиск по dense-вектору (по всем точкам)."""
+        points = self._search_branch_candidates(vector, query_filter, top_k)
         return [
             Hit(point_id=str(r.id), score=r.score or 0.0, payload=r.payload or {}, rank=i)
-            for i, r in enumerate(results.points)
+            for i, r in enumerate(points)
         ]
 
     def search_bm25(
@@ -991,18 +1112,12 @@ class VectorStore:
         """Лексический поиск по sparse-вектору (BM25, Qdrant IDF)."""
         if not sparse_vec.indices:
             return []
-        results = _qdrant_call(
-            self.client.query_points,
-            collection_name=self.collection,
-            query=sparse_vec,
-            using=SPARSE_VECTOR_NAME,
-            query_filter=query_filter,
-            limit=top_k,
-            with_payload=_retrieval_payload_selector(),
+        points = self._search_branch_candidates(
+            sparse_vec, query_filter, top_k, using=SPARSE_VECTOR_NAME,
         )
         return [
             Hit(point_id=str(r.id), score=r.score or 0.0, payload=r.payload or {}, rank=i)
-            for i, r in enumerate(results.points)
+            for i, r in enumerate(points)
         ]
 
     def _graph_expansion(
@@ -1213,6 +1328,7 @@ class VectorStore:
         Требует Qdrant >= 1.11 (условие has_vector).
         """
         from sqlalchemy import select
+        from app.services.bounded_sql_text import capped_text_expression, decode_capped_text
 
         from app.db.models import Document, DocumentChunk, OkfConcept
         from app.db.session import session_scope
@@ -1225,67 +1341,83 @@ class VectorStore:
             if force
             else qm.Filter(must_not=[qm.HasVectorCondition(has_vector=SPARSE_VECTOR_NAME)])
         )
-        target_ids = {
-            str(rec.id)
-            for rec in self._scroll_points(
+        from app.services.maintenance_point_ids import disk_point_ids
+
+        with disk_point_ids(
+            str(rec.id) for rec in self._scroll_points(
                 with_payload=False, with_vectors=False, scroll_filter=scroll_filter
             )
-        }
+        ) as target_ids:
+            points: list[qm.PointVectors] = []
+            projection_total = 0
+            sparse_total = 0
 
-        points: list[qm.PointVectors] = []
+            def flush_sparse():
+                nonlocal sparse_total
+                if points:
+                    self.client.update_vectors(collection_name=self.collection, points=points)
+                    sparse_total += len(points)
+                    points.clear()
 
-        cap = self.settings.okf_max_concept_chars
-        with session_scope() as s:
-            active_generations = lock_generation_read(s)
-            rows = s.execute(
-                select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.title, OkfConcept.content)
-                .join(Document, OkfConcept.doc_id == Document.id)
-            ).all()
-        for doc_id, slug, title, content in rows:
-            point_id = concept_point_id(doc_id, slug, generation_id=active_generations.get(doc_id))
-            # Точки нет в выборке — либо её нет в Qdrant, либо sparse уже
-            # построен (фильтр отсеял). В обоих случаях трогать нечего.
-            if point_id not in target_ids:
-                continue
-            sparse_vec = to_sparse_vector(_sparse_text(title or "", (content or "")[:cap]))
-            if not sparse_vec.indices:
-                continue
-            points.append(
-                qm.PointVectors(id=point_id, vector={SPARSE_VECTOR_NAME: sparse_vec})
-            )
 
-        if include_chunks:
-            cap_chunk = self.settings.okf_max_chunk_index_chars
+            cap = self.settings.okf_max_concept_chars
             with session_scope() as s:
                 active_generations = lock_generation_read(s)
-                chunk_rows = s.execute(
-                    select(
-                        DocumentChunk.doc_id,
-                        DocumentChunk.chunk_index,
-                        DocumentChunk.section_title,
-                        DocumentChunk.content,
-                    ).join(Document, DocumentChunk.doc_id == Document.id)
-                ).all()
-            for doc_id, chunk_index, section_title, content in chunk_rows:
-                point_id = chunk_point_id(doc_id, chunk_index, generation_id=active_generations.get(doc_id))
-                # Точки нет в выборке — либо её нет в Qdrant, либо sparse уже
-                # построен (фильтр отсеял). В обоих случаях трогать нечего.
-                if point_id not in target_ids:
-                    continue
-                sparse_vec = to_sparse_vector(
-                    _sparse_text(section_title or "", (content or "")[:cap_chunk])
+                rows = s.execute(
+                    select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.title, capped_text_expression(s, OkfConcept.content, cap))
+                    .join(Document, OkfConcept.doc_id == Document.id).execution_options(yield_per=batch_size)
                 )
-                if not sparse_vec.indices:
-                    continue
-                points.append(
-                    qm.PointVectors(id=point_id, vector={SPARSE_VECTOR_NAME: sparse_vec})
-                )
-
-        total = len(points)
-        for start in range(0, total, batch_size):
-            batch = points[start : start + batch_size]
-            self.client.update_vectors(collection_name=self.collection, points=batch)
-        return total
+                for doc_id, slug, title, content in rows:
+                    point_id = concept_point_id(doc_id, slug, generation_id=active_generations.get(doc_id))
+                    # Точки нет в выборке — либо её нет в Qdrant, либо sparse уже
+                    # построен (фильтр отсеял). В обоих случаях трогать нечего.
+                    if point_id not in target_ids:
+                        continue
+                    sparse_vec = to_sparse_vector(_sparse_text(title or "", decode_capped_text(content, cap) or ""))
+                    if not sparse_vec.indices:
+                        continue
+                    points.append(
+                        qm.PointVectors(id=point_id, vector={SPARSE_VECTOR_NAME: sparse_vec})
+                    )
+                    if len(points) == batch_size:
+                        flush_sparse()
+            if include_chunks:
+                cap_chunk = self.settings.okf_max_chunk_index_chars
+                with session_scope() as s:
+                    active_generations = lock_generation_read(s)
+                    from app.services.chunk_projection_maintenance import generation_projection_version, rebuild_projection_sparse
+                    projection_docs = set()
+                    for doc_id, generation_id in active_generations.items():
+                        if generation_projection_version(s, doc_id, generation_id) is not None:
+                            projection_docs.add(doc_id)
+                            projection_total += rebuild_projection_sparse(s, self, doc_id, generation_id, target_ids, batch_size)
+                    chunk_rows = s.execute(
+                        select(
+                            DocumentChunk.doc_id,
+                            DocumentChunk.chunk_index,
+                            DocumentChunk.section_title,
+                            capped_text_expression(s, DocumentChunk.content, cap_chunk),
+                        ).join(Document, DocumentChunk.doc_id == Document.id)
+                        .where(DocumentChunk.doc_id.not_in(projection_docs)).execution_options(yield_per=batch_size)
+                    )
+                    for doc_id, chunk_index, section_title, content in chunk_rows:
+                        point_id = chunk_point_id(doc_id, chunk_index, generation_id=active_generations.get(doc_id))
+                        # Точки нет в выборке — либо её нет в Qdrant, либо sparse уже
+                        # построен (фильтр отсеял). В обоих случаях трогать нечего.
+                        if point_id not in target_ids:
+                            continue
+                        sparse_vec = to_sparse_vector(
+                            _sparse_text(section_title or "", decode_capped_text(content, cap_chunk) or "")
+                        )
+                        if not sparse_vec.indices:
+                            continue
+                        points.append(
+                            qm.PointVectors(id=point_id, vector={SPARSE_VECTOR_NAME: sparse_vec})
+                        )
+                        if len(points) == batch_size:
+                            flush_sparse()
+            flush_sparse()
+            return sparse_total + projection_total
 
     def backfill_chunks(self, embedder, batch_size: int = 64) -> int:
         """Индексирует чанки из PostgreSQL (document_chunks) — Этап 2b.
@@ -1300,149 +1432,13 @@ class VectorStore:
         if not self.settings.search_index_chunks_enabled:
             return 0
 
-        from sqlalchemy import select
+        from app.services.maintenance_point_ids import disk_point_ids
 
-        from app.db.models import Document, DocumentChunk
-        from app.db.session import session_scope
-        from app.services.development_registry import get_development_registry
-        from app.services.mail_scope import build_record_mail_scopes
-        from app.services.source_store import fetch_source_trees
-
-        dev_reg = get_development_registry()
-
-        existing_ids: set[str] = set()
-        for rec in self._scroll_points(with_payload=False, with_vectors=False):
-            existing_ids.add(str(rec.id))
-
-        # Собрать состояние в память ДО эмбеддинга (не держим сессию БД во время
-        # долгих LLM-эмбеддингов).
-        docs_data: list[dict] = []
-        with session_scope() as s:
-            active_generations = lock_generation_read(s)
-            docs = s.execute(
-                select(Document.id, Document.filename, Document.development_id).where(
-                    # Не в корзине/не удалён. Статус не фильтруем: paused-документ
-                    # (finalize упал ПОСЛЕ записи чанков в БД, но ДО Qdrant) имеет
-                    # document_chunks без точек — backfill обязан их доиндексировать.
-                    Document.deleted_at.is_(None)
-                )
-            ).all()
-            source_trees = fetch_source_trees(s, {doc_id for doc_id, _, _ in docs})
-            for doc_id, filename, dev_id in docs:
-                chunks = (
-                    s.query(DocumentChunk)
-                    .filter(DocumentChunk.doc_id == doc_id)
-                    .order_by(DocumentChunk.chunk_index)
-                    .all()
-                )
-                if not chunks:
-                    continue
-                doc = s.get(Document, doc_id)
-                global_tags = [t.tag_rel.canonical_text for t in (doc.tags_rel or [])]
-                _, chunk_scopes = build_record_mail_scopes(
-                    source_trees[doc_id], [],
-                    [{"chunk_index": c.chunk_index, "source_id": c.source_id} for c in chunks],
-                )
-                docs_data.append(
-                    {
-                        "doc_id": doc_id,
-                        "generation_id": active_generations.get(doc_id),
-                        "filename": filename,
-                        "dev_id": dev_id,
-                        "global_tags": global_tags,
-                        "source_locale": doc.source_locale,
-                        "mail_scopes": chunk_scopes,
-                        "source_ids": [c.source_id for c in chunks],
-                        "chunks": [
-                            (c.chunk_index, c.section_title or "", c.content or "")
-                            for c in chunks
-                        ],
-                    }
-                )
-
-        chunk_points: list[qm.PointStruct] = []
-        cap = self.settings.okf_max_chunk_index_chars
-        for d in docs_data:
-            doc_id = d["doc_id"]
-            point_ids = [chunk_point_id(doc_id, ci, generation_id=d["generation_id"]) for ci, _, _ in d["chunks"]]
-            if all(pid in existing_ids for pid in point_ids):
-                continue  # весь документ уже проиндексирован — эмбеддинг не нужен
-            embed_positions = [i for i, pid in enumerate(point_ids) if pid not in existing_ids]
-
-            embed_inputs = []
-            for i in embed_positions:
-                st, t = d["chunks"][i][1], d["chunks"][i][2]
-                embed_inputs.append(f"{st}\n{t[:cap]}" if st else t[:cap])
-            vectors = embedder.embed_texts(embed_inputs)
-
-            dev_tags = dev_reg.dev_tags(d["dev_id"]) if d["dev_id"] else []
-            for pos, vec in zip(embed_positions, vectors):
-                ci, st, text = d["chunks"][pos]
-                capped = text[:cap]
-                sparse_text = _sparse_text(st, capped)
-                chunk_points.append(
-                    qm.PointStruct(
-                        id=point_ids[pos],
-                        vector={
-                            "": vec,
-                            SPARSE_VECTOR_NAME: to_sparse_vector(sparse_text),
-                        },
-                        payload={
-                            "point_type": CHUNK_POINT_TYPE,
-                            "generation_id": d["generation_id"],
-                            "doc_id": doc_id,
-                            "chunk_index": ci,
-                            "tags": d["global_tags"],
-                            "dev_tags": dev_tags,
-                            "source_locale": d["source_locale"],
-                            "source_id": d["source_ids"][pos],
-                            "mail_scope": d["mail_scopes"][pos],
-                            "mail_scope_version": MAIL_SCOPE_VERSION,
-                        },
-                    )
-                )
-
-        # Пер-батчевая устойчивость (инцидент 03.09.2026): один битый батч
-        # (422 на коллизии sparse-индексов) убивал весь backfill корпуса.
-        # Сбойный батч логируется и пропускается, остальные уходят; итог —
-        # сводка со счётчиками. Возврат — число реально проиндексированных.
-        total = len(chunk_points)
-        attempted_batches = successful_batches = failed_batches = 0
-        attempted_points = indexed_points = 0
-        failed_doc_ids: set[str] = set()
-        for start in range(0, total, batch_size):
-            batch = chunk_points[start : start + batch_size]
-            attempted_batches += 1
-            attempted_points += len(batch)
-            try:
-                self.client.upsert(collection_name=self.collection, points=batch)
-                successful_batches += 1
-                indexed_points += len(batch)
-            except Exception as exc:
-                failed_batches += 1
-                failed_doc_ids.update(
-                    str(p.payload.get("doc_id")) for p in batch if p.payload
-                )
-                logger.error(
-                    "Backfill чанков: батч %d упал (%d точек): %s",
-                    attempted_batches, len(batch), exc,
-                )
-        if failed_batches:
-            logger.error(
-                "Backfill чанков завершён ЧАСТИЧНО: батчи ок %d/%d, проиндексировано "
-                "%d из %d точек; неиндексированные документы: %s",
-                successful_batches,
-                attempted_batches,
-                indexed_points,
-                attempted_points,
-                ", ".join(sorted(failed_doc_ids)),
-            )
-        elif indexed_points:
-            logger.info(
-                "Backfill чанков: %d/%d батчей, %d точек",
-                successful_batches, attempted_batches, indexed_points,
-            )
-        return indexed_points
+        with disk_point_ids(
+            str(rec.id) for rec in self._scroll_points(with_payload=False, with_vectors=False)
+        ) as existing_ids:
+            from app.services.legacy_chunk_maintenance import backfill_legacy_chunks
+            return backfill_legacy_chunks(self, embedder, existing_ids, batch_size)
 
     def backfill_relations(self) -> int:
         """Нормализует relations в payload концептов из PostgreSQL (okf_concepts).

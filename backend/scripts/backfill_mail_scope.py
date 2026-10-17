@@ -18,7 +18,7 @@ from app.db.session import session_scope
 from app.services.generation_store import lock_generation_read
 from app.services.mail_scope import MAIL_SCOPE_VERSION, build_mail_scope_map
 from app.services.source_store import fetch_source_trees
-from app.services.vector_store import VectorStore, concept_point_id, chunk_point_id
+from app.services.vector_store import VectorStore, concept_point_id
 from qdrant_client.http import models as qm
 
 COUNTERS = ('scanned', 'active', 'skipped_nonactive', 'mail', 'document', 'unknown',
@@ -26,7 +26,7 @@ COUNTERS = ('scanned', 'active', 'skipped_nonactive', 'mail', 'document', 'unkno
             'invalid_identity', 'broken_tree', 'failed_batches', 'readback_errors',
             'missing_active_points')
 FIELDS = ['doc_id', 'point_type', 'slug', 'chunk_index', 'generation_id',
-          'mail_scope', 'mail_scope_version']
+          'mail_scope', 'mail_scope_version','chunk_fragment']
 
 
 def _call(method, **kwargs):
@@ -84,6 +84,7 @@ def _page_scopes(records, report):
         trees = fetch_source_trees(session, doc_ids)
         maps = {doc_id: build_mail_scope_map(tree) for doc_id, tree in trees.items()}
         changes = {}
+        projection_cache = {}
         for point in records:
             p = point.payload or {}
             kind = _kind(p)
@@ -112,7 +113,9 @@ def _page_scopes(records, report):
                         reason = 'missing_canonical'
                 elif kind == 'chunk' and type(p.get('chunk_index')) is int and p['chunk_index'] >= 0:
                     index = p['chunk_index']
-                    valid = str(point.id) == chunk_point_id(doc_id, index, generation_id=generation)
+                    from app.services.chunk_projection_maintenance import valid_active_chunk_point
+                    valid = valid_active_chunk_point(session,doc_id,generation,index,str(point.id),
+                                                     p.get('chunk_fragment'),projection_cache)
                     if (doc_id, index) in chunks:
                         source_id = chunks[(doc_id, index)]
                     else:
@@ -165,14 +168,22 @@ def _audit_missing(store, report, settings, *, batch_size, doc_id):
                         model.doc_id.in_(ids), model.id > last_row).order_by(model.id).limit(batch_size)).all()
                     if not rows:
                         break
-                    expected = {concept_point_id(did, key, generation_id=generations.get(did)) if kind == 'concept'
-                                else chunk_point_id(did, key, generation_id=generations.get(did)): did
-                                for _, did, key in rows}
-                    found = _call(store.client.retrieve, collection_name=store.collection,
-                                  ids=list(expected), with_payload=['generation_id'], with_vectors=False)
-                    actual = {str(row.id) for row in found if (row.payload or {}).get('generation_id') ==
-                              generations.get(expected.get(str(row.id)))}
-                    _increment(report, kind, 'missing_active_points', len(set(expected) - actual))
+                    from itertools import islice
+                    from app.services.chunk_projection_maintenance import active_chunk_point_ids
+                    def expected_identities():
+                        for _, did, key in rows:
+                            identities = ([concept_point_id(did,key,generation_id=generations.get(did))]
+                                if kind=='concept' else active_chunk_point_ids(session,did,generations.get(did),key,batch_size))
+                            for identity in identities:
+                                yield identity,did
+                    iterator=expected_identities()
+                    while batch:=list(islice(iterator,batch_size)):
+                        expected=dict(batch)
+                        found = _call(store.client.retrieve, collection_name=store.collection,
+                                      ids=list(expected), with_payload=['generation_id'], with_vectors=False)
+                        actual = {str(row.id) for row in found if (row.payload or {}).get('generation_id') ==
+                                  generations.get(expected.get(str(row.id)))}
+                        _increment(report, kind, 'missing_active_points', len(set(expected) - actual))
                     last_row = rows[-1][0]
             last_doc = ids[-1]
 

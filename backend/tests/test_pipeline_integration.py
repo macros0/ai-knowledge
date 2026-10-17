@@ -10,6 +10,7 @@ import errno
 import threading
 import time
 from pathlib import Path
+from importlib import import_module
 
 import pytest
 
@@ -44,7 +45,7 @@ def _settings(tmp_path: Path) -> Settings:
 @pytest.fixture
 def isolated_env(tmp_path, monkeypatch):
     settings = _settings(tmp_path)
-    for mod in (
+    modules = (
         "app.config",
         "app.services.pipeline",
         "app.services.staging",
@@ -52,8 +53,11 @@ def isolated_env(tmp_path, monkeypatch):
         "app.services.llm_client",
         "app.services.okf_generator",
         "app.services.vector_store",
-    ):
-        monkeypatch.setattr(f"{mod}.get_settings", lambda: settings)
+        "app.services.table_classification",
+    )
+    loaded_modules = [import_module(module) for module in modules]
+    for module in loaded_modules:
+        monkeypatch.setattr(module, "get_settings", lambda: settings)
 
     from qdrant_client import QdrantClient
     from app.services.vector_store import VectorStore

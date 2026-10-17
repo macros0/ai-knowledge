@@ -59,6 +59,7 @@ def replace_concepts(session, doc_id: str, okf_docs: list) -> None:
                 chunk_index=meta.get("chunk_index"),
                 source_id=meta.get("source_id"),
                 source_spans=list(meta.get("source_spans") or []) or None,
+                table_refs=list(meta.get("table_refs") or []) or None,
                 generated_at=_parse_iso(meta.get("generated_at")),
                 model_id=meta.get("model_id"),
                 prompt_version=meta.get("prompt_version"),

@@ -1,9 +1,14 @@
 """Транзакционное хранение дерева источников документа."""
 from __future__ import annotations
 
-from sqlalchemy import select
+import json
+from collections import defaultdict, deque
+from types import SimpleNamespace
+
+from sqlalchemy import select, case, func, cast, Text
 
 from app.db.models import DocumentSource
+from app.services.bounded_sql_text import capped_text_expression, decode_capped_text
 
 
 def load_source_rows(session, doc_ids: set[str]) -> list[DocumentSource]:
@@ -11,6 +16,59 @@ def load_source_rows(session, doc_ids: set[str]) -> list[DocumentSource]:
     if not doc_ids:
         return []
     return list(session.scalars(select(DocumentSource).where(DocumentSource.doc_id.in_(doc_ids))))
+
+
+def load_source_display_rows(session, doc_ids: set[str]) -> list[SimpleNamespace]:
+    """Read only bounded public provenance in the same canonical snapshot.
+
+    Keep every ancestry edge for exact mail classification. PostgreSQL JSON
+    containing escaped NUL needs a one-row raw fallback; retain only allowlisted
+    display fields after decoding it.
+    """
+    if not doc_ids:
+        return []
+    metadata = DocumentSource.metadata_json
+    postgres = session.get_bind().dialect.name == 'postgresql'
+
+    def value_type(field):
+        return (func.json_typeof(metadata.op('->')(field)) if postgres
+                else func.json_type(metadata, '$.' + field))
+
+    boolean_type = value_type('mail') == 'boolean' if postgres else value_type('mail').in_(['true', 'false'])
+    mail = case((boolean_type, metadata['mail'].as_boolean()), else_=False)
+    limits = [('subject', 512), ('sender', 512), ('sent_at', 64), ('date_raw', 128)]
+    labels = [case((value_type(field) == ('string' if postgres else 'text'),
+                    capped_text_expression(session, metadata[field].as_string(), limit)), else_=None)
+              for field, limit in limits]
+    raw = None
+    if postgres:
+        # All PostgreSQL JSON extraction operators reject an escaped NUL,
+        # even when it appears in another field. Stream just those rare rows
+        # through the original JSON decoder; keep only bounded public fields.
+        needs_raw = func.strpos(cast(metadata, Text), r'\u0000') > 0
+        mail = case((needs_raw, None), else_=mail)
+        labels = [case((needs_raw, None), else_=label) for label in labels]
+        raw = case((needs_raw, cast(metadata, Text)), else_=None)
+    query = select(DocumentSource.doc_id, DocumentSource.source_id, DocumentSource.parent_source_id,
+                   DocumentSource.kind, capped_text_expression(session, DocumentSource.display_name, 256),
+                   mail, *labels, raw).where(DocumentSource.doc_id.in_(doc_ids)).execution_options(yield_per=1)
+    rows = []
+    for doc_id, source_id, parent, kind, display, is_mail, *values in session.execute(query):
+        raw = values.pop()
+        if raw is not None:
+            decoded = json.loads(raw)
+            decoded = decoded if isinstance(decoded, dict) else {}
+            bounded = {'mail': decoded.get('mail') is True}
+            bounded.update({field: value[:limit] for field, limit in limits
+                            if isinstance(value := decoded.get(field), str) and value})
+            del decoded, raw
+        else:
+            bounded = {'mail': is_mail is True}
+            bounded.update({field: decode_capped_text(value, limit)
+                            for (field, limit), value in zip(limits, values) if value})
+        rows.append(SimpleNamespace(doc_id=doc_id, source_id=source_id, parent_source_id=parent,
+                                   kind=kind, display_name=decode_capped_text(display, 256) or '', metadata_json=bounded))
+    return rows
 
 
 def fetch_source_paths(session, pairs: set[tuple[str, str]], *,
@@ -61,7 +119,15 @@ def replace_sources(session, doc_id: str, rows: list[dict]) -> None:
     session.query(DocumentSource).filter(DocumentSource.doc_id == doc_id).delete(
         synchronize_session=False
     )
-    for row in sorted(rows, key=lambda item: (item["source_id"].count("/"), item["source_id"])):
+    # IDs are opaque: their spelling and slash count do not define ancestry.
+    # Insert each parent before its children to satisfy the immediate self-FK.
+    children = defaultdict(list)
+    for row in rows:
+        children[row.get("parent_source_id")].append(row)
+    pending = deque(children[None])
+    while pending:
+        row = pending.popleft()
+        pending.extend(sorted(children[row["source_id"]], key=lambda item: item["source_id"]))
         session.add(
             DocumentSource(
                 doc_id=doc_id,

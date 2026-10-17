@@ -125,11 +125,15 @@ def _worker_error_code(exc: BaseException) -> str:
 
 def _worker(
     send, path: str, filename: str, attachments_dir: str, max_memory_bytes: int,
-    mail_enabled: bool = True,
+    mail_enabled: bool = True, table_mode: bool = False,
 ) -> None:
     try:
-        context = ParseContext(filename, mail_enabled=mail_enabled)
+        from docparser.table_spool import FileTableSink
+        sink = FileTableSink(Path(attachments_dir) / ".tables-spool") if table_mode else None
+        context = ParseContext(filename, mail_enabled=mail_enabled, table_sink=sink)
         blocks = parse_document(path, filename, attachments_dir=attachments_dir, context=context)
+        if sink is not None:
+            sink.close()
         _send_worker_message(
             send,
             {
@@ -149,7 +153,7 @@ def _worker(
 
 def _worker_entry(
     target, send, path: str, filename: str, attachments_dir: str,
-    max_memory_bytes: int, mail_enabled: bool, admission, group_ready,
+    max_memory_bytes: int, mail_enabled: bool, admission, group_ready, table_mode: bool = False,
 ) -> None:
     """Apply the process boundary before any parser or injected worker runs."""
     try:
@@ -163,7 +167,7 @@ def _worker_entry(
                 raise ParserIsolationError("parser isolation unavailable (process group)") from exc
             _set_posix_memory_limit(max_memory_bytes)
         if target is _worker:
-            target(send, path, filename, attachments_dir, max_memory_bytes, mail_enabled)
+            target(send, path, filename, attachments_dir, max_memory_bytes, mail_enabled, table_mode)
         else:
             target(send, path, filename, attachments_dir, max_memory_bytes)
     except BaseException as exc:
@@ -319,6 +323,15 @@ def _terminate(process) -> None:
     process.close()
 
 
+def _worker_response_ready(receive, timeout, job):
+    try:
+        return receive.poll(timeout)
+    except (EOFError, OSError) as exc:
+        if job is not None and job.memory_exceeded():
+            raise ParserMemoryLimitError("Разбор файла превысил лимит памяти") from exc
+        raise ParserWorkerError("parser worker завершился без результата") from exc
+
+
 def parse_document_supervised(
     path: str | Path,
     filename: str,
@@ -328,6 +341,7 @@ def parse_document_supervised(
     max_memory_mb: int,
     max_concurrent: int = 2,
     mail_enabled: bool = True,
+    table_mode: bool = False,
     _worker_target=None,
 ) -> SupervisedParseResult:
     """Parse in a killable child and return blocks, sources and diagnostics.
@@ -357,7 +371,7 @@ def parse_document_supervised(
         process = context.Process(
             target=_worker_entry,
             args=(_worker_target or _worker, send, str(path), filename, str(dest), limit, mail_enabled,
-                  admission, group_ready),
+                  admission, group_ready, table_mode),
             daemon=True,
         )
         deadline = time.monotonic() + timeout_seconds
@@ -376,7 +390,7 @@ def parse_document_supervised(
         while True:
             if job is not None and job.memory_exceeded():
                 raise ParserMemoryLimitError(f"Разбор файла превысил лимит {max_memory_mb} MiB")
-            if receive.poll(0.05):
+            if _worker_response_ready(receive, 0.05, job):
                 try:
                     payload = receive.recv_bytes(maxlength=_MAX_WORKER_RESPONSE_BYTES)
                 except (EOFError, OSError) as exc:
@@ -396,7 +410,7 @@ def parse_document_supervised(
                     raise ParserMemoryLimitError("Разбор файла превысил лимит памяти")
                 # The worker may send its final response and exit after the
                 # preceding empty poll. Drain it through normal validation.
-                if receive.poll():
+                if _worker_response_ready(receive, 0, job):
                     continue
                 raise ParserWorkerError("parser worker завершился без результата")
     finally:

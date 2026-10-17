@@ -42,16 +42,24 @@ def reindex_published_document(doc_id, settings, store, embedder, *, concepts_on
         global_tags = [item.tag_rel.canonical_text for item in document.tags_rel]
         dev = session.get(Development, document.development_id) if document.development_id else None
         dev_tags = [dev.number, dev.name, *([dev.module] if dev.module else [])] if dev else []
+        from app.services.chunk_projection_maintenance import generation_projection_version, backfill_projection_chunks
+        version = generation_projection_version(session, doc_id, generation_id)
+        sources = fetch_source_trees(session, {doc_id})[doc_id]
         concepts = session.query(OkfConcept).filter_by(doc_id=doc_id).order_by(OkfConcept.slug).all()
-        chunks = session.query(DocumentChunk).filter_by(doc_id=doc_id).order_by(DocumentChunk.chunk_index).all()
+        chunks = (session.query(DocumentChunk).filter_by(doc_id=doc_id).order_by(DocumentChunk.chunk_index).all()
+                  if version is None else [])
+        chunk_records = ([dict(source_id=row.source_id,chunk_index=row.chunk_index) for row in chunks]
+            if version is None else [dict(source_id=source,chunk_index=index) for source,index in session.execute(
+                select(DocumentChunk.source_id,DocumentChunk.chunk_index).where(DocumentChunk.doc_id==doc_id))])
         if not generation_id and document.status != "done" and not concepts and not chunks:
             return counts
         concept_scopes, chunk_scopes = build_record_mail_scopes(
-            fetch_source_trees(session, {doc_id})[doc_id],
+            sources,
             [dict(source_id=row.source_id, chunk_index=row.chunk_index) for row in concepts],
-            [dict(source_id=row.source_id, chunk_index=row.chunk_index) for row in chunks],
+            chunk_records,
         )
-        if concepts:
+        for offset in range(0, len(concepts), 64):
+            batch = concepts[offset:offset + 64]
             docs = [OkfDocument(
                 filepath=str(settings.okf_dir / doc_id / f"{row.slug}.md"),
                 metadata={
@@ -59,15 +67,19 @@ def reindex_published_document(doc_id, settings, store, embedder, *, concepts_on
                     "relations": list(row.relations or []), "chunk_index": row.chunk_index,
                     "source_id": row.source_id,
                 }, content=row.content or "", markdown="",
-            ) for row in concepts]
+            ) for row in batch]
             vectors = embedder.embed_texts([
                 f"{item.metadata.get('title', '')}\n{item.content[:settings.okf_max_concept_chars]}"
                 for item in docs
             ])
             store.index_concepts(doc_id, docs, vectors, dev_tags=dev_tags,
                                  source_locale=document.source_locale, generation_id=generation_id,
-                                 mail_scopes=concept_scopes)
-            counts["concepts"] = len(docs)
+                                 mail_scopes=concept_scopes[offset:offset + len(batch)])
+            counts["concepts"] += len(docs)
+        if not concepts_only and settings.search_index_chunks_enabled and version is not None:
+            backfill_projection_chunks(session,store,embedder,doc_id,generation_id,document.filename,
+                global_tags,dev_tags,document.source_locale,sources,64,force=True)
+            counts['chunks']=len(chunk_records)
         if not concepts_only and settings.search_index_chunks_enabled and chunks:
             texts = [row.content or "" for row in chunks]
             titles = [row.section_title or "" for row in chunks]

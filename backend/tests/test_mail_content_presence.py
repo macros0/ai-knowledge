@@ -16,12 +16,14 @@ from app.services.pipeline import Pipeline
 from app.services.registry import DocumentRegistry
 
 
-@pytest.fixture
-def content_pipeline(tmp_path, monkeypatch):
+@pytest.fixture(params=[False,True], ids=["legacy","structural"])
+def content_pipeline(tmp_path, monkeypatch, request):
     settings = Settings(
         _env_file=None, data_dir=tmp_path, embedding_provider="fake", embedding_dimensions=8,
         llm_model="test/mail", dedup_enabled=False, dev_detection_enabled=False,
         okf_write_bundles=True, mail_import_enabled=True,
+        table_structure_enabled=request.param, okf_table_llm_classify=False,
+        llm_chunk_retry_attempts=1, llm_chunk_retry_backoff_seconds=0,
     )
     for module in ("app.config", "app.services.pipeline", "app.services.staging", "app.services.embedder",
                    "app.services.llm_client", "app.services.okf_generator", "app.services.vector_store"):
@@ -92,7 +94,7 @@ def test_subject_only_mail_does_not_make_empty_or_scanned_body_textual(content_p
         monkeypatch.setattr(pipeline, "_finalize", finalize)
     pipeline._process(doc_id, source, source.name, [], resume=resume)
 
-    assert len(calls) == (1 if attachment_kind == "xlsx" else 0)
+    assert len(calls) == (1 if attachment_kind == "xlsx" and not pipeline.settings.table_structure_enabled else 0)
     document = registry.get(doc_id)
     assert document["status"] == "done"
     assert document["problem"] == (None if attachment_kind == "xlsx" else "no_text_layer")
@@ -106,7 +108,9 @@ def test_subject_only_mail_does_not_make_empty_or_scanned_body_textual(content_p
         attachment = next(row for row in sources if row.source_id == "root/0")
         assert (pipeline.settings.uploads_dir / doc_id / attachment.saved_path).read_bytes() == payload
     if attachment_kind == "xlsx":
-        assert "Approval days" in calls[0] and "18" in calls[0]
+        assert any("Approval days" in row.content and "18" in row.content for row in concepts)
+        if not pipeline.settings.table_structure_enabled:
+            assert "Approval days" in calls[0] and "18" in calls[0]
         assert {row.source_id for row in concepts} == {"root/0"}
     else:
         assert concepts == []

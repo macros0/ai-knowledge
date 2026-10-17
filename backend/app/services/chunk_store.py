@@ -38,6 +38,7 @@ def replace_chunks(session, doc_id: str, rows: list[dict]) -> None:
             DocumentChunk(
                 doc_id=doc_id,
                 source_id=r.get("source_id"),
+                table_refs=r.get("table_refs") or None,
                 chunk_index=int(r["chunk_index"]),
                 section_title=r.get("section_title"),
                 content=r.get("content") or "",

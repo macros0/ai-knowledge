@@ -11,7 +11,7 @@ import json
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import Column, inspect, text
+from sqlalchemy import Column, String, Text, inspect, text
 
 from app.db import models  # noqa: F401 - registers canonical tables
 from app.db.base import Base
@@ -33,10 +33,31 @@ NEW_INDEXES = {
 TABLES = set(NEW_TABLES) | set(NEW_COLUMNS)
 
 
+# This helper repairs the mail release only. Later table fields have their
+# own additive migration and must not turn mail-only inspection into a repair.
+_TABLE_COLUMNS = {'table_refs', 'table_schema_version', 'chunk_projection_version'}
+
+
+def _include_object(_obj, name, type_, _reflected, _compare_to):
+    if type_ == 'table': return name in TABLES
+    if type_ == 'column' and name in _TABLE_COLUMNS: return False
+    return True
+
+
+def _mail_compare_type(_context, inspected_column, _metadata_column, inspected_type, metadata_type):
+    # The known legacy title definition belongs to the mail schema. Its later
+    # widening is owned by the table release; this helper never alters it.
+    if (inspected_column.table.name == 'document_chunks' and inspected_column.name == 'section_title'
+            and isinstance(inspected_type, String) and not isinstance(inspected_type, Text)
+            and inspected_type.length == 1024 and isinstance(metadata_type, Text)):
+        return False
+    return None
+
+
 def _diffs(connection):
     context = MigrationContext.configure(connection, opts={
-        "include_object": lambda _obj, name, type_, _reflected, _compare_to:
-            type_ != "table" or name in TABLES,
+        "include_object": _include_object,
+        "compare_type": _mail_compare_type,
     })
     return [item for diff in compare_metadata(context, Base.metadata)
             for item in (diff if isinstance(diff, list) else [diff])]

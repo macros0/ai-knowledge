@@ -14,6 +14,7 @@ from app.models.schemas import Concept, OkfDocument
 from app.prompts.store import get_store
 from app.services.comment_concepts import extract_comment_concepts
 from app.services.field_table import extract_table_concepts
+from app.services.table_projection import compact_markdown_tables
 from app.services.json_atomic import write_json_atomic
 from app.services.llm_client import LLMClient, LLMTruncationError
 from app.services.llm_profiles import generation_budget
@@ -205,6 +206,23 @@ class OKFGenerator:
     def _generate_chunk_recursive(
         self, chunk: str, filename: str, index: int, total: int, doc_id: str, depth: int
     ) -> list[Concept]:
+        # Table units intentionally survive initial document chunking intact.
+        # A classifier may leave them for LLM generation. Bound that remainder
+        # before spending the shared operation budget on repeated long outputs;
+        # keep complete rows/headers and the original stored chunk unchanged.
+        if len(chunk) > self.settings.okf_max_chunk_chars:
+            from app.services.field_table import _is_separator_row, _is_table_row
+            lines = chunk.split("\n")
+            if any(_is_table_row(lines[i]) and _is_separator_row(lines[i + 1])
+                   for i in range(len(lines) - 1)):
+                parts = _split_in_half(chunk)
+                if len(parts) == 2 and all(len(part) < len(chunk) for part in parts):
+                    result: list[Concept] = []
+                    for part in parts:
+                        result.extend(self._generate_chunk_recursive(
+                            part, filename, index, total, doc_id, depth,
+                        ))
+                    return result
         prompt = self._build_prompt(chunk, filename, index, total)
         system = self.prompts.get("okf_system")
         try:
@@ -246,6 +264,7 @@ class OKFGenerator:
             raise
 
     def _build_prompt(self, chunk: str, filename: str, index: int, total: int) -> str:
+        chunk = compact_markdown_tables(chunk)
         if total <= 1:
             return self.prompts.format("okf_user", filename=filename, content=chunk)
         return self.prompts.format("okf_chunk", filename=filename, index=index, total=total, content=chunk)
@@ -303,6 +322,7 @@ class OKFGenerator:
                 "source_document": {"filename": filename, "doc_id": doc_id},
                 "relations": concept.relations,
                 "source_spans": [span.model_dump() for span in concept.source_spans],
+                "table_refs": [ref.model_dump() for ref in concept.table_refs],
                 "attachments": attachments or [],
                 "chunk_index": chunk_index,
                 "source_id": source_id,
@@ -409,6 +429,8 @@ def _build_markdown(
         "attachments": attachments or [],
         "created_at": generated_at or date.today().isoformat(),
     }
+    if concept.table_refs:
+        meta["table_refs"] = [ref.model_dump() for ref in concept.table_refs]
     if chunk_index is not None:
         meta["chunk_index"] = chunk_index
     if source_id:

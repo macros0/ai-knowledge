@@ -19,10 +19,18 @@ class LegacyTableLocator(BaseModel):
     table_ordinal: int = Field(ge=0)
 
 
+class StructuralTableLocator(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    kind: Literal['table'] = 'table'
+    generation_id: str = Field(pattern=r'^[0-9a-f]{32}$')
+    source_id: str = Field(min_length=1, max_length=255, pattern=r'^root(?:/[A-Za-z0-9_-]+)*$')
+    table_id: str = Field(pattern=r'^[0-9a-f]{32}$')
+
+
 class TableQualityReport(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    table_ref: LegacyTableLocator
-    method: Literal['llm_per_row', 'llm_whole', 'llm_generation', 'heuristic_xml', 'deterministic_rows', 'unprocessed']
+    table_ref: LegacyTableLocator | StructuralTableLocator = Field(discriminator="kind")
+    method: Literal['llm_per_row', 'llm_whole', 'llm_generation', 'heuristic_xml', 'deterministic_rows', 'unprocessed', 'structural_rows']
     cause_code: CauseCode | None = None
     input_rows: int | None = Field(default=None, ge=0)
     covered_rows: int | None = Field(default=None, ge=0)

@@ -104,14 +104,14 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
     # context budget for every BM25 candidate before merge.
     snippet_chars = 300
     hits, doc_lookup = load_visible_retrieval_hits(
-        hits,
+        hits, query=req.query,
         max_concept_chars=snippet_chars,
         max_chunk_chars=snippet_chars,
         **({"exact_groups": exact_groups} if exact_groups else {}),
     )
 
     filename_lookup = {did: (d or {}).get("filename", "") for did, d in doc_lookup.items()}
-    merged = merge_and_format(hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups)
+    merged = merge_and_format(hits, settings, filename_lookup=filename_lookup, exact_groups=exact_groups, query=req.query)
     # top_k — число БЛОКОВ (merge-групп с сиблингами), не точек.
     merged = merged[: req.top_k]
     max_score = max((m["score"] for m in merged), default=0.0)
@@ -131,6 +131,7 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
                 source_filename=m["source_filename"],
                 source_id=m.get("source_id"),
                 source_path=m.get("source_path"),
+                    table_refs=m.get("table_refs") or [],
             )
         )
     used_in = [branch for branch in ("dense", "bm25") if branch in branches]

@@ -758,6 +758,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
               {doc.error_code || doc.error ? friendlyDocumentError(doc, t) : (progress || fallbackMeta)}
               {updateView.noticeKey && <span className="doc-update-notice" role="status">{t(updateView.noticeKey)}</span>}
               <DocumentMailMetadata doc={doc} />
+              {(doc.filename?.toLowerCase().endsWith(".xlsx") || doc.problem === "llm_classifier_fallback") && <Link href={`/documents/${doc.id}/okf#tables`}>{t("tables.diagnostics")}</Link>}
             </span>
           </div>
           <div className="doc-meta-line">

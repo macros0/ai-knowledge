@@ -28,16 +28,12 @@ def parse_xlsx(
     # Validate the central directory before openpyxl starts reading XML parts.
     validate_zip(path)
     budget = budget or AttachmentBudget()
-    wb = load_workbook(str(path), read_only=True, data_only=True)
-    blocks: list[Block] = []
-    try:
-        for ws in wb.worksheets:
-            blocks.append(Block("heading", f"Таблица: {ws.title}", level=1))
-            md = _sheet_to_markdown(ws)
-            if md:
-                blocks.append(Block("table", md))
-    finally:
-        wb.close()
+    table_sink = getattr(context, "table_sink", None)
+    if table_sink is not None:
+        from docparser.xlsx_structure import parse_structural_xlsx
+        blocks = parse_structural_xlsx(path, table_sink, source_id)
+    else:
+        blocks = _legacy_blocks(path)
 
     with zipfile.ZipFile(str(path)) as archive:
         members = (info for info in archive.infolist()
@@ -60,6 +56,20 @@ def parse_xlsx(
                 depth=depth + 1, budget=budget, context=context, parent_source_id=source_id,
                 _node_reserved=True,
             ))
+    return blocks
+
+
+def _legacy_blocks(path):
+    wb = load_workbook(str(path), read_only=True, data_only=True)
+    blocks: list[Block] = []
+    try:
+        for ws in wb.worksheets:
+            blocks.append(Block("heading", f"Таблица: {ws.title}", level=1))
+            md = _sheet_to_markdown(ws)
+            if md:
+                blocks.append(Block("table", md))
+    finally:
+        wb.close()
 
     return blocks
 

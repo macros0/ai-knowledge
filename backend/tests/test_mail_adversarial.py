@@ -210,8 +210,8 @@ def test_real_hostile_mail_is_bounded_and_next_parse_recovers(tmp_path, monkeypa
             assert any("Readable parent" in block.text for block in result.blocks)
             assert disk_bytes == 0
         elif case == "html-text":
-            assert sum(len(block.text) for block in result.blocks) <= 2_000_000
-            assert "text_limit_exceeded" in codes
+            assert "".join(block.text for block in result.blocks) == ("Visible text " * 240_000).strip()
+            assert "text_limit_exceeded" not in codes
         elif case == "rtf-expansion":
             assert "unsupported_rtf_body" in codes
             assert disk_bytes == 0

@@ -191,6 +191,58 @@ def test_supervised_parser_normalizes_crashed_worker_and_cleans_storage(tmp_path
     assert not attachments.exists()
 
 
+@pytest.mark.parametrize("failed_poll", [1, 2])
+def test_supervisor_normalizes_closed_pipe_during_poll(tmp_path, monkeypatch, failed_poll):
+    from app.services import parser_supervisor as supervisor
+
+    context = supervisor.mp.get_context("spawn")
+    original_pipe = context.Pipe
+    original_process = context.Process
+    workers = []
+    poll_calls = []
+
+    class ClosedPipe:
+        def __init__(self, receive):
+            self.receive = receive
+
+        def poll(self, *args):
+            poll_calls.append(args)
+            if len(poll_calls) == failed_poll:
+                raise BrokenPipeError(109, "closed parser pipe")
+            return False
+
+        def __getattr__(self, name):
+            return getattr(self.receive, name)
+
+    def pipe(*args, **kwargs):
+        receive, send = original_pipe(*args, **kwargs)
+        return ClosedPipe(receive), send
+
+    def process(*args, **kwargs):
+        worker = original_process(*args, **kwargs)
+        workers.append(worker)
+        return worker
+
+    def wait_for_crash(pid):
+        worker = workers[0]
+        assert worker.pid == pid
+        worker.join(timeout=10)
+        assert worker.exitcode == 17
+        return None
+
+    monkeypatch.setattr(context, "Pipe", pipe)
+    monkeypatch.setattr(context, "Process", process)
+    monkeypatch.setattr(supervisor, "_process_rss_bytes", wait_for_crash)
+    attachments = tmp_path / "attachments"
+    with pytest.raises(ParserWorkerError, match="завершился без результата"):
+        parse_document_supervised(
+            tmp_path / "unused.eml", "unused.eml", attachments_dir=attachments,
+            timeout_seconds=20, max_memory_mb=1024, _worker_target=_crashing_worker,
+        )
+    assert len(poll_calls) == failed_poll
+    assert not attachments.exists()
+
+
 def test_parser_slots_reject_a_third_concurrent_worker_without_waiting():
     first = _acquire_parser_slot(2)
     second = _acquire_parser_slot(2)

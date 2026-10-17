@@ -228,3 +228,29 @@ def test_source_warning_overrides_false_parsed_status(tmp_path, code, status):
     context.warn(child, code)
     blocks = [Block("attachment", "child", meta={"source_id": child, "extraction_status": "parsed"})]
     assert {row["extraction_status"] for row in _source_rows(context.sources, blocks, tmp_path)} == {status}
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_source_tree_parent_order_follows_edges_not_source_id_spelling(reverse):
+    from app.db.session import get_engine
+    from sqlalchemy import text
+
+    _document()
+    # PostgreSQL enforces this FK in production. Enable the same constraint on
+    # the SQLite test connection so this test cannot pass on unordered inserts.
+    with get_engine().connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+    rows = [
+        {"source_id": "root", "kind": "document"},
+        {"source_id": "z/parent/deep", "parent_source_id": "root", "kind": "document"},
+        {"source_id": "a", "parent_source_id": "z/parent/deep", "kind": "document"},
+    ]
+    if reverse:
+        rows.reverse()
+    with session_scope() as session:
+        replace_sources(session, DOC_ID, rows)
+    with session_scope() as session:
+        actual = {row.source_id: row.parent_source_id for row in session.query(DocumentSource).filter_by(doc_id=DOC_ID)}
+        assert actual == {"root": None, "z/parent/deep": "root", "a": "z/parent/deep"}
+        assert not session.execute(text("PRAGMA foreign_key_check")).all()

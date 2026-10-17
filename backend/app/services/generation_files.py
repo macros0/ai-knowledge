@@ -149,6 +149,11 @@ def cleanup_generation_files(session, settings, doc_id: str, generation_id: str)
     The caller must separately clean Qdrant before forgetting the durable row.
     """
     lock_cleanup_generation(session, doc_id, generation_id)
+    from app.db.models import DocumentTableRow, DocumentTable, DocumentChunkFragment, DocumentChunkProjection
+    session.query(DocumentChunkFragment).filter_by(doc_id=doc_id, generation_id=generation_id).delete(synchronize_session=False)
+    session.query(DocumentChunkProjection).filter_by(doc_id=doc_id, generation_id=generation_id).delete(synchronize_session=False)
+    session.query(DocumentTableRow).filter_by(doc_id=doc_id, generation_id=generation_id).delete(synchronize_session=False)
+    session.query(DocumentTable).filter_by(doc_id=doc_id, generation_id=generation_id).delete(synchronize_session=False)
     paths = generation_paths(settings, doc_id, generation_id)
     roots = (paths.uploads_root, paths.bundle)
     for root in roots:

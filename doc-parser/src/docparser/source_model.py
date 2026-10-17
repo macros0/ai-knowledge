@@ -28,7 +28,8 @@ from docparser.blocks import Block
 # v21 escapes plain mail, preserves mixed MIME bodies, diagnoses decoding and
 # alternatives, bounds MSG remainder sources and retains native sender identity.
 # v22 resolves root named MAPI properties for protected embedded MSG messages.
-PARSER_VERSION = "mail-sources-v22"
+# v24 retains full canonical text with structural tables; clipped R2 checkpoints are incompatible.
+PARSER_VERSION = "mail-sources-v27-tables-v1"
 
 
 def parser_version_for_mail_mode(mail_enabled: bool) -> str:
@@ -61,7 +62,8 @@ class ParseResult:
 class ParseContext:
     """Выдаёт детерминированные source_id по пути структурного вхождения."""
 
-    def __init__(self, root_name: str | Path, *, mail_enabled: bool = True):
+    def __init__(self, root_name: str | Path, *, mail_enabled: bool = True, table_sink=None):
+        self.table_sink = table_sink
         self.mail_enabled = mail_enabled
         self.parser_version = parser_version_for_mail_mode(mail_enabled)
         self.sources = [

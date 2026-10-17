@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.services.problem_codes import problem_message
 
@@ -32,6 +32,29 @@ def _normalize_filter_values(values: list[str]) -> list[str]:
             seen.add(normalized)
             result.append(normalized)
     return result
+
+
+class TableRef(BaseModel):
+    """Coordinates of the original cells in one immutable generation."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["table"] = "table"
+    generation_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    source_id: str = Field(pattern=r"^root(?:/[A-Za-z0-9_-]+)*$", max_length=255)
+    table_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    row_number: int = Field(ge=1, le=1048576)
+    columns: list[Annotated[int, Field(ge=1, le=16384)]] = Field(min_length=1, max_length=16384)
+    text_start: int | None = Field(default=None, ge=0)
+    text_end: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if len(set(self.columns)) != len(self.columns):
+            raise ValueError("Duplicate table column")
+        if (self.text_start is None) != (self.text_end is None):
+            raise ValueError("Both continuation bounds are required")
+        if self.text_start is not None and (len(self.columns) != 1 or self.text_end <= self.text_start):
+            raise ValueError("Invalid cell continuation range")
+        return self
 
 
 class DocumentMailOut(BaseModel):
@@ -219,6 +242,7 @@ class SearchHit(BaseModel):
     source_filename: str = ""
     source_id: str | None = None
     source_path: list[dict[str, Any]] | None = None
+    table_refs: list[TableRef] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):
@@ -343,6 +367,7 @@ class ChatSource(BaseModel):
     source_slug: str | None = None
     source_id: str | None = None
     source_path: list[dict[str, Any]] | None = None
+    table_refs: list[TableRef] = Field(default_factory=list)
     # Источник найден поиском; только true означает, что его текст вошёл в контекст LLM.
     in_model_context: bool = True
     source_index: int | None = None
@@ -459,6 +484,7 @@ class SourceLocationSpanOut(BaseModel):
 
 
 class SourceLocationOut(BaseModel):
+    table_refs: list[TableRef] = Field(default_factory=list)
     status: Literal["exact", "recovered", "inferred", "chunk", "unavailable"]
     chunk_index: int | None = None
     source_id: str | None = None
@@ -466,6 +492,7 @@ class SourceLocationOut(BaseModel):
 
 
 class DocumentTextChunkOut(BaseModel):
+    table_refs: list[TableRef] = Field(default_factory=list)
     chunk_index: int
     source_id: str | None = None
     content: str
@@ -480,6 +507,7 @@ class Concept(BaseModel):
     relations: list[str] = Field(default_factory=list)
     source_spans: list[SourceSpan] = Field(default_factory=list)
     source_quotes: list[str] = Field(default_factory=list)
+    table_refs: list[TableRef] = Field(default_factory=list)
 
 
 class OkfDocument(BaseModel):

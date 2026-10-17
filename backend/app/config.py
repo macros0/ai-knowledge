@@ -228,6 +228,9 @@ class Settings(BaseSettings):
     embedding_api_base: str | None = "http://127.0.0.1:11434"
     embedding_api_key: str | None = None
     embedding_batch_size: int = 64
+    # Число токенов физического батча Ollama, отдельно от числа текстов выше.
+    # None сохраняет настройку провайдера; контекст/обрезание не меняются.
+    embedding_ollama_num_batch: int | None = Field(default=None, gt=0, le=32768)
     embedding_timeout_seconds: float = 30.0
     embedding_retry_attempts: int = 1
     embedding_retry_backoff_seconds: float = 2.0
@@ -365,6 +368,12 @@ class Settings(BaseSettings):
     # указывает ключевую колонку. При ошибке/выключении — fallback на XML-
     # эвристику (okf_field_table_min_rows). Кэш на диск: data/cache/table_classify/.
     okf_table_llm_classify: bool = False
+    table_structure_enabled: bool = True
+    # Opt-in for new candidates; resuming a generation retains its stored format.
+    chunk_index_projection_enabled: bool = False
+    table_classification_input_tokens: int = Field(default=10000, ge=512, le=100000)
+    table_embedding_tokens: int = Field(default=6000, ge=256, le=8192)
+    table_context_tokens: int = Field(default=6000, ge=256, le=32768)
     # Программная экстракция концептов из комментариев рецензентов (треды
     # «вопрос → ответы» с контекстом якоря и статусом закрытия) — детерминированный
     # regex вместо нестабильного встраивания LLM; LLM получает заглушку
@@ -589,6 +598,12 @@ class Settings(BaseSettings):
         if isinstance(v, (list, tuple, set)):
             return sorted(set(int(x) for x in v))
         return v
+
+    @model_validator(mode="after")
+    def validate_chunk_projection_index(self) -> "Settings":
+        if self.chunk_index_projection_enabled and not self.search_index_chunks_enabled:
+            raise ValueError("chunk projection requires search_index_chunks_enabled")
+        return self
 
     @model_validator(mode="after")
     def validate_search_mode(self) -> "Settings":

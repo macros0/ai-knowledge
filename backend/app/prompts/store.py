@@ -26,6 +26,7 @@ PROMPT_DEFAULTS: Final = {
     "okf_user": _defaults.USER_OKF_PROMPT,
     "okf_chunk": _defaults.CHUNK_OKF_PROMPT,
     "okf_table_classifier": _defaults.TABLE_CLASSIFIER_PROMPT,
+    "okf_table_classifier_structural": _defaults.STRUCTURAL_TABLE_CLASSIFIER_PROMPT,
     "dev_number_system": _defaults.SYSTEM_DEV_NUMBER_PROMPT,
     "dev_number_user": _defaults.USER_DEV_NUMBER_PROMPT,
 }
@@ -37,6 +38,7 @@ REQUIRED_PLACEHOLDERS: Final = {
     "okf_user": ("filename", "content"),
     "okf_chunk": ("filename", "index", "total", "content"),
     "okf_table_classifier": (),
+    "okf_table_classifier_structural": (),
     "dev_number_system": (),
     "dev_number_user": ("filename", "content"),
 }

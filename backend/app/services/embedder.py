@@ -16,6 +16,7 @@ import time
 import litellm
 
 from app.config import get_settings
+from app.services.ollama_embeddings import embed_ollama
 from app.services.errors import EmbedderError
 from app.services.diagnostics.events import dependency_call
 from app.services.diagnostics.recorder import emit_event
@@ -53,6 +54,15 @@ class Embedder:
 
         for attempt in range(1, max_attempts + 1):
             try:
+                if (self.settings.embedding_model or '').startswith('ollama/'):
+                    options = {}
+                    physical_batch = getattr(self.settings, 'embedding_ollama_num_batch', None)
+                    if physical_batch is not None:
+                        options['num_batch'] = physical_batch
+                    return embed_ollama(api_base=self.settings.embedding_api_base,
+                        model=self.settings.embedding_model, inputs=batch,
+                        timeout_seconds=self.settings.embedding_timeout_seconds,
+                        dimensions=self.settings.embedding_dimensions, **options)
                 response = litellm.embedding(
                     model=self.settings.embedding_model,
                     input=batch,
@@ -103,6 +113,15 @@ class Embedder:
         if self.settings.embedding_provider == "fake":
             return True
         try:
+            if (self.settings.embedding_model or '').startswith('ollama/'):
+                options = {}
+                physical_batch = getattr(self.settings, 'embedding_ollama_num_batch', None)
+                if physical_batch is not None:
+                    options['num_batch'] = physical_batch
+                embed_ollama(api_base=self.settings.embedding_api_base,
+                    model=self.settings.embedding_model, inputs=['ping'],
+                    timeout_seconds=5, dimensions=self.settings.embedding_dimensions, **options)
+                return True
             litellm.embedding(
                 model=self.settings.embedding_model,
                 input=["ping"],

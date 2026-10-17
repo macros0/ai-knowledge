@@ -37,6 +37,15 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
     };
   }, [location?.chunk_index, location?.status, selectedIndex, spans.length]);
 
+  if (location?.table_refs?.length) {
+    const ref = location.table_refs[0];
+    const columns = [...new Set(location.table_refs.filter(r => r.row_number === ref.row_number).flatMap(r => r.columns))].sort((a,b)=>a-b);
+    const query = new URLSearchParams({generation_id:ref.generation_id,source_id:ref.source_id,row:String(ref.row_number),
+      columns:(columns.length <= 12 ? columns : [...columns.slice(0,6), ...columns.slice(-6)]).join(",")});
+    if (ref.text_start != null) {query.set("text_start",String(ref.text_start));query.set("text_end",String(ref.text_end));}
+    return <a href={`/documents/${encodeURIComponent(docId)}/tables/${ref.table_id}?${query}`}>{t("tables.title")}</a>;
+  }
+
   if (!targetChunk) return <p className="source-location-note">{t("sourceLocation.unavailable")}</p>;
 
   return (

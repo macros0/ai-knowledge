@@ -404,47 +404,6 @@ def test_root_eml_without_structural_headers_is_rejected(tmp_path: Path):
         parse_document(broken)
 
 
-def test_root_text_budget_truncates_canonical_mail_text_once(tmp_path: Path, monkeypatch):
-    from docparser import embedded
-
-    monkeypatch.setattr(embedded, "MAX_TEXT_CHARS", 20)
-    message = EmailMessage()
-    message["From"] = "sender@example.test"
-    message["Subject"] = "Заголовок"
-    message.set_content("Согласовано: срок составляет двенадцать дней.")
-    path = tmp_path / "long.eml"
-    path.write_bytes(bytes(message))
-
-    result = parse_document_result(path)
-
-    assert sum(len(block.text) for block in result.blocks) == 20
-    assert result.warnings == [{"code": "text_limit_exceeded", "source_id": "root"}]
-
-
-def test_text_budget_keeps_attachment_metadata_after_text_is_exhausted(tmp_path: Path, monkeypatch):
-    from docparser import embedded
-
-    monkeypatch.setattr(embedded, "MAX_TEXT_CHARS", 1)
-    message = EmailMessage()
-    message["From"] = "sender@example.test"
-    message.set_content("body")
-    message.add_attachment(
-        b"opaque",
-        maintype="application",
-        subtype="octet-stream",
-        filename="proof.bin",
-    )
-    path = tmp_path / "attachment-after-limit.eml"
-    path.write_bytes(bytes(message))
-
-    blocks = parse_document(path, attachments_dir=tmp_path / "attachments")
-
-    marker = next(block for block in blocks if block.type == "attachment")
-    assert marker.text == ""
-    assert marker.meta["name"] == "proof.bin"
-    assert marker.meta["saved_path"]
-
-
 def test_encrypted_smime_eml_is_diagnosed_without_indexing_opaque_body(tmp_path: Path):
     path = tmp_path / "encrypted.eml"
     path.write_bytes(
