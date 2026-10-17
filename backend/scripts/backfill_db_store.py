@@ -63,6 +63,9 @@ logger = logging.getLogger("backfill_db_store")
 
 
 def _is_legacy_document(session, doc_id: str) -> bool:
+    from app.db.models import DocumentProcessingReview
+    if session.get(DocumentProcessingReview,doc_id) is not None:
+        return False
     document = session.get(Document, doc_id)
     state = session.get(DocumentGenerationState, doc_id)
     return bool(

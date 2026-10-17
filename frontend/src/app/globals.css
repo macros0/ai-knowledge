@@ -5080,3 +5080,29 @@ main {
 .chat-filter-controls.chat-disclosure-content { padding:8px 10px; }
 .applied-terms details.chat-disclosure { display:block; flex:1 1 240px; min-width:0; }
 .applied-terms .chat-disclosure-content ul { margin:0; }
+/* Processing scope: long nested names wrap inside the existing modal. */
+.processing-scope-badge { background: var(--surface, #fff7df); color: inherit; border: 1px solid #cfaf68; border-radius: 8px; padding: 3px 7px; font-size: .8rem; cursor: pointer; max-width: 100%; overflow-wrap: anywhere; }
+.scope-tree { list-style: none; padding: 0; margin: 12px 0; max-height: 55vh; overflow-y: auto; overflow-x: hidden; }
+.scope-idle-warning { border-left: 3px solid var(--color-orange); background: color-mix(in srgb, var(--color-orange) 10%, transparent); padding: 10px 12px; margin: 10px 0; overflow-wrap: anywhere; }
+.scope-idle-warning p { margin: 0 0 8px; }
+.scope-node { padding: 8px 4px 8px min(calc(var(--scope-depth) * 16px + 4px), 56px); border-bottom: 1px solid var(--border, #ddd); min-width: 0; }
+.scope-node-heading { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
+.scope-node-heading strong { overflow-wrap: anywhere; min-width: 0; }
+.scope-node-heading input, .scope-root input { margin-top: 4px; flex: 0 0 auto; }
+.scope-branch-toggle { background: transparent; border: 0; padding: 0 3px; cursor: pointer; color: inherit; }
+.scope-node-meta, .scope-tools, .scope-root { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.scope-node-meta { padding-left: 22px; margin-top: 5px; font-size: .8rem; overflow-wrap: anywhere; }
+.attachment-preview .modal-card { max-width: 1120px; min-width: 0; }
+.attachment-preview .modal-body { min-width: 0; }
+.attachment-preview-name { font-weight: 600; overflow-wrap: anywhere; }
+.attachment-preview-sheet { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0; }
+.attachment-preview-sheet select { max-width: 100%; min-width: 0; }
+.attachment-preview-content { height: 50vh; display: flex; flex-direction: column; }
+.attachment-preview-content > .attachment-preview-scroll { flex: 1; min-height: 0; }
+.attachment-preview-scroll { overflow: auto; max-height: 50vh; border: 1px solid var(--border); }
+.attachment-preview-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: .8rem; }
+.attachment-preview-table th, .attachment-preview-table td { padding: 7px 10px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.attachment-preview-table td { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 110px; max-width: 360px; }
+.attachment-preview-table thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+.attachment-preview-table tbody th { background: var(--panel); min-width: 40px; }
+.scope-excluded-sources { border: 1px solid var(--border, #ddd); border-radius: 8px; padding: 10px; margin-bottom: 16px; overflow-wrap: anywhere; }

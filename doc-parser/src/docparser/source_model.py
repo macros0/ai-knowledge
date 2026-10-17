@@ -62,10 +62,18 @@ class ParseResult:
 class ParseContext:
     """Выдаёт детерминированные source_id по пути структурного вхождения."""
 
-    def __init__(self, root_name: str | Path, *, mail_enabled: bool = True, table_sink=None):
+    def __init__(self, root_name: str | Path, *, mail_enabled: bool = True, table_sink=None,
+                 processing_policy=None):
         self.table_sink = table_sink
         self.mail_enabled = mail_enabled
+        self.processing_policy = processing_policy
+        self._locator_chains = {'root': ()}
         self.parser_version = parser_version_for_mail_mode(mail_enabled)
+        if processing_policy is not None:
+            self.parser_version += '-scope-v1'
+            expected=processing_policy.snapshot.get('parser_version')
+            if expected is not None and expected!=self.parser_version:
+                raise ValueError('Processing scope parser version is incompatible; reassess attachments')
         self.sources = [
             SourceNode(
                 source_id="root",
@@ -78,10 +86,26 @@ class ParseContext:
         self._next_ordinal: dict[str, int] = {"root": 0}
         self.warnings: list[dict] = []
 
-    def add_child(self, parent_source_id: str, display_name: str, kind: str) -> str:
+    def key_for(self, parent_source_id: str, locator: str) -> str:
+        from docparser.attachment_policy import make_source_key
+        if self.processing_policy is None:
+            raise ValueError('Source keys require a processing policy')
+        return make_source_key(self.processing_policy.source_file_hash,
+                               (*self._locator_chains[parent_source_id], locator))
+
+    def add_child(self, parent_source_id: str, display_name: str, kind: str,
+                  *, locator: str | None = None) -> str:
         ordinal = self._next_ordinal.get(parent_source_id, 0)
         self._next_ordinal[parent_source_id] = ordinal + 1
         source_id = f"{parent_source_id}/{ordinal}"
+        locator = locator or f'ordinal:{ordinal}'
+        self._locator_chains[source_id] = (*self._locator_chains[parent_source_id], locator)
+        metadata = {}
+        if self.processing_policy is not None:
+            key = self.key_for(parent_source_id, locator)
+            metadata = {'source_key': key, 'source_locator': locator,
+                        'processing_included': self.processing_policy.is_included(key),
+                        **self.processing_policy.source_metadata(key)}
         self.sources.append(
             SourceNode(
                 source_id=source_id,
@@ -89,6 +113,7 @@ class ParseContext:
                 ordinal=ordinal,
                 kind=kind,
                 display_name=Path(display_name).name or "вложение",
+                metadata=metadata,
             )
         )
         return source_id
@@ -97,7 +122,9 @@ class ParseContext:
         """Заменяет metadata уже зарегистрированного узла без смены его ID."""
         for index, node in enumerate(self.sources):
             if node.source_id == source_id:
-                self.sources[index] = replace(node, metadata=dict(metadata))
+                protected={key:value for key,value in node.metadata.items()
+                           if key.startswith('processing_') or key in {'source_key','source_locator'}}
+                self.sources[index] = replace(node, metadata={**metadata,**protected})
                 return
         raise ValueError(f"Unknown source_id: {source_id}")
 

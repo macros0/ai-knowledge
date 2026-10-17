@@ -10,6 +10,18 @@ from docparser.source_model import ParseContext
 import tests.fixtures as fixtures
 
 
+def test_row_checksum_bytes_preserve_legacy_format_without_recursive_asdict(monkeypatch):
+    from dataclasses import asdict
+    from docparser.table_model import TableCell,TableRow
+    from docparser.xlsx_structure import row_bytes
+    row=TableRow(7,{i:TableCell(f"A{i}",value,str(value),"value",formula="=A1" if i==10 else None,
+        hidden=i==2) for i,value in [(1,"текст\nстрока"),(10,1.25),(2,True),(14,None)]},True)
+    expected=json.dumps(asdict(row),ensure_ascii=False,separators=(",",":"),allow_nan=False).encode("utf8")
+    def reject(*args,**kwargs):raise AssertionError("Row checksum must not recursively copy cell records")
+    monkeypatch.setattr("docparser.xlsx_structure.asdict",reject)
+    assert row_bytes(row)==expected
+
+
 class RecordingSink:
     def __init__(self):
         self.tables = {}

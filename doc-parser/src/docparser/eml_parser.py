@@ -12,10 +12,10 @@ from urllib.parse import quote, urlsplit
 
 from docparser.blocks import Block
 from docparser.embedded import (
-    MAX_ATTACHMENT_DEPTH,
     MAX_ATTACHMENT_PAYLOAD,
     Attachment,
     AttachmentBudget,
+    attachment_depth_limit,
     marker_block,
     process_embedded,
 )
@@ -64,7 +64,7 @@ def parse_eml(
         filename = part.get_filename() or _attachment_name(part, index)
         content_id = str(part.get("Content-ID") or "")
         status = getattr(part, "_wire_status", None)
-        if not status and depth + 1 >= MAX_ATTACHMENT_DEPTH:
+        if not status and depth + 1 >= attachment_depth_limit(context):
             status = "skipped_depth"
         elif not status:
             size_bound = _attachment_size_bound(part)
@@ -103,6 +103,7 @@ def parse_eml(
                 parent_source_id=source_id,
                 _node_reserved=True,
                 inline_image=bool(content_id),
+                source_locator=f'mime:{index}',
             )
         images.register(content_id, extracted[0] if extracted else None)
         blocks.extend(extracted)

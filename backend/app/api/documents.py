@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, Form, Query, Request, Response, UploadFi
 from fastapi.responses import FileResponse, JSONResponse
 from docparser import markdown_attachment_spans, parse_document, portable_name
 from docparser.source_model import ParseContext
+from docparser.attachment_policy import ParserProcessingPolicy
 
 from app.auth.models import User
 from app.auth.service import require_role, require_user
@@ -246,6 +247,35 @@ def upload_document(
 
     # Root mail validation is a format/admission check, not a dedup feature.
     # Disabling duplicate detection must not admit corrupt or unreadable mail.
+    processing_scope=None
+    if settings.attachment_review_enabled:
+        from app.services.processing_admission import prepare_upload_scope
+        from app.services.processing_scope import assessment_limits,automatic_snapshot
+        try:
+            with TemporaryDirectory(prefix='attachment-preflight-',dir=settings.uploads_dir) as scope_dir:
+                inventory,selection=prepare_upload_scope(_dest,file.filename or 'unknown',settings,
+                                                         attachments_dir=Path(scope_dir))
+                processing_scope=automatic_snapshot(inventory,assessment_limits(settings))
+                if selection.requires_review:
+                    with upload_admission_lock():
+                        result=_admit_upload(file=file,request=request,tags=tags,development_id=development_id,
+                            canonical_locale=canonical_locale,allow_similar=allow_similar,user=user,
+                            doc_id=doc_id,dest=_dest,size=size,file_hash=inventory.source_file_hash,
+                            preview_markdown=None,preview_mail_fingerprint=None,trash_twin=trash_twin,
+                            processing_inventory=inventory,processing_attempt=Path(scope_dir))
+                    if _registry.get(doc_id) is None:
+                        _dest.unlink(missing_ok=True)
+                    return result
+        except Exception as exc:
+            if _registry.get(doc_id) is None:
+                _dest.unlink(missing_ok=True)
+            from docparser.attachment_inventory import InvalidRootDocument
+            if isinstance(exc,InvalidRootDocument):
+                raise ApiError(status_code=422,code="parse_failed",detail=str(exc)) from exc
+            if isinstance(exc,(ParserBusyError,ParserIsolationError)):
+                from app.api.document_processing_scope import _parser_error
+                raise _parser_error(exc) from exc
+            raise
     if settings.dedup_enabled or extension in {".eml", ".msg"}:
         # Extract with the same parser as the pipeline, but keep attachments
         # temporary. No document, tags, LLM calls or search index until consent.
@@ -253,7 +283,9 @@ def upload_document(
             with TemporaryDirectory(prefix="upload-check-", dir=settings.uploads_dir) as preview_dir:
                 parse_context = ParseContext(
                     file.filename or "unknown", mail_enabled=settings.mail_import_enabled,
+                    **({'processing_policy':ParserProcessingPolicy(processing_scope)} if processing_scope else {}),
                 )
+                parse_context.archive_helper_path=settings.archive_7zip_path or None
                 if settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
                     blocks, parse_context.sources = parse_document_supervised(
                         _dest,
@@ -263,6 +295,7 @@ def upload_document(
                         max_memory_mb=settings.parser_max_memory_mb,
                         max_concurrent=settings.parser_max_concurrent,
                         mail_enabled=settings.mail_import_enabled,
+                        **({'processing_policy':processing_scope,'archive_helper_path':settings.archive_7zip_path or None} if processing_scope else {}),
                     )
                 else:
                     blocks = parse_document(
@@ -283,6 +316,10 @@ def upload_document(
                             raise ApiError(status_code=422, code=error_code, detail=detail)
                 if settings.dedup_enabled:
                     preview_markdown, _ = markdown_attachment_spans(blocks)
+                    if processing_scope is not None:
+                        from docparser import blocks_to_markdown
+                        from app.services.source_chunking import indexable_blocks
+                        preview_markdown=blocks_to_markdown(indexable_blocks(blocks))
                     from app.services.mail_identity import mail_fingerprint_from_parse
 
                     preview_mail_fingerprint = mail_fingerprint_from_parse(
@@ -332,6 +369,7 @@ def upload_document(
                 doc_id=doc_id, dest=_dest, size=size, file_hash=file_hash,
                 preview_markdown=preview_markdown, preview_mail_fingerprint=preview_mail_fingerprint,
                 trash_twin=trash_twin,
+                processing_scope=processing_scope,
             )
     finally:
         if _registry.get(doc_id) is None:
@@ -339,7 +377,8 @@ def upload_document(
 
 
 def _admit_upload(*, file, request, tags, development_id, canonical_locale, allow_similar,
-                  user, doc_id, dest, size, file_hash, preview_markdown, preview_mail_fingerprint, trash_twin):
+                  user, doc_id, dest, size, file_hash, preview_markdown, preview_mail_fingerprint, trash_twin,
+                  processing_scope=None,processing_inventory=None,processing_attempt=None):
     """Called under upload_admission_lock; publish signature before releasing it."""
     duplicates = {"level2": [], "level3": []}
     # Another upload may have finished parsing while this request was parsing.
@@ -369,6 +408,13 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
     user_tags = normalize_tags(tags)
     origin_locale = canonical_locale or request_locale(request, fallback="und")
     _tag_registry.add(user_tags, canonical_locale=origin_locale)
+    scope_create_options={}
+    if processing_inventory is not None:
+        from app.services.processing_scope import assessment_limits
+        scope_create_options={'processing_inventory':processing_inventory,
+                              'processing_limits':assessment_limits(get_settings()),
+                              'processing_artifacts_dir':processing_attempt,
+                              'processing_settings':get_settings()}
     doc = _registry.create(
         doc_id,
         file.filename or "unknown",
@@ -377,6 +423,7 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
         tags=user_tags,
         canonical_locale=origin_locale,
         uploaded_by=user.username,
+        **scope_create_options,
     )
     if file_hash:
         set_file_hash(doc_id, file_hash)
@@ -411,13 +458,15 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
         if preview_markdown is not None:
             index_document(doc_id, preview_markdown, preview_mail_fingerprint)
             doc = _registry.get(doc_id) or doc
-        get_pipeline().ingest(
-            doc_id,
-            get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}",
-            doc["filename"],
-            user_tags=user_tags,
-            is_admin="admin" in user.roles,
-        )
+        if processing_inventory is None:
+            get_pipeline().ingest(
+                doc_id,
+                get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}",
+                doc["filename"],
+                user_tags=user_tags,
+                is_admin="admin" in user.roles,
+                **({'processing_scope':processing_scope} if processing_scope else {}),
+            )
     except Exception as exc:
         # Admission has not started a worker, so there are no vectors to delete.
         # Also undo badges already published by index_document on its neighbors.
@@ -452,6 +501,8 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
     if trash_twin is not None:
         doc = dict(doc)
         doc["duplicate_in_trash"] = trash_twin
+    if processing_inventory is not None:
+        return JSONResponse(status_code=202,content=DocumentOut.model_validate(doc).model_dump(mode='json'))
     return doc
 
 
@@ -608,6 +659,8 @@ def get_document_sources(doc_id: str, user: User = Depends(require_user)):
             kind=row.kind,
             display_name=row.display_name,
             metadata=row.metadata_json or {},
+            **{key:(row.metadata_json or {}).get(key) for key in (
+                'source_key','processing_included','processing_reason','processing_assessment')},
             saved_path=row.saved_path,
             extraction_status=row.extraction_status,
             artifact_kind=row.artifact_kind,
@@ -1388,7 +1441,7 @@ def list_okf_files(doc_id: str):
     # доступа к ФС (staging-fallback использует doc_id как путь).
     _require_active_document(doc_id)
     files = _okf_files_from_db(doc_id)
-    if files:
+    if files or _has_published_generation(doc_id):
         return files
     try:
         staging = StagingStore(doc_id)
@@ -1412,6 +1465,8 @@ def get_okf_file(doc_id: str, filename: str):
     md = _concept_markdown_from_db(doc_id, slug)
     if md is not None:
         return Response(content=md, media_type="text/plain; charset=utf-8")
+    if _has_published_generation(doc_id):
+        raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл не найден")
     try:
         staging = StagingStore(doc_id)
         if staging.exists():
@@ -1498,6 +1553,11 @@ def get_chunk(doc_id: str, chunk_index: int):
     content = _chunk_content_from_db(doc_id, chunk_index)
     if content is not None:
         return Response(content=content, media_type="text/plain; charset=utf-8")
+    if _has_published_generation(doc_id):
+        source_id=_archived_chunk_source(doc_id,chunk_index)
+        if source_id:
+            raise ApiError(status_code=404,code="chunk_source_excluded",detail="Источник исключён из обработки.",source_id=source_id)
+        raise ApiError(status_code=404, code=errors.CHUNK_NOT_FOUND, detail="Чанк не найден")
     try:
         staging = StagingStore(doc_id)
         if staging.exists():
@@ -1591,6 +1651,25 @@ def _ensure_chunks_for_read(doc_id: str) -> list[dict]:
             code=errors.INVALID_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+def _has_published_generation(doc_id: str) -> bool:
+    """An active publication, including an empty one, is authoritative."""
+    with session_scope() as session:
+        state = session.get(DocumentGenerationState, doc_id)
+        return bool(state and state.active_generation_id)
+
+
+def _archived_chunk_source(doc_id: str, chunk_index: int) -> str | None:
+    """Private compact ranges identify old links; never read archived text."""
+    from app.db.models import DocumentGeneration
+    with session_scope() as session:
+        state=session.get(DocumentGenerationState,doc_id)
+        generation=session.get(DocumentGeneration,state.active_generation_id) if state and state.active_generation_id else None
+        for source in ((generation.processing_scope_json or {}).get("archived_chunk_sources",[]) if generation else []):
+            if any(start<=chunk_index<=end for start,end in source["ranges"]):
+                return source["source_id"]
+    return None
 
 
 def _require_active_document(doc_id: str) -> Document:
@@ -1721,7 +1800,8 @@ def _okf_files_from_db(doc_id: str) -> list[OkfFileOut]:
             .filter(OkfConcept.doc_id == doc_id)
             .all()
         )
-    rows.sort(key=lambda c: _concept_list_sort_key(c.chunk_index, c.source_spans, c.slug))
+    rows.sort(key=lambda c: ((0, c.display_order) if c.display_order is not None else
+                            (1, _concept_list_sort_key(c.chunk_index, c.source_spans, c.slug))))
     return [
         OkfFileOut(
             filename=f"{c.slug}.md",
@@ -1789,7 +1869,7 @@ def _fulltext_from_db(doc_id: str) -> list[str]:
         rows = (
             s.query(DocumentChunk.content)
             .filter(DocumentChunk.doc_id == doc_id)
-            .order_by(DocumentChunk.chunk_index)
+            .order_by(func.coalesce(DocumentChunk.display_order, DocumentChunk.chunk_index), DocumentChunk.chunk_index)
             .all()
         )
     return [r[0] for r in rows]

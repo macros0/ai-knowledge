@@ -92,6 +92,10 @@ def restore_canceled_update(session, doc_id: str) -> bool:
             setattr(document, key, value)
     document.status = "done"
     document.error = document.error_code = None
+    from app.db.models import DocumentProcessingReview
+    review=session.get(DocumentProcessingReview,doc_id)
+    if review and review.state=='submitted':
+        review.state='canceled'
     checkpoint = session.get(DocumentStaging, doc_id)
     if checkpoint:
         session.delete(checkpoint)

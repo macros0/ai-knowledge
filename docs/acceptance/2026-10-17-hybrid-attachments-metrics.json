@@ -1,0 +1,54 @@
+{
+  "historical_gates": {
+    "performance-before-lazy-errors.json": {
+      "light-00.docx": {
+        "added_p95_seconds": 4.924200000004203,
+        "passed": false
+      },
+      "light-01.docx": {
+        "added_p95_seconds": 4.514550000007148,
+        "passed": false
+      },
+      "light-05.docx": {
+        "added_p95_seconds": 5.2391499999990625,
+        "passed": false
+      },
+      "light-20.docx": {
+        "added_p95_seconds": 5.2370999999970085,
+        "passed": false
+      }
+    },
+    "performance-after-lazy-errors.json": {
+      "light-00.docx": {
+        "added_p95_seconds": 0.7986000000062632,
+        "passed": true
+      },
+      "light-01.docx": {
+        "added_p95_seconds": 0.8951499999937369,
+        "passed": true
+      },
+      "light-05.docx": {
+        "added_p95_seconds": 0.7753000000011525,
+        "passed": true
+      },
+      "light-20.docx": {
+        "added_p95_seconds": 1.0222000000037952,
+        "passed": false
+      }
+    }
+  },
+  "final_twenty": {
+    "added_p95_seconds": 0.625,
+    "passed": true,
+    "paired_runs": 10
+  },
+  "resource": {
+    "wall_seconds": 1.812000000005355,
+    "peak_tree_rss_bytes": 162291712,
+    "limit_bytes": 1073741824,
+    "time_gate_passed": true,
+    "memory_gate_passed": true,
+    "remaining_worker_or_helper_pids": [],
+    "nodes": 3
+  }
+}

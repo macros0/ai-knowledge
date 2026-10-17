@@ -17,6 +17,8 @@ dependencies = [
     "olefile>=0.47",
     "msg_parser>=1.2,<2",
     "compressed-rtf>=1.0.6,<2",
+    "py7zr==1.1.4",
+    "rarfile==4.5",
 ]
 
 [project.optional-dependencies]

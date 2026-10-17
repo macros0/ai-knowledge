@@ -213,6 +213,10 @@ def import_generation_tables(doc_id, generation_id, bundle: Path):
 
 
 def verify_table_publication(session, doc_id, generation_id, bundle, records):
+    return verify_table_publication_groups(session,doc_id,generation_id,bundle,[records])
+
+
+def verify_table_publication_groups(session,doc_id,generation_id,bundle,record_groups):
     """Verify portable/SQL agreement and every physical cell's projection cover.
 
     The generation's immutable artifact manifest separately verifies file hashes.
@@ -223,46 +227,56 @@ def verify_table_publication(session, doc_id, generation_id, bundle, records):
     tables = list(session.scalars(select(DocumentTable).where(DocumentTable.doc_id == doc_id,
                                  DocumentTable.generation_id == generation_id)))
     if not tables:
-        if any(r.get('table_refs') for r in records):
+        if any(r.get('table_refs') for records in record_groups for r in records):
             raise GenerationIntegrityError()
         return
-    verify_generation_tables(session, doc_id, generation_id)
     try:
         manifest = json.loads((bundle / 'tables' / 'manifest.json').read_text(encoding='utf8'))
         entries = {e['descriptor']['table_id']: e for e in manifest['tables']}
         if len(entries) != len(manifest['tables']) or set(entries) != {t.table_id for t in tables}:
             raise GenerationIntegrityError()
-        coverage = defaultdict(lambda: defaultdict(list))
+        groups=[]
         source_by_table = {t.table_id:t.source_id for t in tables}
-        for record in records:
-            for raw in record.get('table_refs') or []:
-                ref = TableRef.model_validate(raw)
-                if ref.generation_id != generation_id or source_by_table.get(ref.table_id) != ref.source_id:
-                    raise GenerationIntegrityError()
-                for col in ref.columns:
-                    coverage[ref.table_id][(ref.row_number,col)].append((ref.text_start,ref.text_end))
+        for records in record_groups:
+            coverage=defaultdict(lambda:defaultdict(list))
+            for record in records:
+                for raw in record.get('table_refs') or []:
+                    ref = TableRef.model_validate(raw)
+                    if ref.generation_id != generation_id or source_by_table.get(ref.table_id) != ref.source_id:
+                        raise GenerationIntegrityError()
+                    for col in ref.columns:
+                        coverage[ref.table_id][(ref.row_number,col)].append((ref.text_start,ref.text_end))
+            groups.append(coverage)
         for table in tables:
             entry = entries[table.table_id]
             if entry['descriptor'] != table.descriptor or entry['quality'] != table.quality:
                 raise GenerationIntegrityError()
             seen = set()
+            digest,count,cells=sha256(),0,0
             for stored in _stored_rows(session,doc_id,generation_id,table.table_id):
                 row = _row(stored)
+                digest.update(row_bytes(row)+b'\n')
+                count+=1
                 for col,cell in row.cells.items():
                     if cell.state == 'blank' or (cell.raw_value == '' and cell.formula is None):
                         continue
                     key = (row.row_number,col); seen.add(key)
-                    ranges = coverage[table.table_id].get(key,[])
-                    if (None,None) in ranges:
-                        continue
-                    end = 0
-                    for start,stop in sorted(ranges):
-                        if start > end or stop > len(cell.display_text):
+                    cells+=1
+                    for coverage in groups:
+                        ranges = coverage[table.table_id].get(key,[])
+                        if (None,None) in ranges:
+                            continue
+                        end = 0
+                        for start,stop in sorted(ranges):
+                            if start > end or stop > len(cell.display_text):
+                                raise GenerationIntegrityError()
+                            end = max(end,stop)
+                        if not ranges or end != len(cell.display_text):
                             raise GenerationIntegrityError()
-                        end = max(end,stop)
-                    if not ranges or end != len(cell.display_text):
-                        raise GenerationIntegrityError()
-            if set(coverage[table.table_id]) != seen:
+            actual=asdict(TableSummary(count,cells,digest.hexdigest()))
+            if actual!={key:table.quality.get(key) for key in actual}:
+                raise GenerationIntegrityError()
+            if any(set(coverage[table.table_id])!=seen for coverage in groups):
                 raise GenerationIntegrityError()
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise GenerationIntegrityError() from exc
@@ -283,3 +297,26 @@ def clone_generation_tables(session, doc_id, base_id, generation_id, bundle):
                      DocumentTableRow.doc_id==doc_id,DocumentTableRow.generation_id==base_id)
     session.execute(insert(DocumentTableRow).from_select(fields,statement))
     export_generation_tables(session,doc_id,generation_id,bundle)
+
+
+def clone_selected_generation_tables(session, doc_id, base_id, generation_id, bundle, source_ids, *, export_artifacts=True):
+    """Copy only retained canonical tables; row data stays in INSERT SELECT."""
+    from sqlalchemy import insert, literal
+    lock_writable_generation(session, doc_id, generation_id)
+    verify_generation_tables(session, doc_id, base_id)
+    tables = list(session.scalars(select(DocumentTable).where(DocumentTable.doc_id == doc_id,
+        DocumentTable.generation_id == base_id, DocumentTable.source_id.in_(source_ids))))
+    for table in tables:
+        session.add(DocumentTable(doc_id=doc_id, generation_id=generation_id, table_id=table.table_id,
+            source_id=table.source_id, schema_version=table.schema_version, descriptor=table.descriptor, quality=table.quality))
+    session.flush()
+    ids = [table.table_id for table in tables]
+    if ids:
+        fields = ["doc_id", "generation_id", "table_id", "row_number", "cells", "hidden"]
+        statement = select(DocumentTableRow.doc_id, literal(generation_id), DocumentTableRow.table_id,
+            DocumentTableRow.row_number, DocumentTableRow.cells, DocumentTableRow.hidden).where(
+            DocumentTableRow.doc_id == doc_id, DocumentTableRow.generation_id == base_id,
+            DocumentTableRow.table_id.in_(ids))
+        session.execute(insert(DocumentTableRow).from_select(fields, statement))
+    if export_artifacts:
+        return export_generation_tables(session, doc_id, generation_id, bundle)

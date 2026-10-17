@@ -22,6 +22,7 @@ from app.db.table_cells_projection import TableCellsProjection
 from sqlalchemy import (
     JSON,
     Boolean,
+    BigInteger,
     CheckConstraint,
     DateTime,
     Float,
@@ -196,6 +197,7 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_type: Mapped[str] = mapped_column(String(255), default="")
     size: Mapped[int] = mapped_column(Integer, default=0)
+    signature_scope_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="uploaded")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Стабильный код ошибки остановленной обработки; detail остаётся в error.
@@ -423,6 +425,8 @@ class OkfConcept(Base):
     model_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    display_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     __table_args__ = (UniqueConstraint("doc_id", "slug", name="uq_okf_concepts_doc_slug"),)
 
 
@@ -476,6 +480,31 @@ class DocumentGenerationState(Base):
     )
     active_generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     candidate_generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    next_chunk_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+
+class DocumentScopeChange(Base):
+    """Durable plan/receipt; retained after retired generation cleanup."""
+
+    __tablename__ = "document_scope_changes"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="preview")
+    plan_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    candidate_generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    owner_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    result_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (CheckConstraint(
+        "state IN ('preview','admitted','queued','processing','copying','ready','published','failed','canceled')",
+        name="ck_document_scope_changes_state"),)
 
 
 class DocumentGeneration(Base):
@@ -493,6 +522,9 @@ class DocumentGeneration(Base):
     table_schema_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_projection_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     publication_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    processing_scope_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    processing_scope_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    scope_request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -537,6 +569,7 @@ class DocumentChunk(Base):
     source_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     table_refs: Mapped[list | None] = mapped_column(JSON, nullable=True)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     section_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[str] = mapped_column(Text, default="")
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -588,6 +621,47 @@ class DocumentSource(Base):
     )
 
 
+class DocumentScopeEditLock(Base):
+    """Short editor lease; a tab token is stored only as a digest."""
+    __tablename__ = "document_scope_edit_locks"
+
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    idle_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    activity_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+
+
+class DocumentProcessingReview(Base):
+    """Current durable draft/receipt. Published scope lives in its generation."""
+    __tablename__ = 'document_processing_reviews'
+
+    doc_id: Mapped[str] = mapped_column(ForeignKey('documents.id',ondelete='CASCADE'),primary_key=True)
+    id: Mapped[str] = mapped_column(String(32),nullable=False,unique=True)
+    revision: Mapped[int] = mapped_column(Integer,nullable=False,default=1)
+    state: Mapped[str] = mapped_column(String(24),nullable=False,default='draft')
+    source_file_hash: Mapped[str] = mapped_column(String(64),nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(64),nullable=False)
+    assessor_version: Mapped[str] = mapped_column(String(64),nullable=False)
+    policy_json: Mapped[dict] = mapped_column(JSON,nullable=False)
+    inventory_json: Mapped[dict] = mapped_column(JSON,nullable=False)
+    selection_json: Mapped[list] = mapped_column(JSON,nullable=False)
+    selection_hash: Mapped[str] = mapped_column(String(64),nullable=False)
+    summary_json: Mapped[dict | None] = mapped_column(JSON,nullable=True)
+    base_generation_id: Mapped[str | None] = mapped_column(String(32),nullable=True)
+    generation_id: Mapped[str | None] = mapped_column(String(32),nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(32),nullable=True)
+    validation_token: Mapped[str | None] = mapped_column(String(32),nullable=True)
+    validation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),nullable=True)
+    similarity_confirmation_json: Mapped[dict | None] = mapped_column(JSON,nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(255),nullable=True)
+    confirmed_by: Mapped[str | None] = mapped_column(String(255),nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=_utcnow,onupdate=_utcnow)
+
+
 class DocumentStaging(Base):
     __tablename__ = "document_staging"
 
@@ -601,6 +675,7 @@ class DocumentStaging(Base):
     chunks_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     parser_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    processing_scope_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="in_progress")
     updated_at: Mapped[datetime] = mapped_column(

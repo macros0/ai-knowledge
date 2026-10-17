@@ -31,6 +31,12 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     PIP_CERT=/etc/ssl/certs/ca-certificates.crt
 
+# Official RAR-capable helper, fixed release and per-architecture SHA-256.
+# Distribution notices remain alongside the unmodified dynamically linked binary.
+COPY backend/scripts/install_archive_runtime.py /tmp/install_archive_runtime.py
+RUN python /tmp/install_archive_runtime.py && rm /tmp/install_archive_runtime.py
+ENV ARCHIVE_7ZIP_PATH=/opt/7zip/7zz
+
 COPY backend/requirements.txt ./backend/requirements.txt
 COPY doc-parser ./doc-parser
 COPY THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md

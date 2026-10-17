@@ -28,6 +28,13 @@ def build_components() -> list[dict]:
         if license_name:
             component["licenses"] = [{"license": {"name": license_name}}]
         components.append(component)
+    helper_manifest=Path('/opt/7zip/distribution.txt')
+    if helper_manifest.is_file():
+        lines=helper_manifest.read_text(encoding='utf-8').splitlines()
+        components.append({'type':'application','name':'7-Zip', 'version':lines[0].split()[-1],
+            'hashes':[{'alg':'SHA-256','content':lines[2].split()[-1]}],
+            'licenses':[{'license':{'name':'LGPL-2.1-or-later with upstream BSD notices and unRAR restriction'}}],
+            'externalReferences':[{'type':'distribution','url':lines[1]}]})
     return sorted(components, key=lambda component: component["name"].lower())
 
 

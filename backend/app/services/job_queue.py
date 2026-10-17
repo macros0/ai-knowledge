@@ -383,7 +383,10 @@ class JobQueue:
                         ip_address=params.get("ip_address"),
                         new_value={"job_id": job_id, "phase": "requested"},
                     )
-                    self._regenerate_one(pipeline, doc_id, resume=job["job_type"] == BULK_RESUME)
+                    requires_action=self._regenerate_one(pipeline, doc_id, resume=job["job_type"] == BULK_RESUME)
+                    if requires_action:
+                        skipped.append({'doc_id':doc_id,'error_code':'processing_scope_review_required','requires_action':True})
+                        continue
                 results.append({"doc_id": doc_id, "ok": True})
             except Exception as exc:
                 logger.warning("Массовая операция: документ %s пропущен: %s", doc_id, exc, exc_info=True)
@@ -419,6 +422,8 @@ class JobQueue:
             doc = pipeline.registry.get(doc_id)
             if doc is None:
                 raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
+            if doc.get('status')=='awaiting_attachments' or (doc.get('processing_review') or {}).get('requires_action'):
+                return True
             if doc.get("status") in _DOC_TERMINAL:
                 if doc.get("status") != "done":
                     raise DomainError(

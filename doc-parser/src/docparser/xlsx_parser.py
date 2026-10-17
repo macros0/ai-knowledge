@@ -55,6 +55,7 @@ def parse_xlsx(
                 payload, Path(member.filename).name, "", "", attachments_dir, index,
                 depth=depth + 1, budget=budget, context=context, parent_source_id=source_id,
                 _node_reserved=True,
+                source_locator='ooxml:'+member.filename,
             ))
     return blocks
 

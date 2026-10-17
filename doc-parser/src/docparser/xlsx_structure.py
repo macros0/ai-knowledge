@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from decimal import Decimal
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields, replace
 from hashlib import sha256
 import json
 import posixpath
@@ -49,11 +49,24 @@ MAX_MERGES = 50_000
 MAX_STYLES = 65_536
 MAX_TEXT_BYTES = 256 * 1024 * 1024
 BATCH_BYTES = 1024 * 1024
+_ROW_FIELDS = tuple(field.name for field in fields(TableRow))
+_CELL_FIELDS = tuple(field.name for field in fields(TableCell))
+
+
+def _row_json_default(value):
+    # Let JSON traverse containers once rather than constructing a second full
+    # row with recursive asdict. Field order is part of the persisted checksum.
+    names = _ROW_FIELDS if isinstance(value, TableRow) else (
+        _CELL_FIELDS if isinstance(value, TableCell) else None
+    )
+    if names is None:
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+    return {name: getattr(value, name) for name in names}
 
 
 def row_bytes(row: TableRow) -> bytes:
     return json.dumps(
-        asdict(row), ensure_ascii=False, separators=(",", ":"), allow_nan=False
+        row, default=_row_json_default, ensure_ascii=False, separators=(",", ":"), allow_nan=False
     ).encode("utf8")
 
 

@@ -44,6 +44,12 @@ def test_instances_with_same_connection_share_one_client(monkeypatch):
     assert FakeClient.created[0].kwargs["grpc_port"] == 6334
 
 
+def test_precomputed_vector_store_disables_sdk_local_inference_discovery():
+    client=shared_qdrant_client(_settings("http://127.0.0.1:16333"))
+    assert client.kwargs["cloud_inference"] is True
+    assert client.kwargs["url"]=="http://127.0.0.1:16333"
+
+
 def test_closed_shared_client_is_recreated(monkeypatch):
     settings = _settings()
     monkeypatch.setattr(vector_store, "get_settings", lambda: settings)

@@ -16,12 +16,12 @@ import olefile
 
 from docparser.blocks import Block
 from docparser.embedded import (
-    MAX_ATTACHMENT_DEPTH,
     MAX_ATTACHMENT_NODES,
     MAX_ATTACHMENT_PAYLOAD,
     Attachment,
     AttachmentBudget,
     attachment_count_marker,
+    attachment_depth_limit,
     marker_block,
     process_embedded,
 )
@@ -248,7 +248,7 @@ def _parse_native_attachment(handle, *, attachments_dir, index, depth, budget, c
 
     if not budget.reserve_node():
         return skipped("skipped_count", "превышен лимит количества вложений", "attachment_count_exceeded")
-    if depth >= MAX_ATTACHMENT_DEPTH:
+    if depth >= attachment_depth_limit(context):
         return skipped("skipped_depth", "превышена глубина вложенности", "attachment_depth_exceeded")
     try:
         properties = _read_scoped_properties(handle.ole, handle.path, 8, budget, handle.encoding)
@@ -269,6 +269,7 @@ def _parse_native_attachment(handle, *, attachments_dir, index, depth, budget, c
                 lambda: _read_scoped_message(handle.ole, tuple(child_path), budget=budget, named_properties=handle.named_properties),
                 name=att.name, attachments_dir=attachments_dir, index=index, depth=depth,
                 budget=budget, context=context, parent_source_id=parent_source_id, _node_reserved=True,
+                source_locator='ole:'+'/'.join(handle.path),
             )
         data_path = [*handle.path, "__substg1.0_37010102"]
         if method == 5 or not handle.ole.exists(data_path):
@@ -280,6 +281,7 @@ def _parse_native_attachment(handle, *, attachments_dir, index, depth, budget, c
             payload, att.name, attachments_dir=attachments_dir, index=index, depth=depth,
             budget=budget, context=context, parent_source_id=parent_source_id, _node_reserved=True,
             inline_image=bool(content_id),
+            source_locator='ole:'+'/'.join(handle.path),
         )
         if images is not None:
             images.register(content_id, extracted[0] if extracted else None)
@@ -425,14 +427,18 @@ def _parse_embedded_message(
     context,
     parent_source_id: str,
     _node_reserved: bool = False,
+    source_locator: str | None = None,
 ) -> list[Block]:
     effective_budget = budget or AttachmentBudget()
     att = Attachment(name=name, prog_id="", caption="", data=b"", kind="mail")
     if context is not None:
-        att.source_id = context.add_child(parent_source_id, name, "mail")
+        att.source_id = context.add_child(parent_source_id, name, "mail",locator=source_locator)
+        policy=getattr(context,'processing_policy',None)
+        if policy is not None and not policy.is_included(context.sources[-1].metadata['source_key']):
+            return [marker_block(att,note='исключено из обработки',extraction_status='excluded_by_policy')]
     if not _node_reserved and not effective_budget.reserve_node():
         return [marker_block(att, note="превышен лимит количества вложений", extraction_status="skipped_count")]
-    if depth >= MAX_ATTACHMENT_DEPTH:
+    if depth >= attachment_depth_limit(context):
         return [marker_block(att, note="превышена глубина вложенности", extraction_status="skipped_depth")]
     try:
         blocks = _parse_message_data(

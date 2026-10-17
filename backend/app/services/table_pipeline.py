@@ -1,5 +1,6 @@
 """Glue between structural parsing, candidate tables and existing generation jobs."""
 from dataclasses import replace
+from contextlib import nullcontext
 from itertools import islice
 from pathlib import Path
 import shutil
@@ -34,7 +35,7 @@ def import_parser_spool(doc_id, generation_id, folder):
         shutil.rmtree(portable)
 
 
-def build_table_source_chunks(doc_id, generation_id, settings, generator):
+def build_table_source_chunks(doc_id, generation_id, settings, generator, *, source_ids=None):
     result = []
     limits = ProjectionLimits(classification_tokens=settings.table_classification_input_tokens,
         embedding_tokens=settings.table_embedding_tokens, context_tokens=settings.table_context_tokens,
@@ -42,8 +43,10 @@ def build_table_source_chunks(doc_id, generation_id, settings, generator):
                                settings.okf_max_chunk_chars, 2000) - 256)
     with session_scope() as session:
         verify_generation_tables(session, doc_id, generation_id)
-        for table in session.scalars(select(DocumentTable).where(DocumentTable.doc_id == doc_id,
-                                    DocumentTable.generation_id == generation_id).order_by(DocumentTable.table_id)):
+        query = select(DocumentTable).where(DocumentTable.doc_id == doc_id, DocumentTable.generation_id == generation_id)
+        if source_ids is not None:
+            query = query.where(DocumentTable.source_id.in_(source_ids))
+        for table in session.scalars(query.order_by(DocumentTable.table_id)):
             descriptor = descriptor_from_dict(table.descriptor)
             sample = list(islice((_row(r) for r in _stored_rows(session, doc_id, generation_id, table.table_id)), 8))
             decision = classify_table(descriptor, sample, limits,
@@ -71,9 +74,9 @@ def build_table_source_chunks(doc_id, generation_id, settings, generator):
     return result
 
 
-def prepare_table_artifacts(doc_id, generation_id, bundle: Path):
+def prepare_table_artifacts(doc_id, generation_id, bundle: Path, *, session=None):
     reports = []
-    with session_scope() as session:
+    with (nullcontext(session) if session is not None else session_scope()) as session:
         tables = list(session.scalars(select(DocumentTable).where(DocumentTable.doc_id == doc_id,
                                        DocumentTable.generation_id == generation_id)))
         if not tables:

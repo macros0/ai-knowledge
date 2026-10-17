@@ -30,6 +30,32 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
             return False
         generation = session.get(DocumentGeneration, generation_id)
         prepared = load_verified_publication(settings, doc_id, generation_id, generation.publication_hash)
+        scope_change = None
+        if prepared.get("scope_change_id"):
+            from app.db.models import DocumentScopeChange, DocumentProcessingReview
+            from app.services.processing_scope_change import scope_sql_digest
+            from app.services.generation_store import GenerationConflict
+            from datetime import datetime, timezone
+            scope_change = session.get(DocumentScopeChange, prepared["scope_change_id"], populate_existing=True)
+            if (not scope_change or scope_change.doc_id != doc_id or scope_change.state != "ready"
+                    or scope_change.candidate_generation_id != generation_id
+                    or scope_change.owner_token != prepared.get("scope_owner_token")):
+                raise GenerationConflict("Scope operation no longer owns publication")
+            review = session.get(DocumentProcessingReview, doc_id, populate_existing=True)
+            if (not review or review.id != scope_change.plan_json["review_id"]
+                    or review.revision != scope_change.plan_json["revision"]
+                    or review.selection_hash != scope_change.plan_json["snapshot"]["selection_hash"]):
+                raise GenerationConflict("Scope selection changed before publication")
+            if prepared.get("scope_base_hash") and scope_sql_digest(session, doc_id,
+                    generation_id=generation.base_generation_id) != prepared["scope_base_hash"]:
+                raise GenerationConflict("Canonical source data changed before publication")
+            from app.services.generation_artifacts import file_digest
+            from app.services.generation_files import _reject_links
+            document = session.get(Document, doc_id)
+            original = settings.uploads_dir / (doc_id + Path(document.filename).suffix.lower())
+            _reject_links(original)
+            if not original.is_file() or file_digest(original) != prepared["processing_scope"]["source_file_hash"]:
+                raise GenerationConflict("Original changed before publication")
         if prepared.get("canonical_base_hash"):
             from app.services.canonical_repair import canonical_rows_digest
             from app.services.generation_store import GenerationConflict
@@ -37,12 +63,10 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
             if canonical_rows_digest(session, doc_id) != prepared["canonical_base_hash"]:
                 raise GenerationConflict("Canonical document changed before repair publication")
         from app.services.generation_files import generation_paths
-        from app.services.table_store import verify_table_publication
-        verify_table_publication(session, doc_id, generation_id,
-            generation_paths(settings, doc_id, generation_id).bundle,
-            [item.get('metadata', {}) for item in prepared['concepts']])
-        verify_table_publication(session, doc_id, generation_id,
-            generation_paths(settings, doc_id, generation_id).bundle, prepared['chunks'])
+        from app.services.table_store import verify_table_publication_groups
+        verify_table_publication_groups(session,doc_id,generation_id,
+            generation_paths(settings,doc_id,generation_id).bundle,
+            [[item.get('metadata',{}) for item in prepared['concepts']],prepared['chunks']])
         manifest_version = prepared.get("chunk_projection_version")
         version = generation.chunk_projection_version
         if (manifest_version is not None and type(manifest_version) is not int) or manifest_version != version:
@@ -51,6 +75,11 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
         if version is not None:
             from app.services.chunk_projection_publication import verify_chunk_projection_publication
             chunk_identities = verify_chunk_projection_publication(session, doc_id, generation_id, prepared["chunks"])
+        from app.services.processing_scope import assert_prepared_scope
+        if prepared.get('processing_scope')!=generation.processing_scope_json:
+            raise GenerationIntegrityError()
+        assert_prepared_scope(generation.processing_scope_json,prepared.get('sources'),
+                              prepared['chunks'],prepared['concepts'])
         vector_store.verify_generation_points(doc_id, generation_id, prepared["point_ids"])
         okf_docs = [OkfDocument.model_validate(item) for item in prepared["concepts"]]
         sources = prepared["sources"]
@@ -144,11 +173,25 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
             from app.services.deduplication import apply_document_signature
 
             apply_document_signature(session, doc_id, effects["signature"])
+            document.signature_scope_hash=effects.get("signature_scope_hash")
         for key, value in fields.items():
             setattr(document, key, value)
+        if generation.processing_scope_json is not None:
+            from app.services.processing_scope import scope_summary
+            generation.processing_scope_summary_json=scope_summary(generation.processing_scope_json,generation_id)
+            from app.db.models import DocumentProcessingReview
+            review=session.get(DocumentProcessingReview,doc_id)
+            if review and review.generation_id==generation_id:
+                review.state='published'
         attempt = session.get(DocumentUpdateAttempt, doc_id)
         if attempt:
             session.delete(attempt)
+        if scope_change is not None:
+            scope_change.state = "published"
+            scope_change.finished_at = datetime.now(timezone.utc)
+            scope_change.result_json = {"mode": scope_change.plan_json["preview"]["mode"],
+                                       "generation_id": generation_id,
+                                       "counts": scope_change.plan_json["preview"].get("counts")}
     if effects.get("signature"):
         from app.services.deduplication import refresh_duplicate_flags
 

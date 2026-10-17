@@ -36,11 +36,14 @@ TABLES = set(NEW_TABLES) | set(NEW_COLUMNS)
 # This helper repairs the mail release only. Later table fields have their
 # own additive migration and must not turn mail-only inspection into a repair.
 _TABLE_COLUMNS = {'table_refs', 'table_schema_version', 'chunk_projection_version'}
+_SCOPE_COLUMNS = {'signature_scope_hash', 'processing_scope_hash', 'processing_scope_json',
+                  'processing_scope_summary_json', 'scope_request_id', 'display_order'}
 
 
 def _include_object(_obj, name, type_, _reflected, _compare_to):
     if type_ == 'table': return name in TABLES
-    if type_ == 'column' and name in _TABLE_COLUMNS: return False
+    if type_ == 'column' and name in _TABLE_COLUMNS | _SCOPE_COLUMNS: return False
+    if type_ == 'unique_constraint' and any(c.name in _SCOPE_COLUMNS for c in _obj.columns): return False
     return True
 
 

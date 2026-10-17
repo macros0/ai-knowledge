@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ContentViewer from "@/components/ContentViewer";
-import { sourceAncestors, visibleSourceContentIds, visibleSourceIds } from "@/lib/sourceTree.mjs";
+import { sourceAncestors, visibleSourceContentIds, visibleSourceIds,sourceDownloadUrl } from "@/lib/sourceTree.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
 import MailMetadata from "./MailMetadata";
 
@@ -60,6 +60,13 @@ export default function SourceContentViewer({ docId, chunks, sources, focusedSou
 
   return (
     <div className="source-content-viewer">
+      {(sources||[]).some(source=>source.metadata?.processing_included===false && source.metadata?.processing_reason!=='unsupported') && <aside className="scope-excluded-sources">
+        <p>{t('scope.excludedHint')}</p>
+        <ul>{(sources||[]).filter(source=>source.metadata?.processing_included===false && source.metadata?.processing_reason!=='unsupported').map(source=><li key={source.source_id}>
+          <strong>{source.display_name}</strong> · {t('scope.excludedLabel')}
+          {(source.saved_path||source.artifact_kind==='container_only') && <> · <a href={sourceDownloadUrl(docId,source.source_id)} download>{t('scope.download')}</a></>}
+        </li>)}</ul>
+      </aside>}
       {(chunks || []).map((chunk, index) => {
         const sourceId = normalizedSourceId(chunk);
         const source = sourcesById.get(sourceId);

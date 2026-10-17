@@ -37,6 +37,11 @@ def parse_document(
 
         budget = AttachmentBudget()
     context = context or ParseContext(filename)
+    if context.processing_policy is not None and source_id=='root' and depth==0:
+        import hashlib
+        with Path(path).open('rb') as stream:
+            if hashlib.file_digest(stream,'sha256').hexdigest()!=context.processing_policy.source_file_hash:
+                raise ParseError('Processing scope does not match the source file')
     if ext == ".docx":
         blocks = parse_docx(path, attachments_dir=attachments_dir, depth=depth, budget=budget,
                             context=context, source_id=source_id)
@@ -52,6 +57,10 @@ def parse_document(
     elif ext == ".msg":
         blocks = parse_msg(path, attachments_dir=attachments_dir, depth=depth, budget=budget,
                            context=context, source_id=source_id)
+    elif ext in {'.zip','.7z','.rar'} and context.processing_policy is not None:
+        from docparser.archive_parser import parse_archive
+        blocks=parse_archive(path,ext[1:],attachments_dir=attachments_dir,depth=depth,
+                             budget=budget,context=context,source_id=source_id)
     else:
         raise ParseError(f"Неподдерживаемый тип файла: {ext}. Допустимы: {sorted(SUPPORTED_EXTENSIONS)}")
     for block in blocks:

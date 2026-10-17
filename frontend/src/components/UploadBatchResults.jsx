@@ -4,6 +4,7 @@ import Link from "next/link";
 import {getDocument,friendlyApiError,ApiError} from "@/lib/api";
 import {useI18n} from "@/i18n/LocaleContext";
 import ErrorReference from "./ErrorReference";
+import DocumentProcessingScopeButton from './DocumentProcessingScopeButton';
 const ACTIVE=["uploaded","queued","splitting","processing","indexing"];
 export default function UploadBatchResults({upload}) {
   const {t}=useI18n();const [statuses,setStatuses]=useState({}); const [statusRevision,setStatusRevision]=useState(0);
@@ -27,6 +28,7 @@ export default function UploadBatchResults({upload}) {
     <ul>{upload.items.map(item=>{const doc=statuses[item.docId];return <li key={item.id}>
       <strong>{item.filename}</strong><span>{t(`ux.uploadState.${item.state}`)}</span>
       {item.docId && <><Link href={`/documents/${encodeURIComponent(item.docId)}/okf`}>{t("ux.openDocument")}</Link><span className="meta">{t("ux.processingStatus")}: {doc && !doc.unknown ? t(`status.${doc.status}`) : t("ux.statusUnknown")}</span></>}
+      {item.docId && (doc?.processing_review || item.state==='awaiting-attachments') && <DocumentProcessingScopeButton docId={item.docId} pending={doc?.processing_review} onUpdated={()=>setStatusRevision(value=>value+1)} labelKey="scope.choose"/>}
       {doc?.problem && <span className="doc-problem-badge">{doc.problem_message || t("ux.documentWarning")}</span>}
       {item.duplicateInTrash && <span className="meta">{t("upload.trashTwin",{file:item.filename,name:item.duplicateInTrash.filename})}</span>}
       {item.errorCode && item.errorCode !== "unsupported_format" && <span className="meta">{friendlyApiError(new ApiError("",{code:item.errorCode,status:item.errorStatus}),t)}</span>}

@@ -164,6 +164,10 @@ def _replace_comment_snapshot(snapshot, comments, digest, settings, result):
 def process_doc(doc_id: str, filename: str, settings, generator: OKFGenerator,
                 embedder, vector_store, development_id: int | None = None, dry_run: bool = False) -> dict:
     result = {"threads": 0, "removed": 0, "skipped": [], "error": None}
+    from app.services.processing_scope import has_stored_processing_scope
+    if has_stored_processing_scope(doc_id):
+        result['skipped'].append('processing_scope_not_supported')
+        return result
     if Path(filename).suffix.lower() != ".docx":
         result["skipped"].append("not_docx")
         return result

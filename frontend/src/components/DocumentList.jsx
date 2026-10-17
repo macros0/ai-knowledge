@@ -33,6 +33,7 @@ import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import TagManagerModal from "./TagManagerModal";
 import SearchableSelect from "./SearchableSelect";
 import { DocumentMailMetadata } from "./MailMetadata";
+import DocumentProcessingScopeButton from './DocumentProcessingScopeButton';
 
 const BUSY_STATUSES = ["uploaded", "queued", "processing", "splitting", "indexing", "paused"];
 
@@ -187,11 +188,13 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
     paused: t("status.paused"),
     failed: t("status.failed"),
     error: t("status.error"),
+    awaiting_attachments: t('status.awaiting_attachments'),
   };
 
   const STATUS_FILTER_OPTIONS = [
     { value: "", label: t("docs.statusFilterAll") },
     { value: "done", label: t("status.done") },
+    { value: 'awaiting_attachments', label: t('status.awaiting_attachments') },
     { value: "processing", label: t("status.processing") },
     { value: "splitting", label: t("status.splitting") },
     { value: "indexing", label: t("status.indexing") },
@@ -766,6 +769,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
               {doc.error_code || doc.error ? friendlyDocumentError(doc, t) : (progress || fallbackMeta)}
               {updateView.noticeKey && <span className="doc-update-notice" role="status">{t(updateView.noticeKey)}</span>}
               <DocumentMailMetadata doc={doc} />
+              <DocumentProcessingScopeButton docId={doc.id} summary={doc.processing_scope} pending={doc.processing_review} availability={doc.processing_scope_availability} badge onUpdated={()=>load()}/>
             </span>
           </div>
           <div className="doc-meta-line">
@@ -921,7 +925,7 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
           </a>
           {canEdit && (
             <span className="danger-group">
-              {!["uploaded", "queued", "processing", "splitting", "indexing"].includes(doc.status) && !doc.update_cancelling && (
+              {!["uploaded", "queued", "processing", "splitting", "indexing",'awaiting_attachments'].includes(doc.status) && !doc.update_cancelling && !doc.processing_review?.requires_action && (
                 <button
                   className="icon-btn"
                   onClick={() => regenerate(doc)}

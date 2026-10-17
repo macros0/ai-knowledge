@@ -27,7 +27,7 @@ export default function useDocumentUpload() {
         if(!mounted.current) return;
         const id=ids.current.get(file);
         setItems(previous=>updateUploadItem(previous,id,state,details));
-        if(["uploaded","skipped"].includes(state)){files.current.delete(id);ids.current.delete(file);}
+        if(["uploaded","awaiting-attachments","skipped"].includes(state)){files.current.delete(id);ids.current.delete(file);}
       },
       reviewUpload:info=>!mounted.current ? Promise.resolve(false) : new Promise(resolve=>{decision.current=resolve;setReview(info);}),
     });

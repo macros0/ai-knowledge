@@ -116,8 +116,8 @@ def jaccard(sig_a: list[int], sig_b: list[int]) -> float:
     return matches / len(sig_a)
 
 
-def banding_schemes() -> list[dict]:
-    settings = get_settings()
+def banding_schemes(settings=None) -> list[dict]:
+    settings = settings or get_settings()
     return [
         {"variant": "strict", "bands": settings.dedup_strict_bands, "rows": settings.dedup_strict_rows},
         {"variant": "loose", "bands": settings.dedup_loose_bands, "rows": settings.dedup_loose_rows},
@@ -191,16 +191,16 @@ def index_document(doc_id: str, markdown: str, mail_fingerprint: str | None = No
     refresh_duplicate_flags(doc_id, previous_ids)
 
 
-def prepare_document_signature(markdown: str, mail_fingerprint: str | None = None) -> dict:
+def prepare_document_signature(markdown: str, mail_fingerprint: str | None = None, *, settings=None) -> dict:
     """Compute a candidate signature without publishing any document state."""
-    settings = get_settings()
+    settings = settings or get_settings()
     ch = content_hash(markdown)
-    sig = minhash_signature(markdown)
+    sig = minhash_signature(markdown,k=settings.dedup_minhash_k,shingle_n=settings.dedup_shingle_n)
     if len(sig) < settings.dedup_minhash_k:
         sig = None
     buckets = []
     if sig:
-        for scheme in banding_schemes():
+        for scheme in banding_schemes(settings):
             for band_index in range(scheme["bands"]):
                 buckets.append({
                     "variant": scheme["variant"], "band_index": band_index,
@@ -284,10 +284,36 @@ def find_duplicates_for_text(markdown: str, *, mail_fingerprint: str | None = No
     """Read-only upload preflight; does not create a provisional document."""
     if not get_settings().dedup_enabled:
         return {"level2": [], "level3": []}
-    return _merge_duplicates(
-        _find_duplicates(content_hash(markdown), minhash_signature(markdown)),
-        _find_mail_duplicates(mail_fingerprint),
-    )
+    ch, sig = content_hash(markdown), minhash_signature(markdown)
+    published = _merge_duplicates(_find_duplicates(ch, sig), _find_mail_duplicates(mail_fingerprint))
+    return _merge_duplicates(published, _find_scope_reservations(ch, sig, mail_fingerprint))
+
+
+def _find_scope_reservations(ch, sig, mail_fingerprint):
+    """Admission-only candidate signatures; never replace the active signature."""
+    from app.db.models import DocumentProcessingReview
+    settings = get_settings()
+    result = {"level2": [], "level3": []}
+    with session_scope() as session:
+        rows = session.execute(
+            select(Document, DocumentProcessingReview.similarity_confirmation_json,
+                   DocumentProcessingReview.selection_hash)
+            .join(DocumentProcessingReview, DocumentProcessingReview.doc_id == Document.id)
+            .where(Document.deleted_at.is_(None), DocumentProcessingReview.state == "submitted")
+        ).all()
+        for document, confirmation, selection in rows:
+            reservation = (confirmation or {}).get("reservation") or {}
+            if reservation.get("selection_hash") != selection:
+                continue
+            exact = reservation.get("content_hash") == ch or bool(
+                mail_fingerprint and reservation.get("mail_fingerprint") == mail_fingerprint
+            )
+            score = 1.0 if exact else jaccard(sig, reservation.get("minhash") or [])
+            if score >= settings.dedup_jaccard_strict_threshold:
+                result["level2"].append({"doc": _summarize(document), "jaccard": round(score, 4)})
+            elif score >= settings.dedup_jaccard_loose_threshold:
+                result["level3"].append({"doc": _summarize(document), "jaccard": round(score, 4)})
+    return result
 
 
 def _find_mail_duplicates(mail_fingerprint: str | None, doc_id: str | None = None) -> dict:

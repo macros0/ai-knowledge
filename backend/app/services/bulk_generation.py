@@ -17,6 +17,8 @@ def generation_skip_code(doc: dict | None, *, resume: bool) -> str | None:
         return codes.DOCUMENT_NOT_FOUND
     if doc.get("deleted_at"):
         return codes.ALREADY_IN_TRASH
+    if doc.get('status')=='awaiting_attachments' or (doc.get('processing_review') or {}).get('requires_action'):
+        return 'processing_scope_review_required'
     if doc.get("status") in {"uploaded", "queued", "processing", "splitting", "indexing"}:
         return codes.ALREADY_PROCESSING
     if resume and doc.get("status") not in {"paused", "failed"}:

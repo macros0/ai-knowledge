@@ -84,6 +84,7 @@ def parse_docx(
     seen_ole = set()
     ole_count = 0
     ole_exhausted = False
+    ole_locators = {}
 
     def emit_ole(element, part, location: str) -> None:
         nonlocal ole_count, ole_exhausted
@@ -124,11 +125,15 @@ def parse_docx(
                 emitted = [marker_block(att, note="внешняя ссылка" if external else "байты вложения недоступны",
                                         extraction_status="unsupported")]
             elif not ole_exhausted:
+                locator_prefix=f'ooxml:{str(part.partname).lstrip("/")}:{ole.get("r_id")}'
+                locator_occurrence=ole_locators.get(locator_prefix,0)
+                ole_locators[locator_prefix]=locator_occurrence+1
                 emitted = process_embedded(
                     att.data, att.name, att.prog_id, att.caption,
                     attachments_dir, ole_count, depth=depth + 1, budget=budget,
                     context=context, parent_source_id=source_id,
                     _node_reserved=True,
+                    source_locator=f'{locator_prefix}:{locator_occurrence}',
                 )
             ole_count += 1
             if emitted:

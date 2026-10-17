@@ -26,6 +26,7 @@ from app.api import (
     glossary,
     developments,
     documents,
+    document_processing_scope,
     i18n,
     jobs,
     locales,
@@ -211,6 +212,10 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.job_queue import get_job_queue
 
+        from app.services.processing_scope import recover_processing_reviews
+        recover_processing_reviews(get_settings())
+        from app.services.processing_scope_jobs import recover_scope_changes
+        recover_scope_changes()
         get_job_queue().recover_after_restart()
     except Exception as exc:
         logging.warning("Не удалось восстановить очередь массовых операций: %s", exc)
@@ -351,6 +356,7 @@ def create_app() -> FastAPI:
     # в simulation/sso — требует сессию (401 без неё).
     protected = APIRouter(dependencies=[Depends(require_user)])
     protected.include_router(documents.router)
+    protected.include_router(document_processing_scope.router)
     protected.include_router(search.router)
     protected.include_router(chat.router)
     protected.include_router(chat_history.router)

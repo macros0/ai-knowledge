@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.db.models import Document, DocumentChunk, DocumentSource, OkfConcept
 from app.db.session import session_scope
@@ -159,6 +159,6 @@ def get_document_text_chunks(doc_id: str) -> list[DocumentTextChunkOut]:
         rows = session.execute(
             select(DocumentChunk.chunk_index, DocumentChunk.source_id, DocumentChunk.content, DocumentChunk.table_refs)
             .where(DocumentChunk.doc_id == doc_id)
-            .order_by(DocumentChunk.chunk_index)
+            .order_by(func.coalesce(DocumentChunk.display_order, DocumentChunk.chunk_index), DocumentChunk.chunk_index)
         ).all()
     return [DocumentTextChunkOut(chunk_index=index, source_id=source_id, content=content or "", table_refs=refs or []) for index, source_id, content, refs in rows]

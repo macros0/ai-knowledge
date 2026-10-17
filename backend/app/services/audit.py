@@ -20,6 +20,8 @@ from app.db.session import session_scope
 
 # Канонический перечень типов действий (Этап 2а, текущий объём).
 DOCUMENT_UPLOAD = "document_upload"
+DOCUMENT_PROCESSING_SCOPE_UPDATED = 'document_processing_scope_updated'
+DOCUMENT_PROCESSING_SCOPE_CONFIRMED = 'document_processing_scope_confirmed'
 DOCUMENT_DELETE = "document_delete"
 DOCUMENT_BULK_DELETE = "document_bulk_delete"
 DOCUMENT_REGENERATE = "document_regenerate"
@@ -96,6 +98,8 @@ DIAGNOSTIC_BROWSER_LEFT = "diagnostic_browser_left"
 ACTION_TYPES = frozenset(
     {
         DOCUMENT_UPLOAD,
+        DOCUMENT_PROCESSING_SCOPE_UPDATED,
+        DOCUMENT_PROCESSING_SCOPE_CONFIRMED,
         DOCUMENT_DELETE,
         DOCUMENT_BULK_DELETE,
         DOCUMENT_REGENERATE,

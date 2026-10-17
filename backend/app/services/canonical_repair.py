@@ -73,8 +73,16 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
     with session_scope() as session:
         if not lock_document_write(session, doc_id, allow_deleted=False):
             raise GenerationConflict("Document is missing or deleted")
+        from app.db.models import DocumentProcessingReview
+        review=session.get(DocumentProcessingReview,doc_id)
+        if review and review.state not in {'published','canceled'}:
+            return {'doc_id':doc_id,'status':'skipped','reason':'processing_scope_review_required'}
         document = session.get(Document, doc_id)
         state = session.get(DocumentGenerationState, doc_id)
+        if state and state.active_generation_id:
+            from app.services.processing_scope import scope_for_generation
+            if scope_for_generation(session,doc_id,state.active_generation_id) is not None:
+                return {'doc_id':doc_id,'status':'skipped','reason':'processing_scope_not_supported'}
         if document.status != "done" or (state and state.candidate_generation_id):
             raise GenerationConflict("Repair requires a completed document without a pending generation")
         before = _canonical_rows(session, doc_id)
@@ -197,6 +205,12 @@ def _copy_artifacts(settings, doc_id, base_id, generation_id, paths, proposal):
     copied = {}
     expected_hashes = {row["saved_path"]: row["sha256"] for row in proposal["attachments"]
                        if row.get("saved_path") and row.get("sha256")}
+    for row in proposal["sources"]:
+        saved, fingerprint = row.get("saved_path"), row.get("content_fingerprint")
+        if saved and fingerprint:
+            if saved in expected_hashes and expected_hashes[saved] != fingerprint:
+                raise GenerationStorageError("Registered artifact hash changed")
+            expected_hashes[saved] = fingerprint
     for row in [*proposal["sources"], *proposal["attachments"]]:
         saved = row.get("saved_path")
         if not saved:
@@ -228,38 +242,53 @@ def _copy_artifacts(settings, doc_id, base_id, generation_id, paths, proposal):
         row["saved_path"] = copied[saved]
 
 
-def _write_bundle(generator, doc_id, filename, paths, proposal):
+def _write_bundle(generator, doc_id, filename, paths, proposal, *, written_hashes=None, write_bundles=True):
     concepts = proposal["concepts"]
-    docs = generator.save_bundle(
+    build = generator.save_bundle if write_bundles else generator.build_okf_docs
+    result = build(
         doc_id, filename,
         [Concept(id=row["slug"], title=row["title"], type=row["type"], content=row["content"],
                  tags=row.get("tags") or [], relations=row.get("relations") or [],
                  source_spans=row.get("source_spans") or [], table_refs=row.get("table_refs") or []) for row in concepts],
         attachments=proposal["attachments"], global_tags=proposal["global_tags"],
-        bundle_root=paths.bundle, slugs=[row["slug"] for row in concepts],
+        **({"bundle_root":paths.bundle} if write_bundles else {"bundle_dir":paths.bundle,"render_markdown":False}),
+        slugs=[row["slug"] for row in concepts],
         chunk_of_slug={row["slug"]: row["chunk_index"] for row in concepts if row["chunk_index"] is not None},
         source_ids=[row["source_id"] for row in concepts],
     )
+    docs = result if write_bundles else result[0]
     by_slug = {row["slug"]: row for row in concepts}
     if len(docs) != len(concepts):
         raise ValueError("Repair produced invalid or duplicate concepts")
     for doc in docs:
+        if write_bundles and written_hashes is not None:
+            import os
+            # save_bundle uses text mode, including platform newline conversion.
+            raw=doc.markdown.replace("\n",os.linesep).encode("utf-8")
+            written_hashes[f"bundle/{Path(doc.filepath).name}"]=hashlib.sha256(raw).hexdigest()
         row = by_slug[Path(doc.filepath).stem]
         for field in ("generated_at", "model_id", "prompt_version", "source_spans"):
             doc.metadata[field] = row.get(field)
     chunks_dir = paths.bundle / "chunks"
-    chunks_dir.mkdir(parents=True, exist_ok=True)
+    if write_bundles:
+        chunks_dir.mkdir(parents=True, exist_ok=True)
     manifest = []
+    from collections import Counter
+    concept_counts=Counter(row["chunk_index"] for row in concepts)
     for chunk in proposal["chunks"]:
         text = chunk["content"] or ""
         chunk["content_hash"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         chunk["char_count"] = len(text)
-        (chunks_dir / f"chunk_{chunk['chunk_index']:02d}.md").write_bytes(text.encode("utf-8"))
+        if write_bundles:
+            (chunks_dir / f"chunk_{chunk['chunk_index']:02d}.md").write_bytes(text.encode("utf-8"))
+            if written_hashes is not None:
+                written_hashes[f"bundle/chunks/chunk_{chunk['chunk_index']:02d}.md"]=chunk["content_hash"]
         manifest.append({"index": chunk["chunk_index"], "size": len(text.encode("utf-8")),
                          "source_id": chunk.get("source_id"), "table_refs": chunk.get("table_refs") or [],
-                         "concepts_count": sum(row["chunk_index"] == chunk["chunk_index"] for row in concepts)})
-    write_json_atomic(chunks_dir / "manifest.json", manifest)
-    if proposal["sources"]:
+                         "concepts_count": concept_counts[chunk["chunk_index"]]})
+    if write_bundles:
+        write_json_atomic(chunks_dir / "manifest.json", manifest)
+    if write_bundles and proposal["sources"]:
         sources = _source_manifest(proposal["sources"])
         paths_by_source = {row["source_id"]: row.get("saved_path") for row in proposal["sources"]}
         for row in sources["sources"]:

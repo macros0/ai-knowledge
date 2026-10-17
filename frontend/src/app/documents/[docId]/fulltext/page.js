@@ -5,6 +5,7 @@ import { backendFetch } from "@/lib/backendFetch";
 import { serverTranslator } from "@/i18n/server";
 import SourceLocationView from "@/components/SourceLocationView";
 import DocumentMarkupButton from "@/components/DocumentMarkupButton";
+import DocumentProcessingScopeButton from '@/components/DocumentProcessingScopeButton';
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function FulltextPage({ params, searchParams }) {
             <div className="document-viewer-heading">
               <h1>{t("okf.page.fulltextH1")}</h1>
               <DocumentMarkupButton docId={docId} />
+              <DocumentProcessingScopeButton docId={docId}/>
             </div>
             <SourceLocationView docId={docId} chunks={chunks} location={location} heading={t("sourceLocation.title")} showAll sources={sourceData.sources || []} />
           </div>
@@ -57,6 +59,7 @@ export default async function FulltextPage({ params, searchParams }) {
       <div className="document-viewer-heading">
         <h1>{t("okf.page.fulltextH1")}</h1>
         <DocumentMarkupButton docId={docId} />
+        <DocumentProcessingScopeButton docId={docId}/>
       </div>
       {sourceUnavailable && <p className="source-location-note">{t("sourceLocation.unavailable")}</p>}
       <SourceContentViewer docId={docId} chunks={chunks} sources={sourceData.sources || []} />

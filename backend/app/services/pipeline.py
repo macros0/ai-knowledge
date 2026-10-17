@@ -253,9 +253,11 @@ class Pipeline:
         filepath: str | Path,
         filename: str,
         user_tags: list[str] | None = None,
-        *, is_admin: bool = False,
+        *, is_admin: bool = False, processing_scope: dict | None = None,
+        scope_request_id: str | None = None,
     ) -> None:
-        self._start(doc_id, str(filepath), filename, user_tags or [], resume=False, is_admin=is_admin)
+        self._start(doc_id, str(filepath), filename, user_tags or [], resume=False, is_admin=is_admin,
+                    processing_scope=processing_scope,scope_request_id=scope_request_id)
 
     def resume(self, doc_id: str, *, is_admin: bool = False) -> None:
         doc = self.registry.get(doc_id)
@@ -288,7 +290,8 @@ class Pipeline:
         if task and not task.done():
             raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
 
-    def regenerate(self, doc_id: str, *, is_admin: bool = False) -> None:
+    def regenerate(self, doc_id: str, *, is_admin: bool = False, processing_scope: dict | None = None,
+                   scope_request_id: str | None = None) -> None:
         """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
 
         Сбрасывает staging и запускает новую версию. Опубликованные данные
@@ -306,8 +309,15 @@ class Pipeline:
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
 
+        if processing_scope is None:
+            from app.services.processing_admission import prepare_regeneration_scope
+            processing_scope,requires_action=prepare_regeneration_scope(doc_id,self.settings)
+            if requires_action:
+                return
+
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False,
-                    reset_staging=True, is_admin=is_admin)
+                    reset_staging=True, is_admin=is_admin,processing_scope=processing_scope,
+                    scope_request_id=scope_request_id)
 
     def wait_for(self, doc_id: str, timeout: float = 3600) -> dict:
         """Блокирующее ожидание терминального статуса документа.
@@ -325,7 +335,7 @@ class Pipeline:
         Возвращает финальную запись документа (или текущую по истечении timeout).
         """
         deadline = time.monotonic() + timeout
-        terminal = {"done", "error", "failed", "paused"}
+        terminal = {"done", "error", "failed", "paused",'awaiting_attachments'}
         while True:
             doc = self.registry.get(doc_id)
             if doc and doc.get("status") in terminal:
@@ -369,6 +379,9 @@ class Pipeline:
             event = self._abort_events.get(doc_id)
             if event:
                 event.set()
+            from app.services.update_workers import scope_update_in_progress
+            if scope_update_in_progress(doc_id):
+                return  # The scope worker owns its files and restores the draft after exit.
             task = self._threads.get(doc_id)
             if task and not task.done():
                 if not task.cancel():
@@ -393,6 +406,7 @@ class Pipeline:
     def _start(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
         *, reset_staging: bool = False, is_admin: bool = False,
+        processing_scope: dict | None = None,scope_request_id: str | None = None,
     ) -> None:
         with self._start_lock:
             self._ensure_not_running(doc_id)
@@ -414,6 +428,7 @@ class Pipeline:
             previous_state = None
             captured_update = False
             previous_update_id = None
+            admitted_generation_id = None
             try:
                 doc = self.registry.get(doc_id)
                 if doc is None or doc.get("deleted_at") is not None:
@@ -421,7 +436,50 @@ class Pipeline:
                 previous_state = {key: doc.get(key) for key in ("status", "error", "error_code")}
                 previous_update_id = doc.get("update_id")
                 with session_scope() as session:
+                    from app.db.models import DocumentProcessingReview
+                    from app.services.generation_store import lock_document_write
+                    if not lock_document_write(session, doc_id, allow_deleted=False):
+                        raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
+                    pending_review=session.get(DocumentProcessingReview,doc_id,populate_existing=True)
+                    pending = pending_review and (
+                        pending_review.state in {'draft','awaiting_similar','validating'}
+                        or (pending_review.state=='submitted' and not pending_review.generation_id)
+                    )
+                    confirmed = bool(
+                        pending_review and pending_review.state == 'submitted'
+                        and processing_scope and scope_request_id
+                        and pending_review.request_id == scope_request_id
+                        and pending_review.id == processing_scope.get('review_id')
+                        and pending_review.revision == processing_scope.get('review_revision')
+                        and pending_review.selection_hash == processing_scope.get('selection_hash')
+                        and pending_review.source_file_hash == processing_scope.get('source_file_hash')
+                    )
+                    if pending and not confirmed:
+                        raise DomainError('Выберите состав вложений документа.',code='processing_scope_review_required')
+                    if not resume:
+                        from app.services.processing_scope_cache import assert_full_regeneration_cache_safe
+                        assert_full_regeneration_cache_safe(session,self.settings,doc_id,processing_scope)
                     captured_update = capture_published_update(session, doc_id, self.settings, fresh=not resume)
+                    if processing_scope is not None:
+                        from app.db.models import DocumentProcessingReview
+                        from docparser.attachment_policy import canonical_json
+                        generation=self._prepare_generation_attempt(session,doc_id,resume=False)
+                        generation.processing_scope_json=json.loads(canonical_json(processing_scope))
+                        from app.services.processing_scope import scope_summary
+                        generation.processing_scope_summary_json=scope_summary(processing_scope,generation.id)
+                        generation.scope_request_id=scope_request_id
+                        admitted_generation_id=generation.id
+                        review=session.get(DocumentProcessingReview,doc_id)
+                        if review and review.id==processing_scope.get('review_id'):
+                            review.generation_id=generation.id
+                            review.state='submitted'
+                        # Commit queue admission together with the durable generation.
+                        # A restart in the following submit window becomes resumable.
+                        from app.db.models import Document
+                        admitted_doc=session.get(Document,doc_id)
+                        admitted_doc.status='queued'
+                        admitted_doc.error=None
+                        admitted_doc.error_code=None
                 if reset_staging:
                     # Admission and destructive checkpoint reset share the same
                     # lock: a second regenerate must not erase a running worker.
@@ -432,10 +490,22 @@ class Pipeline:
                 # this document for minutes, and resume must stop showing paused.
                 self.registry.update(doc_id, status="queued", error=None, error_code=None)
                 context = new_operation(current_context(), doc_id=doc_id)
-                task = self._executor.submit(
-                    run_bound, context, self._run, doc_id, filepath, filename, user_tags, resume, reset_staging,
-                )
+                run_args=[doc_id,filepath,filename,user_tags,resume,reset_staging]
+                if admitted_generation_id is not None:
+                    run_args.append(admitted_generation_id)
+                task = self._executor.submit(run_bound,context,self._run,*run_args)
             except Exception:
+                if admitted_generation_id is not None:
+                    from app.db.models import DocumentGeneration,DocumentProcessingReview
+                    from app.services.generation_store import abandon_generation
+                    with session_scope() as session:
+                        abandon_generation(session,doc_id,admitted_generation_id)
+                        generation=session.get(DocumentGeneration,admitted_generation_id)
+                        generation.scope_request_id=None
+                        review=session.get(DocumentProcessingReview,doc_id)
+                        if review and review.generation_id==admitted_generation_id:
+                            review.state='draft'
+                            review.generation_id=None
                 self._abort_events.pop(doc_id, None)
                 self._pipeline_slots.release()
                 if previous_state is not None:
@@ -456,14 +526,17 @@ class Pipeline:
     def _run(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
         fresh_table_cache: bool = False,
+        admitted_generation_id: str | None = None,
     ) -> None:
         # Wait until _start registers the Future before processing/cleanup.
         with self._start_lock:
             pass
         try:
+            scope_kwargs={'admitted_generation_id':admitted_generation_id} if admitted_generation_id else {}
             self._process(
                 doc_id, filepath, filename, user_tags, resume=resume,
                 fresh_table_cache=fresh_table_cache,
+                **scope_kwargs,
             )
         except DocumentUpdateCancelled:
             logger.info("[%s] Обновление отменено", doc_id)
@@ -613,14 +686,16 @@ class Pipeline:
 
     def _process(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
-        *, fresh_table_cache: bool = False,
+        *, fresh_table_cache: bool = False,processing_scope: dict | None = None,
+        admitted_generation_id: str | None = None,
     ) -> None:
         context = current_context()
         if context.doc_id != doc_id or not context.operation_id:
             context = new_operation(context, doc_id=doc_id)
         with bind_context(context), operation_span():
             return self._process_bound(doc_id, filepath, filename, user_tags, resume,
-                                       fresh_table_cache=fresh_table_cache)
+                                       fresh_table_cache=fresh_table_cache,processing_scope=processing_scope,
+                                       admitted_generation_id=admitted_generation_id)
 
     def _prepare_generation_attempt(self, session, doc_id: str, *, resume: bool):
         # A request cannot choose its representation; only trusted server settings can.
@@ -634,15 +709,38 @@ class Pipeline:
 
     def _process_bound(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
-        *, fresh_table_cache: bool = False,
+        *, fresh_table_cache: bool = False,processing_scope: dict | None = None,
+        admitted_generation_id: str | None = None,
     ) -> None:
         with session_scope() as session:
+            if not resume:
+                from app.services.processing_scope_cache import assert_full_regeneration_cache_safe
+                assert_full_regeneration_cache_safe(session,self.settings,doc_id,processing_scope)
             capture_published_update(session, doc_id, self.settings)
         self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
         source_file_hash = _sha256_file(filepath)
         staging = StagingStore(doc_id)
         with session_scope() as session:
-            generation = self._prepare_generation_attempt(session, doc_id, resume=resume)
+            if admitted_generation_id is not None:
+                from app.db.models import DocumentGeneration,DocumentGenerationState
+                generation=session.get(DocumentGeneration,admitted_generation_id)
+                state=session.get(DocumentGenerationState,doc_id)
+                if not generation or generation.doc_id!=doc_id or state.candidate_generation_id!=generation.id:
+                    raise ValueError('Admitted generation changed')
+            else:
+                generation = self._prepare_generation_attempt(session, doc_id, resume=resume)
+            if processing_scope is not None:
+                from docparser.attachment_policy import canonical_json
+                if resume and generation.processing_scope_json!=processing_scope:
+                    raise ValueError('Processing scope changed during resume')
+                generation.processing_scope_json=json.loads(canonical_json(processing_scope))
+                from app.services.processing_scope import scope_summary
+                generation.processing_scope_summary_json=scope_summary(processing_scope,generation.id)
+            processing_scope=generation.processing_scope_json
+            from docparser.attachment_policy import ParserProcessingPolicy
+            parser_policy=ParserProcessingPolicy(processing_scope) if processing_scope else None
+            if parser_policy and parser_policy.source_file_hash!=source_file_hash:
+                raise ValueError('Processing scope does not match the source file')
             generation_id, phase = generation.id, generation.phase
             if phase == "preparing":
                 paths = prepare_generation_paths(session, self.settings, doc_id, generation_id)
@@ -652,8 +750,11 @@ class Pipeline:
         set_table_cache_fresh_since(_table_cache_fresh_since(paths.uploads_root, fresh_table_cache, resume))
         if phase == "ready":
             checkpoint = staging.load() or {}
+            if checkpoint.get('processing_scope_hash')!=(processing_scope or {}).get('selection_hash'):
+                raise ValueError('Processing scope changed during resume')
             validate_resume_parser_version(
-                checkpoint, ParseContext(filename, mail_enabled=self.settings.mail_import_enabled).parser_version,
+                checkpoint, ParseContext(filename, mail_enabled=self.settings.mail_import_enabled,
+                                         processing_policy=parser_policy).parser_version,
             )
             validate_resume_source_file_hash(checkpoint, source_file_hash)
             del checkpoint
@@ -673,7 +774,9 @@ class Pipeline:
             if self.settings.table_structure_enabled:
                 reset_candidate_tables(doc_id, generation_id)
             table_sink = GenerationTableSink(doc_id, generation_id) if self.settings.table_structure_enabled else None
-            parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled, table_sink=table_sink)
+            parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled, table_sink=table_sink,
+                                         processing_policy=parser_policy)
+            parse_context.archive_helper_path=self.settings.archive_7zip_path or None
             parse_started = start_stage("parse")
             if self.settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
                 supervised = parse_document_supervised(
@@ -685,6 +788,7 @@ class Pipeline:
                     max_concurrent=self.settings.parser_max_concurrent,
                     mail_enabled=self.settings.mail_import_enabled,
                     table_mode=self.settings.table_structure_enabled,
+                    **({'processing_policy':processing_scope,'archive_helper_path':self.settings.archive_7zip_path or None} if processing_scope else {}),
                 )
                 if self.settings.table_structure_enabled:
                     spool = parse_attachments_dir / ".tables-spool"
@@ -737,7 +841,7 @@ class Pipeline:
             if has_text and not resume and self.settings.dev_detection_enabled:
                 doc = self.registry.get(doc_id)
                 if doc and not doc.get("development_id"):
-                    detection = detect(markdown, filename, doc_id)
+                    detection = detect(indexable_markdown if processing_scope else markdown, filename, doc_id)
                     if detection.confidence is not None:
                         parse_effects["development"] = {
                             "development_confidence": detection.confidence,
@@ -760,13 +864,14 @@ class Pipeline:
                     from app.services.mail_identity import mail_fingerprint_from_parse
 
                     parse_effects["signature"] = prepare_document_signature(
-                        markdown,
+                        indexable_markdown if processing_scope else markdown,
                         mail_fingerprint_from_parse(parse_context.sources, blocks, parse_attachments_dir),
                     )
                 except Exception:
                     logger.warning(
                         "[%s] Индексация сигнатуры дедупликации не удалась", doc_id, exc_info=True
                     )
+            parse_effects['signature_scope_hash']=(processing_scope or {}).get('selection_hash')
             write_json_atomic(effects_path, parse_effects)
 
             source_chunks = chunk_blocks_by_source(blocks, self.okf_generator)
@@ -808,6 +913,8 @@ class Pipeline:
             gen_quality.drain()
             if resume and staging.exists():
                 manifest = staging.load()
+                if manifest.get('processing_scope_hash')!=(processing_scope or {}).get('selection_hash'):
+                    raise ValueError('Processing scope changed during resume')
                 validate_resume_parser_version(manifest, parser_version)
                 validate_resume_source_file_hash(manifest, source_file_hash)
                 # Preparation can stop between writing a raw chunk and committing
@@ -844,6 +951,7 @@ class Pipeline:
                 staging.create(
                     total, global_tags=user_tags, parser_version=parser_version,
                     source_file_hash=source_file_hash, generation_id=generation_id,
+                    processing_scope_hash=(processing_scope or {}).get('selection_hash'),
                 )
             staging.bind_generation(generation_id)
 
@@ -856,6 +964,12 @@ class Pipeline:
                 _rebase_attachment_paths(blocks, parse_attachments_dir, attachments_dir)
         source_rows = _source_rows(parse_context.sources, blocks, doc_root, parser_version=parser_version)
         attachments = _collect_attachments(blocks, doc_root)
+        from app.services.processing_scope_originals import retain_scope_originals
+        retain_scope_originals(self.settings, doc_id, generation_id, processing_scope, source_rows, attachments)
+        if processing_scope is not None:
+            from app.services.processing_scope import assert_prepared_scope
+            assert_prepared_scope(processing_scope,source_rows,
+                                  [{'source_id':source_id} for source_id in chunk_source_ids],[])
         # Only durable source/attachment DTOs are needed beyond parsing.
         del blocks, filtered_blocks, markdown, indexable_markdown, parse_context
         self.registry.update(doc_id, status="splitting", total_chunks=total, processed_chunks=len(staging.processed_chunks))
@@ -1119,6 +1233,17 @@ class Pipeline:
                 }
             )
 
+        from app.services.processing_scope import scope_for_generation,assert_prepared_scope
+        with session_scope() as session:
+            from sqlalchemy import select
+            from app.db.models import DocumentTable
+            processing_scope=scope_for_generation(session,doc_id,generation_id)
+            table_source_ids=list(session.scalars(select(DocumentTable.source_id).where(
+                DocumentTable.doc_id==doc_id,DocumentTable.generation_id==generation_id)))
+        assert_prepared_scope(processing_scope,source_rows,chunk_rows,
+                              [{'metadata':{'source_id':source_id}} for source_id in concept_source_ids],
+                              table_source_ids)
+
         # Этап 2b / Фаза 5: бандл — экспорт, не рабочее состояние. По умолчанию
         # okf_write_bundles=false — okf_docs строятся в памяти (БД — canonical),
         # файлы .md не пишутся. При true (dual-write) — как раньше: tmp + atomic move.
@@ -1301,6 +1426,14 @@ class Pipeline:
         table_reports = reports_from_chunks(chunks_data) + structural_reports
         if table_reports:
             write_table_quality_report(paths.bundle, table_reports)
+        if processing_scope is not None:
+            from app.services.processing_scope_cache import embedding_fingerprint
+            processing_scope={**processing_scope,"vector_space":{"kind":"proven","fingerprint":embedding_fingerprint(self.settings)}}
+            with session_scope() as session:
+                session.get(DocumentGeneration,generation_id).processing_scope_json=processing_scope
+            assert_prepared_scope(processing_scope,source_rows,chunk_rows,
+                                  [item.model_dump(mode='json') for item in okf_docs])
+            write_json_atomic(paths.bundle/'processing-scope.json',processing_scope)
         prepared = {
             "doc_id": doc_id, "generation_id": generation_id,
             "concepts": [item.model_dump(mode="json") for item in okf_docs],
@@ -1312,6 +1445,8 @@ class Pipeline:
             "artifacts": artifact_manifest(self.settings, doc_id, generation_id),
             "point_ids": sorted(keep_point_ids),
         }
+        if processing_scope is not None:
+            prepared['processing_scope']=processing_scope
         if projection_version is not None:
             prepared["chunk_projection_version"] = projection_version
         publication_path = paths.uploads_root / "publication.json"
@@ -1640,6 +1775,9 @@ class Pipeline:
 
 
 def _can_backfill_legacy_chunks(session, doc_id: str) -> bool:
+    from app.db.models import DocumentProcessingReview
+    if session.get(DocumentProcessingReview,doc_id) is not None:
+        return False
     state = session.get(DocumentGenerationState, doc_id)
     if state and (state.active_generation_id or state.candidate_generation_id):
         return False
@@ -1656,7 +1794,7 @@ def _chunks_meta_from_db(doc_id: str) -> list[dict]:
         chunks = (
             s.query(DocumentChunk)
             .filter(DocumentChunk.doc_id == doc_id)
-            .order_by(DocumentChunk.chunk_index)
+            .order_by(func.coalesce(DocumentChunk.display_order, DocumentChunk.chunk_index), DocumentChunk.chunk_index)
             .all()
         )
         if not chunks:

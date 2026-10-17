@@ -61,6 +61,16 @@ def generation_paths(settings, doc_id: str, generation_id: str) -> GenerationPat
     return GenerationPaths(uploads, uploads / "attachments", bundle)
 
 
+def processing_review_paths(settings, doc_id: str, review_id: str) -> Path:
+    _validate_ids(doc_id, review_id)
+    base=Path(os.path.abspath(settings.uploads_dir))
+    target=base/doc_id/'processing-review'/review_id
+    _reject_links(target)
+    if not target.resolve().is_relative_to(base.resolve()):
+        raise GenerationStorageError('Review path leaves storage root')
+    return target
+
+
 def active_bundle_path(settings, doc_id: str) -> Path:
     from app.db.session import session_scope
     from app.services.generation_store import get_generation_state
@@ -96,9 +106,15 @@ def _check_tree(root: Path) -> None:
     for directory, dirs, files in os.walk(root, followlinks=False, onerror=failed):
         for name in (*dirs, *files):
             path = Path(directory) / name
-            _reject_links(path)
-            if not path.resolve().is_relative_to(root.resolve()):
-                raise GenerationStorageError("Generation member leaves its root")
+            # os.walk supplies immediate child names beneath the checked root.
+            # Check each entry itself; its ancestors were checked once above or
+            # when traversed. Re-resolving every ancestor per file is costly on
+            # Windows and provides no additional protection against later races.
+            info=path.lstat()
+            if stat.S_ISLNK(info.st_mode) or (
+                getattr(info,"st_file_attributes",0)&stat.FILE_ATTRIBUTE_REPARSE_POINT
+            ):
+                raise GenerationStorageError("Generation path contains a symlink or reparse point")
 
 
 def merge_legacy_backfill_files(settings, doc_id: str, attempt: Path) -> Path:

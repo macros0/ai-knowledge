@@ -22,7 +22,9 @@ def file_digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def artifact_manifest(settings, doc_id: str, generation_id: str) -> dict[str, str]:
+def artifact_manifest(settings, doc_id: str, generation_id: str, *, written_hashes=None) -> dict[str, str]:
+    # A writer can supply hashes of the bytes it just wrote. Publication always
+    # calls this without the hint and independently reads every actual file.
     paths = generation_paths(settings, doc_id, generation_id)
     from app.services.table_quality import validate_table_quality_artifact
     validate_table_quality_artifact(paths.bundle)
@@ -31,7 +33,10 @@ def artifact_manifest(settings, doc_id: str, generation_id: str) -> dict[str, st
         _check_tree(root)
         for path in sorted(root.rglob("*")):
             if path.is_file():
-                result[f"{name}/{path.relative_to(root).as_posix()}"] = file_digest(path)
+                key=f"{name}/{path.relative_to(root).as_posix()}"
+                result[key] = written_hashes[key] if written_hashes and key in written_hashes else file_digest(path)
+    if written_hashes and not written_hashes.keys() <= result.keys():
+        raise GenerationIntegrityError()
     return result
 
 

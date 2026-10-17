@@ -1299,3 +1299,22 @@ connection on normal return, scroll failure and writer failure; SQLite owns the
 temporary database lifecycle. This derived working index is not a backup, durable
 publication artifact or source of authorization. Document/generation/source scope
 checks in the callers remain mandatory.
+
+## Hybrid attachment scope
+
+Attachment inventories and review files are private document artifacts. They
+inherit document roles, deletion, backup and retention rules; GET never starts
+parsing. Source keys identify physical occurrences and do not grant access.
+Review mutations lock the document and compare review ID/revision; immutable
+generation scope is checked before generation, indexing and publication. Unknown
+sources fail closed. Feature rollback cannot remove a persisted allowlist.
+
+Preflight and full parsing share the isolated worker/process-tree boundary.
+ZIP/7z/RAR members go to bounded controlled sinks, never archive-supplied paths;
+links, special files, duplicate normalized paths and unsafe paths are rejected.
+RAR uses a trusted absolute helper with argv, no shell/stdin or inherited secrets.
+Passwords, volume assembly, SFX execution, macros and external links are unsupported.
+Solid archive decode work remains subject to worker limits even for excluded members.
+The Docker helper is installed only at build time from a pinned official artifact
+with SHA-256 verification and matching license notices. Review/audit records must
+not contain raw cell contents, credentials or private helper errors.

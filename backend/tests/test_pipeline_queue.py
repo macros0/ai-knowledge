@@ -14,7 +14,8 @@ from app.services.registry import DocumentRegistry
 def queue_pipeline(tmp_path):
     p = Pipeline.__new__(Pipeline)
     p.registry = DocumentRegistry()
-    p.settings = SimpleNamespace(uploads_dir=tmp_path, pipeline_max_workers=1, pipeline_max_pending=1)
+    p.settings = SimpleNamespace(uploads_dir=tmp_path, pipeline_max_workers=1, pipeline_max_pending=1,
+                                 attachment_review_enabled=False)
     p._threads = {}
     p._abort_events = {}
     p._start_lock = threading.Lock()

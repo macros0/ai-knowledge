@@ -11,15 +11,18 @@ Centralized handler в main.py перехватывает DependencyUnavailableE
 """
 from __future__ import annotations
 
-import grpc
-import httpx
-import litellm
 
 from app import error_codes as codes
 
 
 def public_error_code(exc: Exception) -> str:
     """Classify known recoverable failures by type/status, never by provider text."""
+    # Parser workers use DomainError/StorageFullError only. Loading the model
+    # runtime at module import adds seconds to every isolated inspection.
+    import grpc
+    import httpx
+    import litellm
+
     from app.services.parser_supervisor import (
         ParserBusyError, ParserIsolationError, ParserMemoryLimitError,
         ParserTimeoutError, ParserWorkerError,

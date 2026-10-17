@@ -228,6 +228,25 @@ export function uploadDocument(file, tags = [], { developmentId = null, canonica
   return request("/documents", { method: "POST", body: form });
 }
 
+const scopeRoute = (docId) => `/documents/${encodeURIComponent(docId)}/processing-scope`;
+export const getProcessingScope = (docId) => request(scopeRoute(docId));
+export const acquireProcessingScopeEditLock = (docId, body) => jsonRequest(`${scopeRoute(docId)}/edit-lock`, 'POST', body, 15000);
+export const renewProcessingScopeEditLock = (docId, body) => jsonRequest(`${scopeRoute(docId)}/edit-lock`, 'PUT', body, 15000);
+export const releaseProcessingScopeEditLock = (docId, body) => jsonRequest(`${scopeRoute(docId)}/edit-lock`, 'DELETE', body, 15000);
+export const createProcessingScopeReview = (docId, body) => jsonRequest(`${scopeRoute(docId)}/review`, 'POST', body, 150000);
+export const saveProcessingScopeReview = (docId, body) => jsonRequest(`${scopeRoute(docId)}/review`, 'PUT', body);
+export const confirmProcessingScope = (docId, body) => jsonRequest(`${scopeRoute(docId)}/confirm`, 'POST', body, 150000);
+export const previewProcessingScopeChange = (docId, body) => jsonRequest(`${scopeRoute(docId)}/change-preview`, 'POST', body, 60000);
+export const applyProcessingScopeChange = (docId, body, endpoint) => {
+  if(!['apply-exclusions','apply-changes'].includes(endpoint))throw new TypeError('Unsupported processing scope action');
+  return jsonRequest(`${scopeRoute(docId)}/${endpoint}`, 'POST', body);
+};
+export const getProcessingScopeChange = (docId, planId) => request(`${scopeRoute(docId)}/changes/${encodeURIComponent(planId)}`);
+export const cancelProcessingScopeReview = (docId, body) => jsonRequest(`${scopeRoute(docId)}/review`, 'DELETE', body);
+export const getAttachmentPreview = (docId, sourceKey, reviewId, sheet = 0, signal) => request(
+  `${scopeRoute(docId)}/attachments/${encodeURIComponent(sourceKey)}/preview?${new URLSearchParams({review_id:reviewId,sheet:String(sheet)})}`,
+  {signal,cache:'no-store'}, 20000);
+
 export async function logoutAuth() {
   const result = await request("/auth/logout", { method: "POST" });
   window.location.assign(result.redirect_url || "/");

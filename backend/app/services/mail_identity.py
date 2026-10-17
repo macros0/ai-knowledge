@@ -105,6 +105,8 @@ def mail_fingerprint_from_parse(sources, blocks, attachments_dir: Path) -> str |
         return None
     if any(getattr(source, "warnings", None) for source in sources):
         return None
+    if any((getattr(source,'metadata',{}) or {}).get('processing_included') is False for source in sources):
+        return None  # Deliberately partial mail must not acquire an all-content identity.
 
     root_dir = attachments_dir.resolve()
     hashes: list[str] = []

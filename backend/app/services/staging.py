@@ -72,6 +72,7 @@ class StagingStore:
         parser_version: str | None = None,
         source_file_hash: str | None = None,
         generation_id: str | None = None,
+        processing_scope_hash: str | None = None,
     ) -> dict:
         self.dir.mkdir(parents=True, exist_ok=True)
         manifest = {
@@ -86,6 +87,7 @@ class StagingStore:
             "parser_version": parser_version,
             "source_file_hash": source_file_hash,
             "generation_id": generation_id,
+            "processing_scope_hash": processing_scope_hash,
         }
         self._write(manifest)
         return manifest
@@ -107,6 +109,7 @@ class StagingStore:
                 "parser_version": row.parser_version,
                 "source_file_hash": row.source_file_hash,
                 "generation_id": row.generation_id,
+                "processing_scope_hash": row.processing_scope_hash,
             }
 
     def _reference_bytes(self, filename: str) -> bytes:
@@ -180,6 +183,7 @@ class StagingStore:
             row.parser_version = manifest.get("parser_version")
             row.source_file_hash = manifest.get("source_file_hash")
             row.generation_id = manifest.get("generation_id")
+            row.processing_scope_hash = manifest.get("processing_scope_hash")
             row.status = manifest.get("status", "in_progress")
 
     @property

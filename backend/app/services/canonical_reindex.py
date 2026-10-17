@@ -53,6 +53,10 @@ def reindex_published_document(doc_id, settings, store, embedder, *, concepts_on
                 select(DocumentChunk.source_id,DocumentChunk.chunk_index).where(DocumentChunk.doc_id==doc_id))])
         if not generation_id and document.status != "done" and not concepts and not chunks:
             return counts
+        from app.services.processing_scope import scope_for_generation,assert_prepared_scope
+        snapshot=scope_for_generation(session,doc_id,generation_id)
+        assert_prepared_scope(snapshot,sources,chunk_records,
+                              [{'metadata':{'source_id':row.source_id}} for row in concepts])
         concept_scopes, chunk_scopes = build_record_mail_scopes(
             sources,
             [dict(source_id=row.source_id, chunk_index=row.chunk_index) for row in concepts],

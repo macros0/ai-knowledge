@@ -280,6 +280,7 @@ class OKFGenerator:
         chunk_of_slug: dict[str, int] | None = None,
         source_ids: list[str | None] | None = None,
         bundle_dir: Path | None = None,
+        render_markdown: bool = True,
     ) -> tuple[list[OkfDocument], list[dict]]:
         """Строит OkfDocument[] + manifest БЕЗ записи файлов (Этап 2b).
 
@@ -287,6 +288,8 @@ class OKFGenerator:
         пайплайна строит okf_docs в памяти (для replace_concepts/index_concepts),
         а файлы .md пишутся только в dual-write (save_bundle) или при экспорте.
         filepath — синтетический путь (slug определяет stem), файл не обязателен.
+        render_markdown=False используется SQL-публикацией: не строить ненужный
+        YAML-экспорт. Её manifest не сохраняется; экспорт использует default True.
         """
         global_tags = global_tags or []
         okf_docs: list[OkfDocument] = []
@@ -313,7 +316,7 @@ class OKFGenerator:
                 global_tags=global_tags,
                 chunk_index=chunk_index,
                 source_id=source_id,
-            )
+            ) if render_markdown else ""
             metadata = {
                 "type": concept.type,
                 "title": concept.title,

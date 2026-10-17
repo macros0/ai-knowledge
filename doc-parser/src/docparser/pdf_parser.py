@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from docparser.blocks import Block
 from docparser.embedded import (
@@ -156,6 +156,7 @@ def parse_pdf(
                         context=context,
                         parent_source_id=source_id,
                         _node_reserved=True,
+                        source_locator=f'pdf:{index}',
                     )
                 )
         except PdfParseError as exc:

@@ -191,6 +191,11 @@ def test_dev_mail_repair_is_additive_idempotent_and_does_not_stamp(migration_db)
     assert report["alembic_versions"] == [BEFORE_MAIL]
     assert "source_id" not in {column["name"] for column in inspect(engine).get_columns("document_chunks")}
     assert migrate(engine, apply=True)["ready"] is True
+    # A mail-only repair must not perform the later attachment-scope migration.
+    assert "signature_scope_hash" not in {c["name"] for c in inspect(engine).get_columns("documents")}
+    assert "processing_scope_hash" not in {c["name"] for c in inspect(engine).get_columns("document_staging")}
+    for name in ("document_chunks", "okf_concepts"):
+        assert "display_order" not in {c["name"] for c in inspect(engine).get_columns(name)}
     _assert_legacy(engine, before)
     title_type = next(column['type'] for column in inspect(engine).get_columns('document_chunks')
                       if column['name'] == 'section_title')

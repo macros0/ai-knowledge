@@ -29,7 +29,7 @@ export async function runDocumentUploadBatch(files, {
       if (doc) {
         summary.uploadedCount += 1;
         if (doc.duplicate_in_trash) summary.trashTwins.push({ file: file.name, twin: doc.duplicate_in_trash });
-        publish(file,"uploaded",{docId:doc.id,docStatus:doc.status,duplicateInTrash:doc.duplicate_in_trash});
+        publish(file,doc.status === 'awaiting_attachments' ? 'awaiting-attachments' : "uploaded",{docId:doc.id,docStatus:doc.status,duplicateInTrash:doc.duplicate_in_trash});
         if (isActive()) onUploaded(doc);
       } else publish(file,"skipped");
     } catch (error) {

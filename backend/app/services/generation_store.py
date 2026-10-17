@@ -99,6 +99,13 @@ def begin_generation(session, doc_id: str, *, chunk_projection_version: int | No
         phase="preparing",
         chunk_projection_version=chunk_projection_version,
     )
+    if state.active_generation_id:
+        from copy import deepcopy
+        previous=_generation(session,doc_id,state.active_generation_id)
+        generation.processing_scope_json=deepcopy(previous.processing_scope_json)
+        if generation.processing_scope_json is not None:
+            from app.services.processing_scope import scope_summary
+            generation.processing_scope_summary_json=scope_summary(generation.processing_scope_json,generation.id)
     session.add(generation)
     state.candidate_generation_id = generation.id
     session.flush()

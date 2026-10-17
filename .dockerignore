@@ -17,3 +17,7 @@ data
 
 .env
 .env.local
+.deps
+.superpowers
+**/.next
+tests/tmp

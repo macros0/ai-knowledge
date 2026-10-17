@@ -32,6 +32,11 @@ MAX_ATTACHMENT_PAYLOAD = 50 * 1024 * 1024   # 50 МБ — одно вложен�
 MAX_TOTAL_PAYLOAD = 200 * 1024 * 1024       # 200 МБ — суммарно распакованных вложений на документ
 MAX_ATTACHMENT_NODES = 1_000                # включает маленькие MIME/MSG части
 
+
+def attachment_depth_limit(context=None):
+    policy=getattr(context,'processing_policy',None)
+    return policy.traversal.max_depth+1 if policy is not None else MAX_ATTACHMENT_DEPTH
+
 PROGID_EXT = {
     "Excel.Sheet.12": ".xlsx",
     "Excel.Sheet.8": ".xls",
@@ -131,6 +136,8 @@ def unwrap_ole(data: bytes) -> tuple[str, bytes]:
                         return "pdf", payload
                     if _is_zip(payload):
                         return "zip", payload
+                    if payload.startswith((b"7z\xbc\xaf\x27\x1c", b"Rar!\x1a\x07")):
+                        return "other", payload
                     if _looks_like_eml(payload) or _looks_like_msg(payload):
                         return "other", payload
         finally:
@@ -172,6 +179,7 @@ def process_embedded(
     parent_source_id: str = "root",
     _node_reserved: bool = False,
     inline_image: bool = False,
+    source_locator: str | None = None,
 ) -> list[Block]:
     """Разбирает встроенный файл. Возвращает блоки (маркер + рекурсивно разобранный контент).
 
@@ -193,9 +201,25 @@ def process_embedded(
             )
         ]
 
+    # Content-ID is also legal on arbitrary MIME attachments. Only actual safe
+    # raster bytes belong to the inline body; a CID must not bypass the allowlist.
+    inline_image = inline_image and raster_extension(data) is not None
+    policy=getattr(context,'processing_policy',None)
+    if policy is not None and not inline_image:
+        locator=source_locator or f'ordinal:{index}'
+        key=context.key_for(parent_source_id,locator)
+        if not policy.is_included(key):
+            att=Attachment(name=name,prog_id=prog_id,caption=caption,data=data)
+            att.source_id=context.add_child(parent_source_id,name,'attachment',locator=locator)
+            if data and attachments_dir is not None and len(data)<=MAX_ATTACHMENT_PAYLOAD and effective_budget.consume(len(data)):
+                att.saved_path=str(save_attachment(att,attachments_dir,index))
+            unsupported=policy.source_metadata(key)['processing_reason']=='unsupported'
+            return [marker_block(att,note='формат не поддерживается' if unsupported else 'исключено из обработки',
+                                 extraction_status='unsupported' if unsupported else 'excluded_by_policy')]
+
     # Reject raw inputs and forbidden recursion before opening any container.
     # Keep a bounded original at the depth boundary for explicit download.
-    if len(data) > MAX_ATTACHMENT_PAYLOAD or depth >= MAX_ATTACHMENT_DEPTH:
+    if len(data) > MAX_ATTACHMENT_PAYLOAD or depth >= attachment_depth_limit(context):
         att = Attachment(name=name, prog_id=prog_id, caption=caption, data=data)
         if context is not None:
             att.source_id = context.add_child(parent_source_id, name, "attachment")
@@ -220,12 +244,27 @@ def process_embedded(
     kind, payload = unwrap_ole(data)
     att = Attachment(name=name, prog_id=prog_id, caption=caption, data=data, kind=kind)
     ext = _recognized_extension(payload, name, prog_id, kind)
+    if policy is not None:
+        if kind=='zip' and not detect_ooxml_ext(payload):
+            ext='.zip'
+        elif payload.startswith(b'7z\xbc\xaf\x27\x1c'):
+            ext='.7z'
+        elif payload.startswith(b'Rar!\x1a\x07'):
+            ext='.rar'
     if context is not None:
         att.source_id = context.add_child(
             parent_source_id,
             name,
             "mail" if ext in {".eml", ".msg"} else "attachment",
+            locator=source_locator,
         )
+        if inline_image and policy is not None:
+            context.update_metadata(att.source_id, {'processing_included': True})
+            # Inline images are part of the containing body, not selectable files.
+            from dataclasses import replace
+            context.sources = [replace(s, metadata={**s.metadata, 'processing_included': True,
+                                'processing_reason': 'inline_body'}) if s.source_id == att.source_id else s
+                               for s in context.sources]
 
     if ext in {".eml", ".msg"} and context is not None and not context.mail_enabled:
         # Keep the exact original bytes for download, but do not extract or
@@ -243,7 +282,7 @@ def process_embedded(
         context.warn(att.source_id or parent_source_id, "mail_import_disabled")
         return [marker_block(att, note="импорт писем отключён", extraction_status="skipped_disabled")]
 
-    if ext in SUPPORTED_EXTENSIONS:
+    if ext in SUPPORTED_EXTENSIONS or (policy is not None and ext in {'.zip','.7z','.rar'}):
         if len(payload) > MAX_ATTACHMENT_PAYLOAD or not effective_budget.consume(len(payload)):
             if context is not None:
                 context.warn(att.source_id, "attachment_size_exceeded")

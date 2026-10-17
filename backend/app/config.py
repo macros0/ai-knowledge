@@ -451,6 +451,20 @@ class Settings(BaseSettings):
     parser_timeout_seconds: float = Field(default=120.0, ge=1.0, le=3600.0)
     parser_max_memory_mb: int = Field(default=1024, ge=64, le=8192)
     parser_max_concurrent: int = Field(default=2, ge=1, le=32)
+    # Hybrid attachment admission. Existing immutable scopes apply even when off.
+    attachment_review_enabled: bool = False
+    attachment_review_rows: int = Field(default=500, ge=1)
+    attachment_review_cells: int = Field(default=20000, ge=1)
+    attachment_review_text_bytes: int = Field(default=524288, ge=1)
+    attachment_review_expanded_bytes: int = Field(default=8388608, ge=1)
+    attachment_review_file_bytes: int = Field(default=10485760, ge=1)
+    attachment_review_total_rows: int = Field(default=1000, ge=1)
+    attachment_review_total_cells: int = Field(default=40000, ge=1)
+    attachment_review_total_text_bytes: int = Field(default=1048576, ge=1)
+    attachment_review_total_file_bytes: int = Field(default=20971520, ge=1)
+    attachment_preflight_timeout_seconds: float = Field(default=15.0, ge=1, le=120)
+    attachment_preflight_scan_bytes: int = Field(default=33554432, ge=1024)
+    archive_7zip_path: str = ''
     # Per-user limits for expensive interactive endpoints (in-memory per process).
     search_rate_limit_per_minute: int = Field(default=120, ge=1, le=10_000)
     chat_rate_limit_per_minute: int = Field(default=60, ge=1, le=10_000)

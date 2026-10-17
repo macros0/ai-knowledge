@@ -11,6 +11,57 @@ from docparser import parse_document_result
 DOC = 'tables-doc-1'
 
 
+@pytest.mark.parametrize("included", [set(), {"root"}])
+def test_clone_selected_tables_preserves_base_and_filters_rows(tmp_path, included):
+    from app.db.models import DocumentTable, DocumentTableRow
+    from app.services.table_store import clone_selected_generation_tables
+    base = candidate()
+    write(tmp_path, base)
+    activate(base)
+    target = candidate()
+    with session_scope() as s:
+        clone_selected_generation_tables(s, DOC, base, target, tmp_path / "target", included)
+    with session_scope() as s:
+        assert s.query(DocumentTableRow).filter_by(generation_id=base).count() == 3
+        assert s.query(DocumentTable).filter_by(generation_id=target).count() == int(bool(included))
+        assert s.query(DocumentTableRow).filter_by(generation_id=target).count() == (3 if included else 0)
+
+
+def test_scope_clone_defers_portable_export_until_candidate_is_complete(tmp_path):
+    from app.services.table_store import clone_selected_generation_tables
+    from app.services.table_pipeline import prepare_table_artifacts
+    base=candidate();write(tmp_path,base);activate(base)
+    target=candidate();bundle=tmp_path/"target"
+    with session_scope() as s:
+        clone_selected_generation_tables(s,DOC,base,target,bundle,{"root"},export_artifacts=False)
+        assert not (bundle/"tables/manifest.json").exists()
+        prepare_table_artifacts(DOC,target,bundle,session=s)
+        assert (bundle/"tables/manifest.json").is_file()
+
+
+def test_publication_checks_all_projection_groups_in_one_row_scan(tmp_path,monkeypatch):
+    import app.services.table_store as store
+    from app.services.generation_artifacts import GenerationIntegrityError
+    from unittest.mock import Mock
+    generation=candidate();table=write(tmp_path,generation);bundle=tmp_path/"bundle"
+    refs=[{"kind":"table","generation_id":generation,"source_id":"root","table_id":table,
+        "row_number":row,"columns":[1,2]} for row in (1,2,3)]
+    with session_scope() as s:
+        store.export_generation_tables(s,DOC,generation,bundle)
+        scan=Mock(wraps=store._stored_rows)
+        monkeypatch.setattr(store,"_stored_rows",scan)
+        store.verify_table_publication_groups(s,DOC,generation,bundle,[[{"table_refs":refs}],[{"table_refs":refs}]])
+        assert scan.call_count==1
+        with pytest.raises(GenerationIntegrityError):
+            store.verify_table_publication_groups(s,DOC,generation,bundle,[[{"table_refs":refs}],[]])
+        from app.db.models import DocumentTableRow
+        changed=s.get(DocumentTableRow,(DOC,generation,table,2))
+        from copy import deepcopy
+        data=deepcopy(changed.cells);data["2"]["raw_value"]="changed";changed.cells=data
+        with pytest.raises(GenerationIntegrityError):
+            store.verify_table_publication_groups(s,DOC,generation,bundle,[[{"table_refs":refs}],[{"table_refs":refs}]])
+
+
 def candidate():
     with session_scope() as s:
         if s.get(Document, DOC) is None:

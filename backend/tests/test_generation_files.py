@@ -171,3 +171,20 @@ def test_preparation_rejects_ready_generation(tmp_path):
     with pytest.raises(GenerationConflict):
         with session_scope() as session:
             prepare_generation_paths(session, settings, DOC_ID, generation_id)
+
+
+def test_tree_safety_checks_do_not_restat_every_ancestor_for_each_file(tmp_path,monkeypatch):
+    from pathlib import Path
+    from app.services.generation_files import _check_tree
+    root=tmp_path/"artifacts"
+    nested=root.joinpath(*[f"level{index}" for index in range(6)])
+    nested.mkdir(parents=True)
+    for index in range(40):(nested/f"{index}.md").write_text("safe")
+    observed=[]
+    original=Path.lstat
+    def counted(path,*args,**kwargs):
+        observed.append(path)
+        return original(path,*args,**kwargs)
+    monkeypatch.setattr(Path,"lstat",counted)
+    _check_tree(root)
+    assert len(observed)<=3*(47+len(root.parents)),"Tree checks must stay linear in entries and root depth"

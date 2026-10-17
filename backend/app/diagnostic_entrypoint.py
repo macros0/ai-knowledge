@@ -5,10 +5,11 @@ import os
 import sys
 import traceback
 
-from app.services.diagnostics import runtime as diagnostics_runtime
-
-
 def main(argv=None, *, settings=None, runner=None) -> int:
+    # Windows spawn reimports this module before worker resource admission.
+    # Provider/diagnostics imports belong only to the actual server process.
+    from app.services.diagnostics import runtime as diagnostics_runtime
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default=os.getenv("UVICORN_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=8000)

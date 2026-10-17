@@ -130,6 +130,9 @@ def process_doc(
     vector_store: VectorStore,
     dry_run: bool = False,
 ) -> dict:
+    from app.services.processing_scope import has_stored_processing_scope
+    if has_stored_processing_scope(doc_id):
+        return {'status':'skipped_processing_scope_not_supported'}
     ext = Path(filename).suffix.lower()
     src = settings.uploads_dir / f"{doc_id}{ext}"
     if not src.is_file():

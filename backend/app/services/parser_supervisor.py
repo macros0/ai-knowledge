@@ -64,6 +64,8 @@ class SupervisedParseResult:
     sources: list
     warnings: list[dict]
     parser_version: str
+    inventory: dict | None = None
+    xlsx_preview: dict | None = None
 
     def __iter__(self):
         yield self.blocks
@@ -118,6 +120,9 @@ def _safe_worker_error(exc: BaseException) -> str:
 def _worker_error_code(exc: BaseException) -> str:
     if is_storage_full(exc):
         return "storage_full"
+    from docparser.attachment_inventory import InvalidRootDocument
+    if isinstance(exc, InvalidRootDocument):
+        return "invalid_root"
     if isinstance(exc, ParserIsolationError):
         return "isolation_unavailable"
     return "memory_limit" if isinstance(exc, MemoryError) else "parse_failed"
@@ -126,12 +131,56 @@ def _worker_error_code(exc: BaseException) -> str:
 def _worker(
     send, path: str, filename: str, attachments_dir: str, max_memory_bytes: int,
     mail_enabled: bool = True, table_mode: bool = False,
+    processing_policy: dict | None = None, inspection_options: dict | None = None, archive_helper_path: str | None = None,
 ) -> None:
     try:
+        if inspection_options is not None:
+            if "xlsx_preview" in inspection_options:
+                from docparser.xlsx_preview import preview_xlsx
+
+                preview = preview_xlsx(Path(path), **inspection_options["xlsx_preview"])
+                _send_worker_message(send, {"ok": True, "blocks": [], "sources": [],
+                                           "warnings": [], "xlsx_preview": preview})
+                return
+            from docparser.attachment_inventory import inspect_attachment_inventory
+            from docparser.attachment_policy import AssessmentLimits, TraversalLimits
+            inventory=inspect_attachment_inventory(Path(path),filename,
+                limits=AssessmentLimits(**inspection_options['limits']),
+                traversal=TraversalLimits(**inspection_options['traversal']),
+                expanded_source_keys=frozenset(inspection_options.get('expanded_source_keys',[])),
+                attachments_dir=Path(attachments_dir), mail_enabled=mail_enabled,
+                helper_path=archive_helper_path, branch=inspection_options.get('branch'))
+            _send_worker_message(send,{'ok':True,'blocks':[],'sources':[],'warnings':[],
+                                      'parser_version':inventory.parser_version,'inventory':inventory.to_dict()})
+            return
         from docparser.table_spool import FileTableSink
+        from docparser.attachment_policy import ParserProcessingPolicy
         sink = FileTableSink(Path(attachments_dir) / ".tables-spool") if table_mode else None
-        context = ParseContext(filename, mail_enabled=mail_enabled, table_sink=sink)
-        blocks = parse_document(path, filename, attachments_dir=attachments_dir, context=context)
+        context = ParseContext(filename, mail_enabled=mail_enabled, table_sink=sink,
+                               processing_policy=ParserProcessingPolicy(processing_policy) if processing_policy else None)
+        context.archive_helper_path=archive_helper_path
+        branch = processing_policy.get("delta_branch") if processing_policy else None
+        if branch:
+            import hashlib
+            import re
+            sid = branch.get("source_id", "")
+            chain = branch.get("locator_chain", [])
+            if (not re.fullmatch(r"root(?:/[A-Za-z0-9_-]+)+", sid) or not 1 <= len(chain) <= 6
+                    or not re.fullmatch(r"[0-9a-f]{64}", branch.get("content_fingerprint", ""))
+                    or not context.processing_policy.is_included(branch.get("source_key"))):
+                raise ParserWorkerError("Invalid incremental source boundary")
+            with Path(path).open("rb") as stream:
+                if hashlib.file_digest(stream, "sha256").hexdigest() != branch["content_fingerprint"]:
+                    raise ParserWorkerError("Incremental source changed")
+            context.sources = [SourceNode(source_id=sid, parent_source_id=branch["parent_source_id"],
+                ordinal=branch["ordinal"], kind=branch["kind"], display_name=filename,
+                metadata={"source_key": branch["source_key"], "source_locator": chain[-1]})]
+            context._locator_chains = {sid: tuple(chain)}
+            context._next_ordinal = {sid: 0}
+            blocks = parse_document(path, filename, attachments_dir=attachments_dir, context=context,
+                                    source_id=sid, depth=len(chain))
+        else:
+            blocks = parse_document(path, filename, attachments_dir=attachments_dir, context=context)
         if sink is not None:
             sink.close()
         _send_worker_message(
@@ -154,6 +203,7 @@ def _worker(
 def _worker_entry(
     target, send, path: str, filename: str, attachments_dir: str,
     max_memory_bytes: int, mail_enabled: bool, admission, group_ready, table_mode: bool = False,
+    processing_policy: dict | None = None, inspection_options: dict | None = None, archive_helper_path: str | None = None,
 ) -> None:
     """Apply the process boundary before any parser or injected worker runs."""
     try:
@@ -167,7 +217,8 @@ def _worker_entry(
                 raise ParserIsolationError("parser isolation unavailable (process group)") from exc
             _set_posix_memory_limit(max_memory_bytes)
         if target is _worker:
-            target(send, path, filename, attachments_dir, max_memory_bytes, mail_enabled, table_mode)
+            target(send, path, filename, attachments_dir, max_memory_bytes, mail_enabled, table_mode,
+                   processing_policy,inspection_options,archive_helper_path)
         else:
             target(send, path, filename, attachments_dir, max_memory_bytes)
     except BaseException as exc:
@@ -195,6 +246,9 @@ def _decode_worker_message(payload: bytes) -> SupervisedParseResult:
             raise ParserMemoryLimitError("Разбор файла превысил лимит памяти")
         if message.get("code") == "isolation_unavailable":
             raise ParserIsolationError("parser isolation unavailable")
+        if message.get("code") == "invalid_root":
+            from docparser.attachment_inventory import InvalidRootDocument
+            raise InvalidRootDocument(error)
         raise ParserWorkerError(error)
     blocks = message.get("blocks")
     sources = message.get("sources")
@@ -220,6 +274,8 @@ def _decode_worker_message(payload: bytes) -> SupervisedParseResult:
             sources=[SourceNode(**source) for source in sources],
             warnings=warnings,
             parser_version=parser_version,
+            inventory=message.get('inventory'),
+            xlsx_preview=message.get('xlsx_preview'),
         )
     except (TypeError, ValueError) as exc:
         raise ParserWorkerError("parser worker вернул некорректную схему ответа") from exc
@@ -332,6 +388,38 @@ def _worker_response_ready(receive, timeout, job):
         raise ParserWorkerError("parser worker завершился без результата") from exc
 
 
+def inspect_attachments_supervised(path,filename,*,attachments_dir,limits,traversal,
+                                  expanded_source_keys=(),timeout_seconds=15,max_memory_mb=1024,
+                                  max_concurrent=2,mail_enabled=True,archive_helper_path=None,branch=None):
+    from dataclasses import asdict
+    import hashlib
+    from docparser.attachment_policy import AttachmentInventory,AttachmentNode,make_source_key
+    try:
+        result=parse_document_supervised(path,filename,attachments_dir=attachments_dir,
+            timeout_seconds=timeout_seconds,max_memory_mb=max_memory_mb,max_concurrent=max_concurrent,
+            mail_enabled=mail_enabled,_inspection_options={'limits':asdict(limits),'traversal':asdict(traversal),
+                                                          'expanded_source_keys':list(expanded_source_keys),'branch':branch},
+            archive_helper_path=archive_helper_path)
+    except (ParserTimeoutError,ParserMemoryLimitError,ParserWorkerError) as exc:
+        if isinstance(exc,ParserIsolationError):
+            raise
+        with Path(path).open('rb') as stream:
+            source_hash=hashlib.file_digest(stream,'sha256').hexdigest()
+        return AttachmentInventory(source_file_hash=source_hash,complete=False,nodes=[
+            AttachmentNode(make_source_key(source_hash,('uninspected-remainder',)),'root',
+                           'uninspected-remainder','Непросмотренные вложения','branch',
+                           assessment='unknown',children_complete=False,status='assessment_incomplete')])
+    try:
+        if not isinstance(result.inventory,dict) or len(result.inventory.get('nodes',[]))>traversal.max_nodes:
+            raise ValueError('Invalid attachment inventory')
+        inventory=AttachmentInventory.from_dict(result.inventory)
+        if any(not isinstance(node.source_key,str) or len(node.source_key)!=64 for node in inventory.nodes):
+            raise ValueError('Invalid attachment source key')
+        return inventory
+    except (TypeError,ValueError,AttributeError,KeyError) as exc:
+        raise ParserWorkerError('parser worker вернул некорректный состав вложений') from exc
+
+
 def parse_document_supervised(
     path: str | Path,
     filename: str,
@@ -342,6 +430,9 @@ def parse_document_supervised(
     max_concurrent: int = 2,
     mail_enabled: bool = True,
     table_mode: bool = False,
+    processing_policy: dict | None = None,
+    archive_helper_path: str | None = None,
+    _inspection_options: dict | None = None,
     _worker_target=None,
 ) -> SupervisedParseResult:
     """Parse in a killable child and return blocks, sources and diagnostics.
@@ -371,7 +462,7 @@ def parse_document_supervised(
         process = context.Process(
             target=_worker_entry,
             args=(_worker_target or _worker, send, str(path), filename, str(dest), limit, mail_enabled,
-                  admission, group_ready, table_mode),
+                  admission, group_ready, table_mode,processing_policy,_inspection_options,archive_helper_path),
             daemon=True,
         )
         deadline = time.monotonic() + timeout_seconds

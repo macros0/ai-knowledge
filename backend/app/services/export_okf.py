@@ -51,7 +51,7 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
         chunk_rows = (
             s.query(DocumentChunk)
             .filter(DocumentChunk.doc_id == doc_id)
-            .order_by(DocumentChunk.chunk_index)
+            .order_by(func.coalesce(DocumentChunk.display_order, DocumentChunk.chunk_index), DocumentChunk.chunk_index)
             .all()
         )
         att_rows = s.query(OkfAttachment).filter(OkfAttachment.doc_id == doc_id).all()
@@ -84,6 +84,11 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
                     'projection_hash':parent.projection_hash,'fragment_count':parent.fragment_count})
         dest_dir.mkdir(parents=True, exist_ok=True)
         files: list[str] = []
+        from app.services.processing_scope import scope_for_generation
+        snapshot=scope_for_generation(s,doc_id,active_generations.get(doc_id))
+        if snapshot is not None:
+            write_json_atomic(dest_dir/'processing-scope.json',snapshot)
+            files.append('processing-scope.json')
         if active_generations.get(doc_id):
             from app.services.table_store import export_generation_tables
             manifest = export_generation_tables(s, doc_id, active_generations[doc_id], dest_dir)

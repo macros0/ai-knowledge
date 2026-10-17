@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.services.problem_codes import problem_message
+from app.models.processing_scope import ProcessingScopeSummary,ProcessingReviewSummary
 
 SearchMode = Literal["dense", "bm25", "hybrid"]
 QueryText = Annotated[str, Field(min_length=1, max_length=8192)]
@@ -68,6 +69,10 @@ class DocumentOut(BaseModel):
     content_type: str
     size: int
     status: str
+    processing_scope: ProcessingScopeSummary | None=None
+    processing_review: ProcessingReviewSummary | None=None
+    processing_scope_availability: Literal["available", "none", "unknown"] = "unknown"
+    processing_update_kind: str | None = None
     has_published_version: bool = False
     update_id: str | None = None
     can_cancel_update: bool = False
@@ -167,6 +172,10 @@ class DocumentSourceOut(BaseModel):
     kind: str
     display_name: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    source_key: str | None = None
+    processing_included: bool | None = None
+    processing_reason: str | None = None
+    processing_assessment: str | None = None
     saved_path: str | None = None
     extraction_status: str | None = None
     artifact_kind: str

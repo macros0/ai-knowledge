@@ -17,6 +17,11 @@ def run_cleanup_loop(stop_event, cleanup, *, interval: float = 60.0) -> None:
     """Discover durable work on startup and retry until application shutdown."""
     while not stop_event.is_set():
         try:
+            from app.services.processing_scope_jobs import recover_scope_changes
+            recover_scope_changes()
+            from app.config import get_settings
+            from app.services.processing_scope import recover_processing_reviews
+            recover_processing_reviews(get_settings())
             cleanup()
         except Exception:
             logging.getLogger(__name__).warning("Очистка старых версий будет повторена", exc_info=True)

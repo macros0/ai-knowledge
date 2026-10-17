@@ -319,6 +319,10 @@ def shared_qdrant_client(settings) -> QdrantClient:
             url, api_key, prefer_grpc, grpc_port = key
             client = QdrantClient(
                 url=url, api_key=api_key, timeout=10, prefer_grpc=prefer_grpc, grpc_port=grpc_port,
+                # We supply precomputed dense/sparse vectors. This public SDK
+                # option skips scanning every float for local inference inputs;
+                # the configured server URL and vector data stay unchanged.
+                cloud_inference=True,
             )
             _shared_clients[key] = client
         return client
@@ -763,6 +767,136 @@ class VectorStore:
             if stats["failed_batches"]:
                 raise VectorStoreError("Qdrant: не удалось завершить индексацию частей чанков.") from stats["failure"]
         return point_ids
+
+    def reconcile_generation_metadata(self, doc_id, generation_id, *, global_tags, dev_tags, source_locale,
+                                      concept_tags, batch_guard):
+        """Bounded diff of copied payloads; unchanged points need no writes."""
+        import json
+        from app.services.generation_artifacts import GenerationIntegrityError
+        offset=None
+        seen_offsets=set()
+        while True:
+            with batch_guard():
+                points,next_offset=_qdrant_call(self.client.scroll,collection_name=self.collection,
+                    scroll_filter=qm.Filter(must=[qm.FieldCondition(key="doc_id",match=qm.MatchValue(value=doc_id)),
+                        qm.FieldCondition(key="generation_id",match=qm.MatchValue(value=generation_id))]),
+                    with_vectors=False,with_payload=["point_type","slug","tags","dev_tags","source_locale"],
+                    limit=UPSERT_BATCH_SIZE,offset=offset)
+                groups={}
+                for point in points:
+                    payload=point.payload or {}
+                    if payload.get("point_type")=="concept":
+                        if payload.get("slug") not in concept_tags:raise GenerationIntegrityError()
+                        tags=concept_tags[payload["slug"]]
+                    elif payload.get("point_type")=="chunk":tags=global_tags
+                    else:raise GenerationIntegrityError()
+                    desired={"tags":tags,"dev_tags":dev_tags,"source_locale":source_locale}
+                    if any(payload.get(key,[] if key!="source_locale" else None)!=value for key,value in desired.items()):
+                        groups.setdefault(json.dumps(desired,sort_keys=True),[]).append(str(point.id))
+                for value,ids in groups.items():
+                    _qdrant_call(self.client.set_payload,collection_name=self.collection,payload=json.loads(value),points=ids,wait=True)
+            if next_offset is None:return
+            if not points or str(next_offset) in seen_offsets:raise GenerationIntegrityError()
+            seen_offsets.add(str(next_offset));offset=next_offset
+
+    def update_generation_relations(self, doc_id, generation_id, relations, *, batch_guard):
+        """Change graph metadata with the canonical scope; vectors stay intact."""
+        import json
+        from app.services.generation_artifacts import GenerationIntegrityError
+        entries=[(concept_point_id(doc_id,slug,generation_id=generation_id),value) for slug,value in relations.items()]
+        for start in range(0,len(entries),UPSERT_BATCH_SIZE):
+            expected=dict(entries[start:start+UPSERT_BATCH_SIZE])
+            with batch_guard():
+                points=_qdrant_call(self.client.retrieve,collection_name=self.collection,ids=list(expected),
+                                   with_vectors=False,with_payload=True)
+                if {str(point.id) for point in points}!=set(expected):
+                    raise GenerationIntegrityError()
+                changed={}
+                for point in points:
+                    payload=point.payload or {}
+                    if payload.get("doc_id")!=doc_id or payload.get("generation_id")!=generation_id or payload.get("point_type")!="concept":
+                        raise GenerationIntegrityError()
+                    desired=expected[str(point.id)]
+                    if payload.get("relations",[])!=desired:
+                        changed.setdefault(json.dumps(desired),[]).append(str(point.id))
+                for value,ids in changed.items():
+                    _qdrant_call(self.client.set_payload,collection_name=self.collection,
+                                payload={"relations":json.loads(value)},points=ids,wait=True)
+                if changed:
+                    verified=_qdrant_call(self.client.retrieve,collection_name=self.collection,ids=list(expected),
+                                         with_vectors=False,with_payload=["relations"])
+                    if {str(point.id) for point in verified}!=set(expected) or any(
+                        (point.payload or {}).get("relations",[])!=expected[str(point.id)] for point in verified):
+                        raise GenerationIntegrityError()
+
+    def copy_generation_points(self, doc_id: str, base_generation_id: str,
+                               generation_id: str, identity_map: dict, *, batch_guard=None) -> int:
+        """Copy existing dense AND sparse values; never invoke an embedder.
+
+        identity_map maps old point IDs to {id: new_id, identity: canonical
+        payload identity}. The caller owns the base generation snapshot and
+        supplies a document writer/ownership guard for each bounded batch.
+        """
+        from contextlib import nullcontext
+        from copy import deepcopy
+        from app.services.generation_artifacts import GenerationIntegrityError
+        from app.services.chunk_index_projection import chunk_fragment_group_id
+
+        entries = list(identity_map.items())
+        targets = [entry["id"] for _, entry in entries]
+        if len(set(targets)) != len(targets) or base_generation_id == generation_id:
+            raise ValueError("Invalid vector copy identities")
+        from app.services.chunk_index_projection import chunk_fragment_point_id_from_descriptor
+        for old_id, entry in entries:
+            identity = entry["identity"]
+            def canonical_id(gid):
+                if identity.get("point_type") == "concept" and identity.get("slug"):
+                    return concept_point_id(doc_id, identity["slug"], generation_id=gid)
+                if identity.get("point_type") == "chunk" and type(identity.get("chunk_index")) is int:
+                    if identity.get("chunk_fragment") is not None:
+                        return chunk_fragment_point_id_from_descriptor(doc_id, identity["chunk_index"], gid,
+                            identity.get("source_id"), identity["chunk_fragment"])
+                    return chunk_point_id(doc_id, identity["chunk_index"], generation_id=gid)
+                raise ValueError("Unknown canonical point identity")
+            if old_id != canonical_id(base_generation_id) or entry["id"] != canonical_id(generation_id):
+                raise ValueError("Vector copy target is not canonical")
+        count = 0
+        for offset in range(0, len(entries), UPSERT_BATCH_SIZE):
+            batch = dict(entries[offset:offset + UPSERT_BATCH_SIZE])
+            with batch_guard() if batch_guard else nullcontext():
+                points = _qdrant_call(self.client.retrieve, collection_name=self.collection,
+                    ids=list(batch), with_vectors=True, with_payload=True)
+                if {str(p.id) for p in points} != set(batch) or len(points) != len(batch):
+                    raise GenerationIntegrityError()
+                copied = []
+                for point in points:
+                    payload, entry = point.payload or {}, batch[str(point.id)]
+                    if payload.get("doc_id") != doc_id or payload.get("generation_id") != base_generation_id:
+                        raise GenerationIntegrityError()
+                    old_identity = dict(entry["identity"])
+                    if old_identity.get("chunk_fragment") is not None:
+                        if old_identity.get("chunk_fragment_group") != chunk_fragment_group_id(
+                                doc_id, generation_id, old_identity.get("source_id"), old_identity["chunk_index"]):
+                            raise GenerationIntegrityError()
+                        old_identity["chunk_fragment_group"] = chunk_fragment_group_id(
+                            doc_id, base_generation_id, old_identity.get("source_id"), old_identity["chunk_index"])
+                    if any(payload.get(k) != v or type(payload.get(k)) is not type(v)
+                           for k, v in old_identity.items()):
+                        raise GenerationIntegrityError()
+                    vector = point.vector
+                    if not isinstance(vector, dict) or not vector.get("") or SPARSE_VECTOR_NAME not in vector:
+                        raise GenerationIntegrityError()
+                    new_payload = deepcopy(payload)
+                    new_payload["generation_id"] = generation_id
+                    if new_payload.get("chunk_fragment") is not None:
+                        new_payload["chunk_fragment_group"] = chunk_fragment_group_id(
+                            doc_id, generation_id, payload.get("source_id"), payload["chunk_index"])
+                    copied.append(qm.PointStruct(id=entry["id"], vector=deepcopy(vector), payload=new_payload))
+                stats = self._upsert_batches(copied, doc_id=doc_id, mode="scope-reuse")
+                if stats["failed_batches"]:
+                    raise VectorStoreError("Не удалось скопировать готовые поисковые данные.") from stats.get("failure")
+                count += len(copied)
+        return count
 
     def verify_generation_points(self, doc_id: str, generation_id: str, point_ids: list[str]) -> None:
         """A ready checkpoint cannot publish a missing or foreign search point."""

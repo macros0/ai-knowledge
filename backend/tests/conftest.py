@@ -23,7 +23,7 @@ def _flush_auth_env(monkeypatch):
     runtime_vars = [
         k
         for k in os.environ
-        if k.startswith(("AUTH_", "KEYC", "SSO_", "LLM_", "CHAT_", "SOURCE_ASSESSMENT_"))
+        if k.startswith(("AUTH_", "KEYC", "SSO_", "LLM_", "CHAT_", "SOURCE_ASSESSMENT_", "EMBEDDING_"))
     ]
     for var in runtime_vars:
         monkeypatch.delenv(var, raising=False)
@@ -31,6 +31,9 @@ def _flush_auth_env(monkeypatch):
     # production, тесты не должны зависеть от дефолта класса или env процесса.
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv("SOURCE_ASSESSMENT_ENABLED", "false")
+    # The live flag is enabled locally; legacy unit fixtures must be explicit.
+    # Scope tests opt in on their isolated Settings instance or via monkeypatch.
+    monkeypatch.setenv("ATTACHMENT_REVIEW_ENABLED", "false")
     from app.config import get_settings
     get_settings.cache_clear()
     # Integration tests explicitly replace this boundary with a typed provider.

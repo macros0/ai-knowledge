@@ -21,6 +21,8 @@ from app.services.registry import DocumentRegistry
 
 EXPECTED_ACTION_TYPES = {
     "document_upload",
+    'document_processing_scope_updated',
+    'document_processing_scope_confirmed',
     "document_delete",
     "document_bulk_delete",
     "document_regenerate",

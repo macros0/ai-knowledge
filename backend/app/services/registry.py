@@ -23,6 +23,9 @@ from app.db.models import (
     DocumentTable,
     DocumentTableRow,
     DocumentGeneration,
+    DocumentProcessingReview,
+    DocumentScopeChange,
+    DocumentScopeEditLock,
     DocumentGenerationState,
     DocumentUpdateAttempt,
     DocumentLshBucket,
@@ -235,6 +238,13 @@ def _document_dicts(session, docs: list[Document]) -> list[dict]:
         item["update_cancelling"] = bool(attempt and attempt.cancel_requested)
         item["can_cancel_update"] = bool((attempt or recoverable) and doc.status != "done" and doc.deleted_at is None)
         result.append(item)
+    from app.services.processing_scope import load_processing_scope_summaries
+    scopes=load_processing_scope_summaries(session,doc_ids)
+    for item in result:
+        item.update(scopes[item['id']])
+        if item['processing_scope'] is None and item.get('has_published_version'):
+            from app.services.processing_scope import scope_summary
+            item['processing_scope']=scope_summary(None)
     return result
 
 
@@ -248,6 +258,8 @@ class DocumentRegistry:
         tags: list[str] | None = None,
         uploaded_by: str | None = None,
         canonical_locale: str = "und",
+        processing_inventory=None, processing_limits=None,
+        processing_artifacts_dir=None, processing_settings=None,
     ) -> dict:
         from app.services.tag_registry import TagRegistry
 
@@ -262,6 +274,19 @@ class DocumentRegistry:
                 uploaded_by=uploaded_by,
             )
             s.add(doc)
+            if processing_inventory is not None:
+                from app.services.processing_scope import create_review
+                doc.status='awaiting_attachments'
+                review=create_review(s,doc_id,processing_inventory,base_generation_id=None,
+                                     actor=uploaded_by,limits=processing_limits)
+                if processing_artifacts_dir is not None:
+                    from app.services.generation_files import processing_review_paths
+                    import shutil
+                    target=processing_review_paths(processing_settings,doc_id,review.id)
+                    # Publish the document and review only after all originals exist.
+                    target.mkdir(parents=True,exist_ok=False)
+                    shutil.copytree(processing_artifacts_dir,target/'attachments')
+                doc.status='awaiting_attachments'
         return self.get(doc_id)
 
     def get(self, doc_id: str) -> dict | None:
@@ -606,7 +631,7 @@ class DocumentRegistry:
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
             lock_document_write(s, doc_id)
-            for model in (DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentGeneration, DocumentGenerationState):
+            for model in (DocumentScopeEditLock, DocumentScopeChange, DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentProcessingReview, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             doc = s.get(Document, doc_id)
             if doc is None:
@@ -629,7 +654,7 @@ class DocumentRegistry:
             doc = s.get(Document, doc_id)
             if doc is None or doc.deleted_at is None:
                 return False
-            for model in (DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentGeneration, DocumentGenerationState):
+            for model in (DocumentScopeEditLock, DocumentScopeChange, DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentProcessingReview, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             s.delete(doc)
             return True
@@ -724,15 +749,20 @@ class DocumentRegistry:
 
         restored = []
         with session_scope() as s:
+            # Scope workers have cross-process leases and their own recovery.
+            # A generic startup must not cancel/restore another live writer.
+            protected = set(s.scalars(select(DocumentScopeChange.doc_id).where(
+                DocumentScopeChange.state.in_(["admitted", "queued", "processing", "copying", "ready"]))))
             canceled = list(s.scalars(select(DocumentUpdateAttempt.doc_id).where(
                 DocumentUpdateAttempt.cancel_requested.is_(True),
+                DocumentUpdateAttempt.doc_id.notin_(protected),
             ).order_by(DocumentUpdateAttempt.doc_id)))
             for doc_id in canceled:
                 if restore_canceled_update(s, doc_id):
                     restored.append(doc_id)
             docs = (
                 s.query(Document)
-                .filter(Document.status.in_(STALE_STATUSES), Document.deleted_at.is_(None))
+                .filter(Document.status.in_(STALE_STATUSES), Document.deleted_at.is_(None), Document.id.notin_(protected))
                 .all()
             )
             for d in docs:
