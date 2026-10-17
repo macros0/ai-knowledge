@@ -440,6 +440,8 @@ export default {
   "selection.more": "More",
   "selection.delete": "Delete documents…",
   "selection.selectShown": "Select shown documents",
+  "selection.clearShown": "Deselect shown documents",
+  "selection.clearPage": "Deselect on page",
   "selection.selectResults": "Select all results",
   "selection.actionLimit": "Up to {max} documents per operation",
   "selection.selected": "Selected: {selected} of {total}",

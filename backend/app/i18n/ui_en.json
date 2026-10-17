@@ -420,6 +420,8 @@
   "bulkGeneration.checkFailed": "Could not check interrupted processing",
   "bulkGeneration.retryCheck": "Retry check",
   "selection.clear": "Clear selection",
+  "selection.clearPage": "Deselect on page",
+  "selection.clearShown": "Deselect shown documents",
   "selection.more": "More",
   "selection.delete": "Delete documents…",
   "selection.selectShown": "Select shown documents",

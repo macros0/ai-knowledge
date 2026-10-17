@@ -590,6 +590,9 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
   }, [selectLimit]);
 
   const pageDocIds = docs.map((d) => d.id);
+  // At the cap, a partially selected group must still be possible to deselect.
+  const pageSelectionOn = pageDocIds.some((id) => selected[id]) &&
+    (pageDocIds.every((id) => selected[id]) || selectedIds.length >= selectLimit);
 
   const allByFilterOn =
     filterSelectedIds.length > 0 && filterSelectedIds.every((id) => selected[id]);
@@ -597,10 +600,15 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
     selectionVersion.current += 1;
     setSelected((s) => {
       const next = { ...s };
+      if (pageSelectionOn) {
+        pageDocIds.forEach((id) => { delete next[id]; });
+        return next;
+      }
       // Кап MAX_SELECT: в grouped-режиме docs — весь отфильтрованный набор
       // (limit=None), «страница» фактически равна ему; выделяем не больше
       // лимита массовой операции, иначе bulk-tags молча упадёт на 400.
       for (const id of pageDocIds) {
+        if (next[id]) continue;
         if (Object.keys(next).length >= selectLimit) {
           showToast(
             t("docs.selectionCapToast", { max: selectLimit }),
@@ -1150,10 +1158,12 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
         )}
       </div>
       {canEdit && !listBlocked && <div className="document-selection-controls">
-        <button type="button" className="bulk-tag-btn" onClick={selectPage} disabled={!docs.length}>
-          {t(groupBy ? "selection.selectShown" : "selection.selectPage")}
+        <button type="button" className={`all-by-filter-btn${pageSelectionOn ? " active" : ""}`} onClick={selectPage} disabled={!docs.length} aria-pressed={pageSelectionOn}>
+          {t(pageSelectionOn
+            ? (groupBy ? "selection.clearShown" : "selection.clearPage")
+            : (groupBy ? "selection.selectShown" : "selection.selectPage"))}
         </button>
-        <button type="button" className={`all-by-filter-btn${allByFilterOn ? " active" : ""}`} onClick={toggleAllByFilter} disabled={!total}>
+        <button type="button" className={`all-by-filter-btn${allByFilterOn ? " active" : ""}`} onClick={toggleAllByFilter} disabled={!total} aria-pressed={allByFilterOn}>
           {t(allByFilterOn ? "selection.clear" : "selection.selectResults")}
         </button>
       </div>}
@@ -1162,7 +1172,6 @@ export default function DocumentList({ refreshKey = 0, onOpenTrash, onOpenUpload
         canDelete={isAdmin}
         canExport={exportEnabled}
         exportMaxDocs={settings.bulk_export_max_docs}
-        onClear={clearSelection}
         onOpenPreview={() => setShowPreview([...selectedIds])}
         onGeneration={(operation) => setGenerationAction({ operation, docIds: [...selectedIds] })}
         onExport={exportSelected}

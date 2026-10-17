@@ -440,6 +440,8 @@ export default {
   "selection.more": "Ещё",
   "selection.delete": "Удалить документы…",
   "selection.selectShown": "Выбрать показанные",
+  "selection.clearShown": "Снять выделение с показанных",
+  "selection.clearPage": "Снять выделение на странице",
   "selection.selectResults": "Выбрать все результаты",
   "selection.actionLimit": "Не более {max} документов за одну операцию",
   "selection.selected": "Выбрано: {selected} из {total}",

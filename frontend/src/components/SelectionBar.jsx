@@ -6,7 +6,7 @@ import { BULK_LIMITS } from "@/lib/documentBulkLimits.mjs";
 import { TrashIcon } from "./icons";
 
 export default function SelectionBar({ selectedIds, canDelete = false, canExport = false, exportMaxDocs = 1000,
-  onEditTags, onOpenPreview, onGeneration, onExport, onClear }) {
+  onEditTags, onOpenPreview, onGeneration, onExport }) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -46,7 +46,6 @@ export default function SelectionBar({ selectedIds, canDelete = false, canExport
           <LimitedAction name={<><TrashIcon size={14} /> {t("selection.delete")}</>} onClick={() => action(onOpenPreview)} count={count} max={BULK_LIMITS.delete} helpId="delete-selection-limit" />
         </div>}
       </div>}
-      <button type="button" className="bulk-tag-btn selection-clear" onClick={onClear}>{t("selection.clear")}</button>
     </div>
   </div>;
 }

@@ -1444,6 +1444,8 @@
     "message"
   ],
   "selection.clear": [],
+  "selection.clearPage": [],
+  "selection.clearShown": [],
   "selection.count": [
     "selected"
   ],
