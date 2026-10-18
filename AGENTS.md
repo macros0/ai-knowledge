@@ -864,6 +864,13 @@ ru), полнота plural-форм.
 
 ## Тесты
 
+Python runtime устанавливать из общего `backend/requirements.lock.txt`:
+`python -m pip install --require-hashes -r backend/requirements.lock.txt`, затем
+`python -m pip install --no-deps -e ./doc-parser` из корня. Исходные зависимости
+остаются в `backend/requirements.txt` и `doc-parser/pyproject.toml`; при их правке
+обновлять lock вместе с ними. Генерация, аудит и защита GitHub main описаны в
+`docs/DEVELOPMENT_CHECKS.md`.
+
 Перед коммитом запускайте из корня `node scripts/check-project.mjs`:
 npm audit (high), ESLint, весь frontend test suite и Ruff бэкенда.
 После нового клона включите `node scripts/check-project.mjs --install-hooks`.

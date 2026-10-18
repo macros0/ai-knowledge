@@ -21,6 +21,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python-lock:
+    name: Python dependency lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check the runtime lock against both dependency manifests
+        run: |
+          python -m pip install uv==0.11.26
+          uv pip compile backend/requirements.txt doc-parser/pyproject.toml \
+            --universal --python-version 3.12 --generate-hashes --no-annotate \
+            --custom-compile-command 'uv pip compile backend/requirements.txt doc-parser/pyproject.toml --universal --python-version 3.12 --generate-hashes --no-annotate -o backend/requirements.lock.txt' \
+            --constraint backend/requirements.lock.txt \
+            --output-file "$RUNNER_TEMP/requirements.lock.txt" --quiet
+          # Targeted updates change uv's command header, not the dependency lock.
+          diff -u --ignore-matching-lines='^#' backend/requirements.lock.txt "$RUNNER_TEMP/requirements.lock.txt"
+
   backend:
     name: backend (pytest)
     runs-on: ubuntu-latest
@@ -32,22 +51,24 @@ jobs:
           # Та же версия, что в backend/Dockerfile.
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements.lock.txt
 
       - name: Установка зависимостей
         run: |
           # doc-parser ставится из исходников: backend импортирует его как пакет
           # (docparser), а на PyPI его нет.
-          pip install -e ./doc-parser
-          pip install -r backend/requirements.txt
+          # Tools go first: restore locked runtime versions afterwards, then
+          # reject incompatible tool requirements instead of testing drift.
+          python -m pip install ruff pytest-cov
+          python -m pip install --force-reinstall --require-hashes -r backend/requirements.lock.txt
+          python -m pip install --no-deps -e ./doc-parser
+          python -m pip check
 
       - name: Линт (ruff)
         working-directory: backend
         # Набор правил — в backend/pyproject.toml, а не здесь: локальный
         # `ruff check` обязан совпадать с гейтом.
-        run: |
-          pip install ruff
-          ruff check .
+        run: ruff check .
 
       - name: Тесты + покрытие
         working-directory: backend
@@ -55,9 +76,7 @@ jobs:
         # (SQLite во временном каталоге, Qdrant/LLM замоканы).
         # Порог — чуть ниже текущего значения: гейт ловит крупный непокрытый
         # кусок, а не колеблется на единицах строк.
-        run: |
-          pip install pytest-cov
-          python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
+        run: python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
 
   diagnostics-windows:
     name: diagnostics (Windows locks and offline CLI)
@@ -68,11 +87,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements.lock.txt
+      - name: Isolate diagnostics Python from runner tools
+        shell: pwsh
+        run: |
+          python -m venv "$env:RUNNER_TEMP\okf-diagnostics-python"
+          "$env:RUNNER_TEMP\okf-diagnostics-python\Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Install diagnostic test dependencies
         run: |
-          python -m pip install -e ./doc-parser
-          python -m pip install -r backend/requirements.txt
+          python -c "import sys; assert sys.prefix != sys.base_prefix"
+          python -m pip install --require-hashes -r backend/requirements.lock.txt
+          python -m pip install --no-deps -e ./doc-parser
+          python -m pip check
       - name: File safety, writer lock and offline export
         working-directory: backend
         run: |
@@ -98,12 +124,10 @@ jobs:
       # приходить как красный CI, а не обнаруживаться на проде.
       - name: pip-audit (backend)
         run: |
-          # doc-parser — локальный editable-пакет; его зависимости (включая
-          # pypdf) отсутствуют в backend/requirements.txt и иначе выпадают из
-          # аудита production runtime.
-          pip install -e ./doc-parser
+          # Audit the complete, hashed backend + parser runtime, independently
+          # of the tools installed in this job. The lock is also used by Docker.
           pip install pip-audit
-          pip-audit --local --progress-spinner off
+          pip-audit -r backend/requirements.lock.txt --require-hashes --disable-pip --strict --progress-spinner off
 
       - name: npm audit (frontend)
         working-directory: frontend
@@ -124,7 +148,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: doc-parser/pyproject.toml
+          cache-dependency-path: backend/requirements.lock.txt
 
       # Тестовые PDF пишутся кириллицей, а встроенная в reportlab Vera её не
       # содержит: без системного шрифта два теста извлечения текста уходят в
@@ -147,8 +171,11 @@ jobs:
           echo "ARCHIVE_7ZIP_PATH=$RUNNER_TEMP/okf-7zip/7zz" >> "$GITHUB_ENV"
 
       - name: Установка зависимостей
-        working-directory: doc-parser
-        run: pip install -e ".[dev]"
+        run: |
+          python -m pip install reportlab
+          python -m pip install --force-reinstall --require-hashes -r backend/requirements.lock.txt
+          python -m pip install --no-deps -e ./doc-parser
+          python -m pip check
 
       - name: Тесты
         working-directory: doc-parser
@@ -531,11 +558,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements.lock.txt
       - name: Install existing dependencies
         run: |
-          pip install -e ./doc-parser
-          pip install -r backend/requirements.txt
+          python -m pip install --require-hashes -r backend/requirements.lock.txt
+          python -m pip install --no-deps -e ./doc-parser
+          python -m pip check
       - name: Wait for real Qdrant
         run: |
           python - <<'PY'

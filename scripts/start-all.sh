@@ -370,7 +370,8 @@ start_backend() {
     if [ ! -x "$python" ]; then
         echo "  [FAIL] Не найден $python. Создайте окружение (Python 3.12+):"
         echo "         python3 -m venv backend/.venv"
-        echo "         backend/.venv/bin/pip install -e ./doc-parser -r backend/requirements.txt"
+        echo "         backend/.venv/bin/pip install --require-hashes -r backend/requirements.lock.txt"
+        echo "         backend/.venv/bin/pip install --no-deps -e ./doc-parser"
         return 1
     fi
     run_service Backend backend app.diagnostic_entrypoint "$OKF_BACKEND_PORT" \

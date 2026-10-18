@@ -158,7 +158,8 @@ Preparación única (Python 3.12+, Node.js 20+):
 ```bash
 cp .env.example .env                 # endpoints de modelos, DATABASE_URL, QDRANT_URL
 python3 -m venv backend/.venv        # Windows: python -m venv backend\.venv
-backend/.venv/bin/pip install -e ./doc-parser -r backend/requirements.txt
+backend/.venv/bin/pip install --require-hashes -r backend/requirements.lock.txt
+backend/.venv/bin/pip install --no-deps -e ./doc-parser
                                      # Windows: backend\.venv\Scripts\pip install ...
 (cd frontend && npm ci)
 ```
