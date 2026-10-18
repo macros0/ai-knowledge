@@ -248,7 +248,7 @@ def _parse_native_attachment(handle, *, attachments_dir, index, depth, budget, c
 
     if not budget.reserve_node():
         return skipped("skipped_count", "превышен лимит количества вложений", "attachment_count_exceeded")
-    if depth >= attachment_depth_limit(context):
+    if depth > attachment_depth_limit(context):
         return skipped("skipped_depth", "превышена глубина вложенности", "attachment_depth_exceeded")
     try:
         properties = _read_scoped_properties(handle.ole, handle.path, 8, budget, handle.encoding)
@@ -438,7 +438,7 @@ def _parse_embedded_message(
             return [marker_block(att,note='исключено из обработки',extraction_status='excluded_by_policy')]
     if not _node_reserved and not effective_budget.reserve_node():
         return [marker_block(att, note="превышен лимит количества вложений", extraction_status="skipped_count")]
-    if depth >= attachment_depth_limit(context):
+    if depth > attachment_depth_limit(context):
         return [marker_block(att, note="превышена глубина вложенности", extraction_status="skipped_depth")]
     try:
         blocks = _parse_message_data(

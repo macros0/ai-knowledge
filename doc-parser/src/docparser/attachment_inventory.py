@@ -9,10 +9,10 @@ import tempfile
 import time
 import zipfile
 from collections import Counter
+from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 
 from defusedxml import ElementTree as ET
-from docparser.extensions import SUPPORTED_EXTENSIONS
 
 from docparser.attachment_assessment import node_is_heavy
 from docparser.attachment_policy import (
@@ -22,6 +22,7 @@ from docparser.attachment_policy import (
     TraversalLimits,
     make_source_key,
 )
+from docparser.extensions import SUPPORTED_EXTENSIONS
 
 
 class InvalidRootDocument(ValueError):
@@ -29,7 +30,9 @@ class InvalidRootDocument(ValueError):
 
 
 class InspectionBudgetExceeded(ValueError):
-    pass
+    def __init__(self, message, *, status='assessment_incomplete'):
+        super().__init__(message)
+        self.status = status
 
 
 class _CountedReader:
@@ -83,6 +86,7 @@ class _Inspector:
         self.result = AttachmentInventory(
             source_file_hash=source_hash,
             parser_version=parser_version_for_mail_mode(mail_enabled) + "-scope-v1",
+            traversal_limits=asdict(traversal),
         )
         self.limits = limits
         self.traversal = traversal
@@ -132,7 +136,7 @@ class _Inspector:
 
     def add_node(self, parent, chain, locator, name, kind):
         if len(self.result.nodes) >= self.traversal.max_nodes:
-            raise InspectionBudgetExceeded("Attachment node budget reached")
+            raise InspectionBudgetExceeded("Attachment node budget reached", status='skipped_count')
         key = make_source_key(self.result.source_file_hash, (*chain, locator))
         node = AttachmentNode(
             key,
@@ -151,8 +155,18 @@ class _Inspector:
         self.result.nodes.append(node)
         return node
 
+    def depth_marker(self, name, locator, parent, chain, depth, file_bytes=None):
+        if depth <= self.traversal.max_depth:
+            return None
+        node = self.add_node(parent, chain, locator, name, 'unknown')
+        node.metrics['file_bytes'] = file_bytes or 0
+        self.unknown(node, 'skipped_depth')
+        return node
+
     def child(self, data, name, locator, parent, chain, depth):
         self.check()
+        if self.depth_marker(name, locator, parent, chain, depth, len(data)):
+            return
         node = self.add_node(parent, chain, locator, name, "unknown")
         node.metrics["file_bytes"] = len(data)
         if depth > self.traversal.max_depth or len(data) > self.traversal.max_payload_bytes:
@@ -166,6 +180,7 @@ class _Inspector:
             return
         try:
             kind, payload = identify_payload(data, name)
+            node.format = kind
             node.kind = (
                 "mail"
                 if kind in {"eml", "msg"}
@@ -222,12 +237,19 @@ class _Inspector:
 
         validate_zip(path)
         with zipfile.ZipFile(path) as archive:
+            if node:
+                from docparser.attachment_preview import office_title
+                title = office_title(archive, kind, charge=self.check)
+                node.title, node.title_source = title['title'], title['title_source']
             if kind == "xlsx":
                 # The root's table size is irrelevant: it is always included.
                 if node:
                     self.xlsx_metrics(archive, node)
                 for info in archive.infolist():
                     if info.filename.startswith("xl/embeddings/") and not info.is_dir():
+                        if self.depth_marker(PurePosixPath(info.filename).name, 'ooxml:' + info.filename,
+                                             parent, chain, depth + 1, info.file_size):
+                            continue
                         with archive.open(info) as stream:
                             data = self.read(stream)
                         self.child(
@@ -269,6 +291,8 @@ class _Inspector:
                                     posixpath.join(posixpath.dirname(part), rel.get("Target", ""))
                                 )
                                 relationships[rel.get("Id")] = target.lstrip("/")
+                    from docparser.attachment_labels import part_attachment_labels
+                    labels = part_attachment_labels(archive, xml, relationships, part, charge=self.check)
                     counts = Counter()
                     for element in xml.iter("{urn:schemas-microsoft-com:office:office}OLEObject"):
                         rid = element.get(
@@ -279,11 +303,18 @@ class _Inspector:
                         target = relationships.get(rid)
                         if target not in archive.namelist():
                             continue
+                        marker = self.depth_marker(PurePosixPath(target).name, locator, parent, chain,
+                                                   depth + 1, archive.getinfo(target).file_size)
+                        if marker:
+                            marker.display_label = labels.get(locator)
+                            continue
                         with archive.open(target) as stream:
                             data = self.read(stream)
+                        before_child = len(self.result.nodes)
                         self.child(
                             data, PurePosixPath(target).name, locator, parent, chain, depth + 1
                         )
+                        self.result.nodes[before_child].display_label = labels.get(locator)
 
     def xlsx_metrics(self, archive, node):
         node.metrics["rows"] = node.metrics["cells"] = 0
@@ -345,11 +376,25 @@ class _Inspector:
         data = path.read_bytes()
         self.check(len(data))
         message = parse_wire_message(data, AttachmentBudget(), header_limit=65536, depth_limit=32)
+        if node:
+            node.title = str(message.get('Subject') or '').strip()[:500] or None
+            node.title_source = 'subject' if node.title else None
         for index, part in enumerate(_attachments(message)):
+            wire_status = getattr(part, '_wire_status', None)
+            if wire_status:
+                child = self.add_node(parent, chain, f'mime:{index}',
+                                      part.get_filename() or 'Непросмотренная часть письма', 'unknown')
+                # MIME nesting is independent of the configured file depth.
+                status = getattr(part, '_wire_warning', wire_status) if wire_status == 'skipped_depth' else wire_status
+                self.unknown(child, status)
+                continue
             if (
                 part.get_content_maintype() == "image"
                 and part.get_content_disposition() != "attachment"
             ):
+                continue
+            if self.depth_marker(part.get_filename() or f'attachment-{index}', f'mime:{index}',
+                                 parent, chain, depth + 1):
                 continue
             size = _attachment_size_bound(part)
             if size is not None and size > min(
@@ -402,6 +447,9 @@ class _Inspector:
         )
 
         if node:
+            node.title = str(message.get('properties', {}).get('Subject') or '').strip()[:500] or None
+            node.title_source = 'subject' if node.title else None
+            node.format = 'msg'
             node.metrics["text_bytes"] = len(
                 str(message.get("properties", {}).get("Body") or "").encode("utf-8")
             )
@@ -412,6 +460,8 @@ class _Inspector:
             )
             name = _attachment_name(properties, index)
             locator = "ole:" + "/".join(handle.path)
+            if self.depth_marker(name, locator, parent, chain, depth + 1):
+                continue
             data_path = [*handle.path, "__substg1.0_37010102"]
             mail_path = [*handle.path, "__substg1.0_3701000D"]
             if handle.ole.exists(data_path):
@@ -437,8 +487,14 @@ class _Inspector:
 
         document = get_pdf_provider().open(path)
         try:
+            if node:
+                node.title = getattr(document, 'document_title', lambda: None)()
+                node.title_source = 'properties' if node.title else None
             for index, entry in enumerate(document.iter_attachments()):
                 self.check()
+                if self.depth_marker(entry.name, f'pdf:{index}', parent, chain, depth + 1,
+                                     entry.declared_size):
+                    continue
                 if (
                     entry.declared_size is None
                     or entry.declared_size > self.traversal.max_payload_bytes
@@ -474,6 +530,9 @@ class _Inspector:
                 if entry.is_dir:
                     continue
                 self.check()
+                if self.depth_marker(entry.display_path, 'archive:' + entry.entry_key,
+                                     parent, chain, depth + 1, entry.size):
+                    continue
                 buffer = io.BytesIO()
                 reader.extract_selected(
                     frozenset({entry.entry_key}), lambda _, target=buffer: target
@@ -503,8 +562,11 @@ def inspect_attachment_inventory(
     branch: dict | None = None,
 ) -> AttachmentInventory:
     path = Path(path)
-    with path.open("rb") as stream:
-        source_hash = hashlib.file_digest(stream, "sha256").hexdigest()
+    if branch:
+        source_hash = branch['source_file_hash']
+    else:
+        with path.open("rb") as stream:
+            source_hash = hashlib.file_digest(stream, "sha256").hexdigest()
     inspector = _Inspector(
         branch["source_file_hash"] if branch else source_hash,
         limits,
@@ -515,6 +577,11 @@ def inspect_attachment_inventory(
     )
     try:
         if branch:
+            marker = inspector.depth_marker(filename, branch['locator'], branch['parent_key'],
+                                            tuple(branch['parent_chain']), branch['depth'])
+            if marker:
+                inspector.result.elapsed_seconds = time.monotonic() - inspector.start
+                return inspector.result
             with path.open("rb") as stream:
                 raw = inspector.read(stream)
             inspector.child(
@@ -527,13 +594,13 @@ def inspect_attachment_inventory(
             )
         else:
             inspector.document(path, Path(filename).suffix.lower()[1:], (), "root", 0)
-    except InspectionBudgetExceeded:
+    except InspectionBudgetExceeded as exc:
         inspector.result.complete = False
         # A root remainder explicitly represents work we could not enumerate.
         if len(inspector.result.nodes) < traversal.max_nodes:
-            inspector.unknown(None)
+            inspector.unknown(None, exc.status)
         elif inspector.result.nodes:
-            inspector.unknown(inspector.result.nodes[-1])
+            inspector.unknown(inspector.result.nodes[-1], exc.status)
     except (ValueError, OSError, zipfile.BadZipFile) as exc:
         from docparser.storage_errors import is_storage_full_error
 

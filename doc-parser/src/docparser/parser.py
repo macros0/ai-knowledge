@@ -4,6 +4,7 @@
 """Диспетчер: выбирает парсер по расширению файла."""
 from pathlib import Path
 
+from docparser.attachment_limits import DEFAULT_ATTACHMENT_MAX_DEPTH
 from docparser.blocks import Block
 from docparser.docx_parser import parse_docx
 from docparser.eml_parser import parse_eml
@@ -74,10 +75,11 @@ def parse_document_result(
     attachments_dir: str | Path | None = None,
     *,
     table_sink=None,
+    attachment_max_depth=DEFAULT_ATTACHMENT_MAX_DEPTH,
 ) -> ParseResult:
     """Разбирает корневой файл и возвращает блоки вместе с деревом источников."""
     filename = filename or Path(path).name
-    context = ParseContext(filename, table_sink=table_sink)
+    context = ParseContext(filename, table_sink=table_sink, attachment_max_depth=attachment_max_depth)
     blocks = parse_document(path, filename=filename, attachments_dir=attachments_dir, context=context)
     return ParseResult(
         blocks=blocks, sources=context.sources, warnings=context.warnings,

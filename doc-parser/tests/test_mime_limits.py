@@ -46,7 +46,7 @@ def test_mime_forbidden_depth_precedes_transfer_decoding(tmp_path, monkeypatch):
     path = _mail(tmp_path, [b"FORBIDDEN"])
     decoded = _observe_decode(monkeypatch)
     context = ParseContext(path.name)
-    blocks = parse_document(path, depth=2, context=context)
+    blocks = parse_document(path, depth=context.attachment_max_depth, context=context)
     assert decoded == []
     assert blocks[-1].meta["extraction_status"] == "skipped_depth"
     assert "saved_path" not in blocks[-1].meta

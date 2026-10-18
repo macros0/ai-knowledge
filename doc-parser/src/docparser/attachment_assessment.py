@@ -26,7 +26,9 @@ def recommend_scope(inventory: AttachmentInventory, limits: AssessmentLimits) ->
     nodes = {node.source_key: node for node in inventory.nodes}
     reasons: dict[str, str] = {}
     for node in inventory.nodes:
-        if not node.supported:
+        if node.status == 'skipped_depth':
+            reasons[node.source_key] = 'depth_limit'
+        elif not node.supported:
             reasons[node.source_key] = "unsupported"
         elif node.assessment == "unknown" or not node.children_complete:
             reasons[node.source_key] = "unknown"

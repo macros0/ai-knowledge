@@ -27,6 +27,14 @@ def build_scope_candidate(base, plan, generation_id, completed_sources):
         if source["source_id"] in removed:
             metadata["processing_excluded"] = True
             metadata["processing_reason"] = "user_excluded"
+        elif (source.get('extraction_status') == 'skipped_depth'
+              and source['source_id'] not in plan.source_mapping.values()
+              and metadata.get('processing_reason') == 'user_excluded'):
+            # This marker inherits the parent selection, not a guessed source
+            # identity. A restored parent clears only the inherited exclusion;
+            # skipped_depth and its unprocessed original remain unchanged.
+            metadata.pop('processing_excluded', None)
+            metadata.pop('processing_reason', None)
     expected = {s["source_key"]: s for s in plan.workset["sources"]}
     if set(completed_sources) != set(expected):
         raise ValueError("Missing or unexpected completed sources")

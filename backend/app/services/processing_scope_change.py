@@ -6,6 +6,8 @@ from copy import deepcopy
 import hashlib
 import json
 
+SCOPE_CHANGE_ANALYSIS_VERSION = 2
+
 
 @dataclass
 class ScopeBaseSnapshot:
@@ -205,6 +207,29 @@ def _valid_provenance(base, source_ids):
     return None
 
 
+def _unmapped_depth_placeholders(base, mapping):
+    """Allow only empty depth-boundary records under a verified source tree.
+
+    Their retained originals are never opened, mapped to an inventory key or
+    promoted to completed parse/concept/cache stages by this exception.
+    """
+    by_id = {s['source_id']: s for s in base.rows.get('sources', [])}
+    mapped = set(mapping.values())
+    unmapped = set(by_id) - mapped
+    content_sources = {r.get('source_id') for kind in ('chunks', 'concepts', 'tables')
+                       for r in base.rows.get(kind, [])}
+    for sid in unmapped:
+        current, seen = sid, set()
+        while current not in mapped:
+            row = by_id.get(current)
+            if (not row or current in seen or current in content_sources
+                    or row.get('extraction_status') != 'skipped_depth'):
+                return None
+            seen.add(current)
+            current = row.get('parent_source_id')
+    return unmapped
+
+
 def analyze_scope_change(base: ScopeBaseSnapshot, selection: dict) -> ScopeChangePlan:
     result = ScopeChangePlan(base_generation_id=base.generation_id,
                              selection_hash=selection.get("selection_hash"))
@@ -242,12 +267,23 @@ def analyze_scope_change(base: ScopeBaseSnapshot, selection: dict) -> ScopeChang
         key for key, sid in mapping.items() if key != "root" and any(s["source_id"] == sid for s in sources)
     }
     removed_keys, added_keys = active_keys - desired_keys, desired_keys - active_keys
-    # A saved source absent from inventory must not silently be retained or lost.
-    if {s["source_id"] for s in sources} - set(mapping.values()):
+    # A skipped-depth original has no generated content or reliable occurrence
+    # locator in legacy parsers. Preserve it structurally and inherit exclusion
+    # from its verified parent; never guess its inventory identity from a name.
+    placeholders = _unmapped_depth_placeholders(base, mapping)
+    if placeholders is None:
         result.reasons.append("incomplete_provenance")
         return result
-    result.excluded_source_ids = sorted(mapping[k] for k in removed_keys)
-    excluded = set(result.excluded_source_ids)
+    excluded = {mapping[k] for k in removed_keys}
+    parents = {s['source_id']: s.get('parent_source_id') for s in sources}
+    for sid in placeholders:
+        parent = parents[sid]
+        while parent is not None:
+            if parent in excluded:
+                excluded.add(sid)
+                break
+            parent = parents.get(parent)
+    result.excluded_source_ids = sorted(excluded)
     result.retained_source_ids = sorted({s["source_id"] for s in sources} - excluded)
     for key in sorted(added_keys):
         node, cache = nodes[key], base.caches.get(key, {})
@@ -296,10 +332,10 @@ def analyze_scope_change(base: ScopeBaseSnapshot, selection: dict) -> ScopeChang
 
 def load_scope_base(doc_id: str, *, session=None) -> ScopeBaseSnapshot:
     """Read a consistent canonical/derived snapshot; no parsing or provider calls."""
-    from sqlalchemy import inspect, select
+    from sqlalchemy import select
     from app.config import get_settings
     from app.db.models import (Document, DocumentGeneration, DocumentGenerationState, DocumentProcessingReview,
-                               DocumentTable, DocumentTableRow, DocumentChunkProjection, DocumentChunkFragment)
+                               DocumentTable)
     from app.db.session import session_scope
     from app.services.canonical_repair import _canonical_rows
     from app.services.generation_store import lock_generation_read

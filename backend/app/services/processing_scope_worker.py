@@ -1,6 +1,5 @@
 """Prepare a new publication using existing source-level processing results."""
 from copy import deepcopy
-from contextlib import contextmanager
 import json
 import logging
 import shutil
@@ -13,12 +12,11 @@ from qdrant_client import models as qm
 
 from app.db.models import (Document, DocumentGeneration, DocumentScopeChange, Development,
     DocumentTable, DocumentTableRow, DocumentChunkProjection, DocumentChunkFragment)
-from app.db.session import session_scope
 from app.services.generation_artifacts import artifact_manifest, file_digest, GenerationIntegrityError
 from app.services.generation_files import generation_paths, prepare_generation_paths, _reject_links
 from app.services.processing_scope_change import load_scope_base, ScopeChangePlan
 from app.services.processing_scope_candidate import build_scope_candidate
-from app.services.processing_scope_cache import SourceResultCache, embedding_fingerprint
+from app.services.processing_scope_cache import SourceResultCache
 from app.services.processing_scope_order import assign_scope_display_order
 from app.services.staging import write_json_atomic
 from app.services.update_workers import scope_write_guard, register_update_worker, finish_update_worker

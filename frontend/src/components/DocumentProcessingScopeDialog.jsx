@@ -2,8 +2,8 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {useI18n} from '@/i18n/LocaleContext';
 import {useAuth} from '@/context/AuthContext';
-import {getProcessingScope,createProcessingScopeReview,saveProcessingScopeReview,confirmProcessingScope,cancelProcessingScopeReview,friendlyApiError,previewProcessingScopeChange,applyProcessingScopeChange} from '@/lib/api';
-import {effectiveSelection,toggleSourceSelection,scopeTreeSources,scopeChangeAction} from '@/lib/processingScope.mjs';
+import {getProcessingScope,getProcessingScopeLabels,createProcessingScopeReview,saveProcessingScopeReview,confirmProcessingScope,cancelProcessingScopeReview,friendlyApiError,previewProcessingScopeChange,applyProcessingScopeChange} from '@/lib/api';
+import {effectiveSelection,toggleSourceSelection,scopeTreeSources,scopeChangeAction,attachmentPreviewFormat,savedScopeChanges} from '@/lib/processingScope.mjs';
 import {sourceAncestors} from '@/lib/sourceTree.mjs';
 import {acquireProcessingScopeEditLock,renewProcessingScopeEditLock,releaseProcessingScopeEditLock} from '@/lib/api';
 import {createScopeIdleTimer} from '@/lib/processingScopeIdle.mjs';
@@ -40,6 +40,8 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
   const editingSession=useRef(0);
   const [busy,setBusy]=useState(false),[similar,setSimilar]=useState(null),[expanded,setExpanded]=useState(new Set());
   const [preview,setPreview]=useState(null);
+  const [sourceTitles,setSourceTitles]=useState({});
+  const [sourceLabels,setSourceLabels]=useState({});
   const [changePreview,setChangePreview]=useState(null),[fullWarning,setFullWarning]=useState(false);
   const [ownsEditor,setOwnsEditor]=useState(false),[editorStatus,setEditorStatus]=useState(null),[editorRetry,setEditorRetry]=useState(0);
   const editToken=useRef(null);
@@ -156,10 +158,36 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
     setError(friendlyApiError(err,t));
   };
   const view=displayedScope(data,editing);
+  const savedChanges=useMemo(()=>savedScopeChanges(data?.active,data?.pending),[data]);
   const nodes=useMemo(()=>view?.inventory?.nodes||[],[view]);
+  const labelScopeType=view===data?.active?'active':'pending';
+  const labelScopeId=labelScopeType==='active'?view?.summary?.generation_id:view?.id;
+  const labelScopeKey=`${docId}:${labelScopeType}:${labelScopeId}`;
+  const labelTargets=useMemo(()=>JSON.stringify(nodes.map(node=>({source_key:node.source_key,
+    content_fingerprint:node.content_fingerprint,display_label:node.display_label}))),[nodes]);
+  useEffect(()=>{
+    const targets=JSON.parse(labelTargets);
+    if(!open||!labelScopeId||!targets.some(n=>!n.display_label))return;
+    const controller=new AbortController();let stopped=false;
+    getProcessingScopeLabels(docId,labelScopeType,labelScopeId,controller.signal).then(result=>{
+      if(stopped||result.scope_type!==labelScopeType||result.scope_id!==labelScopeId)return;
+      setSourceLabels(current=>{
+        const next={...current};
+        for(const node of targets){
+          const label=result.labels?.[node.source_key];
+          if(label?.display_label&&label.content_fingerprint===node.content_fingerprint){
+            next[`${labelScopeKey}:${node.source_key}:${node.content_fingerprint}`]=label.display_label;
+          }
+        }
+        return next;
+      });
+    }).catch(()=>{}); // Optional enrichment: preserve available names on failure.
+    return ()=>{stopped=true;controller.abort();};
+  },[open,docId,labelScopeType,labelScopeId,labelScopeKey,labelTargets]);
   const sources=useMemo(()=>scopeTreeSources(nodes),[nodes]);
-  const effective=useMemo(()=>effectiveSelection(nodes,selected),[nodes,selected]);
-  const allAvailable=useMemo(()=>effectiveSelection(nodes,new Set(nodes.map(n=>n.source_key))),[nodes]);
+  const maximumDepth=view?.inventory?.traversal_limits?.max_depth??6;
+  const effective=useMemo(()=>effectiveSelection(nodes,selected,maximumDepth),[nodes,selected,maximumDepth]);
+  const allAvailable=useMemo(()=>effectiveSelection(nodes,new Set(nodes.map(n=>n.source_key)),maximumDepth),[nodes,maximumDepth]);
   const editorAllowed=canEdit&&(!needsEditor||ownsEditor);
   const editable=editing && editorAllowed && ['draft','awaiting_similar'].includes(data?.pending?.state);
   const draftDirty=!!data?.pending&&selectionDiffers(nodes,effective,data.pending.decisions);
@@ -332,8 +360,19 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
   </>}>
     {!data && <p role="status">{t('scope.loading')}</p>}
     {data && <>
-      <p>{t(editing?'scope.intro':data.active?'scope.viewPublished':'scope.viewPending')}</p>
+      <p>{t(editing?'scope.intro':data.active?(view?.inventory?'scope.viewPublished':'scope.viewLegacy'):view?'scope.viewPending':'scope.legacy')}</p>
       {!editing&&data.active&&['draft','awaiting_similar'].includes(data.pending?.state)&&<p className="source-location-note">{t('scope.savedSelectionHint')}</p>}
+      {!editing&&savedChanges&&<div className="scope-saved-changes" role="status">
+        <p>{t('scope.savedNotApplied')}</p>
+        {['excluded','included'].map(kind=>!!savedChanges[kind].length&&<div key={kind}>
+          <p>{t(kind==='excluded'?'scope.savedExcluded':'scope.savedIncluded')}</p>
+          <ul>{savedChanges[kind].map(node=><li key={node.source_key}>{node.display_label||node.title||node.display_name}</li>)}</ul>
+        </div>)}
+        {data.pending?.last_check?.mode==='blocked'?<>
+          <p>{t('scope.savedCheckBlocked')}</p>
+          {data.pending.last_check.reasons?.map(reason=><p key={reason}>{t(`scope.changeReason.${reason}`)}</p>)}
+        </>:<p>{t('scope.savedApplyHint')}</p>}
+      </div>}
       {data.active?.summary?.chunk_counts && <p className="source-location-note">{t('scope.publishedChunkCounts',data.active.summary.chunk_counts)}</p>}
       {!preview&&idleNotice}
       {needsEditor && canEdit && !ownsEditor && <div role="status">
@@ -351,7 +390,7 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
           {nodes.find(n=>n.source_key===work.source_key)?.display_name}: {['parse','concepts','embeddings'].map(stage=>t(`scope.stage.${stage}.${work[stage]}`)).join('; ')}
         </p>)}
       </div>}
-      {data.active && data.pending && publishedDirty && <p className="source-location-note">{t('scope.oldActive')}</p>}
+      {data.active && ['validating','submitted'].includes(data.pending?.state) && <p className="source-location-note">{t('scope.oldActive')}</p>}
       {data.active && editable && <p className="source-location-note">{t('scope.discardHint')}</p>}
       {!data.active && data.pending && <p>{t('scope.noActive')}</p>}
       {data.pending?.state==='validating' && <p role="status">{t('scope.validationPending')}</p>}
@@ -361,18 +400,24 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
         <button type="button" className="btn ghost" disabled={busy||effective.size===allAvailable.size} onClick={()=>chooseSelection(new Set(allAvailable))}>{t('scope.selectAll')}</button>
         <button type="button" className="btn ghost" disabled={busy||effective.size===0} onClick={()=>chooseSelection(new Set())}>{t('scope.clear')}</button>
       </div>}
-      {!nodes.length && <p>{t(view?.inventory?'scope.noAttachments':'scope.legacy')}</p>}
+      {!nodes.length && view?.inventory && <p>{t('scope.noAttachments')}</p>}
       <ul className="scope-tree">{nodes.map(node=>{
         const parents=sourceAncestors(sources,node.source_key);
         if(parents.some(parent=>!expanded.has(parent)))return null;
         const children=nodes.filter(child=>sourceAncestors(sources,child.source_key).includes(node.source_key));
         const enabled=effective.has(node.source_key);
         const mixed=enabled && children.some(child=>!effective.has(child.source_key));
-        const unknown=node.assessment==='unknown'||node.children_complete===false;
+        const depthLimited=node.status==='skipped_depth'||(Number.isInteger(maximumDepth)&&parents.length+1>maximumDepth);
+        const unknown=depthLimited||node.assessment==='unknown'||node.children_complete===false;
         const blockedAncestor=parents.some(key=>{const ancestor=nodes.find(n=>n.source_key===key);return !ancestor?.supported||ancestor.assessment==='unknown'||ancestor.children_complete===false;});
         const decision=(view.decisions||[]).find(d=>d.source_key===node.source_key);
         const recommendation=(view.inventory?.recommendations||[]).find(d=>d.source_key===node.source_key);
         const metrics=node.metrics||{};
+        const previewFormat=attachmentPreviewFormat(node);
+        const titleKey=`${data.pending?.id}:${node.source_key}:${node.content_fingerprint}`;
+        const titleInfo=sourceTitles[titleKey]||node;
+        const iconLabel=node.display_label||sourceLabels[`${labelScopeKey}:${node.source_key}:${node.content_fingerprint}`];
+        const displayTitle=iconLabel||(titleInfo.title?(titleInfo.title_source==='sheet'?t('scope.previewSheetTitle',{name:titleInfo.title}):titleInfo.title):node.display_name);
         return <li key={node.source_key} className="scope-node" style={{'--scope-depth':parents.length}}>
           <div className="scope-node-heading">
             {!!children.length && <button type="button" className="scope-branch-toggle" aria-expanded={expanded.has(node.source_key)}
@@ -381,27 +426,29 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
               {expanded.has(node.source_key)?'▾':'▸'}</button>}
             <ScopeCheckbox checked={enabled} mixed={mixed} disabled={!editable||busy||!node.supported||unknown||blockedAncestor}
               label={node.display_name} onChange={event=>toggle(node.source_key,event.target.checked)}/>
-            <strong>{node.display_name}</strong>
+            <strong>{displayTitle}</strong>
           </div>
           <div className="meta scope-node-meta">
+            {previewFormat && <span>{previewFormat.toUpperCase()}</span>}
+            {displayTitle!==node.display_name&&<span>{node.display_name}</span>}
             {blockedAncestor && <span>{t('scope.ancestorUnavailable')}</span>}
             {node.kind==='mail' && <span>{t('scope.mailBody')}</span>}
             {node.kind==='archive' && <span>{t('scope.container')}</span>}
             {metrics.rows!=null && <span>{t(node.precision==='lower_bound'?'scope.rowsLowerBound':'scope.rows',{count:metrics.rows})}</span>}
             {metrics.cells!=null && <span>{t('scope.cells',{count:metrics.cells})}</span>}
             {metrics.file_bytes>0 && <span>{t('scope.size',{size:(metrics.file_bytes/1024).toFixed(1)})}</span>}
-            <span>{t(!node.supported?'scope.unsupported':unknown?'scope.unknown':node.assessment==='heavy'?'scope.heavy':(recommendation||decision)?.reason==='aggregate_budget'?'scope.aggregateBudget':'scope.small')}</span>
+            <span>{depthLimited?t('scope.depthLimit',{depth:maximumDepth??6}):t(!node.supported?'scope.unsupported':unknown?'scope.unknown':node.assessment==='heavy'?'scope.heavy':(recommendation||decision)?.reason==='aggregate_budget'?'scope.aggregateBudget':'scope.small')}</span>
             {decision?.reason==='user_excluded' && <span>{t('scope.userExcluded')}</span>}
             {view===data.active && <span>{t(enabled?'scope.includedLabel':'scope.excludedLabel')}</span>}
-            {editable && unknown && <button type="button" disabled={busy} className="btn ghost" onClick={()=>newReview(node.source_key)}>{t('scope.expand')}</button>}
-            {data.pending && node.kind==='xlsx' && node.saved_path && <button type="button" className="btn ghost" disabled={busy}
+            {editable && unknown && !depthLimited && <button type="button" disabled={busy} className="btn ghost" onClick={()=>newReview(node.source_key)}>{t('scope.expand')}</button>}
+            {data.pending && previewFormat && node.saved_path && <button type="button" className="btn ghost" disabled={busy}
               aria-label={t('scope.previewNamed',{name:node.display_name})}
               onClick={()=>setPreview({node,canToggle:editable&&node.supported&&!unknown&&!blockedAncestor})}>{t('scope.preview')}</button>}
             {data.pending && node.saved_path && <a href={`/api/documents/${encodeURIComponent(docId)}/processing-scope/attachments/${node.source_key}`} download>{t('scope.download')}</a>}
           </div>
         </li>;
       })}</ul>
-      <p>{t(view?.inventory?.complete?'scope.selectionStats':'scope.selectionPartial',{count:effective.size,total:nodes.length})}</p>
+      {view?.inventory && <p>{t(view.inventory.complete?'scope.selectionStats':'scope.selectionPartial',{count:effective.size,total:nodes.filter(node=>node.supported!==false).length})}</p>}
       {editing&&<p className="source-location-note">{t(data.active && data.pending?(publishedDirty?'scope.pendingHint':'scope.noChanges'):'scope.excludedHint')}</p>}
       {view?.confirmed_by && <p>{t('scope.confirmedBy',{name:view.confirmed_by})}</p>}
       {view?.confirmed_at && <p>{t('scope.confirmedAt',{date:new Date(view.confirmed_at).toLocaleString()})}</p>}
@@ -413,6 +460,7 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
       sessionNotice={idleNotice}
       docId={docId} reviewId={data.pending.id} node={preview.node} included={effective.has(preview.node.source_key)}
       onReviewChanged={refreshPreservingSelection}
+      onTitle={(title,title_source)=>setSourceTitles(current=>({...current,[`${data.pending.id}:${preview.node.source_key}:${preview.node.content_fingerprint}`]:{title,title_source}}))}
       onClose={()=>setPreview(null)} onToggle={preview.canToggle&&editable?()=>toggle(preview.node.source_key,!effective.has(preview.node.source_key)):null}/>}
   </div>;
 }

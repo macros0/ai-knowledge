@@ -75,6 +75,12 @@ class PypdfPdfiumDocument:
     def page_count(self) -> int:
         return len(self._reader.pages)
 
+    def document_title(self) -> str | None:
+        try:
+            return str((self._reader.metadata or {}).get('/Title') or '').strip()[:500] or None
+        except (PyPdfError, OSError, ValueError, TypeError, AttributeError):
+            return None
+
     def extract_text(self, page_index: int) -> str:
         try:
             return self._reader.pages[page_index].extract_text() or ""

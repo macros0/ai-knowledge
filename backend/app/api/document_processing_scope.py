@@ -2,15 +2,17 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 
 from app.api.errors import ApiError
 from app.auth.models import User
 from app.auth.service import require_role, require_user
 from app.config import get_settings
-from app.db.models import DocumentGenerationState, DocumentProcessingReview
+from app.db.models import DocumentGenerationState, DocumentProcessingReview, DocumentScopeChange
 from app.db.session import session_scope
 from app.models.processing_scope import ScopeReviewIn, ScopeSelectionIn, ScopeConfirmIn, ScopeChangePreviewIn, ScopeChangeApplyIn, ScopeEditLockIn
 from app.models.schemas import DocumentOut
@@ -128,10 +130,25 @@ def get_scope(doc_id: str, user: User = Depends(require_user)):
         review = session.get(DocumentProcessingReview, doc_id)
         pending = None
         if review and review.state not in {"published", "canceled"}:
+            last_check = None
+            if generation_id:
+                from app.services.processing_scope_change import SCOPE_CHANGE_ANALYSIS_VERSION
+                checked = session.scalar(select(DocumentScopeChange).where(
+                    DocumentScopeChange.doc_id == doc_id,
+                    DocumentScopeChange.state == 'preview',
+                    DocumentScopeChange.plan_json['analysis_version'].as_integer() == SCOPE_CHANGE_ANALYSIS_VERSION,
+                    DocumentScopeChange.plan_json['review_id'].as_string() == review.id,
+                    DocumentScopeChange.plan_json['revision'].as_integer() == review.revision,
+                    DocumentScopeChange.plan_json['preview']['selection_hash'].as_string() == review.selection_hash,
+                    DocumentScopeChange.plan_json['preview']['base_generation_id'].as_string() == generation_id,
+                ).order_by(DocumentScopeChange.created_at.desc(), DocumentScopeChange.id.desc()).limit(1))
+                if checked:
+                    last_check = {key: checked.plan_json['preview'].get(key) for key in ('mode', 'reasons')}
             pending = {
                 **review_summary(review),
                 "inventory": review.inventory_json,
                 "decisions": review.selection_json,
+                "last_check": last_check,
             }
         from app.auth.service import build_auth_provider
         can_edit = build_auth_provider(get_settings()).is_disabled() or bool(set(user.roles) & {"editor", "admin"})
@@ -140,6 +157,25 @@ def get_scope(doc_id: str, user: User = Depends(require_user)):
             "edit_lock": True,
             "fast_exclusion": can_edit, "cached_restore": can_edit,
             "incremental_generation": can_edit, "full_regeneration": can_edit}}
+
+
+@router.get("/{doc_id}/processing-scope/labels")
+def get_scope_labels(
+    doc_id: str, scope_type: Literal['active', 'pending'],
+    scope_id: str = Query(min_length=1, max_length=64),
+    user: User = Depends(require_user),
+):
+    from app.services.processing_scope_labels import scope_attachment_labels
+    document = _document(doc_id)
+    try:
+        labels = scope_attachment_labels(get_settings(), doc_id, document, scope_type, scope_id)
+    except ProcessingScopeConflict as exc:
+        raise _conflict(exc) from exc
+    except (ParserBusyError, ParserIsolationError, ParserTimeoutError, ParserMemoryLimitError) as exc:
+        raise _parser_error(exc) from exc
+    except ParserWorkerError as exc:
+        raise ApiError(status_code=422, code='parse_failed', detail='Не удалось прочитать подписи вложений.') from exc
+    return JSONResponse(labels, headers={'Cache-Control': 'no-store'})
 
 
 @router.post("/{doc_id}/processing-scope/change-preview")
@@ -199,13 +235,14 @@ def create_scope_review(
     path = settings.uploads_dir / (doc_id + Path(document["filename"]).suffix.lower())
     filename = document["filename"]
     try:
-        from docparser.attachment_policy import AttachmentInventory
+        from docparser.attachment_policy import AttachmentInventory, inventory_traversal_limits, inventory_node_depth
         from app.services.processing_scope import refresh_review_inventory
         from app.services.generation_files import processing_review_paths
         import shutil
 
         previous = None
         branch = None
+        traversal = None
         with session_scope() as session:
             _require_editor(session, doc_id, body, user)
             existing_review = session.get(DocumentProcessingReview, doc_id)
@@ -224,6 +261,7 @@ def create_scope_review(
                 if old.state not in {"draft", "awaiting_similar"}:
                     raise ProcessingScopeConflict()
                 previous = AttachmentInventory.from_dict(old.inventory_json)
+                traversal = inventory_traversal_limits(previous)
                 if body.expand_source_keys:
                     if len(body.expand_source_keys) != 1:
                         raise ProcessingScopeConflict("Раскрывайте вложения по одному.")
@@ -231,6 +269,12 @@ def create_scope_review(
                     node = nodes.get(body.expand_source_keys[0])
                     if node is None:
                         raise ProcessingScopeConflict()
+                    depth = inventory_node_depth(old.inventory_json['nodes'], node.source_key)
+                    if depth is None:
+                        raise ProcessingScopeConflict()
+                    if node.status == 'skipped_depth' or depth > traversal.max_depth:
+                        raise ProcessingScopeConflict('Достигнут предел вложенности. Раскрытие этого вложения недоступно.',
+                                                      code='attachment_depth_limit')
                     if node.saved_path:
                         root = processing_review_paths(settings, doc_id, old.id) / "attachments"
                         if Path(node.saved_path).name != node.saved_path:
@@ -254,7 +298,7 @@ def create_scope_review(
                         }
         with TemporaryDirectory(prefix="scope-review-", dir=settings.uploads_dir) as folder:
             inventory, _ = prepare_upload_scope(
-                path, filename, settings, attachments_dir=Path(folder), branch=branch
+                path, filename, settings, attachments_dir=Path(folder), branch=branch, traversal=traversal
             )
             if branch:
                 removed = {body.expand_source_keys[0]}
@@ -484,7 +528,6 @@ def preview_review_attachment(
     _document(doc_id)
     settings = get_settings()
     with TemporaryDirectory(prefix="attachment-preview-") as folder:
-        original = Path(folder) / "original.xlsx"
         with session_scope() as session:
             if not lock_document_write(session, doc_id, allow_deleted=False):
                 raise ApiError(status_code=404, code="document_not_found", detail="Документ недоступен.")
@@ -496,8 +539,15 @@ def preview_review_attachment(
             node = next((n for n in row.inventory_json["nodes"] if n["source_key"] == source_key), None)
             if not node:
                 raise ApiError(status_code=404, code="file_not_found", detail="Вложение недоступно.")
-            if node["kind"] != "xlsx":
-                raise ApiError(status_code=422, code="invalid_request", detail="Предпросмотр доступен для XLSX.")
+            from docparser.attachment_preview import PREVIEW_KINDS
+            kind = node['kind']
+            groups = {'mail': {'eml', 'msg'}, 'archive': {'zip', '7z', 'rar'}}
+            if kind in groups:
+                extension = Path(node.get('saved_path') or '').suffix.lower()[1:]
+                kind = extension if extension in groups[kind] else None
+            if kind not in PREVIEW_KINDS or node.get('supported') is False:
+                raise ApiError(status_code=422, code="invalid_request", detail="Формат вложения не поддерживает предпросмотр.")
+            original = Path(folder) / ('original.' + kind)
             root = processing_review_paths(settings, doc_id, row.id) / "attachments"
             name = node.get("saved_path")
             if not name or Path(name).name != name:
@@ -518,14 +568,15 @@ def preview_review_attachment(
                 raise ApiError(status_code=409, code="conflict", detail="Оригинал вложения изменился.")
         try:
             result = parse_document_supervised(
-                original, "original.xlsx", attachments_dir=Path(folder) / "worker",
+                original, original.name, attachments_dir=Path(folder) / "worker",
                 timeout_seconds=min(10, settings.parser_timeout_seconds),
                 max_memory_mb=settings.parser_max_memory_mb,
                 max_concurrent=settings.parser_max_concurrent,
-                _inspection_options={"xlsx_preview": {"sheet_index": sheet}},
+                _inspection_options={"attachment_preview": {"kind": kind, "sheet_index": sheet}},
+                archive_helper_path=settings.archive_7zip_path or None,
             )
         except (ParserBusyError, ParserIsolationError, ParserTimeoutError, ParserMemoryLimitError) as exc:
             raise _parser_error(exc) from exc
         except ParserWorkerError as exc:
-            raise ApiError(status_code=422, code="parse_failed", detail="Не удалось показать этот лист Excel.") from exc
-    return JSONResponse(result.xlsx_preview, headers={"Cache-Control": "no-store"})
+            raise ApiError(status_code=422, code="parse_failed", detail="Не удалось показать это вложение.") from exc
+    return JSONResponse(result.attachment_preview, headers={"Cache-Control": "no-store"})

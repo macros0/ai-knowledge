@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useId,useState} from 'react';
+import {useEffect,useId,useState,useRef} from 'react';
 import {useI18n} from '@/i18n/LocaleContext';
 import {getAttachmentPreview,friendlyApiError} from '@/lib/api';
 import Modal from './Modal';
@@ -53,16 +53,34 @@ export function AttachmentPreviewTable({data,t}) {
   </>;
 }
 
-export default function AttachmentPreviewDialog({docId,reviewId,node,included,onToggle,onClose,onReviewChanged,sessionNotice=null}) {
+export function AttachmentPreviewContent({data,t}) {
+  if(!['text','archive'].includes(data.kind))return <AttachmentPreviewTable data={data} t={t}/>;
+  return <>
+    {data.limited&&<p className="source-location-note" role="status">{t('scope.previewSampleLimited')}</p>}
+    <div className="attachment-preview-scroll" role="region" aria-label={t('scope.previewTitle')} tabIndex={0}>
+      {data.kind==='text'?<>
+        <dl>{Object.entries(data.metadata||{}).filter(([,value])=>value).map(([key,value])=><div key={key}><dt>{t(`scope.previewField.${key}`)}</dt><dd>{value}</dd></div>)}</dl>
+        {data.text?<pre className="attachment-preview-text">{data.text}</pre>:<p>{t('scope.previewTextEmpty')}</p>}
+      </>:data.entries.length?<table className="attachment-preview-table"><thead><tr><th>{t('scope.previewFileName')}</th><th>{t('scope.previewFileSize')}</th></tr></thead>
+        <tbody>{data.entries.map((entry,index)=><tr key={index}><td>{entry.name}{entry.directory?'/':''}</td><td>{t('scope.size',{size:(entry.size/1024).toFixed(1)})}</td></tr>)}</tbody></table>:<p>{t('scope.previewArchiveEmpty')}</p>}
+    </div>
+  </>;
+}
+
+export default function AttachmentPreviewDialog({docId,reviewId,node,included,onToggle,onClose,onReviewChanged,onTitle,sessionNotice=null}) {
   const {t}=useI18n();
   const selectId=useId();
   const [sheet,setSheet]=useState(0),[data,setData]=useState(null),[error,setError]=useState('');
   const [loading,setLoading]=useState(true),[retry,setRetry]=useState(0);
+  const titleCallback=useRef(onTitle);
+  useEffect(()=>{titleCallback.current=onTitle;},[onTitle]);
+  const excel=data?Array.isArray(data.sheets):(node.kind||'xlsx')==='xlsx';
+  const archive=node.kind==='archive'||['zip','7z','rar'].includes(node.kind);
   useEffect(()=>{
     let current=true;
     const request=requestPreview(docId,reviewId,node,sheet);
     request.promise.then(next=>{
-      if(current)setData(next);
+      if(current){setData(next);if(next.title)titleCallback.current?.(next.title,next.title_source);}
     }).catch(err=>{if(current&&err.name!=='AbortError')setError({text:friendlyApiError(err,t),conflict:err.status===409});})
       .finally(()=>{if(current)setLoading(false);});
     return ()=>{current=false;request.release();};
@@ -74,10 +92,9 @@ export default function AttachmentPreviewDialog({docId,reviewId,node,included,on
     </button>}
   </>}>
     {sessionNotice}
-    <p className="attachment-preview-name">{node.display_name}</p>
-    <p className="source-location-note">{t('scope.previewHint')}</p>
-    <p className="source-location-note">{t('scope.previewRawValues')}</p>
-    {data && <label className="attachment-preview-sheet" htmlFor={selectId}>{t('scope.previewSheet')}
+    <p className="source-location-note">{t(excel?'scope.previewHint':archive?'scope.previewArchiveHint':node.kind==='pdf'?'scope.previewPdfHint':'scope.previewTextHint')}</p>
+    {excel&&<p className="source-location-note">{t('scope.previewRawValues')}</p>}
+    {data && excel && <label className="attachment-preview-sheet" htmlFor={selectId}>{t('scope.previewSheet')}
       <select id={selectId} value={sheet} onChange={event=>{setLoading(true);setError('');setSheet(Number(event.target.value));}}>
         {data.sheets.map(item=><option key={item.index} value={item.index}>{item.name}</option>)}
       </select>
@@ -87,7 +104,7 @@ export default function AttachmentPreviewDialog({docId,reviewId,node,included,on
       {error && <div role="alert"><p className="error">{error.text}</p>
         {error.conflict?<button type="button" className="btn ghost" onClick={onReviewChanged||onClose}>{t('scope.previewRefresh')}</button>:
           <button type="button" className="btn ghost" onClick={()=>{setLoading(true);setError('');setRetry(value=>value+1);}}>{t('scope.previewRetry')}</button>}</div>}
-      {!loading && !error && data && <AttachmentPreviewTable data={data} t={t}/>}
+      {!loading && !error && data && <AttachmentPreviewContent data={data} t={t}/>}
     </div>
   </Modal></div>;
 }

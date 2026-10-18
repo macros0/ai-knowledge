@@ -47,6 +47,40 @@ def test_exclude_only_preserves_base_and_reports_exact_retained_counts():
     assert result.workset == {"sources": []}
 
 
+def test_depth_limited_empty_original_follows_excluded_parent_without_parsing():
+    base, desired = example()
+    base.rows['sources'].append({'source_id': 'root/0/deeper', 'parent_source_id': 'root/0',
+                                'extraction_status': 'skipped_depth', 'artifact_kind': 'original',
+                                'saved_path': 'attachments/deeper.bin'})
+    desired['decisions'][0]['effective_included'] = False
+    before = deepcopy(base)
+    plan = analyze_scope_change(base, desired)
+    assert plan.mode == 'fast_exclude'
+    assert plan.excluded_source_ids == ['root/0', 'root/0/deeper']
+    assert plan.workset == {'sources': []}
+    assert 'root/0/deeper' not in plan.source_mapping.values(), 'No guessed identity or reusable result for skipped content'
+    assert base == before
+    # The same placeholder can remain with a retained parent; its payload is
+    # still outside generated results and must not block later composition edits.
+    desired['decisions'][0]['effective_included'] = True
+    assert analyze_scope_change(base, desired).mode == 'noop'
+
+
+@pytest.mark.parametrize('artifact', ['chunks', 'concepts', 'tables', 'available'])
+def test_unmapped_depth_marker_with_content_or_unknown_status_still_blocks(artifact):
+    base, desired = example()
+    base.rows['sources'].append({'source_id': 'root/0/deeper', 'parent_source_id': 'root/0',
+                                'extraction_status': 'skipped_depth'})
+    desired['decisions'][0]['effective_included'] = False
+    if artifact == 'available':
+        base.rows['sources'][-1]['extraction_status'] = 'available'
+    else:
+        base.rows.setdefault(artifact, []).append({'source_id': 'root/0/deeper', 'chunk_index': 999})
+    plan = analyze_scope_change(base, desired)
+    assert plan.mode == 'blocked'
+    assert set(plan.reasons) & {'incomplete_provenance', 'mixed_provenance'}
+
+
 @pytest.mark.parametrize("space", [{"kind":"legacy","origin":"c"*32}, {"kind":"proven","fingerprint":"d"*64}])
 def test_new_embeddings_block_when_base_space_is_unknown_or_changed(space):
     base, desired = example()

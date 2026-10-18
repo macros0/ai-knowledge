@@ -1,4 +1,4 @@
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect
 from app.db.session import get_engine, session_scope
 from app.db.models import Document
 

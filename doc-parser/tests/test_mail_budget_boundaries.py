@@ -65,8 +65,9 @@ FORMATS = ["eml", "msg", "docx", "xlsx", "pdf"]
 
 
 @pytest.mark.parametrize("format_name", FORMATS)
-@pytest.mark.parametrize("depth", [1, 2, 3])
-def test_attachment_depth_boundary_in_real_containers(tmp_path, monkeypatch, format_name, depth):
+@pytest.mark.parametrize("maximum", [2, 6])
+@pytest.mark.parametrize("offset", [-1, 0, 1])
+def test_attachment_depth_boundary_in_real_containers(tmp_path, monkeypatch, format_name, maximum, offset):
     from docparser import parser
 
     child = b"From: child@example.test\r\n\r\nCHILD EVIDENCE\r\n"
@@ -80,10 +81,11 @@ def test_attachment_depth_boundary_in_real_containers(tmp_path, monkeypatch, for
         return original(*args, **kwargs)
 
     monkeypatch.setattr(parser, "parse_eml", observe)
-    context = ParseContext(path.name)
+    depth = maximum + offset
+    context = ParseContext(path.name, attachment_max_depth=maximum)
     blocks = parse_document(path, depth=depth - 1, context=context, attachments_dir=tmp_path / "attachments")
     marker = next(block for block in blocks if block.type == "attachment")
-    if depth < 3:
+    if depth <= maximum:
         assert marker.meta["extraction_status"] == "parsed"
         assert any(block.text == "CHILD EVIDENCE" and block.meta["source_id"] == "root/0" for block in blocks)
         assert Path(marker.meta["saved_path"]).read_bytes() == child

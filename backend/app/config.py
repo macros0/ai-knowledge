@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from docparser.attachment_limits import DEFAULT_ATTACHMENT_MAX_DEPTH, MAX_CONFIGURABLE_ATTACHMENT_DEPTH
 
 # Пресеты режимов поиска: mode (из API/настроек) → набор включённых веток.
 # mode в API трактуется как пресет; явные флаги dense/bm25 в запросе
@@ -452,6 +453,7 @@ class Settings(BaseSettings):
     parser_max_memory_mb: int = Field(default=1024, ge=64, le=8192)
     parser_max_concurrent: int = Field(default=2, ge=1, le=32)
     # Hybrid attachment admission. Existing immutable scopes apply even when off.
+    attachment_max_depth: int = Field(default=DEFAULT_ATTACHMENT_MAX_DEPTH, ge=0, le=MAX_CONFIGURABLE_ATTACHMENT_DEPTH)
     attachment_review_enabled: bool = False
     attachment_review_rows: int = Field(default=500, ge=1)
     attachment_review_cells: int = Field(default=20000, ge=1)

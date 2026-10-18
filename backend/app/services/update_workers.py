@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from threading import Event, Thread
 
 from sqlalchemy import select
-from app.db.models import Document, DocumentScopeChange, DocumentUpdateAttempt
+from app.db.models import DocumentScopeChange, DocumentUpdateAttempt
 from app.db.session import session_scope
 from app.services.document_update import DocumentUpdateCancelled
 from app.services.generation_store import lock_document_write

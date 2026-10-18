@@ -4,6 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from docparser.attachment_limits import (
+    DEFAULT_ATTACHMENT_MAX_DEPTH,
+    validate_attachment_depth,
+)
 from docparser.blocks import Block
 
 # v3 additionally preserves blank-line boundaries in plain-text mail bodies.
@@ -63,10 +67,12 @@ class ParseContext:
     """Выдаёт детерминированные source_id по пути структурного вхождения."""
 
     def __init__(self, root_name: str | Path, *, mail_enabled: bool = True, table_sink=None,
-                 processing_policy=None):
+                 processing_policy=None, attachment_max_depth=DEFAULT_ATTACHMENT_MAX_DEPTH):
         self.table_sink = table_sink
         self.mail_enabled = mail_enabled
         self.processing_policy = processing_policy
+        self.attachment_max_depth = validate_attachment_depth(
+            processing_policy.traversal.max_depth if processing_policy is not None else attachment_max_depth)
         self._locator_chains = {'root': ()}
         self.parser_version = parser_version_for_mail_mode(mail_enabled)
         if processing_policy is not None:
@@ -74,6 +80,9 @@ class ParseContext:
             expected=processing_policy.snapshot.get('parser_version')
             if expected is not None and expected!=self.parser_version:
                 raise ValueError('Processing scope parser version is incompatible; reassess attachments')
+        else:
+            # Prevent resume from combining chunks parsed with different depth limits.
+            self.parser_version += f'-depth-{self.attachment_max_depth}'
         self.sources = [
             SourceNode(
                 source_id="root",

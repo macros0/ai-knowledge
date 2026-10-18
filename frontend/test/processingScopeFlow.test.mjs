@@ -8,11 +8,11 @@ import * as sourceTree from '../src/lib/sourceTree.mjs';
 import * as idle from '../src/lib/processingScopeIdle.mjs';
 
 const t=key=>key;
-function scopeDialog(api,canEdit=true,globals={},props={}, {enterEditor=true}={}){
+function scopeDialog(api,canEdit=true,globals={},props={}, {enterEditor=true,translate=t}={}){
   const mounted=componentHarness(new URL('../src/components/DocumentProcessingScopeDialog.jsx',import.meta.url),{
-    '@/i18n/LocaleContext':{useI18n:()=>({t})},
+    '@/i18n/LocaleContext':{useI18n:()=>({t:translate})},
     '@/context/AuthContext':{useAuth:()=>({mode:'keycloak_oidc',hasRole:()=>canEdit})},
-    '@/lib/api':{friendlyApiError:err=>err.message,...api},
+    '@/lib/api':{friendlyApiError:err=>err.message,getProcessingScopeLabels:async()=>({labels:{}}),...api},
     '@/lib/processingScope.mjs':scope,'@/lib/sourceTree.mjs':sourceTree,
     '@/lib/processingScopeIdle.mjs':idle,
     './Modal':()=>null,'./AttachmentPreviewDialog':()=>null,
@@ -35,6 +35,137 @@ const scopeState=()=>({active:null,pending:{id:'review',revision:1,state:'draft'
   {source_key:'excel',parent_key:'root',display_name:'table.xlsx',supported:true,assessment:'heavy',kind:'xlsx',saved_path:'x.xlsx'},
   {source_key:'unknown',parent_key:'root',display_name:'nested.zip',supported:true,assessment:'unknown',children_complete:false},
 ]},decisions:[{source_key:'excel',effective_included:false},{source_key:'unknown',effective_included:false}]}});
+
+test('hard depth limit is explicit and never offers repeated expansion or inclusion',async()=>{
+  const server=scopeState();
+  Object.assign(server.pending.inventory.nodes[1],{status:'skipped_depth',assessment:'unknown',children_complete:false});
+  const mounted=scopeDialog({getProcessingScope:async()=>server});
+  mounted.render();await setImmediate();mounted.render();
+  assert(mounted.find(n=>n.type==='span'&&n.props.children==='scope.depthLimit'));
+  assert(!mounted.find(n=>n.type==='button'&&n.props.children==='scope.expand'));
+  assert.equal(mounted.find(n=>n.props?.label==='nested.zip').props.disabled,true);
+  mounted.dispose();
+});
+
+test('depth-cutoff container stays visible with its captured global limit',async()=>{
+  const server=scopeState();
+  server.pending.inventory.traversal_limits={max_depth:0};
+  Object.assign(server.pending.inventory.nodes[1],{status:'skipped_depth',assessment:'unknown',children_complete:false});
+  const translate=(key,params)=>key==='scope.depthLimit'?`${key}:${params.depth}`:key;
+  const mounted=scopeDialog({getProcessingScope:async()=>server},true,{}, {},{translate});
+  mounted.render();await setImmediate();mounted.render();
+  assert(mounted.find(n=>n.type==='strong'&&n.props.children==='nested.zip'));
+  assert(mounted.find(n=>n.type==='span'&&n.props.children==='scope.depthLimit:0'));
+  assert.equal(mounted.find(n=>n.props?.label==='nested.zip').props.disabled,true);
+  assert(!mounted.find(n=>n.type==='button'&&n.props.children==='scope.expand'));
+  assert.equal(mounted.find(n=>n.type==='button'&&n.props.children==='scope.selectAll').props.disabled,true);
+  mounted.dispose();
+});
+
+test('first screen shows saved exclusions and a blocked check without presenting them as published',async()=>{
+  const server=scopeState();
+  server.active={inventory:null,decisions:[],summary:{mode:'legacy_all',generation_id:'base'}};
+  server.pending.last_check={mode:'blocked',reasons:['incomplete_provenance']};
+  const mounted=scopeDialog({getProcessingScope:async()=>server},true,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();
+  assert(mounted.find(n=>n.type==='p'&&n.props.children==='scope.savedNotApplied'));
+  assert(mounted.find(n=>n.type==='li'&&n.props.children==='table.xlsx'));
+  assert(mounted.find(n=>n.type==='p'&&n.props.children==='scope.savedCheckBlocked'));
+  assert(mounted.find(n=>n.type==='p'&&n.props.children==='scope.changeReason.incomplete_provenance'));
+  assert(!mounted.find(n=>n.props?.label==='table.xlsx'),'Draft must not replace the published tree');
+  mounted.dispose();
+});
+
+test('an unchanged saved selection does not appear as an unapplied exclusion',async()=>{
+  const server=scopeState();server.active={...structuredClone(server.pending),summary:{generation_id:'base'}};
+  const mounted=scopeDialog({getProcessingScope:async()=>server},true,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();
+  assert(!mounted.find(n=>n.type==='p'&&n.props.children==='scope.savedNotApplied'));
+  mounted.dispose();
+});
+
+test('first screen loads original icon labels without opening preview or changing selection',async()=>{
+  const server=scopeState();server.pending.inventory.nodes[0].content_fingerprint='fp';
+  const calls=[];
+  const mounted=scopeDialog({getProcessingScope:async()=>server,getProcessingScopeLabels:async(...args)=>{
+    calls.push(args.slice(0,3));return {scope_type:'pending',scope_id:'review',labels:{excel:{display_label:'Original source.pdf',content_fingerprint:'fp'}}};
+  }},false,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();await setImmediate();mounted.render();
+  assert(mounted.find(n=>n.type==='strong'&&n.props.children==='Original source.pdf'));
+  assert.deepEqual(calls,[['doc','pending','review']]);
+  assert.equal(mounted.find(n=>n.props?.label==='table.xlsx').props.checked,false);
+  assert(!mounted.find(n=>n.props?.reviewId==='review'));
+  mounted.dispose();
+});
+
+test('refreshing an unchanged scope does not restart an in-flight label read',async()=>{
+  const server=scopeState();let calls=0,finish;
+  const mounted=scopeDialog({getProcessingScope:async()=>structuredClone(server),getProcessingScopeLabels:()=>{
+    calls++;return new Promise(resolve=>{finish=resolve;});
+  }},false,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();
+  mounted.find(n=>n.type==='button'&&n.props.children==='scope.preview').props.onClick();mounted.render();
+  await mounted.find(n=>n.props?.reviewId==='review').props.onReviewChanged();mounted.render();
+  assert.equal(calls,1,'The same scope must keep its original label request');
+  finish({labels:{}});await setImmediate();mounted.dispose();
+});
+
+test('stored icon caption takes priority over a workbook title on the first screen',async()=>{
+  const server=scopeState();Object.assign(server.pending.inventory.nodes[0],{display_label:'Original.xlsx',title:'Internal title',title_source:'properties'});
+  const mounted=scopeDialog({getProcessingScope:async()=>server},false,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();
+  assert(mounted.find(n=>n.type==='strong'&&n.props.children==='Original.xlsx'));
+  mounted.dispose();
+});
+
+test('a label response for a different fingerprint cannot rename an attachment',async()=>{
+  const server=scopeState();server.pending.inventory.nodes[0].content_fingerprint='current';
+  const mounted=scopeDialog({getProcessingScope:async()=>server,getProcessingScopeLabels:async()=>({scope_type:'pending',scope_id:'review',
+    labels:{excel:{display_label:'Wrong.pdf',content_fingerprint:'old'}}})},false,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();await setImmediate();mounted.render();
+  assert(!mounted.find(n=>n.type==='strong'&&n.props.children==='Wrong.pdf'));
+  assert(mounted.find(n=>n.type==='strong'&&n.props.children==='table.xlsx'));
+  mounted.dispose();
+});
+
+test('late labels from the published view cannot rename draft attachments',async()=>{
+  const server=scopeState();server.pending.inventory.nodes[0].content_fingerprint='same';
+  server.active={...structuredClone(server.pending),summary:{generation_id:'published'}};
+  let finish;
+  const mounted=scopeDialog({getProcessingScope:async()=>server,getProcessingScopeLabels:async(_doc,type)=>{
+    if(type==='active')return new Promise(resolve=>{finish=resolve;});
+    return {scope_type:'pending',scope_id:'review',labels:{}};
+  }},true,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();
+  await mounted.find(n=>n.type==='button'&&n.props.children==='scope.edit').props.onClick();mounted.render();
+  finish({scope_type:'active',scope_id:'published',labels:{excel:{display_label:'Late.pdf',content_fingerprint:'same'}}});
+  await setImmediate();mounted.render();
+  assert(!mounted.find(n=>n.type==='strong'&&n.props.children==='Late.pdf'));
+  mounted.dispose();
+});
+
+for(const [kind,extension] of [['docx','docx'],['pdf','pdf'],['mail','eml'],['mail','msg'],['archive','zip'],['archive','7z'],['archive','rar']])test(`supported ${kind}/${extension} attachment offers preview and shows its real format`,async()=>{
+  const server=scopeState();Object.assign(server.pending.inventory.nodes[0],{kind,saved_path:'payload.'+extension,display_name:'oleObject1.bin'});
+  const mounted=scopeDialog({getProcessingScope:async()=>server});
+  mounted.render();await setImmediate();mounted.render();
+  assert(mounted.find(n=>n.type==='button'&&n.props.children==='scope.preview'));
+  assert(mounted.find(n=>n.type==='span'&&n.props.children===extension.toUpperCase()));
+  mounted.dispose();
+});
+
+for(const change of ['fingerprint','review'])test(`a discovered title stays local and cannot leak across a changed ${change}`,async()=>{
+  let server=scopeState();server.pending.inventory.nodes[0].content_fingerprint='first';
+  const mounted=scopeDialog({getProcessingScope:async()=>server});
+  mounted.render();await setImmediate();mounted.render();
+  mounted.find(n=>n.type==='button'&&n.props.children==='scope.preview').props.onClick();mounted.render();
+  mounted.find(n=>n.props?.reviewId==='review').props.onTitle('Actual workbook title','properties');mounted.render();
+  assert(mounted.find(n=>n.type==='strong'&&n.props.children==='Actual workbook title'));
+  server=structuredClone(server);
+  if(change==='fingerprint')server.pending.inventory.nodes[0].content_fingerprint='second';else server.pending.id='new-review';
+  await mounted.find(n=>n.props?.reviewId==='review').props.onReviewChanged();mounted.render();
+  assert(!mounted.find(n=>n.type==='strong'&&n.props.children==='Actual workbook title'));
+  mounted.dispose();
+});
 
 test('first open shows the published scope; explicit edit resumes the saved draft',async()=>{
   const draft=scopeState();draft.pending.decisions[0].effective_included=true;
@@ -71,6 +202,54 @@ test('first open without a draft creates it only after the edit click and remain
   await mounted.find(n=>n.type==='button'&&n.props.children==='scope.edit').props.onClick();mounted.render();
   assert.equal(calls.length,1);assert.equal(calls[0].expected_active_generation_id,'base');
   assert.equal(mounted.find(n=>n.props?.label==='table.xlsx').props.disabled,false);
+  mounted.dispose();
+});
+
+test('legacy published view distinguishes an unknown inventory from an empty attachment list',async()=>{
+  const draft=scopeState();draft.pending.decisions[0].effective_included=true;
+  const server={...draft,active:{summary:{mode:'legacy_all',generation_id:'base'},inventory:null,decisions:[]},capabilities:{cached_restore:true}};
+  const mounted=scopeDialog({getProcessingScope:async()=>server},true,{}, {},{enterEditor:false});
+  const message=key=>mounted.find(n=>n.type==='p'&&n.props.children===key);
+  mounted.render();await setImmediate();mounted.render();
+  assert(message('scope.viewLegacy'),'Explain that the published inventory was never saved');
+  for(const key of ['scope.viewPublished','scope.selectionStats','scope.selectionPartial','scope.noAttachments','scope.oldActive'])assert(!message(key),key);
+  assert(!mounted.find(n=>n.props?.label==='table.xlsx'),'Do not show draft attachments as published');
+  await mounted.find(n=>n.type==='button'&&n.props.children==='scope.edit').props.onClick();mounted.render();
+  assert.equal(mounted.find(n=>n.props?.label==='table.xlsx').props.checked,true);
+  assert(message('scope.selectionPartial'),'The actual draft inventory has a meaningful count');
+  assert(!message('scope.oldActive'),'A draft is not an admitted processing operation');
+  mounted.dispose();
+});
+
+test('a known empty published inventory can still show zero attachments',async()=>{
+  const active={summary:{generation_id:'base'},inventory:{nodes:[],complete:true},decisions:[]};
+  const mounted=scopeDialog({getProcessingScope:async()=>({active,pending:null})},true,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();
+  assert(mounted.find(n=>n.type==='p'&&n.props.children==='scope.viewPublished'));
+  assert(mounted.find(n=>n.type==='p'&&n.props.children==='scope.noAttachments'));
+  assert(mounted.find(n=>n.type==='p'&&n.props.children==='scope.selectionStats'));
+  assert(!mounted.find(n=>n.type==='p'&&n.props.children==='scope.viewLegacy'));
+  mounted.dispose();
+});
+
+test('selection statistics exclude unsupported objects while keeping them visible',async()=>{
+  const server=scopeState();
+  server.pending.inventory.nodes.push({source_key:'image',parent_key:'root',display_name:'image.wmf',kind:'unsupported',supported:false});
+  const translate=(key,params)=>key==='scope.selectionPartial'?`${key}:${params.total}`:key;
+  const mounted=scopeDialog({getProcessingScope:async()=>server},true,{}, {},{translate});
+  mounted.render();await setImmediate();mounted.render();
+  assert(mounted.find(n=>n.type==='strong'&&n.props.children==='image.wmf'));
+  assert(mounted.find(n=>n.type==='p'&&n.props.children==='scope.selectionPartial:2'));
+  mounted.dispose();
+});
+
+for(const state of ['draft','awaiting_similar','validating','submitted'])test(`published-version processing notice follows actual review state ${state}`,async()=>{
+  const server=scopeState();server.pending.state=state;
+  server.active={...structuredClone(server.pending),summary:{generation_id:'base'}};
+  const mounted=scopeDialog({getProcessingScope:async()=>server},true,{}, {},{enterEditor:false});
+  mounted.render();await setImmediate();mounted.render();
+  const notice=mounted.find(n=>n.type==='p'&&n.props.children==='scope.oldActive');
+  assert.equal(!!notice,['validating','submitted'].includes(state));
   mounted.dispose();
 });
 

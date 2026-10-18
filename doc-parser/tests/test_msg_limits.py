@@ -15,7 +15,7 @@ from tests.mail_fixtures import compound_bytes, nested_msg, unicode_msg
 def _parse(tmp_path, payload, budget=None):
     path = tmp_path / "limits.msg"
     path.write_bytes(payload)
-    context = ParseContext(path.name)
+    context = ParseContext(path.name, attachment_max_depth=2)
     blocks = parse_document(path, attachments_dir=tmp_path / "attachments", budget=budget, context=context)
     return blocks, context
 

@@ -203,7 +203,7 @@ def test_cid_admission_limits_precede_decode_and_raster_inspection(tmp_path, mon
     monkeypatch.setattr(eml_parser, "_attachment_payload", forbidden)
     monkeypatch.setattr("docparser.embedded.raster_extension", forbidden)
     blocks = parse_document(path, attachments_dir=tmp_path / "attachments", budget=budget,
-                            context=context, depth=2 if limit == "depth" else 0)
+                            context=context, depth=context.attachment_max_depth if limit == "depth" else 0)
     assert "![" not in blocks_to_markdown(blocks)
     assert any(b.meta.get("extraction_status") == {"nodes": "skipped_count", "bytes": "skipped_size",
                                                   "depth": "skipped_depth"}[limit] for b in blocks)

@@ -5087,14 +5087,16 @@ main {
 .scope-idle-warning p { margin: 0 0 8px; }
 .scope-node { padding: 8px 4px 8px min(calc(var(--scope-depth) * 16px + 4px), 56px); border-bottom: 1px solid var(--border, #ddd); min-width: 0; }
 .scope-node-heading { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
-.scope-node-heading strong { overflow-wrap: anywhere; min-width: 0; }
+.scope-saved-changes { border-left: 3px solid var(--color-orange); padding: 8px 12px; margin: 12px 0; overflow-wrap: anywhere; }
+.scope-saved-changes p { margin: 4px 0; }
+.scope-saved-changes ul { margin: 4px 0 8px; padding-left: 20px; }
+.scope-node-heading strong { overflow-wrap: anywhere; min-width: 0; white-space: normal; overflow: visible; text-overflow: clip; }
 .scope-node-heading input, .scope-root input { margin-top: 4px; flex: 0 0 auto; }
 .scope-branch-toggle { background: transparent; border: 0; padding: 0 3px; cursor: pointer; color: inherit; }
 .scope-node-meta, .scope-tools, .scope-root { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .scope-node-meta { padding-left: 22px; margin-top: 5px; font-size: .8rem; overflow-wrap: anywhere; }
 .attachment-preview .modal-card { max-width: 1120px; min-width: 0; }
 .attachment-preview .modal-body { min-width: 0; }
-.attachment-preview-name { font-weight: 600; overflow-wrap: anywhere; }
 .attachment-preview-sheet { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0; }
 .attachment-preview-sheet select { max-width: 100%; min-width: 0; }
 .attachment-preview-content { height: 50vh; display: flex; flex-direction: column; }
@@ -5105,4 +5107,7 @@ main {
 .attachment-preview-table td { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 110px; max-width: 360px; }
 .attachment-preview-table thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
 .attachment-preview-table tbody th { background: var(--panel); min-width: 40px; }
+.attachment-preview-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px; font: inherit; }
+.attachment-preview-scroll dl { margin: 12px; overflow-wrap: anywhere; }
+.attachment-preview-scroll dd { margin: 0 0 8px; }
 .scope-excluded-sources { border: 1px solid var(--border, #ddd); border-radius: 8px; padding: 10px; margin-bottom: 16px; overflow-wrap: anywhere; }

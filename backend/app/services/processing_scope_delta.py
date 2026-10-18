@@ -2,7 +2,6 @@
 from copy import copy, deepcopy
 from datetime import datetime, timezone
 import hashlib
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,7 +14,6 @@ from app.models.schemas import Concept, OkfDocument
 
 def _parse_source(pipeline, doc_id, plan_id, owner_token, work, source, snapshot, generation_id):
     from dataclasses import asdict
-    import shutil
     from app.db.models import DocumentSource, DocumentTable, DocumentTableRow
     from app.services.processing_scope_worker import _rows
     from app.services.parser_supervisor import parse_document_supervised
@@ -24,6 +22,8 @@ def _parse_source(pipeline, doc_id, plan_id, owner_token, work, source, snapshot
     settings = pipeline.settings
     cache = SourceResultCache(settings.uploads_dir / doc_id / "scope-stage-cache", doc_id)
     nodes = {n["source_key"]: n for n in snapshot["inventory"]["nodes"]}
+    from docparser.attachment_policy import ParserProcessingPolicy
+    max_depth = ParserProcessingPolicy(snapshot).traversal.max_depth
     with scope_write_guard(doc_id, plan_id, owner_token) as session:
         operation = session.get(DocumentScopeChange, plan_id)
         row = session.get(DocumentSource, (doc_id, source["source_id"]))
@@ -43,7 +43,7 @@ def _parse_source(pipeline, doc_id, plan_id, owner_token, work, source, snapshot
         original = cache.save_original(source, original, Path(source["display_name"]).suffix.lower())
     chain, current = [], source["source_key"]
     while current != "root":
-        if current not in nodes or len(chain) >= 6:
+        if current not in nodes or len(chain) >= max_depth:
             raise ValueError("Invalid incremental source ancestry")
         chain.insert(0, nodes[current]["locator"])
         current = nodes[current]["parent_key"]
@@ -91,7 +91,6 @@ def run_scope_delta(doc_id, plan_id, workset, owner_token):
     from app.services.processing_scope_worker import _iter_points, _identities, _rows
     from app.services.canonical_repair import _index_candidate
     from app.services.okf_generator import _slugify
-    from app.services.generation_files import generation_paths
     from app.db.models import DocumentChunkProjection, DocumentChunkFragment
     pipeline = get_pipeline()
     settings, store = pipeline.settings, pipeline.vector_store

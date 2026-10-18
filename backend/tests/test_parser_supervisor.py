@@ -142,7 +142,8 @@ def test_supervised_parser_disables_embedded_mail_without_losing_original(tmp_pa
         timeout_seconds=20, max_memory_mb=1024, mail_enabled=False,
     )
 
-    assert result.parser_version.endswith("-mail-disabled")
+    from docparser import ParseContext
+    assert result.parser_version == ParseContext(source.name, mail_enabled=False).parser_version
     assert result.warnings == [{"code": "mail_import_disabled", "source_id": "root/0"}]
     assert not any("PRIVATE MAIL BODY" in block.text for block in result.blocks)
     marker = next(block for block in result.blocks if block.meta.get("source_id") == "root/0")

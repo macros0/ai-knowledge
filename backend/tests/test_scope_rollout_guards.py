@@ -145,7 +145,9 @@ def test_preview_hashes_canonical_sql_once_inside_document_lock(source_environme
     assert calls.call_count==1,"One consistent write-locked snapshot needs only one full SQL hash"
 
 
-from tests.test_processing_scope_change_end_to_end import source_environment  # noqa: E402,F401
+from tests import test_processing_scope_change_end_to_end as scope_fixtures  # noqa: E402
+
+source_environment = scope_fixtures.source_environment
 
 
 @pytest.mark.parametrize("write_bundles",[False,True])

@@ -51,6 +51,7 @@ class ScopeChangeApplyIn(ScopeRequest):
 class ProcessingScopeSummary(BaseModel):
     mode: Literal["legacy_all", "all", "selected"]
     generation_id: str | None = None
+    counts_version: int | None = None
     total: int | None = None
     included: int | None = None
     excluded: int = 0

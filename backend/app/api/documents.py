@@ -283,6 +283,7 @@ def upload_document(
             with TemporaryDirectory(prefix="upload-check-", dir=settings.uploads_dir) as preview_dir:
                 parse_context = ParseContext(
                     file.filename or "unknown", mail_enabled=settings.mail_import_enabled,
+                    attachment_max_depth=settings.attachment_max_depth,
                     **({'processing_policy':ParserProcessingPolicy(processing_scope)} if processing_scope else {}),
                 )
                 parse_context.archive_helper_path=settings.archive_7zip_path or None
@@ -295,6 +296,7 @@ def upload_document(
                         max_memory_mb=settings.parser_max_memory_mb,
                         max_concurrent=settings.parser_max_concurrent,
                         mail_enabled=settings.mail_import_enabled,
+                        attachment_max_depth=settings.attachment_max_depth,
                         **({'processing_policy':processing_scope,'archive_helper_path':settings.archive_7zip_path or None} if processing_scope else {}),
                     )
                 else:

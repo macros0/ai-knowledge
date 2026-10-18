@@ -77,7 +77,7 @@ def test_opaque_nontext_attachment_is_saved_without_text_loss_warning(tmp_path, 
 
 
 @pytest.mark.parametrize("options,status", [
-    ({"depth": 3}, "skipped_depth"),
+    ({"depth": 7}, "skipped_depth"),
     ({"budget": AttachmentBudget(total=0)}, "skipped_size"),
 ])
 def test_admission_limit_takes_priority_over_unsupported_format(tmp_path, options, status):

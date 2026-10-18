@@ -10,7 +10,7 @@ from sqlalchemy import select
 from app.db.models import Document, DocumentGenerationState, DocumentProcessingReview, DocumentScopeChange
 from app.db.session import session_scope
 from app.services.processing_scope import (ProcessingScopeConflict, locked_review, snapshot_from_review)
-from app.services.processing_scope_change import load_scope_base, analyze_scope_change, scope_base_digest, scope_sql_digest
+from app.services.processing_scope_change import load_scope_base, analyze_scope_change, scope_base_digest, scope_sql_digest, SCOPE_CHANGE_ANALYSIS_VERSION
 from app.services.generation_store import begin_generation, lock_document_write
 
 _fast_slots = BoundedSemaphore(1)
@@ -106,7 +106,7 @@ def create_change_preview(doc_id, review_id, revision, expected_active_generatio
         plan = analyze_scope_change(base, snapshot)
         row = DocumentScopeChange(id=uuid.uuid4().hex, doc_id=doc_id, created_by=actor_id,
             state="preview", expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
-            plan_json={"schema_version": 1, "preview": plan.to_dict(), "snapshot": snapshot,
+            plan_json={"schema_version": 1, "analysis_version": SCOPE_CHANGE_ANALYSIS_VERSION, "preview": plan.to_dict(), "snapshot": snapshot,
                        "input_digest": scope_base_digest(base), "canonical_digest": base.canonical_digest,
                        "review_id": review_id, "revision": revision})
         session.add(row)

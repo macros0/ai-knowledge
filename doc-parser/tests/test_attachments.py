@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import pytest
-from docparser import parse_document, parse_document_result
+from docparser import ParseContext, parse_document, parse_document_result
 
 from tests.fixtures import (
     make_docx_with_embedded_xlsx,
@@ -72,7 +72,7 @@ class TestRecursionDepth:
         # Внешний docx содержит A (уровень 1).
         outer = make_docx_with_embedded_xlsx(tmp_path / "top.docx", middle.read_bytes())
 
-        blocks = parse_document(outer)
+        blocks = parse_document(outer, context=ParseContext(outer.name, attachment_max_depth=2))
 
         markers = [b for b in blocks if b.type == "attachment"]
         assert markers, "маркеры вложений должны присутствовать на каждом уровне"
@@ -109,7 +109,7 @@ class TestAttachmentLimits:
         payload = b"original\0opaque\0bytes"
         blocks = embedded.process_embedded(
             payload, "deep.bin", depth=depth, attachments_dir=tmp_path,
-            budget=embedded.AttachmentBudget(total=len(payload)), context=ParseContext("root.docx"),
+            budget=embedded.AttachmentBudget(total=len(payload)), context=ParseContext("root.docx", attachment_max_depth=2),
         )
         assert len(blocks) == 1
         assert blocks[0].meta["extraction_status"] == "skipped_depth"

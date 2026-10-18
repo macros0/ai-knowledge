@@ -25,4 +25,5 @@ test('scope button requires an actual choice or an existing exclusion',()=>{
   assert.equal(scopeChoiceAvailable(undefined,{total:0,count_complete:true},null),false);
   assert.equal(scopeChoiceAvailable(undefined,{mode:'legacy_all',count_complete:false},null),true);
   assert.equal(scopeChoiceAvailable('none',{mode:'legacy_all',count_complete:false},null),false);
+  assert.equal(scopeChoiceAvailable(undefined,{counts_version:2,total:4,unsupported:28,count_complete:true},null),true);
 });

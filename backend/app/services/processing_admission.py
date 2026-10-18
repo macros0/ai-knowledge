@@ -36,15 +36,16 @@ class ProcessingAdmissionResult:
     detail: dict | None = None
 
 
-def prepare_upload_scope(path, filename, settings, *, attachments_dir=None, branch=None):
+def prepare_upload_scope(path, filename, settings, *, attachments_dir=None, branch=None, traversal=None):
     limits = assessment_limits(settings)
+    traversal = traversal or TraversalLimits(max_depth=settings.attachment_max_depth)
     if settings.parser_supervisor_enabled:
         inventory = inspect_attachments_supervised(
             path,
             filename,
             attachments_dir=attachments_dir,
             limits=limits,
-            traversal=TraversalLimits(),
+            traversal=traversal,
             timeout_seconds=min(limits.timeout_seconds, settings.parser_timeout_seconds),
             max_memory_mb=settings.parser_max_memory_mb,
             max_concurrent=settings.parser_max_concurrent,
@@ -57,7 +58,7 @@ def prepare_upload_scope(path, filename, settings, *, attachments_dir=None, bran
             Path(path),
             filename,
             limits=limits,
-            traversal=TraversalLimits(),
+            traversal=traversal,
             attachments_dir=attachments_dir,
             mail_enabled=settings.mail_import_enabled,
             helper_path=settings.archive_7zip_path or None,

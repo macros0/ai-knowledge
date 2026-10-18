@@ -1241,6 +1241,18 @@ Parser contract `mail-sources-v23` rejects resume checkpoints from the clipped
 layout. Published legacy incomplete results keep their warning until a successful
 regeneration replaces them.
 
+### 2026-10-18 — One configurable attachment depth
+
+`ATTACHMENT_MAX_DEPTH` controls ordinary parsing, inventory, branch expansion and
+incremental parsing; default 6, validated range 0–32. The uploaded root is level 0;
+each attached file is one edge, independent of archive directories or OLE wrappers.
+Captured inventory/snapshot limits govern an existing operation. Expansion retains
+absolute depth and cannot restart the counter; API rejects forbidden selection and
+expansion. Inventory checks depth before child payload reads, and archive parsing
+checks before extraction. Ordinary parser checkpoint identity includes depth to
+reject incompatible resume. MIME structure depth (32), byte/node budgets, process
+memory/time isolation and transport ceilings remain independent safeguards.
+
 ## Compact Kubernetes main integration
 
 Compact/bundled uses one replica/worker, stopped serialized maintenance and

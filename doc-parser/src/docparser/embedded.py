@@ -17,6 +17,7 @@ from pathlib import Path
 
 import olefile
 
+from docparser.attachment_limits import DEFAULT_ATTACHMENT_MAX_DEPTH
 from docparser.blocks import Block
 from docparser.extensions import SUPPORTED_EXTENSIONS
 from docparser.mail_images import raster_extension
@@ -27,15 +28,14 @@ logger = logging.getLogger(__name__)
 
 # Анти-DoS (2026-09-01): цепочки вложений (docx → вложение → вложение → ...)
 # и zip-бомбы множат объём работы/файлов на один загруженный файл неограниченно.
-MAX_ATTACHMENT_DEPTH = 3  # уровней вложенности: уровни 1-2 разбираются, 3+ — только маркер
 MAX_ATTACHMENT_PAYLOAD = 50 * 1024 * 1024   # 50 МБ — одно вложение (payload или сырое)
 MAX_TOTAL_PAYLOAD = 200 * 1024 * 1024       # 200 МБ — суммарно распакованных вложений на документ
 MAX_ATTACHMENT_NODES = 1_000                # включает маленькие MIME/MSG части
 
 
 def attachment_depth_limit(context=None):
-    policy=getattr(context,'processing_policy',None)
-    return policy.traversal.max_depth+1 if policy is not None else MAX_ATTACHMENT_DEPTH
+    """Inclusive maximum, shared by ordinary and scoped parsing."""
+    return getattr(context, 'attachment_max_depth', DEFAULT_ATTACHMENT_MAX_DEPTH)
 
 PROGID_EXT = {
     "Excel.Sheet.12": ".xlsx",
@@ -184,7 +184,7 @@ def process_embedded(
     """Разбирает встроенный файл. Возвращает блоки (маркер + рекурсивно разобранный контент).
 
     depth — уровень вложенности (1 = прямое вложение документа). Глубже
-    MAX_ATTACHMENT_DEPTH рекурсия не идёт — только маркер (анти-DoS).
+    attachment_depth_limit рекурсия не идёт — только маркер (анти-DoS).
     budget — кумулятивный лимит распакованных байтов вложений документа.
     """
     effective_budget = budget or _default_budget()
@@ -219,7 +219,7 @@ def process_embedded(
 
     # Reject raw inputs and forbidden recursion before opening any container.
     # Keep a bounded original at the depth boundary for explicit download.
-    if len(data) > MAX_ATTACHMENT_PAYLOAD or depth >= attachment_depth_limit(context):
+    if len(data) > MAX_ATTACHMENT_PAYLOAD or depth > attachment_depth_limit(context):
         att = Attachment(name=name, prog_id=prog_id, caption=caption, data=data)
         if context is not None:
             att.source_id = context.add_child(parent_source_id, name, "attachment")

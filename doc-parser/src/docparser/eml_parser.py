@@ -64,7 +64,7 @@ def parse_eml(
         filename = part.get_filename() or _attachment_name(part, index)
         content_id = str(part.get("Content-ID") or "")
         status = getattr(part, "_wire_status", None)
-        if not status and depth + 1 >= attachment_depth_limit(context):
+        if not status and depth + 1 > attachment_depth_limit(context):
             status = "skipped_depth"
         elif not status:
             size_bound = _attachment_size_bound(part)

@@ -8,6 +8,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {transformSync} from 'next/dist/build/swc/index.js';
 import {setImmediate} from 'node:timers/promises';
 import {componentHarness} from './support/componentHarness.mjs';
+import * as processingScope from '../src/lib/processingScope.mjs';
 const require=createRequire(import.meta.url);
 
 test('preview renders literal cell text, coordinates and an explicit limited notice',()=>{
@@ -19,6 +20,7 @@ test('preview renders literal cell text, coordinates and an explicit limited not
   const mod={exports:{}};
   runInNewContext(compiled,{module:mod,exports:mod.exports,require(id){
     if(id==='@/lib/api')return {};
+    if(id==='@/lib/processingScope.mjs')return processingScope;
     if(id==='@/i18n/LocaleContext')return {useI18n:()=>({t:key=>key})};
     if(id==='./Modal')return ()=>null;
     return require(id);
@@ -33,14 +35,47 @@ test('preview renders literal cell text, coordinates and an explicit limited not
   assert(html.includes('scope.previewLimited'));
   assert(html.includes('scope.previewTable'));
   assert.match(html,/>9<\/th>/);
+  const text=renderToStaticMarkup(React.createElement(mod.exports.AttachmentPreviewContent,{
+    data:{kind:'text',text:'<script>literal</script>',metadata:{subject:'<img src=x>'},limited:false},t:key=>key}));
+  assert(text.includes('&lt;script&gt;'));assert(!text.includes('<script>'));assert(!text.includes('<img'));
 });
 
 const t=key=>key;
+for(const kind of ['text','archive'])test(`non-Excel ${kind} preview has no sheet controls or Excel-only advice`,async()=>{
+  const data=kind==='text'?{kind,text:'<script>literal</script>',metadata:{subject:'Subject'},limited:false}:
+    {kind,entries:[{name:'folder/file.docx',size:123}],limited:false};
+  const mounted=previewDialog(async()=>data,{node:{source_key:'generic-'+kind,kind:kind==='text'?'docx':'archive',display_name:'object.bin'}});
+  mounted.render();await setImmediate();mounted.render();
+  assert(!mounted.find(n=>n.type==='select'));
+  assert(!mounted.find(n=>n.props?.children==='scope.previewRawValues'));
+  assert(mounted.find(n=>n.props?.data?.kind===kind));
+  mounted.dispose();
+});
+
 const previewData=sheet=>({sheet_index:sheet,sheets:[0,1,2].map(index=>({index,name:`Sheet ${index}`})),
   columns:['A'],rows:[{number:1,cells:[`sheet ${sheet}`]}],limited:false});
+
+test('preview does not repeat the discovered title, technical filename or format',async()=>{
+  const mounted=previewDialog(async()=>({...previewData(0),title:'Actual workbook title',title_source:'properties'}),
+    {node:{source_key:'title-heading',kind:'xlsx',display_name:'_____Microsoft_Excel.xlsx'}});
+  mounted.render();await setImmediate();mounted.render();
+  assert(!mounted.find(n=>n.type==='p'&&n.props.className==='attachment-preview-name'));
+  assert(!mounted.find(n=>n.type==='p'&&n.props.className==='source-location-note'&&Array.isArray(n.props.children)&&n.props.children.some(child=>child==='_____Microsoft_Excel.xlsx'||child==='XLSX')));
+  assert(mounted.find(n=>n.type==='select'),'Sheet selection remains available');
+  mounted.dispose();
+});
+
+test('preview does not show a duplicate name block while loading',()=>{
+  const mounted=previewDialog(async()=>previewData(0),{node:{source_key:'known-heading',kind:'xlsx',
+    display_name:'object.xlsx',title:'Inventory title',title_source:'properties'}});
+  mounted.render();
+  assert(!mounted.find(n=>n.type==='p'&&n.props.className==='attachment-preview-name'));
+  mounted.dispose();
+});
 function previewDialog(load,props={}){
   return componentHarness(new URL('../src/components/AttachmentPreviewDialog.jsx',import.meta.url),{
     '@/lib/api':{getAttachmentPreview:load,friendlyApiError:err=>err.message},
+    '@/lib/processingScope.mjs':processingScope,
     '@/i18n/LocaleContext':{useI18n:()=>({t})},'./Modal':()=>null,
   },{docId:'doc',reviewId:'review',node:{source_key:'excel',display_name:'table.xlsx'},
     included:false,onClose:()=>{},...props});

@@ -12,6 +12,148 @@ upload_client = scope_fixtures.upload_client
 base_upload_client = scope_fixtures.base_upload_client
 
 
+def test_labels_are_read_only_and_available_before_preview(upload_client, monkeypatch):
+    from email.message import EmailMessage
+    import struct
+    import app.api.document_processing_scope as api
+    client, settings, started = upload_client
+    settings.attachment_review_enabled = True
+    settings.dedup_enabled = False
+    monkeypatch.setattr(api, 'get_settings', lambda: settings)
+    import app.services.processing_scope_labels as labels_service
+    calls = []
+    real_worker = labels_service.parse_document_supervised
+    def count_worker(*args, **kwargs):
+        calls.append(kwargs.get('_inspection_options'))
+        return real_worker(*args, **kwargs)
+    monkeypatch.setattr(labels_service, 'parse_document_supervised', count_worker)
+    text = 'Real source name.pdf'.encode('utf-16-le')
+    header = bytearray(88)
+    struct.pack_into('<II', header, 0, 1, 88)
+    header[40:44] = b' EMF'
+    record = bytearray(76 + len(text) + (-len(text) % 4))
+    struct.pack_into('<II', record, 0, 84, len(record))
+    struct.pack_into('<II', record, 44, len(text) // 2, 76)
+    record[76:76 + len(text)] = text
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w') as archive:
+        archive.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"><w:object><v:shape><v:imagedata r:id="icon"/></v:shape><o:OLEObject r:id="file"/></w:object></w:document>')
+        archive.writestr('word/_rels/document.xml.rels', '<Relationships><Relationship Id="icon" Target="media/icon.emf"/><Relationship Id="file" Target="embeddings/oleObject1.bin"/></Relationships>')
+        archive.writestr('word/media/icon.emf', header + record)
+        from pypdf import PdfWriter
+        pdf = io.BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        writer.write(pdf)
+        archive.writestr('word/embeddings/oleObject1.bin', pdf.getvalue())
+    mail = EmailMessage()
+    mail.set_content('Root')
+    mail.add_attachment(output.getvalue(), maintype='application', subtype='octet-stream', filename='nested.docx')
+    book = Workbook()
+    for _ in range(600):
+        book.active.append(['HEAVY'])
+    heavy = io.BytesIO()
+    book.save(heavy)
+    mail.add_attachment(heavy.getvalue(), maintype='application', subtype='octet-stream', filename='large.xlsx')
+    response = client.post('/api/documents', files={'file': ('root.eml', mail.as_bytes(), 'message/rfc822')})
+    assert response.status_code == 202, response.text
+    route = f"/api/documents/{response.json()['id']}/processing-scope"
+    before = client.get(route).json()
+    review = before['pending']
+    assert any(n['display_name'] == 'oleObject1.bin' for n in review['inventory']['nodes']), review['inventory']
+    node = next(n for n in review['inventory']['nodes'] if n['display_name'] == 'oleObject1.bin')
+    # Simulate an already saved inventory, created before icon-caption support.
+    from app.db.session import session_scope
+    from app.db.models import DocumentProcessingReview
+    import copy
+    with session_scope() as session:
+        row = session.get(DocumentProcessingReview, response.json()['id'])
+        inventory = copy.deepcopy(row.inventory_json)
+        for item in inventory['nodes']:
+            item.pop('display_label', None)
+        row.inventory_json = inventory
+    before = client.get(route).json()
+    result = client.get(route + '/labels', params={'scope_type': 'pending', 'scope_id': review['id']})
+    assert result.status_code == 200, result.text
+    assert result.headers['cache-control'] == 'no-store'
+    assert result.json()['labels'][node['source_key']]['display_label'] == 'Real source name.pdf'
+    worker_calls = len(calls)
+    assert worker_calls == 1
+    assert client.get(route + '/labels', params={'scope_type': 'pending', 'scope_id': review['id']}).json() == result.json()
+    assert len(calls) == worker_calls, 'Repeated label reads must reuse metadata after verifying the original hash'
+    assert client.get(route).json() == before
+    assert not started
+    assert client.get(route + '/labels', params={'scope_type': 'pending', 'scope_id': 'stale'}).status_code == 409
+    from app.db.models import DocumentGeneration, DocumentGenerationState
+    generation_id = 'a' * 32
+    with session_scope() as session:
+        session.add(DocumentGeneration(id=generation_id, doc_id=response.json()['id'], phase='active',
+                                      processing_scope_json={'schema_version': 1, 'review_id': review['id'], 'inventory': inventory}))
+        state = session.get(DocumentGenerationState, response.json()['id'])
+        if state is None:
+            state = DocumentGenerationState(doc_id=response.json()['id'])
+            session.add(state)
+        state.active_generation_id = generation_id
+    active = client.get(route + '/labels', params={'scope_type': 'active', 'scope_id': generation_id})
+    assert active.status_code == 200, active.text
+    assert active.json()['labels'] == result.json()['labels']
+    assert len(calls) == worker_calls, 'The same verified bytes can supply active and pending display labels'
+    assert client.get(route + '/labels', params={'scope_type': 'active', 'scope_id': 'stale'}).status_code == 409
+    with session_scope() as session:
+        row = session.get(DocumentProcessingReview, response.json()['id'])
+        changed = copy.deepcopy(row.inventory_json)
+        next(n for n in changed['nodes'] if n['kind'] == 'docx')['content_fingerprint'] = '0' * 64
+        row.inventory_json = changed
+    assert client.get(route + '/labels', params={'scope_type': 'pending', 'scope_id': review['id']}).status_code == 409
+
+
+@pytest.mark.parametrize('kind',['docx','pdf','eml','msg','zip','7z','rar'])
+def test_supported_formats_preview_real_worker_without_admission(upload_client,monkeypatch,kind):
+    from email.message import EmailMessage
+    from pathlib import Path
+    import app.api.document_processing_scope as api
+    client,settings,started=upload_client
+    settings.attachment_review_enabled=True;settings.dedup_enabled=False
+    monkeypatch.setattr(api,'get_settings',lambda:settings)
+    output=io.BytesIO()
+    if kind=='docx':
+        with zipfile.ZipFile(output,'w') as z:
+            z.writestr('word/document.xml','<document><p><t>DOCUMENT_CANARY</t></p></document>')
+            z.writestr('docProps/core.xml','<core xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Real document title</dc:title></core>')
+    elif kind=='pdf':
+        from pypdf import PdfWriter
+        writer=PdfWriter();writer.add_blank_page(width=100,height=100);writer.add_metadata({'/Title':'Real PDF title'});writer.write(output)
+    elif kind=='eml':
+        inner=EmailMessage();inner['Subject']='Real mail title';inner.set_content('MAIL_CANARY');output.write(inner.as_bytes())
+    elif kind=='msg':
+        output.write((Path(__file__).parents[2]/'doc-parser/tests/fixtures/mail/synthetic-unicode-attachment.msg').read_bytes())
+    elif kind=='zip':
+        with zipfile.ZipFile(output,'w') as z:z.writestr('file.txt','ARCHIVE_PAYLOAD')
+    elif kind=='7z':
+        import py7zr
+        with py7zr.SevenZipFile(output,'w') as z:z.writestr(b'ARCHIVE_PAYLOAD','file.txt')
+    else:
+        output.write((Path(__file__).parents[2]/'doc-parser/tests/fixtures/archives/rar5-solid.rar').read_bytes())
+    root=EmailMessage();root.set_content('Root body')
+    book=Workbook()
+    for _ in range(600):book.active.append(['HEAVY'])
+    heavy=io.BytesIO();book.save(heavy)
+    root.add_attachment(heavy.getvalue(),maintype='application',subtype='octet-stream',filename='heavy.xlsx')
+    root.add_attachment(output.getvalue(),maintype='application',subtype='octet-stream',filename='sample.'+kind)
+    uploaded=client.post('/api/documents',files={'file':('root.eml',root.as_bytes())})
+    assert uploaded.status_code==202,uploaded.text
+    route=f"/api/documents/{uploaded.json()['id']}/processing-scope"
+    before=client.get(route).json();review=before['pending']
+    node=next(n for n in review['inventory']['nodes'] if n['display_name']=='sample.'+kind)
+    response=client.get(route+'/attachments/'+node['source_key']+'/preview',params={'review_id':review['id']})
+    assert response.status_code==200,response.text
+    assert response.headers['cache-control']=='no-store'
+    assert response.json()['kind']==('archive' if kind in {'zip','7z','rar'} else 'text')
+    if kind in {'docx','pdf','eml'}:assert response.json()['title']==node['title'] and node['title']
+    assert client.get(route).json()==before
+    assert not started
+
+
 def preview_function():
     return importlib.import_module("docparser.xlsx_preview").preview_xlsx
 

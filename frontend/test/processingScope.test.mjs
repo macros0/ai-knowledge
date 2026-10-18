@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {effectiveSelection,toggleSourceSelection,scopeBadgeModel,scopeTreeSources} from '../src/lib/processingScope.mjs';
 
+test('badge total excludes unsupported entries from old and new summaries',()=>{
+  assert.equal(scopeBadgeModel({excluded:2,total:32,unsupported:28,count_complete:true},null).total,4);
+  assert.equal(scopeBadgeModel({counts_version:2,excluded:2,total:4,unsupported:28,count_complete:true},null).total,4);
+});
+
 const nodes=[{source_key:'mail',parent_key:'root',kind:'mail',supported:true,children_complete:true},
   {source_key:'archive',parent_key:'mail',kind:'archive',supported:true,children_complete:true},
   {source_key:'heavy',parent_key:'archive',kind:'xlsx',supported:true,children_complete:true},

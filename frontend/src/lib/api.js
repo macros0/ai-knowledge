@@ -230,6 +230,9 @@ export function uploadDocument(file, tags = [], { developmentId = null, canonica
 
 const scopeRoute = (docId) => `/documents/${encodeURIComponent(docId)}/processing-scope`;
 export const getProcessingScope = (docId) => request(scopeRoute(docId));
+export const getProcessingScopeLabels = (docId,scopeType,scopeId,signal) => request(
+  `${scopeRoute(docId)}/labels?${new URLSearchParams({scope_type:scopeType,scope_id:scopeId})}`,
+  {signal,cache:'no-store'},20000);
 export const acquireProcessingScopeEditLock = (docId, body) => jsonRequest(`${scopeRoute(docId)}/edit-lock`, 'POST', body, 15000);
 export const renewProcessingScopeEditLock = (docId, body) => jsonRequest(`${scopeRoute(docId)}/edit-lock`, 'PUT', body, 15000);
 export const releaseProcessingScopeEditLock = (docId, body) => jsonRequest(`${scopeRoute(docId)}/edit-lock`, 'DELETE', body, 15000);

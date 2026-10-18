@@ -754,6 +754,7 @@ class Pipeline:
                 raise ValueError('Processing scope changed during resume')
             validate_resume_parser_version(
                 checkpoint, ParseContext(filename, mail_enabled=self.settings.mail_import_enabled,
+                                         attachment_max_depth=self.settings.attachment_max_depth,
                                          processing_policy=parser_policy).parser_version,
             )
             validate_resume_source_file_hash(checkpoint, source_file_hash)
@@ -775,6 +776,7 @@ class Pipeline:
                 reset_candidate_tables(doc_id, generation_id)
             table_sink = GenerationTableSink(doc_id, generation_id) if self.settings.table_structure_enabled else None
             parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled, table_sink=table_sink,
+                                         attachment_max_depth=self.settings.attachment_max_depth,
                                          processing_policy=parser_policy)
             parse_context.archive_helper_path=self.settings.archive_7zip_path or None
             parse_started = start_stage("parse")
@@ -787,6 +789,7 @@ class Pipeline:
                     max_memory_mb=self.settings.parser_max_memory_mb,
                     max_concurrent=self.settings.parser_max_concurrent,
                     mail_enabled=self.settings.mail_import_enabled,
+                    attachment_max_depth=self.settings.attachment_max_depth,
                     table_mode=self.settings.table_structure_enabled,
                     **({'processing_policy':processing_scope,'archive_helper_path':self.settings.archive_7zip_path or None} if processing_scope else {}),
                 )
@@ -1726,7 +1729,8 @@ class Pipeline:
         self.settings.staging_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="chunk-backfill-", dir=self.settings.staging_dir) as temporary:
             attempt = Path(temporary)
-            parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled)
+            parse_context = ParseContext(filename, mail_enabled=self.settings.mail_import_enabled,
+                                         attachment_max_depth=self.settings.attachment_max_depth)
             if self.settings.parser_supervisor_enabled and parse_document.__module__.startswith("docparser"):
                 supervised = parse_document_supervised(
                     filepath, filename, attachments_dir=attempt,
@@ -1734,6 +1738,7 @@ class Pipeline:
                     max_memory_mb=self.settings.parser_max_memory_mb,
                     max_concurrent=self.settings.parser_max_concurrent,
                     mail_enabled=self.settings.mail_import_enabled,
+                    attachment_max_depth=self.settings.attachment_max_depth,
                 )
                 blocks, parse_context.sources = supervised
                 parse_context.parser_version = supervised.parser_version

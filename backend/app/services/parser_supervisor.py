@@ -26,6 +26,7 @@ from pathlib import Path
 
 from docparser import PARSER_VERSION, ParseContext, parse_document
 from docparser.blocks import Block
+from docparser.attachment_limits import DEFAULT_ATTACHMENT_MAX_DEPTH
 from docparser.source_model import SourceNode
 from app.services.parser_limits import WindowsParserJob
 from app.services.storage import StorageFullError, is_storage_full
@@ -66,6 +67,8 @@ class SupervisedParseResult:
     parser_version: str
     inventory: dict | None = None
     xlsx_preview: dict | None = None
+    attachment_preview: dict | None = None
+    attachment_labels: dict | None = None
 
     def __iter__(self):
         yield self.blocks
@@ -132,9 +135,34 @@ def _worker(
     send, path: str, filename: str, attachments_dir: str, max_memory_bytes: int,
     mail_enabled: bool = True, table_mode: bool = False,
     processing_policy: dict | None = None, inspection_options: dict | None = None, archive_helper_path: str | None = None,
+    attachment_max_depth: int = DEFAULT_ATTACHMENT_MAX_DEPTH,
 ) -> None:
     try:
         if inspection_options is not None:
+            if "attachment_labels" in inspection_options:
+                import zipfile
+                from xml.etree.ElementTree import ParseError
+                from defusedxml.common import DefusedXmlException
+                from docparser.attachment_labels import word_attachment_labels
+                labels = {}
+                for item in inspection_options['attachment_labels'][:32]:
+                    name = item['filename']
+                    if Path(name).name != name or not name.endswith('.docx'):
+                        raise ValueError('Invalid label input')
+                    try:
+                        labels[item['parent_key']] = word_attachment_labels(Path(path).parent / name)
+                    except (ValueError, OSError, zipfile.BadZipFile, ParseError, DefusedXmlException):
+                        labels[item['parent_key']] = {}
+                _send_worker_message(send, {'ok': True, 'blocks': [], 'sources': [],
+                                           'warnings': [], 'attachment_labels': labels})
+                return
+            if "attachment_preview" in inspection_options:
+                from docparser.attachment_preview import preview_attachment
+                preview = preview_attachment(Path(path), helper_path=archive_helper_path,
+                                             **inspection_options["attachment_preview"])
+                _send_worker_message(send, {"ok": True, "blocks": [], "sources": [],
+                                           "warnings": [], "attachment_preview": preview})
+                return
             if "xlsx_preview" in inspection_options:
                 from docparser.xlsx_preview import preview_xlsx
 
@@ -157,6 +185,7 @@ def _worker(
         from docparser.attachment_policy import ParserProcessingPolicy
         sink = FileTableSink(Path(attachments_dir) / ".tables-spool") if table_mode else None
         context = ParseContext(filename, mail_enabled=mail_enabled, table_sink=sink,
+                               attachment_max_depth=attachment_max_depth,
                                processing_policy=ParserProcessingPolicy(processing_policy) if processing_policy else None)
         context.archive_helper_path=archive_helper_path
         branch = processing_policy.get("delta_branch") if processing_policy else None
@@ -165,7 +194,7 @@ def _worker(
             import re
             sid = branch.get("source_id", "")
             chain = branch.get("locator_chain", [])
-            if (not re.fullmatch(r"root(?:/[A-Za-z0-9_-]+)+", sid) or not 1 <= len(chain) <= 6
+            if (not re.fullmatch(r"root(?:/[A-Za-z0-9_-]+)+", sid) or not 1 <= len(chain) <= context.attachment_max_depth
                     or not re.fullmatch(r"[0-9a-f]{64}", branch.get("content_fingerprint", ""))
                     or not context.processing_policy.is_included(branch.get("source_key"))):
                 raise ParserWorkerError("Invalid incremental source boundary")
@@ -204,6 +233,7 @@ def _worker_entry(
     target, send, path: str, filename: str, attachments_dir: str,
     max_memory_bytes: int, mail_enabled: bool, admission, group_ready, table_mode: bool = False,
     processing_policy: dict | None = None, inspection_options: dict | None = None, archive_helper_path: str | None = None,
+    attachment_max_depth: int = DEFAULT_ATTACHMENT_MAX_DEPTH,
 ) -> None:
     """Apply the process boundary before any parser or injected worker runs."""
     try:
@@ -218,7 +248,7 @@ def _worker_entry(
             _set_posix_memory_limit(max_memory_bytes)
         if target is _worker:
             target(send, path, filename, attachments_dir, max_memory_bytes, mail_enabled, table_mode,
-                   processing_policy,inspection_options,archive_helper_path)
+                   processing_policy,inspection_options,archive_helper_path,attachment_max_depth)
         else:
             target(send, path, filename, attachments_dir, max_memory_bytes)
     except BaseException as exc:
@@ -276,6 +306,8 @@ def _decode_worker_message(payload: bytes) -> SupervisedParseResult:
             parser_version=parser_version,
             inventory=message.get('inventory'),
             xlsx_preview=message.get('xlsx_preview'),
+            attachment_preview=message.get('attachment_preview'),
+            attachment_labels=message.get('attachment_labels'),
         )
     except (TypeError, ValueError) as exc:
         raise ParserWorkerError("parser worker вернул некорректную схему ответа") from exc
@@ -405,7 +437,7 @@ def inspect_attachments_supervised(path,filename,*,attachments_dir,limits,traver
             raise
         with Path(path).open('rb') as stream:
             source_hash=hashlib.file_digest(stream,'sha256').hexdigest()
-        return AttachmentInventory(source_file_hash=source_hash,complete=False,nodes=[
+        return AttachmentInventory(source_file_hash=source_hash,complete=False,traversal_limits=asdict(traversal),nodes=[
             AttachmentNode(make_source_key(source_hash,('uninspected-remainder',)),'root',
                            'uninspected-remainder','Непросмотренные вложения','branch',
                            assessment='unknown',children_complete=False,status='assessment_incomplete')])
@@ -431,6 +463,7 @@ def parse_document_supervised(
     mail_enabled: bool = True,
     table_mode: bool = False,
     processing_policy: dict | None = None,
+    attachment_max_depth: int | None = None,
     archive_helper_path: str | None = None,
     _inspection_options: dict | None = None,
     _worker_target=None,
@@ -442,6 +475,11 @@ def parse_document_supervised(
     """
     if timeout_seconds <= 0 or max_memory_mb < 64 or max_concurrent < 1:
         raise ValueError("Invalid parser supervisor limits")
+    if attachment_max_depth is None:
+        from app.config import get_settings
+        attachment_max_depth = get_settings().attachment_max_depth
+    from docparser.attachment_limits import validate_attachment_depth
+    validate_attachment_depth(attachment_max_depth)
     slot = _acquire_parser_slot(max_concurrent)
     dest = Path(attachments_dir)
     dest_existed = dest.exists()
@@ -462,7 +500,7 @@ def parse_document_supervised(
         process = context.Process(
             target=_worker_entry,
             args=(_worker_target or _worker, send, str(path), filename, str(dest), limit, mail_enabled,
-                  admission, group_ready, table_mode,processing_policy,_inspection_options,archive_helper_path),
+                  admission, group_ready, table_mode,processing_policy,_inspection_options,archive_helper_path,attachment_max_depth),
             daemon=True,
         )
         deadline = time.monotonic() + timeout_seconds

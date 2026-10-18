@@ -84,7 +84,7 @@ def test_central_attachment_budget_rejections_always_warn(tmp_path, monkeypatch,
     if case == "raw_size":
         monkeypatch.setattr(embedded, "MAX_ATTACHMENT_PAYLOAD", 4)
     elif case == "depth_size":
-        depth = embedded.MAX_ATTACHMENT_DEPTH
+        depth = context.attachment_max_depth + 1
     elif case == "opaque_size":
         payload, name = b"plain bytes", "opaque.bin"
     elif case == "count":

@@ -69,6 +69,26 @@ def source_environment(tmp_path, monkeypatch):
     return locals()
 
 
+def test_depth_placeholder_survives_repeated_parent_exclusion_without_parsing(source_environment, monkeypatch):
+    env = source_environment
+    parser = Mock(side_effect=AssertionError('Depth-limited original must not be parsed'))
+    monkeypatch.setattr('app.services.parser_supervisor.parse_document_supervised', parser)
+    relative = f"generations/{env['base_id']}/attachments/depth-original.bin"
+    original = env['settings'].uploads_dir / env['doc_id'] / relative
+    original.parent.mkdir(parents=True, exist_ok=True)
+    original.write_bytes(b'DEPTH_ORIGINAL_MUST_NOT_BE_PARSED')
+    with session_scope() as session:
+        session.add(DocumentSource(doc_id=env['doc_id'], source_id='root/0/deeper', parent_source_id='root/0',
+                                   extraction_status='skipped_depth', artifact_kind='original', saved_path=relative))
+    test_exclude_restore_multiple_times_without_provider_calls(env, monkeypatch, legacy=True, write_bundles=False)
+    with session_scope() as session:
+        child = session.get(DocumentSource, (env['doc_id'], 'root/0/deeper'))
+        assert child.extraction_status == 'skipped_depth'
+        assert not (child.metadata_json or {}).get('processing_excluded'), 'The restored parent no longer excludes its structural placeholder'
+        assert (env['settings'].uploads_dir / env['doc_id'] / child.saved_path).read_bytes() == b'DEPTH_ORIGINAL_MUST_NOT_BE_PARSED'
+    parser.assert_not_called()
+
+
 @pytest.mark.parametrize("legacy", [False, True])
 @pytest.mark.parametrize("write_bundles",[False,True])
 def test_exclude_restore_multiple_times_without_provider_calls(source_environment, monkeypatch, legacy,write_bundles):
@@ -100,7 +120,7 @@ def test_exclude_restore_multiple_times_without_provider_calls(source_environmen
                 inventory_json=snapshot["inventory"], selection_json=chosen, selection_hash=f"{turn + 5:064x}", base_generation_id=active))
         preview = jobs.create_change_preview(doc_id, f"{turn + 1:032x}", 1, active, "editor")
         assert preview["mode"] == ("reuse_only" if included else "fast_exclude")
-        applied = jobs.apply_scope_change(doc_id, preview["plan_id"], f"{turn + 10:032x}", active, "editor", {preview["mode"]})
+        jobs.apply_scope_change(doc_id, preview["plan_id"], f"{turn + 10:032x}", active, "editor", {preview["mode"]})
         from app.db.models import DocumentScopeChange
         with session_scope() as s:
             owner = s.get(DocumentScopeChange, preview["plan_id"]).owner_token
@@ -158,9 +178,8 @@ def test_exclude_restore_multiple_times_without_provider_calls(source_environmen
 @pytest.mark.parametrize("version", [None, 1])
 @pytest.mark.parametrize("salvage", [False, True])
 def test_reenable_with_cached_chunks_generates_only_missing_concepts(source_environment, monkeypatch, version, salvage):
-    from app.services.processing_scope_cache import SourceResultCache, embedding_fingerprint
+    from app.services.processing_scope_cache import SourceResultCache
     from app.services.generation_files import generation_paths
-    from app.services.processing_scope_change import load_scope_base
     from app.models.schemas import Concept
     from threading import BoundedSemaphore, RLock
     from concurrent.futures import ThreadPoolExecutor
@@ -209,7 +228,7 @@ def test_reenable_with_cached_chunks_generates_only_missing_concepts(source_envi
     monkeypatch.setattr("app.services.parser_supervisor.parse_document_supervised", Mock(side_effect=AssertionError("Already parsed")))
     preview = jobs.create_change_preview(doc_id, "e" * 32, 1, env["base_id"], "editor")
     assert preview["mode"] == "incremental_generate"
-    applied = jobs.apply_scope_change(doc_id, preview["plan_id"], "1" * 32, env["base_id"], "editor", {"incremental_generate"})
+    jobs.apply_scope_change(doc_id, preview["plan_id"], "1" * 32, env["base_id"], "editor", {"incremental_generate"})
     from app.db.models import DocumentScopeChange
     with session_scope() as s:
         operation = s.get(DocumentScopeChange, preview["plan_id"])

@@ -16,8 +16,9 @@ from docparser.attachment_assessment import recommend_scope
 from docparser.attachment_policy import (
     AssessmentLimits,
     AttachmentInventory,
-    TraversalLimits,
     canonical_json,
+    inventory_traversal_limits,
+    inventory_node_depth,
 )
 
 
@@ -65,7 +66,7 @@ def automatic_snapshot(inventory: AttachmentInventory, limits: AssessmentLimits 
     decisions = [asdict(d) for d in recommend_scope(inventory, limits).decisions]
     inventory_data = inventory.to_dict()
     inventory_data["recommendations"] = json.loads(canonical_json(decisions))
-    traversal = asdict(TraversalLimits())
+    traversal = asdict(inventory_traversal_limits(inventory))
     return {
         "schema_version": 1,
         "source_file_hash": inventory.source_file_hash,
@@ -145,6 +146,12 @@ def save_review_selection(
         raise ProcessingScopeConflict("Выбрано неизвестное вложение.")
     for key in selected_source_keys:
         node = nodes[key]
+        depth = inventory_node_depth(row.inventory_json['nodes'], key)
+        if depth is None:
+            raise ProcessingScopeConflict()
+        if node.status == 'skipped_depth' or depth > inventory_traversal_limits(inventory).max_depth:
+            raise ProcessingScopeConflict('Достигнут предел вложенности. Это вложение нельзя включить в обработку.',
+                                          code='attachment_depth_limit')
         if not node.supported or not node.children_complete or node.assessment == "unknown":
             raise ProcessingScopeConflict(
                 "Сначала раскройте состав вложения.", code="processing_scope_changed"
@@ -175,7 +182,7 @@ def save_review_selection(
         )
     row.selection_json = decisions
     row.selection_hash = selection_hash(
-        row.source_file_hash, row.parser_version, asdict(TraversalLimits()), decisions
+        row.source_file_hash, row.parser_version, asdict(inventory_traversal_limits(inventory)), decisions
     )
     row.revision += 1
     row.state = "draft"
@@ -219,7 +226,7 @@ def snapshot_from_review(review):
                 "assessor_version": review.assessor_version,
                 "inventory": review.inventory_json,
                 "policy": review.policy_json,
-                "traversal_limits": asdict(TraversalLimits()),
+                "traversal_limits": asdict(inventory_traversal_limits(review.inventory_json)),
                 "decisions": review.selection_json,
                 "selection_hash": review.selection_hash,
                 "review_id": review.id,
@@ -246,6 +253,14 @@ def scope_for_generation(session, doc_id, generation_id):
     return json.loads(canonical_json(scope)) if scope is not None else None
 
 
+def normalize_scope_summary(summary):
+    """Upgrade compact legacy counters without loading the source inventory."""
+    if not summary or summary.get('total') is None or (summary.get('counts_version') or 0) >= 2:
+        return summary
+    return {**summary, 'counts_version': 2,
+            'total': max(0, summary['total'] - (summary.get('unsupported') or 0))}
+
+
 def scope_summary(snapshot, generation_id=None):
     if snapshot is None:
         return {
@@ -260,20 +275,28 @@ def scope_summary(snapshot, generation_id=None):
             "recommended_excluded_count": None,
         }
     decisions = snapshot["decisions"]
-    unsupported = sum(d["reason"] == "unsupported" for d in decisions)
-    excluded = sum(not d["effective_included"] and d["reason"] != "unsupported" for d in decisions)
+    nodes = {n['source_key']: n for n in snapshot['inventory'].get('nodes', [])}
+
+    def supported(decision):
+        node = nodes.get(decision['source_key'])
+        return node.get('supported', True) is not False if node is not None else decision.get('reason') != 'unsupported'
+
+    supported_decisions = [d for d in decisions if supported(d)]
+    unsupported = len(decisions) - len(supported_decisions)
+    excluded = sum(not d["effective_included"] for d in supported_decisions)
     recommendations = snapshot["inventory"].get("recommendations")
     return {
         "mode": "selected" if excluded else "all",
+        "counts_version": 2,
         "generation_id": generation_id,
-        "total": len(decisions),
-        "included": sum(d["effective_included"] for d in decisions),
+        "total": len(supported_decisions),
+        "included": sum(d["effective_included"] for d in supported_decisions),
         "excluded": excluded,
         "unsupported": unsupported,
         "count_complete": snapshot["inventory"]["complete"],
         "selection_hash": snapshot["selection_hash"],
         "recommended_excluded_count": sum(
-            not d["effective_included"] and d["reason"] != "unsupported" for d in recommendations
+            not d["effective_included"] for d in recommendations if supported(d)
         ) if recommendations is not None else None,
         "chunk_counts": snapshot.get("chunk_counts"),
     }
@@ -310,7 +333,7 @@ def review_summary(review):
         "revision": review.revision,
         "state": review.state,
         "requires_action": review.state in {"draft", "awaiting_similar"},
-        "summary": review.summary_json or scope_summary(snapshot_from_review(review)),
+        "summary": normalize_scope_summary(review.summary_json) or scope_summary(snapshot_from_review(review)),
     }
 
 
@@ -319,6 +342,7 @@ def refresh_review_inventory(session, doc_id, review_id, revision, inventory, *,
     if (
         row.state not in {"draft", "awaiting_similar"}
         or row.source_file_hash != inventory.source_file_hash
+        or inventory_traversal_limits(row.inventory_json) != inventory_traversal_limits(inventory)
     ):
         raise ProcessingScopeConflict()
     old = {d["source_key"]: d for d in row.selection_json}
@@ -338,6 +362,8 @@ def refresh_review_inventory(session, doc_id, review_id, revision, inventory, *,
         node = nodes[decision["source_key"]]
         if not node.supported or node.assessment == "unknown" or not node.children_complete:
             decision.update(selected=False, effective_included=False)
+        if node.status == 'skipped_depth':
+            decision['reason'] = 'depth_limit'
         parent = node.parent_key
         while parent in nodes:
             if not by_key[parent]["effective_included"]:
@@ -346,7 +372,7 @@ def refresh_review_inventory(session, doc_id, review_id, revision, inventory, *,
     row.inventory_json = inventory.to_dict()
     row.selection_json = decisions
     row.selection_hash = selection_hash(
-        row.source_file_hash, row.parser_version, asdict(TraversalLimits()), decisions
+        row.source_file_hash, row.parser_version, asdict(inventory_traversal_limits(inventory)), decisions
     )
     row.revision += 1
     row.state = "draft"
@@ -415,9 +441,9 @@ def append_scope_audit(session, doc_id, actor, action, review):
 def scope_availability(summary, pending, sources):
     if summary and summary.get("excluded", 0):
         return "available"
-    view = (pending or {}).get("summary") or summary
+    view = normalize_scope_summary((pending or {}).get("summary") or summary)
     if view and view.get("count_complete"):
-        return "available" if (view.get("total") or 0) > (view.get("unsupported") or 0) else "none"
+        return "available" if (view.get("total") or 0) > 0 else "none"
     from pathlib import PurePath
     choices = {".docx", ".xlsx", ".pdf", ".eml", ".msg", ".zip", ".7z", ".rar"}
     if any(s.get("source_id") != "root" and PurePath(s.get("display_name", "")).suffix.lower() in choices for s in sources):
@@ -463,7 +489,7 @@ def load_processing_scope_summaries(session, doc_ids):
     }
     result = {
         doc_id: {
-            "processing_scope": summaries.get(states.get(doc_id))
+            "processing_scope": normalize_scope_summary(summaries.get(states.get(doc_id)))
             or scope_summary(None, states[doc_id])
             if states.get(doc_id)
             else None,
@@ -472,7 +498,7 @@ def load_processing_scope_summaries(session, doc_ids):
                 "revision": reviews[doc_id].revision,
                 "state": reviews[doc_id].state,
                 "requires_action": reviews[doc_id].state in {"draft", "awaiting_similar"},
-                "summary": reviews[doc_id].summary_json or scope_summary(None),
+                "summary": normalize_scope_summary(reviews[doc_id].summary_json) or scope_summary(None),
             }
             if doc_id in reviews and reviews[doc_id].state not in {"published", "canceled"}
             else None,

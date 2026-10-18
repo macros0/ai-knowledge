@@ -1,4 +1,7 @@
-from tests.test_processing_scope_api import base_upload_client, upload_mail
+from tests import test_processing_scope_api as scope_fixtures
+from tests.test_processing_scope_api import upload_mail
+
+base_upload_client = scope_fixtures.base_upload_client
 
 
 def test_api_requires_tab_lease_and_does_not_let_second_tab_save(base_upload_client):

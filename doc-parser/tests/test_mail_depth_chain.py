@@ -35,7 +35,7 @@ def test_mixed_mail_chain_stops_xlsx_before_read_at_depth_three(tmp_path, monkey
         return raw
 
     monkeypatch.setattr(msg_parser, "_read_stream", observe)
-    result = parse_document_result(path, attachments_dir=tmp_path / "attachments")
+    result = parse_document_result(path, attachments_dir=tmp_path / "attachments", attachment_max_depth=2)
     assert read_xlsx == ([] if outer_msg else [True])
     text = "\n".join(block.text for block in result.blocks)
     assert "MIDDLE VISIBLE" in text and "INNER VISIBLE" in text

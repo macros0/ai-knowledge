@@ -72,6 +72,105 @@ def test_light_upload_keeps_automatic_flow(upload_client):
     assert started == [response.json()["id"]]
 
 
+@pytest.mark.parametrize('nested', [False, True])
+def test_mime_node_limit_creates_incomplete_review_without_starting_pipeline(upload_client, nested):
+    client, settings, started = upload_client
+    settings.attachment_review_enabled = True
+    settings.dedup_enabled = False
+    message = EmailMessage()
+    message.set_content('ROOT')
+    for index in range(1005):
+        message.add_attachment(b'opaque', maintype='application', subtype='octet-stream', filename=f'{index}.bin')
+    if nested:
+        outer = EmailMessage()
+        outer.set_content('OUTER')
+        outer.add_attachment(message.as_bytes(), maintype='application', subtype='octet-stream', filename='child.eml')
+        message = outer
+    response = client.post('/api/documents', files={'file': ('many.eml', message.as_bytes(), 'message/rfc822')})
+    assert response.status_code == 202, response.text
+    assert response.json()['status'] == 'awaiting_attachments'
+    assert not started
+    scope = client.get(f"/api/documents/{response.json()['id']}/processing-scope").json()['pending']
+    assert scope['inventory']['complete'] is False
+    markers = [n for n in scope['inventory']['nodes'] if n['status'] == 'skipped_count']
+    assert len(markers) == 1
+    assert not next(d for d in scope['decisions'] if d['source_key'] == markers[0]['source_key'])['effective_included']
+
+
+@pytest.mark.parametrize('marked', [False, True])
+def test_depth_boundary_cannot_be_expanded_or_selected(upload_client, monkeypatch, marked):
+    import copy
+    import app.services.processing_admission as admission
+    from app.db.models import DocumentProcessingReview
+    from app.db.session import session_scope
+    client, settings, started = upload_client
+    settings.attachment_review_enabled = True
+    settings.dedup_enabled = False
+    doc_id = upload_mail(client, 600).json()['id']
+    route = f'/api/documents/{doc_id}/processing-scope'
+    with session_scope() as session:
+        row = session.get(DocumentProcessingReview, doc_id)
+        inventory = copy.deepcopy(row.inventory_json)
+        inventory['traversal_limits'] = {'max_depth': 0}
+        if marked:
+            inventory['nodes'][0].update(status='skipped_depth', assessment='unknown', children_complete=False)
+        row.inventory_json = inventory
+        key, review_id, revision = inventory['nodes'][0]['source_key'], row.id, row.revision
+    def forbidden(*args, **kwargs):
+        raise AssertionError('A hard depth limit cannot be bypassed by expanding')
+    monkeypatch.setattr(admission, 'prepare_upload_scope', forbidden)
+    response = client.post(route + '/review', json={'review_id': review_id, 'expected_revision': revision, 'expand_source_keys': [key]})
+    assert response.status_code == 409, response.text
+    assert response.json()['code'] == 'attachment_depth_limit'
+    response = client.put(route + '/review', json={'review_id': review_id, 'expected_revision': revision, 'selected_source_keys': [key]})
+    assert response.status_code == 409, response.text
+    assert response.json()['code'] == 'attachment_depth_limit'
+    assert not started
+
+
+def test_scope_returns_last_check_only_for_the_saved_revision_and_active_version(upload_client):
+    from app.db.models import DocumentGeneration, DocumentGenerationState, DocumentProcessingReview, DocumentScopeChange
+    from app.db.session import session_scope
+    from app.services.processing_scope_change import SCOPE_CHANGE_ANALYSIS_VERSION
+    client, settings, started = upload_client
+    settings.attachment_review_enabled = True
+    settings.dedup_enabled = False
+    doc_id = upload_mail(client, 600).json()['id']
+    route = f'/api/documents/{doc_id}/processing-scope'
+    generation_id = 'b' * 32
+    with session_scope() as session:
+        review = session.get(DocumentProcessingReview, doc_id)
+        session.add(DocumentGeneration(id=generation_id, doc_id=doc_id, phase='active'))
+        session.add(DocumentGenerationState(doc_id=doc_id, active_generation_id=generation_id))
+        session.add(DocumentScopeChange(id='c' * 32, doc_id=doc_id, state='preview', plan_json={
+            'analysis_version': SCOPE_CHANGE_ANALYSIS_VERSION,
+            'review_id': review.id, 'revision': review.revision,
+            'preview': {'base_generation_id': generation_id, 'selection_hash': review.selection_hash,
+                        'mode': 'blocked', 'reasons': ['incomplete_provenance'], 'source_mapping': {'private': 'omit'}},
+        }))
+    result = client.get(route)
+    assert result.status_code == 200, result.text
+    check = result.json()['pending']['last_check']
+    assert check['mode'] == 'blocked'
+    assert check['reasons'] == ['incomplete_provenance']
+    assert 'source_mapping' not in check
+    with session_scope() as session:
+        operation = session.get(DocumentScopeChange, 'c' * 32)
+        saved_plan = dict(operation.plan_json)
+        operation.plan_json = {**saved_plan, 'analysis_version': SCOPE_CHANGE_ANALYSIS_VERSION - 1}
+    assert client.get(route).json()['pending']['last_check'] is None
+    with session_scope() as session:
+        session.get(DocumentScopeChange, 'c' * 32).plan_json = saved_plan
+    with session_scope() as session:
+        session.get(DocumentProcessingReview, doc_id).revision += 1
+    assert client.get(route).json()['pending']['last_check'] is None
+    with session_scope() as session:
+        session.get(DocumentProcessingReview, doc_id).revision -= 1
+        session.get(DocumentGenerationState, doc_id).active_generation_id = None
+    assert client.get(route).json()['pending']['last_check'] is None
+    assert not started
+
+
 def test_scope_capabilities_match_editor_access(upload_client):
     client, settings, _ = upload_client
     settings.attachment_review_enabled = True

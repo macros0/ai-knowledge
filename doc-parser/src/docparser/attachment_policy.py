@@ -6,6 +6,10 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 
+from docparser.attachment_limits import (
+    DEFAULT_ATTACHMENT_MAX_DEPTH,
+    validate_attachment_depth,
+)
 from docparser.source_model import PARSER_VERSION
 
 
@@ -26,12 +30,15 @@ class AssessmentLimits:
 
 @dataclass(frozen=True)
 class TraversalLimits:
-    max_depth: int = 6
+    max_depth: int = DEFAULT_ATTACHMENT_MAX_DEPTH
     max_nodes: int = 1000
     max_payload_bytes: int = 50 * 1024 * 1024
     max_total_bytes: int = 200 * 1024 * 1024
     max_archive_entries: int = 10000
     max_compression_ratio: float = 1000.0
+
+    def __post_init__(self):
+        validate_attachment_depth(self.max_depth)
 
 
 @dataclass
@@ -50,6 +57,10 @@ class AttachmentNode:
     status: str = "available"
     saved_path: str | None = None
     content_fingerprint: str | None = None
+    format: str | None = None
+    title: str | None = None
+    title_source: str | None = None
+    display_label: str | None = None
 
 
 @dataclass
@@ -64,6 +75,8 @@ class AttachmentInventory:
     elapsed_seconds: float = 0.0
     # None distinguishes legacy inventories from a captured automatic assessment.
     recommendations: list[dict] | None = None
+    # Captured inspection limits; absent in old JSON inventories (default6).
+    traversal_limits: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -101,6 +114,24 @@ def canonical_json(value) -> bytes:
 
 def make_source_key(source_file_hash: str, locator_chain: tuple[str, ...]) -> str:
     return hashlib.sha256(canonical_json([source_file_hash, list(locator_chain)])).hexdigest()
+
+
+def inventory_traversal_limits(inventory) -> TraversalLimits:
+    value = inventory.get('traversal_limits') if isinstance(inventory, dict) else inventory.traversal_limits
+    return TraversalLimits(**(value or {}))
+
+
+def inventory_node_depth(nodes: list[dict], source_key: str) -> int | None:
+    """Absolute depth from the uploaded root; invalid ancestry fails closed."""
+    by_key = {n['source_key']: n for n in nodes}
+    current, seen, depth = source_key, set(), 0
+    while current != 'root':
+        if current not in by_key or current in seen:
+            return None
+        seen.add(current)
+        current = by_key[current].get('parent_key')
+        depth += 1
+    return depth
 
 
 class ParserProcessingPolicy:

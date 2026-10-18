@@ -19,7 +19,8 @@ def parse_archive(path, kind, *, attachments_dir, depth, budget, context, source
             if entry.is_dir:
                 continue
             locator = "archive:" + entry.entry_key
-            if not policy.is_included(context.key_for(source_id, locator)):
+            if (depth + 1 > context.attachment_max_depth
+                    or not policy.is_included(context.key_for(source_id, locator))):
                 # Preserve the original archive. Excluded members need not be decoded.
                 blocks.extend(
                     process_embedded(
