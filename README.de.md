@@ -2,7 +2,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Español](README.es.md) · **Deutsch**
 
-Verwandelt Projektdokumentation (DOCX / XLSX / PDF) in eine durchsuchbare Wissensbasis: Ein
+Verwandelt Projektdokumentation (DOCX / XLSX / PDF) und E-Mails (EML / MSG) in eine durchsuchbare Wissensbasis: Ein
 LLM zerlegt Dokumente in semantische **Konzepte** (Open Knowledge Format), ein hybrider
 Vektorindex hält sie für die Suche vor, und ein interaktiver Chat beantwortet Fragen
 **belegt aus Ihren Dokumenten – mit anklickbaren Quellenangaben**.
@@ -16,6 +16,22 @@ auf die genaue Stelle im Ausgangsdokument.
 
 ## Kernfunktionen
 
+- **E-Mails als Wissensquellen.** EML- und Outlook-MSG-Dateien lassen sich zusammen mit
+  Dokumenten hochladen. Der Dienst extrahiert den Nachrichtentext sowie verfügbare Angaben
+  zu Betreff, Absender, Empfängern und Datum und verarbeitet unterstützte Anhänge. Die Suche
+  kann E-Mails einbeziehen, ausschließen oder auf E-Mails beschränkt werden; für deren
+  Anhänge gilt derselbe Filter.
+- **Anhänge in allen unterstützten Dokumenttypen.** Eingebettete Dateien in DOCX, XLSX und
+  PDF sowie Anhänge in EML und MSG werden rekursiv verarbeitet, einschließlich unterstützter
+  verschachtelter Dokumente, E-Mails und Archive. Extrahierte Inhalte fließen in Suche und
+  Antworten ein; ihre Position im Quellenbaum bleibt erhalten. Unterstützte Formate, die
+  ausgewählten Anhänge sowie Grenzen für Verschachtelungstiefe, Größe und Inhaltsumfang
+  bestimmen die Verarbeitung. Nicht verfügbare und ausgeschlossene Anhänge werden mit Gründen angezeigt.
+- **Anhänge auswählen und bearbeiten.** Vorschau und Anhangseditor bestimmen, welche Inhalte
+  in die Wissensbasis aufgenommen werden. Ist eine Spezifikation bereits separat hochgeladen,
+  kann ihre identische Kopie in einer E-Mail ausgeschlossen werden, während der Nachrichtentext
+  durchsuchbar bleibt. Ein gespeicherter Entwurf ändert die Suche noch nicht: Die Änderungen
+  müssen auf den veröffentlichten Verarbeitungsumfang angewendet werden.
 - **Semantische Konzeptextraktion (OKF).** Ein LLM zerlegt Dokumente in inhaltlich
   sinnvolle Konzepte (ein Konzept je Nachrichtenfeld, Geschäftsregel oder
   Begriffsdefinition) mit YAML-Metadaten (`type`, `title`, `tags`, `relations`) – statt
@@ -64,7 +80,7 @@ Die Abbildungen zeigen die englische Oberfläche. Der Ordner `screenshots/` enth
 ## Funktionsweise
 
 ```
-Upload (docx / xlsx / pdf)
+Upload (docx / xlsx / pdf / eml / msg)
         │
         ▼
 ┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
@@ -85,7 +101,8 @@ Upload (docx / xlsx / pdf)
 1. **Upload & API** — Python **FastAPI**; `POST /api/documents`, asynchrone Verarbeitung.
 2. **Parsing** — das eigenständige Paket **`doc-parser`**: `python-docx` (Text,
    Reviewer-Kommentare, eingebettete OLE-Objekte), `openpyxl` (Blätter → Markdown),
-   `pypdf`; rekursives Extrahieren von Anhängen.
+   `pypdf`; rekursives Extrahieren von Anhängen in allen fünf Upload-Formaten sowie Verarbeitung
+   von Nachrichtentext und Metadaten aus EML/MSG.
 3. **OKF-Generierung** — ein LLM (lokal über Ollama/vLLM oder in der Cloud über
    LiteLLM/OpenRouter) zerlegt den Text in Konzepte; Aufzählungs- und XML-Feldtabellen
    werden programmatisch Zeile für Zeile extrahiert.

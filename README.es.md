@@ -2,7 +2,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · **Español** · [Deutsch](README.de.md)
 
-Convierte la documentación de proyecto (DOCX / XLSX / PDF) en una base de conocimiento
+Convierte la documentación de proyecto (DOCX / XLSX / PDF) y los correos (EML / MSG) en una base de conocimiento
 consultable: un LLM divide los documentos en **conceptos** semánticos (Open Knowledge
 Format), un índice vectorial híbrido los almacena para la recuperación y un chat
 interactivo responde preguntas **basándose en tus documentos y citando las fuentes con
@@ -17,6 +17,21 @@ del documento de origen.
 
 ## Características principales
 
+- **Correos como fuentes de conocimiento.** Se pueden cargar archivos EML y MSG de Outlook
+  junto con los documentos. El servicio extrae el cuerpo del mensaje y los datos disponibles
+  de asunto, remitente, destinatarios y fecha, y procesa los adjuntos compatibles. La búsqueda
+  permite incluir correos, excluirlos o buscar solo en ellos; sus adjuntos siguen el mismo filtro.
+- **Adjuntos en todos los tipos de documentos compatibles.** Los archivos incrustados en DOCX,
+  XLSX y PDF, así como los adjuntos de EML y MSG, se procesan de forma recursiva, incluidos
+  documentos, correos y archivos comprimidos anidados compatibles. El contenido extraído
+  participa en las búsquedas y respuestas, conservando su posición en el árbol de fuentes.
+  El procesamiento respeta los formatos compatibles, la selección de adjuntos y los límites
+  de profundidad, tamaño y volumen de contenido. Los adjuntos no disponibles o excluidos
+  se muestran con sus motivos.
+- **Selección y edición de adjuntos.** La vista previa y el editor permiten elegir qué contenido
+  entra en la base. Por ejemplo, si una especificación ya está cargada por separado, se puede
+  excluir su copia idéntica dentro de un correo y mantener el cuerpo del mensaje en la búsqueda.
+  Guardar un borrador no cambia los resultados: hay que aplicar los cambios a la versión publicada.
 - **Extracción semántica de conceptos (OKF).** Un LLM descompone los documentos en
   conceptos con sentido propio (un concepto por campo de mensaje, regla de negocio o
   definición de término) con metadatos YAML (`type`, `title`, `tags`, `relations`), en
@@ -67,7 +82,7 @@ Las capturas muestran la interfaz en inglés. La carpeta `screenshots/` contiene
 ## Cómo funciona
 
 ```
-Carga (docx / xlsx / pdf)
+Carga (docx / xlsx / pdf / eml / msg)
         │
         ▼
 ┌──────────────────────────┐   ┌────────────────────────────┐   ┌────────────────────────┐
@@ -88,7 +103,8 @@ Carga (docx / xlsx / pdf)
 1. **Carga y API** — Python **FastAPI**; `POST /api/documents`, procesamiento asíncrono.
 2. **Análisis** — el paquete independiente **`doc-parser`**: `python-docx` (texto,
    comentarios de revisión, objetos OLE incrustados), `openpyxl` (hojas → Markdown),
-   `pypdf`; extracción recursiva de adjuntos.
+   `pypdf`; extracción recursiva de adjuntos en los cinco formatos de carga y análisis del cuerpo
+   y los metadatos de EML/MSG.
 3. **Generación OKF** — un LLM (local con Ollama/vLLM o en la nube con LiteLLM/OpenRouter)
    divide el texto en conceptos; las tablas de enumeraciones y de campos XML se extraen
    programáticamente, fila a fila.

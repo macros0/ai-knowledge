@@ -2,7 +2,7 @@
 
 **English** · [Русский](README.ru.md) · [Español](README.es.md) · [Deutsch](README.de.md)
 
-Turn project documentation (DOCX / XLSX / PDF) into a searchable knowledge base: an LLM
+Turn project documentation (DOCX / XLSX / PDF) and emails (EML / MSG) into a searchable knowledge base: an LLM
 splits documents into semantic **concepts** (Open Knowledge Format), a hybrid vector index
 stores them for retrieval, and an interactive chat answers questions **grounded in your
 documents with clickable source citations**.
@@ -15,6 +15,20 @@ and always points back to the exact place in the source document.
 
 ## Key features
 
+- **Emails as knowledge sources.** Upload EML and Outlook MSG files alongside documents.
+  The service extracts the message body and available subject, sender, recipients and date,
+  and processes supported attachments. Search can include emails, exclude them or use only
+  email sources; email attachments follow the same filter.
+- **Attachments across all supported document types.** Embedded files in DOCX, XLSX and
+  PDF, as well as attachments in EML and MSG, are processed recursively, including supported
+  nested documents, emails and archives. Extracted attachment content participates in search
+  and answers, with its place in the source tree preserved. Processing respects supported
+  formats, the selected attachment scope and limits on nesting depth, size and content volume;
+  unavailable or excluded attachments are shown with their reasons.
+- **Attachment selection and editing.** Preview attachments and choose which content enters
+  the knowledge base. For example, if a specification is already uploaded separately, exclude
+  its identical copy inside an email while keeping the email body searchable. Saving a draft
+  does not change search results: apply the scope changes to update the published content.
 - **Semantic concept extraction (OKF).** An LLM breaks documents into meaningful concepts
   (a concept per message field, business rule, term definition) with YAML metadata
   (`type`, `title`, `tags`, `relations`) — not opaque full-text blobs.
@@ -54,7 +68,7 @@ The `screenshots/` folder contains the same 10 Russian and 10 English screenshot
 ## How it works
 
 ```
-Upload (docx / xlsx / pdf)
+Upload (docx / xlsx / pdf / eml / msg)
         │
         ▼
 ┌────────────────────────┐   ┌─────────────────────┐   ┌───────────────────┐
@@ -75,7 +89,7 @@ Upload (docx / xlsx / pdf)
 1. **Upload & API** — Python **FastAPI**; `POST /api/documents`, asynchronous processing.
 2. **Parsing** — the standalone **`doc-parser`** package: `python-docx` (text, reviewer
    comments, embedded OLE objects), `openpyxl` (sheets → Markdown), `pypdf`; recursive
-   attachment extraction.
+   attachment extraction across all five upload formats, plus EML/MSG body and metadata parsing.
 3. **OKF generation** — an LLM (local via Ollama/vLLM or cloud via LiteLLM/OpenRouter)
    splits text into concepts; enumeration and XML-field tables are extracted
    programmatically, per row.
