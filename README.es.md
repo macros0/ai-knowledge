@@ -58,9 +58,11 @@ del documento de origen.
 
 ## Capturas de pantalla
 
-| Chat de preguntas y respuestas | Carga de documentos y estado | Fuentes bajo una respuesta |
+| Parámetros de búsqueda | Carga de documentos | Resultados de búsqueda y fuentes |
 |---|---|---|
-| ![Interfaz de chat](screenshots/screenshot-01.png) | ![Carga y estado de procesamiento](screenshots/screenshot-02.png) | ![Bloque de fuentes con citas](screenshots/screenshot-03.png) |
+| ![Parámetros de búsqueda](screenshots/en-search-settings.png) | ![Carga de documentos](screenshots/en-upload.png) | ![Resultados de búsqueda y fuentes](screenshots/en-search-example.png) |
+
+Las capturas muestran la interfaz en inglés. La carpeta `screenshots/` contiene las mismas 10 capturas en ruso y 10 en inglés que las guías de usuario en [ruso](docs/OKF_User_Guide.md) e [inglés](docs/OKF_User_Guide_EN.md).
 
 ## Cómo funciona
 

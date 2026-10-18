@@ -55,9 +55,11 @@ auf die genaue Stelle im Ausgangsdokument.
 
 ## Screenshots
 
-| Frage-Antwort-Chat | Dokument-Upload und Status | Quellen unter einer Antwort |
+| Sucheinstellungen | Dokument-Upload | Suchergebnisse und Quellen |
 |---|---|---|
-| ![Chat-Oberfläche](screenshots/screenshot-01.png) | ![Upload und Verarbeitungsstatus](screenshots/screenshot-02.png) | ![Quellenblock mit Zitaten](screenshots/screenshot-03.png) |
+| ![Sucheinstellungen](screenshots/en-search-settings.png) | ![Dokument-Upload](screenshots/en-upload.png) | ![Suchergebnisse und Quellen](screenshots/en-search-example.png) |
+
+Die Abbildungen zeigen die englische Oberfläche. Der Ordner `screenshots/` enthält dieselben 10 russischen und 10 englischen Screenshots wie die Benutzerhandbücher auf [Russisch](docs/OKF_User_Guide.md) und [Englisch](docs/OKF_User_Guide_EN.md).
 
 ## Funktionsweise
 
