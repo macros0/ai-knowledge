@@ -45,9 +45,11 @@ and always points back to the exact place in the source document.
 
 ## Screenshots
 
-| Q&A chat | Document upload & status | Sources under an answer |
+| Search settings | Document upload | Search results and sources |
 |---|---|---|
-| ![Chat interface](screenshots/screenshot-01.png) | ![Upload and processing status](screenshots/screenshot-02.png) | ![Sources block with citations](screenshots/screenshot-03.png) |
+| ![Search settings](screenshots/en-search-settings.png) | ![Document upload](screenshots/en-upload.png) | ![Search results and sources](screenshots/en-search-example.png) |
+
+The `screenshots/` folder contains the same 10 Russian and 10 English screenshots used in the [Russian](docs/OKF_User_Guide.md) and [English](docs/OKF_User_Guide_EN.md) user guides.
 
 ## How it works
 

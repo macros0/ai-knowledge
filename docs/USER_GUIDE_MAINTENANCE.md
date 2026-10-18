@@ -5,6 +5,7 @@
 - Русский: [Markdown](OKF_User_Guide.md), [PDF](OKF_User_Guide.pdf).
 - English: [Markdown](OKF_User_Guide_EN.md), [PDF](OKF_User_Guide_EN.pdf).
 - Снимки интерфейса: `assets/user-guide/`, отдельный комплект для каждого языка.
+- Корневая папка `screenshots/` содержит точные копии всех 20 снимков из обеих инструкций с теми же именами. При обновлении иллюстраций синхронизируйте обе папки; README использует эти копии.
 
 ## Повторная сборка
 
@@ -18,7 +19,7 @@ python scripts/build-user-guides.py
 
 Нумерация и идентификаторы `guide-01` … `guide-21` совпадают в двух языковых версиях. При изменении структуры обновляйте оба оглавления. При новой редакции обновите дату в обоих Markdown и в оформлении PDF в скрипте.
 
-Старый `scripts/replace-guide-pdf-images.py` относится к прежней верстке: для новых PDF его не применять.
+Старые `scripts/replace-guide-pdf-images.py` и `scripts/capture-doc-screenshots.mjs` относятся к прежней верстке и набору `screenshot-01.png` … `screenshot-13.png`: для новых инструкций их не применять. Актуальные иллюстрации имеют префиксы `ru-` и `en-`.
 
 ## Основания редакции
 
