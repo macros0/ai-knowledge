@@ -626,6 +626,7 @@
   "chat.scopeEditList": [],
   "chat.scopeEmpty": [],
   "chat.scopeEmptyActive": [],
+  "chat.scopeLabel": [],
   "chat.scopeLimit": [
     "max"
   ],
@@ -635,6 +636,7 @@
   "chat.scopeRemoveDocument": [
     "name"
   ],
+  "chat.scopeSelected": [],
   "chat.scopeShowDocuments": [],
   "chat.scopeSomeUnavailable": [],
   "chat.scopeTitle": [],
@@ -665,6 +667,9 @@
   "chat.sessionsLoadError": [
     "message"
   ],
+  "chat.settings": [],
+  "chat.settingsHow": [],
+  "chat.settingsWhere": [],
   "chat.showDocumentFragments": [],
   "chat.showPrevious": [],
   "chat.showSearchFilters": [],

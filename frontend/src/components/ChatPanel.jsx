@@ -12,7 +12,6 @@ import { facetOptions } from "@/lib/sourceLocales.mjs";
 import { addScopeDocuments, scopeRequestIds, SEARCH_SCOPE_MAX_DOCUMENTS } from "@/lib/chatSearchScope.mjs";
 import {chatFeedTurns} from "@/lib/chatRecentHistory.mjs";
 import ChatFilters, {ChatFilterSummary} from "./ChatFilters";
-import ChatDisclosureSummary from "./ChatDisclosureSummary";
 import {buildChatFilterSummary} from "@/lib/chatFilterSummary.mjs";
 import TagPicker from "./TagPicker";
 import DevelopmentFilter from "./DevelopmentFilter";
@@ -414,11 +413,11 @@ export default function ChatPanel() {
             ))}
           </div>
         )}
+        <button type="button" className="btn ghost chat-settings-toggle" aria-expanded={searchSettingsOpen} aria-controls="chat-search-settings"
+          onClick={() => setSearchSettingsOpen(open => !open)}>
+          {t("chat.settings")} <span aria-hidden="true">{searchSettingsOpen ? "▴" : "▾"}</span>
+        </button>
         <div className="chat-toolbar-actions">
-          <label className="chat-scope-toggle">
-            <input type="checkbox" checked={searchScopeEnabled} onChange={(event) => setSearchScopeEnabled(event.target.checked)} />
-            {t("chat.scopeOnly")} <span className="meta">({searchScopeDocuments.length})</span>
-          </label>
           <Link href="/chat/history" className="btn ghost">
             {t("chat.historyBtn")}
           </Link>
@@ -433,27 +432,68 @@ export default function ChatPanel() {
           </button>
         </div>
       </div>
+      <div className="chat-quick-filters" aria-label={t("ux.searchFilters")}>
+        <select className="chat-scope-select" value={searchScopeEnabled ? "selected" : "all"} aria-label={t("chat.scopeLabel")}
+          onChange={event => { setSearchScopeEnabled(event.target.value === "selected"); setScopeNotice(null); }}>
+          <option value="all">{t("ux.scopeAll")}</option>
+          <option value="selected">{t("chat.scopeSelected", {count: searchScopeDocuments.length})}</option>
+        </select>
+        <SearchableSelect
+          className="chat-locale-select"
+          options={localeOptions}
+          value={sourceLocale}
+          onChange={setSourceLocale}
+          searchPlaceholder={t("docs.localeSearchPlaceholder")}
+          emptyLabel={t("docs.empty")}
+          ariaLabel={t("docs.localeFilterAria")}
+        />
+        <select id="chat-mail-mode" className="chat-mail-select" value={mailMode} onChange={event => setMailMode(event.target.value)}
+          aria-label={t("chat.mailModeLabel")} aria-describedby="chat-mail-hint chat-mail-unknown-hint">
+          <option value="all">{t("chat.mailModeAll")}</option>
+          <option value="exclude">{t("chat.mailModeExclude")}</option>
+          <option value="only">{t("chat.mailModeOnly")}</option>
+        </select>
+        <ChatFilterSummary summary={filterSummary.filter(item => item.removable && !["scope", "locale", "mail"].includes(item.id))} onRemove={removeFilter}/>
+      </div>
+      {searchScopeEnabled && searchScopeDocuments.length === 0 && <p className="chat-scope-notice" role="status">{t("chat.scopeEmptyActive")}</p>}
+      <div id="chat-search-settings" className="chat-settings-panel" hidden={!searchSettingsOpen}>
+      <ChatFilters summary={filterSummary} onClear={clearSearchFilters}>
       {searchScopeEnabled && <ChatSearchScope documents={searchScopeDocuments}
         onRemove={(docId) => { setSearchScopeDocuments((items) => items.filter((document) => document.doc_id !== docId)); setScopeNotice(null); }}
         onClear={() => { setSearchScopeDocuments([]); setScopeNotice(null); }}
         refreshKey={messages.length} />}
-      {scopeNotice && <div className="meta" role="status">{t(scopeNotice.key, scopeNotice)}</div>}
-      <div className="chat-log-frame">
-      <ChatTimeline turns={turns} pending={pending} recentHistory={recentHistory} onLoadOlder={historyLoader.load}
-        logRef={logRef} scrollPositionRef={scrollPositionRef} sessionId={sessionId} messageCount={messages.length}
-        view={timelineView} setView={setTimelineView} onContinueWithoutAssessment={continueWithoutAssessment}
-        empty={<div className="chat-empty-start"><p>{t("ux.chatWelcome")}</p><div className="chat-examples">{["process","compare","explain"].map(key=><button type="button" className="btn ghost" key={key} disabled={Boolean(draftQuery.trim())} onClick={()=>{setDraftQuery(t(`ux.example.${key}`));requestAnimationFrame(()=>document.getElementById("chat-question")?.focus());}}>{t(`ux.example.${key}`)}</button>)}</div></div>}
-        renderMessage={(message, index) => <ChatMessageView key={index} message={message} index={index}
-          isLatest={index === lastAssistantIndex}
-          isPending={pending && index === messages.length - 1} actionsPending={pending}
-          isCopied={copiedIndex === index} searchDepthMax={settings.search_depth_max} sourceView={sourceView}
-          onEdit={editAnswer} onCopy={copyAnswer} onSelect={selectSources} onAnswerSelected={answerSelected}
-          onAddToScope={addSelectedToScope} onRetry={retryAnswer} onRefreshSearch={refreshSourceSearch} onRepeatWithoutGlossary={repeatWithoutGlossary}
-          onContinueWithoutAssessment={continueWithoutAssessment} onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} onSourceViewChange={changeSourceView} />}/>
+      <TagPicker
+        label={t("chat.tagsLabel")}
+        placeholder={t("chat.tagsPlaceholder")}
+        selected={tags}
+        onChange={setTags}
+      />
+      <div className="chat-scope-filter">
+        <span className="tag-picker-label">{t("chat.moduleLabel")}</span>
+        <ModulePicker
+          modules={modules}
+          value={moduleFilter}
+          username={user?.username || ""}
+          onChange={(v) => {
+            setModuleFilter(v);
+            if (v) setDevFilter(null);
+          }}
+        />
+        <span className="tag-picker-label">{t("chat.developmentLabel")}</span>
+        <DevelopmentFilter
+          developments={scopeDevelopments}
+          value={devFilter}
+          onChange={(devId) => {
+            setDevFilter(devId);
+            if (devId != null) setModuleFilter("");
+          }}
+        />
+        <span id="chat-mail-hint" className="chat-mail-hint">{t("chat.mailModeHint")}</span>
+        <span id="chat-mail-unknown-hint" className="chat-mail-hint">{mailMode !== "all" ? t("chat.mailModeUnknownHint") : ""}</span>
       </div>
-      <details className="search-settings chat-disclosure" open={searchSettingsOpen} onToggle={(event) => setSearchSettingsOpen(event.currentTarget.open)}>
-        <ChatDisclosureSummary showLabel={t("chat.showSearchSettings")} hideLabel={t("chat.collapseSearchSettings")} />
-        <div className="chat-disclosure-content">
+      </ChatFilters>
+        <fieldset className="chat-settings-group">
+          <legend>{t("chat.settingsHow")}</legend>
         {settings.response_modes?.length > 0 && (
           <div className="topk-picker">
             <span className="topk-label" title={t("chat.searchDepthDescription")}>{t("chat.searchDepthLabel")}</span>
@@ -540,55 +580,22 @@ export default function ChatPanel() {
           />
         )}
       </div>}
-        </div>
-      </details>
-      <ChatFilterSummary summary={filterSummary} onRemove={removeFilter}/>
-      <ChatFilters summary={filterSummary} onRemove={removeFilter} onClear={clearSearchFilters}>
-      <TagPicker
-        label={t("chat.tagsLabel")}
-        placeholder={t("chat.tagsPlaceholder")}
-        selected={tags}
-        onChange={setTags}
-      />
-      <div className="chat-scope-filter">
-        <span className="tag-picker-label">{t("chat.moduleLabel")}</span>
-        <ModulePicker
-          modules={modules}
-          value={moduleFilter}
-          username={user?.username || ""}
-          onChange={(v) => {
-            setModuleFilter(v);
-            if (v) setDevFilter(null);
-          }}
-        />
-        <span className="tag-picker-label">{t("chat.developmentLabel")}</span>
-        <DevelopmentFilter
-          developments={scopeDevelopments}
-          value={devFilter}
-          onChange={(devId) => {
-            setDevFilter(devId);
-            if (devId != null) setModuleFilter("");
-          }}
-        />
-        <span className="tag-picker-label">{t("chat.localeLabel")}</span>
-        <SearchableSelect
-          options={localeOptions}
-          value={sourceLocale}
-          onChange={setSourceLocale}
-          searchPlaceholder={t("docs.localeSearchPlaceholder")}
-          emptyLabel={t("docs.empty")}
-          ariaLabel={t("docs.localeFilterAria")}
-        />
-        <label htmlFor="chat-mail-mode" className="tag-picker-label">{t("chat.mailModeLabel")}</label>
-        <select id="chat-mail-mode" value={mailMode} onChange={(e) => setMailMode(e.target.value)} aria-describedby="chat-mail-hint chat-mail-unknown-hint">
-          <option value="all">{t("chat.mailModeAll")}</option>
-          <option value="exclude">{t("chat.mailModeExclude")}</option>
-          <option value="only">{t("chat.mailModeOnly")}</option>
-        </select>
-        <span id="chat-mail-hint" className="chat-mail-hint">{t("chat.mailModeHint")}</span>
-        <span id="chat-mail-unknown-hint" className="chat-mail-hint">{mailMode !== "all" ? t("chat.mailModeUnknownHint") : ""}</span>
+        </fieldset>
       </div>
-      </ChatFilters>
+      {scopeNotice && <div className="meta" role="status">{t(scopeNotice.key, scopeNotice)}</div>}
+      <div className="chat-log-frame">
+      <ChatTimeline turns={turns} pending={pending} recentHistory={recentHistory} onLoadOlder={historyLoader.load}
+        logRef={logRef} scrollPositionRef={scrollPositionRef} sessionId={sessionId} messageCount={messages.length}
+        view={timelineView} setView={setTimelineView} onContinueWithoutAssessment={continueWithoutAssessment}
+        empty={<div className="chat-empty-start"><p>{t("ux.chatWelcome")}</p><div className="chat-examples">{["process","compare","explain"].map(key=><button type="button" className="btn ghost" key={key} disabled={Boolean(draftQuery.trim())} onClick={()=>{setDraftQuery(t(`ux.example.${key}`));requestAnimationFrame(()=>document.getElementById("chat-question")?.focus());}}>{t(`ux.example.${key}`)}</button>)}</div></div>}
+        renderMessage={(message, index) => <ChatMessageView key={index} message={message} index={index}
+          isLatest={index === lastAssistantIndex}
+          isPending={pending && index === messages.length - 1} actionsPending={pending}
+          isCopied={copiedIndex === index} searchDepthMax={settings.search_depth_max} sourceView={sourceView}
+          onEdit={editAnswer} onCopy={copyAnswer} onSelect={selectSources} onAnswerSelected={answerSelected}
+          onAddToScope={addSelectedToScope} onRetry={retryAnswer} onRefreshSearch={refreshSourceSearch} onRepeatWithoutGlossary={repeatWithoutGlossary}
+          onContinueWithoutAssessment={continueWithoutAssessment} onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} onSourceViewChange={changeSourceView} />}/>
+      </div>
       <ChatComposer value={draftQuery} onChange={setDraftQuery} disabled={searchScopeEnabled && searchScopeDocuments.length === 0} onSubmit={send} />
     </section>
   );
