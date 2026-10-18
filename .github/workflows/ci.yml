@@ -37,7 +37,8 @@ jobs:
             --custom-compile-command 'uv pip compile backend/requirements.txt doc-parser/pyproject.toml --universal --python-version 3.12 --generate-hashes --no-annotate -o backend/requirements.lock.txt' \
             --constraint backend/requirements.lock.txt \
             --output-file "$RUNNER_TEMP/requirements.lock.txt" --quiet
-          diff -u backend/requirements.lock.txt "$RUNNER_TEMP/requirements.lock.txt"
+          # Targeted updates change uv's command header, not the dependency lock.
+          diff -u --ignore-matching-lines='^#' backend/requirements.lock.txt "$RUNNER_TEMP/requirements.lock.txt"
 
   backend:
     name: backend (pytest)
