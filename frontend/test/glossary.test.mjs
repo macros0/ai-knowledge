@@ -89,9 +89,9 @@ test("admin glossary panel keeps long editor content vertically scrollable", () 
   assert.match(styles, /\.admin-panel\s*\{[^}]*overflow-y:\s*auto/);
 });
 
-test("changing a term source locale remounts its translation editor", () => {
+test("changing a source locale does not remount and discard a translation draft", () => {
   const editor = readFileSync(new URL("../src/components/GlossaryEditor.jsx", import.meta.url), "utf8");
-  assert.match(editor, /<GlossaryTranslations\s+key=\{`\$\{term\.id\}:\$\{term\.canonical_locale\}`\}/);
+  assert.match(editor, /<GlossaryTranslations\s+key=\{term\.id\}/);
 });
 
 test("alias locale is editable through the shared locale selector", () => {

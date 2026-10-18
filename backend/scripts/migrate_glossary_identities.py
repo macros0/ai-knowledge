@@ -31,11 +31,22 @@ def _result_checksum(result: dict) -> str:
 def _set_ready(ready: bool, *, expected_revision: int | None = None) -> dict:
     from app.services.glossary.mutation import bump_glossary_revision, glossary_write_session
     with glossary_write_session(allow_unready=True) as (session, state):
+        _guard_offline_resources(session)
         if expected_revision is not None and state.revision != expected_revision:
             raise ValueError(f"Ревизия глоссария устарела: ожидалась {expected_revision}, фактически {state.revision}")
         state.identities_ready = ready
         bump_glossary_revision(session, state)
         return {"status": "ready" if ready else "prepared", "glossary_revision": state.revision}
+
+
+def _guard_offline_resources(session):
+    from sqlalchemy import select
+    from app.db.models import DomainTerm, GlossaryInfotypeRule
+    from app.services.reference_resources import ReferenceKey
+    from app.services.reference_mutation import guard_reference_writes
+    keys = [ReferenceKey(kind, identifier) for model, kind in
+        ((DomainTerm, "glossary_term"), (GlossaryInfotypeRule, "glossary_rule")) for identifier in session.scalars(select(model.id))]
+    return guard_reference_writes(session, keys)
 
 
 def _resolutions(plan):
@@ -91,6 +102,9 @@ def _apply_plan(session, state, plan, registry):
     from scripts.audit_glossary_identities import namespace_from_session
 
     versions = _check_initial_versions(session, state, plan)
+    resource_states = _guard_offline_resources(session)
+    from app.services.reference_resources import ReferenceKey
+    from app.services.reference_concurrency import bump_reference_revision, initialize_reference_resource
     touched = set()
     updates = {}
     for update in plan.get("term_updates") or []:
@@ -115,6 +129,8 @@ def _apply_plan(session, state, plan, registry):
         deleted_aliases.add(alias_id)
         touched.add(alias.term_id)
         session.delete(alias)
+    for term_id in touched:
+        bump_reference_revision(resource_states[ReferenceKey("glossary_term", term_id)])
     for rule_data in plan.get("rules") or []:
         name = str(rule_data["name"]).strip()
         number_from, number_to = int(rule_data["number_from"]), int(rule_data["number_to"])
@@ -124,6 +140,8 @@ def _apply_plan(session, state, plan, registry):
         rule.prefixes_rel = [GlossaryInfotypePrefix(prefix=prefix, normalized_prefix=prefix, position=index)
                              for index, prefix in enumerate(prefixes)]
         session.add(rule)
+        session.flush()
+        initialize_reference_resource(session, ReferenceKey("glossary_rule", rule.id))
     session.flush()
     session.expire_all()
     applied = []

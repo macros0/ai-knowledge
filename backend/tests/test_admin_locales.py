@@ -2,6 +2,7 @@
 импорт стоп-слов (preview→confirm), история/rollback, права и аудит."""
 import pytest
 from fastapi.testclient import TestClient
+from tests.support.reference_client import reference_request
 
 from app.config import Settings
 from app.main import create_app
@@ -59,7 +60,7 @@ def client(tmp_path, monkeypatch):
 
 
 def login(client, username="demo.admin"):
-    resp = client.post("/api/auth/simulate", json={"username": username})
+    resp = reference_request(client, "POST", "/api/auth/simulate", json={"username": username})
     assert resp.status_code == 200, resp.text
 
 
@@ -94,7 +95,7 @@ class TestActiveLocales:
 
     def test_i18n_304_repeats_validator_headers(self, client):
         login(client)
-        assert client.post(
+        assert reference_request(client, "POST",
             "/api/admin/locales/en/ui-dictionary/import",
             json={"data": {"nav.documents": "Papers"}, "confirm": True},
         ).status_code == 200
@@ -119,20 +120,20 @@ class TestLocalesCrud:
 
     def test_create_locale_draft(self, client):
         login(client)
-        resp = client.post("/api/admin/locales", json={"code": "de", "name": "Deutsch"})
+        resp = reference_request(client, "POST", "/api/admin/locales", json={"code": "de", "name": "Deutsch"})
         assert resp.status_code == 200, resp.text
         assert resp.json()["status"] == "draft"
 
     def test_create_duplicate_422(self, client):
         login(client)
-        assert client.post("/api/admin/locales", json={"code": "ru", "name": "X"}).status_code == 422
+        assert reference_request(client, "POST", "/api/admin/locales", json={"code": "ru", "name": "X"}).status_code == 422
 
     def test_activate_without_stopwords_422(self, client):
         login(client)
         # 08.09.2026: гейта «presence в UI-манифесте» больше нет — активация
         # требует только набор stopwords (kind=bm25).
-        client.post("/api/admin/locales", json={"code": "de", "name": "Deutsch"})
-        resp = client.post("/api/admin/locales/de/activate")
+        reference_request(client, "POST", "/api/admin/locales", json={"code": "de", "name": "Deutsch"})
+        resp = reference_request(client, "POST", "/api/admin/locales/de/activate")
         assert resp.status_code == 422, resp.text  # нет bm25-стоп-слов
         assert "stopwords" in resp.json()["detail"]
 
@@ -140,13 +141,13 @@ class TestLocalesCrud:
         login(client)
         # Язык вне UI-манифеста фронтенда активируется (двухуровневая модель) —
         # автосид кладёт en-копию в историю словарей как заготовку для перевода.
-        client.post("/api/admin/locales", json={"code": "fr", "name": "Français"})
-        resp = client.post(
+        reference_request(client, "POST", "/api/admin/locales", json={"code": "fr", "name": "Français"})
+        resp = reference_request(client, "POST",
             "/api/admin/locales/fr/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["le", "la"], "confirm": True},
         )
         assert resp.status_code == 200, resp.text
-        resp = client.post("/api/admin/locales/fr/activate")
+        resp = reference_request(client, "POST", "/api/admin/locales/fr/activate")
         assert resp.status_code == 200, resp.text
         assert resp.json()["status"] == "active"
 
@@ -164,7 +165,7 @@ class TestLocalesCrud:
         assert len(history) == 1
         assert history[0]["version"] == 1
         assert "auto: en copy" in (history[0]["note"] or "")
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/fr/ui-dictionary/rollback", json={"entry_id": history[0]["id"]}
         )
         assert resp.status_code == 200, resp.text
@@ -183,9 +184,9 @@ class TestLocalesCrud:
 
     def test_activation_preserves_existing_dictionary(self, client):
         login(client)
-        client.post("/api/admin/locales", json={"code": "fr", "name": "Français"})
+        reference_request(client, "POST", "/api/admin/locales", json={"code": "fr", "name": "Français"})
         # Свой override импортирован ДО активации — автосид не должен его тронуть.
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/fr/ui-dictionary/import",
             json={
                 "data": {"nav.documents": "Documents FR"},
@@ -194,11 +195,11 @@ class TestLocalesCrud:
             },
         )
         assert resp.status_code == 200, resp.text
-        client.post(
+        reference_request(client, "POST",
             "/api/admin/locales/fr/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["le", "la"], "confirm": True},
         )
-        resp = client.post("/api/admin/locales/fr/activate")
+        resp = reference_request(client, "POST", "/api/admin/locales/fr/activate")
         assert resp.status_code == 200, resp.text
         body = client.get("/api/i18n/fr").json()
         assert body["version"] == 1
@@ -206,17 +207,17 @@ class TestLocalesCrud:
 
     def test_disable_ru_forbidden(self, client):
         login(client)
-        assert client.post("/api/admin/locales/ru/disable").status_code == 422
+        assert reference_request(client, "POST", "/api/admin/locales/ru/disable").status_code == 422
 
     def test_disable_en(self, client):
         login(client)
-        resp = client.post("/api/admin/locales/en/disable")
+        resp = reference_request(client, "POST", "/api/admin/locales/en/disable")
         assert resp.status_code == 200
         assert resp.json()["status"] == "disabled"
 
     def test_create_records_audit(self, client):
         login(client)
-        client.post("/api/admin/locales", json={"code": "nl", "name": "Nederlands"})
+        reference_request(client, "POST", "/api/admin/locales", json={"code": "nl", "name": "Nederlands"})
         from app.services.audit import AuditService
 
         entries = AuditService().query(action_type=LOCALE_CREATE)
@@ -226,7 +227,7 @@ class TestLocalesCrud:
     def test_admin_requires_role(self, client):
         login(client, "demo.viewer")
         assert client.get("/api/admin/locales").status_code == 403
-        assert client.post("/api/admin/locales", json={"code": "de", "name": "D"}).status_code == 403
+        assert reference_request(client, "POST", "/api/admin/locales", json={"code": "de", "name": "D"}).status_code == 403
 
 
 class TestUiDictionaryAdmin:
@@ -240,7 +241,7 @@ class TestUiDictionaryAdmin:
 
     def test_get_active_after_import(self, client):
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/en/ui-dictionary/import",
             json={"data": {"nav.documents": "Papers"}, "confirm": True},
         )
@@ -259,7 +260,7 @@ class TestUiDictionaryAdmin:
         # P0 hardening: preview для несуществующей локали — 404 (не 200 с diff),
         # чтобы ошибки вызывающей стороны не маскировались.
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/zz/ui-dictionary/import",
             json={"data": {"nav.documents": "X"}, "confirm": False},
         )
@@ -284,7 +285,7 @@ class TestStopwordsEmptyReplace:
         assert len(before) > 0
 
         # confirm=true БЕЗ confirm_empty_replace — применение запрещено.
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=replace&kind=bm25",
             json={"words": [], "confirm": True},
         )
@@ -298,7 +299,7 @@ class TestStopwordsEmptyReplace:
 
     def test_empty_replace_with_confirmation_wipes(self, client):
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=replace&kind=bm25",
             json={"words": [], "confirm": True, "confirm_empty_replace": True},
         )
@@ -317,7 +318,7 @@ class TestStopwordsEmptyReplace:
 
     def test_merge_empty_is_noop(self, client):
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=merge&kind=bm25",
             json={"words": [], "confirm": True},
         )
@@ -348,7 +349,7 @@ class TestTranslationPending:
 class TestStopwordsImport:
     def test_preview_then_confirm(self, client):
         login(client)
-        preview = client.post(
+        preview = reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["abctest", "defgh"], "confirm": False},
         )
@@ -357,7 +358,7 @@ class TestStopwordsImport:
         assert body["applied"] is False
         assert set(body["added"]) == {"abctest", "defgh"}
 
-        applied = client.post(
+        applied = reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["abctest", "defgh"], "confirm": True},
         )
@@ -369,11 +370,11 @@ class TestStopwordsImport:
 
     def test_replace_removes_absent(self, client):
         login(client)
-        client.post(
+        reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["keepme", "dropme"], "confirm": True},
         )
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=replace&kind=bm25",
             json={"words": ["keepme"], "confirm": True},
         )
@@ -386,7 +387,7 @@ class TestStopwordsImport:
 
     def test_import_records_audit(self, client):
         login(client)
-        client.post(
+        reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["auditword"], "confirm": True},
         )
@@ -399,11 +400,11 @@ class TestStopwordsImport:
 
     def test_history_and_rollback(self, client):
         login(client)
-        client.post(
+        reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["v1"], "confirm": True},
         )
-        client.post(
+        reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/import?mode=replace&kind=bm25",
             json={"words": ["v2"], "confirm": True},
         )
@@ -413,7 +414,7 @@ class TestStopwordsImport:
         latest_entry_id = history[0]["id"]
         assert "v2" in history[0]["words"]
 
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords/rollback", json={"entry_id": latest_entry_id}
         )
         assert resp.status_code == 200, resp.text
@@ -423,12 +424,12 @@ class TestStopwordsImport:
 
     def test_add_and_delete_word(self, client):
         login(client)
-        assert client.post(
+        assert reference_request(client, "POST",
             "/api/admin/locales/ru/stopwords", json={"word": "singleword", "kind": "bm25"}
         ).status_code == 200
         words = {w["word"] for w in client.get("/api/admin/locales/ru/stopwords?kind=bm25").json()["words"]}
         assert "singleword" in words
-        assert client.delete("/api/admin/locales/ru/stopwords/singleword?kind=bm25").status_code == 200
+        assert reference_request(client, "DELETE", "/api/admin/locales/ru/stopwords/singleword?kind=bm25").status_code == 200
         words = {w["word"] for w in client.get("/api/admin/locales/ru/stopwords?kind=bm25").json()["words"]}
         assert "singleword" not in words
 
@@ -438,7 +439,7 @@ class TestStopwordsImport:
         # валидатором «Некорректное слово» — весь импорт падал на первом же слове.
         login(client)
         words = ["daß", "für", "können", "könnte", "über", "während", "würde", "würden"]
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/en/stopwords/import?mode=merge&kind=bm25",
             json={"words": words, "confirm": True},
         )
@@ -449,7 +450,7 @@ class TestStopwordsImport:
 
     def test_add_word_uppercase_umlaut_normalized(self, client):
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/en/stopwords", json={"word": "Über", "kind": "bm25"}
         )
         assert resp.status_code == 200, resp.text
@@ -457,10 +458,10 @@ class TestStopwordsImport:
 
     def test_delete_word_with_umlaut_url(self, client):
         login(client)
-        assert client.post(
+        assert reference_request(client, "POST",
             "/api/admin/locales/en/stopwords", json={"word": "über", "kind": "bm25"}
         ).status_code == 200
-        resp = client.delete("/api/admin/locales/en/stopwords/über?kind=bm25")
+        resp = reference_request(client, "DELETE", "/api/admin/locales/en/stopwords/über?kind=bm25")
         assert resp.status_code == 200, resp.text
         words = {w["word"] for w in client.get("/api/admin/locales/en/stopwords?kind=bm25").json()["words"]}
         assert "über" not in words
@@ -469,7 +470,7 @@ class TestStopwordsImport:
         # Неподдерживаемые символы по-прежнему блокируют импорт, но сообщение
         # перечисляет ВСЕ некорректные слова (не только первое).
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/en/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["gut-besser", "schlechter", "a_b"], "confirm": False},
         )
@@ -482,7 +483,7 @@ class TestStopwordsImport:
         # Регрессия 08.09.2026 (2): европейская латиница — французские акценты
         # (après, allô, ça, élève) больше не блокируют импорт.
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/en/stopwords/import?mode=merge&kind=bm25",
             json={
                 "words": ["après", "allô", "ça", "élève", "où", "dès"],
@@ -498,7 +499,7 @@ class TestStopwordsImport:
         # Апострофные/дефисные слитные формы (aujourd'hui, celle-ci) НЕ могут стать
         # токеном — импорт отклоняет их с объяснением (не «некорректная буква»).
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/en/stopwords/import?mode=merge&kind=bm25",
             json={"words": ["après", "aujourd'hui", "celle-ci"], "confirm": False},
         )
@@ -532,14 +533,14 @@ class TestErrorCodes:
 
     def test_validation_422_carries_code(self, client):
         login(client)
-        resp = client.post("/api/admin/locales", json={"code": "ru", "name": "X"})
+        resp = reference_request(client, "POST", "/api/admin/locales", json={"code": "ru", "name": "X"})
         assert resp.status_code == 422
         assert resp.json()["code"] == "invalid_request"
 
     def test_ui_dictionary_unknown_locale_is_locale_code(self, client):
         """Не document_not_found: ui_dictionary бросает ValueError на «языка нет»."""
         login(client)
-        resp = client.post(
+        resp = reference_request(client, "POST",
             "/api/admin/locales/zz/ui-dictionary/import",
             json={"data": {"nav.documents": "X"}, "confirm": False},
         )

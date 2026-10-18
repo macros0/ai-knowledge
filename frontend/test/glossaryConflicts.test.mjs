@@ -3,6 +3,15 @@ import assert from "node:assert/strict";
 import * as helpers from "../src/lib/glossaryConflicts.mjs";
 import { conflictSummary, normalizeGlossaryIdentity, resolveRejectedAlias, shouldOfferMerge, buildGlossaryMergeRequest, glossaryDraftPayload } from "../src/lib/glossaryConflicts.mjs";
 
+test("a removed remote alias retains a dirty local draft", () => {
+  const previous = [{id: 7, alias: "Old", locale: "ru", auto_expand: false, search_enabled: false}];
+  const dirty = {...previous[0], alias: "Mine"};
+  const result = helpers.reconcileGlossaryAliasDrafts({7: dirty}, previous, []);
+  assert.equal(result[7].alias, "Mine");
+  assert.equal(helpers.hasPendingGlossaryEdits({aliases: []}, {}, result, {}), true);
+  assert.deepEqual(helpers.reconcileGlossaryAliasDrafts({7: previous[0]}, previous, []), {});
+});
+
 test("identity conflicts are normalized and offer merge", () => {
   const error = { code: "glossary_identity_conflict", conflicts: [{ key_value: " Табель ", term_id: 4, field_name: "original_name" }] };
   assert.equal(normalizeGlossaryIdentity("  Табель  "), "табель");
@@ -39,6 +48,15 @@ test("saved-card merge carries its pending source edit with the saved version", 
   assert.deepEqual(request.source_edit, sourceEdit);
   assert.equal(request.source_term_id, 1);
   assert.equal(request.source_version, 3);
+});
+
+test("merge preview cannot silently rebase an unsaved source edit", () => {
+  const request = buildGlossaryMergeRequest({source: {id: 1, version: 3, reference_revision: 5},
+    sourceEdit: {original_name: "My stale edit"}, target: {id: 2, version: 1, reference_revision: 1},
+    proposal: {source: {id: 1, version: 4, reference_revision: 6}, target: {id: 2, version: 2, reference_revision: 2}, digest: "d", glossary_revision: 7}});
+  assert.equal(request.source_version, 3);
+  assert.equal(request.expected_reference_revisions[1], 5);
+  assert.equal(request.expected_reference_revisions[2], 2);
 });
 
 test("pending disabled state survives source edit and requires an explicit merge choice", () => {

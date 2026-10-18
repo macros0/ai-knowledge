@@ -7,7 +7,7 @@ import {transformSync} from 'next/dist/build/swc/index.js';
 const require=createRequire(import.meta.url);
 
 // Exercise the component's real callbacks/effects with controlled network boundaries.
-export function componentHarness(file,modules={},initialProps={},globals={}) {
+export function componentHarness(file,modules={},initialProps={},globals={}, {exportName = "default"} = {}) {
   const slots=[],effects=[];
   let cursor=0,props=initialProps,tree;
   const hooks={...React,
@@ -31,7 +31,7 @@ export function componentHarness(file,modules={},initialProps={},globals={}) {
     setInterval,clearInterval,setTimeout,clearTimeout,
     ...globals,
     require(id){return id==='react'?hooks:Object.hasOwn(modules,id)?modules[id]:require(id);}});
-  function render(nextProps=props){props=nextProps;cursor=0;tree=mod.exports.default(props);
+  function render(nextProps=props){props=nextProps;cursor=0;tree=mod.exports[exportName](props);
     while(effects.length)effects.shift()();return tree;}
   function walk(predicate,node){if(!node)return undefined;
     if(Array.isArray(node)){for(const child of node){const result=walk(predicate,child);if(result)return result;}return;}

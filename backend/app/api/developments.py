@@ -5,6 +5,7 @@
 from typing import Annotated
 
 from app.api import errors
+from app.api.reference_editing import request_edit_session
 from app.services.errors import DomainError
 from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, Query, Request
@@ -19,7 +20,6 @@ from app.models.schemas import (
     DevelopmentOut,
     DevelopmentUpdate,
 )
-from app.services import audit
 from app.services.development_registry import (
     DevelopmentConflictError,
     DevelopmentModuleError,
@@ -59,8 +59,8 @@ def list_developments(
         order=order,
         limit=limit,
         offset=offset,
+        locale=request_locale(request),
     )
-    _registry.add_display_names(items, request_locale(request))
     return DevelopmentListOut(
         developments=[DevelopmentOut(**d) for d in items],
         total=total,
@@ -77,7 +77,8 @@ def create_development(
 ):
     try:
         dev = _registry.create(body.number, body.name, body.module, created_by=user.username,
-                               canonical_locale=body.canonical_locale or request_locale(request, fallback="und"))
+                               canonical_locale=body.canonical_locale or request_locale(request, fallback="und"),
+                               actor=user, ip_address=_client_ip(request))
     except DevelopmentModuleError as exc:
         raise ApiError(
             status_code=422,
@@ -89,27 +90,18 @@ def create_development(
             status_code=409,
             content={"detail": str(exc), "code": errors.DUPLICATE_NUMBER},
         )
-    audit.record(
-        user,
-        audit.DEVELOPMENT_CREATE,
-        audit.TARGET_DEVELOPMENT,
-        target_id=str(dev["id"]),
-        new_value={"number": dev["number"], "name": dev["name"], "module": dev["module"]},
-        ip_address=_client_ip(request),
-    )
     return DevelopmentOut(**dev)
 
 
 @router.get("/{dev_id}", response_model=DevelopmentOut)
 def get_development(dev_id: int, request: Request, user: User = Depends(require_user)):
-    dev = _registry.get(dev_id)
+    dev = _registry.get(dev_id, locale=request_locale(request))
     if dev is None:
         raise ApiError(
             status_code=404,
             code=errors.DEVELOPMENT_NOT_FOUND,
             detail="Разработка не найдена",
         )
-    _registry.add_display_names([dev], request_locale(request))
     return DevelopmentOut(**dev)
 
 
@@ -122,7 +114,8 @@ def update_development(
 ):
     try:
         dev = _registry.update(
-            dev_id, body.version, number=body.number, name=body.name, module=body.module
+            dev_id, body.version, number=body.number, name=body.name, module=body.module,
+            expected_reference_revision=body.expected_reference_revision, actor=user, lease=request_edit_session(request),
         )
     except DevelopmentModuleError as exc:
         raise ApiError(
@@ -152,14 +145,6 @@ def update_development(
             code=errors.DOCUMENT_NOT_FOUND,
             detail=str(exc),
         ) from exc
-    audit.record(
-        user,
-        audit.DEVELOPMENT_UPDATE,
-        audit.TARGET_DEVELOPMENT,
-        target_id=str(dev_id),
-        new_value={"number": dev["number"], "name": dev["name"], "module": dev["module"]},
-        ip_address=_client_ip(request),
-    )
     return DevelopmentOut(**dev)
 
 
@@ -168,10 +153,12 @@ def delete_development(
     dev_id: int,
     request: Request,
     version: int = Query(...),
+    expected_reference_revision: int | None = Query(default=None, ge=1),
     user: User = Depends(require_role("editor", "admin")),
 ):
     try:
-        deleted = _registry.delete(dev_id, version)
+        deleted = _registry.delete(dev_id, version, expected_reference_revision=expected_reference_revision,
+            actor=user, lease=request_edit_session(request))
     except DevelopmentConflictError as exc:
         return JSONResponse(
             status_code=409,
@@ -187,13 +174,6 @@ def delete_development(
             code=errors.DEVELOPMENT_NOT_FOUND,
             detail="Разработка не найдена",
         )
-    audit.record(
-        user,
-        audit.DEVELOPMENT_DELETE,
-        audit.TARGET_DEVELOPMENT,
-        target_id=str(dev_id),
-        ip_address=_client_ip(request),
-    )
     return {"status": "deleted"}
 
 

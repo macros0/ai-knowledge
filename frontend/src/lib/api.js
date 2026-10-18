@@ -1,6 +1,8 @@
 import { detectLocale, readStored } from "../i18n/core.js";
 import { readChatStream } from "./chatStream.mjs";
 import { errorReference, validRequestId } from "./diagnosticIdentifiers.mjs";
+import { createEditorToken } from "./editorLeaseSession.mjs";
+import { referenceMutationHeaders } from "./editorLeaseAdapters.mjs";
 
 const BASE = "/api";
 const CHAT_TIMEOUT_MS = 210_000;
@@ -259,27 +261,54 @@ export function listTags() {
   return request("/tags").then((data) => data.tags ?? []);
 }
 
-export function deleteTag(name) {
-  return request(`/tags/${encodeURIComponent(name)}`, { method: "DELETE" });
+function referenceLeaseRoute({ resource_type, resource_id, kind, org_id }) {
+  const query = new URLSearchParams();
+  if (kind) query.set("kind", kind);
+  if (org_id != null) query.set("org_id", String(org_id));
+  return `/reference-edit-locks/${encodeURIComponent(resource_type)}/${encodeURIComponent(resource_id)}${query.size ? `?${query}` : ""}`;
 }
 
-export function cleanupTags() {
-  return request("/tags/cleanup", { method: "POST" });
+export const getReferenceEditStatus = resource => request(referenceLeaseRoute(resource));
+export const acquireReferenceEditLock = (resource, body) => request(referenceLeaseRoute(resource), {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+export const acquireReferenceEditLocks = resources => jsonRequest("/reference-edit-locks/acquire-many", "POST", {resources});
+export const renewReferenceEditLock = (resource, body) => request(referenceLeaseRoute(resource), {
+  method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+export const releaseReferenceEditLock = (resource, body) => request(referenceLeaseRoute(resource), {
+  method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+export async function withReferenceEditLock(resource, action) {
+  const token = createEditorToken();
+  const before = await getReferenceEditStatus(resource);
+  const status = before.lease_required === false ? before : await acquireReferenceEditLock(resource, { edit_token: token });
+  const context = status.lease_required === false ? {} : { edit_token: token, lease_epoch: status.lease_epoch };
+  try { return await action({ headers: referenceMutationHeaders(context), status }); }
+  finally { if (context.edit_token) await releaseReferenceEditLock(resource, context).catch(() => {}); }
 }
 
-export function updateTagTranslation(tagId, locale, text) {
+export function deleteTag(name, { expected_reference_revision, headers = {} } = {}) {
+  const query = new URLSearchParams();
+  if (expected_reference_revision != null) query.set("expected_reference_revision", String(expected_reference_revision));
+  return request(`/tags/${encodeURIComponent(name)}${query.size ? `?${query}` : ""}`, { method: "DELETE", headers });
+}
+
+export function cleanupTags(body = { confirm: false }) {
+  return request("/tags/cleanup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+export function updateTagTranslation(tagId, locale, text, { expected_reference_revision, headers = {} } = {}) {
   return request(`/tags/${tagId}/translations/${encodeURIComponent(locale)}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ locale, text }),
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ locale, text, expected_reference_revision }),
   });
 }
 
-export function bulkReviewTags(tagIds) {
+export function bulkReviewTags(items) {
   return request("/tags/bulk-review", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_ids: tagIds }),
+    body: JSON.stringify({ items }),
   });
 }
 
@@ -685,17 +714,20 @@ export function createDevelopment({ number, name, module, canonical_locale }) {
   });
 }
 
-export function updateDevelopment(devId, { number, name, module, version }) {
+export function updateDevelopment(devId, { number, name, module, version, expected_reference_revision }, { headers = {} } = {}) {
   return request(`/developments/${devId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ number, name, module, version }),
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ number, name, module, version, expected_reference_revision }),
   });
 }
 
-export function deleteDevelopment(devId, version) {
-  return request(`/developments/${devId}?version=${encodeURIComponent(version)}`, {
+export function deleteDevelopment(devId, version, { expected_reference_revision, headers = {} } = {}) {
+  const query = new URLSearchParams({ version: String(version) });
+  if (expected_reference_revision != null) query.set("expected_reference_revision", String(expected_reference_revision));
+  return request(`/developments/${devId}?${query}`, {
     method: "DELETE",
+    headers,
   });
 }
 
@@ -716,20 +748,24 @@ export function listDevelopmentDocuments(devId, params = {}) {
 
 // --- Generic атрибуты (module и т.п.) ---
 
+export const getAttributeCatalog = key => request(`/attributes/${key}`);
+
 export function listAttributeValues(key) {
-  return request(`/attributes/${key}`).then((data) => data.values ?? []);
+  return getAttributeCatalog(key).then((data) => data.values ?? []);
 }
 
-export function addAttributeValue(key, value, { label, canonicalLocale } = {}) {
+export function addAttributeValue(key, value, { label, canonicalLocale, expected_reference_revision } = {}) {
   return request(`/attributes/${key}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ value, label, canonical_locale: canonicalLocale }),
+    body: JSON.stringify({ value, label, canonical_locale: canonicalLocale, expected_reference_revision }),
   });
 }
 
-export function deleteAttributeValue(key, value) {
-  return request(`/attributes/${key}/${encodeURIComponent(value)}`, {
+export function deleteAttributeValue(key, value, { expected_reference_revision } = {}) {
+  const query = new URLSearchParams();
+  if (expected_reference_revision != null) query.set("expected_reference_revision", expected_reference_revision);
+  return request(`/attributes/${key}/${encodeURIComponent(value)}?${query}`, {
     method: "DELETE",
   });
 }
@@ -817,40 +853,41 @@ export function createGlossaryTerm(data) {
   });
 }
 
-export function updateGlossaryTerm(termId, data) {
+export function updateGlossaryTerm(termId, data, { headers = {} } = {}) {
   return request(`/admin/glossary/${termId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(data),
   });
 }
 
-export function updateGlossarySource(termId, data) {
+export function updateGlossarySource(termId, data, { headers = {} } = {}) {
   return request(`/admin/glossary/${termId}/source`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(data),
   });
 }
 
-export function addGlossaryAlias(termId, data) {
+export function addGlossaryAlias(termId, data, { headers = {} } = {}) {
   return request(`/admin/glossary/${termId}/aliases`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(data),
   });
 }
 
-export function updateGlossaryAlias(termId, aliasId, data) {
+export function updateGlossaryAlias(termId, aliasId, data, { headers = {} } = {}) {
   return request(`/admin/glossary/${termId}/aliases/${aliasId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(data),
   });
 }
 
-export function deleteGlossaryAlias(termId, aliasId, version) {
-  return request(`/admin/glossary/${termId}/aliases/${aliasId}?version=${encodeURIComponent(version)}`, { method: "DELETE" });
+export function deleteGlossaryAlias(termId, aliasId, version, { expected_reference_revision, headers = {} } = {}) {
+  const query = new URLSearchParams({ version, expected_reference_revision });
+  return request(`/admin/glossary/${termId}/aliases/${aliasId}?${query}`, { method: "DELETE", headers });
 }
 
 export function previewGlossaryQuery(query, locale) {
@@ -861,18 +898,18 @@ export function previewGlossaryQuery(query, locale) {
   });
 }
 
-export function glossaryTranslation(termId, locale, data) {
+export function glossaryTranslation(termId, locale, data, { headers = {} } = {}) {
   return request(`/admin/glossary/${termId}/translations/${encodeURIComponent(locale)}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(data),
   });
 }
 
-export function reviewGlossaryTranslation(termId, locale, data) {
+export function reviewGlossaryTranslation(termId, locale, data, { headers = {} } = {}) {
   return request(`/admin/glossary/${termId}/translations/${encodeURIComponent(locale)}/review`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(data),
   });
 }
@@ -897,12 +934,13 @@ export function createGlossaryRule(data) {
   return jsonRequest("/admin/glossary/rules", "POST", data);
 }
 
-export function updateGlossaryRule(ruleId, data) {
-  return jsonRequest(`/admin/glossary/rules/${ruleId}`, "PATCH", data);
+export function updateGlossaryRule(ruleId, data, { headers = {} } = {}) {
+  return request(`/admin/glossary/rules/${ruleId}`, {method: "PATCH", headers: {"Content-Type": "application/json", ...headers}, body: JSON.stringify(data)});
 }
 
-export function deleteGlossaryRule(ruleId, version) {
-  return request(`/admin/glossary/rules/${ruleId}?version=${encodeURIComponent(version)}`, { method: "DELETE" });
+export function deleteGlossaryRule(ruleId, version, { expected_reference_revision, headers = {} } = {}) {
+  const query = new URLSearchParams({ version, expected_reference_revision });
+  return request(`/admin/glossary/rules/${ruleId}?${query}`, { method: "DELETE", headers });
 }
 
 export function previewGlossaryMerge(data) {
@@ -947,61 +985,64 @@ export function createLocale(code, name) {
   });
 }
 
-export function updateLocale(code, { name, status } = {}) {
+export function updateLocale(code, { name, status, expected_reference_revision } = {}) {
   return request(`/admin/locales/${encodeURIComponent(code)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, status }),
+    body: JSON.stringify({ name, status, expected_reference_revision }),
   });
 }
 
-export function activateLocale(code) {
-  return request(`/admin/locales/${encodeURIComponent(code)}/activate`, { method: "POST" });
+export function activateLocale(code, {expected_reference_revision} = {}) {
+  return jsonRequest(`/admin/locales/${encodeURIComponent(code)}/activate`, "POST", {expected_reference_revision});
 }
 
-export function disableLocale(code) {
-  return request(`/admin/locales/${encodeURIComponent(code)}/disable`, { method: "POST" });
+export function disableLocale(code, {expected_reference_revision} = {}) {
+  return jsonRequest(`/admin/locales/${encodeURIComponent(code)}/disable`, "POST", {expected_reference_revision});
+}
+
+export function getStopwordSet(code, kind) {
+  const qs = kind ? `?kind=${encodeURIComponent(kind)}` : "";
+  return request(`/admin/locales/${encodeURIComponent(code)}/stopwords${qs}`);
 }
 
 export function listStopwords(code, kind) {
-  const qs = kind ? `?kind=${encodeURIComponent(kind)}` : "";
-  return request(`/admin/locales/${encodeURIComponent(code)}/stopwords${qs}`).then(
-    (data) => data.words ?? []
-  );
+  return getStopwordSet(code, kind).then(data => data.words ?? []);
 }
 
-export function importStopwords(code, { words, kind = "bm25", mode = "merge", confirm = false, confirm_empty_replace = false } = {}) {
+export function importStopwords(code, { words, kind = "bm25", mode = "merge", confirm = false, confirm_empty_replace = false,
+  expected_reference_revision, preview_digest, headers = {} } = {}) {
   const qs = `?kind=${encodeURIComponent(kind)}&mode=${encodeURIComponent(mode)}`;
   return request(`/admin/locales/${encodeURIComponent(code)}/stopwords/import${qs}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ words, confirm, confirm_empty_replace }),
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ words, confirm, confirm_empty_replace, expected_reference_revision, preview_digest }),
   });
 }
 
-export function addStopword(code, { word, kind = "bm25" } = {}) {
+export function addStopword(code, { word, kind = "bm25", expected_reference_revision, headers = {} } = {}) {
   return request(`/admin/locales/${encodeURIComponent(code)}/stopwords`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ word, kind }),
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ word, kind, expected_reference_revision }),
   });
 }
 
-export function renameStopword(code, word, newWord, kind = "bm25") {
+export function renameStopword(code, word, newWord, kind = "bm25", {expected_reference_revision, headers = {}} = {}) {
   return request(
     `/admin/locales/${encodeURIComponent(code)}/stopwords/${encodeURIComponent(word)}?kind=${encodeURIComponent(kind)}`,
     {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ word: newWord }),
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ word: newWord, expected_reference_revision }),
     }
   );
 }
 
-export function deleteStopword(code, word, kind = "bm25") {
+export function deleteStopword(code, word, kind = "bm25", {expected_reference_revision, headers = {}} = {}) {
   return request(
-    `/admin/locales/${encodeURIComponent(code)}/stopwords/${encodeURIComponent(word)}?kind=${encodeURIComponent(kind)}`,
-    { method: "DELETE" }
+    `/admin/locales/${encodeURIComponent(code)}/stopwords/${encodeURIComponent(word)}?kind=${encodeURIComponent(kind)}${expected_reference_revision == null ? "" : `&expected_reference_revision=${expected_reference_revision}`}`,
+    { method: "DELETE", headers }
   );
 }
 
@@ -1011,11 +1052,11 @@ export function stopwordsHistory(code) {
   );
 }
 
-export function rollbackStopwords(code, entryId) {
+export function rollbackStopwords(code, entryId, {confirm = false, kind, expected_reference_revision, preview_digest, headers = {}} = {}) {
   return request(`/admin/locales/${encodeURIComponent(code)}/stopwords/rollback`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entry_id: entryId }),
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ entry_id: entryId, confirm, kind, expected_reference_revision, preview_digest }),
   });
 }
 
@@ -1033,11 +1074,11 @@ export function getUiDictionaryAdmin(code) {
   return request(`/admin/locales/${encodeURIComponent(code)}/ui-dictionary`);
 }
 
-export function importUiDictionary(code, { data, note = "", confirm = false } = {}) {
+export function importUiDictionary(code, { data, note = "", confirm = false, expected_reference_revision, expected_active_version, preview_digest, headers = {} } = {}) {
   return request(`/admin/locales/${encodeURIComponent(code)}/ui-dictionary/import`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ data, note, confirm }),
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ data, note, confirm, expected_reference_revision, expected_active_version, preview_digest }),
   });
 }
 
@@ -1047,11 +1088,11 @@ export function uiDictionaryHistory(code) {
   );
 }
 
-export function rollbackUiDictionary(code, entryId) {
+export function rollbackUiDictionary(code, entryId, {confirm = false, expected_reference_revision, expected_active_version, preview_digest, headers = {}} = {}) {
   return request(`/admin/locales/${encodeURIComponent(code)}/ui-dictionary/rollback`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entry_id: entryId }),
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ entry_id: entryId, confirm, expected_reference_revision, expected_active_version, preview_digest }),
   });
 }
 

@@ -5,16 +5,28 @@ import {setImmediate} from 'node:timers/promises';
 import {componentHarness} from './support/componentHarness.mjs';
 import * as scope from '../src/lib/processingScope.mjs';
 import * as sourceTree from '../src/lib/sourceTree.mjs';
-import * as idle from '../src/lib/processingScopeIdle.mjs';
+import * as lease from '../src/lib/editorLeaseSession.mjs';
+import * as adapters from '../src/lib/editorLeaseAdapters.mjs';
 
 const t=key=>key;
 function scopeDialog(api,canEdit=true,globals={},props={}, {enterEditor=true,translate=t}={}){
+  const completedLease=async(action,...args)=>{
+    const value=await action(...args);
+    if(value?.state!=='editing')return value;
+    const now=(globals.Date||Date).now();
+    return {server_now:new Date(now).toISOString(),expires_at:new Date(now+Math.min(180000,(value.idle_remaining_seconds??600)*1000)).toISOString(),
+      idle_expires_at:new Date(now+(value.idle_remaining_seconds??600)*1000).toISOString(),...value};
+  };
+  const leaseApi={...api};
+  for(const name of ['acquireProcessingScopeEditLock','renewProcessingScopeEditLock'])
+    if(api[name])leaseApi[name]=(...args)=>completedLease(api[name],...args);
   const mounted=componentHarness(new URL('../src/components/DocumentProcessingScopeDialog.jsx',import.meta.url),{
     '@/i18n/LocaleContext':{useI18n:()=>({t:translate})},
-    '@/context/AuthContext':{useAuth:()=>({mode:'keycloak_oidc',hasRole:()=>canEdit})},
-    '@/lib/api':{friendlyApiError:err=>err.message,getProcessingScopeLabels:async()=>({labels:{}}),...api},
+    '@/context/AuthContext':{useAuth:()=>({mode:'keycloak_oidc',hasRole:()=>typeof canEdit==='function'?canEdit():canEdit})},
+    '@/lib/api':{friendlyApiError:err=>err.message,getProcessingScopeLabels:async()=>({labels:{}}),...leaseApi},
     '@/lib/processingScope.mjs':scope,'@/lib/sourceTree.mjs':sourceTree,
-    '@/lib/processingScopeIdle.mjs':idle,
+    '@/lib/editorLeaseSession.mjs':lease,'@/lib/editorLeaseAdapters.mjs':adapters,
+    './EditorLeaseNotice':()=>null,
     './Modal':()=>null,'./AttachmentPreviewDialog':()=>null,
   },{docId:'doc',open:true,onClose:()=>{},...props},globals);
   // Most regressions exercise editing callbacks. Perform the real entry click;
@@ -512,7 +524,7 @@ for(const failure of ['heartbeat','save'])test(`lost ${failure} lease immediatel
   const mounted=scopeDialog({getProcessingScope:async()=>server,
     acquireProcessingScopeEditLock:async()=>({state:'editing',owner:'Alice'}),
     releaseProcessingScopeEditLock:async()=>{},renewProcessingScopeEditLock:lost,saveProcessingScopeReview:lost,
-  },true,{setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}});
+  },true,{setTimeout:(fn,delay)=>{if(delay===60000)beat=fn;return 1;},clearTimeout:()=>{}});
   context.after(()=>mounted.dispose());
   mounted.render();await setImmediate();mounted.render();await setImmediate();mounted.render();
   assert.equal(mounted.find(n=>n.props?.label==='table.xlsx').props.disabled,false);
@@ -526,6 +538,7 @@ for(const failure of ['heartbeat','save'])test(`lost ${failure} lease immediatel
   assert.equal(mounted.find(n=>n.props?.label==='table.xlsx').props.checked,false,'An expired editor returns to the published view');
   assert(!mounted.find(n=>n.type==='button'&&n.props.children==='scope.save'));
   assert(!mounted.find(n=>n.type==='button'&&n.props.children==='scope.confirm'));
+  assert.equal(mounted.find(n=>n.props?.expiryAction==='close').props.state,'lost');
   mounted.dispose();
 });
 
@@ -563,7 +576,7 @@ for(const action of ['confirm','preview','expand'])test(`lease loss during defer
     confirmProcessingScope:async()=>calls.push('confirm'),
     previewProcessingScopeChange:async()=>calls.push('preview'),
     createProcessingScopeReview:async()=>{calls.push('expand');return server;},
-  },true,{setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}});
+  },true,{setTimeout:(fn,delay)=>{if(delay===60000)beat=fn;return 1;},clearTimeout:()=>{}});
   context.after(()=>mounted.dispose());
   mounted.render();await setImmediate();mounted.render();await setImmediate();mounted.render();
   mounted.find(n=>n.props?.label==='table.xlsx').props.onChange({target:{checked:true}});mounted.render();
@@ -578,31 +591,34 @@ for(const action of ['confirm','preview','expand'])test(`lease loss during defer
 });
 
 test('idle editor warns, continues on interaction, then closes both dialogs and releases without applying',async()=>{
-  let time=0,nextId=0,closed=0;const tasks=new Map(),renewals=[],released=[];
+  let time=0,nextId=0,closed=0,serverIdle=600000,lastActivity=0;const tasks=new Map(),renewals=[],released=[];
   const server={...scopeState(),capabilities:{edit_lock:true},edit_lock:{state:'available'}};
   const globals={Date:class extends Date {static now(){return time;}},
     setTimeout:(fn,delay)=>{tasks.set(++nextId,{fn,at:time+delay});return nextId;},clearTimeout:id=>tasks.delete(id),
     setInterval:()=>1,clearInterval:()=>{}};
-  function advance(ms){const target=time+ms;let job;
+  async function advance(ms){const target=time+ms;let job;
     while((job=[...tasks].filter(([,j])=>j.at<=target).sort((a,b)=>a[1].at-b[1].at)[0])){
-      time=job[1].at;tasks.delete(job[0]);job[1].fn();
+      time=job[1].at;tasks.delete(job[0]);job[1].fn();await setImmediate();
     }time=target;}
   const mounted=scopeDialog({getProcessingScope:async()=>server,
     acquireProcessingScopeEditLock:async()=>({state:'editing',owner:'Alice',idle_remaining_seconds:600}),
-    renewProcessingScopeEditLock:async(_id,body)=>{renewals.push(body);return {state:'editing',idle_remaining_seconds:600};},
+    renewProcessingScopeEditLock:async(_id,body)=>{renewals.push(body);
+      if(body.activity_sequence>lastActivity){lastActivity=body.activity_sequence;serverIdle=time+600000;}
+      return {state:'editing',idle_remaining_seconds:Math.max(0,(serverIdle-time)/1000)};},
     releaseProcessingScopeEditLock:async()=>{released.push(true);},
     confirmProcessingScope:async()=>{assert.fail('Idle expiry cannot apply choices');},
   },true,globals,{onClose:()=>{closed++;}});
   mounted.render();await setImmediate();mounted.render();await setImmediate();mounted.render();
   mounted.find(n=>n.type==='button'&&n.props.children==='scope.preview').props.onClick();mounted.render();
-  advance(9*60000);mounted.render();
+  await advance(9*60000);mounted.render();
   assert(mounted.find(n=>n.props?.reviewId==='review').props.sessionNotice,'The topmost Excel preview must show the idle warning');
-  assert(mounted.find(n=>n.type==='button'&&n.props.children==='scope.continueEditing'));
-  await mounted.find(n=>n.type==='button'&&n.props.children==='scope.continueEditing').props.onClick();
+  const notice=mounted.find(n=>n.props?.expiryAction==='close');
+  assert.equal(notice.props.remainingSeconds,60);
+  await notice.props.onContinue();
   await setImmediate();mounted.render();
-  assert(!mounted.find(n=>n.type==='button'&&n.props.children==='scope.continueEditing'));
+  assert.equal(mounted.find(n=>n.props?.expiryAction==='close').props.remainingSeconds,null);
   assert(renewals.at(-1).activity_sequence>0);
-  advance(10*60000);await setImmediate();mounted.render();
+  await advance(10*60000);await setImmediate();mounted.render();
   assert.equal(closed,1);assert(released.length>0);
   assert(!mounted.find(n=>n.props?.reviewId==='review'));
   assert.equal(mounted.find(n=>n.props?.label==='table.xlsx').props.disabled,true);
@@ -614,14 +630,14 @@ test('activity during an in-flight heartbeat is reported immediately after its r
   const first=new Promise(resolve=>{resolveFirst=resolve;});
   const server={...scopeState(),capabilities:{edit_lock:true},edit_lock:{state:'available'}};
   const globals={Date:class extends Date {static now(){return time;}},
-    setTimeout:()=>1,clearTimeout:()=>{},setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}};
+    setTimeout:(fn,delay)=>{if(delay===60000)beat=fn;return 1;},clearTimeout:()=>{}};
   const mounted=scopeDialog({getProcessingScope:async()=>server,
     acquireProcessingScopeEditLock:async()=>({state:'editing',idle_remaining_seconds:600}),
     renewProcessingScopeEditLock:(_id,body)=>{calls.push(body);return calls.length===1?first:Promise.resolve({state:'editing',idle_remaining_seconds:600});},
     releaseProcessingScopeEditLock:async()=>{},
   },true,globals);
   mounted.render();await setImmediate();mounted.render();await setImmediate();mounted.render();
-  time=9*60000;beat();
+  time=60000;beat();
   mounted.find(n=>n.props?.['data-scope-editor-session']!==undefined).props.onPointerDownCapture({isTrusted:true});
   resolveFirst({state:'editing',idle_remaining_seconds:60});await setImmediate();
   assert.equal(calls.length,2);assert.equal(calls[0].activity_sequence,0);assert.equal(calls[1].activity_sequence,1);
@@ -714,4 +730,48 @@ test('waiting review is uploaded successfully and does not hold the next file',a
   assert(states.some(([name,state])=>name==='heavy.docx' && state==='awaiting-attachments'));
   assert(states.some(([name,state])=>name==='next.pdf' && state==='uploaded'));
   assert.equal(result.failed.length,0);
+});
+
+
+for(const failure of ['heartbeat','save'])test(`accepted operation stays applying after ${failure} reports it`,async context=>{
+  const server={...scopeState(),capabilities:{edit_lock:true},edit_lock:{state:'available'}};
+  let beat,cancelled=0;
+  const busy=async()=>{throw Object.assign(new Error('Applying'),{code:'scope_change_in_progress'});};
+  const mounted=scopeDialog({getProcessingScope:async()=>server,
+    acquireProcessingScopeEditLock:async()=>({state:'editing',owner:'Alice'}),
+    renewProcessingScopeEditLock:busy,releaseProcessingScopeEditLock:async()=>{},
+    saveProcessingScopeReview:busy,cancelProcessingScopeReview:async()=>{cancelled++;},
+  },true,{setTimeout:(fn,delay)=>{if(delay===60000)beat=fn;return 1;},clearTimeout:()=>{}});
+  context.after(()=>mounted.dispose());
+  mounted.render();await setImmediate();mounted.render();await setImmediate();mounted.render();
+  if(failure==='heartbeat'){await beat();await setImmediate();}
+  else{
+    mounted.find(n=>n.props?.label==='table.xlsx').props.onChange({target:{checked:true}});mounted.render();
+    await mounted.find(n=>n.type==='button'&&n.props.children==='scope.save').props.onClick();
+  }
+  mounted.render();
+  assert.equal(mounted.find(n=>n.props?.expiryAction==='close').props.state,'applying');
+  assert.equal(cancelled,0);
+});
+
+for(const action of ['confirm','preview','expand'])test(`replaced lease session fences deferred ${action} continuation`,async context=>{
+  let allowed=true,resolveSave,acquired=0;const calls=[];
+  const server={...scopeState(),capabilities:{edit_lock:true,fast_exclusion:true},edit_lock:{state:'available'}};
+  if(action==='preview')server.active={...structuredClone(server.pending),summary:{generation_id:'base'}};
+  const mounted=scopeDialog({getProcessingScope:async()=>server,
+    acquireProcessingScopeEditLock:async()=>{acquired++;return {state:'editing',owner:'Alice'};},
+    releaseProcessingScopeEditLock:async()=>{},
+    saveProcessingScopeReview:async()=>{calls.push('save');return new Promise(resolve=>{resolveSave=resolve;});},
+    confirmProcessingScope:async()=>calls.push('confirm'),previewProcessingScopeChange:async()=>calls.push('preview'),
+    createProcessingScopeReview:async()=>{calls.push('expand');return server;},
+  },()=>allowed);
+  context.after(()=>mounted.dispose());
+  mounted.render();await setImmediate();mounted.render();await setImmediate();mounted.render();
+  mounted.find(n=>n.props?.label==='table.xlsx').props.onChange({target:{checked:true}});mounted.render();
+  const key=action==='expand'?'scope.expand':action==='preview'?'scope.checkChanges':'scope.confirm';
+  const pending=mounted.find(n=>n.type==='button'&&n.props.children===key).props.onClick();
+  allowed=false;mounted.render();allowed=true;mounted.render();await setImmediate();mounted.render();
+  assert.equal(acquired,2);
+  resolveSave({...server,pending:{...server.pending,revision:2}});await pending;mounted.render();
+  assert.deepEqual(calls,['save']);
 });

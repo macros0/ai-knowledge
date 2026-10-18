@@ -23,6 +23,9 @@ from app.db.models import (
 from app.db.session import get_engine, session_scope
 from app import error_codes as codes
 from app.services import audit
+from app.services.reference_resources import ReferenceKey
+from app.services.reference_concurrency import current_reference_revision, initialize_reference_resource
+from app.services.reference_mutation import guard_reference_writes
 from app.services.glossary.mutation import bump_glossary_revision, glossary_write_session
 from app.services.glossary.normalization import (
     GlossaryValidationError,
@@ -183,6 +186,7 @@ def _term_dict(term: DomainTerm, conflict_map: dict | None = None) -> dict:
     conflicts = [item for alias in term.aliases_rel for item in conflict_map.get(alias.id, [])]
     return {
         "id": term.id,
+        "reference_revision": current_reference_revision(object_session(term), ReferenceKey("glossary_term", term.id)),
         "canonical": term.canonical,
         "kind": term.kind,
         "infotype_number": term.infotype_number,
@@ -489,6 +493,7 @@ class GlossaryRegistry:
             if conflicts:
                 raise GlossaryIdentityConflictError(conflicts)
             _replace_identity_keys(session, term)
+            initialize_reference_resource(session, ReferenceKey("glossary_term", term.id))
             bump_glossary_revision(session, state)
 
             audit.record_in_session(
@@ -505,7 +510,7 @@ class GlossaryRegistry:
             return _term_dict(term)
 
     def get(self, term_id: int) -> dict | None:
-        with session_scope() as session:
+        with glossary_write_session(allow_unready=True) as (session, _state):
             term = session.execute(
                 select(DomainTerm)
                 .where(DomainTerm.id == term_id)
@@ -517,7 +522,7 @@ class GlossaryRegistry:
             return _term_dict(term) if term is not None else None
 
     def list(self, *, enabled: bool | None = None, _session=None) -> list[dict]:
-        with (session_scope() if _session is None else nullcontext(_session)) as session:
+        with (glossary_write_session(allow_unready=True) if _session is None else nullcontext((_session, None))) as (session, _state):
             stmt = select(DomainTerm).options(
                 selectinload(DomainTerm.aliases_rel),
                 selectinload(DomainTerm.translations_rel),
@@ -620,7 +625,7 @@ class GlossaryRegistry:
         offset: int = 0,
     ) -> dict:
         """Return a deterministic, paginated admin view of the registry."""
-        with session_scope() as session:
+        with glossary_write_session(allow_unready=True) as (session, _state):
             stmt = select(DomainTerm).options(
                 selectinload(DomainTerm.aliases_rel),
                 selectinload(DomainTerm.translations_rel),
@@ -794,8 +799,9 @@ class GlossaryRegistry:
         updated_by: str | None = None,
         ip_address: str | None = None,
         audit_username: str | None = None,
+        reference_context=None,
     ) -> dict:
-        with glossary_write_session() as (session, state):
+        with glossary_write_session(reference_keys=[ReferenceKey("glossary_term", term_id)], reference_context=reference_context) as (session, state):
             _ensure_identity_keys(session)
             term = session.get(DomainTerm, term_id)
             if term is None:
@@ -897,8 +903,9 @@ class GlossaryRegistry:
         updated_by: str | None = None,
         ip_address: str | None = None,
         audit_username: str | None = None,
+        reference_context=None,
     ) -> dict:
-        with glossary_write_session() as (session, state):
+        with glossary_write_session(reference_keys=[ReferenceKey("glossary_term", term_id)], reference_context=reference_context) as (session, state):
             _ensure_identity_keys(session)
             term = session.get(DomainTerm, term_id)
             if term is None:
@@ -978,8 +985,9 @@ class GlossaryRegistry:
         updated_by: str | None = None,
         ip_address: str | None = None,
         audit_username: str | None = None,
+        reference_context=None,
     ) -> dict:
-        with glossary_write_session() as (session, state):
+        with glossary_write_session(reference_keys=[ReferenceKey("glossary_term", term_id)], reference_context=reference_context) as (session, state):
             _ensure_identity_keys(session)
             term = session.get(DomainTerm, term_id)
             if term is None:
@@ -1027,8 +1035,9 @@ class GlossaryRegistry:
         updated_by: str | None = None,
         ip_address: str | None = None,
         audit_username: str | None = None,
+        reference_context=None,
     ) -> dict:
-        with glossary_write_session() as (session, state):
+        with glossary_write_session(reference_keys=[ReferenceKey("glossary_term", term_id)], reference_context=reference_context) as (session, state):
             _ensure_identity_keys(session)
             term = session.get(DomainTerm, term_id)
             if term is None:
@@ -1212,8 +1221,8 @@ class GlossaryRegistry:
         from app.services.glossary.merge import build_merge_result, merge_proposal_digest, unresolved_merge_fields
 
         selections = request.get("selections") or {}
-        with (session_scope() if _session is None else nullcontext(_session)) as session:
-            state = _state or session.get(GlossaryState, 1)
+        with (glossary_write_session(allow_unready=True) if _session is None else nullcontext((_session, _state))) as (session, snapshot_state):
+            state = _state or snapshot_state
             source, target, source_value, target_value = self._merge_rows(session, request)
             merged = build_merge_result(source_value, target_value, selections, self._merge_rules(session), allow_unresolved=True)
             self._validate_merged_aliases(session, merged, source_value, target_value)
@@ -1239,6 +1248,7 @@ class GlossaryRegistry:
         digest: str,
         *,
         actor_id: str | None = None,
+        reference_context=None,
         _session=None,
         _state=None,
         _defer_identity_validation: bool = False,
@@ -1267,6 +1277,9 @@ class GlossaryRegistry:
                 if receipt.actor_id != (actor_id or "unknown"):
                     raise GlossaryIdempotencyConflictError("request_id уже использован другим пользователем")
                 return receipt.result
+            keys = [ReferenceKey("glossary_term", value) for value in
+                (request.get("source_term_id", request.get("source_id")), request.get("target_term_id", request.get("target_id"))) if value is not None]
+            session.info["glossary_reference_states"] = guard_reference_writes(session, keys, reference_context)
             source, target, source_value, target_value = self._merge_rows(session, request)
             def stale_preview(message):
                 error = GlossaryMergePreviewStaleError(message)

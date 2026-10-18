@@ -1,5 +1,25 @@
 # SECURITY.md — security model
 
+## Reference editor leases
+
+2026-10-18: reference leases bind a short-lived database row to an authenticated
+user and one editor token. Store only the SHA-256 token hash; never return or log
+the token/hash. Role/resource access is checked independently on each request.
+An administrator may revoke only the displayed lease epoch, with an audited
+reason. Old saves, renewals and releases cannot affect a later owner. Heartbeats
+do not prolong the idle deadline without a new activity sequence. These leases
+do not replace content revision checks or durable worker ownership. Lease audit
+shares the mutation transaction; ordinary heartbeats do not create audit rows.
+The additive schema must be tested/migrated before enabling on a target server.
+Missing original revisions are rejected even when the lease flag is disabled;
+mixed old/new writers are unsupported. Toggle only with all writers stopped and
+invalidate generations with the explicit-database maintenance tool. Keep the
+additive state table during functional rollback. Operational summary counters
+use fixed labels without user/resource IDs; attempts cover one process lifetime,
+while active-lease counts come from the database. Non-machine translations remain
+protected even without a reviewer. See `docs/REFERENCE_EDITING.md` for the rollout
+and exact-generation administrative revoke protocol.
+
 ## Diagnostic support bundles
 
 The administrator can enable a time-limited diagnostic session and export a

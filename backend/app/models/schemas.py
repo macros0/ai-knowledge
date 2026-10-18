@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from app.services.problem_codes import problem_message
 from app.models.processing_scope import ProcessingScopeSummary,ProcessingReviewSummary
@@ -536,6 +536,7 @@ class TagTranslationOut(BaseModel):
 
 class TagOut(BaseModel):
     id: int
+    reference_revision: int = 1
     canonical_locale: str = "und"
     name: str
     display: str
@@ -551,10 +552,30 @@ class TagListOut(BaseModel):
 class TagTranslationUpdate(BaseModel):
     locale: str
     text: str = Field(min_length=1, max_length=255)
+    expected_reference_revision: StrictInt | None = Field(default=None, ge=1)
+
+
+class TagReviewItem(BaseModel):
+    tag_id: StrictInt = Field(ge=1)
+    locale: ReferenceLocale
+    expected_reference_revision: StrictInt = Field(ge=1)
 
 
 class TagBulkReviewRequest(BaseModel):
-    tag_ids: list[int]
+    tag_ids: list[int] | None = None  # Explicitly rejected old clients receive 428.
+    items: list[TagReviewItem] | None = Field(default=None, min_length=1, max_length=10000)
+
+
+class TagCleanupCandidate(BaseModel):
+    tag_id: StrictInt = Field(ge=1)
+    expected_reference_revision: StrictInt = Field(ge=1)
+    name: str | None = Field(default=None, max_length=255)
+
+
+class TagCleanupRequest(BaseModel):
+    confirm: bool = False
+    candidates: list[TagCleanupCandidate] = Field(default_factory=list, max_length=100)
+    preview_digest: str | None = Field(default=None, max_length=64)
 
 
 class TagTranslationBackfillRequest(BaseModel):
@@ -562,7 +583,13 @@ class TagTranslationBackfillRequest(BaseModel):
     entities: list[str] = ["tags", "developments", "attributes"]
 
 
-class UiDictionaryImportRequest(BaseModel):
+class ReferenceRevisionInput(BaseModel):
+    expected_reference_revision: StrictInt | None = Field(default=None, ge=1)
+
+
+class UiDictionaryImportRequest(ReferenceRevisionInput):
+    preview_digest: str | None = Field(default=None, min_length=64, max_length=64)
+    expected_active_version: StrictInt | None = Field(default=None, ge=1)
     data: dict[str, Any]
     note: str | None = None
     confirm: bool = False
@@ -576,6 +603,9 @@ class UiDictionaryPreview(BaseModel):
 
 
 class UiDictionaryImportResult(BaseModel):
+    reference_revision: int = 1
+    active_version: int | None = None
+    preview_digest: str | None = None
     errors: list[str] = Field(default_factory=list)
     applied: bool = False
     version: int | None = None
@@ -595,6 +625,13 @@ class UiDictionaryHistoryOut(BaseModel):
     entries: list[UiDictionaryHistoryEntry] = Field(default_factory=list)
 
 
+class UiDictionaryRollbackRequest(ReferenceRevisionInput):
+    entry_id: int = Field(ge=1)
+    confirm: bool = False
+    expected_active_version: StrictInt | None = Field(default=None, ge=1)
+    preview_digest: str | None = Field(default=None, min_length=64, max_length=64)
+
+
 class UiDictionaryActiveOut(BaseModel):
     locale: str
     version: int
@@ -602,6 +639,7 @@ class UiDictionaryActiveOut(BaseModel):
 
 
 class UiDictionaryAdminOut(BaseModel):
+    reference_revision: int = 1
     locale: str
     version: int | None = None
     data: dict[str, Any] | None = None
@@ -662,6 +700,7 @@ class BlockUserRequest(BaseModel):
 
 
 class DevelopmentOut(BaseModel):
+    reference_revision: int = 1
     id: int
     canonical_locale: str = "und"
     number: str
@@ -689,6 +728,7 @@ class DevelopmentCreate(BaseModel):
 
 
 class DevelopmentUpdate(BaseModel):
+    expected_reference_revision: StrictInt | None = Field(default=None, ge=1)
     number: str | None = None
     name: str | None = None
     module: str | None = None
@@ -720,6 +760,7 @@ class DetectDevelopmentOut(BaseModel):
 
 
 class AttributeValueOut(BaseModel):
+    reference_revision: int = 1
     id: int
     canonical_locale: str = "und"
     attribute_key: str
@@ -732,10 +773,12 @@ class AttributeValueOut(BaseModel):
 
 
 class AttributeListOut(BaseModel):
+    reference_revision: int = 1
     values: list[AttributeValueOut]
 
 
 class AttributeCreate(BaseModel):
+    expected_reference_revision: StrictInt | None = Field(default=None, ge=1)
     value: str
     label: str | None = None
     sort_order: int = 0
@@ -743,6 +786,7 @@ class AttributeCreate(BaseModel):
 
 
 class LocaleOut(BaseModel):
+    reference_revision: int = 1
     code: str
     name: str
     status: str
@@ -771,12 +815,13 @@ class LocaleCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
 
 
-class LocaleUpdate(BaseModel):
+class LocaleUpdate(ReferenceRevisionInput):
     name: str | None = None
     status: str | None = None
 
 
-class StopwordImportRequest(BaseModel):
+class StopwordImportRequest(ReferenceRevisionInput):
+    preview_digest: str | None = Field(default=None, min_length=64, max_length=64)
     words: list[str] = Field(default_factory=list)
     confirm: bool = False
     # Явное подтверждение ДЕСТРУКТИВНОГО пустого replace (mode=replace + words=[]):
@@ -785,6 +830,8 @@ class StopwordImportRequest(BaseModel):
 
 
 class StopwordImportResult(BaseModel):
+    reference_revision: int = 1
+    preview_digest: str | None = None
     locale: str
     kind: str
     mode: str
@@ -797,6 +844,7 @@ class StopwordImportResult(BaseModel):
 
 
 class StopwordWordOut(BaseModel):
+    reference_revision: int = 1
     word: str
     kind: str
     updated_by: str | None = None
@@ -804,16 +852,17 @@ class StopwordWordOut(BaseModel):
 
 
 class StopwordListOut(BaseModel):
+    reference_revisions: dict[str, int] = Field(default_factory=dict)
     locale: str
     words: list[StopwordWordOut] = Field(default_factory=list)
 
 
-class StopwordAddRequest(BaseModel):
+class StopwordAddRequest(ReferenceRevisionInput):
     word: str = Field(min_length=1, max_length=64)
     kind: Literal["bm25", "marker"] = "bm25"
 
 
-class StopwordRenameRequest(BaseModel):
+class StopwordRenameRequest(ReferenceRevisionInput):
     word: str = Field(min_length=1, max_length=64)
 
 
@@ -830,7 +879,10 @@ class StopwordHistoryOut(BaseModel):
     entries: list[StopwordHistoryEntry] = Field(default_factory=list)
 
 
-class StopwordRollbackRequest(BaseModel):
+class StopwordRollbackRequest(ReferenceRevisionInput):
+    confirm: bool = False
+    kind: Literal["bm25", "marker"] | None = None
+    preview_digest: str | None = Field(default=None, min_length=64, max_length=64)
     entry_id: int
 
 

@@ -18,9 +18,14 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from app.db.models import AuditLog, Locale, Stopword
+from app.db.models import AuditLog, Locale, Stopword, ReferenceResourceState
 from app.db.session import session_scope
 from app.services import audit
+from sqlalchemy import select
+from app.services.reference_resources import ReferenceKey
+from app.services.reference_concurrency import (ReferenceError, lock_reference_resources,
+    bump_reference_revision, initialize_reference_resource, reference_preview_digest)
+from app.services.reference_mutation import guard_reference_writes
 from app.services.sparse import TOKEN_EXTRA_LETTERS, normalize_for_tokens
 from app.services.stopwords import (
     KIND_BM25,
@@ -58,9 +63,10 @@ def _now() -> datetime:
 # --- Локали ---
 
 
-def _locale_to_dict(loc: Locale, *, bm25_count: int = 0, marker_count: int = 0) -> dict:
+def _locale_to_dict(loc: Locale, *, reference_revision: int = 1, bm25_count: int = 0, marker_count: int = 0) -> dict:
     return {
         "code": loc.code,
+        "reference_revision": reference_revision,
         "name": loc.name,
         "status": loc.status,
         "ui_dictionary_version": loc.ui_dictionary_version,
@@ -72,33 +78,28 @@ def _locale_to_dict(loc: Locale, *, bm25_count: int = 0, marker_count: int = 0) 
 
 
 def list_locales() -> list[dict]:
-    from sqlalchemy import select
-
-    with session_scope() as s:
-        locs = s.execute(select(Locale).order_by(Locale.code)).scalars().all()
-        counts: dict[str, dict[str, int]] = {}
-        for row in s.execute(select(Stopword.locale, Stopword.kind)).all():
+    with session_scope() as session:
+        codes = list(session.scalars(select(Locale.code)))
+        keys = [ReferenceKey("locale", code) for code in codes]
+        states = lock_reference_resources(session, keys)
+        locs = session.scalars(select(Locale).where(Locale.code.in_(codes)).order_by(Locale.code)
+            .execution_options(populate_existing=True)).all()
+        counts = {}
+        for row in session.execute(select(Stopword.locale, Stopword.kind)):
             counts.setdefault(row.locale, {}).setdefault(row.kind, 0)
             counts[row.locale][row.kind] += 1
-    out = []
-    for loc in locs:
-        c = counts.get(loc.code, {})
-        out.append(
-            _locale_to_dict(
-                loc, bm25_count=c.get(KIND_BM25, 0), marker_count=c.get(KIND_MARKER, 0)
-            )
-        )
-    return out
+        return [_locale_to_dict(loc, reference_revision=states[ReferenceKey("locale", loc.code)].revision,
+            bm25_count=counts.get(loc.code, {}).get(KIND_BM25, 0),
+            marker_count=counts.get(loc.code, {}).get(KIND_MARKER, 0)) for loc in locs]
 
 
 def get_locale(code: str) -> dict:
-    from sqlalchemy import select
-
-    with session_scope() as s:
-        loc = s.execute(select(Locale).where(Locale.code == code)).scalar_one_or_none()
-    if loc is None:
-        raise LocaleNotFoundError(code)
-    return _locale_to_dict(loc)
+    with session_scope() as session:
+        if session.get(Locale, code) is None:
+            raise LocaleNotFoundError(code)
+        state = lock_reference_resources(session, [ReferenceKey("locale", code)])[ReferenceKey("locale", code)]
+        loc = session.get(Locale, code, populate_existing=True)
+        return _locale_to_dict(loc, reference_revision=state.revision)
 
 
 def active_locale_codes() -> frozenset:
@@ -111,27 +112,58 @@ def active_locale_codes() -> frozenset:
     return frozenset(rows)
 
 
-def create_locale(code: str, name: str) -> dict:
-    code = (code or "").strip().lower()
-    name = (name or "").strip()
+def create_locale(code: str, name: str, *, user=None, ip_address=None) -> dict:
+    code, name = (code or "").strip().lower(), (name or "").strip()
     if not _LOCALE_CODE_RE.match(code):
         raise LocaleError("Некорректный код локали (ожидается BCP 47, например 'ru' или 'pt-BR')")
     if not name:
         raise LocaleError("Название языка обязательно")
-    with session_scope() as s:
-        if s.query(Locale).filter(Locale.code == code).first() is not None:
+    key = ReferenceKey("locale", code)
+    with session_scope() as session:
+        existed = session.get(ReferenceResourceState, key.canonical) is not None
+        lock_reference_resources(session, [key])
+        if session.get(Locale, code) is not None:
             raise LocaleError(f"Язык '{code}' уже существует")
-        s.add(Locale(code=code, name=name, status=LOCALE_STATUS_DRAFT))
-    return get_locale(code)
+        loc = Locale(code=code, name=name, status=LOCALE_STATUS_DRAFT)
+        session.add(loc)
+        session.flush()
+        state = lock_reference_resources(session, [key])[key]
+        if existed:
+            from app.services.reference_edit_lock import invalidate_reference_lease
+            bump_reference_revision(state)
+            invalidate_reference_lease(state)
+        for kind in KINDS:
+            initialize_reference_resource(session, ReferenceKey("stopword_set", code, kind=kind))
+        initialize_reference_resource(session, ReferenceKey("ui_dictionary", code))
+        if user is not None:
+            _locale_audit(session, user, audit.LOCALE_CREATE, code, None, {"name": name}, ip_address)
+        return _locale_to_dict(loc, reference_revision=state.revision)
 
 
-def update_locale(code: str, name: str | None = None, status: str | None = None) -> dict:
+def _locale_audit(session, user, action, code, before, after, ip_address):
+    audit.record_in_session(session, action_type=action, user_id=getattr(user, "user_id", None),
+        username=getattr(user, "username", None), target_type=audit.TARGET_LOCALE,
+        target_id=code, old_value=before, new_value=after, ip_address=ip_address)
+
+
+def update_locale(code: str, name: str | None = None, status: str | None = None, *, reference_context=None,
+    user=None, ip_address=None, action=audit.LOCALE_UPDATE) -> dict:
     if status is not None and status not in LOCALE_STATUSES:
         raise LocaleError(f"Недопустимый статус: {status}")
-    with session_scope() as s:
-        loc = s.query(Locale).filter(Locale.code == code).first()
+    if code == "ru" and status == LOCALE_STATUS_DISABLED:
+        raise LocaleError("Нельзя отключить fallback-язык 'ru'")
+    key = ReferenceKey("locale", code)
+    with session_scope() as session:
+        keys = [key] + ([ReferenceKey("stopword_set", code, kind=KIND_BM25)] if status == LOCALE_STATUS_ACTIVE else [])
+        lock_reference_resources(session, keys)
+        loc = session.get(Locale, code, populate_existing=True)
         if loc is None:
             raise LocaleNotFoundError(code)
+        state = guard_reference_writes(session, [key], reference_context)[key]
+        if status == LOCALE_STATUS_ACTIVE and not session.scalar(select(Stopword.word)
+            .where(Stopword.locale == code, Stopword.kind == KIND_BM25).limit(1)):
+            raise LocaleError("Нельзя активировать язык без набора stopwords (kind=bm25)")
+        old = {"name": loc.name, "status": loc.status}
         if name is not None:
             name = (name or "").strip()
             if not name:
@@ -139,29 +171,23 @@ def update_locale(code: str, name: str | None = None, status: str | None = None)
             loc.name = name
         if status is not None:
             loc.status = status
-    return get_locale(code)
+        changed = old != {"name": loc.name, "status": loc.status}
+        if changed:
+            bump_reference_revision(state)
+            if user is not None:
+                _locale_audit(session, user, action, code, old, {"name": loc.name, "status": loc.status}, ip_address)
+        result = _locale_to_dict(loc, reference_revision=state.revision)
+    if changed:
+        invalidate()
+    return result
 
 
-def _validate_activation(code: str) -> None:
-    with session_scope() as s:
-        n_bm25 = (
-            s.query(Stopword)
-            .filter(Stopword.locale == code, Stopword.kind == KIND_BM25)
-            .count()
-        )
-    if n_bm25 == 0:
-        raise LocaleError("Нельзя активировать язык без набора stopwords (kind=bm25)")
+def activate(code: str, **kwargs) -> dict:
+    return update_locale(code, status=LOCALE_STATUS_ACTIVE, action=audit.LOCALE_ACTIVATE, **kwargs)
 
 
-def activate(code: str) -> dict:
-    _validate_activation(code)
-    return update_locale(code, status=LOCALE_STATUS_ACTIVE)
-
-
-def disable(code: str) -> dict:
-    if code == "ru":
-        raise LocaleError("Нельзя отключить fallback-язык 'ru'")
-    return update_locale(code, status=LOCALE_STATUS_DISABLED)
+def disable(code: str, **kwargs) -> dict:
+    return update_locale(code, status=LOCALE_STATUS_DISABLED, action=audit.LOCALE_DISABLE, **kwargs)
 
 
 # --- Стоп-слова ---
@@ -226,196 +252,151 @@ def _current_words(code: str, kind: str) -> list[str]:
     return list(rows)
 
 
-def list_stopwords(code: str, kind: str | None = None) -> list[dict]:
-    from sqlalchemy import select
-
-    kinds = list(KINDS) if kind is None else [kind]
-    if kind is not None and kind not in KINDS:
+def _stopword_key(code, kind):
+    if kind not in KINDS:
         raise LocaleError(f"Неизвестный kind: {kind}")
-    with session_scope() as s:
-        rows = s.execute(
-            select(Stopword)
-            .where(Stopword.locale == code, Stopword.kind.in_(kinds))
-            .order_by(Stopword.kind, Stopword.word)
-        ).scalars().all()
-    return [
-        {
-            "word": r.word,
-            "kind": r.kind,
-            "updated_by": r.updated_by,
-            "updated_at": r.updated_at,
-        }
-        for r in rows
-    ]
+    return ReferenceKey("stopword_set", code, kind=kind)
+
+
+def _words_in_session(session, code, kind):
+    return list(session.scalars(select(Stopword.word).where(Stopword.locale == code, Stopword.kind == kind).order_by(Stopword.word)))
+
+
+def stopword_snapshot(code: str, kind: str | None = None) -> dict:
+    kinds = list(KINDS) if kind is None else [kind]
+    keys = [_stopword_key(code, value) for value in kinds]
+    with session_scope() as session:
+        if session.get(Locale, code) is None:
+            raise LocaleNotFoundError(code)
+        states = lock_reference_resources(session, keys)
+        rows = session.scalars(select(Stopword).where(Stopword.locale == code, Stopword.kind.in_(kinds))
+            .order_by(Stopword.kind, Stopword.word)).all()
+        return {"locale": code, "reference_revisions": {value: states[_stopword_key(code, value)].revision for value in kinds},
+            "words": [{"word": row.word, "kind": row.kind, "updated_by": row.updated_by, "updated_at": row.updated_at,
+                "reference_revision": states[_stopword_key(code, row.kind)].revision} for row in rows]}
+
+
+def list_stopwords(code: str, kind: str | None = None) -> list[dict]:
+    return stopword_snapshot(code, kind)["words"]
+
+
+def _word_state(session, code, kind, reference_context=None, *, write=True):
+    key = _stopword_key(code, kind)
+    state = lock_reference_resources(session, [key])[key]
+    if session.get(Locale, code) is None:
+        raise LocaleNotFoundError(code)
+    return guard_reference_writes(session, [key], reference_context)[key] if write else state
+
+
+def _apply_words_in_session(session, code, kind, words, updated_by):
+    current = _words_in_session(session, code, kind)
+    if current == sorted(words):
+        return False
+    session.query(Stopword).filter(Stopword.locale == code, Stopword.kind == kind).delete()
+    session.add_all([Stopword(locale=code, word=word, kind=kind, created_by=updated_by, updated_by=updated_by) for word in words])
+    return True
 
 
 def _apply_words(code: str, kind: str, words: list[str], *, updated_by: str) -> None:
-    """Заменяет набор слов (одна транзакция) + синхронная инвалидация кэша."""
-    with session_scope() as s:
-        s.query(Stopword).filter(Stopword.locale == code, Stopword.kind == kind).delete()
-        for w in words:
-            s.add(Stopword(locale=code, word=w, kind=kind, created_by=updated_by, updated_by=updated_by))
+    with session_scope() as session:
+        state = _word_state(session, code, kind)
+        if _apply_words_in_session(session, code, kind, words, updated_by):
+            bump_reference_revision(state)
     invalidate(kind)
 
 
-def import_stopwords(
-    code: str,
-    words: list[str],
-    kind: str,
-    mode: str,
-    *,
-    confirm: bool,
-    user,
-    ip_address: str | None = None,
-    confirm_empty_replace: bool = False,
-) -> dict:
-    """Импорт набора стоп-слов: без confirm — preview diff, с confirm — применение.
+def _confirm_preview(reference_context, supplied, actual):
+    if reference_context is not None and not supplied:
+        raise ReferenceError("reference_precondition_required", 428)
+    if supplied is not None and supplied != actual:
+        raise ReferenceError("reference_preview_stale")
 
-    Возвращает dict: {locale, kind, mode, added, removed, unchanged, total_after,
-    applied, requires_empty_replace_confirmation}. Применение — одна транзакция,
-    инвалидация кэша синхронна, audit.
 
-    Пустой `replace` (mode=replace + words=[]) — ДЕСТРУКТИВНАЯ очистка набора:
-    требует явного `confirm_empty_replace=True` (серверный гейт, Этап 7 P2).
-    """
-    get_locale(code)  # 404, если нет
-    if kind not in KINDS:
-        raise LocaleError(f"Неизвестный kind: {kind}")
+def _word_diff(code, kind, mode, current, incoming, revision, operation=None):
+    final = set(incoming) if mode == "replace" else set(current) | set(incoming)
+    result = {"locale": code, "kind": kind, "mode": mode, "added": sorted(final - set(current)),
+        "removed": sorted(set(current) - final), "unchanged": sorted(set(incoming) & set(current)),
+        "total_after": len(final), "applied": False, "reference_revision": revision,
+        "requires_empty_replace_confirmation": mode == "replace" and not incoming and bool(current)}
+    result["preview_digest"] = reference_preview_digest({"operation": operation or "import", "locale": code,
+        "kind": kind, "mode": mode, "words": sorted(incoming), "revision": revision, "final": sorted(final)})
+    return result, sorted(final)
+
+
+def import_stopwords(code: str, words: list[str], kind: str, mode: str, *, confirm: bool, user,
+    ip_address: str | None = None, confirm_empty_replace: bool = False, reference_context=None, preview_digest=None) -> dict:
     if mode not in ("replace", "merge"):
         raise LocaleError("mode должен быть 'replace' или 'merge'")
     incoming = _normalize_words(words)
     if len(incoming) > get_max_words():
         raise LocaleError(f"Набор превышает лимит {get_max_words()} слов")
-
-    current = set(_current_words(code, kind))
-    incoming_set = set(incoming)
-    added = [w for w in incoming if w not in current]
-    removed = [w for w in current if w not in incoming_set] if mode == "replace" else []
-    unchanged = [w for w in incoming if w in current]
-
-    is_empty_replace = mode == "replace" and not incoming and bool(current)
-
-    result = {
-        "locale": code,
-        "kind": kind,
-        "mode": mode,
-        "added": sorted(added),
-        "removed": sorted(removed),
-        "unchanged": sorted(unchanged),
-        "total_after": len(incoming_set) if mode == "replace" else len(current | incoming_set),
-        "applied": False,
-        "requires_empty_replace_confirmation": is_empty_replace,
-    }
-    if not confirm:
-        return result
-
-    if is_empty_replace and not confirm_empty_replace:
-        return result  # применение запрещено без явного подтверждения
-
-    final = incoming if mode == "replace" else sorted(current | incoming_set)
-    username = getattr(user, "username", None) or "anonymous"
-    _apply_words(code, kind, final, updated_by=username)
-    result["applied"] = True
-    audit.record(
-        user,
-        audit.STOPWORDS_IMPORT,
-        audit.TARGET_LOCALE,
-        target_id=code,
-        old_value={"words": sorted(current), "kind": kind},
-        new_value={"words": sorted(final), "kind": kind},
-        ip_address=ip_address,
-        meta={
-            "mode": mode,
-            "added": len(added),
-            "removed": len(removed),
-            "unchanged": len(unchanged),
-            **({"empty_replace": True, "removed_count": len(removed)} if is_empty_replace else {}),
-        },
-    )
+    with session_scope() as session:
+        state = _word_state(session, code, kind, reference_context, write=confirm)
+        current = _words_in_session(session, code, kind)
+        result, final = _word_diff(code, kind, mode, current, incoming, state.revision)
+        if not confirm:
+            return result
+        _confirm_preview(reference_context, preview_digest, result["preview_digest"])
+        if result["requires_empty_replace_confirmation"] and not confirm_empty_replace:
+            return result
+        if _apply_words_in_session(session, code, kind, final, getattr(user, "username", None) or "anonymous"):
+            bump_reference_revision(state)
+        result.update(applied=True, reference_revision=state.revision)
+        audit.record_in_session(session, action_type=audit.STOPWORDS_IMPORT,
+            user_id=getattr(user, "user_id", None), username=getattr(user, "username", None),
+            target_type=audit.TARGET_LOCALE, target_id=code,
+            old_value={"words": current, "kind": kind}, new_value={"words": final, "kind": kind}, ip_address=ip_address,
+            meta={"mode": mode, "added": len(result["added"]), "removed": len(result["removed"]),
+                "unchanged": len(result["unchanged"]),
+                **({"empty_replace": True, "removed_count": len(result["removed"])} if result["requires_empty_replace_confirmation"] else {})})
+    invalidate(kind)
     return result
 
 
-def add_stopword(code: str, word: str, kind: str, *, user, ip_address: str | None = None) -> dict:
-    get_locale(code)
-    if kind not in KINDS:
-        raise LocaleError(f"Неизвестный kind: {kind}")
+def _mutate_word(code, word, kind, *, user, new_word=None, delete=False, reference_context=None, ip_address=None):
     (word,) = _normalize_words([word])
+    if new_word is not None:
+        (new_word,) = _normalize_words([new_word])
     username = getattr(user, "username", None) or "anonymous"
-    from sqlalchemy import select
-
-    with session_scope() as s:
-        exists = s.execute(
-            select(Stopword).where(Stopword.locale == code, Stopword.word == word, Stopword.kind == kind)
-        ).scalar_one_or_none()
-        if exists is None:
-            s.add(Stopword(locale=code, word=word, kind=kind, created_by=username, updated_by=username))
-    invalidate(kind)
-    audit.record(
-        user,
-        audit.STOPWORDS_UPDATE,
-        audit.TARGET_LOCALE,
-        target_id=code,
-        old_value=None,
-        new_value={"word": word, "kind": kind},
-        ip_address=ip_address,
-    )
-    return {"word": word, "kind": kind}
-
-
-def delete_stopword(code: str, word: str, kind: str, *, user, ip_address: str | None = None) -> dict:
-    get_locale(code)
-    if kind not in KINDS:
-        raise LocaleError(f"Неизвестный kind: {kind}")
-    (word,) = _normalize_words([word])
-    with session_scope() as s:
-        row = s.query(Stopword).filter(
-            Stopword.locale == code, Stopword.word == word, Stopword.kind == kind
-        ).first()
-        if row is None:
-            raise LocaleNotFoundError(f"{word} ({kind})")
-        s.delete(row)
-    invalidate(kind)
-    audit.record(
-        user,
-        audit.STOPWORDS_UPDATE,
-        audit.TARGET_LOCALE,
-        target_id=code,
-        old_value={"word": word, "kind": kind},
-        new_value=None,
-        ip_address=ip_address,
-    )
-    return {"word": word, "kind": kind}
+    with session_scope() as session:
+        state = _word_state(session, code, kind, reference_context)
+        row = session.get(Stopword, (code, word, kind))
+        changed = False
+        if delete or new_word is not None:
+            if row is None:
+                raise LocaleNotFoundError(f"{word} ({kind})")
+            if delete or new_word != word:
+                if new_word is not None and session.get(Stopword, (code, new_word, kind)) is not None:
+                    raise LocaleError("Такое стоп-слово уже существует")
+                session.delete(row)
+                if not delete:
+                    session.add(Stopword(locale=code, word=new_word, kind=kind, created_by=username, updated_by=username))
+                changed = True
+        elif row is None:
+            session.add(Stopword(locale=code, word=word, kind=kind, created_by=username, updated_by=username))
+            changed = True
+        if changed:
+            bump_reference_revision(state)
+            audit.record_in_session(session, action_type=audit.STOPWORDS_UPDATE, user_id=getattr(user, "user_id", None),
+                username=username, target_type=audit.TARGET_LOCALE, target_id=code,
+                old_value={"word": word, "kind": kind} if delete or new_word is not None else None,
+                new_value=None if delete else {"word": new_word or word, "kind": kind}, ip_address=ip_address)
+        result = {"word": new_word or word, "kind": kind, "reference_revision": state.revision}
+    if changed:
+        invalidate(kind)
+    return result
 
 
-def rename_stopword(code: str, word: str, kind: str, new_word: str, *, user, ip_address: str | None = None) -> dict:
-    """Переименование слова (delete + insert в одной транзакции, один audit)."""
-    get_locale(code)
-    if kind not in KINDS:
-        raise LocaleError(f"Неизвестный kind: {kind}")
-    (word,) = _normalize_words([word])
-    (new_word,) = _normalize_words([new_word])
-    if word == new_word:
-        return {"word": word, "kind": kind}
-    username = getattr(user, "username", None) or "anonymous"
-    with session_scope() as s:
-        row = s.query(Stopword).filter(
-            Stopword.locale == code, Stopword.word == word, Stopword.kind == kind
-        ).first()
-        if row is None:
-            raise LocaleNotFoundError(f"{word} ({kind})")
-        s.delete(row)
-        s.add(Stopword(locale=code, word=new_word, kind=kind, created_by=username, updated_by=username))
-    invalidate(kind)
-    audit.record(
-        user,
-        audit.STOPWORDS_UPDATE,
-        audit.TARGET_LOCALE,
-        target_id=code,
-        old_value={"word": word, "kind": kind},
-        new_value={"word": new_word, "kind": kind},
-        ip_address=ip_address,
-    )
-    return {"word": new_word, "kind": kind}
+def add_stopword(code: str, word: str, kind: str, *, user, ip_address=None, reference_context=None) -> dict:
+    return _mutate_word(code, word, kind, user=user, ip_address=ip_address, reference_context=reference_context)
+
+
+def delete_stopword(code: str, word: str, kind: str, *, user, ip_address=None, reference_context=None) -> dict:
+    return _mutate_word(code, word, kind, delete=True, user=user, ip_address=ip_address, reference_context=reference_context)
+
+
+def rename_stopword(code: str, word: str, kind: str, new_word: str, *, user, ip_address=None, reference_context=None) -> dict:
+    return _mutate_word(code, word, kind, new_word=new_word, user=user, ip_address=ip_address, reference_context=reference_context)
 
 
 def stopwords_history(code: str) -> list[dict]:
@@ -443,32 +424,34 @@ def stopwords_history(code: str) -> list[dict]:
     ]
 
 
-def rollback_stopwords(code: str, entry_id: int, *, user, ip_address: str | None = None) -> dict:
-    get_locale(code)
-    with session_scope() as s:
-        row = s.query(AuditLog).filter(
-            AuditLog.id == entry_id,
-            AuditLog.action_type == audit.STOPWORDS_IMPORT,
-            AuditLog.target_id == code,
-        ).first()
-    if row is None:
-        raise LocaleNotFoundError(f"Запись импорта {entry_id}")
-    kind = (row.old_value or {}).get("kind")
-    words = list((row.old_value or {}).get("words") or [])
-    if kind not in KINDS or not words:
-        raise LocaleError("Снапшот импорта пуст или некорректен")
-    username = getattr(user, "username", None) or "anonymous"
-    _apply_words(code, kind, words, updated_by=username)
-    audit.record(
-        user,
-        audit.STOPWORDS_ROLLBACK,
-        audit.TARGET_LOCALE,
-        target_id=code,
-        old_value={"kind": kind, "from_entry": entry_id},
-        new_value={"words": sorted(words), "kind": kind},
-        ip_address=ip_address,
-    )
-    return {"locale": code, "kind": kind, "total_after": len(words), "applied": True}
+def rollback_stopwords(code: str, entry_id: int, *, user, ip_address=None, confirm=True,
+    reference_context=None, preview_digest=None, expected_kind=None) -> dict:
+    with session_scope() as session:
+        row = session.scalar(select(AuditLog).where(AuditLog.id == entry_id,
+            AuditLog.action_type == audit.STOPWORDS_IMPORT, AuditLog.target_id == code))
+        if row is None:
+            raise LocaleNotFoundError(f"Запись импорта {entry_id}")
+        kind = (row.old_value or {}).get("kind")
+        words = list((row.old_value or {}).get("words") or [])
+        if kind not in KINDS or not words:
+            raise LocaleError("Снапшот импорта пуст или некорректен")
+        if expected_kind is not None and expected_kind != kind:
+            raise ReferenceError("reference_preview_stale")
+        state = _word_state(session, code, kind, reference_context, write=confirm)
+        current = _words_in_session(session, code, kind)
+        result, final = _word_diff(code, kind, "replace", current, words, state.revision, f"rollback:{entry_id}")
+        if not confirm:
+            return result
+        _confirm_preview(reference_context, preview_digest, result["preview_digest"])
+        if _apply_words_in_session(session, code, kind, final, getattr(user, "username", None) or "anonymous"):
+            bump_reference_revision(state)
+        result.update(applied=True, reference_revision=state.revision)
+        audit.record_in_session(session, action_type=audit.STOPWORDS_ROLLBACK, user_id=getattr(user, "user_id", None),
+            username=getattr(user, "username", None), target_type=audit.TARGET_LOCALE, target_id=code,
+            old_value={"kind": kind, "from_entry": entry_id, "words": current},
+            new_value={"words": final, "kind": kind}, ip_address=ip_address)
+    invalidate(kind)
+    return result
 
 
 def get_max_words() -> int:

@@ -2,7 +2,7 @@
 
 import { apiToast } from "@/lib/apiToast.mjs";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import {
   addAttributeValue,
@@ -10,9 +10,13 @@ import {
   deleteAttributeValue,
   deleteDevelopment,
   friendlyApiError,
-  listAttributeValues,
+  getAttributeCatalog,
+  getDevelopment,
   listDevelopmentsPage,
   updateDevelopment,
+  acquireReferenceEditLock,
+  getReferenceEditStatus,
+  releaseReferenceEditLock,
 } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { TYPED_CONFIRM_THRESHOLD } from "@/lib/constants";
@@ -21,6 +25,11 @@ import { useI18n } from "@/i18n/LocaleContext";
 import ConfirmModal from "./ConfirmModal";
 import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import SearchableSelect from "./SearchableSelect";
+import ReferenceConflictDialog from "./ReferenceConflictDialog";
+import ReferenceEditNotice from "./ReferenceEditNotice";
+import { useReferenceEditSession } from "@/hooks/useReferenceEditSession";
+import { createEditorToken } from "@/lib/editorLeaseSession.mjs";
+import { referenceMutationHeaders } from "@/lib/editorLeaseAdapters.mjs";
 
 const EMPTY_FORM = { number: "", name: "", module: "" };
 const PAGE_SIZE = 50;
@@ -36,9 +45,13 @@ export default function DevelopmentPanel() {
   const [total, setTotal] = useState(0);
   const [modules, setModules] = useState([]);
   const [newModule, setNewModule] = useState("");
+  const [moduleRevision, setModuleRevision] = useState(null);
+  const moduleLoadSequence = useRef(0);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editing, setEditing] = useState(null); // id редактируемой разработки
   const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editBase, setEditBase] = useState(null);
+  const [editConflict, setEditConflict] = useState(null);
   const [busy, setBusy] = useState(false);
   const [modulesOpen, setModulesOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -53,6 +66,14 @@ export default function DevelopmentPanel() {
 
   const canEdit = mode === "disabled" || hasRole("editor", "admin");
   const canDelete = mode === "disabled" || hasRole("editor", "admin");
+  const editSession = useReferenceEditSession({ resource: { resource_type: "development", resource_id: String(editing || 0) },
+    enabled: Boolean(editing) && canEdit, onAcquired: async (_status, isCurrent) => {
+      const fresh = await getDevelopment(editing);
+      if (!isCurrent()) return;
+      if (fresh.reference_revision !== editBase?.reference_revision) {
+        setEditConflict({base: editBase, local: {...editForm}, remote: fresh});
+      }
+    }});
 
   const COLUMNS = [
     { key: "number", label: t("devpanel.colNumber") },
@@ -86,11 +107,13 @@ export default function DevelopmentPanel() {
 
   const loadModules = useCallback(async () => {
     try {
-      const values = await listAttributeValues("module");
-      setModules(values.map((v) => v.value));
-    } catch {
-      setModules([]);
-    }
+      const sequence = ++moduleLoadSequence.current;
+      const snapshot = await getAttributeCatalog("module");
+      if (sequence === moduleLoadSequence.current) {
+        setModules([...new Set(snapshot.values.map(v => v.value))]);
+        setModuleRevision(snapshot.reference_revision);
+      }
+    } catch { /* Preserve the last observed catalog and any typed module. */ }
   }, []);
 
   useEffect(() => {
@@ -133,15 +156,17 @@ export default function DevelopmentPanel() {
       const v = (value || "").trim();
       if (!v || modules.includes(v)) return v || null;
       try {
-        await addAttributeValue("module", v, { label: v, canonicalLocale: sourceLocale });
-        setModules((prev) => [...prev, v].sort());
+        const saved = await addAttributeValue("module", v, { label: v, canonicalLocale: sourceLocale, expected_reference_revision: moduleRevision });
+        ++moduleLoadSequence.current; setModuleRevision(saved.reference_revision);
+        setModules((prev) => [...new Set([...prev, v])].sort());
       } catch (err) {
+        if (err.code === "version_conflict") await loadModules();
         showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.addModuleError", { message: friendlyApiError(err, t) }) });
         throw err;
       }
       return v;
     },
-    [modules, showToast, t, moduleLocale, locale]
+    [modules, showToast, t, moduleLocale, locale, moduleRevision, loadModules]
   );
 
   const submitCreate = async (e) => {
@@ -164,6 +189,9 @@ export default function DevelopmentPanel() {
   };
 
   const startEdit = (dev) => {
+    if (busy) return;
+    setEditBase({ ...dev });
+    setEditConflict(null);
     setEditing(dev.id);
     setEditForm({
       number: dev.number,
@@ -172,10 +200,12 @@ export default function DevelopmentPanel() {
       originalNumber: dev.number,
       documentsCount: dev.documents_count,
       version: dev.version,
+      reference_revision: dev.reference_revision,
     });
   };
 
   const submitEdit = async (devId) => {
+    if (busy || editConflict || editSession.state !== "editing") return;
     const number = editForm.number.trim();
     const name = editForm.name.trim();
     if (!number || !name) return;
@@ -196,14 +226,19 @@ export default function DevelopmentPanel() {
         name,
         module: moduleName,
         version: editForm.version,
-      });
+        expected_reference_revision: editForm.reference_revision,
+      }, { headers: editSession.getMutationHeaders() });
       setEditing(null);
       setEditForm(EMPTY_FORM);
       showToast(t("devpanel.saved"), { type: "success" });
       await load();
     } catch (err) {
+      editSession.handleMutationError?.(err);
       if (err.code === "version_conflict") {
-        setEditForm((f) => ({ ...f, version: err.data?.current?.version }));
+        const remote = err.data?.current;
+        if (remote?.id === devId && Number.isInteger(remote.version)) {
+          setEditConflict({ base: editBase, local: { ...editForm, number, name }, remote });
+        }
         showToast(t("devpanel.versionConflict"), { type: "error" });
       } else {
         showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.saveError", { message: friendlyApiError(err, t) }) });
@@ -215,8 +250,15 @@ export default function DevelopmentPanel() {
 
   const doDelete = async (dev) => {
     setBusy(true);
+    const resource = { resource_type: "development", resource_id: String(dev.id) };
+    let context = null;
     try {
-      await deleteDevelopment(dev.id, dev.version);
+      const token = createEditorToken();
+      const status = await getReferenceEditStatus(resource);
+      const acquired = status.lease_required === false ? status : await acquireReferenceEditLock(resource, { edit_token: token });
+      context = acquired.lease_required === false ? {} : { edit_token: token, lease_epoch: acquired.lease_epoch };
+      await deleteDevelopment(dev.id, dev.version, { expected_reference_revision: dev.reference_revision,
+        headers: referenceMutationHeaders(context) });
       showToast(t("devpanel.deleted"), { type: "success" });
       setPendingDelete(null);
       await load();
@@ -229,6 +271,7 @@ export default function DevelopmentPanel() {
         showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.deleteError", { message: friendlyApiError(err, t) }) });
       }
     } finally {
+      if (context?.edit_token) releaseReferenceEditLock(resource, context).catch(() => {});
       setBusy(false);
     }
   };
@@ -254,11 +297,13 @@ export default function DevelopmentPanel() {
       return;
     }
     try {
-      await addAttributeValue("module", value, { label: value, canonicalLocale: moduleLocale || locale });
-      setModules((prev) => [...prev, value].sort());
+      const saved = await addAttributeValue("module", value, { label: value, canonicalLocale: moduleLocale || locale, expected_reference_revision: moduleRevision });
+      ++moduleLoadSequence.current; setModuleRevision(saved.reference_revision);
+      setModules((prev) => [...new Set([...prev, value])].sort());
       setNewModule("");
       showToast(t("devpanel.moduleAdded", { name: value }), { type: "success" });
     } catch (err) {
+      if (err.code === "version_conflict") await loadModules();
       showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.addModuleError", { message: friendlyApiError(err, t) }) });
     }
   };
@@ -266,10 +311,11 @@ export default function DevelopmentPanel() {
   const removeModule = async (value) => {
     if (!window.confirm(t("devpanel.removeModuleConfirm", { name: value }))) return;
     try {
-      await deleteAttributeValue("module", value);
-      setModules((prev) => prev.filter((m) => m !== value));
+      await deleteAttributeValue("module", value, {expected_reference_revision: moduleRevision});
+      await loadModules();
       showToast(t("devpanel.moduleRemoved", { name: value }), { type: "success" });
     } catch (err) {
+      if (err.code === "version_conflict") await loadModules();
       showToast({ ...apiToast(err, t, { type: "error" }), message: t("devpanel.removeModuleError", { message: friendlyApiError(err, t) }) });
     }
   };
@@ -379,6 +425,8 @@ export default function DevelopmentPanel() {
         />
       </div>
 
+      {editing && <ReferenceEditNotice session={editSession}
+        onCopy={() => navigator.clipboard?.writeText(JSON.stringify(editForm, null, 2)).catch(() => {})} />}
       <div className="dev-table-scroll">
         <table className="dev-table">
           <thead>
@@ -402,11 +450,13 @@ export default function DevelopmentPanel() {
           <tbody>
             {developments.map((dev) =>
               editing === dev.id ? (
-                <tr key={dev.id}>
+                <tr key={dev.id} onPointerDownCapture={editSession.markActivity}
+                  onKeyDownCapture={editSession.markActivity} onScrollCapture={editSession.markActivity}>
                   <td>
                     <input
                       className="dev-input"
                       value={editForm.number}
+                      disabled={busy || Boolean(editConflict) || editSession.state !== "editing"}
                       onChange={(e) => setEditForm((f) => ({ ...f, number: e.target.value }))}
                     />
                   </td>
@@ -414,6 +464,7 @@ export default function DevelopmentPanel() {
                     <input
                       className="dev-input"
                       value={editForm.name}
+                      disabled={busy || Boolean(editConflict) || editSession.state !== "editing"}
                       onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
                     />
                   </td>
@@ -421,16 +472,17 @@ export default function DevelopmentPanel() {
                     <input
                       className="dev-input"
                       value={editForm.module}
+                      disabled={busy || Boolean(editConflict) || editSession.state !== "editing"}
                       list="dev-module-datalist"
                       onChange={(e) => setEditForm((f) => ({ ...f, module: e.target.value }))}
                     />
                   </td>
                   <td>{dev.documents_count}</td>
                   <td className="dev-actions">
-                    <button className="btn" onClick={() => submitEdit(dev.id)} disabled={busy}>
+                    <button className="btn" onClick={() => submitEdit(dev.id)} disabled={busy || Boolean(editConflict) || editSession.state !== "editing"}>
                       {t("devpanel.saveBtn")}
                     </button>
-                    <button className="btn ghost" onClick={() => setEditing(null)}>
+                    <button className="btn ghost" disabled={busy} onClick={() => { setEditing(null); setEditConflict(null); }}>
                       {t("devpanel.cancelBtn")}
                     </button>
                   </td>
@@ -447,7 +499,7 @@ export default function DevelopmentPanel() {
                   <td>{dev.documents_count}</td>
                   {canEdit && (
                     <td className="dev-actions">
-                      <button className="btn ghost" onClick={() => startEdit(dev)}>
+                      <button className="btn ghost" disabled={busy} onClick={() => startEdit(dev)}>
                         {t("devpanel.editBtn")}
                       </button>
                       {canDelete && (
@@ -487,6 +539,21 @@ export default function DevelopmentPanel() {
           </button>
         </div>
       )}
+
+      {editConflict && <ReferenceConflictDialog
+        key={`${editing}:${editConflict.remote.version}`}
+        {...editConflict}
+        fields={["number", "name", "module"]}
+        labels={{ number: t("devpanel.colNumber"), name: t("devpanel.colName"), module: t("devpanel.colModule") }}
+        onClose={() => setEditConflict(null)}
+        onConfirm={merged => {
+          setEditForm({ ...editConflict.local, ...merged, version: editConflict.remote.version,
+            reference_revision: editConflict.remote.reference_revision,
+            originalNumber: editConflict.remote.number, documentsCount: editConflict.remote.documents_count });
+          setEditBase({ ...editConflict.remote });
+          setEditConflict(null);
+        }}
+      />}
 
       {pendingDelete && (
         <ConfirmModal

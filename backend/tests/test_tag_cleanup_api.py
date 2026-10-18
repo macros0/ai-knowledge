@@ -53,7 +53,7 @@ class TestDeleteTagApi:
         get_registry().create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10, tags=["keep"])
         login(client, "demo.editor")
 
-        resp = client.delete("/api/tags/garbage")
+        resp = client.delete("/api/tags/garbage?expected_reference_revision=1")
 
         assert resp.status_code == 200, resp.text
         assert resp.json() == {"deleted": "garbage"}
@@ -65,7 +65,7 @@ class TestDeleteTagApi:
 
     def test_viewer_forbidden(self, client):
         login(client, "demo.viewer")
-        resp = client.delete("/api/tags/garbage")
+        resp = client.delete("/api/tags/garbage?expected_reference_revision=1")
         assert resp.status_code == 403
 
     def test_missing_tag_404(self, client):
@@ -77,7 +77,7 @@ class TestDeleteTagApi:
         TagRegistry().add(["keep"])
         get_registry().create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10, tags=["keep"])
         login(client, "demo.editor")
-        resp = client.delete("/api/tags/keep")
+        resp = client.delete("/api/tags/keep?expected_reference_revision=1")
         assert resp.status_code == 409
 
     def test_trash_only_tag_can_be_deleted(self, client):
@@ -88,7 +88,7 @@ class TestDeleteTagApi:
         TagRegistry().add(["keep"])
         login(client, "demo.editor")
 
-        resp = client.delete("/api/tags/keep")
+        resp = client.delete("/api/tags/keep?expected_reference_revision=1")
 
         assert resp.status_code == 200, resp.text
         assert resp.json() == {"deleted": "keep"}
@@ -116,7 +116,11 @@ class TestCleanupApi:
         TagRegistry().add(["keep", "g1", "g2"])
         login(client, "demo.editor")
 
-        resp = client.post("/api/tags/cleanup")
+        preview = client.post("/api/tags/cleanup", json={"confirm": False})
+        if preview.status_code == 200:
+            resp = client.post("/api/tags/cleanup", json={"confirm": True, **preview.json()["batches"][0]})
+        else:
+            resp = preview
 
         assert resp.status_code == 200, resp.text
         assert sorted(resp.json()["deleted"]) == ["g1", "g2"]
@@ -128,7 +132,11 @@ class TestCleanupApi:
 
     def test_viewer_forbidden(self, client):
         login(client, "demo.viewer")
-        resp = client.post("/api/tags/cleanup")
+        preview = client.post("/api/tags/cleanup", json={"confirm": False})
+        if preview.status_code == 200:
+            resp = client.post("/api/tags/cleanup", json={"confirm": True, **preview.json()["batches"][0]})
+        else:
+            resp = preview
         assert resp.status_code == 403
 
     def test_cleanup_removes_trash_only_tag(self, client):
@@ -139,7 +147,11 @@ class TestCleanupApi:
         TagRegistry().add(["keep", "g1"])
         login(client, "demo.editor")
 
-        resp = client.post("/api/tags/cleanup")
+        preview = client.post("/api/tags/cleanup", json={"confirm": False})
+        if preview.status_code == 200:
+            resp = client.post("/api/tags/cleanup", json={"confirm": True, **preview.json()["batches"][0]})
+        else:
+            resp = preview
 
         assert resp.status_code == 200, resp.text
         assert sorted(resp.json()["deleted"]) == ["g1", "keep"]

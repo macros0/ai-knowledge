@@ -6,6 +6,10 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 
+from app.api.reference_editing import request_edit_session
+from app.services.reference_mutation import ReferenceWriteContext
+from app.services.reference_resources import ReferenceKey
+from app.services.reference_concurrency import ReferenceError
 from app.api import errors
 from app.api.errors import ApiError
 from app.auth.models import User
@@ -79,6 +83,23 @@ router = APIRouter(prefix="/admin/glossary", tags=["glossary"])
 
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
+
+
+def _reference_context(resource_type, resource_id, expected, request, user):
+    key = ReferenceKey(resource_type, resource_id)
+    lease = request_edit_session(request)
+    return ReferenceWriteContext(user, {key: expected}, {key: lease} if lease else {})
+
+
+def _merge_reference_context(body, resource_type, user):
+    source = body.source_term_id if resource_type == "glossary_term" else body.source_rule_id
+    target = body.target_term_id if resource_type == "glossary_term" else body.target_rule_id
+    ids = {value for value in (source, target) if value is not None}
+    if set(body.expected_reference_revisions) != ids or set(body.edit_sessions) - ids:
+        raise ReferenceError("reference_precondition_required", 428)
+    return ReferenceWriteContext(user,
+        {ReferenceKey(resource_type, value): revision for value, revision in body.expected_reference_revisions.items()},
+        {ReferenceKey(resource_type, value): lease.model_dump() for value, lease in body.edit_sessions.items()})
 
 
 def _validation_error(exc: GlossaryValidationError) -> ApiError:
@@ -259,12 +280,13 @@ def check_glossary_rule(body: GlossaryRuleCheck, user: User = Depends(require_ro
 
 
 @router.patch("/rules/{rule_id}", response_model=GlossaryRuleOut)
-def update_glossary_rule(rule_id: int, body: GlossaryRulePatch, user: User = Depends(require_role("admin"))):
+def update_glossary_rule(rule_id: int, body: GlossaryRulePatch, request: Request, user: User = Depends(require_role("admin"))):
     try:
         return GlossaryRuleRegistry().update(
             rule_id, body.version, name=body.name, number_from=body.number_from,
             number_to=body.number_to, prefixes=body.prefixes, enabled=body.enabled,
             actor_id=user.user_id,
+            reference_context=_reference_context("glossary_rule", rule_id, body.expected_reference_revision, request, user),
         )
     except Exception as exc:
         _raise_mutation_error(exc)
@@ -285,16 +307,16 @@ def merge_glossary_rules(body: GlossaryRuleMergeRequest, user: User = Depends(re
     try:
         if body.preview_digest is None or body.expected_revision is None:
             raise GlossaryRuleVersionConflictError("Для объединения правил нужен актуальный предпросмотр")
-        return GlossaryRuleRegistry().merge(body.model_dump(), body.preview_digest, actor_id=user.user_id)
+        return GlossaryRuleRegistry().merge(body.model_dump(), body.preview_digest, actor_id=user.user_id, reference_context=_merge_reference_context(body, "glossary_rule", user))
     except Exception as exc:
         _raise_mutation_error(exc)
     raise AssertionError("unreachable")
 
 
 @router.delete("/rules/{rule_id}", response_model=GlossaryRuleOut)
-def delete_glossary_rule(rule_id: int, version: int = Query(..., ge=1), user: User = Depends(require_role("admin"))):
+def delete_glossary_rule(rule_id: int, request: Request, version: int = Query(..., ge=1), expected_reference_revision: int | None = Query(None, ge=1), user: User = Depends(require_role("admin"))):
     try:
-        return GlossaryRuleRegistry().delete(rule_id, version, actor_id=user.user_id)
+        return GlossaryRuleRegistry().delete(rule_id, version, actor_id=user.user_id, reference_context=_reference_context("glossary_rule", rule_id, expected_reference_revision, request, user))
     except Exception as exc:
         _raise_mutation_error(exc)
     raise AssertionError("unreachable")
@@ -315,7 +337,7 @@ def merge_glossary_terms(body: GlossaryMergeCommit, user: User = Depends(require
         payload = body.model_dump()
         if not body.preview_digest or body.expected_revision is None:
             raise GlossaryMergePreviewStaleError("Для merge нужен актуальный предпросмотр")
-        return _registry().merge(payload, body.preview_digest, actor_id=user.user_id)
+        return _registry().merge(payload, body.preview_digest, actor_id=user.user_id, reference_context=_merge_reference_context(body, "glossary_term", user))
     except Exception as exc:
         _raise_mutation_error(exc)
     raise AssertionError("unreachable")
@@ -369,6 +391,7 @@ def update_glossary_translation(
             translation_version=body.translation_version,
             source_revision=body.source_revision,
             user=user,
+            reference_context=_reference_context("glossary_term", term_id, body.expected_reference_revision, request, user),
             ip_address=_client_ip(request),
         )
     except Exception as exc:
@@ -391,6 +414,7 @@ def review_glossary_translation_route(
             translation_version=body.translation_version,
             source_revision=body.source_revision,
             user=user,
+            reference_context=_reference_context("glossary_term", term_id, body.expected_reference_revision, request, user),
             ip_address=_client_ip(request),
         )
     except Exception as exc:
@@ -440,6 +464,7 @@ def update_glossary_term(
     try:
         return _registry().update(
             term_id, body.version, enabled=body.enabled, updated_by=user.user_id,
+            reference_context=_reference_context("glossary_term", term_id, body.expected_reference_revision, request, user),
             ip_address=_client_ip(request),
             audit_username=user.username,
         )
@@ -463,6 +488,7 @@ def update_glossary_source(
     try:
         return _registry().update(
             term_id, body.version, updated_by=user.user_id,
+            reference_context=_reference_context("glossary_term", term_id, body.expected_reference_revision, request, user),
             ip_address=_client_ip(request), **values,
             audit_username=user.username,
         )
@@ -482,6 +508,7 @@ def add_glossary_alias(
         return _registry().add_alias(
             term_id, body.version, body.alias, locale=body.locale, auto_expand=body.auto_expand,
             search_enabled=body.search_enabled, updated_by=user.user_id,
+            reference_context=_reference_context("glossary_term", term_id, body.expected_reference_revision, request, user),
             ip_address=_client_ip(request),
             audit_username=user.username,
         )
@@ -502,6 +529,7 @@ def update_glossary_alias(
         return _registry().update_alias(
             term_id, body.version, alias_id, alias=body.alias, locale=body.locale,
             auto_expand=body.auto_expand, search_enabled=body.search_enabled, updated_by=user.user_id,
+            reference_context=_reference_context("glossary_term", term_id, body.expected_reference_revision, request, user),
             ip_address=_client_ip(request),
             audit_username=user.username,
         )
@@ -516,11 +544,13 @@ def delete_glossary_alias(
     alias_id: int,
     request: Request,
     version: int = Query(..., ge=1),
+    expected_reference_revision: int | None = Query(None, ge=1),
     user: User = Depends(require_role("admin")),
 ):
     try:
         return _registry().delete_alias(
             term_id, version, alias_id, updated_by=user.user_id,
+            reference_context=_reference_context("glossary_term", term_id, expected_reference_revision, request, user),
             ip_address=_client_ip(request),
             audit_username=user.username,
         )

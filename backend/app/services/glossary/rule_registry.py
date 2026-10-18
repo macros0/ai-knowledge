@@ -9,11 +9,12 @@ from typing import Sequence
 from app import error_codes as codes
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import object_session, selectinload
 
-from app.db.models import DomainTerm, GlossaryInfotypePrefix, GlossaryInfotypeRule, GlossaryState
-from app.db.session import session_scope
+from app.db.models import DomainTerm, GlossaryInfotypePrefix, GlossaryInfotypeRule
 from app.services import audit
+from app.services.reference_resources import ReferenceKey
+from app.services.reference_concurrency import current_reference_revision, initialize_reference_resource
 from app.services.glossary.mutation import bump_glossary_revision, glossary_write_session
 from app.services.glossary.normalization import GlossaryInvalidRuleError, normalize_alias
 from app.services.glossary.rules import normalize_rule_prefix, validate_rule
@@ -54,6 +55,7 @@ def _clean(name: str, number_from: int, number_to: int, prefixes: Sequence[str])
 def _as_dict(rule: GlossaryInfotypeRule) -> dict:
     return {
         "id": rule.id,
+        "reference_revision": current_reference_revision(object_session(rule), ReferenceKey("glossary_rule", rule.id)) if object_session(rule) is not None else getattr(rule, "reference_revision", 1),
         "name": rule.name,
         "number_from": rule.number_from,
         "number_to": rule.number_to,
@@ -150,12 +152,13 @@ class GlossaryRuleRegistry:
             rule.prefixes_rel = [GlossaryInfotypePrefix(prefix=prefix, normalized_prefix=prefix, position=index) for index, prefix in enumerate(prefixes)]
             session.add(rule)
             session.flush()
+            initialize_reference_resource(session, ReferenceKey("glossary_rule", rule.id))
             bump_glossary_revision(session, state)
             audit.record_in_session(session, action_type=audit.GLOSSARY_RULE_CREATE, user_id=actor_id, username=actor_id, target_type="glossary_rule", target_id=str(rule.id), new_value=_audit_dict(rule))
             return _as_dict(rule)
 
-    def update(self, rule_id: int, version: int, *, actor_id: str | None = None, **changes) -> dict:
-        with glossary_write_session() as (session, state):
+    def update(self, rule_id: int, version: int, *, actor_id: str | None = None, reference_context=None, **changes) -> dict:
+        with glossary_write_session(reference_keys=[ReferenceKey("glossary_rule", rule_id)], reference_context=reference_context) as (session, state):
             rule = session.execute(select(GlossaryInfotypeRule).where(GlossaryInfotypeRule.id == rule_id).options(selectinload(GlossaryInfotypeRule.prefixes_rel))).scalar_one_or_none()
             if rule is None:
                 raise GlossaryRuleNotFoundError(f"Правило не найдено: {rule_id}")
@@ -186,8 +189,8 @@ class GlossaryRuleRegistry:
             audit.record_in_session(session, action_type=audit.GLOSSARY_RULE_UPDATE, user_id=actor_id, username=actor_id, target_type="glossary_rule", target_id=str(rule_id), old_value=old, new_value=_audit_dict(rule))
             return _as_dict(rule)
 
-    def delete(self, rule_id: int, version: int, *, actor_id: str | None = None) -> dict:
-        with glossary_write_session() as (session, state):
+    def delete(self, rule_id: int, version: int, *, actor_id: str | None = None, reference_context=None) -> dict:
+        with glossary_write_session(reference_keys=[ReferenceKey("glossary_rule", rule_id)], reference_context=reference_context) as (session, state):
             rule = session.execute(select(GlossaryInfotypeRule).where(GlossaryInfotypeRule.id == rule_id).options(selectinload(GlossaryInfotypeRule.prefixes_rel))).scalar_one_or_none()
             if rule is None:
                 raise GlossaryRuleNotFoundError(f"Правило не найдено: {rule_id}")
@@ -201,9 +204,8 @@ class GlossaryRuleRegistry:
 
     def merge_preview(self, request) -> dict:
         """Describe a safe rule merge without changing the database."""
-        with session_scope() as session:
+        with glossary_write_session(allow_unready=True) as (session, state):
             _saved_source, source, target = self._load_merge_source(session, request)
-            state = session.get(GlossaryState, 1)
             return self._merge_proposal(source, target, state.revision)
 
     def _load_merge_source(self, session, request):
@@ -227,6 +229,7 @@ class GlossaryRuleRegistry:
             updated_at=saved_source.updated_at if saved_source else None)
         source.prefixes_rel = [GlossaryInfotypePrefix(prefix=prefix, normalized_prefix=prefix, position=index)
                                for index, prefix in enumerate(prefixes)]
+        source.reference_revision = current_reference_revision(session, ReferenceKey("glossary_rule", source_id)) if source_id else 1
         return saved_source, source, target
 
     @staticmethod
@@ -247,9 +250,9 @@ class GlossaryRuleRegistry:
         result["digest"] = _merge_digest(result)
         return result
 
-    def merge(self, request, digest: str, *, actor_id: str | None = None) -> dict:
+    def merge(self, request, digest: str, *, actor_id: str | None = None, reference_context=None) -> dict:
         source_id, target_id = _merge_ids(request)
-        with glossary_write_session() as (session, state):
+        with glossary_write_session(reference_keys=[ReferenceKey("glossary_rule", value) for value in (source_id, target_id) if value is not None], reference_context=reference_context) as (session, state):
             saved_source, source, target = self._load_merge_source(session, request)
             for key, current in (('source_version', source.version), ('target_version', target.version), ('expected_revision', state.revision)):
                 if request.get(key) is not None and request[key] != current:

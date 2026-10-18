@@ -8,6 +8,7 @@ import { buildGlossaryListParams, keepGlossarySelection } from "@/lib/glossaryUi
 import { useI18n } from "@/i18n/LocaleContext";
 import { useToast } from "./Toast";
 import { useAuth } from "@/context/AuthContext";
+import { useReferenceEditSession } from "@/hooks/useReferenceEditSession";
 import GlossaryEditor from "./GlossaryEditor";
 import ReferenceLocaleSelect from "./ReferenceLocaleSelect";
 import GlossaryAliasCheck, { GlossaryCheckResult, useGlossaryAliasCheck } from "./GlossaryAliasCheck";
@@ -25,6 +26,11 @@ export default function GlossaryPanel() {
   const { showToast } = useToast();
   const [terms, setTerms] = useState([]);
   const [selected, setSelected] = useState(null);
+  const editSession = useReferenceEditSession({resource: {resource_type: "glossary_term", resource_id: String(selected?.id || 0)}, enabled: Boolean(selected),
+    onAcquired: async (_status, isCurrent) => {
+      const fresh = await getGlossaryTerm(selected.id);
+      if (isCurrent()) setSelected(fresh);
+    }});
   const [filters, setFilters] = useState({ query: "", kind: "", enabled: "", needsReview: false, page: 1 });
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -204,7 +210,7 @@ export default function GlossaryPanel() {
       {!loading && !terms.length && <p className="muted">{t("admin.glossary.empty")}</p>}
       <div className="glossary-layout">
         <div className="glossary-table-wrap"><table className="language-table glossary-table"><thead><tr><th>{t("admin.glossary.name")}</th><th>{t("admin.glossary.locale")}</th><th>{t("admin.glossary.aliasCount")}</th><th>{t("admin.glossary.state")}</th></tr></thead><tbody>{terms.map((term) => <tr key={term.id} className={selected?.id === term.id ? "selected" : ""} onClick={() => openTerm(term.id)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && openTerm(term.id)}><td><strong>{term.original_name}</strong></td><td>{term.canonical_locale}</td><td>{term.aliases?.length || 0}</td><td>{term.enabled ? t("admin.glossary.active") : t("admin.glossary.disabled")}{term.has_duplicates && <span className="glossary-duplicate-badge">{t("admin.glossary.duplicate")}</span>}</td></tr>)}</tbody></table><div className="glossary-pagination"><button className="modal-btn" disabled={filters.page <= 1} onClick={() => setFilters((v) => ({ ...v, page: v.page - 1 }))}>←</button><span>{filters.page} / {pageCount}</span><button className="modal-btn" disabled={filters.page >= pageCount} onClick={() => setFilters((v) => ({ ...v, page: v.page + 1 }))}>→</button></div></div>
-        {selected && <GlossaryEditor key={selected.id} term={selected} canManage={canManage} onSaved={updateSelected} onOpenTerm={openTerm} onPendingAliasChange={setPendingAlias} onDraftChange={setPendingEdit} onClose={closeSelected} onMergeCompleted={finishMerge} />}
+        {selected && <GlossaryEditor key={selected.id} session={editSession} term={selected} canManage={canManage} onSaved={updateSelected} onOpenTerm={openTerm} onPendingAliasChange={setPendingAlias} onDraftChange={setPendingEdit} onClose={closeSelected} onMergeCompleted={finishMerge} />}
       </div>
       {selected && canManage && <div className="glossary-merge-launcher">
         <label>{t("admin.glossary.mergeWith")}
@@ -215,7 +221,7 @@ export default function GlossaryPanel() {
           </select>
         </label>
         {mergeSearching && <span role="status">{t("common.loading")}</span>}
-        {mergeTarget && <GlossaryMergeDialog key={`${selected.id}:${mergeTarget.id}`} source={{...selected, ...pendingEdit}} sourceEdit={pendingEdit} target={mergeTarget} onClose={() => setMergeTarget(null)} onCompleted={finishMerge} />}
+        {mergeTarget && <GlossaryMergeDialog key={`${selected.id}:${mergeTarget.id}`} sourceSession={editSession} source={{...selected, ...pendingEdit}} sourceEdit={pendingEdit} target={mergeTarget} onClose={() => setMergeTarget(null)} onCompleted={finishMerge} />}
       </div>}
     </section>
   );

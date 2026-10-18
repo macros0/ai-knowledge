@@ -31,7 +31,7 @@ const ENTITY_LABEL_KEYS = {
 const ALL_ENTITIES = Object.keys(ENTITY_LABEL_KEYS);
 const LEGACY_ENTITIES = ALL_ENTITIES.filter((entity) => entity !== "glossary");
 
-export default function BackfillControl({ locale }) {
+export default function BackfillControl({ locale, onBusyChange }) {
   const { t } = useI18n();
   const { showToast } = useToast();
 
@@ -46,6 +46,7 @@ export default function BackfillControl({ locale }) {
   const [pending, setPending] = useState({});
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 
   useEffect(() => {
     getChatSettings()
@@ -60,7 +61,7 @@ export default function BackfillControl({ locale }) {
   const providerOff = provider === "off";
 
   const loadPending = useCallback(async () => {
-    if (!code || !selectedEntities.length) {
+    if (!code || (!selectedEntities.length && !checked.has("glossary"))) {
       setPending({});
       return;
     }
@@ -92,6 +93,8 @@ export default function BackfillControl({ locale }) {
   };
 
   const run = async () => {
+    if (busy || !code || providerOff) return;
+    onBusyChange?.(true);
     setBusy(true);
     setResult(null);
     try {
@@ -99,19 +102,28 @@ export default function BackfillControl({ locale }) {
       if (selectedEntities.length) {
         const legacy = await backfillTranslations(code, selectedEntities);
         Object.assign(result, legacy.result || {});
+        setResult({...result});
       }
       if (checked.has("glossary")) {
-        const page = await listGlossary({ enabled: true, limit: 100, offset: 0 });
-        const glossaryIds = (page.terms || [])
+        const terms = [];
+        let offset = 0;
+        while (true) {
+          const page = await listGlossary({enabled: true, limit: 100, offset});
+          const items = page.terms || [];
+          terms.push(...items); offset += items.length;
+          if (!items.length || (Number.isInteger(page.total) ? offset >= page.total : items.length < 100)) break;
+        }
+        const glossaryIds = [...new Set(terms
           .filter((term) => term.canonical_locale !== code)
           .filter((term) => !term.translations?.some((item) => item.locale === code && !item.is_machine_translated))
-          .map((term) => term.id);
+          .map((term) => term.id))];
         const glossaryResult = {};
         for (const batch of chunkTermIds(glossaryIds)) {
           const response = await backfillGlossaryTranslations(code, batch);
           for (const [key, value] of Object.entries(response || {})) {
             if (typeof value === "number") glossaryResult[key] = (glossaryResult[key] || 0) + value;
           }
+          setResult({...result, glossary: {...glossaryResult}});
         }
         result.glossary = glossaryResult;
       }
@@ -121,6 +133,7 @@ export default function BackfillControl({ locale }) {
       showToast(apiToast(err, t, { type: "error" }));
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   };
 
@@ -153,6 +166,7 @@ export default function BackfillControl({ locale }) {
             <input
               type="checkbox"
               checked={checked.has(ent)}
+              disabled={busy}
               onChange={() => toggle(ent)}
             />
             {t(ENTITY_LABEL_KEYS[ent])}
@@ -165,6 +179,7 @@ export default function BackfillControl({ locale }) {
         {t("admin.backfill.pendingTotal", { count: pendingTotal })}
       </p>
       <p className="uictl-warning">{t("admin.backfill.warning")}</p>
+      <p className="muted">{t("reference.backfillEstimate")}</p>
 
       <button
         className="modal-btn"
@@ -185,10 +200,15 @@ export default function BackfillControl({ locale }) {
       )}
 
       {result && (
-        <div className="backfill-result">
+        <div className="backfill-result" role="status">
           {ALL_ENTITIES.filter((e) => result[e]).map((e) => (
             <div key={e}>
-              {t(ENTITY_LABEL_KEYS[e])}: created={result[e].created ?? 0} failed={result[e].failed ?? 0}
+              <strong>{t(ENTITY_LABEL_KEYS[e])}</strong>
+              <p>{t("reference.backfillSummary", {created: result[e].created ?? 0, updated: result[e].updated ?? 0,
+                unchanged: result[e].unchanged ?? 0, failed: result[e].failed ?? 0,
+                skipped: Object.entries(result[e]).filter(([key]) => key.startsWith("skipped_")).reduce((sum, [, value]) => sum + (Number.isInteger(value) ? value : 0), 0)})}</p>
+              <p>{t("reference.backfillSkipped", {locked: result[e].skipped_locked ?? 0, changed: result[e].skipped_changed ?? 0,
+                reviewed: result[e].skipped_reviewed ?? 0, deleted: result[e].skipped_deleted ?? result[e].skipped_missing ?? 0})}</p>
             </div>
           ))}
         </div>

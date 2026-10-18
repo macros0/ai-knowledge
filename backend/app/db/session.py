@@ -93,8 +93,12 @@ def session_scope():
     try:
         yield session
         session.commit()
-    except Exception:
+    except Exception as exc:
         session.rollback()
+        dialect = session.info.get("reference_transaction_dialect")
+        if dialect is not None:
+            from app.services.reference_concurrency import translate_reference_timeout
+            translate_reference_timeout(exc, dialect)
         raise
     finally:
         session.close()

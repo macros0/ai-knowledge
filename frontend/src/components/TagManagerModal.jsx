@@ -2,19 +2,22 @@
 
 import { apiToast } from "@/lib/apiToast.mjs";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   bulkReviewTags,
   cleanupTags,
   deleteTag,
-  friendlyApiError,
   listTags,
-  updateTagTranslation,
+  withReferenceEditLock,
 } from "@/lib/api";
 import { bumpTagVersion } from "@/lib/tagDictionary";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import { PencilIcon, TrashIcon } from "./icons";
+import TagTranslationEditor from "./TagTranslationEditor";
+import Modal from "./Modal";
+import ReferenceBatchResult from "./ReferenceBatchResult";
+import { chunkReferenceCards } from "@/lib/referenceEditing.mjs";
 
 /**
  * Модалка управления справочником тегов: список с поиском, счётчики использования,
@@ -30,12 +33,36 @@ export default function TagManagerModal({ onClose }) {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [expanded, setExpanded] = useState({});
   const [busy, setBusy] = useState(false);
+  const dirtyDrafts = useRef({});
+  const loadedTags = useRef(tags);
+  const [retainedDrafts, setRetainedDrafts] = useState({});
+  const [reviewPreview, setReviewPreview] = useState(null);
+  const [batchResults, setBatchResults] = useState([]);
+  useEffect(() => { loadedTags.current = tags; }, [tags]);
+  const onDirtyChange = useCallback((id, value) => {
+    dirtyDrafts.current[id] = value;
+    const snapshot = value ? loadedTags.current.find(tag => tag.id === id) : null;
+    setRetainedDrafts(previous => {
+      if (value) return previous[id] || !snapshot ? previous : { ...previous, [id]: snapshot };
+      if (!previous[id]) return previous;
+      const next = { ...previous }; delete next[id]; return next;
+    });
+  }, []);
+  const handleClose = () => {
+    if (busy) return;
+    if (Object.values(dirtyDrafts.current).some(Boolean) && !window.confirm(t("admin.glossary.unsavedChangesConfirm"))) return;
+    onClose();
+  };
+  const toggleExpanded = id => {
+    if (expanded[id] && dirtyDrafts.current[id] && !window.confirm(t("admin.glossary.unsavedChangesConfirm"))) return;
+    setExpanded(previous => ({ ...previous, [id]: !previous[id] }));
+  };
 
   const load = async () => {
     try {
       setTags(await listTags());
-    } catch {
-      setTags([]);
+    } catch (error) {
+      showToast(apiToast(error, t, { type: "error" }));
     }
   };
 
@@ -59,77 +86,64 @@ export default function TagManagerModal({ onClose }) {
   }, [tags, query, reviewOnly]);
 
   const unused = useMemo(() => tags.filter((t) => t.count === 0), [tags]);
-  const reviewCount = useMemo(
-    () => tags.filter((t) => t.needs_review).length,
-    [tags]
-  );
+  const reviewCount = filtered.filter(tag => tag.needs_review).length;
+  const retained = Object.values(retainedDrafts).filter(tag => !filtered.some(item => item.id === tag.id));
+  const displayedTags = [...filtered, ...retained];
 
   const afterChange = async () => {
     bumpTagVersion();
     await load();
   };
 
-  const removeOne = async (name) => {
+  const removeOne = async tag => {
+    if (busy) return;
     setBusy(true);
     try {
-      await deleteTag(name);
-      showToast(t("tags.manager.deleted", { name }), { type: "success" });
+      await withReferenceEditLock({ resource_type: "tag", resource_id: String(tag.id) }, ({ headers }) =>
+        deleteTag(tag.name, { expected_reference_revision: tag.reference_revision, headers }));
+      showToast(t("tags.manager.deleted", { name: tag.name }), { type: "success" });
       await afterChange();
-    } catch (err) {
-      showToast({ ...apiToast(err, t, { type: "error" }), message: t("tags.manager.deleteError", { message: friendlyApiError(err, t) }) });
-    } finally {
-      setBusy(false);
-    }
+    } catch (error) { showToast(apiToast(error, t, { type: "error" })); }
+    finally { setBusy(false); }
   };
 
   const removeAllUnused = async () => {
-    setBusy(true);
+    if (busy) return;
+    setBusy(true); let applied = false;
+    const results = [];
     try {
-      const res = await cleanupTags();
-      showToast(t("tags.manager.cleaned", { count: res?.total ?? 0 }), { type: "success" });
-      await afterChange();
-    } catch (err) {
-      showToast({ ...apiToast(err, t, { type: "error" }), message: t("tags.manager.cleanupError", { message: friendlyApiError(err, t) }) });
-    } finally {
-      setBusy(false);
-    }
+      const preview = await cleanupTags({ confirm: false });
+      if (!preview.total || !window.confirm(t("reference.cleanupConfirm", { count: preview.total }))) return;
+      for (const batch of preview.batches) {
+        applied = true;
+        const response = await cleanupTags({ confirm: true, ...batch });
+        results.push(...response.results); setBatchResults([...results]);
+      }
+    } catch (error) { showToast(apiToast(error, t, { type: "error" })); }
+    finally { if (applied) await afterChange(); setBusy(false); }
   };
 
-  const approveIds = async (ids) => {
-    setBusy(true);
-    try {
-      await bulkReviewTags(ids);
-      showToast(t("tags.manager.reviewed"), { type: "success" });
-      await afterChange();
-    } catch (err) {
-      showToast({ ...apiToast(err, t, {
-        type: "error",
-      }), message: t("tags.manager.translationError", { message: friendlyApiError(err, t) }) });
-    } finally {
-      setBusy(false);
-    }
+  const approveIds = (ids, targetLocale) => {
+    if (busy) return;
+    const items = tags.filter(tag => ids.includes(tag.id)).flatMap(tag => tag.translations
+      .filter(row => row.is_machine_translated && !row.reviewed_by && (!targetLocale || row.locale === targetLocale))
+      .map(row => ({ tag_id: tag.id, name: tag.name, locale: row.locale, text: row.text,
+        expected_reference_revision: tag.reference_revision })));
+    if (items.length) setReviewPreview(items);
   };
-
-  const saveTranslation = async (tag) => {
-    const el = document.getElementById(`tag-tr-${tag.id}`);
-    const text = (el?.value ?? "").trim();
-    if (!text) return;
-    setBusy(true);
+  const applyReview = async () => {
+    if (busy || !reviewPreview) return;
+    setBusy(true); const results = [];
     try {
-      await updateTagTranslation(tag.id, locale, text);
-      showToast(t("tags.manager.translationSaved"), { type: "success" });
-      await afterChange();
-    } catch (err) {
-      showToast({ ...apiToast(err, t, {
-        type: "error",
-      }), message: t("tags.manager.translationError", { message: friendlyApiError(err, t) }) });
-    } finally {
-      setBusy(false);
-    }
+      for (const batch of chunkReferenceCards(reviewPreview)) {
+        const response = await bulkReviewTags(batch.map(({ tag_id, locale, expected_reference_revision }) =>
+          ({ tag_id, locale, expected_reference_revision })));
+        results.push(...response.results); setBatchResults([...results]);
+      }
+      setReviewPreview(null);
+    } catch (error) { showToast(apiToast(error, t, { type: "error" })); }
+    finally { await afterChange(); setBusy(false); }
   };
-
-  const currentText = (tag) =>
-    tag.translations.find((tr) => tr.locale === locale)?.text ?? "";
 
   // Справочная скобка: любой en-перевод (машинный или проверенный — здесь это
   // только подсказка, авторитет остаётся в name/canonical). reviewed/machine
@@ -141,11 +155,11 @@ export default function TagManagerModal({ onClose }) {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-card tag-manager" onClick={(e) => e.stopPropagation()}>
         <header className="tag-manager-header">
           <h3 className="modal-title">{t("tags.manager.title")}</h3>
-          <button className="tag-manager-close" onClick={onClose} aria-label={t("tags.manager.closeAria")}>
+          <button className="tag-manager-close" onClick={handleClose} aria-label={t("tags.manager.closeAria")}>
             ×
           </button>
         </header>
@@ -168,7 +182,7 @@ export default function TagManagerModal({ onClose }) {
           </button>
           <button
             className="bulk-tag-btn"
-            onClick={() => approveIds(tags.filter((t) => t.needs_review).map((t) => t.id))}
+            onClick={() => approveIds(filtered.filter((t) => t.needs_review).map((t) => t.id))}
             disabled={busy || reviewCount === 0}
           >
             {t("tags.manager.reviewAll", { count: reviewCount })}
@@ -181,8 +195,19 @@ export default function TagManagerModal({ onClose }) {
             {t("tags.manager.deleteUnused", { count: unused.length })}
           </button>
         </div>
+        {retained.length > 0 && <p>{t("reference.retainedDrafts")}</p>}
+        <ReferenceBatchResult results={batchResults} />
+        {reviewPreview && <Modal title={t("reference.reviewPreview")} onClose={() => { if (!busy) setReviewPreview(null); }}
+          footer={<>
+            <button type="button" className="modal-btn" disabled={busy} onClick={() => setReviewPreview(null)}>{t("common.cancel")}</button>
+            <button type="button" className="modal-btn" disabled={busy} onClick={applyReview}>{t("tags.manager.approve")}</button>
+          </>}>
+          <ul>{reviewPreview.map(item => <li key={`${item.tag_id}:${item.locale}`}>
+            <strong>{item.name} ({item.locale})</strong>: {item.text}
+          </li>)}</ul>
+        </Modal>}
         <ul className="tag-manager-list">
-          {filtered.map((tag) => (
+          {displayedTags.map((tag) => (
             <li
               key={tag.id}
               className={`tag-manager-item ${tag.count === 0 ? "unused" : ""}`}
@@ -191,7 +216,7 @@ export default function TagManagerModal({ onClose }) {
                 <button
                   className="tag-manager-expand"
                   onClick={() =>
-                    setExpanded((e) => ({ ...e, [tag.id]: !e[tag.id] }))
+                    toggleExpanded(tag.id)
                   }
                   aria-label={t("tags.manager.expand")}
                 >
@@ -235,7 +260,7 @@ export default function TagManagerModal({ onClose }) {
                 {tag.count === 0 && (
                   <button
                     className="tag-manager-delete"
-                    onClick={() => removeOne(tag.name)}
+                    onClick={() => removeOne(tag)}
                     disabled={busy}
                     aria-label={t("tags.manager.deleteAria", { name: tag.name })}
                   >
@@ -264,7 +289,7 @@ export default function TagManagerModal({ onClose }) {
                           {tr.is_machine_translated && !tr.reviewed_by && (
                             <button
                               className="bulk-tag-btn"
-                              onClick={() => approveIds([tag.id])}
+                              onClick={() => approveIds([tag.id], tr.locale)}
                               disabled={busy}
                             >
                               {t("tags.manager.approve")}
@@ -274,25 +299,13 @@ export default function TagManagerModal({ onClose }) {
                       ))}
                     </ul>
                   )}
-                  {locale !== tag.canonical_locale && <div className="tag-manager-edit">
-                    <input
-                      id={`tag-tr-${tag.id}`}
-                      defaultValue={currentText(tag)}
-                      placeholder={t("tags.manager.editPlaceholder", { locale })}
-                    />
-                    <button
-                      className="bulk-tag-btn"
-                      onClick={() => saveTranslation(tag)}
-                      disabled={busy}
-                    >
-                      {t("tags.manager.save")}
-                    </button>
-                  </div>}
+                  <TagTranslationEditor tag={tag} locale={locale}
+                    onSaved={afterChange} onDirtyChange={onDirtyChange} />
                 </div>
               )}
             </li>
           ))}
-          {filtered.length === 0 && (
+          {displayedTags.length === 0 && (
             <li className="tag-manager-empty">{t("tags.manager.noMatch")}</li>
           )}
         </ul>

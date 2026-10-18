@@ -523,6 +523,7 @@ class Settings(BaseSettings):
     # Disabled until the corpus acceptance pass proves precision/recall.  The
     # flag is deliberately read at query-plan build time, not cached by the
     # glossary service, so a restart is enough to roll the feature back.
+    reference_edit_locks_enabled: bool = False
     glossary_query_expansion_enabled: bool = False
     glossary_max_terms_per_query: int = Field(default=5, ge=1, le=100)
     glossary_max_aliases_per_term: int = Field(default=50, ge=1, le=500)

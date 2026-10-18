@@ -38,6 +38,26 @@ def _term(*, locale="de", description="Deutsche Beschreibung"):
     )
 
 
+def test_unreviewed_human_translation_is_protected_before_model_and_at_commit(monkeypatch):
+    from app.services.glossary.translations import _write_machine_translation
+    monkeypatch.setattr("app.services.glossary.translations.get_settings", lambda: _settings())
+    term = _term()
+    with session_scope() as session:
+        session.add(DomainTermTranslation(term_id=term["id"], locale="ru", display_name="Ручной перевод",
+            description="Из объединённой карточки", is_machine_translated=False, reviewed_by=None,
+            version=1, source_revision=term["source_revision"]))
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("manual text must never be sent for machine replacement")
+    monkeypatch.setattr("app.services.glossary.translations.translate_texts_batch", forbidden)
+    result = backfill_glossary_translations("ru", [term["id"]], user=_User())
+    assert result["skipped_reviewed"] == 1
+    outcome = _write_machine_translation(term_id=term["id"], locale="ru", source_revision=term["source_revision"],
+        expected_version=1, expected_reference_revision=term["reference_revision"],
+        display_name="Machine overwrite", description=None, user=_User(), ip_address=None)
+    assert outcome == "skipped_reviewed"
+    assert GlossaryRegistry().get(term["id"])["translations"][0]["display_name"] == "Ручной перевод"
+
+
 def test_backfill_translates_name_and_description_from_canonical_source_even_when_machine_translation_exists(monkeypatch):
     monkeypatch.setattr("app.services.glossary.translations.get_settings", lambda: _settings())
     term = _term()

@@ -164,22 +164,52 @@ def ensure_seeded() -> dict:
     из замороженного индексного набора не имеет поискового эффекта.
     """
     from sqlalchemy import select
+    from app.db.models import ReferenceResourceState
+    from app.services.reference_resources import ReferenceKey
+    from app.services.reference_concurrency import lock_reference_resources, bump_reference_revision
+    from app.services.reference_edit_lock import live, invalidate_reference_lease
 
+    defaults = _default_stopwords_by_locale()
+    keys = [ReferenceKey("locale", code) for code, _name, _status in DEFAULT_LOCALES]
+    keys += [ReferenceKey("ui_dictionary", code) for code, _name, _status in DEFAULT_LOCALES]
+    keys += [ReferenceKey("stopword_set", code, kind=kind) for code, kinds in defaults.items() for kind in kinds]
     created = {"locales": 0, "stopwords": 0}
-    with session_scope() as s:
-        existing_locales = set(s.execute(select(Locale.code)).scalars())
+    with session_scope() as session:
+        prior_keys = set(session.scalars(select(ReferenceResourceState.resource_key)
+            .where(ReferenceResourceState.resource_key.in_([key.canonical for key in keys]))))
+        states = lock_reference_resources(session, keys)
+        existing_locales = set(session.scalars(select(Locale.code)))
+        new_locales = set()
         for code, name, status in DEFAULT_LOCALES:
             if code not in existing_locales:
-                s.add(Locale(code=code, name=name, status=status))
+                session.add(Locale(code=code, name=name, status=status))
                 created["locales"] += 1
-        existing_words = set(
-            s.execute(select(Stopword.locale, Stopword.word, Stopword.kind)).all()
-        )
-        for locale, kinds in _default_stopwords_by_locale().items():
+                new_locales.add(code)
+                key = ReferenceKey("locale", code)
+                if key.canonical in prior_keys:
+                    bump_reference_revision(states[key])
+                    invalidate_reference_lease(states[key])
+                dictionary_key = ReferenceKey("ui_dictionary", code)
+                if dictionary_key.canonical in prior_keys:
+                    bump_reference_revision(states[dictionary_key])
+                    invalidate_reference_lease(states[dictionary_key])
+        session.flush()
+        existing_words = set(session.execute(select(Stopword.locale, Stopword.word, Stopword.kind)).all())
+        for locale, kinds in defaults.items():
             for kind, words in kinds.items():
-                for word in words:
-                    if (locale, word, kind) not in existing_words:
-                        s.add(Stopword(locale=locale, word=word, kind=kind, created_by="seed"))
-                        created["stopwords"] += 1
+                missing = [word for word in words if (locale, word, kind) not in existing_words]
+                if not missing:
+                    continue
+                key = ReferenceKey("stopword_set", locale, kind=kind)
+                state = states[key]
+                if live(state) and locale not in new_locales:
+                    created["skipped_locked"] = created.get("skipped_locked", 0) + 1
+                    continue
+                if locale not in new_locales or key.canonical in prior_keys:
+                    bump_reference_revision(state)
+                if locale in new_locales and key.canonical in prior_keys:
+                    invalidate_reference_lease(state)
+                session.add_all([Stopword(locale=locale, word=word, kind=kind, created_by="seed") for word in missing])
+                created["stopwords"] += len(missing)
     invalidate()
     return created

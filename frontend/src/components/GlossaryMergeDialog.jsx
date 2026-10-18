@@ -2,6 +2,8 @@
 
 import { apiToast } from "@/lib/apiToast.mjs";
 
+import ReferenceEditNotice from "./ReferenceEditNotice";
+import { useReferenceMergeSession } from "@/hooks/useReferenceMergeSession";
 import { useState } from "react";
 import { commitGlossaryMerge, friendlyApiError, previewGlossaryMerge } from "@/lib/api";
 import { buildGlossaryMergeRequest, normalizeGlossaryIdentity, defaultGlossaryMergeChoice } from "@/lib/glossaryConflicts.mjs";
@@ -12,12 +14,14 @@ import { useGlossaryDialogFocus } from "@/lib/useGlossaryDialogFocus";
 
 const FIELDS = ["original_name", "original_description", "canonical_locale", "kind", "infotype_number", "enabled"];
 
-export default function GlossaryMergeDialog({ source: initialSource, target: initialTarget, draft, sourceEdit, targets = [], onTargetChange, onClose, onCompleted, returnFocusTo }) {
+export default function GlossaryMergeDialog({ source: initialSource, target: initialTarget, draft, sourceEdit, targets = [], onTargetChange, onClose, onCompleted, returnFocusTo, sourceSession }) {
   const { t } = useI18n();
   const { showToast } = useToast();
   const [source, setSource] = useState(initialSource);
   const [target, setTarget] = useState(initialTarget);
   const [proposal, setProposal] = useState(null);
+  const mergeSession = useReferenceMergeSession({resourceType: "glossary_term", sourceId: draft ? null : source.id,
+    targetId: target.id, sourceSession});
   const [selections, setSelections] = useState(() => Object.fromEntries(FIELDS.map((field) => {
     const left = source[field] ?? (field === "enabled" ? true : "");
     const right = target[field] ?? (field === "enabled" ? true : "");
@@ -73,10 +77,13 @@ export default function GlossaryMergeDialog({ source: initialSource, target: ini
     finally { setBusy(false); }
   };
   const commit = async () => {
-    if (!proposal) return;
+    if (!proposal || busy || mergeSession.state !== "editing") return;
     setBusy(true);
-    try { await commitGlossaryMerge(request(true)); onCompleted?.(); }
+    try {
+      await commitGlossaryMerge({...request(true), edit_sessions: mergeSession.getEditSessions()}); onCompleted?.();
+    }
     catch (err) {
+      mergeSession.handleMutationError?.(err);
       const fresh = err.data?.preview;
       if (fresh) {
         setSource(fresh.source); setTarget(fresh.target); setProposal(null);
@@ -101,8 +108,9 @@ export default function GlossaryMergeDialog({ source: initialSource, target: ini
     ? t((owner.enabled ?? true) ? "admin.glossary.active" : "admin.glossary.disabled")
     : String(owner[field] ?? "");
   return <div ref={dialogRef} tabIndex={-1} className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t("admin.glossary.mergeTitle")}>
-    <div className="modal-card">
+    <div className="modal-card" onInputCapture={mergeSession.markActivity} onPointerDownCapture={mergeSession.markActivity} onKeyDownCapture={mergeSession.markActivity}>
       <h3>{t("admin.glossary.mergeTitle")}</h3>
+      <ReferenceEditNotice session={mergeSession} onCopy={() => navigator.clipboard.writeText(JSON.stringify(request(), null, 2)).catch(() => {})} />
       <p className="muted">{t("admin.glossary.mergeHint")}</p>
       {targets.length > 1 && <label>{t("admin.glossary.mergeWith")}
         <select value={target.id} disabled={busy} onChange={(event) => onTargetChange?.(Number(event.target.value))}>
@@ -147,7 +155,7 @@ export default function GlossaryMergeDialog({ source: initialSource, target: ini
       <div className="modal-actions">
         <button type="button" className="modal-btn" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
         <button type="button" className="modal-btn" disabled={busy || needsChoice} onClick={preview}>{t("admin.glossary.mergePreview")}</button>
-        {proposal && <button type="button" className="modal-btn" disabled={busy || proposal.unresolved_fields?.length > 0 || proposal.conflicts?.length > 0} onClick={commit}>{t("admin.glossary.mergeCommit")}</button>}
+        {proposal && <button type="button" className="modal-btn" disabled={busy || mergeSession.state !== "editing" || proposal.unresolved_fields?.length > 0 || proposal.conflicts?.length > 0} onClick={commit}>{t("admin.glossary.mergeCommit")}</button>}
       </div>
       {proposal && <div className="glossary-merge-preview" role="status">
         <strong>{t("admin.glossary.mergeResult")}</strong>

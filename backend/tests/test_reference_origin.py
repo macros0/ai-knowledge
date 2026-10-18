@@ -34,7 +34,8 @@ def test_backfill_uses_each_original_and_skips_target_originals(entity):
     assert count_pending("fr", [entity]) == {entity: 2}
     with patch("app.services.translation.translate_texts_batch", return_value=["Traduit"]) as tr:
         result = backfill_reference_data("fr", [entity], user=User())
-    assert result[entity] == {"created": 2, "failed": 0}
+    assert result[entity] == {"created": 2, "updated": 0, "unchanged": 0, "failed": 0,
+        "skipped_locked": 0, "skipped_changed": 0, "skipped_reviewed": 0, "skipped_deleted": 0}
     assert [(c.args[0], c.args[1], c.kwargs["source_locale"]) for c in tr.call_args_list] == [
         (["Payroll"], "fr", "en"), (["Urlaub"], "fr", "de")
     ]
@@ -110,10 +111,12 @@ def test_api_records_creation_locale_and_preserves_it_on_edit(monkeypatch):
     assert response.status_code == 200, response.text
     dev = response.json()
     assert dev["canonical_locale"] == "en"
-    response = client.patch(f'/developments/{dev["id"]}', json={"version": dev["version"], "name": "Payroll register"})
+    response = client.patch(f'/developments/{dev["id"]}', json={"version": dev["version"],
+        "expected_reference_revision": dev["reference_revision"], "name": "Payroll register"})
     assert response.status_code == 200, response.text
     assert response.json()["canonical_locale"] == "en"
-    response = client.post("/attributes/module", json={"value": "HR", "label": "Personal", "canonical_locale": "de"})
+    revision = client.get("/attributes/module").json()["reference_revision"]
+    response = client.post("/attributes/module", json={"value": "HR", "label": "Personal", "canonical_locale": "de", "expected_reference_revision": revision})
     assert response.status_code == 200, response.text
     assert response.json()["canonical_locale"] == "de"
     assert client.post("/developments", json={"number": "bad", "name": "Bad", "canonical_locale": "INVALID language"}).status_code == 422
@@ -130,11 +133,12 @@ def test_api_cookie_is_default_only_for_new_elements(monkeypatch):
         monkeypatch.setattr(f"{module}.get_settings", lambda: settings)
     client = TestClient(create_app())
     client.cookies.set("okf.locale", "en")
-    response = client.post("/attributes/module", json={"value": "Payroll", "label": "Payroll"})
+    revision = client.get("/attributes/module").json()["reference_revision"]
+    response = client.post("/attributes/module", json={"value": "Payroll", "label": "Payroll", "expected_reference_revision": revision})
     assert response.status_code == 200, response.text
     assert response.json()["canonical_locale"] == "en"
     client.cookies.set("okf.locale", "ru")
-    assert client.post("/attributes/module", json={"value": "Payroll"}).json()["canonical_locale"] == "en"
+    assert client.post("/attributes/module", json={"value": "Payroll", "expected_reference_revision": revision}).json()["canonical_locale"] == "en"
 
 
 def test_tag_origin_reaches_registry_through_document_updates(monkeypatch):

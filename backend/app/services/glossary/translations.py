@@ -17,8 +17,12 @@ from app.db.models import DomainTerm, DomainTermTranslation
 from app.db.session import session_scope
 from app.services import audit
 from app.services.glossary.normalization import GlossaryValidationError, validate_locale
-from app.services.glossary.registry import GlossaryNotFoundError, GlossaryRegistry
+from app.services.glossary.registry import GlossaryNotFoundError
 from app.services.glossary.registry import invalidate_snapshot_cache
+from app.db.models import ReferenceResourceState
+from app.services.reference_resources import ReferenceKey
+from app.services.reference_concurrency import lock_reference_resources, current_reference_revision
+from app.services.reference_edit_lock import live
 from app.services.glossary.mutation import glossary_write_session, bump_glossary_revision
 from app.services.translation import translate_texts_batch
 
@@ -92,7 +96,7 @@ def _clean_description(value: str | None) -> str | None:
 
 
 def _candidate(term_id: int, locale: str) -> tuple | None:
-    with session_scope() as session:
+    with glossary_write_session(allow_unready=True) as (session, _state):
         term = session.get(DomainTerm, term_id)
         if term is None:
             return None
@@ -113,6 +117,8 @@ def _candidate(term_id: int, locale: str) -> tuple | None:
             translation.reviewed_by if translation else None,
             translation.is_machine_translated if translation else None,
             translation.source_revision if translation else None,
+            current_reference_revision(session, ReferenceKey("glossary_term", term_id)),
+            live(session.get(ReferenceResourceState, ReferenceKey("glossary_term", term_id).canonical)),
         )
 
 
@@ -146,6 +152,7 @@ def _write_machine_translation(
     locale: str,
     source_revision: int,
     expected_version: int,
+    expected_reference_revision: int,
     display_name: str,
     description: str | None,
     user,
@@ -153,6 +160,11 @@ def _write_machine_translation(
 ) -> str:
     """Commit one result only if the source and target remained unchanged."""
     with glossary_write_session() as (session, state):
+        key = ReferenceKey("glossary_term", term_id)
+        resource_state = lock_reference_resources(session, [key])[key]
+        if live(resource_state):
+            return "skipped_locked"
+        session.info["glossary_reference_states"] = {key: resource_state}
         term = session.get(DomainTerm, term_id)
         if term is None or not term.enabled or term.source_revision != source_revision:
             return "skipped_changed"
@@ -165,8 +177,10 @@ def _write_machine_translation(
             .with_for_update()
         ).scalar_one_or_none()
         current_version = translation.version if translation else 0
-        if translation is not None and translation.reviewed_by:
+        if translation is not None and (translation.reviewed_by or not translation.is_machine_translated):
             return "skipped_reviewed"
+        if resource_state.revision != expected_reference_revision:
+            return "skipped_changed"
         if current_version != expected_version:
             return "skipped_changed"
 
@@ -233,6 +247,7 @@ def backfill_glossary_translations(
         "updated": 0,
         "failed": 0,
         "skipped_changed": 0,
+        "skipped_locked": 0,
         "skipped_reviewed": 0,
         "skipped_same_locale": 0,
         "skipped_disabled": 0,
@@ -269,7 +284,12 @@ def backfill_glossary_translations(
             reviewed_by,
             is_machine,
             translation_source_revision,
+            reference_revision,
+            locked,
         ) = candidate
+        if locked:
+            result["skipped_locked"] += 1
+            continue
         expected = expected_translation_versions.get(term_id)
         if expected is not None and expected != translation_version:
             result["skipped_expected_version"] += 1
@@ -280,7 +300,7 @@ def backfill_glossary_translations(
         if canonical_locale == locale:
             result["skipped_same_locale"] += 1
             continue
-        if reviewed_by:
+        if reviewed_by or is_machine is False:
             result["skipped_reviewed"] += 1
             continue
 
@@ -301,6 +321,7 @@ def backfill_glossary_translations(
                 locale=locale,
                 source_revision=source_revision,
                 expected_version=translation_version,
+                expected_reference_revision=reference_revision,
                 display_name=display_name,
                 description=description,
                 user=user,
@@ -308,11 +329,13 @@ def backfill_glossary_translations(
             )
             result[outcome] += 1
         except Exception as exc:
-            logger.warning("Перевод термина %d не удался: %s", term_id, exc)
+            logger.warning("Перевод термина %d не удался (%s)", term_id, type(exc).__name__)
             result["failed"] += 1
 
-    if result["failed"] or result["skipped_changed"] or result["skipped_reviewed"]:
+    if result["failed"] or result["skipped_changed"] or result["skipped_reviewed"] or result["skipped_locked"]:
         result["status"] = "partial"
+    from app.services.diagnostics.reference_counters import record_backfill
+    record_backfill("glossary_term", result)
     audit.record(
         user,
         audit.GLOSSARY_TRANSLATION_BACKFILL,
@@ -334,6 +357,7 @@ def set_glossary_translation(
     source_revision: int,
     user,
     ip_address: str | None = None,
+    reference_context=None,
 ) -> dict:
     """Human edit with independent translation and source CAS guards."""
     locale = _validate_target_locale(locale)
@@ -342,7 +366,7 @@ def set_glossary_translation(
     if translation_version < 0 or source_revision < 1:
         raise GlossaryTranslationValidationError("Некорректная версия перевода или исходника")
 
-    with glossary_write_session() as (session, state):
+    with glossary_write_session(reference_keys=[ReferenceKey("glossary_term", term_id)], reference_context=reference_context) as (session, state):
         term = session.get(DomainTerm, term_id)
         if term is None:
             raise GlossaryNotFoundError(f"Термин не найден: {term_id}")
@@ -398,8 +422,11 @@ def set_glossary_translation(
             ip_address=ip_address,
         )
         bump_glossary_revision(session, state)
+        from app.services.glossary.registry import _term_dict
+        session.expire(term, ["translations_rel", "aliases_rel"])
+        result = _term_dict(term)
     invalidate_snapshot_cache()
-    return GlossaryRegistry().get(term_id)  # type: ignore[return-value]
+    return result
 
 
 def review_glossary_translation(
@@ -410,10 +437,11 @@ def review_glossary_translation(
     source_revision: int,
     user,
     ip_address: str | None = None,
+    reference_context=None,
 ) -> dict:
     """Confirm a machine translation without changing its text."""
     locale = _validate_target_locale(locale)
-    with glossary_write_session() as (session, state):
+    with glossary_write_session(reference_keys=[ReferenceKey("glossary_term", term_id)], reference_context=reference_context) as (session, state):
         term = session.get(DomainTerm, term_id)
         if term is None:
             raise GlossaryNotFoundError(f"Термин не найден: {term_id}")
@@ -455,5 +483,8 @@ def review_glossary_translation(
                 ip_address=ip_address,
             )
             bump_glossary_revision(session, state)
+        from app.services.glossary.registry import _term_dict
+        session.expire(term, ["translations_rel", "aliases_rel"])
+        result = _term_dict(term)
     invalidate_snapshot_cache()
-    return GlossaryRegistry().get(term_id)  # type: ignore[return-value]
+    return result

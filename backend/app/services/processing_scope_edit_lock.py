@@ -3,7 +3,7 @@
 Every mutation checks its lease while holding the document write lock. No SQL
 transaction spans parsing/provider calls or the lifetime of an open dialog.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import hashlib
 import secrets
 
@@ -13,9 +13,9 @@ from app.db.models import (Document, DocumentGenerationState, DocumentProcessing
                            DocumentScopeChange, DocumentScopeEditLock)
 from app.services.generation_store import lock_document_write
 from app.services.processing_scope import ProcessingScopeConflict
+from app.services.edit_lease_policy import (
+    LEASE_SECONDS as LEASE_SECONDS, IDLE_SECONDS as IDLE_SECONDS, compute_deadlines)
 
-LEASE_SECONDS = 180
-IDLE_SECONDS = 600
 OPERATION_STATES = {"admitted", "queued", "processing", "copying", "ready"}
 
 
@@ -53,6 +53,7 @@ def edit_lock_status(session, doc_id):
     if not _live(row):
         return {"state": "available", "owner": None, "expires_at": None}
     return {"state": "editing", "owner": row.owner_name, "expires_at": _utc(row.expires_at).isoformat(),
+            "server_now": _now().isoformat(),
             "idle_expires_at": _utc(row.idle_expires_at).isoformat(),
             "idle_remaining_seconds": max(0, int((_utc(row.idle_expires_at) - _now()).total_seconds()))}
 
@@ -89,8 +90,7 @@ def acquire_edit_lock(session, doc_id, owner_id, owner_name, token):
         row = DocumentScopeEditLock(doc_id=doc_id)
         session.add(row)
     row.owner_id, row.owner_name, row.token_hash = owner_id, owner_name, _hash(token)
-    row.expires_at = _now() + timedelta(seconds=LEASE_SECONDS)
-    row.idle_expires_at = _now() + timedelta(seconds=IDLE_SECONDS)
+    row.expires_at, row.idle_expires_at = compute_deadlines(_now(), _now(), record_activity=True)
     row.activity_sequence = 0
     session.flush()
     return edit_lock_status(session, doc_id)
@@ -103,9 +103,8 @@ def require_edit_lock(session, doc_id, owner_id, token, *, record_activity=True)
     if not _matches(row, owner_id, token) or not _live(row):
         raise ProcessingScopeConflict("Блокировка редактора истекла. Обновите состав.", code="scope_edit_lock_lost")
     # A bounded mutation also renews the lease; it cannot resurrect an expired tab.
-    if record_activity:
-        row.idle_expires_at = _now() + timedelta(seconds=IDLE_SECONDS)
-    row.expires_at = min(_now() + timedelta(seconds=LEASE_SECONDS), _utc(row.idle_expires_at))
+    row.expires_at, row.idle_expires_at = compute_deadlines(
+        _now(), row.idle_expires_at, record_activity=record_activity)
     return row
 
 
@@ -113,8 +112,7 @@ def renew_edit_lock(session, doc_id, owner_id, token, *, activity_sequence=0):
     row = require_edit_lock(session, doc_id, owner_id, token, record_activity=False)
     if activity_sequence > row.activity_sequence:
         row.activity_sequence = activity_sequence
-        row.idle_expires_at = _now() + timedelta(seconds=IDLE_SECONDS)
-        row.expires_at = _now() + timedelta(seconds=LEASE_SECONDS)
+        row.expires_at, row.idle_expires_at = compute_deadlines(_now(), row.idle_expires_at, record_activity=True)
     return edit_lock_status(session, doc_id)
 
 

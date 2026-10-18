@@ -17,11 +17,15 @@ import {
   rollbackUiDictionary,
   uiDictionaryHistory,
 } from "@/lib/api";
+import { useReferenceEditSession } from "@/hooks/useReferenceEditSession";
+import ReferenceEditNotice from "./ReferenceEditNotice";
+import ReferenceDictionaryConflictDialog from "./ReferenceDictionaryConflictDialog";
+import Modal from "./Modal";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 import { downloadDict, effectiveDictionary, exportFilename, enSourceDictionary } from "@/lib/uiDictExport.mjs";
 
-export default function UiDictionaryEditor({ locale }) {
+export default function UiDictionaryEditor({ locale, onDirtyChange, onBusyChange }) {
   const { t } = useI18n();
   const { showToast } = useToast();
 
@@ -37,6 +41,32 @@ export default function UiDictionaryEditor({ locale }) {
   const [loadError, setLoadError] = useState(null); // текст ошибки загрузки (или null)
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [comparison, setComparison] = useState(null);
+  const [rollbackPreview, setRollbackPreview] = useState(null);
+  const baseline = useRef(null);
+  const session = useReferenceEditSession({resource: {resource_type: "ui_dictionary", resource_id: code || "invalid"},
+    enabled: Boolean(code), onLost: () => {setResult(null); setRollbackPreview(null);},
+    onAcquired: async (_status, isCurrent) => {
+      const fresh = await getUiDictionaryAdmin(code);
+      if (!isCurrent()) return;
+      setResult(null); setRollbackPreview(null);
+      setActiveData(fresh.data || null); setIsNew(fresh.data == null);
+      if (dirty) {
+        if (baseline.current?.reference_revision !== fresh.reference_revision) {
+          try {openComparison(fresh, JSON.parse(text || "{}"));}
+          catch { /* Invalid JSON remains a draft; preview requires valid JSON and compares again. */ }
+        }
+      } else {
+        baseline.current = fresh;
+        const value = fresh.data == null ? "" : JSON.stringify(fresh.data, null, 2);
+        textRef.current = value; setText(value); setNote(fresh.note || "");
+      }
+    }});
+  const writable = session.state === "editing" && !busy && !comparison;
+  useEffect(() => {onDirtyChange?.(dirty);}, [dirty, onDirtyChange]);
+  useEffect(() => {onBusyChange?.(busy);}, [busy, onBusyChange]);
+  useEffect(() => () => {onDirtyChange?.(false); onBusyChange?.(false);}, [onDirtyChange, onBusyChange]);
 
   // Флаг «пользователь уже правил JSON» — реф, чтобы не перезаписывать при retry.
   const dirtyRef = useRef(false);
@@ -44,7 +74,7 @@ export default function UiDictionaryEditor({ locale }) {
 
   const onTextChange = (v) => {
     textRef.current = v;
-    dirtyRef.current = true;
+    dirtyRef.current = true; setDirty(true); setResult(null);
     setText(v);
   };
 
@@ -69,11 +99,9 @@ export default function UiDictionaryEditor({ locale }) {
       setIsNew(!hasData);
       setActiveData(hasData ? active.data : null);
       if (!dirtyRef.current) {
+        baseline.current = active;
         setText(hasData ? JSON.stringify(active.data, null, 2) : "");
         textRef.current = hasData ? JSON.stringify(active.data, null, 2) : "";
-        setNote(active?.note || "");
-      } else {
-        // Правки пользователя сохранены; метаданные сервера всё равно обновляем.
         setNote(active?.note || "");
       }
       return true;
@@ -102,58 +130,73 @@ export default function UiDictionaryEditor({ locale }) {
     return parsed;
   };
 
-  const onPreview = () => {
-    let data;
-    try {
-      data = parseJson();
-    } catch (err) {
-      showToast(t("admin.uictl.invalidJson", { error: err.message }), { type: "error" });
-      return;
+  const openComparison = (remote, data) => setComparison({base: baseline.current?.data || {},
+    local: data, remote: remote.data || {}, snapshot: remote});
+  const reportWriteError = err => {
+    session.handleMutationError?.(err);
+    if (["version_conflict", "reference_preview_stale"].includes(err.code || err.data?.code)) {
+      setResult(null); setRollbackPreview(null);
     }
-    setBusy(true);
-    importUiDictionary(code, { data, note, confirm: false })
-      .then((res) => setResult(res))
-      .catch((err) => showToast(apiToast(err, t, { type: "error" })))
-      .finally(() => setBusy(false));
+    showToast(apiToast(err, t, {type: "error"}));
   };
-
-  const onApply = () => {
+  const onPreview = async () => {
+    if (!code || busy) return;
     let data;
+    try {data = parseJson();}
+    catch (err) {showToast(t("admin.uictl.invalidJson", {error: err.message}), {type: "error"}); return;}
+    setBusy(true);
     try {
-      data = parseJson();
-    } catch (err) {
-      showToast(t("admin.uictl.invalidJson", { error: err.message }), { type: "error" });
-      return;
-    }
-    setBusy(true);
-    importUiDictionary(code, { data, note, confirm: true })
-      .then(async (res) => {
-        if (res.applied) {
-          showToast(t("admin.uictl.applied"), { type: "success" });
-          setResult(null);
-          dirtyRef.current = false; // применено — сервер теперь источник
-          await loadActive();
-          await loadHistory();
-        } else {
-          setResult(res);
-        }
-      })
-      .catch((err) => showToast(apiToast(err, t, { type: "error" })))
-      .finally(() => setBusy(false));
+      const remote = await getUiDictionaryAdmin(code);
+      if (!baseline.current || baseline.current.reference_revision !== remote.reference_revision) {
+        setResult(null); openComparison(remote, data); return;
+      }
+      const request = {data, note};
+      const result = await importUiDictionary(code, {...request, confirm: false});
+      if (result.errors?.length) {setResult(result); return;}
+      if (result.reference_revision !== baseline.current.reference_revision) {
+        openComparison(await getUiDictionaryAdmin(code), data); setResult(null); return;
+      }
+      setResult({...result, request});
+    } catch (err) {reportWriteError(err);}
+    finally {setBusy(false);}
   };
-
-  const onRollback = (entry) => {
-    if (!window.confirm(t("admin.uictl.rollbackConfirm", { version: entry.version }))) return;
+  const onApply = async () => {
+    if (!code || !writable || !result?.request || !result.preview_digest || result.errors?.length) return;
     setBusy(true);
-    rollbackUiDictionary(code, entry.id)
-      .then(async () => {
-        showToast(t("admin.uictl.rolledBack"), { type: "success" });
-        dirtyRef.current = false;
-        await loadActive();
-        await loadHistory();
-      })
-      .catch((err) => showToast(apiToast(err, t, { type: "error" })))
-      .finally(() => setBusy(false));
+    try {
+      const saved = await importUiDictionary(code, {...result.request, confirm: true,
+        expected_reference_revision: result.reference_revision, expected_active_version: result.active_version,
+        preview_digest: result.preview_digest, headers: session.getMutationHeaders()});
+      if (saved.applied) {
+        showToast(t("admin.uictl.applied"), {type: "success"});
+        setResult(null); dirtyRef.current = false; setDirty(false);
+        await loadActive(); await loadHistory();
+      } else setResult(saved);
+    } catch (err) {reportWriteError(err);}
+    finally {setBusy(false);}
+  };
+  const onRollback = async entry => {
+    if (!writable) return;
+    setBusy(true);
+    try {setRollbackPreview({entry, response: await rollbackUiDictionary(code, entry.id, {confirm: false})});}
+    catch (err) {reportWriteError(err);}
+    finally {setBusy(false);}
+  };
+  const applyRollback = async () => {
+    if (!writable || !rollbackPreview) return;
+    setBusy(true);
+    try {
+      const {entry, response} = rollbackPreview;
+      const saved = await rollbackUiDictionary(code, entry.id, {confirm: true,
+        expected_reference_revision: response.reference_revision, expected_active_version: response.active_version,
+        preview_digest: response.preview_digest, headers: session.getMutationHeaders()});
+      if (saved.applied) {
+        setResult(null); setRollbackPreview(null);
+        showToast(t("admin.uictl.rolledBack"), {type: "success"});
+        await loadActive(); await loadHistory();
+      }
+    } catch (err) {reportWriteError(err);}
+    finally {setBusy(false);}
   };
 
   const previewErrors = result?.errors && result.errors.length ? result.errors : null;
@@ -163,7 +206,8 @@ export default function UiDictionaryEditor({ locale }) {
   }
 
   return (
-    <div className="uictl-editor">
+    <div className="uictl-editor" onInputCapture={session.markActivity} onKeyDownCapture={session.markActivity} onPointerDownCapture={session.markActivity}>
+      <ReferenceEditNotice session={session} onCopy={() => navigator.clipboard.writeText(`${text}\n${note}`).catch(() => {})} />
       {isNew ? (
         <p className="muted">{t("admin.uictl.newOverride")}</p>
       ) : (
@@ -215,7 +259,7 @@ export default function UiDictionaryEditor({ locale }) {
       <textarea
         className="uictl-textarea"
         value={text}
-        onChange={(e) => onTextChange(e.target.value)}
+        onChange={(e) => onTextChange(e.target.value)} readOnly={!writable || loading}
         rows={10}
         placeholder={t("admin.uictl.placeholder")}
         spellCheck={false}
@@ -223,14 +267,14 @@ export default function UiDictionaryEditor({ locale }) {
       <input
         className="uictl-note"
         value={note}
-        onChange={(e) => setNote(e.target.value)}
+        readOnly={!writable || loading} onChange={(e) => {setNote(e.target.value); dirtyRef.current = true; setDirty(true); setResult(null);}}
         placeholder={t("admin.uictl.notePlaceholder")}
       />
       <div className="uictl-controls">
         <button className="modal-btn" disabled={busy} onClick={onPreview}>
           {t("admin.uictl.preview")}
         </button>
-        <button className="modal-btn" disabled={busy} onClick={onApply}>
+        <button className="modal-btn" disabled={!writable || !result?.request || Boolean(previewErrors)} onClick={onApply}>
           {t("admin.uictl.apply")}
         </button>
       </div>
@@ -266,7 +310,7 @@ export default function UiDictionaryEditor({ locale }) {
                   {entry.note ? ` · ${entry.note}` : ""}
                 </div>
                 <div className="job-actions">
-                  <button className="modal-btn" disabled={busy} onClick={() => onRollback(entry)}>
+                  <button className="modal-btn" disabled={!writable} onClick={() => onRollback(entry)}>
                     {t("admin.uictl.rollback")}
                   </button>
                 </div>
@@ -275,6 +319,15 @@ export default function UiDictionaryEditor({ locale }) {
           </ul>
         )}
       </div>
+      {comparison && <ReferenceDictionaryConflictDialog {...comparison} onClose={() => setComparison(null)}
+        onConfirm={value => {baseline.current = comparison.snapshot; onTextChange(JSON.stringify(value, null, 2)); setComparison(null);}} />}
+      {rollbackPreview && <Modal title={t("admin.uictl.rollbackConfirm", {version: rollbackPreview.entry.version})}
+        onClose={() => {if (!busy) setRollbackPreview(null);}} footer={<>
+          <button type="button" className="modal-btn" disabled={busy} onClick={() => setRollbackPreview(null)}>{t("common.cancel")}</button>
+          <button type="button" className="modal-btn" disabled={!writable} onClick={applyRollback}>{t("admin.uictl.rollback")}</button>
+        </>}>
+        <pre className="reference-dictionary-preview">{JSON.stringify(rollbackPreview.response.target_data, null, 2)}</pre>
+      </Modal>}
     </div>
   );
 }

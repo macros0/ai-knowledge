@@ -23,6 +23,10 @@ from app.db.session import session_scope
 from app.services import audit
 from app import error_codes as codes
 from app.services.errors import NotFoundError
+from app.services.reference_resources import ReferenceKey
+from app.services.reference_concurrency import (ReferenceError, lock_reference_resources, bump_reference_revision,
+    reference_preview_digest)
+from app.services.reference_mutation import guard_reference_writes
 
 logger = logging.getLogger(__name__)
 
@@ -180,89 +184,91 @@ def get_active(locale: str) -> dict | None:
         }
 
 
-def import_dictionary(
-    locale: str,
-    data: dict,
-    note: str | None,
-    uploaded_by: str | None,
-    *,
-    confirm: bool = False,
-    activate: bool = True,
-    user=None,
-    ip_address: str | None = None,
-) -> dict:
-    """Двухшаговый импорт: без confirm — preview, с confirm — новый version.
+_EXPECTED_UNSET = object()
 
-    Возвращает {errors, applied, preview|version}. Семантика — ПОЛНАЯ замена
-    override-словаря (загруженный JSON становится актуальным словарём локали).
 
-    `activate=False` создаёт версию, НЕ делая её активной (locales.
-    ui_dictionary_version не двигается): версия ложится в историю как заготовка,
-    которую админ включает откатом. Используется автосидом (см.
-    seed_english_copy).
-    """
+def _active_in_session(session, locale, loc):
+    if loc.ui_dictionary_version is None:
+        return None
+    return session.scalar(select(UiDictionary).where(UiDictionary.locale == locale,
+        UiDictionary.version == loc.ui_dictionary_version))
+
+
+def get_admin_snapshot(locale):
+    key = ReferenceKey("ui_dictionary", locale)
+    with session_scope() as session:
+        state = lock_reference_resources(session, [key])[key]
+        loc = session.get(Locale, locale, populate_existing=True)
+        if loc is None:
+            raise ValueError(f"Язык '{locale}' не найден")
+        active = _active_in_session(session, locale, loc)
+        return {"locale": locale, "reference_revision": state.revision, "version": active.version if active else None,
+            "data": active.data if active else None, "note": active.note if active else None,
+            "uploaded_by": active.uploaded_by if active else None, "created_at": active.created_at if active else None}
+
+
+def _dictionary_fence(session, locale, reference_context=None, *, write=False):
+    key, locale_key = ReferenceKey("ui_dictionary", locale), ReferenceKey("locale", locale)
+    states = lock_reference_resources(session, [locale_key, key])
+    loc = session.get(Locale, locale, populate_existing=True)
+    if loc is None:
+        raise ValueError(f"Язык '{locale}' не найден")
+    state = guard_reference_writes(session, [key], reference_context)[key] if write else states[key]
+    return loc, state, states[locale_key]
+
+
+def _confirm_dictionary(context, digest, actual_digest, expected_active, current_active):
+    if context is not None and (not digest or expected_active is _EXPECTED_UNSET):
+        raise ReferenceError("reference_precondition_required", 428)
+    if expected_active is not _EXPECTED_UNSET:
+        if expected_active is not None and (type(expected_active) is not int or expected_active < 1):
+            raise ReferenceError("reference_precondition_required", 428)
+        if expected_active != current_active:
+            raise ReferenceError("version_conflict")
+    if digest is not None and digest != actual_digest:
+        raise ReferenceError("reference_preview_stale")
+
+
+def _dictionary_audit(session, user, action, locale, version, ip_address, **meta):
+    if user is not None:
+        audit.record_in_session(session, action_type=action, user_id=getattr(user, "user_id", None),
+            username=getattr(user, "username", None), target_type=audit.TARGET_LOCALE, target_id=locale,
+            new_value={"version": version}, ip_address=ip_address, meta=meta)
+
+
+def import_dictionary(locale: str, data: dict, note: str | None, uploaded_by: str | None, *, confirm=False,
+    activate=True, user=None, ip_address=None, reference_context=None, preview_digest=None,
+    expected_active_version=_EXPECTED_UNSET, only_if_empty=False) -> dict:
     errors = validate(locale, data)
     if errors:
         return {"errors": errors, "applied": False}
-
-    # Проверка существования локали ДО построения preview: иначе preview для
-    # несуществующего языка вернёт 200 и замаскирует ошибку вызывающей стороны
-    # (инцидент «[object Object]», Этап 7 P0 hardening).
-    with session_scope() as s:
-        if s.get(Locale, locale) is None:
-            raise ValueError(f"Язык '{locale}' не найден")
-
-    current = get_active(locale)
-    current_keys = set(current["data"].keys()) if current else set()
-    new_keys = set(data.keys())
-    preview = {
-        "total": len(new_keys),
-        "added": sorted(new_keys - current_keys),
-        "removed": sorted(current_keys - new_keys),
-        "unchanged": sorted(new_keys & current_keys),
-    }
-    if not confirm:
-        return {"errors": [], "applied": False, "preview": preview}
-
-    with session_scope() as s:
-        loc = s.get(Locale, locale)
-        if loc is None:
-            raise ValueError(f"Язык '{locale}' не найден")
-        # Максимум ПО ИСТОРИИ, а не по активному указателю: тот может отставать
-        # (откат на старую версию, неактивная заготовка автосида), и версия
-        # «активная + 1» упиралась бы в unique(locale, version).
-        max_version = s.execute(
-            select(func.max(UiDictionary.version)).where(UiDictionary.locale == locale)
-        ).scalar()
+    with session_scope() as session:
+        loc, state, locale_state = _dictionary_fence(session, locale, reference_context, write=confirm)
+        current = _active_in_session(session, locale, loc)
+        current_keys = set(current.data) if current else set()
+        new_keys = set(data)
+        preview = {"total": len(new_keys), "added": sorted(new_keys - current_keys),
+            "removed": sorted(current_keys - new_keys), "unchanged": sorted(new_keys & current_keys)}
+        digest = reference_preview_digest({"operation": "import", "locale": locale, "revision": state.revision,
+            "active_version": loc.ui_dictionary_version, "data": data, "note": note, "activate": activate})
+        result = {"errors": [], "applied": False, "preview": preview, "preview_digest": digest,
+            "reference_revision": state.revision, "active_version": loc.ui_dictionary_version}
+        if not confirm:
+            return result
+        _confirm_dictionary(reference_context, preview_digest, digest, expected_active_version, loc.ui_dictionary_version)
+        max_version = session.scalar(select(func.max(UiDictionary.version)).where(UiDictionary.locale == locale))
+        if only_if_empty and max_version is not None:
+            return {**result, "reason": "already_exists"}
         next_version = (max_version or 0) + 1
-        s.add(
-            UiDictionary(
-                locale=locale,
-                version=next_version,
-                data=data,
-                note=note,
-                uploaded_by=uploaded_by,
-            )
-        )
+        session.add(UiDictionary(locale=locale, version=next_version, data=data, note=note, uploaded_by=uploaded_by))
+        bump_reference_revision(state)
         if activate:
             loc.ui_dictionary_version = next_version
-
-    if user is not None:
-        audit.record(
-            user,
-            audit.UI_DICTIONARY_IMPORT,
-            audit.TARGET_LOCALE,
-            target_id=locale,
-            new_value={"version": next_version, "total": len(new_keys)},
-            ip_address=ip_address,
-            meta={
-                "note": note,
-                "added": len(preview["added"]),
-                "removed": len(preview["removed"]),
-                "activated": activate,
-            },
-        )
-    return {"errors": [], "applied": True, "version": next_version, "preview": preview}
+            bump_reference_revision(locale_state)
+        _dictionary_audit(session, user, audit.UI_DICTIONARY_IMPORT, locale, next_version, ip_address,
+            note=note, total=len(new_keys), added=len(preview["added"]), removed=len(preview["removed"]), activated=activate)
+        return {**result, "applied": True, "version": next_version, "reference_revision": state.revision,
+            "active_version": loc.ui_dictionary_version}
 
 
 def _has_versions(locale: str) -> bool:
@@ -319,6 +325,7 @@ def seed_english_copy(locale: str, *, user=None, ip_address: str | None = None) 
             uploaded_by=uploaded_by,
             confirm=True,
             activate=False,
+            only_if_empty=True,
             user=user,
             ip_address=ip_address,
         )
@@ -329,6 +336,8 @@ def seed_english_copy(locale: str, *, user=None, ip_address: str | None = None) 
             locale,
             exc_info=True,
         )
+        return False
+    if result.get("reason") == "already_exists":
         return False
     if not result.get("applied"):
         logger.warning(
@@ -360,25 +369,28 @@ def history(locale: str) -> list[dict]:
     ]
 
 
-def rollback(locale: str, version_id: int, *, user=None, ip_address: str | None = None) -> dict:
-    """Возвращает locales.ui_dictionary_version на выбранную историческую версию."""
-    with session_scope() as s:
-        row = s.get(UiDictionary, version_id)
+def rollback(locale: str, version_id: int, *, user=None, ip_address=None, confirm=True,
+    reference_context=None, preview_digest=None, expected_active_version=_EXPECTED_UNSET) -> dict:
+    with session_scope() as session:
+        loc, state, locale_state = _dictionary_fence(session, locale, reference_context, write=confirm)
+        row = session.get(UiDictionary, version_id)
         if row is None or row.locale != locale:
             raise NotFoundError("Версия словаря не найдена", code=codes.DICT_VERSION_NOT_FOUND)
-        loc = s.get(Locale, locale)
-        if loc is None:
-            raise ValueError(f"Язык '{locale}' не найден")
-        loc.ui_dictionary_version = row.version
-        version = row.version
-
-    if user is not None:
-        audit.record(
-            user,
-            audit.UI_DICTIONARY_ROLLBACK,
-            audit.TARGET_LOCALE,
-            target_id=locale,
-            new_value={"version": version},
-            ip_address=ip_address,
-        )
-    return {"locale": locale, "version": version, "applied": True}
+        digest = reference_preview_digest({"operation": "rollback", "locale": locale, "entry_id": version_id,
+            "target_version": row.version, "target_data": row.data, "revision": state.revision,
+            "active_version": loc.ui_dictionary_version})
+        current = _active_in_session(session, locale, loc)
+        old_keys, new_keys = set(current.data) if current else set(), set(row.data)
+        result = {"locale": locale, "version": row.version, "applied": False, "preview_digest": digest, "target_data": row.data,
+            "reference_revision": state.revision, "active_version": loc.ui_dictionary_version,
+            "preview": {"total": len(new_keys), "added": sorted(new_keys - old_keys), "removed": sorted(old_keys - new_keys),
+                "unchanged": sorted(new_keys & old_keys)}}
+        if not confirm:
+            return result
+        _confirm_dictionary(reference_context, preview_digest, digest, expected_active_version, loc.ui_dictionary_version)
+        if loc.ui_dictionary_version != row.version:
+            loc.ui_dictionary_version = row.version
+            bump_reference_revision(state)
+            bump_reference_revision(locale_state)
+            _dictionary_audit(session, user, audit.UI_DICTIONARY_ROLLBACK, locale, row.version, ip_address)
+        return {**result, "applied": True, "reference_revision": state.revision, "active_version": loc.ui_dictionary_version}

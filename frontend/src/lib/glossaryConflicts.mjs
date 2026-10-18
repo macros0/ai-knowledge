@@ -52,14 +52,21 @@ export function reconcileGlossaryDraft(draft, previous, updated) {
 }
 
 export function reconcileGlossaryAliasDrafts(drafts, previous = [], updated = []) {
-  return Object.fromEntries(updated.map((alias) => {
+  const result = Object.fromEntries(updated.map((alias) => {
     const before = previous.find((item) => item.id === alias.id);
     return [alias.id, before && drafts[alias.id] ? reconcileGlossaryDraft(drafts[alias.id], before, alias) : alias];
   }));
+  for (const [id, draft] of Object.entries(drafts)) {
+    if (Object.hasOwn(result, id)) continue;
+    const before = previous.find(item => String(item.id) === id);
+    if (!before || ["alias", "locale", "auto_expand", "search_enabled"].some(key => !equalDraftValue(draft[key], before[key]))) result[id] = draft;
+  }
+  return result;
 }
 
 export function hasPendingGlossaryEdits(term, source, aliases, newAlias) {
   return Boolean(newAlias?.alias?.trim()) ||
+    Object.keys(aliases).some(id => !(term.aliases || []).some(alias => String(alias.id) === id)) ||
     Object.entries(source).some(([key, value]) => !equalDraftValue(value, term[key])) ||
     (term.aliases || []).some((alias) => ["alias", "locale", "auto_expand", "search_enabled"].some((key) =>
       !equalDraftValue((aliases[alias.id] || alias)[key], alias[key])));
@@ -88,10 +95,13 @@ export function buildGlossaryMergeRequest({ source, target, draft, sourceEdit, r
     target_version: proposal?.target?.version ?? target.version,
     ...(draft ? {draft} : {
       source_term_id: source.id,
-      source_version: proposal?.source?.version ?? source.version,
+      source_version: sourceEdit ? source.version : proposal?.source?.version ?? source.version,
       ...(sourceEdit ? {source_edit: sourceEdit} : {}),
     }),
     selections,
-    ...(proposal ? {preview_digest: proposal.digest, expected_revision: proposal.glossary_revision} : {}),
+    ...(proposal ? {preview_digest: proposal.digest, expected_revision: proposal.glossary_revision,
+      expected_reference_revisions: Object.fromEntries([
+        ...(draft ? [] : [sourceEdit ? source : proposal.source || source]), proposal.target || target,
+      ].map(item => [item.id, item.reference_revision]))} : {}),
   };
 }

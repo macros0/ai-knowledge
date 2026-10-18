@@ -44,6 +44,25 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class ReferenceResourceState(Base):
+    """Durable content revision and a short user lease; releasing never deletes it."""
+
+    __tablename__ = "reference_resource_states"
+    resource_key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger, default=1, server_default="1", nullable=False)
+    lease_epoch: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
+    owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    acquired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    idle_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activity_sequence: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
+    __table_args__ = (
+        CheckConstraint("revision >= 1 AND lease_epoch >= 0 AND activity_sequence >= 0", name="ck_reference_state_bounds"),
+    )
+
+
 class DiagnosticSession(Base):
     __tablename__ = "diagnostic_sessions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -132,8 +151,7 @@ class AttributeValue(Base):
 
     Значения хранятся как данные (attribute_key + value), а не как CHECK/enum в
     схеме. org_id=NULL — общее/системное значение; иначе — привязано к организации.
-    Уникальность (key, value, org_id) — в БД; мягкое дублирование (NULL org) гасится
-    идемпотентностью сервиса (attribute_registry.py).
+    Уникальность глобальных и scoped значений проверяется в БД.
     """
 
     __tablename__ = "attribute_values"
@@ -150,6 +168,8 @@ class AttributeValue(Base):
 
     __table_args__ = (
         UniqueConstraint("attribute_key", "value", "org_id", name="uq_attribute_values_key_value_org"),
+        Index("uq_attribute_values_global", "attribute_key", "value", unique=True,
+              sqlite_where=text("org_id IS NULL"), postgresql_where=text("org_id IS NULL")),
     )
 
 

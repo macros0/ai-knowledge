@@ -6,7 +6,9 @@ import {getProcessingScope,getProcessingScopeLabels,createProcessingScopeReview,
 import {effectiveSelection,toggleSourceSelection,scopeTreeSources,scopeChangeAction,attachmentPreviewFormat,savedScopeChanges} from '@/lib/processingScope.mjs';
 import {sourceAncestors} from '@/lib/sourceTree.mjs';
 import {acquireProcessingScopeEditLock,renewProcessingScopeEditLock,releaseProcessingScopeEditLock} from '@/lib/api';
-import {createScopeIdleTimer} from '@/lib/processingScopeIdle.mjs';
+import {createEditorLeaseSession} from '@/lib/editorLeaseSession.mjs';
+import {createScopeLeaseAdapter} from '@/lib/editorLeaseAdapters.mjs';
+import EditorLeaseNotice from './EditorLeaseNotice';
 import Modal from './Modal';
 import AttachmentPreviewDialog from './AttachmentPreviewDialog';
 
@@ -47,6 +49,7 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
   const editToken=useRef(null);
   const idleSession=useRef(null),closeEditor=useRef(onClose);
   const [idleWarning,setIdleWarning]=useState(null);
+  const [leaseState,setLeaseState]=useState('viewing');
   useEffect(()=>{closeEditor.current=onClose;},[onClose]);
   const sequence=useRef(0),mounted=useRef(true),requestId=useRef(null);
   useEffect(()=>()=>{mounted.current=false;sequence.current+=1;},[]);
@@ -82,65 +85,49 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
   const needsEditor=data?.capabilities?.edit_lock===true;
   useEffect(()=>{
     if(!open||!canEdit||!needsEditor)return;
-    let stopped=false,heartbeat=null,renewing=false,activitySequence=0,lastRenew=0,serverIdleDeadline=Date.now()+600000;
-    const token=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
-    editToken.current=token;
-    const body={edit_token:token};
-    const release=()=>releaseProcessingScopeEditLock(docId,body).catch(()=>{});
-    const renew=()=>{
-      if(stopped||renewing)return;
-      renewing=true;lastRenew=Date.now();
-      const sentSequence=activitySequence;
-      return renewProcessingScopeEditLock(docId,{...body,activity_sequence:sentSequence}).then(next=>{
+    let stopped=false;
+    const adapter=createScopeLeaseAdapter({getProcessingScope,acquireProcessingScopeEditLock,
+      renewProcessingScopeEditLock,releaseProcessingScopeEditLock},docId);
+    const session=createEditorLeaseSession({adapter,now:()=>Date.now(),setTimer:setTimeout,clearTimer:clearTimeout,
+      onChange:next=>{
         if(stopped)return;
-        setEditorStatus(next);serverIdleDeadline=Date.now()+(next.idle_remaining_seconds??600)*1000;
-      }).catch(()=>{
+        setLeaseState(next.state);setEditorStatus(next.status);setIdleWarning(next.countdown);
+        setOwnsEditor(next.state==='editing');
+        editToken.current=next.state==='editing'?session.mutationContext()?.edit_token:null;
+      },
+      onAcquired:async(_status,isCurrent)=>{
+        const next=await getProcessingScope(docId);
+        if(!stopped&&isCurrent())apply(next);
+      },
+      onLost:error=>{
         if(stopped)return;
-        stopped=true;
-        clearInterval(heartbeat);idleSession.current?.stop();idleSession.current=null;
-        returnToViewing();
-        setIdleWarning(null);setOwnsEditor(false);setEditorStatus({state:'lost'});
-        setChangePreview(null);requestId.current=null;setPreview(null);
-      }).finally(()=>{
-        renewing=false;
-        if(!stopped&&activitySequence>sentSequence)renew();
-      });
-    };
-    acquireProcessingScopeEditLock(docId,body).then(async status=>{
-      if(stopped){release();return;}
-      // Reacquisition follows an explicit user action; start from the current
-      // server revision so an expired tab cannot silently overwrite another.
-      const next=await getProcessingScope(docId);if(stopped)return;apply(next);
-      setOwnsEditor(true);setEditorStatus(status);
-      serverIdleDeadline=Date.now()+(status.idle_remaining_seconds??600)*1000;
-      idleSession.current=createScopeIdleTimer({now:()=>Date.now(),setTimer:setTimeout,clearTimer:clearTimeout,
-        onCountdown:remaining=>{if(!stopped)setIdleWarning(remaining);},
-        onActivity:seq=>{
-          activitySequence=seq;
-          // Coalesce scrolling/typing, but report immediately near the server's
-          // idle deadline so a last-minute continuation is not lost.
-          if(Date.now()-lastRenew>=30000 || serverIdleDeadline-Date.now()<=120000)renew();
-        },
-        onExpire:()=>{
-          if(stopped)return;
-          stopped=true;clearInterval(heartbeat);idleSession.current=null;
-          editingSession.current+=1;
-          editToken.current=null;setOwnsEditor(false);setPreview(null);setChangePreview(null);
-          requestId.current=null;release();closeEditor.current?.();
-        }});
-      heartbeat=setInterval(renew,60000);
-    }).catch(async()=>{
-      if(stopped)return;
-      setOwnsEditor(false);
-      try{const next=await getProcessingScope(docId);if(!stopped)setEditorStatus(next.edit_lock||{state:'lost'});}
-      catch{if(!stopped)setEditorStatus({state:'lost'});}
-    });
+        if(error?.code==='scope_change_in_progress'){
+          setLeaseState('applying');setEditorStatus({state:'applying'});
+        }
+        returnToViewing();setOwnsEditor(false);setPreview(null);setChangePreview(null);requestId.current=null;
+      },
+      onExpire:()=>{
+        if(stopped)return;
+        editingSession.current+=1;
+        editToken.current=null;setOwnsEditor(false);setPreview(null);setChangePreview(null);
+        requestId.current=null;closeEditor.current?.();
+      }});
+    idleSession.current=session;
+    // A cleaned-up Strict Mode opening must not race its replacement's acquire.
+    Promise.resolve().then(()=>session.start());
     return ()=>{
-      stopped=true;clearInterval(heartbeat);idleSession.current?.stop();idleSession.current=null;
-      editToken.current=null;setOwnsEditor(false);setIdleWarning(null);release();
+      editingSession.current+=1;
+      stopped=true;session.dispose();
+      if(idleSession.current===session)idleSession.current=null;
+      editToken.current=null;setOwnsEditor(false);setIdleWarning(null);
     };
   },[open,canEdit,needsEditor,docId,editorRetry,apply,returnToViewing]);
-  const withEditor=body=>needsEditor?{...body,edit_token:editToken.current}:body;
+  const withEditor=body=>{
+    if(!needsEditor)return body;
+    const context=idleSession.current?.mutationContext();
+    if(!context)throw Object.assign(new Error('Editor access lost'),{code:'scope_edit_lock_lost'});
+    return {...body,...context};
+  };
   const sessionCurrent=session=>mounted.current&&session===editingSession.current;
   const recordFailure=err=>{
     if(!mounted.current)return;
@@ -151,9 +138,10 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
     }
     if(['scope_edit_locked','scope_edit_lock_lost','scope_change_in_progress'].includes(err.code)){
       returnToViewing();
-      idleSession.current?.stop();idleSession.current=null;setIdleWarning(null);
+      idleSession.current?.dispose();idleSession.current=null;setIdleWarning(null);
       setOwnsEditor(false);setPreview(null);setChangePreview(null);requestId.current=null;
       setEditorStatus({state:err.code==='scope_change_in_progress'?'applying':'lost'});
+      setLeaseState(err.code==='scope_change_in_progress'?'applying':'lost');
     }
     setError(friendlyApiError(err,t));
   };
@@ -340,11 +328,10 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
   const supportsChanges=!!(data?.capabilities?.fast_exclusion||data?.capabilities?.cached_restore||data?.capabilities?.incremental_generation);
   const changeLabel=!publishedDirty?'scope.noChanges':({fast_exclude:'scope.applyExclusions',reuse_only:'scope.restoreCached',incremental_generate:'scope.processAdded',noop:'scope.noChanges',blocked:'scope.changeBlocked'}[changePreview?.mode]||'scope.checkChanges');
   const editorActivity=event=>{if(event?.isTrusted!==false)idleSession.current?.activity();};
-  const idleNotice=ownsEditor?(idleWarning>0?<div className="scope-idle-warning" role="status" aria-live="polite">
-    <p>{t('scope.idleWarning')}</p>
-    <p aria-live="off">{t('scope.idleCountdown',{seconds:idleWarning})}</p>
-    <button type="button" className="btn" onClick={()=>idleSession.current?.activity()}>{t('scope.continueEditing')}</button>
-  </div>:<p className="source-location-note">{t('scope.idleHint')}</p>):null;
+  const idleNotice=needsEditor&&canEdit?<EditorLeaseNotice state={leaseState}
+    ownerName={editorStatus?.owner||data?.edit_lock?.owner} remainingSeconds={idleWarning}
+    expiryAction="close" onContinue={()=>idleSession.current?.activity()}
+    onRetry={()=>{if(!busy)setEditorRetry(value=>value+1);}}/>:null;
   return <div data-scope-editor-session onPointerDownCapture={editorActivity} onKeyDownCapture={editorActivity} onScrollCapture={editorActivity}>
   <Modal title={t('scope.title')} onClose={onClose} footer={<>
     <button type="button" className="btn ghost" onClick={onClose}>{t('scope.later')}</button>
@@ -375,10 +362,6 @@ export default function DocumentProcessingScopeDialog({docId,open,onClose,onUpda
       </div>}
       {data.active?.summary?.chunk_counts && <p className="source-location-note">{t('scope.publishedChunkCounts',data.active.summary.chunk_counts)}</p>}
       {!preview&&idleNotice}
-      {needsEditor && canEdit && !ownsEditor && <div role="status">
-        <p>{t(editorStatus?.state==='editing'?'scope.editorBusy':editorStatus?.state==='applying'?'scope.editorApplying':'scope.editorLost',{name:editorStatus?.owner||data.edit_lock?.owner||'—'})}</p>
-        {editorStatus?.state!=='applying' && <button type="button" className="btn ghost" disabled={busy} onClick={()=>setEditorRetry(value=>value+1)}>{t('scope.acquireEditor')}</button>}
-      </div>}
       {data.active && !supportsChanges && <p role="status">{t('scope.changesUnavailable')}</p>}
       {fullWarning && <p role="alert">{t('scope.fullRegenerationWarning')}</p>}
       {changePreview && <div role="status" aria-live="polite">

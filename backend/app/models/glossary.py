@@ -4,9 +4,10 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_serializer, model_validator
 
 from app.models.schemas import QueryText, ReferenceLocale
+from app.models.reference_editing import EditSession
 
 
 GlossaryKind = Literal[
@@ -42,12 +43,16 @@ class GlossaryConflictCheck(GlossaryTermCreate):
     enabled: StrictBool = True
 
 
-class GlossaryTermPatch(BaseModel):
+class GlossaryReferencePrecondition(BaseModel):
+    expected_reference_revision: StrictInt | None = Field(default=None, ge=1)
+
+
+class GlossaryTermPatch(GlossaryReferencePrecondition):
     version: int = Field(ge=1)
     enabled: bool | None = None
 
 
-class GlossaryAliasAdd(BaseModel):
+class GlossaryAliasAdd(GlossaryReferencePrecondition):
     version: int = Field(ge=1)
     alias: str = Field(min_length=1, max_length=256)
     locale: ReferenceLocale | None = None
@@ -55,7 +60,7 @@ class GlossaryAliasAdd(BaseModel):
     search_enabled: bool = False
 
 
-class GlossarySourcePatch(BaseModel):
+class GlossarySourcePatch(GlossaryReferencePrecondition):
     version: int = Field(ge=1)
     kind: GlossaryKind | None = None
     infotype_number: str | None = Field(default=None, pattern=r"^[0-9]{4}$")
@@ -73,7 +78,7 @@ class GlossarySourcePatch(BaseModel):
         return self
 
 
-class GlossaryAliasPatch(BaseModel):
+class GlossaryAliasPatch(GlossaryReferencePrecondition):
     version: int = Field(ge=1)
     alias: str | None = Field(default=None, min_length=1, max_length=256)
     locale: ReferenceLocale | None = None
@@ -114,6 +119,7 @@ class GlossaryTranslationOut(BaseModel):
 
 
 class GlossaryTermOut(BaseModel):
+    reference_revision: int = 1
     id: int
     canonical: str
     kind: GlossaryKind | str
@@ -159,14 +165,14 @@ class GlossaryPendingOut(BaseModel):
     pending: dict[str, int] = Field(default_factory=dict)
 
 
-class GlossaryTranslationPatch(BaseModel):
+class GlossaryTranslationPatch(GlossaryReferencePrecondition):
     translation_version: int = Field(ge=0)
     source_revision: int = Field(ge=1)
     display_name: str = Field(min_length=1, max_length=256)
     description: str | None = Field(default=None, max_length=8000)
 
 
-class GlossaryTranslationReview(BaseModel):
+class GlossaryTranslationReview(GlossaryReferencePrecondition):
     translation_version: int = Field(ge=1)
     source_revision: int = Field(ge=1)
 
@@ -207,7 +213,7 @@ class GlossaryRuleCreate(BaseModel):
     enabled: bool = True
 
 
-class GlossaryRulePatch(GlossaryRuleCreate):
+class GlossaryRulePatch(GlossaryRuleCreate, GlossaryReferencePrecondition):
     version: int = Field(ge=1)
 
 
@@ -236,6 +242,7 @@ class GlossaryRulePreviewOut(BaseModel):
 
 
 class GlossaryRuleOut(BaseModel):
+    reference_revision: int = 1
     id: int
     name: str
     number_from: int
@@ -250,6 +257,8 @@ class GlossaryRuleOut(BaseModel):
 
 
 class GlossaryRuleMergeRequest(BaseModel):
+    expected_reference_revisions: dict[int, StrictInt] = Field(default_factory=dict, max_length=2)
+    edit_sessions: dict[int, EditSession] = Field(default_factory=dict, max_length=2, exclude=True)
     source_rule_id: int | None = Field(default=None, ge=1)
     target_rule_id: int = Field(ge=1)
     source_version: int | None = Field(default=None, ge=1)
@@ -310,6 +319,8 @@ class GlossaryMergeSourceEdit(GlossaryTermCreate):
 
 
 class GlossaryMergeRequest(BaseModel):
+    expected_reference_revisions: dict[int, StrictInt] = Field(default_factory=dict, max_length=2)
+    edit_sessions: dict[int, EditSession] = Field(default_factory=dict, max_length=2, exclude=True)
     model_config = ConfigDict(extra="forbid")
     request_id: UUID
     source_term_id: int | None = Field(default=None, ge=1)

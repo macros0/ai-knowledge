@@ -83,7 +83,7 @@ def translate_texts_batch(
 
 def _pending_rows(entity: str, locale: str) -> list[tuple[int, str, str]]:
     """[(entity_id, original_text, original_locale)] без РУЧНОГО перевода в locale
-    (reviewed_by IS NULL; машинный без review переводится/обновляется).
+    (отсутствующий перевод либо машинный без review; ручной сохраняется и без review).
 
     Единственный источник «что обработает бэкфилл»: count_pending и _backfill_*
     используют его, чтобы число preview совпадало с реальным прогоном.
@@ -91,7 +91,8 @@ def _pending_rows(entity: str, locale: str) -> list[tuple[int, str, str]]:
     with session_scope() as s:
         if entity == "tags":
             rows = s.execute(
-                select(Tag.id, Tag.canonical_text, Tag.canonical_locale, TagTranslation.reviewed_by)
+                select(Tag.id, Tag.canonical_text, Tag.canonical_locale, TagTranslation.reviewed_by,
+                       TagTranslation.is_machine_translated, TagTranslation.tag_id)
                 .outerjoin(
                     TagTranslation,
                     (TagTranslation.tag_id == Tag.id) & (TagTranslation.locale == locale),
@@ -100,7 +101,8 @@ def _pending_rows(entity: str, locale: str) -> list[tuple[int, str, str]]:
             ).all()
         elif entity == "developments":
             rows = s.execute(
-                select(Development.id, Development.name, Development.canonical_locale, DevelopmentTranslation.reviewed_by)
+                select(Development.id, Development.name, Development.canonical_locale, DevelopmentTranslation.reviewed_by,
+                       DevelopmentTranslation.is_machine_translated, DevelopmentTranslation.development_id)
                 .outerjoin(
                     DevelopmentTranslation,
                     (DevelopmentTranslation.development_id == Development.id)
@@ -110,7 +112,8 @@ def _pending_rows(entity: str, locale: str) -> list[tuple[int, str, str]]:
             ).all()
         elif entity == "attributes":
             rows = s.execute(
-                select(AttributeValue.id, AttributeValue.label, AttributeValue.canonical_locale, AttributeValueTranslation.reviewed_by)
+                select(AttributeValue.id, AttributeValue.label, AttributeValue.canonical_locale, AttributeValueTranslation.reviewed_by,
+                       AttributeValueTranslation.is_machine_translated, AttributeValueTranslation.attribute_value_id)
                 .outerjoin(
                     AttributeValueTranslation,
                     (AttributeValueTranslation.attribute_value_id == AttributeValue.id)
@@ -121,8 +124,8 @@ def _pending_rows(entity: str, locale: str) -> list[tuple[int, str, str]]:
             ).all()
         else:
             raise ValueError(f"Неизвестная сущность справочника: {entity}")
-    return [(entity_id, text, source) for entity_id, text, source, reviewed in rows
-            if reviewed is None and source != locale]
+    return [(entity_id, text, source) for entity_id, text, source, reviewed, machine, translation_id in rows
+            if reviewed is None and source != locale and (translation_id is None or machine is True)]
 
 
 def backfill_reference_data(
@@ -155,18 +158,12 @@ def backfill_reference_data(
     username = getattr(user, "username", None) or "anonymous"
     total_created = 0
 
-    if "tags" in entities:
-        created, failed = _backfill_tags(locale, translations, username)
-        result["tags"] = {"created": created, "failed": failed}
-        total_created += created
-    if "developments" in entities:
-        created, failed = _backfill_developments(locale, translations, username)
-        result["developments"] = {"created": created, "failed": failed}
-        total_created += created
-    if "attributes" in entities:
-        created, failed = _backfill_attributes(locale, translations, username)
-        result["attributes"] = {"created": created, "failed": failed}
-        total_created += created
+    for entity in ('tags', 'developments', 'attributes'):
+        if entity in entities:
+            counts = {}
+            created, _failed = _backfill_reference(entity, locale, translations, username, counters=counts)
+            result[entity] = counts
+            total_created += created
 
     if "glossary" in entities:
         from app.services.glossary.translations import (
@@ -225,8 +222,7 @@ def backfill_reference_data(
 def count_pending(locale: str, entities: list[str]) -> dict:
     """Число объектов справочника без РУЧНОГО перевода в locale — по сущностям.
 
-    Использует тот же `_pending_rows`, что и бэкфилл: preview (сколько будет
-    переведено) гарантированно совпадает с реальным прогоном.
+    Использует тот же `_pending_rows`, что и бэкфилл: preview — оценка на момент чтения; параллельные изменения могут уменьшить число записей.
     """
     result: dict = {}
     for ent in entities:
@@ -245,103 +241,44 @@ def _resolve_translation(text: str, translations: dict[str, str] | None) -> str 
     return translations.get(text)
 
 
-def _backfill_tags(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
-    targets = _pending_rows("tags", locale)
-    if not targets:
-        return 0, 0
-    created = 0
-    failed = 0
-    for tid, text, source in targets:
-        tr = _resolve_translation(text, translations) if translations is not None else None
-        is_machine = tr is None
-        if tr is None:
-            try:
-                tr = translate_texts_batch([text], locale, source_locale=source)[0]
-            except Exception as exc:
-                logger.warning("Перевод тега %d не удался: %s", tid, exc)
-                failed += 1
-                continue
-        if not tr:
-            failed += 1
+def _backfill_reference(entity, locale, translations, username, *, counters=None):
+    from app.services.reference_translation import (capture_translation_candidate,
+        commit_translation_candidate, SKIPS)
+    counts = {key: 0 for key in ('created', 'updated', 'unchanged', 'failed', *SKIPS)}
+    for identifier, _text, _source in _pending_rows(entity, locale):
+        candidate, skipped = capture_translation_candidate(entity, identifier, locale)
+        if skipped:
+            counts[skipped] += 1
             continue
-        with session_scope() as s:
-            existing = s.execute(
-                select(TagTranslation).where(
-                    TagTranslation.tag_id == tid, TagTranslation.locale == locale
-                )
-            ).scalar_one_or_none()
-            if existing is None:
-                s.add(TagTranslation(tag_id=tid, locale=locale, text=tr, is_machine_translated=is_machine))
-            else:
-                existing.text = tr
-                existing.is_machine_translated = is_machine
-        created += 1
-    return created, failed
-
-
-def _backfill_developments(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
-    targets = _pending_rows("developments", locale)
-    created, failed = 0, 0
-    if not targets:
-        return 0, 0
-    for did, name, source in targets:
-        tr = _resolve_translation(name, translations) if translations is not None else None
-        is_machine = tr is None
-        if tr is None:
+        translated = _resolve_translation(candidate.source_text, translations) if translations is not None else None
+        is_machine = translated is None
+        if translated is None:
             try:
-                tr = translate_texts_batch([name], locale, source_locale=source)[0]
-            except Exception as exc:
-                logger.warning("Перевод разработки %d не удался: %s", did, exc)
-                failed += 1
+                translated = translate_texts_batch([candidate.source_text], locale, source_locale=candidate.source_locale)[0]
+            except Exception:
+                logger.warning('Reference translation failed: entity=%s id=%d', entity, identifier)
+                counts['failed'] += 1
                 continue
-        if not tr:
-            failed += 1
+        if not isinstance(translated, str) or not translated.strip():
+            counts['failed'] += 1
             continue
-        with session_scope() as s:
-            existing = s.execute(
-                select(DevelopmentTranslation).where(
-                    DevelopmentTranslation.development_id == did,
-                    DevelopmentTranslation.locale == locale,
-                )
-            ).scalar_one_or_none()
-            if existing is None:
-                s.add(DevelopmentTranslation(development_id=did, locale=locale, name=tr, is_machine_translated=is_machine))
-            else:
-                existing.name = tr
-                existing.is_machine_translated = is_machine
-        created += 1
-    return created, failed
+        with session_scope() as session:
+            outcome = commit_translation_candidate(session, candidate, translated.strip(), is_machine=is_machine, actor_name=username)
+        counts[outcome] += 1
+    if counters is not None:
+        counters.update(counts)
+    from app.services.diagnostics.reference_counters import record_backfill
+    record_backfill({"tags": "tag", "developments": "development", "attributes": "attribute_catalog"}[entity], counts)
+    return counts['created'] + counts['updated'], counts['failed']
 
 
-def _backfill_attributes(locale: str, translations: dict[str, str] | None, username: str) -> tuple[int, int]:
-    targets = _pending_rows("attributes", locale)
-    created, failed = 0, 0
-    if not targets:
-        return 0, 0
-    for aid, label, source in targets:
-        tr = _resolve_translation(label, translations) if translations is not None else None
-        is_machine = tr is None
-        if tr is None:
-            try:
-                tr = translate_texts_batch([label], locale, source_locale=source)[0]
-            except Exception as exc:
-                logger.warning("Перевод атрибута %d не удался: %s", aid, exc)
-                failed += 1
-                continue
-        if not tr:
-            failed += 1
-            continue
-        with session_scope() as s:
-            existing = s.execute(
-                select(AttributeValueTranslation).where(
-                    AttributeValueTranslation.attribute_value_id == aid,
-                    AttributeValueTranslation.locale == locale,
-                )
-            ).scalar_one_or_none()
-            if existing is None:
-                s.add(AttributeValueTranslation(attribute_value_id=aid, locale=locale, label=tr, is_machine_translated=is_machine))
-            else:
-                existing.label = tr
-                existing.is_machine_translated = is_machine
-        created += 1
-    return created, failed
+def _backfill_tags(locale, translations, username, *, counters=None):
+    return _backfill_reference('tags', locale, translations, username, counters=counters)
+
+
+def _backfill_developments(locale, translations, username, *, counters=None):
+    return _backfill_reference('developments', locale, translations, username, counters=counters)
+
+
+def _backfill_attributes(locale, translations, username, *, counters=None):
+    return _backfill_reference('attributes', locale, translations, username, counters=counters)

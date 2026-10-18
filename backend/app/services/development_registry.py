@@ -12,20 +12,39 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import String, cast, delete, func, literal, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Development, DevelopmentTranslation, Document
+from app.db.models import Development, DevelopmentTranslation, Document, ReferenceResourceState
 from app.db.session import session_scope
 from app.services.attribute_registry import get_attribute_registry
 from app import error_codes as codes
 from app.services.errors import DomainError, NotFoundError
+from app.services.reference_resources import ReferenceKey
+from app.services.reference_concurrency import (ReferenceError, lock_reference_resources,
+    current_reference_revision, bump_reference_revision, initialize_reference_resource)
+from app.services.reference_mutation import guard_reference_write
 
 logger = logging.getLogger(__name__)
 
 # Сентинел фильтра «без модуля» в GET /developments?module=__none__ (часть API-контракта).
 # Отличается от «фильтр не передан» (module=None → без фильтра).
 MODULE_NONE = "__none__"
+
+
+def _snapshot_revision():
+    key = literal('["development","') + cast(Development.id, String) + literal('",null,null]')
+    return func.coalesce(select(ReferenceResourceState.revision)
+        .where(ReferenceResourceState.resource_key == key).correlate(Development).scalar_subquery(), 1)
+
+
+def _snapshot_display(locale):
+    if not locale:
+        return literal(None)
+    return select(DevelopmentTranslation.name).where(
+        DevelopmentTranslation.development_id == Development.id,
+        DevelopmentTranslation.locale == locale,
+        Development.canonical_locale != locale).correlate(Development).scalar_subquery()
 
 
 class DevelopmentNumberExistsError(ValueError):
@@ -49,9 +68,14 @@ class DevelopmentConflictError(ValueError):
         super().__init__("Разработка изменена другим пользователем")
 
 
-def _to_dict(dev: Development, documents_count: int = 0) -> dict:
+def _to_dict(dev: Development, documents_count: int = 0, reference_revision=None) -> dict:
+    if reference_revision is None:
+        from sqlalchemy.orm import object_session
+        session = object_session(dev)
+        reference_revision = current_reference_revision(session, ReferenceKey("development", str(dev.id))) if session else 1
     return {
         "id": dev.id,
+        "reference_revision": reference_revision,
         "number": dev.number,
         "name": dev.name,
         "canonical_locale": dev.canonical_locale,
@@ -82,15 +106,17 @@ class DevelopmentRegistry:
 
     # --- CRUD ---
 
-    def create(self, number: str, name: str, module: str | None = None, created_by: str | None = None, *, canonical_locale: str = "und") -> dict:
+    def create(self, number: str, name: str, module: str | None = None, created_by: str | None = None,
+               *, canonical_locale: str = "und", actor=None, ip_address=None) -> dict:
         number = number.strip()
         name = name.strip()
         if not number:
             raise DomainError("Номер разработки не может быть пустым", code=codes.EMPTY_VALUE)
         if not name:
             raise DomainError("Название разработки не может быть пустым", code=codes.EMPTY_VALUE)
-        module = self._validate_module(module)
         with session_scope() as s:
+            lock_reference_resources(s, [ReferenceKey("attribute_catalog", "module")])
+            module = self._validate_module(module)
             dev = Development(number=number, name=name, module=module, created_by=created_by, version=1, canonical_locale=canonical_locale)
             s.add(dev)
             try:
@@ -99,24 +125,40 @@ class DevelopmentRegistry:
                 raise DevelopmentNumberExistsError(
                     f"Разработка с номером '{number}' уже существует"
                 ) from exc
+            initialize_reference_resource(s, ReferenceKey("development", str(dev.id)))
+            if actor is not None:
+                from app.services import audit
+                from app.services.reference_resources import require_access
+                require_access(ReferenceKey("development", str(dev.id)), actor)
+                audit.record_in_session(s, action_type=audit.DEVELOPMENT_CREATE,
+                    user_id=actor.user_id, username=actor.username, target_type=audit.TARGET_DEVELOPMENT,
+                    target_id=str(dev.id), new_value={"number": dev.number, "name": dev.name, "module": dev.module},
+                    ip_address=ip_address)
             return _to_dict(dev, 0)
 
-    def get(self, dev_id: int) -> dict | None:
+    def get(self, dev_id: int, *, locale: str | None = None) -> dict | None:
         with session_scope() as s:
-            dev = s.get(Development, dev_id)
+            if s.get(Development, dev_id) is None:
+                return None
+            lock_reference_resources(s, [ReferenceKey("development", str(dev_id))])
+            dev = s.get(Development, dev_id, populate_existing=True)
             if dev is None:
                 return None
             count = self._count(s, dev_id)
-            return _to_dict(dev, count)
+            result = _to_dict(dev, count)
+            result["display_name"] = s.scalar(select(_snapshot_display(locale))
+                .select_from(Development).where(Development.id == dev_id)) if locale else None
+            return result
 
     def find_by_number(self, number: str) -> dict | None:
         with session_scope() as s:
-            dev = s.execute(
-                select(Development).where(Development.number == number)
-            ).scalar_one_or_none()
-            if dev is None:
+            row = s.execute(
+                select(Development, _snapshot_revision()).where(Development.number == number)
+            ).one_or_none()
+            if row is None:
                 return None
-            return _to_dict(dev, self._count(s, dev.id))
+            dev, revision = row
+            return _to_dict(dev, self._count(s, dev.id), revision)
 
     def list(self) -> list[dict]:
         """Все разработки (без пагинации) — обратная совместимость для
@@ -133,6 +175,7 @@ class DevelopmentRegistry:
         order: str = "asc",
         limit: int | None = None,
         offset: int = 0,
+        locale: str | None = None,
     ) -> tuple[list[dict], int]:
         """Фильтрация + сортировка + пагинация справочника разработок.
 
@@ -180,7 +223,7 @@ class DevelopmentRegistry:
             sort_col = sort_map.get(sort_by, Development.number)
             order_expr = sort_col.desc() if order == "desc" else sort_col.asc()
 
-            stmt = select(Development, count_subq)
+            stmt = select(Development, count_subq, _snapshot_revision(), _snapshot_display(locale))
             if conditions:
                 stmt = stmt.where(*conditions)
             stmt = stmt.order_by(order_expr).offset(offset)
@@ -193,10 +236,21 @@ class DevelopmentRegistry:
             total = s.execute(total_stmt).scalar_one()
 
             rows = s.execute(stmt).all()
-            return [_to_dict(dev, count) for dev, count in rows], total
+            return [{**_to_dict(dev, count, revision), "display_name": display}
+                    for dev, count, revision, display in rows], total
 
-    def update(self, dev_id: int, version: int, number: str | None = None, name: str | None = None, module: str | None = None) -> dict:
+    def update(self, dev_id: int, version: int, number: str | None = None, name: str | None = None, module: str | None = None,
+               *, expected_reference_revision=None, actor=None, lease=None) -> dict:
         with session_scope() as s:
+            lock_reference_resources(s, [ReferenceKey("attribute_catalog", "module"), ReferenceKey("development", str(dev_id))])
+            try:
+                state = guard_reference_write(s, ReferenceKey("development", str(dev_id)),
+                    expected_revision=expected_reference_revision, actor=actor, lease=lease)
+            except ReferenceError as exc:
+                current = s.get(Development, dev_id)
+                if exc.code == "version_conflict" and current is not None:
+                    exc.extra["current"] = _to_dict(current, self._count(s, dev_id))
+                raise
             dev = s.get(Development, dev_id)
             if dev is None:
                 raise NotFoundError("Разработка не найдена", code=codes.DEVELOPMENT_NOT_FOUND)
@@ -256,13 +310,19 @@ class DevelopmentRegistry:
                     "created_at": dev.created_at,
                     "created_by": dev.created_by,
                     "documents_count": self._count(s, dev_id),
+                    "reference_revision": bump_reference_revision(state),
                 }
                 changed = True
+                if actor is not None:
+                    from app.services import audit
+                    audit.record_in_session(s, action_type=audit.DEVELOPMENT_UPDATE,
+                        user_id=actor.user_id, username=actor.username, target_type=audit.TARGET_DEVELOPMENT,
+                        target_id=str(dev_id), new_value={k: result[k] for k in ("number", "name", "module", "reference_revision")})
         if changed:
             self._schedule_sync(dev_id)
         return result
 
-    def delete(self, dev_id: int, version: int) -> bool:
+    def delete(self, dev_id: int, version: int, *, expected_reference_revision=None, actor=None, lease=None) -> bool:
         """Удаляет разработку, отвязывая её документы (SET NULL) и очищая их dev_tags.
 
         Версия сверяется атомарно: условный UPDATE по `version` резервирует строку
@@ -277,6 +337,8 @@ class DevelopmentRegistry:
         протухшими). Поля отвязки — полный набор (как в ручной отвязке документа).
         """
         with session_scope() as s:
+            state = guard_reference_write(s, ReferenceKey("development", str(dev_id)),
+                expected_revision=expected_reference_revision, actor=actor, lease=lease)
             claimed = s.execute(
                 update(Development)
                 .where(Development.id == dev_id, Development.version == version)
@@ -309,6 +371,15 @@ class DevelopmentRegistry:
                 .where(Development.id == dev_id)
                 .execution_options(synchronize_session=False)
             )
+            bump_reference_revision(state)
+            state.owner_id = state.owner_name = state.token_hash = None
+            state.expires_at = state.idle_expires_at = state.acquired_at = None
+            state.lease_epoch += 1
+            if actor is not None:
+                from app.services import audit
+                audit.record_in_session(s, action_type=audit.DEVELOPMENT_DELETE,
+                    user_id=actor.user_id, username=actor.username, target_type=audit.TARGET_DEVELOPMENT,
+                    target_id=str(dev_id))
         self._schedule_sync_many(doc_ids)
         return True
 

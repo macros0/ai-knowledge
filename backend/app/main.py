@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -30,6 +31,7 @@ from app.api import (
     i18n,
     jobs,
     locales,
+    reference_editing,
     search,
     tags,
     users,
@@ -42,6 +44,7 @@ from app.auth.service import require_user
 from app.config import get_settings
 from app.prompts.store import get_store
 from app.services.errors import DependencyUnavailableError, public_error_code
+from app.services.reference_concurrency import ReferenceError
 from app.services.health import get_health, get_readiness, public_view
 from app.services.storage import is_storage_full
 from app.services.vector_store import VectorStore
@@ -373,7 +376,13 @@ def create_app() -> FastAPI:
     protected.include_router(locales.router)
     protected.include_router(admin_locales.router)
     protected.include_router(i18n.router)
+    protected.include_router(reference_editing.router)
     app.include_router(protected, prefix=settings.api_prefix)
+
+    @app.exception_handler(ReferenceError)
+    async def reference_error_handler(request: Request, exc: ReferenceError):
+        return JSONResponse(status_code=exc.status_code,
+            content=jsonable_encoder(_error_content({"detail": "Не удалось изменить справочник", "code": exc.code, **exc.extra})))
 
     @app.exception_handler(ApiError)
     async def api_error_handler(request: Request, exc: ApiError):

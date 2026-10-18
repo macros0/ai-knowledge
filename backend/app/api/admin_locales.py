@@ -6,14 +6,19 @@
 """
 import logging
 
+from app.api.reference_editing import request_edit_session
+from app.services.reference_mutation import ReferenceWriteContext
+from app.services.reference_resources import ReferenceKey
+from app.services.reference_concurrency import ReferenceError
 from app.api import errors
 from app.api.errors import ApiError
 from app.services.errors import DomainError
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.auth.models import User
 from app.auth.service import require_role
 from app.models.schemas import (
+    ReferenceRevisionInput,
     LocaleCreate,
     LocaleListOut,
     LocaleOut,
@@ -34,10 +39,11 @@ from app.models.schemas import (
     UiDictionaryHistoryEntry,
     UiDictionaryHistoryOut,
     UiDictionaryImportRequest,
+    UiDictionaryRollbackRequest,
     UiDictionaryImportResult,
     UiDictionaryAdminOut,
 )
-from app.services import audit, locale_service, ui_dictionary
+from app.services import locale_service, ui_dictionary
 from app.services.locale_service import LocaleError, LocaleNotFoundError
 
 router = APIRouter(prefix="/admin/locales", tags=["admin-locales"])
@@ -47,6 +53,15 @@ admin = Depends(require_role("admin"))
 
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
+
+
+def _reference_context(kind, code, expected, request, user, subkind=None):
+    try:
+        key = ReferenceKey(kind, code, kind=subkind)
+    except ValueError as exc:
+        raise ReferenceError("invalid_request", 422) from exc
+    lease = request_edit_session(request)
+    return ReferenceWriteContext(user, {key: expected}, {key: lease} if lease else {})
 
 
 def _raise(exc: Exception) -> ApiError:
@@ -71,47 +86,29 @@ def list_locales(user: User = admin):
 @router.post("", response_model=LocaleOut)
 def create_locale(body: LocaleCreate, request: Request, user: User = admin):
     try:
-        loc = locale_service.create_locale(body.code, body.name)
+        loc = locale_service.create_locale(body.code, body.name, user=user, ip_address=_client_ip(request))
     except LocaleError as exc:
         raise _raise(exc) from exc
-    audit.record(
-        user,
-        audit.LOCALE_CREATE,
-        audit.TARGET_LOCALE,
-        target_id=loc["code"],
-        new_value={"code": loc["code"], "name": loc["name"]},
-        ip_address=_client_ip(request),
-    )
     return LocaleOut(**loc)
 
 
 @router.patch("/{code}", response_model=LocaleOut)
 def update_locale(code: str, body: LocaleUpdate, request: Request, user: User = admin):
     try:
-        loc = locale_service.update_locale(code, name=body.name, status=body.status)
+        loc = locale_service.update_locale(code, name=body.name, status=body.status, user=user, ip_address=_client_ip(request),
+            reference_context=_reference_context("locale", code, body.expected_reference_revision, request, user))
     except (LocaleError, LocaleNotFoundError) as exc:
         raise _raise(exc) from exc
-    audit.record(
-        user,
-        audit.LOCALE_UPDATE,
-        audit.TARGET_LOCALE,
-        target_id=code,
-        old_value=None,
-        new_value={"name": body.name, "status": body.status},
-        ip_address=_client_ip(request),
-    )
     return LocaleOut(**loc)
 
 
 @router.post("/{code}/activate", response_model=LocaleOut)
-def activate_locale(code: str, request: Request, user: User = admin):
+def activate_locale(code: str, request: Request, body: ReferenceRevisionInput | None = None, user: User = admin):
     try:
-        loc = locale_service.activate(code)
+        loc = locale_service.activate(code, user=user, ip_address=_client_ip(request),
+            reference_context=_reference_context("locale", code, body.expected_reference_revision if body else None, request, user))
     except (LocaleError, LocaleNotFoundError) as exc:
         raise _raise(exc) from exc
-    audit.record(
-        user, audit.LOCALE_ACTIVATE, audit.TARGET_LOCALE, target_id=code, ip_address=_client_ip(request)
-    )
     # Автосид en-копии при активации языка без runtime-override (фаза 2): словарь
     # нужен не как блокер активации, а как стартовая точка перевода — провал сида
     # не должен ронять успешную активацию (см. контракт seed_english_copy).
@@ -126,14 +123,12 @@ def activate_locale(code: str, request: Request, user: User = admin):
 
 
 @router.post("/{code}/disable", response_model=LocaleOut)
-def disable_locale(code: str, request: Request, user: User = admin):
+def disable_locale(code: str, request: Request, body: ReferenceRevisionInput | None = None, user: User = admin):
     try:
-        loc = locale_service.disable(code)
+        loc = locale_service.disable(code, user=user, ip_address=_client_ip(request),
+            reference_context=_reference_context("locale", code, body.expected_reference_revision if body else None, request, user))
     except (LocaleError, LocaleNotFoundError) as exc:
         raise _raise(exc) from exc
-    audit.record(
-        user, audit.LOCALE_DISABLE, audit.TARGET_LOCALE, target_id=code, ip_address=_client_ip(request)
-    )
     return LocaleOut(**loc)
 
 
@@ -143,10 +138,10 @@ def disable_locale(code: str, request: Request, user: User = admin):
 @router.get("/{code}/stopwords", response_model=StopwordListOut)
 def list_stopwords(code: str, kind: str | None = None, user: User = admin):
     try:
-        words = locale_service.list_stopwords(code, kind=kind)
+        result = locale_service.stopword_snapshot(code, kind=kind)
     except (LocaleError, LocaleNotFoundError) as exc:
         raise _raise(exc) from exc
-    return StopwordListOut(locale=code, words=[StopwordWordOut(**w) for w in words])
+    return StopwordListOut(**result)
 
 
 @router.post("/{code}/stopwords/import", response_model=StopwordImportResult)
@@ -166,6 +161,8 @@ def import_stopwords(
             mode,
             confirm=body.confirm,
             confirm_empty_replace=body.confirm_empty_replace,
+            reference_context=_reference_context("stopword_set", code, body.expected_reference_revision, request, user, kind),
+            preview_digest=body.preview_digest,
             user=user,
             ip_address=_client_ip(request),
         )
@@ -178,7 +175,8 @@ def import_stopwords(
 def add_stopword(code: str, body: StopwordAddRequest, request: Request, user: User = admin):
     try:
         result = locale_service.add_stopword(
-            code, body.word, body.kind, user=user, ip_address=_client_ip(request)
+            code, body.word, body.kind, user=user, ip_address=_client_ip(request),
+            reference_context=_reference_context("stopword_set", code, body.expected_reference_revision, request, user, body.kind)
         )
     except (LocaleError, LocaleNotFoundError) as exc:
         raise _raise(exc) from exc
@@ -191,7 +189,8 @@ def rename_stopword(
 ):
     try:
         result = locale_service.rename_stopword(
-            code, word, kind, body.word, user=user, ip_address=_client_ip(request)
+            code, word, kind, body.word, user=user, ip_address=_client_ip(request),
+            reference_context=_reference_context("stopword_set", code, body.expected_reference_revision, request, user, kind)
         )
     except (LocaleError, LocaleNotFoundError) as exc:
         raise _raise(exc) from exc
@@ -200,11 +199,12 @@ def rename_stopword(
 
 @router.delete("/{code}/stopwords/{word}", response_model=StopwordWordOut)
 def delete_stopword(
-    code: str, word: str, request: Request, user: User = admin, kind: str = "bm25"
+    code: str, word: str, request: Request, user: User = admin, kind: str = "bm25", expected_reference_revision: int | None = Query(None, ge=1)
 ):
     try:
         result = locale_service.delete_stopword(
-            code, word, kind, user=user, ip_address=_client_ip(request)
+            code, word, kind, user=user, ip_address=_client_ip(request),
+            reference_context=_reference_context("stopword_set", code, expected_reference_revision, request, user, kind)
         )
     except (LocaleError, LocaleNotFoundError) as exc:
         raise _raise(exc) from exc
@@ -222,19 +222,16 @@ def stopwords_history(code: str, user: User = admin):
 
 @router.post("/{code}/stopwords/rollback", response_model=StopwordImportResult)
 def rollback_stopwords(code: str, body: StopwordRollbackRequest, request: Request, user: User = admin):
+    if "confirm" not in body.model_fields_set or body.kind is None:
+        raise ReferenceError("reference_precondition_required", 428)
     try:
         result = locale_service.rollback_stopwords(
-            code, body.entry_id, user=user, ip_address=_client_ip(request)
+            code, body.entry_id, user=user, ip_address=_client_ip(request), confirm=body.confirm, expected_kind=body.kind,
+            preview_digest=body.preview_digest, reference_context=_reference_context("stopword_set", code, body.expected_reference_revision, request, user, body.kind)
         )
     except (LocaleError, LocaleNotFoundError) as exc:
         raise _raise(exc) from exc
-    return StopwordImportResult(
-        locale=result["locale"],
-        kind=result["kind"],
-        mode="replace",
-        total_after=result["total_after"],
-        applied=True,
-    )
+    return StopwordImportResult(**result)
 
 
 @router.post("/{code}/stopwords/probe", response_model=StopwordProbeResponse)
@@ -273,6 +270,8 @@ def import_ui_dictionary(
     user: User = admin,
 ):
     """Двухшаговый импорт override-словаря: без confirm — preview/валидация."""
+    if body.confirm and "expected_active_version" not in body.model_fields_set:
+        raise ReferenceError("reference_precondition_required", 428)
     try:
         result = ui_dictionary.import_dictionary(
             code,
@@ -280,6 +279,8 @@ def import_ui_dictionary(
             body.note,
             user.username,
             confirm=body.confirm,
+            reference_context=_reference_context("ui_dictionary", code, body.expected_reference_revision, request, user),
+            preview_digest=body.preview_digest, expected_active_version=body.expected_active_version,
             user=user,
             ip_address=_client_ip(request),
         )
@@ -315,23 +316,23 @@ def get_active_ui_dictionary(code: str, user: User = admin):
     сохраняет 404-семантику для клиента).
     """
     try:
-        locale_service.get_locale(code)
-    except LocaleNotFoundError as exc:
-        raise _raise(exc) from exc
-    active = ui_dictionary.get_active(code)
-    if active is None:
-        return UiDictionaryAdminOut(locale=code)
-    return UiDictionaryAdminOut(**active)
+        return UiDictionaryAdminOut(**ui_dictionary.get_admin_snapshot(code))
+    except ValueError as exc:
+        raise ApiError(status_code=404, code=errors.LOCALE_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.post("/{code}/ui-dictionary/rollback")
 def rollback_ui_dictionary(
-    code: str, body: StopwordRollbackRequest, request: Request, user: User = admin
+    code: str, body: UiDictionaryRollbackRequest, request: Request, user: User = admin
 ):
     """Возвращает локали актуальную версию словаря к исторической (entry_id)."""
+    if "confirm" not in body.model_fields_set or (body.confirm and "expected_active_version" not in body.model_fields_set):
+        raise ReferenceError("reference_precondition_required", 428)
     try:
         result = ui_dictionary.rollback(
-            code, body.entry_id, user=user, ip_address=_client_ip(request)
+            code, body.entry_id, user=user, ip_address=_client_ip(request), confirm=body.confirm,
+            reference_context=_reference_context("ui_dictionary", code, body.expected_reference_revision, request, user),
+            preview_digest=body.preview_digest, expected_active_version=body.expected_active_version,
         )
     except DomainError as exc:
         raise errors.domain_error(exc, 404) from exc

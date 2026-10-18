@@ -11,9 +11,27 @@ org_id=NULL — общее/системное значение; иначе — �
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.orm import object_session
 
 from app.db.models import AttributeValue, AttributeValueTranslation, Development
 from app.db.session import session_scope
+from app.services import audit
+from app.services.reference_resources import ReferenceKey, require_access
+from app.services.reference_concurrency import (ReferenceError, lock_reference_resources,
+    current_reference_revision, bump_reference_revision)
+from app.services.reference_mutation import guard_reference_write
+
+
+def catalog_key(key, org_id=None):
+    try:
+        return ReferenceKey("attribute_catalog", key, org_id=org_id)
+    except ValueError as exc:
+        raise ReferenceError("invalid_request", 422) from exc
+
+
+def catalog_keys(key, org_id=None):
+    # The global row also serializes membership/soft module-reference decisions.
+    return list({catalog_key(key), catalog_key(key, org_id)})
 
 
 class AttributeValueInUseError(ValueError):
@@ -32,6 +50,7 @@ class AttributeValueInUseError(ValueError):
 def _to_dict(a: AttributeValue) -> dict:
     return {
         "id": a.id,
+        "reference_revision": current_reference_revision(object_session(a), catalog_key(a.attribute_key, a.org_id)),
         "attribute_key": a.attribute_key,
         "value": a.value,
         "label": a.label,
@@ -45,12 +64,18 @@ def _to_dict(a: AttributeValue) -> dict:
 class AttributeRegistry:
     def list(self, key: str, org_id: int | None = None) -> list[dict]:
         """Значения атрибута. org_id=None → все значения ключа (global ∪ scoped)."""
+        return self.snapshot(key, org_id)["values"]
+
+    def snapshot(self, key, org_id=None, locale=None):
         with session_scope() as s:
+            states = lock_reference_resources(s, catalog_keys(key, org_id))
             stmt = select(AttributeValue).where(AttributeValue.attribute_key == key)
             if org_id is not None:
                 stmt = stmt.where(AttributeValue.org_id == org_id)
             stmt = stmt.order_by(AttributeValue.sort_order, AttributeValue.value)
-            return [_to_dict(a) for a in s.execute(stmt).scalars().all()]
+            values = [_to_dict(a) for a in s.execute(stmt).scalars().all()]
+            self._display_labels(s, values, locale)
+            return {"values": values, "reference_revision": states[catalog_key(key, org_id)].revision}
 
     def values(self, key: str, org_id: int | None = None) -> list[str]:
         seen: set[str] = set()
@@ -80,9 +105,16 @@ class AttributeRegistry:
         org_id: int | None = None,
         created_by: str | None = None,
         canonical_locale: str = "und",
+        *, expected_reference_revision=None, actor=None, ip_address=None,
     ) -> dict:
         """Идемпотентно добавляет значение (если уже есть — возвращает существующее)."""
         with session_scope() as s:
+            states = lock_reference_resources(s, catalog_keys(key, org_id))
+            resource = catalog_key(key, org_id)
+            if actor is not None:
+                require_access(resource, actor)
+                if type(expected_reference_revision) is not int or expected_reference_revision < 1:
+                    raise ReferenceError("reference_precondition_required", 428)
             existing = s.execute(
                 select(AttributeValue).where(
                     AttributeValue.attribute_key == key,
@@ -92,6 +124,7 @@ class AttributeRegistry:
             ).scalar_one_or_none()
             if existing is not None:
                 return _to_dict(existing)
+            state = guard_reference_write(s, resource, expected_revision=expected_reference_revision, actor=actor)
             item = AttributeValue(
                 attribute_key=key,
                 value=value,
@@ -103,15 +136,19 @@ class AttributeRegistry:
             )
             s.add(item)
             s.flush()
+            bump_reference_revision(state)
+            if org_id is not None:
+                bump_reference_revision(states[catalog_key(key)])
+            if actor is not None:
+                audit.record_in_session(s, action_type=audit.ATTRIBUTE_CREATE, user_id=actor.user_id, username=actor.username,
+                    target_type=audit.TARGET_ATTRIBUTE, target_id=f"{key}:{value}",
+                    new_value={"attribute_key": key, "value": value, "org_id": org_id}, ip_address=ip_address)
             return _to_dict(item)
 
-    def remove(self, key: str, value: str, org_id: int | None = None) -> bool:
-        # Проверка использования и DELETE выполняются в ОДНОЙ транзакции
-        # (session_scope), чтобы исключить гонку «проверили count==0 → создали
-        # development → удалили значение». Для module ссылка мягкая (developments.module
-        # — строка, не FK), поэтому защита здесь — счётчик + мягкая валидация в
-        # DevelopmentRegistry.create; этого достаточно для внутреннего инструмента.
+    def remove(self, key: str, value: str, org_id: int | None = None, *, expected_reference_revision=None, actor=None, ip_address=None) -> bool:
         with session_scope() as s:
+            states = lock_reference_resources(s, catalog_keys(key, org_id))
+            state = guard_reference_write(s, catalog_key(key, org_id), expected_revision=expected_reference_revision, actor=actor)
             if key == "module":
                 count = (
                     s.query(Development).filter(Development.module == value).count()
@@ -121,21 +158,32 @@ class AttributeRegistry:
             stmt = s.query(AttributeValue).filter(
                 AttributeValue.attribute_key == key,
                 AttributeValue.value == value,
+                AttributeValue.org_id == org_id,
             )
-            if org_id is not None:
-                stmt = stmt.filter(AttributeValue.org_id == org_id)
             deleted = stmt.delete(synchronize_session=False)
+            if deleted:
+                bump_reference_revision(state)
+                if org_id is not None:
+                    bump_reference_revision(states[catalog_key(key)])
+                if actor is not None:
+                    audit.record_in_session(s, action_type=audit.ATTRIBUTE_DELETE, user_id=actor.user_id, username=actor.username,
+                        target_type=audit.TARGET_ATTRIBUTE, target_id=f"{key}:{value}",
+                        old_value={"attribute_key": key, "value": value, "org_id": org_id}, ip_address=ip_address)
             return bool(deleted)
 
     def add_display_labels(self, items: list[dict], locale: str | None) -> None:
+        with session_scope() as s:
+            self._display_labels(s, items, locale)
+
+    @staticmethod
+    def _display_labels(s, items, locale):
         """Заполняет `display_label` (перевод label для locale). None — без перевода."""
         for it in items:
             it["display_label"] = None
         if not items or not locale:
             return
         ids = [it["id"] for it in items]
-        with session_scope() as s:
-            rows = s.execute(
+        rows = s.execute(
                 select(
                     AttributeValueTranslation.attribute_value_id,
                     AttributeValueTranslation.label,
@@ -143,7 +191,7 @@ class AttributeRegistry:
                     AttributeValueTranslation.attribute_value_id.in_(ids),
                     AttributeValueTranslation.locale == locale,
                 )
-            ).all()
+        ).all()
         trs = dict(rows)
         for it in items:
             if locale != it.get("canonical_locale"):

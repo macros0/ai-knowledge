@@ -358,7 +358,7 @@ class TestDevelopmentConflictApi:
         client = _make_client(monkeypatch)
         resp = client.patch(
             f"/api/developments/{dev['id']}",
-            json={"name": "Старое имя", "version": dev["version"]},
+            json={"name": "Старое имя", "version": dev["version"], "expected_reference_revision": dev["reference_revision"]},
         )
         assert resp.status_code == 409, resp.text
         body = resp.json()
@@ -376,7 +376,7 @@ class TestDevelopmentConflictApi:
         client = _make_client(monkeypatch)
         resp = client.patch(
             f"/api/developments/{dev_b['id']}",
-            json={"number": dev_a["number"], "version": dev_b["version"]},
+            json={"number": dev_a["number"], "version": dev_b["version"], "expected_reference_revision": dev_b["reference_revision"]},
         )
         assert resp.status_code == 409, resp.text
         assert resp.json()["code"] == "duplicate_number"
@@ -387,7 +387,7 @@ class TestDevelopmentConflictApi:
         reg.update(dev["id"], dev["version"], name="СЭДО 2.0")
 
         client = _make_client(monkeypatch)
-        resp = client.delete(f"/api/developments/{dev['id']}?version={dev['version']}")
+        resp = client.delete(f"/api/developments/{dev['id']}?version={dev['version']}&expected_reference_revision={dev['reference_revision']}")
         assert resp.status_code == 409, resp.text
         assert resp.json()["code"] == "version_conflict"
         assert reg.get(dev["id"]) is not None
@@ -397,7 +397,7 @@ class TestDevelopmentConflictApi:
         dev = reg.create("12010", "СЭДО", module="PY")
 
         client = _make_client(monkeypatch)
-        resp = client.delete(f"/api/developments/{dev['id']}?version={dev['version']}")
+        resp = client.delete(f"/api/developments/{dev['id']}?version={dev['version']}&expected_reference_revision={dev['reference_revision']}")
         assert resp.status_code == 200, resp.text
         assert reg.get(dev["id"]) is None
 
@@ -408,7 +408,7 @@ class TestDevelopmentConflictApi:
         client = _make_client(monkeypatch)
         resp = client.patch(
             f"/api/developments/{dev['id']}",
-            json={"name": "СЭДО 2.0", "version": dev["version"]},
+            json={"name": "СЭДО 2.0", "version": dev["version"], "expected_reference_revision": dev["reference_revision"]},
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["version"] == dev["version"] + 1

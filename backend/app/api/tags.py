@@ -2,12 +2,14 @@
 from app.api import errors
 from app.services.errors import DomainError
 from app.api.errors import ApiError
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
+from app.api.reference_editing import request_edit_session
 
 from app.auth.models import User
 from app.auth.service import require_role
 from app.models.schemas import (
     TagBulkReviewRequest,
+    TagCleanupRequest,
     TagListOut,
     TagOut,
     TagTranslationBackfillRequest,
@@ -18,6 +20,8 @@ from app.services import audit
 from app.services.locale_service import request_locale
 from app.services.tag_registry import TagInUseError, TagRegistry
 from app.services.translation import backfill_reference_data, count_pending
+from app.services.reference_concurrency import ReferenceError
+from app.services.reference_tag_actions import cleanup_preview, apply_cleanup, review_tag_items
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
@@ -41,6 +45,7 @@ def list_tags(request: Request, needs_review: bool = False):
 def delete_tag(
     tag: str,
     request: Request,
+    expected_reference_revision: int | None = Query(default=None, ge=1),
     user: User = Depends(require_role("editor", "admin")),
 ):
     """Удаляет тег из справочника, если он не используется активными документами.
@@ -49,7 +54,8 @@ def delete_tag(
     в audit_log (tag_delete).
     """
     try:
-        deleted = _tag_registry.delete(tag)
+        deleted = _tag_registry.delete(tag, expected_reference_revision=expected_reference_revision,
+            actor=user, lease=request_edit_session(request), ip_address=_client_ip(request))
     except TagInUseError as exc:
         raise ApiError(
             status_code=409,
@@ -62,25 +68,24 @@ def delete_tag(
             code=errors.TAG_NOT_FOUND,
             detail="Тег не найден в справочнике",
         )
-    audit.record(
-        user,
-        audit.TAG_DELETE,
-        audit.TARGET_TAG,
-        target_id=tag,
-        old_value={"name": tag},
-        new_value=None,
-        ip_address=_client_ip(request),
-    )
     return {"deleted": tag}
 
 
 @router.post("/cleanup")
 def cleanup_tags(
     request: Request,
+    body: TagCleanupRequest | None = None,
     user: User = Depends(require_role("editor", "admin")),
 ):
     """Удаляет из справочника все теги, не используемые активными документами."""
-    deleted = _tag_registry.delete_unused()
+    if body is None:
+        raise ReferenceError("reference_precondition_required", 428)
+    if not body.confirm:
+        return cleanup_preview()
+    if not body.preview_digest:
+        raise ReferenceError("reference_precondition_required", 428)
+    result = apply_cleanup([item.model_dump() for item in body.candidates], body.preview_digest, user)
+    deleted = result["deleted"]
     audit.record(
         user,
         audit.TAG_CLEANUP,
@@ -89,7 +94,7 @@ def cleanup_tags(
         new_value={"deleted": deleted},
         ip_address=_client_ip(request),
     )
-    return {"deleted": deleted, "total": len(deleted)}
+    return result
 
 
 @router.patch("/{tag_id}/translations/{locale}")
@@ -101,9 +106,16 @@ def update_tag_translation(
     user: User = Depends(require_role("editor", "admin")),
 ):
     """Записывает/правит перевод имени тега для локали (человеком)."""
+    if body.locale != locale:
+        raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Локаль тела не совпадает с URL")
+    lease = None
+    token, epoch = request.headers.get("X-Reference-Edit-Token"), request.headers.get("X-Reference-Edit-Epoch")
+    if token and epoch and epoch.isdecimal():
+        lease = {"edit_token": token, "lease_epoch": int(epoch)}
     try:
         result = _tag_registry.set_translation(
-            tag_id, body.locale, body.text, is_machine=False, reviewed_by=user.username
+            tag_id, locale, body.text, is_machine=False, reviewed_by=user.username,
+            expected_reference_revision=body.expected_reference_revision, actor=user, lease=lease,
         )
     except DomainError as exc:
         raise errors.domain_error(exc, 404) from exc
@@ -113,15 +125,6 @@ def update_tag_translation(
             code=errors.DOCUMENT_NOT_FOUND,
             detail=str(exc),
         ) from exc
-    audit.record(
-        user,
-        audit.TAG_TRANSLATION_UPDATE,
-        audit.TARGET_TAG,
-        target_id=str(tag_id),
-        old_value=None,
-        new_value={"locale": body.locale, "text": body.text},
-        ip_address=_client_ip(request),
-    )
     return result
 
 
@@ -132,15 +135,9 @@ def bulk_review_translations(
     user: User = Depends(require_role("editor", "admin")),
 ):
     """Подтверждает машинные переводы выбранных тегов (массовый review)."""
-    count = _tag_registry.bulk_review(body.tag_ids, user.username)
-    audit.record(
-        user,
-        audit.TAG_TRANSLATION_REVIEW,
-        audit.TARGET_TAG,
-        new_value={"tag_ids": body.tag_ids, "reviewed": count},
-        ip_address=_client_ip(request),
-    )
-    return {"reviewed": count}
+    if body.items is None:
+        raise ReferenceError("reference_precondition_required", 428)
+    return review_tag_items([item.model_dump() for item in body.items], user)
 
 
 @router.post("/translations/backfill")

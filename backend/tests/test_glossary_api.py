@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.support.reference_client import ObservedGlossaryClient
 
 from app.api.settings import get_settings as settings_dependency
 from app.config import Settings
@@ -78,7 +79,7 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
         monkeypatch.setattr(f"{module}.get_settings", lambda: settings)
     app = create_app()
     app.dependency_overrides[settings_dependency] = lambda: settings
-    return TestClient(app)
+    return ObservedGlossaryClient(app)
 
 
 @pytest.fixture

@@ -265,6 +265,8 @@ class DocumentRegistry:
 
         tag_ids = TagRegistry().get_or_create_ids(tags, created_by=uploaded_by, canonical_locale=canonical_locale)
         with session_scope() as s:
+            from app.services.tag_registry import ensure_assigned_tags
+            ensure_assigned_tags(s, tag_ids)
             doc = Document(
                 id=doc_id,
                 filename=filename,
@@ -603,6 +605,17 @@ class DocumentRegistry:
                 tags = normalize_tags(tags)
                 tag_ids = TagRegistry().get_or_create_ids(tags, canonical_locale=canonical_locale)
             with session_scope() as s:
+                from app.services.tag_registry import ensure_assigned_tags
+                from app.services.reference_resources import ReferenceKey
+                from app.services.reference_concurrency import lock_reference_resources, ReferenceError
+                reference_keys = [ReferenceKey("tag", str(identifier)) for identifier in (tag_ids or [])]
+                if fields.get("development_id") is not None:
+                    reference_keys.append(ReferenceKey("development", str(fields["development_id"])))
+                lock_reference_resources(s, reference_keys)
+                if fields.get("development_id") is not None and s.get(Development, fields["development_id"]) is None:
+                    raise ReferenceError("development_not_found", 404)
+                if tag_ids is not None:
+                    ensure_assigned_tags(s, tag_ids)
                 if not lock_document_write(s, doc_id):
                     return
                 doc = s.get(Document, doc_id)
@@ -677,11 +690,18 @@ class DocumentRegistry:
     def restore(self, doc_id: str) -> bool:
         """Снимает флаг удаления (восстановление из корзины)."""
         with session_scope() as s:
+            from app.services.tag_registry import ensure_assigned_tags
+            from app.services.reference_concurrency import ReferenceError
+            identifiers = set(s.scalars(select(DocumentTag.tag_id).where(DocumentTag.doc_id == doc_id)).all())
+            ensure_assigned_tags(s, identifiers)
             if not lock_document_write(s, doc_id):
                 return False
             doc = s.get(Document, doc_id)
             if doc is None:
                 return False
+            current_ids = set(s.scalars(select(DocumentTag.tag_id).where(DocumentTag.doc_id == doc_id)).all())
+            if current_ids != identifiers:
+                raise ReferenceError("reference_write_busy", 503)
             doc.deleted_at = None
             doc.deleted_by = None
         from app.services.deduplication import refresh_duplicate_flags

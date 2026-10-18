@@ -7,18 +7,19 @@ from contextlib import contextmanager
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     AuditLog, DomainTerm, DomainTermAlias, DomainTermTranslation,
     GlossaryIdentityKey, GlossaryInfotypePrefix, GlossaryInfotypeRule,
     GlossaryMergeReceipt, GlossaryState,
+    ReferenceResourceState,
 )
 
 
 TABLES = (DomainTerm, DomainTermAlias, DomainTermTranslation, GlossaryInfotypeRule,
-          GlossaryInfotypePrefix, GlossaryIdentityKey, GlossaryState, GlossaryMergeReceipt)
+          GlossaryInfotypePrefix, GlossaryIdentityKey, GlossaryState, GlossaryMergeReceipt, ReferenceResourceState)
 
 
 def read_metadata(session) -> dict:
@@ -26,8 +27,11 @@ def read_metadata(session) -> dict:
     rows = {}
     for model in TABLES:
         table = model.__table__
-        rows[table.name] = [dict(row) for row in session.execute(
-            select(table).order_by(*table.primary_key.columns)).mappings()]
+        statement = select(table).order_by(*table.primary_key.columns)
+        if model is ReferenceResourceState:
+            statement = statement.where(or_(table.c.resource_key.startswith('["glossary_term",', autoescape=True),
+                table.c.resource_key.startswith('["glossary_rule",', autoescape=True)))
+        rows[table.name] = [dict(row) for row in session.execute(statement).mappings()]
     return rows
 
 
@@ -47,7 +51,9 @@ def public_metadata(rows: dict) -> dict:
     return {"terms": terms, "rules": rules,
             "state": next(iter(rows[GlossaryState.__tablename__]), None),
             "identity_keys": rows[GlossaryIdentityKey.__tablename__],
-            "merge_receipts": rows[GlossaryMergeReceipt.__tablename__]}
+            "merge_receipts": rows[GlossaryMergeReceipt.__tablename__],
+            "reference_revisions": [{"resource_key": row["resource_key"], "revision": row["revision"]}
+                for row in rows.get(ReferenceResourceState.__tablename__, [])]}
 
 
 def json_value(value):

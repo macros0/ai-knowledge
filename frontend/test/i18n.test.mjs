@@ -24,6 +24,8 @@ import { lookupTitleKey, makeTitle } from "../src/i18n/titles.js";
 import locales from "../src/i18n/locales/index.js";
 import ru from "../src/i18n/locales/ru.js";
 import en from "../src/i18n/locales/en.js";
+import de from "../src/i18n/locales/de.js";
+import fr from "../src/i18n/locales/fr.js";
 
 test("LocaleProvider imports the DEFAULT_LOCALE it uses for the server cookie fallback", () => {
   const provider = readFileSync(
@@ -196,9 +198,10 @@ test("en полон: каждый ключ ru переведён (en — язы�
 test("манифест: каждый словарь соответствует коду локали", () => {
   assert.equal(locales.ru.messages, ru);
   assert.equal(locales.en.messages, en);
-  // de/fr — ЗАГЛУШКИ фазы 2: строки ссылаются на en-объект (без файла de.js/fr.js).
-  assert.equal(locales.de.messages, en);
-  assert.equal(locales.fr.messages, en);
+  assert.equal(locales.de.messages, de);
+  assert.equal(locales.fr.messages, fr);
+  assert.equal(de["nav.chat"], en["nav.chat"]);
+  assert.equal(fr["nav.chat"], en["nav.chat"]);
   assert.equal(SUPPORTED_LOCALES.join(","), Object.keys(locales).join(","));
 });
 
