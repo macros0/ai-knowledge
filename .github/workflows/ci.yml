@@ -87,8 +87,14 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.lock.txt
+      - name: Isolate diagnostics Python from runner tools
+        shell: pwsh
+        run: |
+          python -m venv "$env:RUNNER_TEMP\okf-diagnostics-python"
+          "$env:RUNNER_TEMP\okf-diagnostics-python\Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Install diagnostic test dependencies
         run: |
+          python -c "import sys; assert sys.prefix != sys.base_prefix"
           python -m pip install --require-hashes -r backend/requirements.lock.txt
           python -m pip install --no-deps -e ./doc-parser
           python -m pip check
