@@ -56,7 +56,8 @@ def test_current_parser_without_structural_publication_is_still_planned():
   run=plan_run(s,target_version=PARSER_VERSION)
   assert [d['doc_id'] for d in run['documents']]==['route-disabled']
 
-def test_reconcile_reports_verified_candidate_and_observed_rollback(pipeline_env):
+@pytest.mark.parametrize('parser_suffix', ['', '-depth-6', '-mail-disabled-depth-0', '-scope-v1'])
+def test_reconcile_reports_verified_candidate_and_observed_rollback(pipeline_env, parser_suffix):
  from app.services.generation_publication import publish_prepared_document
  from tests.test_generation_pipeline import DOC_ID
  from tests.test_chunk_fragment_publication import prepare
@@ -71,7 +72,7 @@ def test_reconcile_reports_verified_candidate_and_observed_rollback(pipeline_env
  reconcile(run,{'status':'running'})
  assert run['documents'][0]['status']=='verified'
  publish_prepared_document(pipeline.settings,pipeline.vector_store,DOC_ID,new)
- with session_scope() as s:s.get(Document,DOC_ID).parser_version=PARSER_VERSION
+ with session_scope() as s:s.get(Document,DOC_ID).parser_version=PARSER_VERSION+parser_suffix
  reconcile(run,{'status':'done'})
  assert run['documents'][0]['status']=='published'
  with session_scope() as s:
@@ -104,6 +105,24 @@ def test_dry_run_does_not_skip_current_tables_without_generic_format():
   run=plan_run(s,target_version=PARSER_VERSION)
   assert [d['doc_id'] for d in run['documents']]==['current-legacy']
   assert run['chunk_projection_version']==1
+
+
+@pytest.mark.parametrize('suffix,current', [
+ ('',True), ('-depth-6',True), ('-mail-disabled-depth-0',True),
+ ('-scope-v1',True), ('-mail-disabled-scope-v1',True), ('-depth-32',True),
+ ('-depth-33',False), ('-depth-06',False), ('-scope-v1-depth-6',False),
+ ('-unknown',False), ('-mail-disabled-extra',False),
+])
+def test_plan_recognizes_only_supported_parser_release_profiles(suffix,current):
+ from app.services.generation_store import begin_generation,mark_generation_ready,publish_generation
+ with session_scope() as s:
+  s.add(Document(id='profile',filename='table.xlsx',status='done',parser_version=PARSER_VERSION+suffix));s.flush()
+  gen=begin_generation(s,'profile',chunk_projection_version=1).id
+  mark_generation_ready(s,'profile',gen,table_schema_version=1)
+  publish_generation(s,'profile',gen)
+ with session_scope() as s:
+  run=plan_run(s,target_version=PARSER_VERSION)
+  assert [d['doc_id'] for d in run['documents']]==([] if current else ['profile'])
 
 
 

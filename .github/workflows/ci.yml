@@ -133,6 +133,19 @@ jobs:
       - name: Шрифт с кириллицей для генерации тестовых PDF
         run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-dejavu-core
 
+      # Ubuntu's standalone 7zz omits RAR3 support. Use the same pinned,
+      # checksum-verified official helper as the production backend image.
+      - name: RAR-capable archive runtime
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from backend.scripts.install_archive_runtime import install
+
+          install(Path(os.environ["RUNNER_TEMP"]) / "okf-7zip")
+          PY
+          echo "ARCHIVE_7ZIP_PATH=$RUNNER_TEMP/okf-7zip/7zz" >> "$GITHUB_ENV"
+
       - name: Установка зависимостей
         working-directory: doc-parser
         run: pip install -e ".[dev]"

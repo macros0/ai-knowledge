@@ -17,12 +17,26 @@ from app.db.models import Document, DocumentGenerationState, DocumentSource
 from app.db.session import session_scope
 from app.services.json_atomic import write_json_atomic
 from docparser.source_model import PARSER_VERSION
+from docparser.attachment_limits import MAX_CONFIGURABLE_ATTACHMENT_DEPTH
+
+
+def _parser_release_versions(target_version):
+    # The migration targets table/projection formats for a parser release.
+    # Mail, reviewed-scope and depth profiles retain that release identity;
+    # unknown suffixes must still be reparsed rather than accepted by prefix.
+    versions=set()
+    for mail_suffix in ('', '-mail-disabled'):
+        base=target_version+mail_suffix
+        versions.update((base, base+'-scope-v1'))
+        versions.update(f'{base}-depth-{depth}' for depth in range(MAX_CONFIGURABLE_ATTACHMENT_DEPTH+1))
+    return versions
 
 
 def plan_run(session, *, target_version, doc_ids=None, limit=5):
     if target_version != PARSER_VERSION or not 1 <= limit <= 100:
         raise ValueError('Unsupported target version or batch limit')
     rows=[]
+    target_versions=_parser_release_versions(target_version)
     generation_columns={c['name'] for c in inspect(session.get_bind()).get_columns('document_generations')}
     structure_column='table_schema_version' in generation_columns
     projection_column='chunk_projection_version' in generation_columns
@@ -40,7 +54,7 @@ def plan_run(session, *, target_version, doc_ids=None, limit=5):
                                     {'id':state.active_generation_id}).scalar() if structure_column and state else None
         projection = session.execute(text('SELECT chunk_projection_version FROM document_generations WHERE id=:id'),
                                      {'id':state.active_generation_id}).scalar() if projection_column and state else None
-        if doc.parser_version == target_version and structure == 1 and projection == 1:
+        if doc.parser_version in target_versions and structure == 1 and projection == 1:
             continue
         rows.append({'doc_id':doc.id,'old_generation_id':state.active_generation_id if state else None,
                      'new_generation_id':None,'old_parser_version':doc.parser_version,'target_version':target_version,
@@ -110,7 +124,7 @@ def reconcile(manifest, job):
                     verify_chunk_projection_publication(session,entry['doc_id'],candidate.id,prepared['chunks'])
                     entry['status']='verified'
             active=session.get(DocumentGeneration,state.active_generation_id) if state and state.active_generation_id else None
-            if doc and active and active.id != entry['old_generation_id'] and doc.parser_version==manifest['target_version'] and active.table_schema_version==1 and active.chunk_projection_version==manifest['chunk_projection_version']:
+            if doc and active and active.id != entry['old_generation_id'] and doc.parser_version in _parser_release_versions(manifest['target_version']) and active.table_schema_version==1 and active.chunk_projection_version==manifest['chunk_projection_version']:
                 verify_generation_tables(session,doc.id,active.id)
                 chunks=session.execute(select(DocumentChunk.chunk_index,DocumentChunk.section_title,
                     DocumentChunk.content,DocumentChunk.content_hash,DocumentChunk.source_id,DocumentChunk.table_refs)

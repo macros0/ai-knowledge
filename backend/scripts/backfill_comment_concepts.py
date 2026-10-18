@@ -147,13 +147,14 @@ def _replace_comment_snapshot(snapshot, comments, digest, settings, result):
             tags.append(ATTACHMENT_TAG)
         tags = list(dict.fromkeys([*tags, *global_tags]))
         spans = resolve_source_spans(chunk["content"], concept.content, [question])
+        previous = existing.get(slug)
         row = {
             "slug": slug, "title": concept.title, "type": concept.type, "content": concept.content,
             "tags": tags, "relations": list(concept.relations), "chunk_index": chunk["chunk_index"],
             "source_id": chunk.get("source_id"), "source_spans": [span.model_dump() for span in spans] or None,
             "model_id": None, "prompt_version": None,
+            "display_order": previous.get("display_order") if previous else None,
         }
-        previous = existing.get(slug)
         row["generated_at"] = (previous.get("generated_at") if previous and all(
             previous.get(key) == value for key, value in row.items()
         ) else datetime.now(timezone.utc))

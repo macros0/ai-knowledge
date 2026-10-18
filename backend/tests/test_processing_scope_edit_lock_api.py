@@ -6,9 +6,12 @@ base_upload_client = scope_fixtures.base_upload_client
 
 def test_api_requires_tab_lease_and_does_not_let_second_tab_save(base_upload_client):
     client, settings, _ = base_upload_client
+    settings.mail_import_enabled = True
     settings.attachment_review_enabled = True
     settings.dedup_enabled = False
-    doc = upload_mail(client, 600).json()
+    uploaded = upload_mail(client, 600)
+    assert uploaded.status_code == 202, uploaded.text
+    doc = uploaded.json()
     route = f"/api/documents/{doc['id']}/processing-scope"
     review = client.get(route).json()["pending"]
     body = {"review_id": review["id"], "expected_revision": review["revision"], "selected_source_keys": []}
@@ -32,9 +35,12 @@ def test_idle_expiration_is_enforced_by_api_even_with_regular_heartbeats(base_up
     from datetime import datetime, timedelta, timezone
     import app.services.processing_scope_edit_lock as locks
     client, settings, _ = base_upload_client
+    settings.mail_import_enabled = True
     settings.attachment_review_enabled = True
     settings.dedup_enabled = False
-    doc = upload_mail(client, 600).json()
+    uploaded = upload_mail(client, 600)
+    assert uploaded.status_code == 202, uploaded.text
+    doc = uploaded.json()
     route = f"/api/documents/{doc['id']}/processing-scope/edit-lock"
     start = datetime.now(timezone.utc)
     monkeypatch.setattr(locks, "_now", lambda:start)

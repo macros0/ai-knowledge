@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from docparser import PARSER_VERSION
+from docparser import ParseContext
 
 from app.config import Settings
 from app.db.models import DocumentChunk, DocumentSource, OkfConcept
@@ -147,7 +147,11 @@ def test_mail_pipeline_keeps_nested_mail_chunks_concepts_and_sources_together(
     pipeline._process(DOC_ID, source, "forward.eml", [], resume=False)
 
     document = registry.get(DOC_ID)
-    assert document["parser_version"] == PARSER_VERSION
+    expected_parser_version = ParseContext(
+        "forward.eml", mail_enabled=settings.mail_import_enabled,
+        attachment_max_depth=settings.attachment_max_depth,
+    ).parser_version
+    assert document["parser_version"] == expected_parser_version
     warnings = ([{"code": "unsupported_attachment_format", "source_id": "root/1"}]
                 if unsupported_attachment else [])
     assert document["parse_warnings"] == warnings
@@ -189,7 +193,7 @@ def test_mail_pipeline_keeps_nested_mail_chunks_concepts_and_sources_together(
     assert (settings.uploads_dir / DOC_ID / child_source.saved_path).read_bytes()
     assert set(chunk_source_ids) == {"root", "root/0"}
     assert set(concept_source_ids) == {"root", "root/0"}
-    assert parser_versions == {PARSER_VERSION}
+    assert parser_versions == {expected_parser_version}
     assert any("Лимит согласования: 12 дней." in text for text in canonical_texts)
     assert all("Вложение:" not in text for text in canonical_texts)
     if attachment_kind == "cid":
@@ -399,7 +403,10 @@ def test_disabled_embedded_mail_keeps_parent_searchable_and_original_downloadabl
     document = registry.get(doc_id)
     assert document["status"] == "done"
     assert document["problem"] == (None if with_parent_text else "no_text_layer")
-    assert document["parser_version"].endswith("-mail-disabled")
+    assert document["parser_version"] == ParseContext(
+        "container.pdf", mail_enabled=False,
+        attachment_max_depth=settings.attachment_max_depth,
+    ).parser_version
     assert document["parse_warnings"] == [{"code": "mail_import_disabled", "source_id": "root/0"}]
     with session_scope() as session:
         sources = session.query(DocumentSource).filter_by(doc_id=doc_id).order_by(DocumentSource.source_id).all()

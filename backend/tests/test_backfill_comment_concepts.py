@@ -15,6 +15,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
 
 from app.config import Settings
 from app.services.concept_store import fetch_contents
@@ -286,14 +287,27 @@ class TestProcessDoc:
         # registry-счётчик
         assert get_registry().get(DOC_ID)["okf_concept_count"] == 2
 
-    def test_idempotent_second_run(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize("display_order", [None, 7])
+    def test_idempotent_second_run(self, tmp_path, monkeypatch, display_order):
         settings, bundle = _setup_doc(tmp_path)
         embedder, vs, fake_q = _fake_services(settings, monkeypatch)
         from app.services.okf_generator import OKFGenerator
+        from app.db.models import OkfConcept
+        from app.db.session import session_scope
+
+        with session_scope() as session:
+            session.query(OkfConcept).filter_by(doc_id=DOC_ID, slug="obychnoy-koncept").one().display_order = display_order
 
         gen = OKFGenerator()
         r1 = backfill.process_doc(DOC_ID, "doc.docx", settings, gen, embedder, vs)
+        assert r1["error"] is None
         assert r1["threads"] == 1
+        with session_scope() as session:
+            assert session.query(OkfConcept).filter_by(doc_id=DOC_ID, slug="obychnoy-koncept").one().display_order == display_order
+            # A previously published comment may also have an explicit display order.
+            comment = session.query(OkfConcept).filter(OkfConcept.doc_id == DOC_ID,
+                                                      OkfConcept.slug != "obychnoy-koncept").one()
+            comment.display_order = display_order
         bundle = active_bundle_path(settings, DOC_ID)
         files_after_first = sorted(p.name for p in bundle.glob("*.md"))
         upserts_first = len(fake_q.upserted)

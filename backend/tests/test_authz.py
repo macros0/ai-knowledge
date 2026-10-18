@@ -85,13 +85,34 @@ class TestDevelopmentDeleteRoleGate:
             ("demo.security", 403),  # security — не editor/admin
         ],
     )
-    def test_delete_development_gate(self, client, username, expected):
+    def test_delete_development_gate(self, client, monkeypatch, username, expected):
+        from app.config import get_settings
         from app.services.development_registry import get_development_registry
 
+        settings = get_settings()
+        monkeypatch.setattr(settings, "reference_edit_locks_enabled", True)
+        for module in ("app.api.reference_editing", "app.services.reference_mutation"):
+            monkeypatch.setattr(f"{module}.get_settings", lambda: settings)
         dev = get_development_registry().create("99999", "Тест", module=None)
         login(client, username)
-        resp = client.delete(f"/api/developments/{dev['id']}?version={dev['version']}")
-        assert resp.status_code == expected
+        token = "a" * 64
+        acquired = client.post(
+            f"/api/reference-edit-locks/development/{dev['id']}",
+            json={"edit_token": token},
+        )
+        assert acquired.status_code == expected, acquired.text
+        headers = {}
+        if expected == 200:
+            headers = {
+                "X-Reference-Edit-Token": token,
+                "X-Reference-Edit-Epoch": str(acquired.json()["lease_epoch"]),
+            }
+        resp = client.delete(
+            f"/api/developments/{dev['id']}",
+            params={"version": dev["version"], "expected_reference_revision": dev["reference_revision"]},
+            headers=headers,
+        )
+        assert resp.status_code == expected, resp.text
 
 
 class TestUploadRoleGate:

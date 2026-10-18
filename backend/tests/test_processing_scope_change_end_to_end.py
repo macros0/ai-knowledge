@@ -259,15 +259,17 @@ def test_reenable_with_cached_chunks_generates_only_missing_concepts(source_envi
     pipeline._executor.shutdown()
 
 
-def test_added_excel_uses_supervised_branch_and_keeps_existing_results(source_environment, monkeypatch):
+@pytest.mark.parametrize("mail_enabled", [False, True])
+def test_added_excel_uses_supervised_branch_and_keeps_existing_results(source_environment, monkeypatch, mail_enabled):
     from copy import deepcopy
     from concurrent.futures import ThreadPoolExecutor
     from threading import RLock
     from openpyxl import Workbook
-    from docparser import PARSER_VERSION
+    from docparser.source_model import parser_version_for_mail_mode
     from app.services.generation_files import processing_review_paths
     from app.db.models import DocumentScopeChange, DocumentChunk
     env = source_environment
+    env["settings"].mail_import_enabled = mail_enabled
     doc_id, pipeline = env["doc_id"], env["pipeline"]
     review_id = "e" * 32
     folder = processing_review_paths(env["settings"], doc_id, review_id) / "attachments"
@@ -285,7 +287,7 @@ def test_added_excel_uses_supervised_branch_and_keeps_existing_results(source_en
     decisions = [*env["decisions"], {"source_key": node["source_key"], "effective_included": True, "reason": "small"}]
     with session_scope() as s:
         s.add(DocumentProcessingReview(doc_id=doc_id, id=review_id, revision=1, state="draft", source_file_hash=env["root_hash"],
-            parser_version=PARSER_VERSION + "-scope-v1", assessor_version="test", policy_json={}, inventory_json=inventory,
+            parser_version=parser_version_for_mail_mode(mail_enabled) + "-scope-v1", assessor_version="test", policy_json={}, inventory_json=inventory,
             selection_json=decisions, selection_hash="f" * 64, base_generation_id=env["base_id"]))
     pipeline.embedder = SimpleNamespace(embed_texts=Mock(side_effect=lambda values: [[1., 0.] for _ in values]))
     pipeline._threads, pipeline._start_lock = {}, RLock()

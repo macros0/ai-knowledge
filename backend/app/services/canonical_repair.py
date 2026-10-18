@@ -267,7 +267,7 @@ def _write_bundle(generator, doc_id, filename, paths, proposal, *, written_hashe
             raw=doc.markdown.replace("\n",os.linesep).encode("utf-8")
             written_hashes[f"bundle/{Path(doc.filepath).name}"]=hashlib.sha256(raw).hexdigest()
         row = by_slug[Path(doc.filepath).stem]
-        for field in ("generated_at", "model_id", "prompt_version", "source_spans"):
+        for field in ("generated_at", "model_id", "prompt_version", "source_spans", "display_order"):
             doc.metadata[field] = row.get(field)
     chunks_dir = paths.bundle / "chunks"
     if write_bundles:
