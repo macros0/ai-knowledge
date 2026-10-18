@@ -178,6 +178,7 @@ def backfill_reference_data(
             "updated": 0,
             "failed": 0,
             "skipped_changed": 0,
+            "skipped_locked": 0,
             "skipped_reviewed": 0,
             "skipped_same_locale": 0,
             "skipped_disabled": 0,

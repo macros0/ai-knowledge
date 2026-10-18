@@ -188,8 +188,22 @@ export default function DevelopmentPanel() {
     }
   };
 
+  const confirmDiscardEdit = () => {
+    const dirty = editing && ["number", "name", "module"].some(
+      field => (editForm[field] ?? "") !== (editBase?.[field] ?? "")
+    );
+    return !dirty || window.confirm(t("admin.glossary.unsavedChangesConfirm"));
+  };
+
+  const cancelEdit = () => {
+    if (busy || !confirmDiscardEdit()) return;
+    setEditing(null);
+    setEditConflict(null);
+    setEditBase(null);
+  };
+
   const startEdit = (dev) => {
-    if (busy) return;
+    if (busy || editing === dev.id || !confirmDiscardEdit()) return;
     setEditBase({ ...dev });
     setEditConflict(null);
     setEditing(dev.id);
@@ -482,7 +496,7 @@ export default function DevelopmentPanel() {
                     <button className="btn" onClick={() => submitEdit(dev.id)} disabled={busy || Boolean(editConflict) || editSession.state !== "editing"}>
                       {t("devpanel.saveBtn")}
                     </button>
-                    <button className="btn ghost" disabled={busy} onClick={() => { setEditing(null); setEditConflict(null); }}>
+                    <button className="btn ghost" disabled={busy} onClick={cancelEdit}>
                       {t("devpanel.cancelBtn")}
                     </button>
                   </td>

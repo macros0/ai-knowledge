@@ -332,3 +332,31 @@ def test_translation_model_override_is_used_only_by_translation_client(monkeypat
     monkeypatch.setattr("app.services.llm_client.LLMClient", FakeClient)
     assert translate_texts_batch(["source"], "ru", source_locale="de") == ["translated"]
     assert captured == {"interactive": False, "model": "vendor/glossary-model"}
+
+
+
+def test_generic_backfill_aggregates_locked_glossary_terms_across_batches(monkeypatch):
+    from app.auth.models import User
+    from app.services.translation import backfill_reference_data
+    from app.services.reference_resources import ReferenceKey
+    from app.services.reference_edit_lock import acquire_edit_lock
+    monkeypatch.setattr("app.services.glossary.translations.get_settings", lambda: _settings())
+    monkeypatch.setattr("app.services.translation.get_settings", lambda: _settings())
+    actor = User(user_id="aggregate-test", username="Aggregate test", roles=["admin"])
+    terms = [GlossaryRegistry().create(f"TX{index:02d}", "sap_transaction", f"Term {index}", None, "de") for index in range(12)]
+    for index in (0, 10):
+        with session_scope() as session:
+            acquire_edit_lock(session, ReferenceKey("glossary_term", terms[index]["id"]), actor, f"{index:064x}")
+    translated = []
+    def translate(texts, *_args, **_kwargs):
+        translated.extend(texts)
+        return ["Translated " + text for text in texts]
+    monkeypatch.setattr("app.services.glossary.translations.translate_texts_batch", translate)
+    result = backfill_reference_data("ru", ["glossary"], user=actor, glossary_term_ids=[term["id"] for term in terms])["glossary"]
+    assert result["skipped_locked"] == 2
+    assert result["requested"] == 12
+    assert result["created"] == 10
+    assert result["status"] == "partial"
+    assert "Term 0" not in translated and "Term 10" not in translated
+    for index in (0, 10):
+        assert GlossaryRegistry().get(terms[index]["id"])["translations"] == []

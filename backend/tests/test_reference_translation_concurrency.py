@@ -69,7 +69,7 @@ def test_locked_candidate_skips_model_call(monkeypatch):
     from app.auth.models import User
     registry, tag = make_tag()
     with session_scope() as s:
-        acquire_edit_lock(s, ReferenceKey("tag", str(tag["id"])), User(user_id="a"), "a" * 64)
+        acquire_edit_lock(s, ReferenceKey("tag", str(tag["id"])), User(user_id="a", roles=["editor"]), "a" * 64)
     def forbidden(*args, **kwargs):
         pytest.fail("model must not be called for an occupied editor")
     monkeypatch.setattr(translation, "translate_texts_batch", forbidden)
