@@ -37,13 +37,14 @@ COPY backend/scripts/install_archive_runtime.py /tmp/install_archive_runtime.py
 RUN python /tmp/install_archive_runtime.py && rm /tmp/install_archive_runtime.py
 ENV ARCHIVE_7ZIP_PATH=/opt/7zip/7zz
 
-COPY backend/requirements.txt ./backend/requirements.txt
+COPY backend/requirements.lock.txt ./backend/requirements.lock.txt
 COPY doc-parser ./doc-parser
 COPY THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
 RUN --mount=type=secret,id=pip_config,target=/etc/pip.conf,required=false \
     pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e ./doc-parser && \
-    pip install --no-cache-dir -r backend/requirements.txt && \
+    pip install --no-cache-dir --require-hashes -r backend/requirements.lock.txt && \
+    pip install --no-cache-dir --no-deps -e ./doc-parser && \
+    pip check && \
     python -c "import importlib.metadata as m, importlib.util; assert m.version('pypdfium2'); assert importlib.util.find_spec('pymupdf') is None; assert importlib.util.find_spec('fitz') is None"
 
 COPY backend/app ./app

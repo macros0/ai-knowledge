@@ -1,5 +1,18 @@
 # SECURITY.md — security model
 
+## Python runtime dependency integrity (2026-10-18)
+
+The backend image and Python CI jobs install the complete backend and parser
+runtime from `backend/requirements.lock.txt` with exact versions and SHA-256
+verification. The local parser is installed separately with `--no-deps`.
+The `Python dependency lock` check rejects drift from either source manifest.
+The dependency audit reads that complete lock with `--strict`; previously its
+isolated job installed only the parser and omitted backend-only dependencies.
+This corrects audit coverage and is not evidence of an exploited vulnerability.
+Development tools, local build dependencies, OS packages and base images remain
+outside this runtime lock. GitHub main protection requires passing checks and a
+pull request; setup and update commands are in `docs/DEVELOPMENT_CHECKS.md`.
+
 ## Reference editor leases
 
 2026-10-18: reference leases bind a short-lived database row to an authenticated

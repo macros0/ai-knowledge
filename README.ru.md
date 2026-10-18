@@ -147,7 +147,8 @@ docker compose --env-file "$OKF_RUNTIME_ENV_FILE" up -d --build
 ```bash
 cp .env.example .env                 # endpoint'ы моделей, DATABASE_URL, QDRANT_URL
 python3 -m venv backend/.venv        # Windows: python -m venv backend\.venv
-backend/.venv/bin/pip install -e ./doc-parser -r backend/requirements.txt
+backend/.venv/bin/pip install --require-hashes -r backend/requirements.lock.txt
+backend/.venv/bin/pip install --no-deps -e ./doc-parser
                                      # Windows: backend\.venv\Scripts\pip install ...
 (cd frontend && npm ci)
 ```

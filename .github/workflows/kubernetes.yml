@@ -32,8 +32,9 @@ jobs:
           sudo install /tmp/kubectl /usr/local/bin/kubectl
       - name: Dependencies and compact contracts
         run: |
-          pip install -e ./doc-parser
-          pip install -r backend/requirements.txt -r scripts/kubernetes/requirements.txt
+          python -m pip install --require-hashes -r backend/requirements.lock.txt
+          python -m pip install --no-deps -e ./doc-parser
+          python -m pip check
           cd backend
           python -m pytest tests/test_deployment_profile.py tests/test_kubernetes_chart.py tests/test_kubernetes_model_profile.py tests/test_model_stub_contract.py tests/test_kubernetes_compact_compact_cli.py tests/test_kubernetes_compact_home_access.py tests/test_kubernetes_compact_host_tls.py tests/test_kubernetes_session_cleanup.py -q
       - name: Build source images
