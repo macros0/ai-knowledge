@@ -1,11 +1,17 @@
 """Native lifecycle sampling tests; synthetic allocations are harness evidence only."""
 import importlib.util
+import mmap
 from pathlib import Path
 import subprocess
 import sys
 import time
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _collector_import_path(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / 'test_scripts'))
 
 
 def api():
@@ -60,12 +66,23 @@ def test_native_sampler_detects_retained_32mib_child_during_parse():
 
 def test_periodic_sampler_detects_peak_inside_finalization_not_only_boundaries():
     sampler = api().PipelineRssSampler(); sampler.start()
-    sampler.phase('finalization'); baseline = sampler.trace.peak
-    retained = bytearray(32 * 1024 * 1024)
-    time.sleep(.45)
-    assert sampler.trace.peak >= baseline + 24 * 1024 * 1024
-    assert retained[0] == 0
-    assert complete(sampler)['rss_sampling_complete']
+    try:
+        sampler.phase('finalization'); baseline = sampler.trace.peak
+        # A bytearray can reuse already-resident heap pages after earlier tests.
+        # Fresh mapped pages must be written to become a real new RSS increase.
+        with mmap.mmap(-1, 32 * 1024 * 1024) as retained:
+            for offset in range(0, len(retained), mmap.PAGESIZE):
+                retained[offset] = 1
+            deadline = time.monotonic() + 5
+            while sampler.trace.peak < baseline + 24 * 1024 * 1024 and time.monotonic() < deadline:
+                time.sleep(.01)
+            # No boundary request occurs while the transient allocation exists.
+            assert sampler.trace.peak >= baseline + 24 * 1024 * 1024
+            assert retained[0] == 1
+        assert complete(sampler)['rss_sampling_complete']
+    finally:
+        if not sampler.finished:
+            sampler.finish(publication_completed=False)
 
 
 def test_changed_selected_pid_birth_invalidates_sampling():
