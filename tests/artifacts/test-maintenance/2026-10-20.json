@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-20",
+  "base_commit": "45e4a2c0d747341a372493c22babd5e633dfb4f7",
+  "scope": "Tracked backend, frontend and doc-parser test suites; targeted semantic review of duplicate candidates",
+  "collected": {
+    "backend_before": 4770,
+    "backend_after": 4761,
+    "frontend": 659,
+    "doc_parser": 557
+  },
+  "removed_tests": 9,
+  "removal_mapping": "tests/README.md",
+  "static_checks": {
+    "python_test_definitions_before": 3687,
+    "exact_python_duplicates_including_decorators": 0,
+    "shadowed_python_test_definitions": 0,
+    "exact_frontend_test_callback_duplicates": 0,
+    "literal_parameter_lists_checked": 493,
+    "duplicate_values_in_literal_parameter_lists": 0
+  },
+  "removal_coverage_comparison": {
+    "scope": "Same four edited test modules and matched runtime settings, before later audit environment isolation",
+    "tests_passed_before": 86,
+    "tests_passed_after": 77,
+    "app_executed_lines_before": 8764,
+    "app_executed_lines_after": 8764,
+    "lost_executed_lines": 0,
+    "gained_executed_lines": 0,
+    "branch_coverage_measured": false
+  },
+  "verification": {
+    "final_edited_modules_and_edit_lock_authz_tests_passed": 117,
+    "audit_environment_and_transport_tests_passed": 62,
+    "frontend_passed": 658,
+    "frontend_skipped": 1,
+    "doc_parser_passed": 556,
+    "doc_parser_skipped": 1,
+    "collection_from_backend_and_repo_root": "4761 tests, no collection errors",
+    "ruff_changed_python_files": "passed",
+    "git_diff_check": "passed",
+    "optional_audit_test_connection_variables": "preserved"
+  },
+  "full_backend_run": {
+    "status": "not_completed",
+    "passed_before_stop": 204,
+    "skipped_before_stop": 4,
+    "failed_before_stop": 3,
+    "stop_reason": "maxfail=3: local durable/Logstash settings leaked into tests",
+    "follow_up": "Isolated audit transport settings; all three failures passed in the 62-test focused run. Full backend suite was not rerun to completion."
+  },
+  "limitations": [
+    "No claim that every remaining test received an individual semantic review.",
+    "Identical line coverage supports the nine removals but is not proof of identical branch or mutation coverage.",
+    "No real PostgreSQL/Docker acceptance was performed."
+  ]
+}

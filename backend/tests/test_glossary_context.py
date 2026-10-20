@@ -58,13 +58,6 @@ def test_domain_match_keeps_source_with_explicit_equivalent_alias():
     assert matched_domain_terms(unrelated, plan.match_groups) == []
 
 
-def test_bare_domain_word_does_not_count_as_domain_match():
-    plan = _infotype_plan()
-    unrelated = _block("Другой раздел", "Описание инфотипа без конкретного кода.")
-
-    assert matched_domain_terms(unrelated, plan.match_groups) == []
-
-
 def test_complete_form_matching_does_not_build_source_offset_mapping(monkeypatch):
     def fail_mapping(_text):
         raise AssertionError("content matching must not build source offsets")

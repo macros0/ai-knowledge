@@ -1,7 +1,7 @@
 """Общие фикстуры для тестов бэкенда.
 
-Настройки: убирает из окружения переменные auth/Keycloak и LLM/чата перед каждым
-тестом. Без этого pydantic-settings (читает env-переменные с приоритетом над
+Настройки: изолирует auth/Keycloak, LLM/чат, транспорт аудита и блокировки
+редактирования перед каждым тестом. Без этого pydantic-settings (читает env-переменные с приоритетом над
 dotenv) подхватывает AUTH_PROVIDER/KEYCLOAK из окружения pytest-процесса, и старые
 тесты, строящие Settings без явного auth_provider, случайно получают 'keycloak_oidc' → 401.
 
@@ -15,15 +15,22 @@ import os
 import pytest
 
 
+# Relative to this conftest, so collection also works from the repository root.
+# This directory contains artifacts from old local runs, not maintained tests.
+collect_ignore = ["tmp"]
+
+
 @pytest.fixture(autouse=True)
 def _flush_auth_env(monkeypatch):
     # LiteLLM can load the development .env into os.environ during collection.
     # Settings(_env_file=None) still reads environment variables: isolate LLM
     # and chat defaults just as auth defaults, without changing the live .env.
+    # Local durable/Logstash audit settings also change auth events and payloads.
     runtime_vars = [
         k
         for k in os.environ
         if k.startswith(("AUTH_", "KEYC", "SSO_", "LLM_", "CHAT_", "SOURCE_ASSESSMENT_", "EMBEDDING_"))
+        or k in {"AUDIT_STDOUT_MODE", "AUDIT_STDOUT_FORMAT"}
     ]
     for var in runtime_vars:
         monkeypatch.delenv(var, raising=False)
@@ -34,6 +41,9 @@ def _flush_auth_env(monkeypatch):
     # The live flag is enabled locally; legacy unit fixtures must be explicit.
     # Scope tests opt in on their isolated Settings instance or via monkeypatch.
     monkeypatch.setenv("ATTACHMENT_REVIEW_ENABLED", "false")
+    # Local edit-lock rollout must not change legacy API test preconditions.
+    # Lock protocol tests enable it explicitly on their isolated Settings.
+    monkeypatch.setenv("REFERENCE_EDIT_LOCKS_ENABLED", "false")
     from app.config import get_settings
     get_settings.cache_clear()
     # Integration tests explicitly replace this boundary with a typed provider.
