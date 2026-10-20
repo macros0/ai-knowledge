@@ -8,6 +8,7 @@ runtime:
   environment: production
   workers: 1
   auditStdoutMode: disabled
+  auditStdoutFormat: native
   config: {}
 trust:
   existingConfigMap: ""

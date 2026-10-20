@@ -404,6 +404,8 @@ class Settings(BaseSettings):
     # Журнал ИБ: срок хранения записей audit_log (дни). Очистка — отдельной
     # задачей; здесь фиксируется только срок для документации/будущей очистки.
     audit_retention_days: int = 365
+    audit_stdout_mode: Literal["disabled", "durable"] = "disabled"
+    audit_stdout_format: Literal["native", "logstash"] = "native"
     # Soft-лимит числа документов на одну массовую операцию.
     bulk_delete_max_docs: int = 50
     bulk_regenerate_max_docs: int = 20

@@ -379,6 +379,59 @@ Invariants enforced by `validate_auth_provider` in `app/config.py` (production):
   dedicated service account with INSERT-only privileges is recommended
   (see `README.md`, "Audit log hardening").
 
+### Durable audit and Logstash stdout (2026-10-20)
+
+`AUDIT_STDOUT_MODE=disabled` preserves the legacy database audit path; `durable`
+adds an atomic AuditLog/outbox pair. Security mutations explicitly using
+`record_in_session` share their transaction with that pair. This does not make
+unrelated legacy business mutations transactionally atomic. Login/session and
+required security writes fail closed if their durable audit cannot commit;
+audit failure during an already-denied request preserves its 401/403/redirect and
+increments fixed diagnostic counters. It never grants access. OIDC validation,
+roles and CSRF boundaries remain unchanged.
+
+The dispatcher uses one process/OS lock and retries committed pending rows.
+`stdout_written` acknowledges a complete local stdout write, not collector or
+OpenSearch receipt; an uncertain marker can repeat the same `event_id`. Invalid
+payloads are held. `AUDIT_STDOUT_FORMAT=native|logstash` changes only the wire
+representation. Logstash uses a private python-json-logger path with fixed
+fields, original UTC event timestamp and propagating sink failures. Root logging
+configuration cannot filter these audit records. The canonical/wire limits are
+16384/18432 bytes; blank fence lines and container fragments require collector
+handling. Deduplication by event_id is a downstream responsibility.
+
+Only allowlisted structured values leave the process. Headers, cookies, tokens,
+OAuth code/state, document content, free-form metadata and exception text are
+excluded. Actor IDs/names and target IDs can still be sensitive; stdout access,
+index permissions and retention must protect them. Client IP remains null with
+unknown provenance; untrusted headers cannot supply it or the server request ID.
+The existing security-role boundary still controls audit API reads.
+
+The additive 066 schema must exist before durable startup; no legacy backfill or
+historical replay is introduced. The writer requires SELECT/INSERT audit_log,
+sequence USAGE and SELECT/INSERT outbox plus UPDATE of delivery columns only;
+UPDATE/DELETE audit_log are unnecessary. Status and hold use separate operator
+permissions. Restore must hold pending rows before restarting writers; binary
+rollback retains the schema and held/pending data. No automatic retention or
+outbox garbage collection is added.
+
+PostgreSQL denial writes retain bounded admission, absolute deadlines and owned
+helpers for DNS/default/file operations. Unsupported service/certificate profiles
+are rejected before unsafe I/O or native connect; TLS is not downgraded. Private
+file snapshots and quarantined cleanup ownership are not an automatic orphan
+recovery system. Kubernetes Secret/NFS/CSI and remaining native authentication
+profiles keep their separate acceptance limits.
+
+Linux Docker startup sets the app user's HOME when dropping privileges, so libpq
+cannot accidentally inspect `/root` defaults. The packaged nonroot UID/HOME and
+PostgreSQL preflight have a real Docker regression test. Linux/POSIX tests and a
+home Docker stdout→Fluent Bit→OpenSearch proof succeeded, including outage/replay;
+these do not approve the customer's collector, CRI/TLS/access or retention.
+See [delivery contract](docs/AUDIT_DELIVERY.md) and the
+[Linux/OpenSearch report](docs/superpowers/reports/2026-10-20-audit-logstash-linux-opensearch.md).
+Older experimental audit/Kubernetes reports below remain historical and do not
+extend this implementation's accepted platform profiles.
+
 ### Operational diagnostics (control and retention)
 
 The diagnostic stream uses an explicit event-field allowlist; existing log
@@ -500,6 +553,18 @@ does not corrupt data.
   active tokens because encryption at rest is delegated to infrastructure.
 
 ## 7. Security change log
+
+### 2026-10-20 — Durable audit stdout and packaged Linux identity
+
+Added the selectively ported audit/outbox contract, bounded security-event writes
+and Logstash-compatible JSON stdout with a fixed content allowlist. Local stdout
+completion is not remote receipt; hold/restore and downstream dedup remain explicit.
+A real Linux startup found setpriv retaining root HOME for the app UID, causing
+PostgreSQL file-profile preflight to fail. The entrypoint now sets the app home;
+the same Docker regression failed before and passed after that change. The home
+OpenSearch proof indexed 1013/1013 events and retained that count after full replay;
+customer collector acceptance remains OPEN. No existing auth control is relaxed.
+
 
 ### 2026-10-02 — Diagnostics: link checks bounded by the spool root
 Change: the backend store, bundle/prepare workers and the Node spool rejected a

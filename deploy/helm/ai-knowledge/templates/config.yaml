@@ -14,6 +14,7 @@ data:
   MODEL_MODE: {{ .Values.models.mode | quote }}
   UVICORN_WORKERS: "1"
   AUDIT_STDOUT_MODE: {{ .Values.runtime.auditStdoutMode | quote }}
+  AUDIT_STDOUT_FORMAT: {{ .Values.runtime.auditStdoutFormat | quote }}
   {{- if eq .Values.models.mode "stub" }}
   EMBEDDING_PROVIDER: fake
   LLM_MODEL: openai/test-stub

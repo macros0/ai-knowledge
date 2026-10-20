@@ -23,6 +23,9 @@ from app import config as config_mod
 from app.auth.factory import build_auth_provider, build_authorizer
 from app.auth.identity import AuthenticatedIdentity
 from app.auth.models import User
+from sqlalchemy import delete
+from sqlalchemy.exc import SQLAlchemyError
+from app.auth.audit_errors import AuthSessionStoreUnavailable
 from app.db.models import AuthSession
 from app.db.session import session_scope
 
@@ -67,14 +70,21 @@ def store_identity(request: Request, identity: AuthenticatedIdentity) -> None:
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.auth_session_ttl_seconds)
     payload = identity.model_dump(mode="json")
     id_token = (payload.get("attributes") or {}).get("id_token")
-    with session_scope() as db:
-        db.add(AuthSession(
-            id=key,
-            external_id=identity.external_id,
-            identity=payload,
-            id_token=id_token,
-            expires_at=expires_at,
-        ))
+    raw=request.session.get(_SESSION_KEY) or {}
+    previous=raw.get("session_id") if isinstance(raw,dict) else None
+    try:
+        with session_scope() as db:
+            from app.services.audit_security import enabled
+            if enabled() and isinstance(previous,str) and previous.isascii():
+                db.execute(delete(AuthSession).where(AuthSession.id==hashlib.sha256(previous.encode("ascii")).hexdigest()))
+            db.add(AuthSession(id=key, external_id=identity.external_id, identity=payload, id_token=id_token, expires_at=expires_at))
+            from app.services.audit_security import record_auth_in_session
+            record_auth_in_session(db, request, identity, "auth_login_success")
+    except (SQLAlchemyError, ValueError, TypeError):
+        from app.services.audit_security import enabled
+        if enabled():
+            raise AuthSessionStoreUnavailable() from None
+        raise
     request.session.clear()
     request.session[_SESSION_KEY] = {"session_id": session_id}
 
@@ -88,8 +98,15 @@ def clear_identity(request: Request) -> None:
             with session_scope() as db:
                 row = db.get(AuthSession, key)
                 if row is not None:
+                    from app.services.audit_security import record_auth_in_session
+                    from app.services.audit_security import enabled
+                    identity = AuthenticatedIdentity(**row.identity) if enabled() else None
                     db.delete(row)
-        except Exception:
+                    record_auth_in_session(db, request, identity, "auth_logout")
+        except (SQLAlchemyError, ValueError, TypeError):
+            from app.services.audit_security import enabled
+            if enabled():
+                raise AuthSessionStoreUnavailable() from None
             logger.warning("Не удалось удалить server-side session", exc_info=True)
     request.session.clear()
 
@@ -178,6 +195,8 @@ def require_user(request: Request) -> User:
         return public_user()
 
     identity = identity_from_session(request)
+    if identity is not None:
+        request.state.audit_identity = identity
     if identity is None:
         _unauthorized()
 
@@ -198,6 +217,8 @@ def current_user(request: Request) -> User:
         return public_user()
 
     identity = identity_from_session(request)
+    if identity is not None:
+        request.state.audit_identity = identity
     if identity is None:
         return public_user()
     if _blocked(identity):

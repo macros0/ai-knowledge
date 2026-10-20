@@ -20,6 +20,7 @@ from app.services.audit import (
 from app.services.registry import DocumentRegistry
 
 EXPECTED_ACTION_TYPES = {
+    "auth_login_success", "auth_login_denied", "auth_access_denied", "auth_logout",
     "reference_edit_acquired", "reference_edit_released", "reference_edit_revoked",
     "reference_edit_generations_invalidated", "reference_translation_commit",
     "document_upload",

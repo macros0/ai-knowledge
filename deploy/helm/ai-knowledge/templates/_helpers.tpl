@@ -27,7 +27,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and (eq $key "KEYCLOAK_TOKEN_ENDPOINT_AUTH_METHOD") (not (has $value (list "client_secret_basic" "client_secret_post" "none"))) -}}
 {{- fail "Invalid OIDC token authentication method" -}}
 {{- end -}}
-{{- if or (not (regexMatch "^[A-Z][A-Z0-9_]*$" $key)) (and (regexMatch "(?i)(password|secret|token|api_key|database_url)" $key) (ne $key "KEYCLOAK_TOKEN_ENDPOINT_AUTH_METHOD")) (has $key (list "ENVIRONMENT" "DEPLOYMENT_TIER" "MODEL_MODE" "EMBEDDING_PROVIDER" "UVICORN_WORKERS" "STORAGE_MODE" "DATA_DIR" "QDRANT_URL" "AUDIT_STDOUT_MODE")) -}}
+{{- if or (not (regexMatch "^[A-Z][A-Z0-9_]*$" $key)) (and (regexMatch "(?i)(password|secret|token|api_key|database_url)" $key) (ne $key "KEYCLOAK_TOKEN_ENDPOINT_AUTH_METHOD")) (has $key (list "ENVIRONMENT" "DEPLOYMENT_TIER" "MODEL_MODE" "EMBEDDING_PROVIDER" "UVICORN_WORKERS" "STORAGE_MODE" "DATA_DIR" "QDRANT_URL" "AUDIT_STDOUT_MODE" "AUDIT_STDOUT_FORMAT")) -}}
 {{- fail (printf "Runtime config key %s is secret or chart-controlled" $key) -}}
 {{- end -}}
 {{- end -}}

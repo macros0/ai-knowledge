@@ -1,0 +1,33 @@
+{
+  "@timestamp": "2026-10-20T09:00:00+00:00",
+  "@version": "1",
+  "message": "auth_login_success",
+  "logger_name": "ai_knowledge.audit",
+  "thread_name": "audit-outbox",
+  "level": "INFO",
+  "level_value": 20000,
+  "application": "ai-knowledge",
+  "audit_transport_version": 1,
+  "schema_version": 1,
+  "event_id": "00000000-0000-4000-8000-000000000001",
+  "timestamp": "2026-10-20T09:00:00+00:00",
+  "action": "auth_login_success",
+  "actor": {
+    "type": "user",
+    "id": "test-user",
+    "name": "Test User"
+  },
+  "target": {
+    "type": null,
+    "id": null
+  },
+  "outcome": "success",
+  "method": "simulation",
+  "reason": null,
+  "request_id": "00000000-0000-4000-8000-000000000002",
+  "client_ip": null,
+  "ip_source": "unknown",
+  "old_value": null,
+  "new_value": null,
+  "meta": null
+}
