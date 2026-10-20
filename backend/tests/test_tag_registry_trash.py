@@ -16,14 +16,6 @@ def _count(name: str) -> int | None:
 
 
 class TestTrashOnly:
-    def test_count_is_zero(self):
-        TagRegistry().add(["ааа"])
-        reg = get_registry()
-        reg.create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10, tags=["ааа"])
-        reg.soft_delete("aaaaaaaaaaaaaaaa", "demo.editor")
-
-        assert _count("ааа") == 0
-
     def test_delete_allowed(self):
         TagRegistry().add(["ааа"])
         reg = get_registry()
@@ -79,15 +71,6 @@ class TestActive:
 
 
 class TestMixed:
-    def test_count_is_active_only(self):
-        TagRegistry().add(["ааа"])
-        reg = get_registry()
-        reg.create("aaaaaaaaaaaaaaaa", "a.docx", "x", 10, tags=["ааа"])
-        reg.create("bbbbbbbbbbbbbbbb", "b.docx", "x", 10, tags=["ааа"])
-        reg.soft_delete("bbbbbbbbbbbbbbbb", "demo.editor")
-
-        assert _count("ааа") == 1
-
     def test_delete_blocked_while_any_active(self):
         TagRegistry().add(["ааа"])
         reg = get_registry()

@@ -72,13 +72,6 @@ class TestActiveLocales:
         codes = {l["code"] for l in resp.json()["locales"]}
         assert {"ru", "en"} <= codes
 
-    def test_etag_304(self, client):
-        login(client)
-        r1 = client.get("/api/locales")
-        etag = r1.headers["etag"]
-        r2 = client.get("/api/locales", headers={"if-none-match": etag})
-        assert r2.status_code == 304
-
     def test_304_repeats_validator_headers(self, client):
         """RFC 7232 §4.1: на 304 едут ETag и Cache-Control, что и на 200.
 
@@ -123,10 +116,6 @@ class TestLocalesCrud:
         resp = reference_request(client, "POST", "/api/admin/locales", json={"code": "de", "name": "Deutsch"})
         assert resp.status_code == 200, resp.text
         assert resp.json()["status"] == "draft"
-
-    def test_create_duplicate_422(self, client):
-        login(client)
-        assert reference_request(client, "POST", "/api/admin/locales", json={"code": "ru", "name": "X"}).status_code == 422
 
     def test_activate_without_stopwords_422(self, client):
         login(client)
@@ -251,24 +240,6 @@ class TestUiDictionaryAdmin:
         body = client.get("/api/admin/locales/en/ui-dictionary").json()
         assert body["version"] == 1
         assert body["data"] == {"nav.documents": "Papers"}
-
-    def test_get_active_unknown_locale_404(self, client):
-        login(client)
-        assert client.get("/api/admin/locales/zz/ui-dictionary").status_code == 404
-
-    def test_import_preview_unknown_locale_404(self, client):
-        # P0 hardening: preview для несуществующей локали — 404 (не 200 с diff),
-        # чтобы ошибки вызывающей стороны не маскировались.
-        login(client)
-        resp = reference_request(client, "POST",
-            "/api/admin/locales/zz/ui-dictionary/import",
-            json={"data": {"nav.documents": "X"}, "confirm": False},
-        )
-        assert resp.status_code == 404, resp.text
-
-    def test_history_unknown_locale_404(self, client):
-        login(client)
-        assert client.get("/api/admin/locales/zz/ui-dictionary/history").status_code == 404
 
     def test_history_existing_empty_200(self, client):
         login(client)

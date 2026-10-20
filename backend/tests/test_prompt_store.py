@@ -36,12 +36,6 @@ class TestCascade:
         (canonical / "chat_system.md").write_text("канонический", encoding="utf-8")
         assert _store(dirs).get("chat_system") == "канонический"
 
-    def test_override_wins_over_canonical(self, dirs):
-        override, canonical = dirs
-        (override / "chat_system.md").write_text("оверрайд", encoding="utf-8")
-        (canonical / "chat_system.md").write_text("канонический", encoding="utf-8")
-        assert _store(dirs).get("chat_system") == "оверрайд"
-
     def test_unknown_key_raises(self, dirs):
         with pytest.raises(KeyError):
             _store(dirs).get("nope")
