@@ -1,7 +1,7 @@
 """Fail-closed audit readiness checks and private DB-only operator status."""
 from datetime import datetime, timezone
 import time
-from sqlalchemy import func, select, text, inspect
+from sqlalchemy import false, func, insert, null, select, text, inspect, update
 from app.db.models import AuditOutbox
 from app.db.session import get_engine
 from .audit_schema import validate_audit_schema
@@ -50,18 +50,18 @@ def preflight_audit(settings, *, engine=None):
             validate_audit_schema(connection)
             from app.db.models import AuditLog
             for model in (AuditLog, AuditOutbox):
-                readable = [column.name for column in model.__table__.columns]
-                connection.execute(text("SELECT " + ",".join(readable) + " FROM " + model.__tablename__ + " WHERE 1=0"))
+                connection.execute(select(model.__table__).where(false()))
                 columns = [column.name for column in model.__table__.columns
                            if not (model is AuditLog and column.name == "id")]
-                connection.execute(text("INSERT INTO " + model.__tablename__ + "(" + ",".join(columns)
-                                        + ") SELECT " + ",".join("NULL" for _ in columns) + " WHERE 1=0"))
+                connection.execute(insert(model.__table__).from_select(
+                    columns, select(*(null() for _ in columns)).where(false()), include_defaults=False))
             if connection.dialect.name == "postgresql":
                 allowed = connection.scalar(text("SELECT has_sequence_privilege(pg_get_serial_sequence('audit_log','id'),'USAGE')"))
                 if allowed is not True:
                     raise ValueError("Audit sequence permission required")
             mutable = ("status", "attempt_count", "next_attempt_at", "last_error_code", "stdout_written_at")
-            connection.execute(text("UPDATE audit_outbox SET " + ",".join(name + "=" + name for name in mutable) + " WHERE 1=0"))
+            connection.execute(update(AuditOutbox.__table__).where(false()).values(
+                {name: AuditOutbox.__table__.c[name] for name in mutable}))
         finally:transaction.rollback()
 
 

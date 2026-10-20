@@ -151,7 +151,9 @@ class FileMaterials:
         # probes/writes the filesystem in the parent. All creation is isolated.
         root = next((os.environ[key] for key in (('TEMP', 'TMP') if os.name == 'nt' else ('TMPDIR', 'TEMP', 'TMP')) if os.environ.get(key)), None)
         if root is None:
-            root = str(Path(os.environ['SYSTEMROOT']) / 'Temp') if os.name == 'nt' and os.environ.get('SYSTEMROOT') else ('/tmp' if os.name != 'nt' else '')
+            # Shared base only: worker exclusively creates a UUID child (0700/Windows ACL)
+            # and validates ownership/links. Parent must not probe the filesystem.
+            root = str(Path(os.environ['SYSTEMROOT']) / 'Temp') if os.name == 'nt' and os.environ.get('SYSTEMROOT') else ('/tmp' if os.name != 'nt' else '')  # nosec B108
         self.base = Path(root)
         if not root or len(root) > 4096 or '\0' in root or not self.base.is_absolute():
             raise FileProfileError('Unsupported audit temporary directory')

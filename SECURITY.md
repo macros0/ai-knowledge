@@ -381,6 +381,16 @@ Invariants enforced by `validate_auth_provider` in `app/config.py` (production):
 
 ### Durable audit and Logstash stdout (2026-10-20)
 
+2026-10-20 CI follow-up: zero-row permission probes now use SQLAlchemy table
+expressions for SELECT/INSERT/UPDATE, preserving the column-level privilege
+checks without constructing SQL identifiers. The ORM declares the same unique
+`event_id` index as additive migration 066, avoiding Alembic metadata drift;
+no schema migration or data rewrite is needed. The fixed POSIX temporary base
+has a narrowly documented Bandit B108 exception: only the isolated worker
+creates an exclusive UUID child with mode 0700 (a private ACL on Windows),
+checks links and retains its owner marker. The parent never probes the base.
+
+
 `AUDIT_STDOUT_MODE=disabled` preserves the legacy database audit path; `durable`
 adds an atomic AuditLog/outbox pair. Security mutations explicitly using
 `record_in_session` share their transaction with that pair. This does not make

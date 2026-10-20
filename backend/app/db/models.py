@@ -728,7 +728,7 @@ class AuditLog(Base):
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
-    event_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
+    event_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True, index=True)
     schema_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     actor_type: Mapped[str | None] = mapped_column(String(12), nullable=True)
     method: Mapped[str | None] = mapped_column(String(16), nullable=True)

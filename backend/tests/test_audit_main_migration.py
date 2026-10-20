@@ -63,4 +63,14 @@ def test_fresh_main_alembic_chain(tmp_path):
         assert c.scalar(text("SELECT version_num FROM alembic_version"))=="066b1c2d3e4f"
         from sqlalchemy import inspect
         assert {"auth_sessions","document_generations","reference_resource_states"} <= set(inspect(c).get_table_names())
+        # The migrated schema must match create_all's audit metadata as well as
+        # preserve rows; a unique index and unique constraint are not identical.
+        from alembic.autogenerate import compare_metadata
+        from alembic.migration import MigrationContext
+        from app.db.models import Base
+        def audit_tables_only(obj, name, kind, reflected, compare_to):
+            return kind != "table" or name in {"audit_log", "audit_outbox"}
+        context = MigrationContext.configure(c, opts={"include_object": audit_tables_only})
+        assert compare_metadata(context, Base.metadata) == []
+
     engine.dispose()
