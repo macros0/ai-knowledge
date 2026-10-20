@@ -564,6 +564,15 @@ does not corrupt data.
 
 ## 7. Security change log
 
+### 2026-10-20 — Remove compromised emSign trust from the Python runtime
+
+The shared runtime lock now pins `certifi==2026.10.19`, including SHA-256 hashes,
+to remediate [GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2).
+Earlier bundles trust emSign root CAs associated with compromised intermediate
+CA keys. The updated bundle removes that trust; deployments using those chains
+must provide a valid replacement certificate chain. TLS verification remains
+enabled. The lock update does not update already running deployments.
+
 ### 2026-10-20 — Durable audit stdout and packaged Linux identity
 
 Added the selectively ported audit/outbox contract, bounded security-event writes
