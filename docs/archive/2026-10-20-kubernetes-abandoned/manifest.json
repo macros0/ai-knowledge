@@ -1,0 +1,45 @@
+{
+  "archived_at": "2026-10-20",
+  "status": "abandoned; historical evidence only",
+  "base_commit": "5446e8ef9bdb7e830f5730906c964c5bc4743abb",
+  "files": [
+    {
+      "source": "docs/KUBERNETES_SCHEMA_REFERENCE.md",
+      "archive": "snapshots/docs/KUBERNETES_SCHEMA_REFERENCE.md",
+      "sha256": "4b1c62b63736f528c6d7df7b9a37e4aff43a8dc89ae9f60fc1d8ac758b8b3970",
+      "bytes": 50344
+    },
+    {
+      "source": "docs/KUBERNETES_TESTING.md",
+      "archive": "snapshots/docs/KUBERNETES_TESTING.md",
+      "sha256": "edf40d0e7ec2de8ab740d827162bc768a17974d042b315d2e53de2a3b0c55035",
+      "bytes": 35409
+    },
+    {
+      "source": "docs/superpowers/plans/2026-10-05-kubernetes-postgres-tls.md",
+      "archive": "snapshots/docs/superpowers/plans/2026-10-05-kubernetes-postgres-tls.md",
+      "sha256": "3a93938eb203cb2cc94e42d738a4853a981ba74bbb843ad8b514a36b3acc3fbd",
+      "bytes": 405666
+    },
+    {
+      "source": "docs/superpowers/reports/2026-10-05-kubernetes-postgres-tls-acceptance.md",
+      "archive": "snapshots/docs/superpowers/reports/2026-10-05-kubernetes-postgres-tls-acceptance.md",
+      "sha256": "ddff76d3bfab2c9b6602be9f103901e5dc00d59ddb6806b44d52196f39ff9e67",
+      "bytes": 372358
+    },
+    {
+      "source": "docs/superpowers/specs/2026-10-05-kubernetes-postgres-tls-design.md",
+      "archive": "snapshots/docs/superpowers/specs/2026-10-05-kubernetes-postgres-tls-design.md",
+      "sha256": "1bbfe72fe411ad3d3093a1573ad9049d9d7c4dbdd5761f05192cf4f3aa414645",
+      "bytes": 187653
+    },
+    {
+      "source": "docs/superpowers/reports/2026-10-10-kubernetes-delivery-loop-review.md",
+      "archive": "snapshots/docs/superpowers/reports/2026-10-10-kubernetes-delivery-loop-review.md",
+      "sha256": "4848d47d9ea47bdcc974789187bf81f9596761d7d61effb1320df7092d4718ab",
+      "bytes": 40534
+    }
+  ],
+  "patch_sha256": "47bb29a29e098212e677727aabbb33cab9126543d3329f183db43d8d2d050944",
+  "audit_report_sha256": "fef29c5577ab09e59c01f3c373dda462f7fbdde6bf7837c8e83119dc441f5187"
+}
