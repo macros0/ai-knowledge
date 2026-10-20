@@ -43,7 +43,9 @@ class DiagnosticContextMiddleware:
             return await self.app(scope, receive, send)
         candidates = [value for key, value in scope.get("headers", ()) if key.lower() == b"x-request-id"]
         incoming = candidates[0].decode("ascii", errors="replace") if len(candidates) == 1 else None
-        request_id = canonical_request_id(incoming) or str(uuid4())
+        from app.config import get_settings
+        request_id = (str(uuid4()) if getattr(get_settings(), "audit_stdout_mode", "disabled") == "durable"
+                      else canonical_request_id(incoming) or str(uuid4()))
         scope.setdefault("state", {})["request_id"] = request_id
         kind = "search_chat" if (scope.get("path") in self.search_routes
                                  or _route_template(scope) in self.search_routes) else "interface"

@@ -16,3 +16,4 @@ psycopg[binary]>=3.1
 alembic>=1.13
 mmh3>=4.0
 py3langid~=0.4.0
+python-json-logger>=3,<5

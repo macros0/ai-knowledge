@@ -117,6 +117,8 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         if unsafe and protected and has_session:
             supplied = request.headers.get("X-CSRF-Token", "")
             if not csrf_cookie or not secrets.compare_digest(supplied, csrf_cookie):
+                from app.services.audit_security import emit_auth_denial_once
+                await emit_auth_denial_once(request, "csrf_failed")
                 return JSONResponse(
                     status_code=403,
                     content=_error_content({"detail": "Недействительный CSRF-токен", "code": "csrf_failed"}),
@@ -156,159 +158,183 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     from app.services.diagnostics.runtime import initialize_diagnostics
 
+    from app.services.audit_runtime import validate_existing_audit, validate_audit_transport_profile
+    from starlette.concurrency import run_in_threadpool
+    await run_in_threadpool(validate_audit_transport_profile, get_settings())
+    await run_in_threadpool(validate_existing_audit)
     diagnostic_runtime = initialize_diagnostics()
-    app.state.diagnostics = diagnostic_runtime if diagnostic_runtime.available else None
-    worker_hint = os.getenv("UVICORN_WORKERS") or os.getenv("WEB_CONCURRENCY")
+    audit_dispatcher = None
+    generation_cleanup_stop = None
+    generation_cleanup_thread = None
     try:
-        worker_count = int(worker_hint) if worker_hint else 1
-    except ValueError:
-        worker_count = 1
-    if worker_count > 1:
-        logging.warning(
-            "Backend рассчитан на single-process deployment: UVICORN_WORKERS=%s; "
-            "rate limiter, pipeline и purge state не разделяются между workers",
-            worker_count,
-        )
-    try:
-        _validate_runtime_dependencies()
-    except Exception as exc:
-        if diagnostic_runtime.available:
-            diagnostic_runtime.recorder.emit("server_start_failed", exception=exc)
-        raise
-    # Создание отсутствующих таблиц БД (идемпотентно). Мягкий старт: если БД
-    # недоступна — не валить процесс, репозитории будут пытаться при запросах.
-    try:
-        # create_all — удобство локального запуска. В production схема версионируется
-        # Alembic (alembic upgrade head), поэтому init_db() здесь не вызываем — иначе
-        # при дрейфе моделей таблицы создавались бы в обход миграций.
-        if get_settings().environment != "production":
-            from app.db.session import init_db
+        app.state.diagnostics = diagnostic_runtime if diagnostic_runtime.available else None
+        worker_hint = os.getenv("UVICORN_WORKERS") or os.getenv("WEB_CONCURRENCY")
+        try:
+            worker_count = int(worker_hint) if worker_hint else 1
+        except ValueError:
+            worker_count = 1
+        if worker_count > 1:
+            if getattr(get_settings(), "audit_stdout_mode", "disabled") == "durable":
+                raise ValueError("Durable audit requires one worker")
+            logging.warning(
+                "Backend рассчитан на single-process deployment: UVICORN_WORKERS=%s; "
+                "rate limiter, pipeline и purge state не разделяются между workers",
+                worker_count,
+            )
+        try:
+            _validate_runtime_dependencies()
+        except Exception as exc:
+            if diagnostic_runtime.available:
+                diagnostic_runtime.recorder.emit("server_start_failed", exception=exc)
+            raise
+        # Создание отсутствующих таблиц БД (идемпотентно). Мягкий старт: если БД
+        # недоступна — не валить процесс, репозитории будут пытаться при запросах.
+        try:
+            # create_all — удобство локального запуска. В production схема версионируется
+            # Alembic (alembic upgrade head), поэтому init_db() здесь не вызываем — иначе
+            # при дрейфе моделей таблицы создавались бы в обход миграций.
+            if get_settings().environment != "production":
+                from app.db.session import init_db
 
-            init_db()
-        # Идемпотентный посев locales/stopwords (Этап 7). Для dev (create_all без
-        # Alembic-сида) — обязателен; для prod (сид через миграцию) — no-op.
-        from app.services.stopwords import ensure_seeded
+                init_db()
+        except Exception as exc:
+            logging.warning("Не удалось инициализировать БД: %s", exc)
+        from app.services.audit_runtime import preflight_audit
+        await run_in_threadpool(preflight_audit, get_settings())
+        if getattr(get_settings(), "audit_stdout_mode", "disabled") == "durable":
+            from app.services.audit_outbox import AuditDispatcher
+            candidate = AuditDispatcher(get_settings())
+            candidate.start()
+            audit_dispatcher = candidate
+        app.state.audit_dispatcher = audit_dispatcher
+        try:
+            # Идемпотентный посев locales/stopwords (Этап 7). Для dev (create_all без
+            # Alembic-сида) — обязателен; для prod (сид через миграцию) — no-op.
+            from app.services.stopwords import ensure_seeded
 
-        ensure_seeded()
-        from app.services.glossary.seed import ensure_initial_rules
+            ensure_seeded()
+            from app.services.glossary.seed import ensure_initial_rules
 
-        rules_seeded = ensure_initial_rules()
-        if rules_seeded:
-            logging.info("Начальное заполнение глоссария: добавлено правил %d", rules_seeded)
-        from app.services.registry import reset_stale_statuses
+            rules_seeded = ensure_initial_rules()
+            if rules_seeded:
+                logging.info("Начальное заполнение глоссария: добавлено правил %d", rules_seeded)
+            from app.services.registry import reset_stale_statuses
 
-        reset_stale_statuses()
-        from app.auth.service import purge_expired_sessions
+            reset_stale_statuses()
+            from app.auth.service import purge_expired_sessions
 
-        purged = purge_expired_sessions()
-        if purged:
-            logging.info("Удалено просроченных auth-сессий: %d", purged)
-    except Exception as exc:
-        logging.warning("Не удалось инициализировать БД при старте: %s", exc)
+            purged = purge_expired_sessions()
+            if purged:
+                logging.info("Удалено просроченных auth-сессий: %d", purged)
+        except Exception as exc:
+            logging.warning("Не удалось инициализировать БД при старте: %s", exc)
 
-    diagnostic_runtime.start()
+        diagnostic_runtime.start()
 
-    # Очередь массовых операций: поднимаем worker и возвращаем в очередь задачи,
-    # потерянные при рестарте. Здесь, а не на импорте app.api.jobs — восстановление
-    # ходит в БД и должно идти после init_db()/миграций (в production схему
-    # накатывает Alembic). Мягкий старт: недоступная БД не валит процесс.
-    try:
-        from app.services.job_queue import get_job_queue
+        # Очередь массовых операций: поднимаем worker и возвращаем в очередь задачи,
+        # потерянные при рестарте. Здесь, а не на импорте app.api.jobs — восстановление
+        # ходит в БД и должно идти после init_db()/миграций (в production схему
+        # накатывает Alembic). Мягкий старт: недоступная БД не валит процесс.
+        try:
+            from app.services.job_queue import get_job_queue
 
-        from app.services.processing_scope import recover_processing_reviews
-        recover_processing_reviews(get_settings())
-        from app.services.processing_scope_jobs import recover_scope_changes
-        recover_scope_changes()
-        get_job_queue().recover_after_restart()
-    except Exception as exc:
-        logging.warning("Не удалось восстановить очередь массовых операций: %s", exc)
+            from app.services.processing_scope import recover_processing_reviews
+            recover_processing_reviews(get_settings())
+            from app.services.processing_scope_jobs import recover_scope_changes
+            recover_scope_changes()
+            get_job_queue().recover_after_restart()
+        except Exception as exc:
+            logging.warning("Не удалось восстановить очередь массовых операций: %s", exc)
 
-    # Экспорт исходников владеет отдельным worker: generic JobQueue намеренно
-    # не берёт его задачи, чтобы не обойти leases и retention артефактов.
-    try:
-        from app.services.export_queue import get_export_queue
+        # Экспорт исходников владеет отдельным worker: generic JobQueue намеренно
+        # не берёт его задачи, чтобы не обойти leases и retention артефактов.
+        try:
+            from app.services.export_queue import get_export_queue
 
-        get_export_queue().recover_after_restart()
-    except Exception as exc:
-        logging.warning("Не удалось восстановить очередь массовых экспортов: %s", exc)
+            get_export_queue().recover_after_restart()
+        except Exception as exc:
+            logging.warning("Не удалось восстановить очередь массовых экспортов: %s", exc)
 
-    # Мягкий старт: не валить процесс, если Qdrant недоступен.
-    # ensure_collection будет повторена при первом запросе или бэкфилле.
-    try:
-        vs = VectorStore()
-        vs.ensure_collection()
-    except DependencyUnavailableError as exc:
-        logging.warning("Qdrant недоступен при старте: %s. Поиск будет возвращать 503.", exc.user_message)
-    except Exception as exc:
-        logging.warning("Не удалось инициализировать Qdrant при старте: %s", exc)
-
-    def run_backfills():
+        # Мягкий старт: не валить процесс, если Qdrant недоступен.
+        # ensure_collection будет повторена при первом запросе или бэкфилле.
         try:
             vs = VectorStore()
             vs.ensure_collection()
-        except Exception:
-            logging.warning("Бэкфиллы пропущены: Qdrant недоступен")
-            return
+        except DependencyUnavailableError as exc:
+            logging.warning("Qdrant недоступен при старте: %s. Поиск будет возвращать 503.", exc.user_message)
+        except Exception as exc:
+            logging.warning("Не удалось инициализировать Qdrant при старте: %s", exc)
+
+        def run_backfills():
+            try:
+                vs = VectorStore()
+                vs.ensure_collection()
+            except Exception:
+                logging.warning("Бэкфиллы пропущены: Qdrant недоступен")
+                return
+            try:
+                n = vs.backfill_sparse()
+                if n:
+                    logging.info("Бэкфилл sparse-векторов: %d точек", n)
+            except Exception:
+                logging.exception("Бэкфилл sparse-векторов не удался — поиск BM25/гибрид может быть неполным")
+            try:
+                n = vs.backfill_relations()
+                if n:
+                    logging.info("Бэкфилл relations: %d точек", n)
+            except Exception:
+                logging.exception("Бэкфилл relations не удался")
+            try:
+                from app.services.embedder import Embedder
+
+                emb = Embedder()
+                n = vs.backfill_chunks(emb)
+                if n:
+                    logging.info("Бэкфилл чанков: %d точек", n)
+            except Exception:
+                logging.exception("Бэкфилл чанков не удался — поиск по чанкам может быть неполным")
+
+        t = threading.Thread(target=run_backfills, daemon=True)
+        t.start()
+
+        # Автоочистка корзины (Этап 4a.2): фоновый демон-поток физически удаляет
+        # документы с истёкшим окном хранения. Ленивый импорт — поток не роняет
+        # сервер, если trash-сервис недоступен на старте.
         try:
-            n = vs.backfill_sparse()
-            if n:
-                logging.info("Бэкфилл sparse-векторов: %d точек", n)
-        except Exception:
-            logging.exception("Бэкфилл sparse-векторов не удался — поиск BM25/гибрид может быть неполным")
+            from app.services.trash import start_purge_loop
+
+            start_purge_loop()
+        except Exception as exc:
+            logging.warning("Автоочистка корзины не запущена: %s", exc)
+
+        # Автоочистка истории чата (Этап 6): фоновый демон-поток физически удаляет
+        # soft-deleted треды по истечении окна хранения (chat_history_retention_days).
         try:
-            n = vs.backfill_relations()
-            if n:
-                logging.info("Бэкфилл relations: %d точек", n)
-        except Exception:
-            logging.exception("Бэкфилл relations не удался")
-        try:
-            from app.services.embedder import Embedder
+            from app.services.chat_history import start_chat_purge_loop
 
-            emb = Embedder()
-            n = vs.backfill_chunks(emb)
-            if n:
-                logging.info("Бэкфилл чанков: %d точек", n)
-        except Exception:
-            logging.exception("Бэкфилл чанков не удался — поиск по чанкам может быть неполным")
+            start_chat_purge_loop()
+        except Exception as exc:
+            logging.warning("Автоочистка истории чата не запущена: %s", exc)
 
-    t = threading.Thread(target=run_backfills, daemon=True)
-    t.start()
+        from app.services.generation_cleanup import run_cleanup_loop
+        from app.services.pipeline import get_pipeline
 
-    # Автоочистка корзины (Этап 4a.2): фоновый демон-поток физически удаляет
-    # документы с истёкшим окном хранения. Ленивый импорт — поток не роняет
-    # сервер, если trash-сервис недоступен на старте.
-    try:
-        from app.services.trash import start_purge_loop
-
-        start_purge_loop()
-    except Exception as exc:
-        logging.warning("Автоочистка корзины не запущена: %s", exc)
-
-    # Автоочистка истории чата (Этап 6): фоновый демон-поток физически удаляет
-    # soft-deleted треды по истечении окна хранения (chat_history_retention_days).
-    try:
-        from app.services.chat_history import start_chat_purge_loop
-
-        start_chat_purge_loop()
-    except Exception as exc:
-        logging.warning("Автоочистка истории чата не запущена: %s", exc)
-
-    from app.services.generation_cleanup import run_cleanup_loop
-    from app.services.pipeline import get_pipeline
-
-    generation_cleanup_stop = threading.Event()
-    generation_cleanup_thread = threading.Thread(
-        target=run_cleanup_loop,
-        args=(generation_cleanup_stop, lambda: get_pipeline().cleanup_inactive_generations()),
-        name="generation-cleanup", daemon=True,
-    )
-    generation_cleanup_thread.start()
-    try:
+        generation_cleanup_stop = threading.Event()
+        generation_cleanup_thread = threading.Thread(
+            target=run_cleanup_loop,
+            args=(generation_cleanup_stop, lambda: get_pipeline().cleanup_inactive_generations()),
+            name="generation-cleanup", daemon=True,
+        )
+        generation_cleanup_thread.start()
         yield
     finally:
+        if audit_dispatcher is not None:
+            audit_dispatcher.stop()
         diagnostic_runtime.stop()
-        generation_cleanup_stop.set()
-        generation_cleanup_thread.join(timeout=2)
+        if generation_cleanup_stop is not None:
+            generation_cleanup_stop.set()
+        if generation_cleanup_thread is not None:
+            generation_cleanup_thread.join(timeout=2)
         # Функция не создаёт singleton, поэтому teardown не поднимет worker при
         # неудачном старте приложения.
         from app.services.export_queue import shutdown_export_queue_if_started
@@ -396,6 +422,12 @@ def create_app() -> FastAPI:
         штатный http_exception_handler FastAPI, который делал это сам, — без
         этого Retry-After (429) и WWW-Authenticate (401) до клиента не дойдут.
         """
+        if exc.status_code in {401, 403}:
+            from app.services.audit_security import emit_auth_denial_once
+            reason = {error_codes.AUTH_REQUIRED: "session_absent", error_codes.NO_ROLE: "no_role",
+                      error_codes.USER_BLOCKED: "blocked", error_codes.FORBIDDEN: "insufficient_role"}.get(exc.code, "denied")
+            action = "auth_login_denied" if request.url.path.endswith(("/auth/callback", "/auth/simulate")) else "auth_access_denied"
+            await emit_auth_denial_once(request, reason, action=action)
         logger.warning("Ошибка API %s %s: %s", request.method, request.url.path, exc.detail, exc_info=exc)
         return JSONResponse(
             status_code=exc.status_code,

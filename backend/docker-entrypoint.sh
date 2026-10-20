@@ -21,6 +21,8 @@ if [ "$(id -u)" = "0" ]; then
     if [ "$(stat -c %u /data 2>/dev/null)" != "$(id -u app)" ]; then
         chown -R app:app /data 2>/dev/null || true
     fi
+    # setpriv preserves the root environment; libpq must use the app home.
+    export HOME="$(getent passwd app | cut -d: -f6)"
     exec setpriv --reuid=app --regid=app --init-groups "$@"
 fi
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.db.models import UserBlock
 from app.db.session import session_scope
@@ -48,36 +48,25 @@ class Blocklist:
         expires_at: datetime | None = None,
     ) -> dict:
         with session_scope() as s:
-            block = UserBlock(
-                external_id=external_id,
-                username=username,
-                reason=reason,
-                blocked_by=blocked_by,
-                expires_at=expires_at,
-                is_active=True,
-            )
-            s.add(block)
-            s.flush()
-            return {"id": block.id, "external_id": block.external_id}
+            return self.block_in_session(s, external_id, blocked_by=blocked_by, username=username,
+                                         reason=reason, expires_at=expires_at)
+
+    def block_in_session(self, session, external_id: str, *, blocked_by: str,
+                         username=None, reason=None, expires_at=None) -> dict:
+        block = UserBlock(external_id=external_id, username=username, reason=reason,
+                          blocked_by=blocked_by, expires_at=expires_at, is_active=True)
+        session.add(block)
+        session.flush()
+        return {"id": block.id, "external_id": block.external_id}
+
+    def unblock_in_session(self, session, external_id: str) -> int:
+        result = session.execute(update(UserBlock).where(UserBlock.external_id == external_id,
+                                  UserBlock.is_active.is_(True)).values(is_active=False))
+        return result.rowcount
 
     def unblock(self, external_id: str) -> int:
-        """Снимает все активные блокировки пользователя. Возвращает число записей."""
         with session_scope() as s:
-            rows = (
-                s.execute(
-                    select(UserBlock).where(
-                        UserBlock.external_id == external_id,
-                        UserBlock.is_active.is_(True),
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            n = 0
-            for b in rows:
-                b.is_active = False
-                n += 1
-            return n
+            return self.unblock_in_session(s, external_id)
 
     def list_active(self) -> list[dict]:
         """Список блокировок со статусом is_active=True (для панели Security).

@@ -11,11 +11,14 @@ action_type — фиксированный перечень значений (т
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy import func, select
 
-from app.db.models import AuditLog
+from app.db.models import AuditLog, AuditOutbox
+from app.services.audit_catalog import CATALOG, AUTH_ACTIONS
+from app.services.audit_event import AuditContext, build_event, encode_event
 from app.db.session import session_scope
 
 # Канонический перечень типов действий (Этап 2а, текущий объём).
@@ -175,6 +178,8 @@ ACTION_TYPES = frozenset(
     }
 )
 
+ACTION_TYPES = ACTION_TYPES | AUTH_ACTIONS
+
 TARGET_DOCUMENT = "document"
 TARGET_JOB = "job"
 TARGET_USER = "user"
@@ -230,9 +235,10 @@ def record_in_session(
     new_value: dict | None = None,
     ip_address: str | None = None,
     meta: dict | None = None,
+    event_context: AuditContext | None = None,
 ) -> dict:
     """Append an audit entry to an existing transaction without committing it."""
-    if action_type not in ACTION_TYPES:
+    if action_type not in CATALOG:
         raise ValueError(f"Неизвестный action_type: {action_type}")
     entry = AuditLog(
         action_type=action_type,
@@ -245,8 +251,23 @@ def record_in_session(
         ip_address=ip_address,
         meta=meta,
     )
+    from app.config import get_settings
+    durable = getattr(get_settings(), "audit_stdout_mode", "disabled") == "durable"
+    if durable:
+        context = event_context or AuditContext(outcome=CATALOG[action_type].outcome)
+        entry.created_at = datetime.now(timezone.utc)
+        entry.event_id = str(uuid4())
+        entry.schema_version = 1
+        for field in ("actor_type", "method", "reason", "outcome", "request_id", "ip_source"):
+            setattr(entry, field, getattr(context, field))
+        payload = encode_event(build_event(entry, context)).decode("utf-8")
     session.add(entry)
     session.flush()
+    if durable:
+        session.add(AuditOutbox(audit_id=entry.id, payload=payload))
+        session.flush()
+        from app.services.audit_metrics import track_record
+        track_record(session, denied=context.outcome == "denied")
     return _to_dict(entry)
 
 
@@ -263,6 +284,7 @@ class AuditService:
         new_value: dict | None = None,
         ip_address: str | None = None,
         meta: dict | None = None,
+        event_context: AuditContext | None = None,
     ) -> dict:
         """Добавляет запись в журнал. Единственный путь записи — без update/delete."""
         with session_scope() as s:
@@ -277,6 +299,7 @@ class AuditService:
                 new_value=new_value,
                 ip_address=ip_address,
                 meta=meta,
+                event_context=event_context,
             )
 
     def query(
@@ -343,12 +366,24 @@ def record(
     new_value: dict | None = None,
     ip_address: str | None = None,
     meta: dict | None = None,
+    event_context: AuditContext | None = None,
 ) -> dict:
     """Удобная обёртка поверх AuditService.append для эндпоинтов.
 
     user — доменная модель User (app.auth.models.User) или любой объект с
     атрибутами user_id/username (в disabled-режиме — public_user()).
     """
+    if action_type not in CATALOG:
+        raise ValueError(f"Неизвестный action_type: {action_type}")
+    from app.config import get_settings
+    if event_context is None and getattr(get_settings(), "audit_stdout_mode", "disabled") == "durable":
+        from app.auth.models import User
+        from app.services.diagnostics.context import current_context
+        actor_type = "system" if isinstance(user, SystemUser) else (
+            "anonymous" if isinstance(user, User) and user.user_id == "anonymous" else
+            "user" if isinstance(user, User) else "unknown")
+        event_context = AuditContext(actor_type=actor_type, outcome=CATALOG[action_type].outcome,
+                                     request_id=current_context().request_id)
     return get_audit().append(
         action_type=action_type,
         user_id=getattr(user, "user_id", None) or "anonymous",
@@ -359,4 +394,5 @@ def record(
         new_value=new_value,
         ip_address=ip_address,
         meta=meta,
+        event_context=event_context,
     )

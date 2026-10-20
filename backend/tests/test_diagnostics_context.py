@@ -35,7 +35,7 @@ def test_parallel_requests_and_threads_do_not_share_context():
     assert current_context() == DiagnosticContext()
 
 
-@pytest.mark.parametrize("incoming", [None, "CANARY_SECRET", "\ninvalid", str(uuid4())])
+@pytest.mark.parametrize("incoming", [None, "CANARY_SECRET", "\ninvalid", str(uuid4())], ids=["missing", "canary", "invalid", "valid-uuid"])
 def test_uuid_header_validation(incoming):
     from app.services.diagnostics.context import current_context
     from app.services.diagnostics.middleware import DiagnosticContextMiddleware

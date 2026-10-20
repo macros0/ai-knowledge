@@ -76,6 +76,13 @@
             "disabled",
             "durable"
           ]
+        },
+        "auditStdoutFormat": {
+          "type": "string",
+          "enum": [
+            "native",
+            "logstash"
+          ]
         }
       }
     },

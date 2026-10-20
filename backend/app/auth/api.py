@@ -140,6 +140,8 @@ async def login(request: Request):
     try:
         return await provider.start_login(request)
     except httpx.HTTPError as exc:
+        from app.services.audit_security import emit_auth_denial_once
+        await emit_auth_denial_once(request, "provider_unavailable", action="auth_login_denied")
         # Keycloak недоступен при старте входа (браузерный переход) —
         # редирект с сообщением, а не 500.
         logger.warning("Keycloak недоступен при старте входа: %s", exc)
@@ -160,6 +162,8 @@ async def auth_callback(request: Request):
     try:
         identity = await provider.handle_callback(request)
     except OAuthError as exc:
+        from app.services.audit_security import emit_auth_denial_once
+        await emit_auth_denial_once(request, "invalid_response", action="auth_login_denied")
         # Keycloak вернул error/error_description (например authentication_expired).
         # Не 500, а понятное сообщение с возможностью войти заново.
         logger.warning(
@@ -169,6 +173,8 @@ async def auth_callback(request: Request):
         )
         return RedirectResponse(url="/?auth_error=session_expired", status_code=303)
     except httpx.HTTPError as exc:
+        from app.services.audit_security import emit_auth_denial_once
+        await emit_auth_denial_once(request, "provider_unavailable", action="auth_login_denied")
         # Token/userinfo endpoints are network calls too; a transient IdP outage
         # should be recoverable from the login page instead of becoming a 500.
         logger.warning("Keycloak недоступен во время callback: %s", exc)
