@@ -30,7 +30,7 @@ def _flush_auth_env(monkeypatch):
         k
         for k in os.environ
         if k.startswith(("AUTH_", "KEYC", "SSO_", "LLM_", "CHAT_", "SOURCE_ASSESSMENT_", "EMBEDDING_"))
-        or k in {"AUDIT_STDOUT_MODE", "AUDIT_STDOUT_FORMAT"}
+        or k in {"AUDIT_DB_ENABLED", "AUDIT_STDOUT_MODE", "AUDIT_STDOUT_FORMAT"}
     ]
     for var in runtime_vars:
         monkeypatch.delenv(var, raising=False)

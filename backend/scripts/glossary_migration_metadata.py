@@ -11,9 +11,9 @@ from sqlalchemy import create_engine, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    AuditLog, DomainTerm, DomainTermAlias, DomainTermTranslation,
+    AuditLog, AuditOutbox, DomainTerm, DomainTermAlias, DomainTermTranslation,
     GlossaryIdentityKey, GlossaryInfotypePrefix, GlossaryInfotypeRule,
-    GlossaryMergeReceipt, GlossaryState,
+    GlossaryMergeReceipt, GlossaryMigrationReceipt, GlossaryState,
     ReferenceResourceState,
 )
 
@@ -68,7 +68,9 @@ def json_value(value):
 def simulation_session(rows: dict):
     engine = create_engine("sqlite:///:memory:")
     try:
-        for model in (*TABLES, AuditLog):
+        # Simulated mutations may audit through either sink. These operational
+        # tables stay private and outside the copied/checksummed domain metadata.
+        for model in (*TABLES, AuditLog, AuditOutbox, GlossaryMigrationReceipt):
             model.__table__.create(engine)
         with engine.begin() as connection:
             for model in TABLES:

@@ -3,13 +3,20 @@
 import { apiToast } from "@/lib/apiToast.mjs";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { blockUser, friendlyApiError, listAudit, listAuditActionTypes, listAuditUsers, listBlocks, unblockUser } from "@/lib/api";
+import { blockUser, getAuditConfig, listAudit, listAuditActionTypes, listAuditUsers, listBlocks, unblockUser } from "@/lib/api";
 import { useToast } from "./Toast";
 import { useI18n } from "@/i18n/LocaleContext";
 
-function fmtTime(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString();
+function configMode(config) {
+  const modes = {
+    db: { db: true, stdout: "disabled" },
+    external: { db: false, stdout: "durable" },
+    both: { db: true, stdout: "durable" },
+  };
+  const mode = Object.hasOwn(modes, config?.effective_mode) ? modes[config.effective_mode] : null;
+  return mode && config.db_enabled === mode.db && config.stdout_mode === mode.stdout
+    && ["native", "logstash"].includes(config.stdout_format)
+    ? config.effective_mode : "unknown";
 }
 
 // Защита от CSV-инъекции: значения, начинающиеся с = + - @, Excel трактует как
@@ -51,6 +58,7 @@ export default function SecurityPanel() {
   const { showToast } = useToast();
   const { t, fmtDateTime } = useI18n();
   const [entries, setEntries] = useState([]);
+  const [auditMode, setAuditMode] = useState("loading");
   const [blocks, setBlocks] = useState([]);
   const [actionTypes, setActionTypes] = useState([]);
   const [users, setUsers] = useState([]);
@@ -99,6 +107,16 @@ export default function SecurityPanel() {
       mounted.current = false;
     };
   }, [load]);
+
+  // Конфигурация независима от локальной истории и управления блокировками.
+  useEffect(() => {
+    let active = true;
+    getAuditConfig().then(
+      (config) => { if (active) setAuditMode(configMode(config)); },
+      () => { if (active) setAuditMode("unknown"); },
+    );
+    return () => { active = false; };
+  }, []);
 
   // Справочники для фильтров: полный перечень действий и пользователи журнала.
   useEffect(() => {
@@ -169,6 +187,14 @@ export default function SecurityPanel() {
           {t("security.exportCsv")}
         </button>
       </div>
+
+      <div className="muted" role="status">
+        <span>{t("security.auditMode.label")}</span>{" "}
+        <strong>{t(`security.auditMode.${auditMode}`)}</strong>
+      </div>
+      {auditMode === "external" && <p className="muted">{t("security.auditExternalHistory")}</p>}
+      {["external", "both"].includes(auditMode) && <p className="muted">{t("security.auditStdoutBoundary")}</p>}
+      <p className="muted">{t("security.auditLocalScope")}</p>
 
       <div className="sec-grid">
         <div className="sec-col">

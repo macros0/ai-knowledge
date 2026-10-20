@@ -208,3 +208,18 @@ documented there; never commit real secrets). Set `ENVIRONMENT=development` for 
 [MIT License](LICENSE). Releases published before this license change remain under
 their original AGPL-3.0 terms. The standard PDF provider is pypdf + pypdfium2;
 third-party notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+
+### Audit destinations
+
+Choose DB-only (`AUDIT_DB_ENABLED=true`, `AUDIT_STDOUT_MODE=disabled`, default),
+external-only (`false`, `durable`), or both (`true`, `durable`). Disabling both
+is rejected. All modes include the same security events. External-only retains
+the SQL delivery queue but creates no new permanent audit_log rows. JSON stdout
+requires a collector; stdout_written is not an OpenSearch acknowledgement.
+
+Upgrade stopped writers to schema `067b1c2d3e4f` before starting the new binary.
+Old history, queue bytes/states and functional import history are preserved;
+old binaries cannot run on v2. No automatic queue cleanup or historical replay
+is added. See [audit delivery and migration](docs/AUDIT_DELIVERY.md) for Helm,
+permissions, switching modes, restore and rollback boundaries.

@@ -197,3 +197,46 @@ def test_postgres_readonly_role_fails_preflight_without_fake_events(postgres):
             assert c.scalar(select(func.count()).select_from(AuditLog)) == 0
             assert c.scalar(select(func.count()).select_from(AuditOutbox)) == 0
     finally: restricted.dispose()
+
+
+@pytest.mark.parametrize('db,stdout',[(True,'disabled'),(False,'durable'),(True,'durable')])
+def test_postgres_selected_sinks_need_no_other_sink_insert_privilege(postgres,db,stdout):
+    from sqlalchemy import event
+    engine,config=postgres
+    AuditLog.__table__.create(engine)
+    AuditOutbox.__table__.create(engine)
+    config.audit_db_enabled=db
+    config.audit_stdout_mode=stdout
+    role='audit_selected_'+uuid4().hex
+    schema=engine.url.query['options'].split('=',1)[1]
+    tables=(['audit_log'] if db else [])+(['audit_outbox'] if stdout=='durable' else [])
+    with engine.begin() as connection:
+        connection.execute(text('CREATE ROLE '+role))
+        connection.execute(text('GRANT USAGE ON SCHEMA '+schema+' TO '+role))
+        connection.execute(text('GRANT SELECT ON ALL TABLES IN SCHEMA '+schema+' TO '+role))
+        for table in tables:
+            connection.execute(text('GRANT INSERT ON '+table+' TO '+role))
+            sequence=connection.scalar(text("SELECT pg_get_serial_sequence(:table,'id')"),{'table':table})
+            connection.execute(text('GRANT USAGE ON SEQUENCE '+sequence+' TO '+role))
+        if stdout=='durable':
+            connection.execute(text('GRANT UPDATE(status,attempt_count,next_attempt_at,last_error_code,stdout_written_at) ON audit_outbox TO '+role))
+    restricted=create_engine(engine.url)
+    @event.listens_for(restricted,'connect')
+    def use_role(connection,record):
+        with connection.cursor() as cursor:
+            cursor.execute('SET ROLE '+role)
+        connection.commit()
+    try:
+        preflight_audit(config,engine=restricted)
+        sessions=sessionmaker(restricted)
+        with sessions.begin() as session:
+            audit.record_in_session(session,action_type=audit.DOCUMENT_UPLOAD)
+        if stdout=='durable':
+            emitted=[]
+            assert AuditDispatcher(config,session_factory=sessions,write_line=emitted.append).tick()==1
+            assert len(emitted)==1
+        with engine.connect() as connection:
+            assert connection.scalar(select(func.count()).select_from(AuditLog))==int(db)
+            assert connection.scalar(select(func.count()).select_from(AuditOutbox))==int(stdout=='durable')
+    finally:
+        restricted.dispose()

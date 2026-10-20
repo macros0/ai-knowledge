@@ -156,7 +156,7 @@ def test_thousand_events_are_delivered(tmp_path,monkeypatch,fmt,record_property)
     assert len(written)==1000 and len({json.loads(b)["event_id"] for b in written})==1000
     with session_scope() as s:
         assert s.scalar(select(func.count()).select_from(AuditOutbox).where(AuditOutbox.status=="stdout_written"))==1000
-        originals=[json.loads(row) for row in s.scalars(select(AuditOutbox.payload).order_by(AuditOutbox.audit_id))]
+        originals=[json.loads(row) for row in s.scalars(select(AuditOutbox.payload).order_by(AuditOutbox.id))]
     for wire,source in zip(written,originals):
         output=json.loads(wire)
         assert {key:output[key] for key in source}==source

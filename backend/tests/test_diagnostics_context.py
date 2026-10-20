@@ -56,10 +56,7 @@ def test_uuid_header_validation(incoming):
     request_id = dict(sent[0]["headers"])[b"x-request-id"].decode()
     assert str(UUID(request_id)) == request_id
     assert request_id == seen[0] == scope["state"]["request_id"]
-    if incoming and incoming == str(UUID(request_id)):
-        assert request_id == incoming
-    else:
-        assert request_id != incoming
+    assert request_id != incoming
     assert current_context() == DiagnosticContext()
 
 

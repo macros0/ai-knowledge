@@ -744,15 +744,40 @@ class AuditOutbox(Base):
     __table_args__ = (
         CheckConstraint("status IN ('pending','held','stdout_written')", name="ck_audit_outbox_status"),
         CheckConstraint("attempt_count >= 0", name="ck_audit_outbox_attempt_count"),
-        Index("ix_audit_outbox_eligible", "status", "next_attempt_at", "audit_id"),
+        Index("ix_audit_outbox_eligible", "status", "next_attempt_at", "id"),
     )
-    audit_id: Mapped[int] = mapped_column(ForeignKey("audit_log.id"), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", server_default="pending")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
     last_error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     stdout_written_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class StopwordImportSnapshot(Base):
+    """Functional import history, independent of selected audit sinks."""
+    __tablename__ = "stopword_import_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    locale: Mapped[str] = mapped_column(String(16), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    old_words: Mapped[list] = mapped_column(JSON, nullable=False)
+    new_words: Mapped[list] = mapped_column(JSON, nullable=False)
+    import_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class GlossaryMigrationReceipt(Base):
+    """Committed glossary migration result; no dependency on audit retention."""
+    __tablename__ = "glossary_migration_receipts"
+
+    checksum: Mapped[str] = mapped_column(String(64), primary_key=True)
+    result_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
 
 
 class DomainTerm(Base):

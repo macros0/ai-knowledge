@@ -1,7 +1,7 @@
 """Управление языками и стоп-словами (Этап 7 roadmap, «Поддержка языков»).
 
 Сервис покрывает фазу A: CRUD locales (draft/active/disabled), импорт/правка
-стоп-слов с preview→confirm, история и rollback через append-only audit_log,
+стоп-слов с preview→confirm, история и rollback через независимые снимки импорта,
 read-only probe по тестовым запросам (без изменения Qdrant), и резолв локали
 пользователя из cookie okf.locale.
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from app.db.models import AuditLog, Locale, Stopword, ReferenceResourceState
+from app.db.models import Locale, Stopword, StopwordImportSnapshot, ReferenceResourceState
 from app.db.session import session_scope
 from app.services import audit
 from sqlalchemy import select
@@ -342,13 +342,16 @@ def import_stopwords(code: str, words: list[str], kind: str, mode: str, *, confi
         if _apply_words_in_session(session, code, kind, final, getattr(user, "username", None) or "anonymous"):
             bump_reference_revision(state)
         result.update(applied=True, reference_revision=state.revision)
+        import_meta = {"mode": mode, "added": len(result["added"]), "removed": len(result["removed"]),
+            "unchanged": len(result["unchanged"]),
+            **({"empty_replace": True, "removed_count": len(result["removed"])} if result["requires_empty_replace_confirmation"] else {})}
+        session.add(StopwordImportSnapshot(locale=code, kind=kind,
+            username=getattr(user, "username", None), old_words=current, new_words=final, import_meta=import_meta))
         audit.record_in_session(session, action_type=audit.STOPWORDS_IMPORT,
             user_id=getattr(user, "user_id", None), username=getattr(user, "username", None),
             target_type=audit.TARGET_LOCALE, target_id=code,
             old_value={"words": current, "kind": kind}, new_value={"words": final, "kind": kind}, ip_address=ip_address,
-            meta={"mode": mode, "added": len(result["added"]), "removed": len(result["removed"]),
-                "unchanged": len(result["unchanged"]),
-                **({"empty_replace": True, "removed_count": len(result["removed"])} if result["requires_empty_replace_confirmation"] else {})})
+            meta=import_meta)
     invalidate(kind)
     return result
 
@@ -402,12 +405,9 @@ def rename_stopword(code: str, word: str, kind: str, new_word: str, *, user, ip_
 def stopwords_history(code: str) -> list[dict]:
     with session_scope() as s:
         rows = (
-            s.query(AuditLog)
-            .filter(
-                AuditLog.action_type == audit.STOPWORDS_IMPORT,
-                AuditLog.target_id == code,
-            )
-            .order_by(AuditLog.created_at.desc())
+            s.query(StopwordImportSnapshot)
+            .filter(StopwordImportSnapshot.locale == code)
+            .order_by(StopwordImportSnapshot.created_at.desc(), StopwordImportSnapshot.id.desc())
             .limit(100)
             .all()
         )
@@ -416,9 +416,9 @@ def stopwords_history(code: str) -> list[dict]:
             "id": r.id,
             "created_at": r.created_at,
             "username": r.username,
-            "kind": (r.new_value or {}).get("kind"),
-            "meta": r.meta,
-            "words": (r.new_value or {}).get("words") or [],
+            "kind": r.kind,
+            "meta": r.import_meta,
+            "words": r.new_words or [],
         }
         for r in rows
     ]
@@ -427,12 +427,12 @@ def stopwords_history(code: str) -> list[dict]:
 def rollback_stopwords(code: str, entry_id: int, *, user, ip_address=None, confirm=True,
     reference_context=None, preview_digest=None, expected_kind=None) -> dict:
     with session_scope() as session:
-        row = session.scalar(select(AuditLog).where(AuditLog.id == entry_id,
-            AuditLog.action_type == audit.STOPWORDS_IMPORT, AuditLog.target_id == code))
+        row = session.scalar(select(StopwordImportSnapshot).where(StopwordImportSnapshot.id == entry_id,
+            StopwordImportSnapshot.locale == code))
         if row is None:
             raise LocaleNotFoundError(f"Запись импорта {entry_id}")
-        kind = (row.old_value or {}).get("kind")
-        words = list((row.old_value or {}).get("words") or [])
+        kind = row.kind
+        words = list(row.old_words or [])
         if kind not in KINDS or not words:
             raise LocaleError("Снапшот импорта пуст или некорректен")
         if expected_kind is not None and expected_kind != kind:

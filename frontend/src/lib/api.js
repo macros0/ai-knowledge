@@ -468,6 +468,10 @@ export function cancelJob(jobId) {
   return request(`/jobs/${jobId}/cancel`, { method: "POST" });
 }
 
+export function getAuditConfig() {
+  return request("/audit/config", { cache: "no-store" });
+}
+
 export function listAudit(params = {}) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {

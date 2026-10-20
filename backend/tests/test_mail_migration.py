@@ -120,7 +120,8 @@ def test_mail_migrations_roundtrip_preserves_legacy_data(migration_db, populated
     if populated:
         _seed_legacy(engine)
     before = _snapshot(engine)
-    command.upgrade(config, "head")
+    # Historical mail roundtrip stops before the intentionally irreversible audit-v2 head.
+    command.upgrade(config, "066b1c2d3e4f")
     _assert_legacy(engine, before)
     inspector = inspect(engine)
     for table in LEGACY_TABLES[1:]:

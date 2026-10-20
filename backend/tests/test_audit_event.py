@@ -64,6 +64,6 @@ def test_record_preserves_verified_actor_and_server_context(monkeypatch,tmp_path
                        (audit.SystemUser(),"system")]:
         with bind_context(DiagnosticContext(request_id=rid)):
             result=audit.record(actor,audit.DOCUMENT_UPLOAD,audit.TARGET_DOCUMENT)
-        with session_scope() as s:event=json.loads(s.scalar(select(AuditOutbox.payload).where(AuditOutbox.audit_id==result['id'])))
+        with session_scope() as s:event=json.loads(s.scalar(select(AuditOutbox.payload).where(AuditOutbox.event_id==result['event_id'])))
         assert event['actor']['type']==kind
         assert event['request_id']==rid

@@ -1,7 +1,7 @@
 """Add committed audit delivery state without replaying historical events."""
 from alembic import op
 from sqlalchemy import text
-from app.services.audit_schema import upgrade_audit_schema, FIELDS
+from app.services.audit_schema_v1 import upgrade_audit_schema, FIELDS
 
 revision = "066b1c2d3e4f"
 down_revision = "065b1c2d3e4f"

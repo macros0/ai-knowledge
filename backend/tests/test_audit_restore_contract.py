@@ -21,7 +21,7 @@ def test_hold_preserves_payload_and_new_events_remain_pending(tmp_path,monkeypat
         assert hold_pending(engine)==0
         with sessions.begin() as s:audit.record_in_session(s,action_type=audit.DOCUMENT_DELETE)
         with sessions() as s:
-            rows=list(s.scalars(select(AuditOutbox).order_by(AuditOutbox.audit_id)))
+            rows=list(s.scalars(select(AuditOutbox).order_by(AuditOutbox.id)))
             assert rows[0].status=='held' and rows[0].payload==before
             assert rows[0].last_error_code=='restored_backup' and rows[1].status=='pending'
         status=delivery_status(engine=engine)

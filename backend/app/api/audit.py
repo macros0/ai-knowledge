@@ -1,5 +1,5 @@
 """Роут журнала ИБ (audit_log): read-only доступ для роли Security."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app.auth.models import User
 from app.auth.service import require_role
@@ -39,3 +39,14 @@ def list_action_types(user: User = Depends(require_role("security"))):
 def list_audit_users(user: User = Depends(require_role("security"))):
     """Справочник пользователей, встречающихся в журнале (для фильтра)."""
     return {"users": _audit.distinct_users()}
+
+
+@router.get("/config")
+def audit_config(response: Response, user: User = Depends(require_role("security"))):
+    from app.config import get_settings
+    from app.services.audit_modes import get_audit_mode
+    settings = get_settings()
+    mode = get_audit_mode(settings)
+    response.headers["Cache-Control"] = "no-store"
+    return {"effective_mode": mode.effective_mode, "db_enabled": mode.db_enabled,
+            "stdout_mode": settings.audit_stdout_mode, "stdout_format": settings.audit_stdout_format}
