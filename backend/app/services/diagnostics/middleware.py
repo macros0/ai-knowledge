@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from starlette.responses import JSONResponse
 
-from .context import bind_context, canonical_request_id
+from .context import bind_context
 from .recorder import begin_trace, emit_event
 from .schema import DiagnosticContext, ROUTE_TEMPLATES
 
@@ -41,11 +41,10 @@ class DiagnosticContextMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        candidates = [value for key, value in scope.get("headers", ()) if key.lower() == b"x-request-id"]
-        incoming = candidates[0].decode("ascii", errors="replace") if len(candidates) == 1 else None
         from app.config import get_settings
-        request_id = (str(uuid4()) if getattr(get_settings(), "audit_stdout_mode", "disabled") == "durable"
-                      else canonical_request_id(incoming) or str(uuid4()))
+        from app.services.audit_modes import get_audit_mode
+        get_audit_mode(get_settings())
+        request_id = str(uuid4())
         scope.setdefault("state", {})["request_id"] = request_id
         kind = "search_chat" if (scope.get("path") in self.search_routes
                                  or _route_template(scope) in self.search_routes) else "interface"

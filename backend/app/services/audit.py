@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from uuid import uuid4
+from types import SimpleNamespace
+from app.services.audit_modes import get_audit_mode
 
 from sqlalchemy import func, select
 
@@ -210,6 +212,7 @@ def iso_or_str(value) -> str | None:
 def _to_dict(entry: AuditLog) -> dict:
     return {
         "id": entry.id,
+        "event_id": entry.event_id,
         "created_at": entry.created_at,
         "user_id": entry.user_id,
         "username": entry.username,
@@ -240,34 +243,31 @@ def record_in_session(
     """Append an audit entry to an existing transaction without committing it."""
     if action_type not in CATALOG:
         raise ValueError(f"Неизвестный action_type: {action_type}")
-    entry = AuditLog(
-        action_type=action_type,
-        user_id=user_id,
-        username=username,
-        target_type=target_type,
-        target_id=target_id,
-        old_value=old_value,
-        new_value=new_value,
-        ip_address=ip_address,
-        meta=meta,
-    )
     from app.config import get_settings
-    durable = getattr(get_settings(), "audit_stdout_mode", "disabled") == "durable"
-    if durable:
-        context = event_context or AuditContext(outcome=CATALOG[action_type].outcome)
-        entry.created_at = datetime.now(timezone.utc)
-        entry.event_id = str(uuid4())
-        entry.schema_version = 1
-        for field in ("actor_type", "method", "reason", "outcome", "request_id", "ip_source"):
-            setattr(entry, field, getattr(context, field))
-        payload = encode_event(build_event(entry, context)).decode("utf-8")
-    session.add(entry)
-    session.flush()
-    if durable:
-        session.add(AuditOutbox(audit_id=entry.id, payload=payload))
+    from app.services.diagnostics.context import current_context
+    mode = get_audit_mode(get_settings())
+    context = event_context or AuditContext(
+        outcome=CATALOG[action_type].outcome, request_id=current_context().request_id)
+    entry = SimpleNamespace(
+        id=None, created_at=datetime.now(timezone.utc), event_id=str(uuid4()),
+        schema_version=1, action_type=action_type, user_id=user_id, username=username,
+        target_type=target_type, target_id=target_id, old_value=old_value,
+        new_value=new_value, ip_address=ip_address, meta=meta,
+    )
+    for field in ("actor_type", "method", "reason", "outcome", "request_id", "ip_source"):
+        setattr(entry, field, getattr(context, field))
+    # Validate before adding either sink, even if the caller catches a failure.
+    payload = encode_event(build_event(entry, context)).decode("utf-8")
+    if mode.db_enabled:
+        log = AuditLog(**{key: value for key, value in vars(entry).items() if key != 'id'})
+        session.add(log)
         session.flush()
-        from app.services.audit_metrics import track_record
-        track_record(session, denied=context.outcome == "denied")
+        entry.id = log.id
+    if mode.stdout_enabled:
+        session.add(AuditOutbox(event_id=entry.event_id, created_at=entry.created_at, payload=payload))
+        session.flush()
+    from app.services.audit_metrics import track_record
+    track_record(session, denied=context.outcome == "denied")
     return _to_dict(entry)
 
 
@@ -375,8 +375,7 @@ def record(
     """
     if action_type not in CATALOG:
         raise ValueError(f"Неизвестный action_type: {action_type}")
-    from app.config import get_settings
-    if event_context is None and getattr(get_settings(), "audit_stdout_mode", "disabled") == "durable":
+    if event_context is None:
         from app.auth.models import User
         from app.services.diagnostics.context import current_context
         actor_type = "system" if isinstance(user, SystemUser) else (

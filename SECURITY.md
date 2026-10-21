@@ -391,14 +391,27 @@ creates an exclusive UUID child with mode 0700 (a private ACL on Windows),
 checks links and retains its owner marker. The parent never probes the base.
 
 
-`AUDIT_STDOUT_MODE=disabled` preserves the legacy database audit path; `durable`
-adds an atomic AuditLog/outbox pair. Security mutations explicitly using
-`record_in_session` share their transaction with that pair. This does not make
-unrelated legacy business mutations transactionally atomic. Login/session and
-required security writes fail closed if their durable audit cannot commit;
-audit failure during an already-denied request preserves its 401/403/redirect and
-increments fixed diagnostic counters. It never grants access. OIDC validation,
-roles and CSRF boundaries remain unchanged.
+`AUDIT_DB_ENABLED=true|false` and `AUDIT_STDOUT_MODE=disabled|durable` select
+DB-only (true/disabled, default), external-only (false/durable), or both
+(true/durable). False/disabled is rejected before startup workers. All three
+modes include login/logout/access denials and mandatory security audit. DB-only
+logout now also requires its audit transaction to commit; the previous
+best-effort logout behavior is intentionally strengthened. OIDC, roles and CSRF
+boundaries remain in force. Failure auditing an already denied request preserves
+the denial response and records fixed diagnostic counters; it never grants access.
+
+The v2 outbox has independent id/event_id/created_at and no audit_log FK.
+Events receive identity before sink selection. External-only creates no new
+AuditLog rows; both commits both sinks atomically with the same event_id/time.
+Security mutations using record_in_session share that transaction; unrelated
+legacy domain operations are not automatically made atomic. Processing-scope
+changes use the same sink selection. Commit counters count events once, not sinks.
+
+Stopword import/rollback snapshots and glossary migration idempotency receipts
+are application working data in separate tables, committed with their domain
+mutation and selected audit sinks. Disabling the local journal does not disable
+these functions or retain hidden AuditLog rows. Old snapshot IDs and audit history
+are preserved through migration. Read access does not expose technical outbox data.
 
 The dispatcher uses one process/OS lock and retries committed pending rows.
 `stdout_written` acknowledges a complete local stdout write, not collector or
@@ -417,13 +430,24 @@ index permissions and retention must protect them. Client IP remains null with
 unknown provenance; untrusted headers cannot supply it or the server request ID.
 The existing security-role boundary still controls audit API reads.
 
-The additive 066 schema must exist before durable startup; no legacy backfill or
-historical replay is introduced. The writer requires SELECT/INSERT audit_log,
-sequence USAGE and SELECT/INSERT outbox plus UPDATE of delivery columns only;
-UPDATE/DELETE audit_log are unnecessary. Status and hold use separate operator
-permissions. Restore must hold pending rows before restarting writers; binary
-rollback retains the schema and held/pending data. No automatic retention or
-outbox garbage collection is added.
+Schema 067 is required in every mode. The 066 v1 migration uses frozen helpers;
+067 preserves queued payload bytes/states and migrates functional history without
+replaying old events. Writers must be stopped for upgrade. Unknown drift or
+incomplete source history is refused. Preflight checks the selected sink write
+and sequence privileges; external-only does not require INSERT audit_log.
+UPDATE/DELETE audit_log and DELETE outbox remain unnecessary. Status and hold use
+separate operator permissions; hold understands exact v1/v2 schemas. Pending rows
+must be held after restore before writers start. The old binary cannot use v2,
+even with stdout disabled: schema downgrade is refused. Restore a pre-migration
+backup in an isolated destination before new writes, or repair forward; restoring
+an older backup after new writes may lose data and needs an explicit recovery plan.
+
+Mode changes affect new events only; DB-only pauses pending rather than deleting
+it, durable resumes the same identity, held/written are not automatically replayed.
+No historical sink backfill, automatic retention or outbox garbage collection is
+added. External-only retains SQL delivery rows and does not eliminate DB growth.
+Server request IDs are generated in all modes. The security-only, no-store audit
+config API exposes effective mode/format but no secrets or OpenSearch health claim.
 
 PostgreSQL denial writes retain bounded admission, absolute deadlines and owned
 helpers for DNS/default/file operations. Unsupported service/certificate profiles
@@ -572,6 +596,19 @@ Earlier bundles trust emSign root CAs associated with compromised intermediate
 CA keys. The updated bundle removes that trust; deployments using those chains
 must provide a valid replacement certificate chain. TLS verification remains
 enabled. The lock update does not update already running deployments.
+
+### 2026-10-21 — Independent audit destinations
+
+PostgreSQL audit sequence repair builds SELECT queries with SQLAlchemy identifier
+objects, including the catalog-provided schema and sequence names. It preserves
+transactional ALTER SEQUENCE RESTART and does not interpolate identifiers into
+SELECT text or suppress Bandit SQL checks.
+
+Added validated DB-only/external-only/both selection, an independent SQL outbox,
+transactional working history/receipts, strict migration and mode visibility.
+Reason: customers must be able to use external audit without retaining a duplicate
+permanent local journal or breaking history/rollback and idempotency. Auth audit
+coverage and mandatory commit behavior now apply equally to all three modes.
 
 ### 2026-10-20 — Durable audit stdout and packaged Linux identity
 

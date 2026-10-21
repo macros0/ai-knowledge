@@ -41,8 +41,8 @@ def test_migration_graph_has_single_head():
 
 
 @pytest.fixture
-def migrated_db_url(tmp_path, monkeypatch):
-    """Чистая БД, накатанная `alembic upgrade head`."""
+def migrated_db_url(tmp_path, monkeypatch, request):
+    """Fresh head by default; historical downgrade cases explicitly select a revision."""
     from alembic import command
     from alembic.config import Config
 
@@ -55,7 +55,7 @@ def migrated_db_url(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     get_settings.cache_clear()
     try:
-        command.upgrade(Config(str(BACKEND_DIR / "alembic.ini")), "head")
+        command.upgrade(Config(str(BACKEND_DIR / "alembic.ini")), getattr(request, "param", "head"))
         yield db_url
     finally:
         get_settings.cache_clear()
@@ -105,3 +105,22 @@ def test_alembic_logging_does_not_disable_application_loggers():
     )
 
     assert "disable_existing_loggers=False" in env_source
+
+
+def test_audit_v2_downgrade_refuses_even_empty_queue_and_preserves_history(migrated_db_url):
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import text
+    engine=create_engine(migrated_db_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO audit_log(id,created_at,action_type,username) VALUES(901,CURRENT_TIMESTAMP,'document_upload','synthetic-history')"))
+        with pytest.raises(RuntimeError,match='Audit v2'):
+            command.downgrade(Config(str(BACKEND_DIR / 'alembic.ini')),'066b1c2d3e4f')
+        with engine.connect() as connection:
+            assert connection.scalar(text('SELECT version_num FROM alembic_version'))=='067b1c2d3e4f'
+            assert connection.scalar(text('SELECT username FROM audit_log WHERE id=901'))=='synthetic-history'
+            assert connection.scalar(text('SELECT count(*) FROM audit_outbox'))==0
+            assert 'event_id' in {c['name'] for c in inspect(connection).get_columns('audit_outbox')}
+    finally:
+        engine.dispose()

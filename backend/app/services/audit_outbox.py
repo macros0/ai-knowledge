@@ -144,26 +144,29 @@ class AuditDispatcher:
                 if self._handle is not None:self._handle.close();self._handle=None
                 self._state='stopped'
 
-    def _failure(self,audit_id,attempts,code):
+    def _failure(self,outbox_id,attempts,code):
         self._counts[code]+=1
         self._last_error=code
         with self.sessions.begin() as session:
-            session.execute(update(AuditOutbox).where(AuditOutbox.audit_id==audit_id,AuditOutbox.status=='pending').values(last_error_code=code,next_attempt_at=self.clock()+timedelta(seconds=min(60,2**min(attempts-1,6)))))
+            session.execute(update(AuditOutbox).where(AuditOutbox.id==outbox_id,AuditOutbox.status=='pending').values(last_error_code=code,next_attempt_at=self.clock()+timedelta(seconds=min(60,2**min(attempts-1,6)))))
 
-    def _mark_written(self,audit_id):
+    def _mark_written(self,outbox_id):
         with self.sessions.begin() as session:
-            session.execute(update(AuditOutbox).where(AuditOutbox.audit_id==audit_id,AuditOutbox.status=='pending').values(status='stdout_written',stdout_written_at=self.clock(),last_error_code=None))
+            session.execute(update(AuditOutbox).where(AuditOutbox.id==outbox_id,AuditOutbox.status=='pending').values(status='stdout_written',stdout_written_at=self.clock(),last_error_code=None))
 
     def tick(self):
+        from .audit_modes import get_audit_mode
+        if not get_audit_mode(self.settings).stdout_enabled:
+            return 0
         if time.monotonic()<self._database_retry_at:return 0
         delivered=0
         try:
             with self.sessions() as session:
-                rows=list(session.execute(select(AuditOutbox.audit_id).where(AuditOutbox.status=='pending',AuditOutbox.next_attempt_at<=self.clock()).order_by(AuditOutbox.next_attempt_at,AuditOutbox.audit_id).limit(100)).scalars())
-            for audit_id in rows:
+                rows=list(session.execute(select(AuditOutbox.id).where(AuditOutbox.status=='pending',AuditOutbox.next_attempt_at<=self.clock()).order_by(AuditOutbox.next_attempt_at,AuditOutbox.id).limit(100)).scalars())
+            for outbox_id in rows:
                 if self._stop.is_set():break
                 with self.sessions.begin() as session:
-                    row=session.get(AuditOutbox,audit_id)
+                    row=session.get(AuditOutbox,outbox_id)
                     if row is None or row.status!='pending':continue
                     try:payload=_validate_payload(row.payload)
                     except (ValueError,TypeError,KeyError,UnicodeError,AttributeError):
@@ -175,12 +178,12 @@ class AuditDispatcher:
                 self._inflight_since=time.monotonic()
                 try:self.write_line(payload)
                 except Exception:
-                    self._failure(audit_id,attempts,'stdout_failure')
+                    self._failure(outbox_id,attempts,'stdout_failure')
                     continue
                 finally:self._inflight_since=None
-                try:self._mark_written(audit_id)
+                try:self._mark_written(outbox_id)
                 except Exception:
-                    self._failure(audit_id,attempts,'marker_failure')
+                    self._failure(outbox_id,attempts,'marker_failure')
                     continue
                 self._counts['stdout_written']+=1
                 if attempts>1:self._counts['retry']+=1

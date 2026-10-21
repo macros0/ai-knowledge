@@ -38,17 +38,24 @@ def test_legacy_upgrade_preserves_rows(tmp_path, monkeypatch, postgres):
             c.execute(audit.insert().values(id=42,created_at=datetime(2026,1,1,tzinfo=timezone.utc),username="legacy-user",action_type="document_upload"))
             before=c.execute(text("SELECT id,username,action_type FROM audit_log")).all()
             monkeypatch.setattr(module.op,"get_bind",lambda:c)
-            module.upgrade(); validate_audit_schema(c)
+            module.upgrade()
+            from app.services.audit_schema_v1 import validate_audit_schema as validate_v1
+            from app.services.audit_schema import upgrade_audit_schema
+            from app.services.audit_hold import validate_outbox_contract
+            validate_v1(c)
+            assert validate_outbox_contract(c) == 1
+            with pytest.raises(ValueError): validate_audit_schema(c)
             assert c.execute(text("SELECT id,username,action_type FROM audit_log")).all()==before
             assert c.scalar(text("SELECT event_id FROM audit_log WHERE id=42")) is None
             assert c.scalar(text("SELECT count(*) FROM audit_outbox"))==0
             # Repair is idempotent; no backfill and no history stamp.
-            module.upgrade();validate_audit_schema(c)
+            module.upgrade(); validate_v1(c)
+            upgrade_audit_schema(c); validate_audit_schema(c)
             assert module.down_revision=="065b1c2d3e4f"
     finally:
         if postgres:
             with engine.begin() as c:
-                c.execute(text("DROP TABLE IF EXISTS audit_outbox"));c.execute(text("DROP TABLE IF EXISTS audit_log"))
+                c.execute(text("DROP TABLE IF EXISTS glossary_migration_receipts"));c.execute(text("DROP TABLE IF EXISTS stopword_import_snapshots"));c.execute(text("DROP TABLE IF EXISTS audit_outbox"));c.execute(text("DROP TABLE IF EXISTS audit_log"))
         engine.dispose()
 
 
@@ -60,7 +67,7 @@ def test_fresh_main_alembic_chain(tmp_path):
     engine=create_engine(env["DATABASE_URL"])
     with engine.connect() as c:
         validate_audit_schema(c)
-        assert c.scalar(text("SELECT version_num FROM alembic_version"))=="066b1c2d3e4f"
+        assert c.scalar(text("SELECT version_num FROM alembic_version"))=="067b1c2d3e4f"
         from sqlalchemy import inspect
         assert {"auth_sessions","document_generations","reference_resource_states"} <= set(inspect(c).get_table_names())
         # The migrated schema must match create_all's audit metadata as well as

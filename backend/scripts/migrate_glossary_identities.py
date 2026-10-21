@@ -187,18 +187,14 @@ def _simulate(rows, plan, registry):
 
 
 def _previous_result(session, checksum, current):
-    from sqlalchemy import select
-    from app.db.models import AuditLog
-    from app.services import audit
-    record = session.scalar(select(AuditLog).where(
-        AuditLog.action_type == audit.GLOSSARY_IDENTITY_MIGRATION,
-        AuditLog.target_id == checksum).order_by(AuditLog.id.desc()).limit(1))
+    from app.db.models import GlossaryMigrationReceipt
+    record = session.get(GlossaryMigrationReceipt, checksum)
     if record is None:
         return None
-    if (record.meta or {}).get("result_checksum") != _result_checksum(current):
+    if record.result_checksum != _result_checksum(current):
         raise ValueError("План миграции устарел: итоговые метаданные изменены после применения")
     return {"status": "unchanged", "checksum": checksum,
-            "result_checksum": record.meta["result_checksum"], "applied": 0,
+            "result_checksum": record.result_checksum, "applied": 0,
             "conflicts": 0, "merges": [], "result": current}
 
 
@@ -258,6 +254,8 @@ def apply_identity_migration(plan: dict, *, dry_run: bool = False, execute: bool
         applied = _apply_plan(session, state, plan, registry)
         result = public_metadata(read_metadata(session))
         result_checksum = _result_checksum(result)
+        from app.db.models import GlossaryMigrationReceipt
+        session.add(GlossaryMigrationReceipt(checksum=checksum, result_checksum=result_checksum))
         audit.record_in_session(session, action_type=audit.GLOSSARY_IDENTITY_MIGRATION,
                                 user_id="migration", username="migration", target_type="glossary", target_id=checksum,
                                 old_value=json.loads(_metadata_json(before)), new_value=json.loads(_metadata_json(result)),

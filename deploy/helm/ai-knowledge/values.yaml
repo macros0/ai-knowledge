@@ -7,6 +7,8 @@ application:
 runtime:
   environment: production
   workers: 1
+  # DB only: true + disabled; external only: false + durable; both: true + durable.
+  auditDbEnabled: true
   auditStdoutMode: disabled
   auditStdoutFormat: native
   config: {}

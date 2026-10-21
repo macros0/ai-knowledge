@@ -25,7 +25,9 @@ def test_alias_migration_preserves_rows_allows_duplicates_and_guards_rollback(tm
             conn.execute(text("INSERT INTO domain_term_aliases (id,term_id,alias,normalized_alias,created_at,updated_at) VALUES (1,1,'IT0003','it0003',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))
             before = conn.execute(text("SELECT * FROM domain_term_aliases")).all()
         assert migrate(engine)["ready"] is False
-        command.upgrade(config, "head")
+        # Exercise this alias migration's rollback directly. Later audit v2
+        # intentionally requires forward repair instead of schema downgrade.
+        command.upgrade(config, "c3d4e5f6a7b8")
         assert migrate(engine, apply=True)["ready"] is True
         assert migrate(engine, apply=True)["ready"] is True
         with engine.begin() as conn:

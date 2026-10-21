@@ -404,6 +404,7 @@ class Settings(BaseSettings):
     # Журнал ИБ: срок хранения записей audit_log (дни). Очистка — отдельной
     # задачей; здесь фиксируется только срок для документации/будущей очистки.
     audit_retention_days: int = 365
+    audit_db_enabled: bool = True
     audit_stdout_mode: Literal["disabled", "durable"] = "disabled"
     audit_stdout_format: Literal["native", "logstash"] = "native"
     # Soft-лимит числа документов на одну массовую операцию.
@@ -619,6 +620,12 @@ class Settings(BaseSettings):
         if isinstance(v, (list, tuple, set)):
             return sorted(set(int(x) for x in v))
         return v
+
+    @model_validator(mode="after")
+    def validate_audit_destinations(self):
+        from app.services.audit_modes import get_audit_mode
+        get_audit_mode(self)
+        return self
 
     @model_validator(mode="after")
     def validate_chunk_projection_index(self) -> "Settings":

@@ -309,7 +309,8 @@ class TestAuditMetaEndpoints:
         resp = client.get("/api/audit/users")
         assert resp.status_code == 200, resp.text
         users = {u["user_id"]: u for u in resp.json()["users"]}
-        assert set(users) == {"u1", "u2"}
+        assert set(users) == {"u1", "u2", "sim-security"}
+        assert users["sim-security"]["count"] == 1  # DB-only also records the security login.
         assert users["u1"]["username"] == "alice"
         assert users["u1"]["count"] == 2
 

@@ -96,13 +96,24 @@ def test_service_lifespan_refuses_before_seed_and_dispatcher(monkeypatch, tmp_pa
         engine.dispose()
 
 
-@pytest.mark.parametrize('profile', ['disabled', 'sqlite'])
-def test_early_service_guard_preserves_legacy_profiles(monkeypatch, profile):
+def test_early_service_guard_skips_only_sqlite(monkeypatch):
     from app.services.audit_runtime import validate_audit_transport_profile
     monkeypatch.setenv('PGSERVICE', '')
-    monkeypatch.setattr(transport, 'reject_service_profile', lambda *a: pytest.fail('Legacy profile invoked PostgreSQL guard'))
-    engine = create_engine('sqlite://') if profile == 'sqlite' else create_engine('postgresql+psycopg://synthetic:synthetic@127.0.0.1:9/isolated')
+    monkeypatch.setattr(transport, 'reject_service_profile', lambda *a: pytest.fail('SQLite invoked PostgreSQL guard'))
+    engine=create_engine('sqlite://')
     try:
-        assert validate_audit_transport_profile(SimpleNamespace(audit_stdout_mode='durable' if profile == 'sqlite' else 'disabled'), engine=engine) is None
+        assert validate_audit_transport_profile(SimpleNamespace(audit_stdout_mode='disabled'),engine=engine) is None
+    finally:
+        engine.dispose()
+
+
+def test_db_only_also_refuses_service_profile_before_native_io(monkeypatch):
+    from app.services.audit_runtime import validate_audit_transport_profile
+    monkeypatch.setenv('PGSERVICE','synthetic')
+    monkeypatch.setattr(transport,'validate_driver',lambda:None)
+    engine=create_engine('postgresql+psycopg://synthetic:synthetic@127.0.0.1:9/isolated')
+    try:
+        with pytest.raises(ValueError,match='service-file profile'):
+            validate_audit_transport_profile(SimpleNamespace(audit_stdout_mode='disabled'),engine=engine)
     finally:
         engine.dispose()

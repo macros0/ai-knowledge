@@ -51,10 +51,10 @@ def test_broken_pipe_uses_bounded_backoff(settings):
 def test_invalid_payload_is_held_without_starving_valid_rows(settings):
     audit.get_audit().append(action_type=audit.DOCUMENT_UPLOAD)
     audit.get_audit().append(action_type=audit.DOCUMENT_DELETE)
-    with session_scope() as s:s.scalars(select(AuditOutbox).order_by(AuditOutbox.audit_id)).first().payload='invalid'
+    with session_scope() as s:s.scalars(select(AuditOutbox).order_by(AuditOutbox.id)).first().payload='invalid'
     written=[];d=AuditDispatcher(settings,write_line=written.append)
     d.tick()
-    with session_scope() as s:assert list(s.scalars(select(AuditOutbox.status).order_by(AuditOutbox.audit_id)))==['held','stdout_written']
+    with session_scope() as s:assert list(s.scalars(select(AuditOutbox.status).order_by(AuditOutbox.id)))==['held','stdout_written']
     assert len(written)==1
 
 def test_blocked_writer_and_shutdown_retain_lock(settings):
@@ -97,11 +97,11 @@ def test_boolean_schema_is_held_and_does_not_starve_valid_event(settings):
     audit.get_audit().append(action_type=audit.DOCUMENT_UPLOAD)
     audit.get_audit().append(action_type=audit.DOCUMENT_DELETE)
     with session_scope() as session:
-        first = session.scalars(select(AuditOutbox).order_by(AuditOutbox.audit_id)).first()
+        first = session.scalars(select(AuditOutbox).order_by(AuditOutbox.id)).first()
         event = json.loads(first.payload); event['schema_version'] = True
         first.payload = json.dumps(event, ensure_ascii=False, separators=(',', ':'))
     written = []; dispatcher = AuditDispatcher(settings, write_line=written.append)
     assert dispatcher.tick() == 1
     with session_scope() as session:
-        assert list(session.scalars(select(AuditOutbox.status).order_by(AuditOutbox.audit_id))) == ['held', 'stdout_written']
+        assert list(session.scalars(select(AuditOutbox.status).order_by(AuditOutbox.id))) == ['held', 'stdout_written']
     assert len(written) == 1

@@ -6,11 +6,14 @@
 
 ## Установка и миграция
 
-Новый backend требует additive audit schema **даже при выключенном stdout**.
-Перед обновлением сохранить backup и остановить backend writers. На versioned
-БД выполнить штатный Alembic upgrade до `066b1c2d3e4f` (после текущего head
-`065b1c2d3e4f`). Migration добавляет audit metadata и audit_outbox; старые rows
-сохраняются, исторического replay нет. Fresh development DB создаётся init_db.
+Новый backend требует audit schema v2 **во всех трёх режимах**.
+Перед обновлением сохранить backup и остановить всех writers; старый binary
+со схемой v2 несовместим. На versioned
+БД выполнить штатный Alembic upgrade до `067b1c2d3e4f` (после `066b1c2d3e4f`). Migration отделяет
+outbox от audit_log, переносит существующие payload/state без replay и создаёт
+рабочие snapshots импорта стоп-слов и receipts миграций глоссария. Старые
+строки журнала и history IDs сохраняются. Неизвестная схема/неполная история
+отвергается до преобразования; существующий create_all не заменяет миграцию. Fresh development DB создаётся init_db.
 
 Для существующей dev/create_all БД с drift использовать узкий инструмент:
 
@@ -25,15 +28,34 @@ python scripts/migrate_audit_schema.py --runtime-env-file <private-runtime.env> 
 
 ## Режимы
 
-| Переменная | Значения | Default |
+| Режим | AUDIT_DB_ENABLED | AUDIT_STDOUT_MODE |
 |---|---|---|
-| AUDIT_STDOUT_MODE | disabled, durable | disabled |
-| AUDIT_STDOUT_FORMAT | native, logstash | native |
+| Только БД (default) | true | disabled |
+| Только внешний аудит | false | durable |
+| Оба канала | true | durable |
 
-Disabled сохраняет прежний DB audit: новых outbox нет и dispatcher не запускается.
-Durable записывает audit + sanitized immutable payload в одной SQL транзакции.
-Один dispatcher читает committed pending, выводит строку и отдельной транзакцией
-ставит stdout_written. При сбое между записью и marker возможен повтор.
+`false + disabled` запрещено при загрузке Settings и Helm render. Выбор
+`AUDIT_STDOUT_FORMAT=native|logstash` независим от получателей, default native.
+Внешний аудит использует техническую очередь в БД, даже когда постоянный журнал
+отключён. Полное отключение аудита не поддерживается.
+
+Во всех режимах один каталог событий, включая вход/выход/отказы доступа.
+В DB-only новые события идут только в audit_log. В external-only — только
+в audit_outbox; both атомарно сохраняет обе копии с одним event_id/time.
+Outbox имеет собственные id/event_id/created_at, не зависит от строки журнала.
+После commit один dispatcher выводит JSON и отдельной транзакцией отмечает
+stdout_written. Сбой между выводом и marker может повторить событие.
+
+Смена режима применяется после restart только к новым событиям. Старая история
+остаётся доступной security; события external-only задним числом в журнал не
+переносятся. При disabled накопленные pending приостанавливаются; durable
+продолжает их с исходной identity. Held не снимаются, written не переигрываются.
+Объём БД в external-only продолжает расти: автоматической очистки outbox нет.
+Политика retention/GC — отдельный проект, stdout_written не является внешним ACK.
+
+Snapshot history/rollback стоп-слов и receipts идемпотентной миграции глоссария
+сохраняются в отдельных рабочих таблицах во всех режимах. Это данные приложения,
+не скрытые записи постоянного журнала.
 
 Запускать через `python -m app.diagnostic_entrypoint --host 0.0.0.0 --port 8000`
 с одним worker без hot reload. Для локального host выбирать принятый в окружении
@@ -41,7 +63,9 @@ Durable записывает audit + sanitized immutable payload в одной S
 stderr; audit JSON — в stdout. Некорректная schema/права/profile и второй owner
 отвергаются до запуска mutating workers; startup failure закрывает ресурсы.
 
-Helm: `runtime.auditStdoutMode: durable`, `runtime.auditStdoutFormat: logstash`.
+Helm: `runtime.auditDbEnabled: false` + `runtime.auditStdoutMode: durable`
+для external-only; true + durable для both; true + disabled для DB-only.
+`runtime.auditStdoutFormat: logstash` выбирает оболочку JSON.
 Не задавать эти env через runtime.config: chart отклоняет двойную настройку.
 Перезапуск применяет выбор формата; dynamic reload отсутствует.
 
@@ -79,9 +103,9 @@ Canonical limit 16384 bytes, Logstash limit 18432 bytes без framing.
 скрыть ошибку audit writer. Заблокированный stdout занимает один writer, не HTTP
 request thread; stalled writer не следует лечить автоматическим restart storm.
 
-В durable login/logout/block/unblock атомарны с audit/outbox; обязательный audit
-failure откатывает security mutation и не выдаёт новую cookie. Disabled logout
-сохраняет прежнее best-effort очищение браузерной сессии при ошибке DB.
+Во всех режимах login/logout/block/unblock атомарны с выбранными получателями; обязательный audit
+failure откатывает security mutation и не выдаёт новую cookie. DB-only также требует успешного commit обязательного аудита; это намеренное
+усиление прежнего best-effort logout. При ошибке DB успех выхода не подтверждается.
 Domain операции сохраняют свои существующие transaction boundaries main:
 атомарность audit+outbox не делает всю бизнес-операцию автоматически атомарной.
 
@@ -93,7 +117,7 @@ admission. PostgreSQL durable требует поддержанный psycopg/li
 неизвестный service-file profile отвергается до defaults/DB I/O. Дополнительные
 NFS/CSI/OS/crypto profiles не подтверждаются результатами обычного локального PG.
 
-В durable используется серверный UUID request ID; произвольный входящий
+Во всех режимах используется серверный UUID request ID; произвольный входящий
 X-Request-ID его не заменяет. Client IP остаётся null/ip_source=unknown; доверенный
 proxy relay в этот пакет не входит. Существующие разрешённые actor ID/name могут
 быть персональными данными. Headers, cookies, токены, OAuth state/code, тексты
@@ -120,18 +144,29 @@ python scripts/audit_hold_restored_events.py --runtime-env-file <restored-runtim
 Проверить ID/time/payload и counts. Команда идемпотентна, удерживает restored pending;
 сама подмена DB приложением не распознаётся. Kubernetes restore framework не нужен.
 
-Для отката только формата вернуть native штатным restart. Для отката binary:
-остановить writer, backup, hold pending с reason binary_rollback через standalone
-operator API `hold_pending(engine, reason="binary_rollback")`, выбрать disabled,
-вернуть предыдущий binary. Не удалять additive schema и не stamp-ить БД.
-Возврат durable продолжает оставшиеся pending; новые события периода disabled
-не backfill-ятся. Не снимать held ради освобождения места и не удалять строки
-с pending/held или неподтверждённой доставкой. Новый retention/GC не добавлен.
+Для отката только формата вернуть native штатным restart. Для смены режима
+выбрать одну из трёх допустимых комбинаций; pending сохраняются при disabled.
 
-DB права writer: SELECT/INSERT audit_log и sequence USAGE, SELECT/INSERT outbox,
-UPDATE delivery columns. UPDATE/DELETE audit_log для writer не нужны. Status —
-SELECT; hold operator — UPDATE outbox. Existing retention/удаление допускается
-только отдельной процедурой, учитывающей outbox и факт внешней доставки.
+**Старый binary несовместим со схемой v2 даже при disabled.** Автоматический
+schema downgrade запрещён. До первого запуска новой версии возврат выполняется
+проверенным восстановлением backup до миграции в отдельную БД/data directory.
+После новых записей предпочтительно исправление вперёд; откат backup может
+потерять новые данные и требует отдельного решения/переноса. Не создавать
+фиктивные AuditLog ради старого FK и не удалять queue. Restore hold tool
+распознаёт строгие v1/v2; runtime требует v2 и рабочие history/receipt таблицы.
+
+Writer DB-only: INSERT/SELECT audit_log и USAGE его sequence. External-only:
+INSERT/SELECT outbox и USAGE её sequence, UPDATE только delivery columns;
+INSERT audit_log не нужен. Both объединяет эти права. Для просмотра сохранённой
+истории нужен SELECT audit_log. Рабочие domain-таблицы имеют отдельные права
+приложения. UPDATE/DELETE audit_log и DELETE outbox для writer не нужны.
+Status — SELECT, hold operator — UPDATE outbox. Не очищать pending/held либо
+stdout_written без отдельно согласованного retention/replay контракта.
+
+`GET /api/audit/config` доступен роли security, Cache-Control: no-store;
+возвращает режим и format, не подтверждает доступность OpenSearch. UI показывает
+режим, сохранённую локальную историю и ограничение CSV/агрегатов локальными
+записями. Ошибка чтения конфигурации показывается как неизвестный режим.
 
 ## Проверка OpenSearch
 
@@ -152,3 +187,5 @@ AC-10. Локальные PASS и библиотека python-json-logger это
 `Id_Key event_id` + `Write_Operation index` обеспечивают проверенный replay dedup.
 Эти настройки необходимо сопоставить с реальным сборщиком заказчика; они не
 включаются автоматически выбором `AUDIT_STDOUT_FORMAT=logstash`.
+
+Режимы v2 и границы текущей проверки: [отчёт](superpowers/reports/2026-10-21-audit-storage-modes-acceptance.md).

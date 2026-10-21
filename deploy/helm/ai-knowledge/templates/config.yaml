@@ -13,6 +13,7 @@ data:
   DEPLOYMENT_TIER: {{ .Values.deployment.environment | quote }}
   MODEL_MODE: {{ .Values.models.mode | quote }}
   UVICORN_WORKERS: "1"
+  AUDIT_DB_ENABLED: {{ .Values.runtime.auditDbEnabled | quote }}
   AUDIT_STDOUT_MODE: {{ .Values.runtime.auditStdoutMode | quote }}
   AUDIT_STDOUT_FORMAT: {{ .Values.runtime.auditStdoutFormat | quote }}
   {{- if eq .Values.models.mode "stub" }}

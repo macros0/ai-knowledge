@@ -9,6 +9,8 @@ from tests.test_schema_drift import migrated_db_url as shared_migrated_db_url
 migrated_db_url = shared_migrated_db_url
 
 
+# Scope downgrade policy is tested before the deliberately irreversible audit-v2 revision.
+@pytest.mark.parametrize("migrated_db_url", ["066b1c2d3e4f"], indirect=True)
 @pytest.mark.parametrize("policy", ["legacy", "review", "generation"])
 def test_scope_downgrade_preserves_policy_or_legacy_data(migrated_db_url, policy):
     from alembic import command

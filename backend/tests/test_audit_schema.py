@@ -61,7 +61,8 @@ def test_fixture_only_empty_downgrade_preserves_legacy_rows(tmp_path):
         with engine.begin() as connection:
             connection.execute(text(LEGACY))
             connection.execute(text("INSERT INTO audit_log(id,created_at,action_type,username) VALUES(1,'2026-10-04','document_upload','legacy')"))
-            upgrade_audit_schema(connection)
+            from app.services.audit_schema_v1 import upgrade_audit_schema as upgrade_frozen
+            upgrade_frozen(connection)
             with Operations.context(MigrationContext.configure(connection)): migration.downgrade()
             assert 'audit_outbox' not in inspect(connection).get_table_names()
             assert 'event_id' not in {c['name'] for c in inspect(connection).get_columns('audit_log')}

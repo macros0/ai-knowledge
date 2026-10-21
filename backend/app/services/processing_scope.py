@@ -420,22 +420,14 @@ def recover_review_admission(session, doc_id, settings, *, force=False):
 
 
 def append_scope_audit(session, doc_id, actor, action, review):
-    from app.db.models import AuditLog
+    from app.services.audit import record_in_session
 
-    session.add(
-        AuditLog(
-            username=actor,
-            action_type=action,
-            target_type="document",
-            target_id=doc_id,
-            new_value={
-                "review_id": review.id,
-                "revision": review.revision,
-                "selection_hash": review.selection_hash,
-            },
-            meta={"request_id": review.request_id} if review.request_id else None,
-        )
-    )
+    record_in_session(session, action_type=action, username=actor,
+        target_type="document", target_id=doc_id,
+        new_value={"review_id": review.id, "revision": review.revision,
+                   "selection_hash": review.selection_hash},
+        meta={"request_id": review.request_id} if review.request_id else None)
+
 
 
 def scope_availability(summary, pending, sources):

@@ -17,7 +17,9 @@ _denial_slots = threading.BoundedSemaphore(4)
 
 
 def enabled():
-    return getattr(config_mod.get_settings(), 'audit_stdout_mode', 'disabled') == 'durable'
+    from .audit_modes import get_audit_mode
+    get_audit_mode(config_mod.get_settings())
+    return True
 
 
 def failure_count():

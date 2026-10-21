@@ -21,7 +21,7 @@ def test_commit_creates_audit_and_outbox_same_event():
     with session_scope() as s:
         row=s.scalar(select(AuditOutbox));log=s.get(AuditLog,item["id"])
         assert json.loads(row.payload)["event_id"]==log.event_id
-        assert row.audit_id==log.id and row.status=="pending"
+        assert row.event_id==log.event_id and row.status=="pending"
     assert totals()==[1,1]
 
 def test_outer_and_savepoint_rollback_publish_nothing():

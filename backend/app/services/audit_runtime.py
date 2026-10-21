@@ -1,24 +1,24 @@
-"""Fail-closed audit readiness checks and private DB-only operator status."""
+"""Fail-closed audit readiness checks and payload-free operator status."""
 from datetime import datetime, timezone
 import time
 from sqlalchemy import false, func, insert, null, select, text, inspect, update
-from app.db.models import AuditOutbox
+from app.db.models import AuditLog, AuditOutbox
 from app.db.session import get_engine
-from .audit_schema import validate_audit_schema
+from .audit_schema import validate_audit_schema, validate_audit_domain_schema
 from .audit_outbox import ERROR_CODES
+from .audit_modes import get_audit_mode
 
 
 def validate_existing_audit():
-    # Check before best-effort startup init/seeds can touch a drifted installation.
     with get_engine().connect() as connection:
-        if "audit_log" in inspect(connection).get_table_names():
+        if 'audit_log' in inspect(connection).get_table_names():
             validate_audit_schema(connection)
+            validate_audit_domain_schema(connection)
 
 
 def validate_audit_transport_profile(settings, *, engine=None):
-    """Reject unsafe profiles before startup seeds touch the shared database."""
-    if getattr(settings, 'audit_stdout_mode', 'disabled') == 'disabled':
-        return None
+    """All modes record denial events, so validate their bounded DB profile."""
+    get_audit_mode(settings)
     engine = engine if engine is not None else get_engine()
     if engine.dialect.name == 'postgresql':
         from .audit_denial_transport import reject_service_profile, validate_driver, connection_parameters, WORK_SECONDS
@@ -31,55 +31,57 @@ def validate_audit_transport_profile(settings, *, engine=None):
 
 
 def preflight_audit(settings, *, engine=None):
-    engine=engine or get_engine()
-    if getattr(settings,'audit_stdout_mode','disabled')=='disabled':
-        with engine.connect() as connection:
-            validate_audit_schema(connection)
-        return None
-    if engine.dialect.name == "postgresql":
-        from .audit_denial_transport import reject_service_profile, validate_driver, connection_parameters
-        reject_service_profile(engine)
-        validate_driver()
-        from .audit_file_materials import prepare_files
-        deadline = time.monotonic() + 4.0
-        material = prepare_files(connection_parameters(engine, deadline=deadline), deadline)
-        material.close()
+    mode = get_audit_mode(settings)
+    engine = engine if engine is not None else get_engine()
+    validate_audit_transport_profile(settings, engine=engine)
+    selected = ([AuditLog] if mode.db_enabled else []) + ([AuditOutbox] if mode.stdout_enabled else [])
     with engine.connect() as connection:
-        transaction=connection.begin()
+        transaction = connection.begin()
         try:
             validate_audit_schema(connection)
-            from app.db.models import AuditLog
-            for model in (AuditLog, AuditOutbox):
-                connection.execute(select(model.__table__).where(false()))
-                columns = [column.name for column in model.__table__.columns
-                           if not (model is AuditLog and column.name == "id")]
-                connection.execute(insert(model.__table__).from_select(
+            for model in selected:
+                table = model.__table__
+                connection.execute(select(table).where(false()))
+                columns = [column.name for column in table.columns if column.name != 'id']
+                connection.execute(insert(table).from_select(
                     columns, select(*(null() for _ in columns)).where(false()), include_defaults=False))
-            if connection.dialect.name == "postgresql":
-                allowed = connection.scalar(text("SELECT has_sequence_privilege(pg_get_serial_sequence('audit_log','id'),'USAGE')"))
-                if allowed is not True:
-                    raise ValueError("Audit sequence permission required")
-            mutable = ("status", "attempt_count", "next_attempt_at", "last_error_code", "stdout_written_at")
-            connection.execute(update(AuditOutbox.__table__).where(false()).values(
-                {name: AuditOutbox.__table__.c[name] for name in mutable}))
-        finally:transaction.rollback()
+                if connection.dialect.name == 'postgresql':
+                    # Names come only from the fixed selected model list above.
+                    allowed = connection.scalar(text(
+                        "SELECT has_sequence_privilege(pg_get_serial_sequence(:table,'id'),'USAGE')"
+                    ), {'table': table.name})
+                    if allowed is not True:
+                        raise ValueError('Audit sequence permission required')
+            if mode.stdout_enabled:
+                mutable = ('status', 'attempt_count', 'next_attempt_at', 'last_error_code', 'stdout_written_at')
+                connection.execute(update(AuditOutbox.__table__).where(false()).values(
+                    {name: AuditOutbox.__table__.c[name] for name in mutable}))
+        finally:
+            transaction.rollback()
 
 
-def delivery_status(*,engine=None):
-    engine=engine or get_engine()
-    now=datetime.now(timezone.utc)
+def delivery_status(*, engine=None, settings=None):
+    from app.config import get_settings
+    mode = get_audit_mode(settings if settings is not None else get_settings())
+    engine = engine if engine is not None else get_engine()
+    now = datetime.now(timezone.utc)
     with engine.connect() as connection:
         validate_audit_schema(connection)
-        rows=connection.execute(select(AuditOutbox.status,func.count()).group_by(AuditOutbox.status)).all()
-        counts={key:0 for key in ('pending','held','stdout_written')}
-        for key,count in rows:
-            if key not in counts:raise ValueError('Unknown audit delivery state')
-            counts[key]=count
-        created=connection.scalar(text("SELECT MIN(a.created_at) FROM audit_log a JOIN audit_outbox o ON o.audit_id=a.id WHERE o.status='pending'"))
-        if isinstance(created,str):created=datetime.fromisoformat(created)
-        if created is not None and created.tzinfo is None:created=created.replace(tzinfo=timezone.utc)
-        errors={}
-        for key,count in connection.execute(select(AuditOutbox.last_error_code,func.count()).where(AuditOutbox.last_error_code.is_not(None)).group_by(AuditOutbox.last_error_code)):
-            safe=key if key in ERROR_CODES else 'unknown'
-            errors[safe]=errors.get(safe,0)+count
-    return {'observed_at':now.isoformat(),'counts':counts,'oldest_pending_age_seconds':max(0,(now-created).total_seconds()) if created else None,'runtime_state':'unknown','error_counts':errors}
+        rows = connection.execute(select(AuditOutbox.status, func.count()).group_by(AuditOutbox.status)).all()
+        counts = {key: 0 for key in ('pending', 'held', 'stdout_written')}
+        for key, count in rows:
+            if key not in counts:
+                raise ValueError('Unknown audit delivery state')
+            counts[key] = count
+        created = connection.scalar(select(func.min(AuditOutbox.created_at)).where(AuditOutbox.status == 'pending'))
+        if created is not None and created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        errors = {}
+        for key, count in connection.execute(select(AuditOutbox.last_error_code, func.count()).where(
+                AuditOutbox.last_error_code.is_not(None)).group_by(AuditOutbox.last_error_code)):
+            safe = key if key in ERROR_CODES else 'unknown'
+            errors[safe] = errors.get(safe, 0) + count
+    return {'observed_at': now.isoformat(), 'counts': counts,
+            'oldest_pending_age_seconds': max(0, (now-created).total_seconds()) if created else None,
+            'runtime_state': 'unknown', 'error_counts': errors, 'effective_mode': mode.effective_mode,
+            'delivery_paused': not mode.stdout_enabled and counts['pending'] > 0}
