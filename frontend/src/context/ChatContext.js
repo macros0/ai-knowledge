@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {readAssessmentPreference, writeAssessmentPreference} from "@/lib/chatSourceAssessment.mjs";
+import {reduceSearchScope} from "@/lib/chatSearchScope.mjs";
 import { useAuth } from "./AuthContext";
 import { getChatSettings, listRecentChatTurns } from "@/lib/api";
 import {createRecentHistoryLoader, EMPTY_RECENT_HISTORY} from "@/lib/chatRecentHistory.mjs";
@@ -79,8 +80,11 @@ function ChatState({ children }) {
   const [searchDepth, setSearchDepth] = useState(FALLBACK_SETTINGS.search_depth_default);
   const [mailMode, setMailMode] = useState("all");
   const [useGlossary, setUseGlossary] = useState(true);
-  const [searchScopeDocuments, setSearchScopeDocuments] = useState([]);
-  const [searchScopeEnabled, setSearchScopeEnabled] = useState(false);
+  const [searchScope, dispatchSearchScope] = useReducer(reduceSearchScope, {documents:[], enabled:false});
+  const searchScopeDocuments = searchScope.documents;
+  const searchScopeEnabled = searchScope.enabled;
+  const setSearchScopeDocuments = useCallback(value => dispatchSearchScope({type:"documents", value}), []);
+  const setSearchScopeEnabled = useCallback(value => dispatchSearchScope({type:"enabled", value}), []);
 
   const MODE_LABELS = useMemo(
     () => ({
@@ -102,7 +106,7 @@ function ChatState({ children }) {
     setSessionId(null);
     setSearchScopeDocuments([]);
     setSearchScopeEnabled(false);
-  }, [historyLoader]);
+  }, [historyLoader, setSearchScopeDocuments, setSearchScopeEnabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,7 +137,7 @@ function ChatState({ children }) {
       responseMode, setResponseMode, selectedTopK: selectedTopK ?? settings.top_k_default, setSelectedTopK,
       showCustom, setShowCustom, customValue, setCustomValue, showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue,
       moduleFilter, setModuleFilter, devFilter, setDevFilter, sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen }),
-    [queuedAssessmentRetry, assessSources, setAssessSources, recentHistory, historyLoader, timelineView, startNewChat, sourceView, draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled,
+    [queuedAssessmentRetry, assessSources, setAssessSources, recentHistory, historyLoader, timelineView, startNewChat, sourceView, draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled, setSearchScopeDocuments, setSearchScopeEnabled,
       responseMode, selectedTopK, showCustom, customValue, showCustomDepth, customDepthValue, moduleFilter, devFilter, sourceLocale, searchSettingsOpen]
   );
 

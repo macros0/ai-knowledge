@@ -1,8 +1,7 @@
 "use client";
 
 import {useState} from "react";
-import {useChat} from "@/context/ChatContext";
-import ChatSources from "./ChatSources";
+import ChatHistorySources from "./ChatHistorySources";
 import { CiteLink, remarkCiteLinks } from "@/lib/chatSources";
 import { searchLimitWarning } from "@/lib/chatAnswerState.mjs";
 import { useI18n } from "@/i18n/LocaleContext";
@@ -20,11 +19,10 @@ export function fmtDate(iso) {
 
 export function SourceBadges({sources,responseMode}) {
   const [open,setOpen]=useState(false);
-  const {sourceView,setSourceView}=useChat();
-  return <ChatSources sources={sources || []} responseMode={responseMode} open={open} onToggle={setOpen} view={sourceView} onViewChange={setSourceView}/>;
+  return <ChatHistorySources sources={sources || []} responseMode={responseMode} open={open} onToggle={setOpen}/>;
 }
 
-export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, actionsPending }) {
+export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, actionsPending, documentSelectionEnabled = true }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { t } = useI18n();
   const youLabel = userLabel ?? t("chat.you");
@@ -73,7 +71,7 @@ export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, acti
         outcome={m.retrieval_metadata?.source_assessment} candidateCount={m.sources?.length ?? 0}
         responseMode={attempt?.mode} pending={actionsPending} onShowCandidates={() => setSourcesOpen(true)}
         onContinueWithoutAssessment={onContinueWithoutAssessment ? () => onContinueWithoutAssessment(m) : undefined} />}
-      <ChatSources sources={m.sources || []} responseMode={attempt?.mode} open={sourcesOpen} onToggle={setSourcesOpen} />
+      <ChatHistorySources sources={m.sources || []} responseMode={attempt?.mode} open={sourcesOpen} onToggle={setSourcesOpen} documentSelectionEnabled={documentSelectionEnabled} />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import ru from "../src/i18n/locales/ru.js";
 const require = createRequire(import.meta.url);
 const modules = new Map();
 const selectionControls = [];
+const documentControls = [];
 let currentLocale = "ru";
 const t = createTranslator("ru", ru).t;
 function load(name) {
@@ -33,6 +34,7 @@ function load(name) {
       const runtime = require(id);
       const capture = (create) => (type, props, key) => {
         if (type === "button" && props.className?.includes("source-select-all")) selectionControls.push(props);
+        if (type === "input" && props.type === "checkbox") documentControls.push(props);
         return create(type, props, key);
       };
       return { ...runtime, jsx:capture(runtime.jsx), jsxs:capture(runtime.jsxs) };
@@ -110,6 +112,41 @@ test("legacy sources keep global citation numbers after document grouping withou
   assert.match(html, /<li value="2">/);
   assert.equal(html.includes('class="source-select"'),false);
   assert.equal(sources.some(source => source.source_index > 0),false);
+});
+
+test("history document selection accepts legacy and updated documents while excluding unavailable ones in both views", () => {
+  const sources = [
+    { doc_id: "a", title: "Old A1", filename: "Old.docx", selectable: false },
+    { doc_id: "b", title: "Deleted", filename: "Deleted.docx", selectable: true, source_index: 2 },
+    { doc_id: "a", title: "Old A3", filename: "Old.docx" },
+  ];
+  for (const view of ["documents", "rating"]) {
+    documentControls.length = 0;
+    const changes = [];
+    const html = renderToStaticMarkup(React.createElement(load("ChatSources").default, {
+      sources, open: true, view, onToggle: noop,
+      documentSelection: {
+        documents: [{ doc_id: "a", filename: "Current.docx", available: true }, { doc_id: "b", available: false }],
+        selectedIds: ["a"], onSelect: (ids, checked) => changes.push([[...ids], checked]),
+      },
+    }));
+    assert.ok(html.includes('class="source-select"'), "Legacy documents can be selected without canonical excerpts");
+    assert.ok(html.includes("Документ недоступен"));
+    assert.ok(!html.includes("Выбрать фрагмент"), "Document choice must not enable historical fragment selection");
+    assert.ok(documentControls.every(control => control.checked));
+    documentControls[0].onChange({ target: { checked: false } });
+    assert.deepEqual(changes, [[["a"], false]]);
+    assert.equal(documentControls.length, view === "documents" ? 1 : 2);
+  }
+});
+
+test("history document selection waits for availability without treating unknown documents as deleted", () => {
+  const html = renderToStaticMarkup(React.createElement(load("ChatSources").default, {
+    sources: message.sources.slice(0, 1), open: true, onToggle: noop,
+    documentSelection: { documents: [], selectedIds: [], onSelect: noop },
+  }));
+  assert.equal(html.includes('class="source-select"'), false);
+  assert.equal(html.includes("Документ недоступен"), false);
 });
 
 test("saved group expansion survives component remount", () => {

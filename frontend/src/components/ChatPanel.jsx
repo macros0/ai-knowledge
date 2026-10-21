@@ -22,6 +22,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/i18n/LocaleContext";
 import SearchableSelect from "./SearchableSelect";
 import ChatSearchScope from "./ChatSearchScope";
+import ChatScopeSelector from "./ChatScopeSelector";
 import ChatComposer from "./ChatComposer";
 import {applyAssessmentOutcome, withoutAssessmentOptions, historyAssessmentMessage, editAssessmentOptions, selectedAssessmentOptions} from "@/lib/chatSourceAssessment.mjs";
 import ChatMessageView from "./ChatMessageView";
@@ -433,11 +434,11 @@ export default function ChatPanel() {
         </div>
       </div>
       <div className="chat-quick-filters" aria-label={t("ux.searchFilters")}>
-        <select className="chat-scope-select" value={searchScopeEnabled ? "selected" : "all"} aria-label={t("chat.scopeLabel")}
-          onChange={event => { setSearchScopeEnabled(event.target.value === "selected"); setScopeNotice(null); }}>
-          <option value="all">{t("ux.scopeAll")}</option>
-          <option value="selected">{t("chat.scopeSelected", {count: searchScopeDocuments.length})}</option>
-        </select>
+        <ChatScopeSelector documents={searchScopeDocuments} enabled={searchScopeEnabled}
+          onEnabledChange={enabled => {setSearchScopeEnabled(enabled); setScopeNotice(null);}}
+          onRemove={docId => {setSearchScopeDocuments(items => items.filter(document => document.doc_id !== docId)); setScopeNotice(null);}}
+          onClear={() => {setSearchScopeDocuments([]); setScopeNotice(null);}}
+          refreshKey={messages.length} />
         <SearchableSelect
           className="chat-locale-select"
           options={localeOptions}

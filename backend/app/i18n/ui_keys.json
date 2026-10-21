@@ -515,6 +515,7 @@
     "done",
     "total"
   ],
+  "chat.clearDocumentSelection": [],
   "chat.clearSourceSelection": [],
   "chat.collapseAllSources": [],
   "chat.collapseDialog": [],
@@ -535,6 +536,7 @@
   "chat.deleteThreadTitle": [],
   "chat.developmentLabel": [],
   "chat.developmentTitle": [],
+  "chat.documentUnavailable": [],
   "chat.empty": [],
   "chat.errorPrefix": [
     "message"
@@ -622,7 +624,9 @@
   "chat.scopeChecking": [],
   "chat.scopeClear": [],
   "chat.scopeCollapseDocuments": [],
+  "chat.scopeCurrentVersions": [],
   "chat.scopeDescription": [],
+  "chat.scopeEdit": [],
   "chat.scopeEditList": [],
   "chat.scopeEmpty": [],
   "chat.scopeEmptyActive": [],
@@ -631,6 +635,7 @@
     "max"
   ],
   "chat.scopeOnly": [],
+  "chat.scopeOpenChat": [],
   "chat.scopeRefresh": [],
   "chat.scopeRemove": [],
   "chat.scopeRemoveDocument": [
@@ -652,6 +657,7 @@
     "depth"
   ],
   "chat.searchSettings": [],
+  "chat.selectAllDocuments": [],
   "chat.selectAllSources": [],
   "chat.selectDocument": [
     "name"
@@ -697,6 +703,7 @@
   "chat.thinking": [],
   "chat.threadDeleted": [],
   "chat.title": [],
+  "chat.toggleAllDocuments": [],
   "chat.toggleAllSources": [],
   "chat.topkDetailed": [],
   "chat.topkLabel": [],
@@ -1749,13 +1756,20 @@
   "sort.label": [],
   "sort.newFirst": [],
   "sort.oldFirst": [],
+  "sourceLocation.changed": [],
   "sourceLocation.chunkOnly": [
+    "index"
+  ],
+  "sourceLocation.conceptEvidence": [
     "index"
   ],
   "sourceLocation.exact": [
     "index"
   ],
   "sourceLocation.inferred": [
+    "index"
+  ],
+  "sourceLocation.match": [
     "index"
   ],
   "sourceLocation.navigation": [],
@@ -1773,9 +1787,6 @@
     "index"
   ],
   "sourceLocation.title": [],
-  "sourceLocation.match": ["index"],
-  "sourceLocation.conceptEvidence": ["index"],
-  "sourceLocation.changed": [],
   "sourceLocation.unavailable": [],
   "sources.collapse": [
     "name"
