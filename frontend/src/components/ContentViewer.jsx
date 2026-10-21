@@ -77,7 +77,7 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false, s
                           setExpandedSegments(previous => previous[key] === open ? previous : {...previous, [key]: open});
                         }}>
                           <summary>{t("content.tableRowsRange", {from, to})}</summary>
-                          {segmentOpen && <MarkdownViewer text={chunk} docId={docId} lineMap={part.chunkLineMaps?.[j]} highlightedLines={highlightedLines} />}
+                          {segmentOpen && <MarkdownViewer text={chunk} docId={docId} lineMap={part.chunkLineMaps?.[j]} highlightedLines={highlightedLines} sourceSpans={sourceSpans} canonicalText={text} />}
                         </details>
                       );
                     })}
@@ -92,6 +92,8 @@ export default function ContentViewer({ text, docId, stripFrontmatter = false, s
                 stripFrontmatter={stripFrontmatter && i === 0}
                 lineMap={part.lineMap}
                 highlightedLines={highlightedLines}
+                sourceSpans={sourceSpans}
+                canonicalText={text}
                 className={part.tablePreview ? "okf-markdown okf-table-preview" : undefined}
               />
             );

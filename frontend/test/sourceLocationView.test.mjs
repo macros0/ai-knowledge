@@ -6,6 +6,7 @@ import {runInNewContext} from 'node:vm';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {transformSync} from 'next/dist/build/swc/index.js';
+import * as sourceGuard from '../src/lib/sourceLocationGuard.mjs';
 
 const require = createRequire(import.meta.url);
 const compiled = transformSync(readFileSync(new URL('../src/components/SourceLocationView.jsx', import.meta.url), 'utf8'), {
@@ -29,6 +30,7 @@ function mount(props) {
   const compiledModule = {exports: {}};
   runInNewContext(compiled, {module: compiledModule, exports: compiledModule.exports, require(id) {
     if (id === 'react') return hooks;
+    if (id === '@/lib/sourceLocationGuard.mjs') return sourceGuard;
     if (id === '@/i18n/LocaleContext') return {useI18n: () => ({t: (key, args) => `${key}:${args?.index ?? ''}`})};
     if (id === '@/components/ContentViewer') return function ContentViewerProbe(props) {viewers.push(props); return React.createElement('p', null, props.text);};
     if (id === './MailMetadata') return () => null;

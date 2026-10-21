@@ -83,6 +83,8 @@ from app.services.locale_service import request_locale
 from app.services.source_locale import is_valid_source_locale, normalize_source_locale
 from app.services.source_locale_sync import reindex_document_source_locale, schedule_source_locale_sync
 from app.services.source_location import get_document_text_chunks, get_source_location
+from app.models.schemas import ResultLocationRef
+from app.services.result_source_location import resolve_result_location
 from app.services.staging import StagingStore
 from app.services.tag_registry import TagRegistry, normalize_tags
 from app.services.trash import RestoreConflictError, bulk_restore, restore_document
@@ -1573,6 +1575,27 @@ def get_chunk(doc_id: str, chunk_index: int):
             code=errors.CHUNK_NOT_FOUND,
             detail="Чанк не найден",
         )
+
+
+@router.get('/{doc_id}/source-location', response_model=SourceLocationOut)
+def get_result_source_location(doc_id: str, ref: str = Query(max_length=8192)):
+    from pydantic import ValidationError
+    _require_active_document(doc_id)
+    try:
+        reference = ResultLocationRef.model_validate_json(ref)
+    except ValidationError:
+        raise ApiError(status_code=422, code=errors.INVALID_REQUEST,
+                       detail='Некорректная привязка к источнику') from None
+    return resolve_result_location(doc_id, reference)
+
+
+@router.get('/{doc_id}/chunks/{chunk_index}/source-text', response_model=DocumentTextChunkOut)
+def get_source_chunk_text(doc_id: str, chunk_index: int):
+    _require_active_document(doc_id)
+    chunks = get_document_text_chunks(doc_id, chunk_index=chunk_index)
+    if not chunks:
+        raise ApiError(status_code=404, code=errors.CHUNK_NOT_FOUND, detail='Чанк не найден')
+    return chunks[0]
 
 
 @router.get("/{doc_id}/concepts/{slug}/source-location", response_model=SourceLocationOut)

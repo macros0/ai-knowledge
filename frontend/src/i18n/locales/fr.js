@@ -2,6 +2,9 @@ import en from "./en.js";
 
 export default {
   ...en,
+  "sourceLocation.match": "Passage trouvé surligné · fragment {index}",
+  "sourceLocation.conceptEvidence": "Passages liés au concept · fragment {index}",
+  "sourceLocation.changed": "Le document a changé depuis la recherche. L’emplacement exact n’est plus confirmé ; le fragment actuel est affiché.",
   "devpanel.versionConflict": "Un autre utilisateur a modifié cette fiche — comparez les modifications avant de l’enregistrer",
   "reference.previewChanged": "Les données ont changé. Votre brouillon est conservé. Actualisez et vérifiez l’aperçu avant de l’appliquer.",
   "reference.conflictTitle": "Comparer les modifications",

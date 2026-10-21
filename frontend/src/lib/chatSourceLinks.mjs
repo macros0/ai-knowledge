@@ -16,11 +16,20 @@ export function sourceHref(source) {
     if (table.text_start != null) {query.set("text_start", String(table.text_start));query.set("text_end", String(table.text_end));}
     return `/documents/${encodeURIComponent(source.doc_id)}/tables/${encodeURIComponent(table.table_id)}?${query}`;
   }
+  const legacySlug = (source.filepath?.split(/[\\/]/).at(-1) || '').replace(/\.md$/i, '');
+  const ref = source.location_ref || (Number.isInteger(source.chunk_index) && source.snippet ? {
+    version: 1, basis: 'legacy', chunk_index: source.chunk_index,
+    source_id: source.source_id || null, source_slug: source.source_slug || legacySlug || null,
+    excerpt: Array.from(source.snippet).slice(0, 300).join(''),
+  } : null);
+  if (ref) {
+    const query = new URLSearchParams({location: JSON.stringify(ref)});
+    return `/documents/${encodeURIComponent(source.doc_id)}/fulltext?${query}`;
+  }
   if (source.point_type === "chunk" && source.chunk_index != null) {
     return `/documents/${encodeURIComponent(source.doc_id)}/chunks/${source.chunk_index}`;
   }
   const filename = source.filepath?.split(/[\\/]/).at(-1) || "";
-  const legacySlug = /\.md$/i.test(filename) ? filename.replace(/\.md$/i, "") : "";
-  const slug = source.source_slug || legacySlug;
+  const slug = source.source_slug || (/\.md$/i.test(filename) ? filename.replace(/\.md$/i, "") : "");
   return slug ? `${documentUrl}/${encodeURIComponent(slug)}.md` : documentUrl;
 }

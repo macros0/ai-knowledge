@@ -58,7 +58,7 @@ from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
 from app.services.glossary.expansion import prepare_query
-from app.services.glossary.matching import exact_excerpt
+from app.services.result_source_location import build_result_locations, result_excerpt
 from app.services.glossary.query_sparse import build_query_sparse
 from app.services.glossary.snapshot import GlossaryMigrationRequiredError
 from app.services.generation_store import lock_generation_read
@@ -604,6 +604,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
                 lexical_cache=lexical_cache,
             )
         max_score = max((m["score"] for m in merged), default=0.0)
+        snippets = [result_excerpt(m['content'], 200, query=req.query, groups=exact_groups) for m in merged]
+        location_refs = build_result_locations(merged, snippets)
         sources = []
         for index, m in enumerate(merged):
             score = m["score"] / max_score if max_score > 0 else m["score"]
@@ -616,7 +618,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
                     tags=m["tags"],
                     doc_id=m["doc_id"],
                     filename=src_doc.get("filename") or Path(m["filepath"]).name,
-                    snippet=exact_excerpt(m["content"], 200, exact_groups),
+                    snippet=snippets[index],
+                    location_ref=location_refs[index],
                     point_type=m["point_type"],
                     chunk_index=m["chunk_index"],
                     source_slug=m.get("source_slug"),
