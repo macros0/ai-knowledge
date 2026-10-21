@@ -1773,6 +1773,9 @@
     "index"
   ],
   "sourceLocation.title": [],
+  "sourceLocation.match": ["index"],
+  "sourceLocation.conceptEvidence": ["index"],
+  "sourceLocation.changed": [],
   "sourceLocation.unavailable": [],
   "sources.collapse": [
     "name"

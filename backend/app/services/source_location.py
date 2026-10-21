@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import nullcontext
 from pathlib import Path
 
 from sqlalchemy import select, func
@@ -21,9 +22,9 @@ from app.services.source_evidence import (
 )
 
 
-def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
-    with session_scope() as session:
-        lock_generation_read(session, [doc_id])
+def get_source_location(doc_id: str, slug: str, *, session=None) -> SourceLocationOut | None:
+    with (session_scope() if session is None else nullcontext(session)) as session:
+        generations = lock_generation_read(session, [doc_id])
         concept = session.execute(
             select(
                 OkfConcept.chunk_index,
@@ -151,14 +152,22 @@ def get_source_location(doc_id: str, slug: str) -> SourceLocationOut | None:
         chunk_index=chunk_index,
         source_id=source_id,
         spans=valid,
+        chunk_hash=digest,
+        generation_id=generations.get(doc_id),
     )
 
 
-def get_document_text_chunks(doc_id: str) -> list[DocumentTextChunkOut]:
+def get_document_text_chunks(doc_id: str, chunk_index: int | None = None) -> list[DocumentTextChunkOut]:
     with session_scope() as session:
+        generations = lock_generation_read(session, [doc_id])
+        statement = select(DocumentChunk.chunk_index, DocumentChunk.source_id, DocumentChunk.content, DocumentChunk.table_refs)
+        if chunk_index is not None:
+            statement = statement.where(DocumentChunk.chunk_index == chunk_index)
         rows = session.execute(
-            select(DocumentChunk.chunk_index, DocumentChunk.source_id, DocumentChunk.content, DocumentChunk.table_refs)
+            statement
             .where(DocumentChunk.doc_id == doc_id)
             .order_by(func.coalesce(DocumentChunk.display_order, DocumentChunk.chunk_index), DocumentChunk.chunk_index)
         ).all()
-    return [DocumentTextChunkOut(chunk_index=index, source_id=source_id, content=content or "", table_refs=refs or []) for index, source_id, content, refs in rows]
+    return [DocumentTextChunkOut(chunk_index=index, source_id=source_id, content=content or "", table_refs=refs or [],
+        chunk_hash=hashlib.sha256((content or '').encode('utf-8')).hexdigest(),
+        generation_id=generations.get(doc_id)) for index, source_id, content, refs in rows]

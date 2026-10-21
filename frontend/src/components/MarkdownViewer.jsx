@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "@/i18n/LocaleContext";
 import { resolveDocumentImage } from "@/lib/markdownImage.mjs";
+import { rehypeSourceHighlights } from "@/lib/sourceHighlight.mjs";
 
 function resolveAttachment(src, docId) {
   const clean = String(src || "").replace(/^\.?\//, "");
@@ -23,6 +24,8 @@ export default function MarkdownViewer({
   remarkPlugins = [],
   lineMap = null,
   highlightedLines = [],
+  sourceSpans = [],
+  canonicalText = text,
 }) {
   const { t } = useI18n();
   const [lightbox, setLightbox] = useState(null);
@@ -88,6 +91,7 @@ export default function MarkdownViewer({
   }
 
   const highlightedSpanIndices = (node) => {
+    if (sourceSpans.length) return [];
     if (!node?.position || !lineMap?.length || !highlightedLines.length) return [];
     const start = lineMap[node.position.start.line - 1];
     const end = lineMap[node.position.end.line - 1];
@@ -176,7 +180,8 @@ export default function MarkdownViewer({
 
   return (
     <div ref={viewerRef} className={className}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, ...remarkPlugins]} components={defaultComponents}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, ...remarkPlugins]} components={defaultComponents}
+        rehypePlugins={[[rehypeSourceHighlights, {text: body, canonicalText, spans: sourceSpans, lineMap}]]}>
         {body}
       </ReactMarkdown>
       {lightbox && (
