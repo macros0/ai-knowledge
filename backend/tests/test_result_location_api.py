@@ -68,6 +68,7 @@ def test_document_location_endpoint_validates_reference_and_deleted_documents(mo
     from app.main import create_app
     settings = setup(monkeypatch, search, False)
     monkeypatch.setattr('app.main.get_settings', lambda: settings)
+    monkeypatch.setattr('app.config.get_settings', lambda: settings)
     client = TestClient(create_app())
     ref = search.search(SearchRequest(query='disability', mode='dense'), User()).hits[0].location_ref
     response = client.get(f'/api/documents/{DOC}/source-location', params={'ref': ref.model_dump_json()})
