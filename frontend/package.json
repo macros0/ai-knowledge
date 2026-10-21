@@ -20,7 +20,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "eslint": "^9.39.5",
+    "eslint": "^10.13.0",
     "eslint-config-next": "^16.4.2",
     "fast-glob": "file:tooling/eslint-root-glob"
   },
