@@ -107,7 +107,7 @@ export default function AdminChatHistoryPanel() {
           </div>
           <div className="chat-log history-log">
             {active.messages.map((m, i) => (
-              <HistoryMessage key={i} m={m} userLabel={t("chat.userLabel")} />
+              <HistoryMessage key={i} m={m} userLabel={t("chat.userLabel")} documentSelectionEnabled={false} />
             ))}
           </div>
         </div>
