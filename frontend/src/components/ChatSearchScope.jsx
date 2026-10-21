@@ -7,7 +7,7 @@ import { documentHref } from "@/lib/chatSources";
 import { useI18n } from "@/i18n/LocaleContext";
 import ChatDisclosureSummary from "./ChatDisclosureSummary";
 
-export default function ChatSearchScope({ documents, onRemove, onClear, refreshKey }) {
+export default function ChatSearchScope({ documents, onRemove, onClear, refreshKey, expanded = false }) {
   const { t } = useI18n();
   const [result, setResult] = useState(null);
   const [revision, setRevision] = useState(0);
@@ -31,36 +31,36 @@ export default function ChatSearchScope({ documents, onRemove, onClear, refreshK
   const availability = new Map((current?.items ?? []).map((item) => [item.doc_id, item]));
   const unavailableCount = documents.filter((document) => availability.get(document.doc_id)?.available === false).length;
 
+  const documentList = <div className="chat-disclosure-content">
+    <ul className="chat-scope-documents">
+      {documents.map((document) => {
+        const item = availability.get(document.doc_id);
+        const name = item?.filename || document.filename;
+        return <li key={document.doc_id}>
+          {item?.available === false ? <span>{name}</span> : <Link href={documentHref(document)} target="_blank" rel="noopener noreferrer">{name}</Link>}
+          <span className="meta">{t(item?.available === false ? "chat.scopeUnavailable" : !current ? "chat.scopeChecking" : current.error ? "chat.scopeUnknown" : "chat.scopeAvailable")}</span>
+          <button type="button" className="btn ghost" aria-label={t("chat.scopeRemoveDocument", { name })} onClick={() => onRemove(document.doc_id)}>{t("chat.scopeRemove")}</button>
+        </li>;
+      })}
+    </ul>
+    <div className="chat-scope-actions">
+      <button type="button" className="btn ghost" onClick={() => setRevision((value) => value + 1)}>{t("chat.scopeRefresh")}</button>
+      <button type="button" className="btn ghost" onClick={onClear}>{t("chat.scopeClear")}</button>
+    </div>
+  </div>;
+
   return (
     <div className="chat-search-scope active">
       <div className="chat-scope-header">
         <strong>{t("chat.scopeTitle", { count: documents.length })}</strong>
       </div>
       <p className="meta">{t(documents.length ? "chat.scopeDescription" : "chat.scopeEmptyActive")}</p>
-      {documents.length > 0 && (
+      {documents.length > 0 && (expanded ? documentList : (
         <details className="chat-scope-details chat-disclosure">
           <ChatDisclosureSummary showLabel={t("chat.scopeShowDocuments")} hideLabel={t("chat.scopeCollapseDocuments")} />
-          <div className="chat-disclosure-content">
-          <ul className="chat-scope-documents">
-            {documents.map((document) => {
-              const item = availability.get(document.doc_id);
-              const name = item?.filename || document.filename;
-              return (
-                <li key={document.doc_id}>
-                  {item?.available === false ? <span>{name}</span> : <Link href={documentHref(document)} target="_blank" rel="noopener noreferrer">{name}</Link>}
-                  <span className="meta">{t(item?.available === false ? "chat.scopeUnavailable" : !current ? "chat.scopeChecking" : current.error ? "chat.scopeUnknown" : "chat.scopeAvailable")}</span>
-                  <button type="button" className="btn ghost" aria-label={t("chat.scopeRemoveDocument", { name })} onClick={() => onRemove(document.doc_id)}>{t("chat.scopeRemove")}</button>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="chat-scope-actions">
-            <button type="button" className="btn ghost" onClick={() => setRevision((value) => value + 1)}>{t("chat.scopeRefresh")}</button>
-            <button type="button" className="btn ghost" onClick={onClear}>{t("chat.scopeClear")}</button>
-          </div>
-          </div>
+          {documentList}
         </details>
-      )}
+      ))}
       {unavailableCount > 0 && <p className="meta" role="status">{t(unavailableCount === documents.length ? "chat.scopeAllUnavailable" : "chat.scopeSomeUnavailable", { count: unavailableCount })}</p>}
       {current?.error && <p className="meta" role="status">{friendlyApiError(current.error, t)}</p>}
     </div>
