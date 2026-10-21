@@ -239,6 +239,25 @@ class SearchRequest(BaseModel):
     )
 
 
+class ResultSourceSpan(BaseModel):
+    start: int = Field(ge=0, strict=True)
+    end: int = Field(gt=0, strict=True)
+
+
+class ResultLocationRef(BaseModel):
+    """Bounded navigation reference in canonical chunk coordinates, never concept offsets."""
+    version: Literal[1] = 1
+    generation_id: str | None = Field(default=None, max_length=64)
+    source_id: str | None = Field(default=None, max_length=512)
+    chunk_index: int = Field(ge=0, strict=True)
+    source_slug: str | None = Field(default=None, max_length=255)
+    basis: Literal['match', 'concept', 'chunk', 'legacy'] = 'chunk'
+    chunk_hash: str | None = Field(default=None, pattern=r'^[0-9a-f]{64}$')
+    spans: list[ResultSourceSpan] = Field(default_factory=list, max_length=3)
+    # Used only to recover pre-reference history inside its original chunk/source.
+    excerpt: str | None = Field(default=None, max_length=300)
+
+
 class SearchHit(BaseModel):
     score: float
     title: str
@@ -252,6 +271,9 @@ class SearchHit(BaseModel):
     source_id: str | None = None
     source_path: list[dict[str, Any]] | None = None
     table_refs: list[TableRef] = Field(default_factory=list)
+    doc_id: str = ''
+    source_slug: str | None = None
+    location_ref: ResultLocationRef | None = None
 
 
 class SearchResponse(BaseModel):
@@ -377,6 +399,7 @@ class ChatSource(BaseModel):
     source_id: str | None = None
     source_path: list[dict[str, Any]] | None = None
     table_refs: list[TableRef] = Field(default_factory=list)
+    location_ref: ResultLocationRef | None = None
     # Источник найден поиском; только true означает, что его текст вошёл в контекст LLM.
     in_model_context: bool = True
     source_index: int | None = None
@@ -498,6 +521,10 @@ class SourceLocationOut(BaseModel):
     chunk_index: int | None = None
     source_id: str | None = None
     spans: list[SourceLocationSpanOut] = Field(default_factory=list)
+    basis: Literal['match', 'concept', 'chunk'] | None = None
+    reason: Literal['changed', 'missing'] | None = None
+    chunk_hash: str | None = None
+    generation_id: str | None = None
 
 
 class DocumentTextChunkOut(BaseModel):
@@ -505,6 +532,8 @@ class DocumentTextChunkOut(BaseModel):
     chunk_index: int
     source_id: str | None = None
     content: str
+    chunk_hash: str | None = None
+    generation_id: str | None = None
 
 
 class Concept(BaseModel):

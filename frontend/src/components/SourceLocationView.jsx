@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import ContentViewer from "@/components/ContentViewer";
 import { useI18n } from "@/i18n/LocaleContext";
 import MailMetadata from "./MailMetadata";
+import { guardSourceLocation } from "@/lib/sourceLocationGuard.mjs";
 
-export default function SourceLocationView({ docId, chunks, location, heading, showAll = false, sources = [] }) {
+export default function SourceLocationView({ docId, chunks, location: suppliedLocation, heading, showAll = false, sources = [] }) {
   const { t } = useI18n();
+  const location = guardSourceLocation(suppliedLocation, chunks);
   const current = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [expandedChunks, setExpandedChunks] = useState(() => new Set());
@@ -14,6 +16,7 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
   const selectedIndex = Math.min(activeIndex, Math.max(0, spans.length - 1));
   const targetChunk = chunks.find(({ chunk_index }) => chunk_index === location?.chunk_index);
   const sourcesById = new Map(sources.map((source) => [source.source_id, source]));
+
 
   useEffect(() => {
     const root = current.current;
@@ -53,7 +56,8 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
       <header className="source-location-header">
         <strong>{heading || t("sourceLocation.title")}</strong>
         {location.status === "exact" || location.status === "recovered" || location.status === "inferred" ? (
-          <span>{t(`sourceLocation.${location.status}`, { index: location.chunk_index + 1 })}</span>
+          <span>{t(location.basis === 'match' ? 'sourceLocation.match' : location.basis === 'concept' && location.status !== 'inferred'
+            ? 'sourceLocation.conceptEvidence' : `sourceLocation.${location.status}`, { index: location.chunk_index + 1 })}</span>
         ) : (
           <span>{t("sourceLocation.chunkOnly", { index: location.chunk_index + 1 })}</span>
         )}
@@ -65,6 +69,7 @@ export default function SourceLocationView({ docId, chunks, location, heading, s
           </nav>
         )}
       </header>
+      {location.reason === 'changed' && <p className="source-location-note" role="status">{t('sourceLocation.changed')}</p>}
       {spans[selectedIndex]?.quote && (
         <blockquote className="source-location-quotes">
           <p>{spans[selectedIndex].quote}</p>

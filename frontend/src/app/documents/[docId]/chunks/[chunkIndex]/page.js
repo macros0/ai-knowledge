@@ -24,11 +24,11 @@ export default async function ChunkPage({ params, searchParams }) {
       }
       if (location.chunk_index === index && location.status !== "unavailable") {
         const [resp, sourcesResp] = await Promise.all([
-          backendFetch(`/api/documents/${docId}/chunks/${index}`),
+          backendFetch(`/api/documents/${docId}/chunks/${index}/source-text`),
           backendFetch(`/api/documents/${docId}/sources`),
         ]);
         if (!resp.ok) notFound();
-        const text = await resp.text();
+        const chunk = await resp.json();
         const sourceData = sourcesResp.ok ? await sourcesResp.json() : { sources: [] };
         return (
           <div className="okf-viewer source-chunk-viewer">
@@ -39,7 +39,7 @@ export default async function ChunkPage({ params, searchParams }) {
               </h1>
               <DocumentMarkupButton docId={docId} />
             </div>
-            <SourceLocationView docId={docId} chunks={[{ chunk_index: index, source_id: location.source_id, content: text }]} location={location} sources={sourceData.sources || []} />
+            <SourceLocationView docId={docId} chunks={[chunk]} location={location} sources={sourceData.sources || []} />
           </div>
         );
       }

@@ -3,6 +3,9 @@ import en from "./en.js";
 // Existing untranslated messages retain the established English fallback.
 export default {
   ...en,
+  "sourceLocation.match": "Gefundene Textstelle hervorgehoben · Abschnitt {index}",
+  "sourceLocation.conceptEvidence": "Mit dem Konzept verknüpfte Textstellen · Abschnitt {index}",
+  "sourceLocation.changed": "Das Dokument wurde seit der Suche geändert. Die genaue Stelle ist nicht mehr bestätigt; der aktuelle Abschnitt wird angezeigt.",
   "devpanel.versionConflict": "Ein anderer Benutzer hat den Eintrag geändert — vergleichen Sie die Änderungen vor dem Speichern",
   "reference.previewChanged": "Die Daten wurden geändert. Ihr Entwurf bleibt erhalten. Aktualisieren und prüfen Sie die Vorschau vor dem Anwenden.",
   "reference.conflictTitle": "Änderungen vergleichen",

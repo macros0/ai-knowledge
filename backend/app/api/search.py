@@ -20,7 +20,7 @@ from app.services.retrieval_hydration import load_visible_retrieval_hits
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
 from app.services.glossary.expansion import prepare_query
-from app.services.glossary.matching import exact_excerpt
+from app.services.result_source_location import build_result_locations, result_excerpt
 from app.services.glossary.query_sparse import build_query_sparse
 from app.services.glossary.snapshot import GlossaryMigrationRequiredError
 from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
@@ -115,8 +115,10 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
     # top_k — число БЛОКОВ (merge-групп с сиблингами), не точек.
     merged = merged[: req.top_k]
     max_score = max((m["score"] for m in merged), default=0.0)
+    snippets = [result_excerpt(m['content'], 300, query=req.query, groups=exact_groups) for m in merged]
+    location_refs = build_result_locations(merged, snippets)
     result = []
-    for m in merged:
+    for index, m in enumerate(merged):
         score = m["score"] / max_score if max_score > 0 else m["score"]
         result.append(
             SearchHit(
@@ -126,7 +128,10 @@ def search(req: SearchRequest, current_user: User = Depends(require_user)):
                 point_type=m["point_type"],
                 tags=m["tags"],
                 filepath=m["filepath"],
-                snippet=exact_excerpt(m["content"], 300, exact_groups),
+                snippet=snippets[index],
+                doc_id=m['doc_id'],
+                source_slug=m.get('source_slug'),
+                location_ref=location_refs[index],
                 chunk_index=m["chunk_index"],
                 source_filename=m["source_filename"],
                 source_id=m.get("source_id"),

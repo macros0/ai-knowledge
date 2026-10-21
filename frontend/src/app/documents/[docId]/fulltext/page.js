@@ -14,11 +14,13 @@ export default async function FulltextPage({ params, searchParams }) {
   const { docId } = await params;
   const query = await searchParams;
   const concept = query?.concept;
+  const resultLocation = typeof query?.location === 'string' && query.location.length <= 8192 ? query.location : null;
   let sourceUnavailable = false;
 
-  if (concept) {
+  if (concept || resultLocation) {
     const [locationResp, chunksResp, mailSourcesResp] = await Promise.all([
-      backendFetch(`/api/documents/${docId}/concepts/${encodeURIComponent(concept)}/source-location`),
+      backendFetch(resultLocation ? `/api/documents/${docId}/source-location?ref=${encodeURIComponent(resultLocation)}`
+        : `/api/documents/${docId}/concepts/${encodeURIComponent(concept)}/source-location`),
       backendFetch(`/api/documents/${docId}/fulltext/chunks`),
       backendFetch(`/api/documents/${docId}/sources`),
     ]);
@@ -34,7 +36,7 @@ export default async function FulltextPage({ params, searchParams }) {
               <DocumentMarkupButton docId={docId} />
               <DocumentProcessingScopeButton docId={docId}/>
             </div>
-            <SourceLocationView docId={docId} chunks={chunks} location={location} heading={t("sourceLocation.title")} showAll sources={sourceData.sources || []} />
+            <SourceLocationView key={resultLocation || concept} docId={docId} chunks={chunks} location={location} heading={t("sourceLocation.title")} showAll sources={sourceData.sources || []} />
           </div>
         );
       }
