@@ -4,7 +4,7 @@ import json
 import re
 from uuid import UUID
 
-from sqlalchemy import MetaData, Table, inspect, select, text
+from sqlalchemy import MetaData, Table, column as sql_column, func, inspect, select, table as sql_table, text
 
 from app.db.models import AuditLog, AuditOutbox, GlossaryMigrationReceipt, StopwordImportSnapshot
 from app.services.audit_hold import validate_outbox_contract
@@ -169,8 +169,10 @@ def _repair_sequence(connection, table, column='id'):
             WHERE c.oid=CAST(:sequence AS regclass)"""), {'sequence': sequence}).one()
         quote = connection.dialect.identifier_preparer.quote
         qualified = f'{quote(namespace)}.{quote(name)}'
-        last_value, is_called = connection.execute(text(f'SELECT last_value,is_called FROM {qualified}')).one()
-        maximum = connection.scalar(text(f'SELECT MAX({column}) FROM {table}'))
+        sequence_table = sql_table(name, sql_column('last_value'), sql_column('is_called'), schema=namespace)
+        last_value, is_called = connection.execute(select(sequence_table)).one()
+        target = sql_table(table, sql_column(column))
+        maximum = connection.scalar(select(func.max(target.c[column])))
         next_value = max(1, (maximum or 0) + 1, last_value + int(is_called))
         connection.execute(text(f'ALTER SEQUENCE {qualified} RESTART WITH {next_value}'))
 

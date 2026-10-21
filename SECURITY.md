@@ -599,6 +599,11 @@ enabled. The lock update does not update already running deployments.
 
 ### 2026-10-21 — Independent audit destinations
 
+PostgreSQL audit sequence repair builds SELECT queries with SQLAlchemy identifier
+objects, including the catalog-provided schema and sequence names. It preserves
+transactional ALTER SEQUENCE RESTART and does not interpolate identifiers into
+SELECT text or suppress Bandit SQL checks.
+
 Added validated DB-only/external-only/both selection, an independent SQL outbox,
 transactional working history/receipts, strict migration and mode visibility.
 Reason: customers must be able to use external audit without retaining a duplicate
