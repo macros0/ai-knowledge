@@ -1756,13 +1756,20 @@
   "sort.label": [],
   "sort.newFirst": [],
   "sort.oldFirst": [],
+  "sourceLocation.changed": [],
   "sourceLocation.chunkOnly": [
+    "index"
+  ],
+  "sourceLocation.conceptEvidence": [
     "index"
   ],
   "sourceLocation.exact": [
     "index"
   ],
   "sourceLocation.inferred": [
+    "index"
+  ],
+  "sourceLocation.match": [
     "index"
   ],
   "sourceLocation.navigation": [],
@@ -1780,9 +1787,6 @@
     "index"
   ],
   "sourceLocation.title": [],
-  "sourceLocation.match": ["index"],
-  "sourceLocation.conceptEvidence": ["index"],
-  "sourceLocation.changed": [],
   "sourceLocation.unavailable": [],
   "sources.collapse": [
     "name"

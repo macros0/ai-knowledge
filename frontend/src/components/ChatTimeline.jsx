@@ -58,7 +58,7 @@ function TimelineTurn({turn, previewHeight, expanded, onToggle, onExpand, onInte
       style={{"--chat-preview-height": `${previewHeight}px`}}>
       <div ref={contentRef}>
         {turn.messages.map(({message, index}, i) => turn.historical
-          ? <HistoryMessage key={i} m={message} actionsPending={actionsPending} onContinueWithoutAssessment={onContinueWithoutAssessment ? m => onContinueWithoutAssessment(m, turn.session_id) : undefined}/>
+          ? <HistoryMessage key={i} m={message} sessionId={turn.session_id} actionsPending={actionsPending} onContinueWithoutAssessment={onContinueWithoutAssessment ? m => onContinueWithoutAssessment(m, turn.session_id) : undefined}/>
           : renderMessage(message, index))}
       </div>
     </div>
@@ -101,12 +101,17 @@ export default function ChatTimeline({turns, pending, recentHistory, onLoadOlder
 
   useLayoutEffect(() => {
     const log = logRef.current;
+    const content = contentRef.current;
+    if (!log || !content) return;
+    let active = true;
     const measure = () => {
+      // React may detach refs before a queued resize notification is delivered.
+      if (!active || logRef.current !== log || contentRef.current !== content) return;
       const previous = layoutRef.current;
       const width = log.clientWidth;
       const height = log.clientHeight;
       const heights = previous.width === width ? {...previous.heights} : {};
-      for (const node of contentRef.current.querySelectorAll("[data-chat-turn]")) {
+      for (const node of content.querySelectorAll("[data-chat-turn]")) {
         heights[node.dataset.chatTurn] = node.getBoundingClientRect().height + 12;
       }
       const next = {width, height, heights};
@@ -121,9 +126,9 @@ export default function ChatTimeline({turns, pending, recentHistory, onLoadOlder
     };
     const observer = new ResizeObserver(measure);
     observer.observe(log);
-    observer.observe(contentRef.current);
+    observer.observe(content);
     measure();
-    return () => { observer.disconnect(); };
+    return () => { active = false; observer.disconnect(); };
   }, [logRef, scrollPositionRef, remember, visibleKeys, setView]);
 
   const rememberReader = () => {
