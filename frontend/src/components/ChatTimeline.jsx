@@ -58,7 +58,7 @@ function TimelineTurn({turn, previewHeight, expanded, onToggle, onExpand, onInte
       style={{"--chat-preview-height": `${previewHeight}px`}}>
       <div ref={contentRef}>
         {turn.messages.map(({message, index}, i) => turn.historical
-          ? <HistoryMessage key={i} m={message} actionsPending={actionsPending} onContinueWithoutAssessment={onContinueWithoutAssessment ? m => onContinueWithoutAssessment(m, turn.session_id) : undefined}/>
+          ? <HistoryMessage key={i} m={message} sessionId={turn.session_id} actionsPending={actionsPending} onContinueWithoutAssessment={onContinueWithoutAssessment ? m => onContinueWithoutAssessment(m, turn.session_id) : undefined}/>
           : renderMessage(message, index))}
       </div>
     </div>

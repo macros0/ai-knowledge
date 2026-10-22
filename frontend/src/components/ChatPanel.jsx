@@ -38,7 +38,7 @@ function getPresetLabel(preset, settings, t) {
 }
 
 export default function ChatPanel() {
-  const { queuedAssessmentRetry, setQueuedAssessmentRetry, assessSources, setAssessSources, messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
+  const { queuedSourceAnswer, setQueuedSourceAnswer, queuedAssessmentRetry, setQueuedAssessmentRetry, assessSources, setAssessSources, messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
     responseMode, setResponseMode, selectedTopK, setSelectedTopK, showCustom, setShowCustom, customValue, setCustomValue,
     showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue, moduleFilter, setModuleFilter, devFilter, setDevFilter,
     sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen, draftQuery,setDraftQuery,sourceView,setSourceView,
@@ -330,6 +330,12 @@ export default function ChatPanel() {
 
   const answerSelected = useCallback((message) => sendQuestion(message.query,
     selectedAssessmentOptions(message), false), [sendQuestion]);
+
+  useEffect(() => {
+    if (!queuedSourceAnswer || pending || activeRequestRef.current) return;
+    setQueuedSourceAnswer(null);
+    answerSelected(queuedSourceAnswer);
+  }, [queuedSourceAnswer, setQueuedSourceAnswer, pending, answerSelected]);
 
   const addSelectedToScope = useCallback((message) => {
     try {

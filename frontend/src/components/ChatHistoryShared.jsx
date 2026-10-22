@@ -22,7 +22,7 @@ export function SourceBadges({sources,responseMode}) {
   return <ChatHistorySources sources={sources || []} responseMode={responseMode} open={open} onToggle={setOpen}/>;
 }
 
-export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, actionsPending, documentSelectionEnabled = true }) {
+export function HistoryMessage({ m, sessionId, userLabel, onContinueWithoutAssessment, actionsPending, documentSelectionEnabled = true }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { t } = useI18n();
   const youLabel = userLabel ?? t("chat.you");
@@ -71,7 +71,7 @@ export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, acti
         outcome={m.retrieval_metadata?.source_assessment} candidateCount={m.sources?.length ?? 0}
         responseMode={attempt?.mode} pending={actionsPending} onShowCandidates={() => setSourcesOpen(true)}
         onContinueWithoutAssessment={onContinueWithoutAssessment ? () => onContinueWithoutAssessment(m) : undefined} />}
-      <ChatHistorySources sources={m.sources || []} responseMode={attempt?.mode} open={sourcesOpen} onToggle={setSourcesOpen} documentSelectionEnabled={documentSelectionEnabled} />
+      <ChatHistorySources message={m} sessionId={sessionId} sources={m.sources || []} responseMode={attempt?.mode} open={sourcesOpen} onToggle={setSourcesOpen} documentSelectionEnabled={documentSelectionEnabled} />
     </div>
   );
 }
