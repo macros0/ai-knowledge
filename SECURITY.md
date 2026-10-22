@@ -1,5 +1,14 @@
 # SECURITY.md — security model
 
+## Next.js dependency security update (2026-10-23)
+
+Next.js and matching ESLint packages are updated from 16.3.8 to 16.4.2.
+The lock no longer selects the affected Next.js range in GHSA-2464-fhr4-w9xw,
+GHSA-673q-mjm6-r5xr and GHSA-p3m5-59mp-jv5r; the required sharp floor is 0.35.5.
+This addresses dependency advisories, not evidence of exploitation in this app.
+Existing deployments require a new build and restart to run the update.
+[Upstream advisory](https://nextjs.org/blog/nextjs-security-update-october-14-2026).
+
 ## Python runtime dependency integrity (2026-10-18)
 
 The backend image and Python CI jobs install the complete backend and parser
