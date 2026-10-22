@@ -48,7 +48,7 @@ function load(name) {
     if (id === "@/lib/glossaryUi.mjs") return glossary;
     if (id === "@/lib/diagnosticIdentifiers.mjs") return identifiers;
     if (id === "next/link") return function Link({ children, ...props }) { return React.createElement("a", props, children); };
-    if (["./ChatSourceAssessment", "./ChatSources", "./icons", "./ErrorReference", "./AppliedTerms", "./ChatDisclosureSummary"].includes(id)) return load(id.slice(2));
+    if (["./ChatScenarioBadge", "./Modal", "./ChatSourceAssessment", "./ChatSources", "./icons", "./ErrorReference", "./AppliedTerms", "./ChatDisclosureSummary"].includes(id)) return load(id.slice(2));
     if (id === "./ChatAnswer") return { __esModule: true, default: ({ text }) => React.createElement("p", {}, text) };
     return require(id);
   };

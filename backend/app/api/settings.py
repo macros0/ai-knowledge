@@ -2,6 +2,9 @@
 from fastapi import APIRouter, Depends
 
 from app.config import Settings, get_settings
+from app.auth.models import User
+from app.auth.service import require_user
+from app.services.answer_scenarios import scenarios_available
 from app.models.schemas import ChatSettingsOut
 from app.services.vector_store import SEARCH_MODES
 
@@ -9,13 +12,15 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 @router.get("", response_model=ChatSettingsOut)
-def get_chat_settings(settings: Settings = Depends(get_settings)) -> ChatSettingsOut:
+def get_chat_settings(settings: Settings = Depends(get_settings), user: User = Depends(require_user)) -> ChatSettingsOut:
     default_mode = settings.search_mode_default if settings.search_mode_default in SEARCH_MODES else "hybrid"
     return ChatSettingsOut(
         source_assessment={"available": settings.source_assessment_enabled,
                            "default_enabled": settings.source_assessment_enabled and settings.source_assessment_default_enabled,
                            "sample_size": settings.source_assessment_sample_size},
         knowledge_profile=settings.knowledge_profile,
+        scenarios_available=scenarios_available(user),
+        response_modes=["documents","fast","full"] + (["scenario"] if scenarios_available(user) else []),
         top_k_min=settings.chat_top_k_min,
         top_k_max=settings.chat_top_k_max,
         top_k_default=settings.chat_top_k_default,

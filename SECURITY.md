@@ -1493,3 +1493,23 @@ Solid archive decode work remains subject to worker limits even for excluded mem
 The Docker helper is installed only at build time from a pinned official artifact
 with SHA-256 verification and matching license notices. Review/audit records must
 not contain raw cell contents, credentials or private helper errors.
+
+
+## User answer scenarios (2026-10-23)
+Authenticated users, including viewer, may create and publish their own answer
+instructions. The owner may edit, unpublish or delete their scenarios.
+Administrators may edit or delete another user's public scenario, but cannot
+view or mutate their private scenarios through the catalog. Public scenarios can be read, used
+and copied by other authenticated users. Private and missing IDs
+are indistinguishable. Disabled authentication has one anonymous identity and
+cannot use this feature. Scenario publication does not grant document access.
+Each accepted answer stores its exact scenario snapshot under existing chat
+history authorization and retention. Unpublishing/deleting does not revoke
+snapshots already in history or independent copies. Catalog deletion removes
+catalog versions only; historical snapshots remain independent.
+Scenario instructions are lower priority than source grounding and citation
+rules, are never executed as code, and do not enable tools or network actions.
+Catalog mutation audit events contain IDs, versions and public/private state,
+never instruction/name/description text. Mutations use the transactional audit
+outbox so audit failure rolls back the change. CHAT_SCENARIOS_ENABLED=false
+blocks new scenario operations while leaving historical snapshots readable.

@@ -1213,3 +1213,35 @@ class DocumentChunkFragment(Base):
             ["document_chunk_projections.doc_id", "document_chunk_projections.generation_id", "document_chunk_projections.chunk_index"], ondelete="CASCADE"),
         CheckConstraint("ordinal >= 0", name="ck_chunk_fragment_ordinal"),
     )
+
+
+class AnswerScenario(Base):
+    __tablename__ = "answer_scenarios"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner_username: Mapped[str | None] = mapped_column(String(255))
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False, default="private")
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    __table_args__ = (
+        CheckConstraint("visibility IN ('private', 'public')", name="ck_answer_scenario_visibility"),
+        CheckConstraint("current_version > 0", name="ck_answer_scenario_version"),
+        Index("ix_answer_scenarios_visibility_updated", "visibility", "updated_at"),
+    )
+
+
+class AnswerScenarioVersion(Base):
+    __tablename__ = "answer_scenario_versions"
+    scenario_id: Mapped[str] = mapped_column(ForeignKey("answer_scenarios.id", ondelete="CASCADE"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    instructions: Mapped[str] = mapped_column(Text, nullable=False)
+    instructions_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_answer_scenario_versions_positive"),
+        CheckConstraint("visibility IN ('private', 'public')", name="ck_answer_scenario_versions_visibility"),
+    )

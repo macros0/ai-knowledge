@@ -180,7 +180,7 @@ ACTION_TYPES = frozenset(
     }
 )
 
-ACTION_TYPES = ACTION_TYPES | AUTH_ACTIONS
+ACTION_TYPES = ACTION_TYPES | AUTH_ACTIONS | {"answer_scenario_"+action for action in ("create","update","publish","unpublish","copy","delete")}
 
 TARGET_DOCUMENT = "document"
 TARGET_JOB = "job"

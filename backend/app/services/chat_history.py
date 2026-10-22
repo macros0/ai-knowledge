@@ -60,7 +60,7 @@ def _attempt_message(s, ref: AttemptRef, user):
     return message
 
 
-def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, response_mode: str) -> AttemptRef:
+def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, response_mode: str, *, scenario_id: str | None = None) -> AttemptRef:
     """Persist one question/placeholder pair before search; no evidence checkpoint."""
     session_id = session_id or str(uuid.uuid4())
     with session_scope() as s:
@@ -74,7 +74,7 @@ def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, res
             for message in messages:
                 attempt = (message.retrieval_metadata or {}).get("answer_attempt", {})
                 if attempt.get("id") == attempt_id:
-                    if attempt.get("query") != query or attempt.get("mode") != response_mode:
+                    if attempt.get("query") != query or attempt.get("mode") != response_mode or attempt.get("scenario_id") != scenario_id:
                         raise ValueError("Attempt ID reused with different request")
                     return AttemptRef(session_id, message.id, attempt_id, attempt.get("status", "incomplete"), True)
                 if message.role == "assistant" and attempt.get("status") == "incomplete":
@@ -86,12 +86,18 @@ def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, res
                 username=getattr(user, "username", None), title=query[:1024],
             )
             s.add(sess)
+        scenario_metadata = {}
+        if scenario_id:
+            from app.services.answer_scenarios import resolve_scenario_snapshot
+            snapshot = resolve_scenario_snapshot(s, scenario_id, user)
+            scenario_metadata = {"scenario": snapshot.model_dump(mode="json"), "scenario_execution":{"status":"accepted"}}
         sess.updated_at = _now()
         s.add(ChatMessage(session_id=session_id, role="user", content=query))
         message = ChatMessage(
             session_id=session_id, role="assistant", content="",
-            sources=[], retrieval_metadata={"answer_attempt": {
+            sources=[], retrieval_metadata={**scenario_metadata, "answer_attempt": {
                 "id": attempt_id, "query": query, "mode": response_mode,
+                **({"scenario_id":scenario_id} if scenario_id else {}),
                 "status": "incomplete",
             }},
         )
@@ -108,7 +114,7 @@ def save_attempt_sources(ref: AttemptRef, user, sources: list[dict], *, retrieva
             if retrieval_metadata is not None:
                 message.retrieval_metadata = {
                     **message.retrieval_metadata,
-                    **{k: deepcopy(v) for k, v in retrieval_metadata.items() if k != "answer_attempt"},
+                    **{k: deepcopy(v) for k, v in retrieval_metadata.items() if k not in {"answer_attempt", "scenario", "scenario_execution"}},
                 }
 
 
@@ -580,3 +586,17 @@ def start_chat_purge_loop() -> threading.Thread | None:
     thread = threading.Thread(target=_loop, name="chat-history-purge", daemon=True)
     thread.start()
     return thread
+
+
+def read_attempt_scenario(ref: AttemptRef, user):
+    from app.models.answer_scenarios import ScenarioSnapshot
+    with session_scope() as s:
+        raw=(_attempt_message(s,ref,user).retrieval_metadata or {}).get("scenario")
+        return ScenarioSnapshot.model_validate(raw) if raw else None
+
+
+def set_scenario_execution(ref: AttemptRef, user, execution):
+    with session_scope() as s:
+        message=_attempt_message(s,ref,user)
+        if (message.retrieval_metadata or {}).get("scenario"):
+            message.retrieval_metadata={**message.retrieval_metadata,"scenario_execution":execution.model_dump(mode="json")}

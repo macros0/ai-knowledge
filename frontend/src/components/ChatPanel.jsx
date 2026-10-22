@@ -27,6 +27,8 @@ import ChatComposer from "./ChatComposer";
 import {applyAssessmentOutcome, withoutAssessmentOptions, historyAssessmentMessage, editAssessmentOptions, selectedAssessmentOptions} from "@/lib/chatSourceAssessment.mjs";
 import ChatMessageView from "./ChatMessageView";
 import ChatTimeline from "./ChatTimeline";
+import ChatScenarioPicker from "./ChatScenarioPicker";
+import {scenarioNetworkOptions,previewSearch} from "@/lib/chatScenarios.mjs";
 
 function getPresetLabel(preset, settings, t) {
   if (preset === settings.top_k_default) return t("chat.topkStandard");
@@ -39,6 +41,7 @@ function getPresetLabel(preset, settings, t) {
 
 export default function ChatPanel() {
   const { queuedSourceAnswer, setQueuedSourceAnswer, queuedAssessmentRetry, setQueuedAssessmentRetry, assessSources, setAssessSources, messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
+    selectedScenarioId, setSelectedScenarioId, selectedScenario, setSelectedScenario,
     responseMode, setResponseMode, selectedTopK, setSelectedTopK, showCustom, setShowCustom, customValue, setCustomValue,
     showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue, moduleFilter, setModuleFilter, devFilter, setDevFilter,
     sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen, draftQuery,setDraftQuery,sourceView,setSourceView,
@@ -255,6 +258,7 @@ export default function ChatPanel() {
           sourceLocales: requestOptions.requestSourceLocales,
           includeUnknownSourceLocale: requestOptions.requestIncludeUnknownLocale,
           responseMode: requestOptions.responseMode,
+          ...scenarioNetworkOptions(requestOptions),
           searchDepth: requestOptions.requestSearchDepth,
           ...chatNetworkScopeOptions(requestOptions),
           attemptId,
@@ -276,6 +280,7 @@ export default function ChatPanel() {
           ...applyAssessmentOutcome(copy.at(-1), resp.source_assessment), text: resp.answer, sources: reconcileChatSources(copy.at(-1).sources, resp.sources),
           requestSearchDepth: resp.search_depth ?? requestOptions.requestSearchDepth,
           searchLimitReached: Boolean(resp.search_limit_reached),
+          scenario:resp.scenario, scenarioExecution:resp.scenario_execution,
           uploadHint, applied_terms: resp.applied_terms, expansion_status: resp.expansion_status,
         };
         return copy;
@@ -312,13 +317,13 @@ export default function ChatPanel() {
   }, [resolveUploadHint, sessionId, setMessages, setPending, setSessionId, setTimelineView, stopCurrent, t, useGlossary, assessSources]);
 
   const send = useCallback(async (q) => {
-    if (searchScopeEnabled && !searchScopeDocuments.length) return;
-    const requestOptions = { requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestSearchDepth: showCustomDepth ? applyCustomDepth() : searchDepth, requestMode: selectedMode, requestSourceLocale: sourceLocale, responseMode: settings.response_modes?.includes(responseMode) ? responseMode : null, requestDocIds: scopeRequestIds(searchScopeDocuments, searchScopeEnabled) };
+    if ((searchScopeEnabled && !searchScopeDocuments.length) || (responseMode === "scenario" && (!selectedScenarioId || selectedScenario?.unavailable))) return;
+    const requestOptions = { requestScenarioId: responseMode === "scenario" ? selectedScenarioId : undefined, requestMailMode: mailMode, requestTags: effectiveTags, requestTopK: selectedTopK, requestSearchDepth: showCustomDepth ? applyCustomDepth() : searchDepth, requestMode: selectedMode, requestSourceLocale: sourceLocale, responseMode: settings.response_modes?.includes(responseMode) ? responseMode : null, requestDocIds: scopeRequestIds(searchScopeDocuments, searchScopeEnabled) };
     setDraftQuery("");
     const replay = editRequestRef.current;
     editRequestRef.current = null;
     await sendQuestion(q, replay || requestOptions);
-  }, [applyCustomDepth, effectiveTags, mailMode, responseMode, searchDepth, searchScopeDocuments,
+  }, [selectedScenarioId, selectedScenario, applyCustomDepth, effectiveTags, mailMode, responseMode, searchDepth, searchScopeDocuments,
       searchScopeEnabled, selectedMode, selectedTopK, sendQuestion, settings.response_modes,
       showCustomDepth, sourceLocale, setDraftQuery]);
 
@@ -329,7 +334,7 @@ export default function ChatPanel() {
   }, [setMessages]);
 
   const answerSelected = useCallback((message) => sendQuestion(message.query,
-    selectedAssessmentOptions(message), false), [sendQuestion]);
+    {...selectedAssessmentOptions(message), ...(message.responseMode !== "scenario" && responseMode === "scenario" && selectedScenarioId ? {responseMode:"scenario",requestScenarioId:selectedScenarioId} : {})}, false), [sendQuestion,responseMode,selectedScenarioId]);
 
   useEffect(() => {
     if (!queuedSourceAnswer || pending || activeRequestRef.current) return;
@@ -420,6 +425,11 @@ export default function ChatPanel() {
             ))}
           </div>
         )}
+        {settings.scenarios_available && responseMode === "scenario" && <ChatScenarioPicker ownerId={user?.user_id} selectedId={selectedScenarioId} selected={selectedScenario}
+          onIdChange={setSelectedScenarioId} onSelectedChange={setSelectedScenario}
+          search={previewSearch({requestTags:effectiveTags,requestTopK:selectedTopK,requestMode:selectedMode,requestSearchDepth:searchDepth,
+            requestDocIds:scopeRequestIds(searchScopeDocuments,searchScopeEnabled),requestMailMode:mailMode,requestUseGlossary:useGlossary,
+            requestAssessSources:assessSources,requestSourceLocale:sourceLocale},"",locale)} />}
         <button type="button" className="btn ghost chat-settings-toggle" aria-expanded={searchSettingsOpen} aria-controls="chat-search-settings"
           onClick={() => setSearchSettingsOpen(open => !open)}>
           {t("chat.settings")} <span aria-hidden="true">{searchSettingsOpen ? "▴" : "▾"}</span>
@@ -603,7 +613,7 @@ export default function ChatPanel() {
           onAddToScope={addSelectedToScope} onRetry={retryAnswer} onRefreshSearch={refreshSourceSearch} onRepeatWithoutGlossary={repeatWithoutGlossary}
           onContinueWithoutAssessment={continueWithoutAssessment} onStop={stopCurrent} onToggleSources={toggleSources} onToggleSourceGroup={toggleSourceGroup} onSourceViewChange={changeSourceView} />}/>
       </div>
-      <ChatComposer value={draftQuery} onChange={setDraftQuery} disabled={searchScopeEnabled && searchScopeDocuments.length === 0} onSubmit={send} />
+      <ChatComposer value={draftQuery} onChange={setDraftQuery} disabled={(searchScopeEnabled && searchScopeDocuments.length === 0) || (responseMode === "scenario" && (!selectedScenarioId || selectedScenario?.unavailable))} onSubmit={send} />
     </section>
   );
 }

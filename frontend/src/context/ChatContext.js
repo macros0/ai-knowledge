@@ -67,6 +67,8 @@ function ChatState({ children }) {
   }, []);
   const [selectedMode, setSelectedMode] = useState(FALLBACK_SETTINGS.search_mode_default);
   const [responseMode, setResponseMode] = useState("fast");
+  const [selectedScenarioId, setSelectedScenarioId] = useState(null);
+  const [selectedScenario, setSelectedScenario] = useState(null);
   const [selectedTopK, setSelectedTopK] = useState(null);
   const [showCustom, setShowCustom] = useState(false);
   const [customValue, setCustomValue] = useState("");
@@ -136,11 +138,12 @@ function ChatState({ children }) {
 
   const value = useMemo(
     () => ({queuedSourceAnswer, setQueuedSourceAnswer, queuedAssessmentRetry, setQueuedAssessmentRetry, assessSources: assessSources ?? settings.source_assessment.default_enabled, setAssessSources, recentHistory, historyLoader, timelineView, setTimelineView, sourceView,setSourceView,draftQuery,setDraftQuery,messages, tags, pending, settings, selectedMode, searchDepth, setSearchDepth, sessionId, scrollPositionRef, mailMode, setMailMode, useGlossary, setUseGlossary, setSessionId, startNewChat, setMessages, setTags, setPending, setSelectedMode, MODE_LABELS, searchScopeDocuments, setSearchScopeDocuments, searchScopeEnabled, setSearchScopeEnabled,
+      selectedScenarioId, setSelectedScenarioId, selectedScenario, setSelectedScenario,
       responseMode, setResponseMode, selectedTopK: selectedTopK ?? settings.top_k_default, setSelectedTopK,
       showCustom, setShowCustom, customValue, setCustomValue, showCustomDepth, setShowCustomDepth, customDepthValue, setCustomDepthValue,
       moduleFilter, setModuleFilter, devFilter, setDevFilter, sourceLocale, setSourceLocale, searchSettingsOpen, setSearchSettingsOpen }),
     [queuedSourceAnswer, queuedAssessmentRetry, assessSources, setAssessSources, recentHistory, historyLoader, timelineView, startNewChat, sourceView, draftQuery, messages, tags, pending, settings, selectedMode, searchDepth, sessionId, mailMode, useGlossary, MODE_LABELS, searchScopeDocuments, searchScopeEnabled, setSearchScopeDocuments, setSearchScopeEnabled,
-      responseMode, selectedTopK, showCustom, customValue, showCustomDepth, customDepthValue, moduleFilter, devFilter, sourceLocale, searchSettingsOpen]
+      selectedScenarioId, selectedScenario, responseMode, selectedTopK, showCustom, customValue, showCustomDepth, customDepthValue, moduleFilter, devFilter, sourceLocale, searchSettingsOpen]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

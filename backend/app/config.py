@@ -539,6 +539,7 @@ class Settings(BaseSettings):
 
     # --- Контекст LLM (форматирование после merge/collapse) ---
     # Жёсткий лимит на суммарный объём контекста, передаваемого в LLM.
+    chat_scenarios_enabled: bool = True
     chat_max_context_chars: int = 32000
     chat_focus_named_objects: bool = False
     # Обрезка отдельного блока в контексте (концепт vs чанк).

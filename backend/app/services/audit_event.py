@@ -52,6 +52,9 @@ def _values(value,rule):
         item=value.get(key)
         if kind=="int" and type(item) is int and 0<=item<=2**63-1:clean[key]=item
         elif kind=="bool" and type(item) is bool:clean[key]=item
+        elif kind=="uuid" and isinstance(item,str):
+            try:clean[key]=_uuid(item)
+            except AuditEventError:pass
         elif kind=="summary" and isinstance(item,list):clean[key]={"count":len(item),"truncated":bool(item)}
     return clean or None
 

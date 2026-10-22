@@ -5165,3 +5165,21 @@ main {
 .attachment-preview-scroll dl { margin: 12px; overflow-wrap: anywhere; }
 .attachment-preview-scroll dd { margin: 0 0 8px; }
 .scope-excluded-sources { border: 1px solid var(--border, #ddd); border-radius: 8px; padding: 10px; margin-bottom: 16px; overflow-wrap: anywhere; }
+
+/* Named answer scenarios: compact toolbar, readable literal instruction snapshots. */
+.chat-scenario-picker { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; max-width:100%; }
+.scenario-choice { min-width:0; flex:1 1 190px; max-width:100%; }
+.scenario-choice select { width:100%; min-width:0; max-width:320px; }
+.scenario-editor { display:grid; gap:12px; }
+.scenario-editor label { display:grid; gap:5px; min-width:0; }
+.scenario-editor input,.scenario-editor textarea,.scenario-editor select,.scenario-search { width:100%; box-sizing:border-box; max-width:100%; }
+.scenario-editor textarea { resize:vertical; font:inherit; }
+.scenario-editor-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0; }
+.scenario-instructions { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; max-width:100%; }
+.scenario-catalog { display:grid; gap:10px; margin:12px 0; }
+.scenario-card { border:1px solid var(--border,#ddd); border-radius:8px; padding:12px; overflow-wrap:anywhere; }
+.scenario-preview,.scenario-conflict { border:1px solid var(--border,#ddd); border-radius:8px; padding:12px; min-width:0; }
+.scenario-preview .chat-markdown { overflow-wrap:anywhere; }
+.scenario-badge { margin:5px 0; overflow-wrap:anywhere; }
+.scenario-badge .btn { max-width:100%; white-space:normal; text-align:left; }
+@media(max-width:480px) { .chat-scenario-picker { width:100%; } .scenario-choice select { max-width:100%; } }

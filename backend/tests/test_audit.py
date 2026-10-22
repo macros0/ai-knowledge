@@ -51,6 +51,8 @@ EXPECTED_ACTION_TYPES = {
     "document_restore",
     "document_bulk_restore",
     "document_auto_delete",
+    "answer_scenario_create", "answer_scenario_update", "answer_scenario_publish",
+    "answer_scenario_unpublish", "answer_scenario_copy", "answer_scenario_delete",
     "chat_history_view",
     "chat_history_auto_delete",
     "document_export",

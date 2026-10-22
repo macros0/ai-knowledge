@@ -560,6 +560,7 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
   if (options.dense != null) body.dense = options.dense;
   if (options.bm25 != null) body.bm25 = options.bm25;
   if (options.responseMode) body.response_mode = options.responseMode;
+  if (options.responseMode === "scenario" && options.scenarioId) body.scenario_id = options.scenarioId;
   if (options.searchDepth != null) body.search_depth = options.searchDepth;
   if (options.attemptId) body.attempt_id = options.attemptId;
   if (options.sourceSelection) body.source_selection = options.sourceSelection;
@@ -1128,4 +1129,21 @@ export function getDocumentTableRows(docId, tableId, generationId, options = {})
   const query = new URLSearchParams({ generation_id: generationId });
   for (const [key, value] of Object.entries(options)) if (value != null) query.set(key, String(value));
   return request(`/documents/${encodeURIComponent(docId)}/tables/${encodeURIComponent(tableId)}/rows?${query}`);
+}
+
+
+export function listAnswerScenarios(params={}) {
+  return request(`/answer-scenarios?${new URLSearchParams(params)}`);
+}
+export const getAnswerScenario=id=>request(`/answer-scenarios/${encodeURIComponent(id)}`);
+export const createAnswerScenario=data=>request("/answer-scenarios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+export const updateAnswerScenario=(id,data)=>request(`/answer-scenarios/${encodeURIComponent(id)}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+export const deleteAnswerScenario=(id,version)=>request(`/answer-scenarios/${encodeURIComponent(id)}?expected_version=${version}`,{method:"DELETE"});
+export const copyAnswerScenario=(id,version)=>request(`/answer-scenarios/${encodeURIComponent(id)}/copy`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({expected_version:version})});
+export function previewAnswerScenario(body,options={}) {
+  return request("/answer-scenarios/preview/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:options.signal},undefined,
+    async response=>{
+      try {return await readChatStream(response,options.onText,()=>{},{onProgress:options.onProgress,idleTimeoutMs:CHAT_TIMEOUT_MS});}
+      catch(error) {if(error.name==="AbortError")throw error;throw new ApiError("Preview failed",{code:error.code ?? "dependency_unavailable",status:error.status ?? 503,requestId:error.requestId});}
+    });
 }

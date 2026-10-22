@@ -22,6 +22,7 @@ from app.api import (
     audit,
     chat,
     chat_history,
+    answer_scenarios,
     diagnostic_client,
     diagnostics,
     glossary,
@@ -389,6 +390,7 @@ def create_app() -> FastAPI:
     protected.include_router(search.router)
     protected.include_router(chat.router)
     protected.include_router(chat_history.router)
+    protected.include_router(answer_scenarios.router)
     protected.include_router(diagnostic_client.router)
     protected.include_router(diagnostics.router)
     protected.include_router(glossary.router)

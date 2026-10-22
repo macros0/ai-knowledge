@@ -1,4 +1,5 @@
 "use client";
+import ChatScenarioBadge from "./ChatScenarioBadge";
 
 import {useState} from "react";
 import ChatHistorySources from "./ChatHistorySources";
@@ -46,6 +47,7 @@ export function HistoryMessage({ m, sessionId, userLabel, onContinueWithoutAsses
     <div className={`msg ${m.role}`}>
       <div className="role">{m.role === "user" ? youLabel : t("chat.assistant")}</div>
       <div className="bubble history-bubble">{content}</div>
+      {m.role === "assistant" && <ChatScenarioBadge scenario={m.retrieval_metadata?.scenario} execution={m.retrieval_metadata?.scenario_execution} />}
       {m.role === "assistant" && attempt && attempt.status !== "completed" && m.content && (
         <div className="meta" role={attempt.status === "failed" ? "alert" : "status"}>
           <div>{t("chat.retainedAnswerNotice")}</div>

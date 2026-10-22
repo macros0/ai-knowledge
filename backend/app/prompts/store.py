@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 PROMPT_DEFAULTS: Final = {
     "chat_system": _defaults.SYSTEM_CHAT_PROMPT,
+    "chat_scenario_core": _defaults.SCENARIO_CORE_PROMPT,
     "chat_user": _defaults.USER_CHAT_PROMPT,
     "okf_system": _defaults.SYSTEM_OKF_PROMPT,
     "okf_user": _defaults.USER_OKF_PROMPT,
@@ -33,6 +34,7 @@ PROMPT_DEFAULTS: Final = {
 
 REQUIRED_PLACEHOLDERS: Final = {
     "chat_system": ("locale",),
+    "chat_scenario_core": ("locale",),
     "chat_user": ("context", "query"),
     "okf_system": (),
     "okf_user": ("filename", "content"),

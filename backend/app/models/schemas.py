@@ -1,4 +1,6 @@
 from datetime import datetime
+from uuid import UUID
+from app.models.answer_scenarios import ScenarioSnapshot, ScenarioExecution
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
@@ -291,8 +293,9 @@ class ChatSourceSelection(BaseModel):
 class ChatRequest(BaseModel):
     assess_sources: bool | None = Field(default=None, strict=True)
     mail_mode: Literal["all", "exclude", "only"] = "all"
-    response_mode: Literal["documents", "fast", "full"] | None = None
+    response_mode: Literal["documents", "fast", "full", "scenario"] | None = None
     attempt_id: str | None = None
+    scenario_id: UUID | None = None
     # For the three response modes, cap final fragments after merge and filtering.
     search_depth: int | None = Field(default=None, ge=1, le=500, strict=True)
     source_selection: ChatSourceSelection | None = None
@@ -319,7 +322,9 @@ class ChatRequest(BaseModel):
     _normalize_query = field_validator("query", mode="before")(_normalize_query)
     @model_validator(mode="after")
     def validate_source_selection(self):
-        if self.source_selection and (not self.session_id or self.response_mode != 'full'):
+        if (self.response_mode == "scenario") != (self.scenario_id is not None):
+            raise ValueError("Scenario mode requires scenario_id; other modes forbid it")
+        if self.source_selection and (not self.session_id or self.response_mode not in {'full', 'scenario'}):
             raise ValueError('Selected sources require a session and full response mode')
         if self.source_selection and self.search_doc_ids is not None:
             raise ValueError('Source selection and document search scope are separate actions')
@@ -359,6 +364,7 @@ class SourceAssessmentOut(BaseModel):
 
 
 class ChatSettingsOut(BaseModel):
+    scenarios_available: bool = False
     source_assessment: SourceAssessmentCapabilities = Field(default_factory=SourceAssessmentCapabilities)
     knowledge_profile: str = "Основной контур"
     response_modes: list[str] = Field(default_factory=lambda: ["documents", "fast", "full"])
@@ -417,13 +423,16 @@ class ChatSource(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    scenario: ScenarioSnapshot | None = None
+    scenario_execution: ScenarioExecution | None = None
+    preview: bool = False
     source_assessment: SourceAssessmentOut | None = None
     query: str
     answer: str
     sources: list[ChatSource]
     search_depth: int = 40
     search_limit_reached: bool = False
-    response_mode: Literal["documents", "fast", "full"] | None = None
+    response_mode: Literal["documents", "fast", "full", "scenario"] | None = None
     attempt_id: str | None = None
     # UUID треда, к которому относится обмен (для продолжения «Нового чата»).
     session_id: str | None = None

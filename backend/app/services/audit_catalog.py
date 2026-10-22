@@ -45,6 +45,8 @@ CATALOG = MappingProxyType({
     'document_restore': EventRule({}, 'success'),
     'document_bulk_restore': EventRule({}, 'success'),
     'document_auto_delete': EventRule({}, 'success'),
+    **{"answer_scenario_"+action: EventRule({"version":"int","public":"bool","source_id":"uuid"},"success")
+       for action in ("create","update","publish","unpublish","copy","delete")},
     'chat_history_view': EventRule({}, 'success'),
     'chat_history_auto_delete': EventRule({}, 'success'),
     'document_export': EventRule({}, 'success'),

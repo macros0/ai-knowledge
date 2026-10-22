@@ -9,6 +9,7 @@ import { CheckIcon, CopyIcon } from "./icons";
 import ErrorReference from "./ErrorReference";
 import AppliedTerms from "./AppliedTerms";
 import ChatAnswer from "./ChatAnswer";
+import ChatScenarioBadge from "./ChatScenarioBadge";
 import ChatSourceAssessment from "./ChatSourceAssessment";
 import ChatSources from "./ChatSources";
 
@@ -21,7 +22,7 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
   const selectedIndexes = m.selectedSourceIndexes ?? EMPTY;
   const availableSources = useMemo(() => selectableSources({ sources, attemptId: m.attemptId, responseMode: m.responseMode }),
     [sources, m.attemptId, m.responseMode]);
-  const selectionEnabled = Boolean(m.attemptId && ["documents", "fast", "full"].includes(m.responseMode));
+  const selectionEnabled = Boolean(m.attemptId && ["documents", "fast", "full", "scenario"].includes(m.responseMode));
   const sourcesOpen = Boolean(m.sourcesOpen) && (m.sourcesTouched || isLatest);
   const select = useCallback((indexes, checked) => onSelect(index, indexes, checked), [index, onSelect]);
   const toggle = useCallback((open) => onToggleSources(index, open), [index, onToggleSources]);
@@ -43,6 +44,7 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
                 </button>
               )}
             </div>
+            {m.role === "assistant" && <ChatScenarioBadge scenario={m.scenario} execution={m.scenarioExecution} />}
             {(m.role !== "assistant" || m.text || isPending) && <div className="bubble">
               {m.role === "assistant" ? (
                 <ChatAnswer text={m.text || (isPending ? t("chat.thinking") : "")} sources={sources} />
@@ -84,7 +86,7 @@ export default memo(function ChatMessageView({ message: m, index, isLatest = tru
                 })}
               </div>
             )}
-            {m.role === "assistant" && m.progress?.phase && m.progress.phase !== "source_assessment" && isPending && (
+            {m.role === "assistant" && m.progress?.phase && m.progress.phase !== "source_assessment" && m.progress.phase !== "scenario" && isPending && (
               <div className="chat-progress" role="status">
                 {m.progress.phase === "synthesis"
                   ? t("chat.synthesizing")
