@@ -36,10 +36,32 @@ class Settings(BaseSettings):
     knowledge_profile: str = "Основной контур"
     data_dir: Path = Path("./data")
 
+    # Opt-in contract only; runtime capability is enabled by code in a later stage.
+    okf_deployment_schema: str | None = None
+    app_role: str = "combined"
+    artifact_backend: str = "local"
+    postgres_provider: str = "managed"
+    qdrant_provider: str = "managed"
+    artifact_provider: str = "managed"
+
+    @model_validator(mode="after")
+    def validate_replica_runtime(self):
+        from app.deployment.replica_profile import ReplicaProfile, validate_runtime_profile
+
+        profile = ReplicaProfile(
+            role=self.app_role, artifact_backend=self.artifact_backend,
+            postgres_provider=self.postgres_provider, qdrant_provider=self.qdrant_provider,
+            artifact_provider=self.artifact_provider,
+        )
+        validate_runtime_profile(self.okf_deployment_schema, profile)
+        return self
+
     # Diagnostics use a separate root so short-lived logs do not enter document backups.
     diagnostics_dir: Path = Path("./diagnostics")
     diagnostics_baseline_enabled: bool = True
     diagnostics_capture_enabled: bool = False
+    diagnostics_ingest_token: str | None = Field(default=None, min_length=32, max_length=512,
+                                               exclude=True, repr=False)
     diagnostics_bundle_enabled: bool = False
     diagnostics_download_enabled: bool = False
     diagnostics_total_mb: int = Field(default=500, ge=1)

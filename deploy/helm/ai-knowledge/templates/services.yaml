@@ -9,6 +9,6 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    okf-role: {{ ternary "application" $name (has $name (list "frontend" "backend")) }}
+    okf-role: {{ if and (eq $name "frontend") (eq $.Values.deployment.mode "frontend-split") }}frontend{{ else }}{{ ternary "application" $name (has $name (list "frontend" "backend")) }}{{ end }}
   ports: [{name: http, port: {{ $port }}, targetPort: {{ $port }}}]
 {{- end }}

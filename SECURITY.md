@@ -585,6 +585,23 @@ does not corrupt data.
   development keeps a warning for visibility.
   Redis (or another shared limiter/queue backend) becomes mandatory before enabling multiple
   workers, adding a second backend replica, or horizontally scaling for load.
+  The planned `replicas-v1` backend schema currently has a build-controlled
+  rejection in settings and migration preflight; no environment flag enables
+  additional backend roles yet. Helm permits independent frontend replicas with
+  the original single combined backend; distributed backend mode remains refused.
+  Structural profile validation is not deployment certification.
+  Compact Helm values reject unsupported replica counts, external ownership,
+  object storage and resilience claims rather than silently ignoring them.
+  Internal diagnostic transport is disabled unless DIAGNOSTICS_INGEST_TOKEN is
+  configured (32–512 characters). `/internal/diagnostics` uses constant-time
+  bearer validation independently of browser sessions and is excluded from the
+  public API proxy; unsafe proxy path segments are rejected before forwarding.
+  Frontend transport permits no redirects, bounds requests to 100 events/256 KiB
+  and 2 seconds, queues at most 1000 events and accepts only content-free frontend
+  server events through the existing sanitizer. The SQL inbox caps 10000 receipts
+  and 20 MiB of pending payload, retains retry receipts for seven days and retries
+  delivery with per-batch backoff. Its immutable segments are charged to the
+  frontend diagnostic budget. This is diagnostic telemetry, not security audit.
 - **Pipeline admission** — the document parser currently remains an in-process worker; the
   production deployment must keep a bounded worker count and pending queue. A multi-worker or
   multi-replica deployment must use a shared queue before increasing process count.
@@ -1494,6 +1511,38 @@ The Docker helper is installed only at build time from a pinned official artifac
 with SHA-256 verification and matching license notices. Review/audit records must
 not contain raw cell contents, credentials or private helper errors.
 
+
+## 2026-10-31 — Dependency denial-of-service advisories
+
+Updated tooling Zod to 4.6.7 (GHSA-mrhx-c7xc-m3w5) and all upstream minimatch
+implementations to 11.0.3 (GHSA-g3hv-75wg-m249), preserving the required lint
+checks rather than suppressing advisories. Legacy CommonJS ESLint callers use a
+private adapter to the patched matching engine; makeRe consumers retain their
+test predicate, without reintroducing regex generation removed upstream.
+Ordinary matching, Windows paths, partial traversal and actual import-rule
+diagnostics are covered. New local tooling is included before Docker npm ci.
+Independent review found no concrete surviving bypass/regression. npm audit
+reports zero vulnerabilities after clean installation; this is dependency
+remediation, not a repository-wide security audit.
+
+## 2026-10-31 — Independent frontend maintenance
+
+Frontend split retains exactly one backend, uses isolated ephemeral frontend
+diagnostic directories and an internal token from the existing runtime Secret.
+Maintenance stops both workloads and persists replica counts in its lock before
+scaling; resume refuses a backend count above one and restores frontend counts.
+Desired/current frontend probe/grace budgets are checked before maintenance.
+Unknown writer/node states still require investigation; no force deletion or
+distributed-backend guarantee is introduced.
+
+## 2026-10-31 — Internal frontend diagnostics transport
+
+Added opt-in token authentication, strict content-free payload validation, bounded
+SQL inbox and immutable retry segments for internal frontend events. Diagnostics
+capture and security audit keep separate contracts. Public proxy path segments
+are validated/encoded so `..` cannot normalize the destination outside `/api`.
+Reason: independent frontend replicas must not require shared control files or
+expose the new internal endpoints through user-controlled proxy paths.
 
 ## User answer scenarios (2026-10-23)
 Authenticated users, including viewer, may create and publish their own answer

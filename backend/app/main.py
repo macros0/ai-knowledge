@@ -379,6 +379,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(auth_router, prefix=settings.api_prefix)
+    from app.api.internal_diagnostics import router as internal_diagnostics_router
+    app.include_router(internal_diagnostics_router)
     # Last-added middleware is outermost: IDs also cover auth and CSRF failures.
     app.add_middleware(DiagnosticContextMiddleware, api_prefix=settings.api_prefix)
 

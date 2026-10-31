@@ -27,7 +27,7 @@ export const runtime = "nodejs";
 
 function backendTarget(request, path) {
   const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:18000";
-  const target = new URL(`/api/${path.join("/")}`, backendUrl);
+  const target = new URL(`/api/${path.map(encodeURIComponent).join("/")}`, backendUrl);
   target.search = new URL(request.url).search;
   return target;
 }
@@ -39,6 +39,10 @@ async function proxy(request, context) {
 
 async function proxyBound(request, context, requestId) {
   const { path } = await context.params;
+  if (!Array.isArray(path) || path.some((segment) => typeof segment !== "string"
+    || !segment || segment === "." || segment === ".." || /[\\/]/.test(segment))) {
+    return new Response(null, { status: 400 });
+  }
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("content-length");

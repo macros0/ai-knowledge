@@ -142,7 +142,8 @@ def read_event_page(view: ReadViewLease, *, offset: int, limit: int) -> EventPag
                             event = None
                         if (event is None
                                 or (descriptor.source == "frontend" and event.get("component") != "frontend")
-                                or (descriptor.source == "backend" and event.get("component") not in {"backend", "browser"})):
+                                or (descriptor.source == "backend" and event.get("component") not in (
+                                    {"frontend"} if path.name.startswith("remote-") else {"backend", "browser"}))):
                             counts["invalid"] += 1
                             continue
                         stamp = datetime.fromisoformat(event["timestamp_utc"]).timestamp()

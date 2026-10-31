@@ -1,4 +1,29 @@
-# Компактный Kubernetes из исходников
+# Kubernetes из исходников
+
+## Независимые frontend-реплики (локально проверено, приёмка платформы открыта)
+
+Overlay `deploy/kubernetes/profiles/frontend-split.values.example.yaml` включает
+`deployment.mode=frontend-split` и две frontend-реплики. Deployment `application`
+сохраняет один backend process, Service `backend`; новый Deployment `frontend`
+выбирается Service `frontend`. Gateway по-прежнему направлен только во frontend.
+Это не режим нескольких backend и не обещание HA storage.
+
+В существующем runtime Secret до запуска нужен одинаковый для backend/frontend
+`DIAGNOSTICS_INGEST_TOKEN` длиной 32–512 символов; Secret не помещать в values/Git.
+Frontend получает DIAGNOSTICS_INGEST_URL и Pod UID, пишет только в свой emptyDir;
+общий data/diagnostics PVC монтируется backend. Секрет проверяется lifecycle preflight.
+
+Пользоваться lifecycle CLI с этим overlay, а не прямым Helm поверх работающих
+writers. Backup/maintenance останавливает оба Deployment, сохраняет исходные
+counts в lock и возвращает их после успешного backup. Drift backend count >1
+отклоняется. При неизвестном исходе операции lock сохраняется для разбора.
+Ручной restore split-поставки требует восстановления обоих workloads из тех же
+images/values; старые compact restore-примеры не доказывают такую приёмку.
+
+Локальные render/unit проверки не заменяют SSO/CSRF/SSE/upload smoke и остановку
+одного frontend Pod через реальный Gateway. Этот gate пока открыт.
+
+## Компактная установка
 
 Поддерживаемый путь этого merge: Linux/amd64, compact/bundled, один Pod приложения,
 один backend worker, Recreate, отдельные PG/Qdrant и внешние для release PVC.

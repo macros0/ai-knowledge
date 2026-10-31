@@ -7,6 +7,7 @@ import path from "node:path";
 import { currentRequestId } from "./requestContext.mjs";
 import { encodeServerEvent, routeTemplate, safeServerException, validRequestId } from "./diagnosticSchema.mjs";
 import { parseCaptureControl, selectCapture } from "./diagnosticPolicy.mjs";
+import { createDiagnosticTransport } from "./diagnosticTransport.mjs";
 
 // Next may bundle instrumentation and route handlers as separate module copies
 // in the same worker. A process-wide slot keeps one writer for both copies.
@@ -36,7 +37,8 @@ async function canonicalLocation(filename) {
 export class DiagnosticServerRecorder {
   constructor({ root, controlPath, budgetBytes = 20 * 1048576, segmentBytes = 5 * 1048576,
     minFreeBytes = 2 * 1024 * 1048576, queueSize = 256, baselineSeconds = 7 * 86400,
-    captureSeconds = 86400, baselineEnabled = true, now = Date.now, monotonic = () => performance.now() } = {}) {
+    captureSeconds = 86400, baselineEnabled = true, now = Date.now, monotonic = () => performance.now(), transport = null } = {}) {
+    this.transport = transport;
     this.root = root ? path.resolve(root) : null;
     this.controlPath = controlPath ? path.resolve(controlPath) : null;
     this.limits = { budgetBytes, segmentBytes, minFreeBytes, queueSize, baselineSeconds, captureSeconds };
@@ -205,13 +207,17 @@ export class DiagnosticServerRecorder {
   }
 
   async refreshControl() {
-    if (!this.running || !this.controlPath) return;
+    if (!this.running || (!this.controlPath && !this.transport)) return;
     const ticket = {};
     this.controlRefreshTicket = ticket;
     try {
-      await this._checkAbsolute(this.controlPath, path.dirname(this.controlPath));
-      if ((await fs.stat(this.controlPath)).size > 4096) throw new Error("Oversized control");
-      const value = JSON.parse(await fs.readFile(this.controlPath, "utf8"));
+      let value;
+      if (this.transport) value = await this.transport.getControl();
+      else {
+        await this._checkAbsolute(this.controlPath, path.dirname(this.controlPath));
+        if ((await fs.stat(this.controlPath)).size > 4096) throw new Error("Oversized control");
+        value = JSON.parse(await fs.readFile(this.controlPath, "utf8"));
+      }
       if (this.controlRefreshTicket !== ticket) return;
       const fingerprint = JSON.stringify(value);
       if (fingerprint === this.controlFingerprint) return;
@@ -364,6 +370,22 @@ export class DiagnosticServerRecorder {
   }
 
   async _appendBatch(lines, stream) {
+    if (this.transport) {
+      // Baseline errors must survive stop/expiry before capture delivery.
+      const events = lines.map((line) => {
+        const event = JSON.parse(line);
+        if (stream === "baseline") delete event.diagnostic_session_id;
+        return event;
+      });
+      for (let offset = 0; offset < events.length; offset += 30) {
+        // 30 * MAX_EVENT_BYTES stays below the 256 KiB request limit.
+        const batch = { batch_id: randomUUID(), events: events.slice(offset, offset + 30) };
+        const receipt = await this.transport.sendBatch(batch) || await this.transport.sendBatch(batch);
+        if (!receipt) throw new Error("Diagnostic collector unavailable");
+        this.counts.written += batch.events.length;
+      }
+      return;
+    }
     const directory = await this._safe(path.join(this.root, "events", stream));
     await fs.mkdir(directory, { recursive: true, mode: 0o2770 });
     let pending = [], pendingBytes = 0;
@@ -524,6 +546,7 @@ export class DiagnosticServerRecorder {
       new Promise((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); }),
     ]);
     clearTimeout(timer);
+    this.transport?.close();
     this.control = null;
     if (finished) try {
       if (await this._ownsMarker()) { await fs.unlink(path.join(this.root, "writer.json")); return true; }
@@ -538,8 +561,11 @@ export class DiagnosticServerRecorder {
 export async function initializeServerDiagnostics() {
   if (currentRecorder()) return currentRecorder();
   const baselineEnabled = !["false", "0"].includes((process.env.DIAGNOSTICS_BASELINE_ENABLED || "true").toLowerCase());
+  const ingestUrl = process.env.DIAGNOSTICS_INGEST_URL;
+  const transport = ingestUrl ? createDiagnosticTransport({ baseUrl: ingestUrl,
+    token: process.env.DIAGNOSTICS_INGEST_TOKEN, instanceId: process.env.OKF_INSTANCE_ID || randomUUID() }) : null;
   const recorder = new DiagnosticServerRecorder({ root: process.env.OKF_FRONTEND_DIAGNOSTICS_DIR,
-    controlPath: process.env.OKF_DIAGNOSTICS_CONTROL_PATH, baselineEnabled });
+    controlPath: process.env.OKF_DIAGNOSTICS_CONTROL_PATH, baselineEnabled, transport });
   setServerRecorder(recorder);
   await recorder.start();
   installServerDiagnosticsShutdown(recorder);

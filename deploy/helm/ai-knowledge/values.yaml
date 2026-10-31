@@ -4,6 +4,15 @@ deployment:
 application:
   enabled: true
   replicas: 1
+# Contract for upcoming replica modes; templates still reject non-compact modes.
+replicaStorage:
+  postgres: {provider: managed}
+  qdrant: {provider: managed}
+  artifacts: {provider: managed, backend: local}
+resilience: {class: basic}
+frontend: {replicas: 1}
+api: {replicas: 1}
+worker: {replicas: 0}
 runtime:
   environment: production
   workers: 1

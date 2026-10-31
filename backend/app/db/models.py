@@ -63,6 +63,21 @@ class ReferenceResourceState(Base):
     )
 
 
+class DiagnosticIngestBatch(Base):
+    """Bounded, content-free frontend inbox with durable retry receipts."""
+
+    __tablename__ = "diagnostic_ingest_batches"
+    instance_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    batch_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[list] = mapped_column(JSON, nullable=False)
+    payload_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    accepted: Mapped[int] = mapped_column(Integer, nullable=False)
+    delivered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
+
+
 class DiagnosticSession(Base):
     __tablename__ = "diagnostic_sessions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

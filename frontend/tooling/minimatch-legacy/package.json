@@ -1,0 +1,10 @@
+{
+  "name": "@okf/minimatch-legacy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.js",
+  "license": "MIT",
+  "description": "Legacy ESLint minimatch API backed by patched upstream minimatch",
+  "dependencies": { "minimatch-modern": "npm:minimatch@11.0.3" }
+}

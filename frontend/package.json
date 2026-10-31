@@ -22,9 +22,12 @@
   "devDependencies": {
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.2",
-    "fast-glob": "file:tooling/eslint-root-glob"
+    "fast-glob": "file:tooling/eslint-root-glob",
+    "minimatch": "file:tooling/minimatch-legacy"
   },
   "overrides": {
+    "minimatch@<4": "$minimatch",
+    "minimatch@>=4 <11": "11.0.3",
     "@next/eslint-plugin-next": {
       "fast-glob": "$fast-glob"
     }

@@ -96,6 +96,13 @@ class DiagnosticRuntime:
         if not self.available:
             return
         now = now or datetime.now(timezone.utc)
+        if getattr(self.settings, "diagnostics_ingest_token", None):
+            from .ingest import drain_ingest
+            try:
+                if drain_ingest(self.store)["deferred"]:
+                    self.failure_code = "diagnostic_maintenance_degraded"
+            except Exception:
+                self.failure_code = "diagnostic_maintenance_degraded"
         for action in (
             lambda: self.sessions.tick(now),
             self.sessions.reconcile_control_events,

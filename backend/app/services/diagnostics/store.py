@@ -388,6 +388,39 @@ class DiagnosticStore:
             self._last_failure = "storage_low" if low else "storage_error"
             return BatchWriteResult(written_events, written_bytes, self._last_failure)
 
+    def write_remote_batch(self, identity: str, events: list[dict], *, stream: str):
+        """Immutable deterministic segment: retry after SQL failure cannot append twice."""
+        if valid_uuid(identity) is None:
+            raise ValueError("Invalid remote segment identity")
+        encoded = b"".join(encode_event(event) for event in events)
+        with self._mutex:
+            self.open()
+            directory = self._stream_path(stream)
+            directory.mkdir(parents=True, exist_ok=True, mode=0o770)
+            path = self.safe_path(directory / f"remote-{identity}.jsonl")
+            if path.exists():
+                if path.stat().st_size != len(encoded) or path.read_bytes() != encoded:
+                    raise ValueError("Remote segment identity conflict")
+                return
+            budget = self.limits.baseline_bytes if stream == "baseline" else self.limits.session_bytes
+            used = sum(self._index.size(item) for item in self._index.stream_paths(stream))
+            remote_used = sum(self._index.size(item) for item in self._index.files
+                              if item.name.startswith("remote-") and item.suffix == ".jsonl")
+            if remote_used + len(encoded) > self.limits.frontend_bytes:
+                raise StorageQuotaError("Frontend diagnostic budget full")
+            if len(encoded) > self.limits.segment_bytes or used + len(encoded) > budget:
+                raise StorageQuotaError("Diagnostic stream full")
+            temporary = self.safe_path(directory / f"remote-{identity}.tmp")
+            try:
+                self.write_bytes(temporary, encoded)
+                with temporary.open("r+b") as handle:
+                    os.fsync(handle.fileno())
+                os.replace(temporary, path)
+                self.note_rename(temporary, path)
+            finally:
+                temporary.unlink(missing_ok=True)
+                self.note_deleted(temporary)
+
     def append(self, encoded: bytes, *, stream: str) -> bool:
         try:
             event = self.validate_event(encoded)
