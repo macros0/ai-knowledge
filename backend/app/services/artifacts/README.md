@@ -27,8 +27,9 @@ original cache from the bound blob. Sources/attachments in v2 generations also
 use bindings; source caches, review originals, table sidecars and ready job
 archives now also restore from registered bytes.
 Purge detaches bindings but never directly deletes
-objects; receipt tombstones survive purge. Unreferenced objects require S3 GC,
-which is why preview is disabled by default and prohibited in production.
+objects; receipt tombstones survive purge. Unreferenced objects retire through
+GC; explicit corpus migration/runtime acceptance still keep preview disabled by
+default and prohibited in production.
 
 Lifecycle foundation (S3) adds durable read leases and deletion tombstones.
 LeasedBlobStore is read-only: its open verifies against registered metadata,
@@ -38,19 +39,18 @@ monotonic deadline stop further byte delivery. An already materialized private
 copy no longer reads the provider and does not keep that lease alive.
 
 collect_blob only handles metadata-known, unbound objects older than its grace
-(24h default). It checks both ArtifactBinding and CheckpointBinding plus live
+(24h default). It checks ArtifactBinding, CheckpointBinding, SourceCacheHead and live
 leases under the object row lock, commits deleting before provider deletion,
 then acknowledges its exact claim token. Failed deletion can retry after claim
-expiry. Metadata tombstones prevent identity reuse. It never removes bindings,
-scans arbitrary provider keys or runs automatically. Owner lifecycle code alone
+expiry. Metadata tombstones prevent identity reuse. It never removes bindings or
+scans arbitrary provider keys. The opt-in worker below schedules it. Owner lifecycle code alone
 detaches references under its document/job lock. Newly registered object creation
 uses server time; upgrades preserve historical timestamps conservatively.
 
 CheckpointBinding records generation/chunk/source signature and a verified blob.
 Replacement requires an explicit previous object ID; abandoned or missing
 generations reject writes. materialize_checkpoint reads with a lease on another
-scratch root. This interface is not yet wired into StagingStore's complete
-checkpoint/sidecar protocol, and job-owner fencing remains R2 work.
+scratch root. StagingStore integrates this protocol; job-owner fencing remains R2 work.
 
 Publication v2 is written by the ordinary pipeline, canonical repair and scope
 worker when preview is enabled. Every durable generation file and the canonical
@@ -75,9 +75,8 @@ fall back to an old local file. HTTP Range/disposition and private scratch clean
 retain their previous contracts. Already-active publication replay is a no-op
 and does not require provider access.
 
-V1 remains restricted to legacy local combined execution/migration. These
-changes do not yet restore every cold-worker consumer (source result caches,
-remaining table/export/diagnostic flows) or discover provider-only orphans.
+V1 remains restricted to legacy local combined execution/migration. Source caches,
+table/export/diagnostic consumers and provider-only orphan discovery are described below.
 Production/shared runtime gates remain closed. The S3 protocol double verifies
 adapter behavior but does not certify a customer S3 service.
 
@@ -136,7 +135,51 @@ existing DB. They preserve legacy protocol1 rows and add source/review/diagnosti
 markers. Export protocol2 is recorded in Job.result. Downgrade refuses portable
 rows/results whose metadata would become unreadable. An environment flag toggle
 does not migrate or downgrade known portable documents. Explicit legacy corpus
-migration is S4; provider-only orphan discovery/automatic GC are still pending.
+migration is S4; automatic GC is an independent opt-in preview described below.
+
+GC discovery/worker (rpl01g_artifact_gc) uses bounded inventory pages, persistent
+SQL cursors and a renewable token-checked run lease. The combined lifespan starts
+and stops the worker only with ARTIFACT_GC_ENABLED=true; the default is false.
+Production/distributed execution stays blocked until S4/R3/platform acceptance.
+The default interval is 60s, page size 100, full-byte verification budget 2 GiB per
+cycle, and grace 86400s (minimum 24h). Configuration names: ARTIFACT_GC_INTERVAL_SECONDS,
+ARTIFACT_GC_BATCH_SIZE, ARTIFACT_GC_VERIFY_BYTES and ARTIFACT_GC_GRACE_SECONDS.
+Oversized/budget-deferred candidates are counted; increase the budget deliberately
+to collect larger artifacts. Local/RWX paging bounds memory but scans the flat
+directory to select the next sorted page; S3 uses bounded continuation tokens.
+
+Only exact objects/<32 lowercase hex> keys under the configured root/prefix are
+eligible. Provider-only objects enter SQL quarantine at DB first-seen time, not
+provider mtime. Changed inventory fingerprints restart quarantine. After grace,
+inspection hashes actual bytes (ETag/provider metadata are not trusted), then
+registers the orphan before ordinary deletion claims recheck all refs/leases.
+Bound objects cannot be detached by GC. Source-cache heads protect their manifests
+even if an associated binding is lost. Late binding wins or is rejected before
+ACK; a claimed/deleted ID never becomes readable again. A late PUT recreating
+the same deleted bytes can be quarantined/redeleted while preserving its tombstone.
+Missing bytes/failed deletes retry without claiming success; cursors advance past
+per-object processing failures. Invalid/unavailable inventory defers the cycle.
+Stop/lease-loss guards run during hashing
+and immediately before physical deletion. Logs contain counts and error classes.
+
+Each store has a DB scope token/location hash and a conditional gc-owner.json
+marker outside objects/. Empty new stores initialize automatically. Existing
+unmarked stores require explicit adoption after verifying the matching database,
+exclusive root/prefix and backup, with application writers stopped. A missing or
+foreign marker, lost database identity or changed store location blocks collection;
+neither automatic startup nor explicit adoption overwrites a foreign marker.
+The DB identity and provider marker must be preserved together during backup/restore.
+
+From backend/, review setup without mutation:
+`python scripts/collect_artifacts.py --initialize --adopt-existing`.
+After checking the target, append `--apply`; then enable ARTIFACT_GC_ENABLED.
+`python scripts/collect_artifacts.py --apply` runs one bounded cycle when enabled.
+Without --apply the command never opens the provider or changes the DB.
+Apply rpl01g before enabling; downgrade refuses initialized ownership metadata.
+GC never runs against a backup prefix/root. It handles completed current objects;
+local tmp, incomplete S3 multipart uploads and noncurrent S3 versions require
+separate scratch/provider lifecycle policies. Real CSI/S3 quota/failure acceptance,
+global runtime scheduling and corpus migration remain open.
 
 PostgreSQL probes live in tests/replica_postgres and require the private URL file
 path in OKF_ARTIFACT_PG_URL_FILE. Only loopback replica_test_<run-id> databases are
@@ -157,7 +200,7 @@ guarantees require platform acceptance.
 
 Open verifies the full SHA256/size on the same handle before exposing a bounded
 range; this prioritizes integrity and costs a full pass before streaming. GC
-coordination and read leases belong to S3/R2, before shared deployment is enabled.
+claims/read leases are implemented; distributed job fencing remains R2 work.
 Materialization rechecks provider bytes and cleans parser scratch on exit.
 The returned path is named source; parser callers must retain document format
 metadata when integrating it. No original filenames enter artifact keys.

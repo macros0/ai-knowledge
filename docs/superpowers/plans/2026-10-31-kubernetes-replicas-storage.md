@@ -45,8 +45,13 @@ Private download scratch ограничен квотой и очищается �
 выключение preview-флага не возвращает portable документ к filesystem authority.
 Проверены cold caches/reviews/exports/table import и миграции на отдельном PG17.
 Diagnostic recorder spool остаётся local scratch по инвентарю; distributed
-control/retention — R3/R4. Автозапуск GC и поиск provider-only orphans остаются
-открытыми вместе с S4 и platform acceptance. Single-node kind
+control/retention — R3/R4. Автозапуск GC и поиск provider-only orphans реализованы
+за ARTIFACT_GC_ENABLED (default false, combined non-production): bounded pages и
+DB cursors, quarantine >=24h от DB first-seen, full digest verification и claims.
+Scope token/marker защищает от чужой БД/смены root; unmarked existing store требует
+явного CLI adoption с --apply. Проверены реальные PG гонки attach/GC, leases и
+миграция rpl01g; production guard не снят. S4, distributed scheduling и platform
+acceptance остаются открытыми. Single-node kind
 не подтверждает RWX/CSI/S3 или устойчивость к потере ноды.
 
 ## Global Constraints

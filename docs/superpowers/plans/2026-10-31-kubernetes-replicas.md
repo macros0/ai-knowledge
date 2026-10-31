@@ -30,7 +30,10 @@ Source-result caches, retained review originals, table sidecars, OKF export и
 готовые export/diagnostic архивы переведены на bindings/materialize в preview.
 Cold-worker сценарии и миграции rpl01e/rpl01f проверены на SQLite/PostgreSQL;
 готовые архивы и оригиналы очереди защищены retention/read правилами.
-Provider-only orphan discovery, автоматический GC и S4 ещё не реализованы.
+Provider-only orphan discovery и автоматический GC реализованы как отдельный
+opt-in combined preview: quarantine >=24h, ownership marker, bounded cursors,
+SQL leases/claims и остановка с приложением. Проверены реальные PG гонки/миграция.
+S4 и distributed scheduling/runtime/provider acceptance остаются открытыми.
 CT102 оставлен stopped, учебная VM103 running по запросу пользователя.
 Python/npm advisory audits после исправлений не находят известных уязвимостей;
 S2–S4, runtime/operations и окруженческие проверки остаются открытыми.

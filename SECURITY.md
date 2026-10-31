@@ -1581,9 +1581,9 @@ generation, exact source signature and CAS for replacement. Purge/retired cleanu
 detach references without directly deleting provider objects; existing leases
 still protect in-progress readers.
 
-No automatic provider scan or GC scheduler is enabled. Provider-only unregistered
-orphans, remaining staging/table/export consumers and R2 job fencing
-remain pending; production activation stays prohibited. The lifecycle contract
+The initial lifecycle stage kept provider discovery/scheduling disabled. The
+later opt-in GC preview below implements them; R2 job fencing
+remains pending and production activation stays prohibited. The lifecycle contract
 and migration were exercised on isolated PostgreSQL in the user's training VM;
 this does not establish multi-node/provider failure certification.
 
@@ -1610,7 +1610,7 @@ Source/attachment routes authenticate before resolving registered ancestry and
 the active generation's refs; v2 reads do not trust local path resolution or fall
 back to old files. Private scratch, Range/disposition and transaction/disconnect
 cleanup remain enforced. Preview remains default-off/prohibited in production:
-explicit corpus migration, orphan discovery and R2
+explicit corpus migration and R2
 fencing/provider acceptance are still required for distributed runtime.
 
 ## 2026-10-31 — Portable staging checkpoint preview
@@ -1631,7 +1631,7 @@ changes never fall back to cache. Finalization uses the committed chunk inventor
 unregistered leftover files on a worker do not enter the published corpus.
 Replacement/removal detach only the owned generation's references; checkpoints
 of other generations remain bound. Immutable byte deletion uses existing
-GC grace/read-lease rules. Automatic GC/provider-only orphan discovery remain off.
+GC grace/read-lease rules. Automatic GC remains separately opt-in as described below.
 
 The rpl01d migration preserves legacy rows as protocol1 and adds a durable
 checkpoint_version marker for protocol2, which survives feature-flag changes.
@@ -1675,10 +1675,44 @@ distributed recorder/control and global quota coordination remain R3/R4.
 Portable export ETags use the immutable digest so If-Range does not depend on
 the timestamp of the current API's temporary file.
 
-Automatic GC/provider-only orphan discovery, explicit legacy corpus migration,
-distributed runtime and real RWX/S3 acceptance remain open. Bytes written before
-a failed SQL commit can still leave provider-only orphans. Production preview
+Explicit legacy corpus migration, distributed runtime and real RWX/S3 acceptance
+remain open. Bytes written before a failed SQL commit can leave provider-only
+orphans, now handled by the separately enabled quarantined discovery below. Production preview
 remains prohibited; tests do not modify the working application database.
+
+## 2026-10-31 — Quarantined provider discovery and automatic artifact GC
+
+ARTIFACT_GC_ENABLED defaults false and is restricted to non-production combined
+execution pending migration/runtime/provider acceptance. The lifespan owns its
+worker and signals shutdown; no executor starts on module import. Bounded pages,
+durable inventory/orphan/sweep cursors, per-cycle byte budget and a renewable SQL
+run token limit work and support restart. DB time determines quarantine/leases;
+provider timestamps do not shorten the minimum 24-hour orphan quarantine.
+
+Discovery considers only canonical immutable object keys in the configured
+service-owned root/prefix. Every discovered orphan is fully streamed/hashed after
+quarantine before registration. ETag, listing sizes and uploaded checksum metadata
+are not content integrity evidence. Changed inventory metadata restarts quarantine.
+Deletion still commits a SQL claim after checking bindings, checkpoint pointers,
+source-cache heads and live read leases under the object lock. It never decides
+owner retention or detaches references. Failed provider I/O leaves retryable
+claims/tombstones; late PUTs for deleted IDs can be quarantined/redeleted without
+making the ID readable. Stop/lease-loss guards run during verification/before delete.
+
+A persisted database scope token/location hash must match a conditional provider
+gc-owner.json marker. Empty stores can initialize; existing unmarked stores require
+explicit adoption through the CLI with --apply, after target/backup verification
+and writer shutdown. A foreign/lost marker, wrong restored DB or changed location
+blocks deletion. Adoption cannot overwrite a foreign marker. Backup/restore must
+preserve the matching database identity and provider marker together; backup
+locations must never be GC targets. rpl01g adds quarantine/state/indexes; downgrade
+refuses initialized GC ownership. Commands without --apply perform no provider/DB
+mutation. Logs report aggregate counts/error classes without credentials or content.
+
+This GC covers completed current objects. Temporary files, incomplete multipart
+uploads and noncurrent S3 versions retain separate scratch/provider lifecycle
+requirements. It does not certify customer CSI/S3 or enable distributed workers.
+PostgreSQL contention/migration probes use disposable schemas/namespace only.
 
 ## 2026-10-31 — Dependency denial-of-service advisories
 

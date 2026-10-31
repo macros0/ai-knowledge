@@ -39,6 +39,18 @@ def validate_endpoint(endpoint, bucket, prefix, addressing_style="path", allow_h
 
 
 class S3BlobStore:
+    def inventory_page(self, **kwargs):
+        from .inventory import s3_page
+        return s3_page(self, **kwargs)
+
+    def inspect_candidate(self, candidate, **kwargs):
+        from .inventory import s3_inspect
+        return s3_inspect(self, candidate, **kwargs)
+
+    def gc_scope(self, token, **kwargs):
+        from .inventory import gc_scope
+        return gc_scope(self, token, **kwargs)
+
     def __init__(self, *, client, endpoint: str, bucket: str, prefix: str,
                  store_id: str, scratch_root: Path, addressing_style="path",
                  allow_http=False, max_bytes=DEFAULT_MAX_BYTES):
@@ -237,10 +249,16 @@ class S3BlobStore:
         with self.open(ref):
             return ref
 
-    def delete(self, ref):
+    def delete(self, ref, *, guard=None):
         key = self._key(ref)
         try:
-            self.stat(ref)
+            if guard:
+                with self.open(ref, guard=guard):
+                    pass
+            else:
+                self.stat(ref)
         except BlobNotFound:
             return
+        if guard:
+            guard()
         self._call("delete_object", Key=key)

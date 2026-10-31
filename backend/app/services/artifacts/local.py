@@ -49,6 +49,18 @@ class _RangeReader(io.RawIOBase):
 
 
 class LocalBlobStore:
+    def inventory_page(self, **kwargs):
+        from .inventory import local_page
+        return local_page(self, **kwargs)
+
+    def inspect_candidate(self, candidate, **kwargs):
+        from .inventory import local_inspect
+        return local_inspect(self, candidate, **kwargs)
+
+    def gc_scope(self, token, **kwargs):
+        from .inventory import gc_scope
+        return gc_scope(self, token, **kwargs)
+
     def __init__(self, root: Path, *, store_id: str):
         self.root = canonical_root(root)
         self.store_id = store_id
@@ -179,12 +191,17 @@ class LocalBlobStore:
         with self.open(ref):
             return ref
 
-    def delete(self, ref: BlobRef) -> None:
+    def delete(self, ref: BlobRef, *, guard=None) -> None:
         path = self._path(ref)
         try:
             if not path.exists():
                 return
-            self.stat(ref)
+            if guard:
+                with self.open(ref, guard=guard):
+                    pass
+                guard()
+            else:
+                self.stat(ref)
             path.unlink(missing_ok=True)
         except OSError as exc:
             raise _storage_failure(exc) from None

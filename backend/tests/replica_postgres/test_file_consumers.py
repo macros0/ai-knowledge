@@ -54,6 +54,10 @@ def test_postgres_consumer_migrations_preserve_legacy_rows(orphan, monkeypatch):
     from app.db.models import Document
     with session_scope() as session:
         schema = session.scalar(text("select current_schema()"))
+        session.execute(text("DROP TABLE artifact_orphans"))
+        session.execute(text("DROP TABLE artifact_gc_state"))
+        session.execute(text("DROP INDEX ix_artifact_gc_candidates"))
+        session.execute(text("DROP INDEX ix_artifact_source_caches_object_id"))
         session.execute(text("DROP TABLE artifact_source_caches"))
         session.execute(text("ALTER TABLE documents DROP COLUMN source_cache_version"))
         session.execute(text("ALTER TABLE diagnostic_bundles DROP COLUMN artifact_version"))

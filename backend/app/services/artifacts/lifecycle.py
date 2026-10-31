@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy import delete, func, select
 
-from app.db.models import ArtifactBinding, ArtifactReadLease, CheckpointBinding
+from app.db.models import ArtifactBinding, ArtifactReadLease, CheckpointBinding, SourceCacheHead
 from app.db.session import session_scope
 from .contract import BlobLeaseLost, BlobRef
 from .repository import _ref, lock_object
@@ -63,11 +63,11 @@ class DeleteClaim:
     token: str
 
 
-def claim_delete(session, object_id, *, grace_seconds=86400, ttl_seconds=60, store_id=None):
+def claim_delete(session, object_id, *, grace_seconds=86400, ttl_seconds=60, store_id=None, reappeared=False):
     grace_seconds = _seconds(grace_seconds, minimum=0, maximum=365 * 86400)
     ttl_seconds = _seconds(ttl_seconds)
     row = lock_object(session, object_id)
-    if row is None or row.state == "deleted":
+    if row is None or row.state == "deleted" and not reappeared:
         return None
     if store_id is not None and row.store_id != store_id:
         raise ValueError("Foreign artifact GC store")
@@ -79,6 +79,8 @@ def claim_delete(session, object_id, *, grace_seconds=86400, ttl_seconds=60, sto
     if session.scalar(select(ArtifactBinding.object_id).where(ArtifactBinding.object_id == object_id).limit(1)):
         return None
     if session.scalar(select(CheckpointBinding.object_id).where(CheckpointBinding.object_id == object_id).limit(1)):
+        return None
+    if session.scalar(select(SourceCacheHead.object_id).where(SourceCacheHead.object_id == object_id).limit(1)):
         return None
     if session.scalar(select(ArtifactReadLease.object_id).where(ArtifactReadLease.object_id == object_id,
                                                                ArtifactReadLease.expires_at > now).limit(1)):
@@ -105,11 +107,15 @@ def finish_delete(session, claim):
     return True
 
 
-def collect_blob(store, object_id, *, grace_seconds=86400):
+def collect_blob(store, object_id, *, grace_seconds=86400, guard=None, reappeared=False):
     with session_scope() as session:
-        claim = claim_delete(session, object_id, grace_seconds=grace_seconds, store_id=store.store_id)
+        claim = claim_delete(session, object_id, grace_seconds=grace_seconds, store_id=store.store_id, reappeared=reappeared)
     if claim is None:
         return False
-    store.delete(claim.ref)
+    if guard:
+        guard()
+        store.delete(claim.ref, guard=guard)
+    else:
+        store.delete(claim.ref)
     with session_scope() as session:
         return finish_delete(session, claim)

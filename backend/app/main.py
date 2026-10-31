@@ -167,6 +167,7 @@ async def lifespan(app: FastAPI):
     audit_dispatcher = None
     generation_cleanup_stop = None
     generation_cleanup_thread = None
+    artifact_gc_worker = None
     try:
         app.state.diagnostics = diagnostic_runtime if diagnostic_runtime.available else None
         worker_hint = os.getenv("UVICORN_WORKERS") or os.getenv("WEB_CONCURRENCY")
@@ -327,8 +328,12 @@ async def lifespan(app: FastAPI):
             name="generation-cleanup", daemon=True,
         )
         generation_cleanup_thread.start()
+        from app.services.artifacts.gc import start_gc_if_enabled
+        artifact_gc_worker = start_gc_if_enabled(get_settings())
         yield
     finally:
+        if artifact_gc_worker is not None:
+            artifact_gc_worker.stop()
         if audit_dispatcher is not None:
             audit_dispatcher.stop()
         diagnostic_runtime.stop()

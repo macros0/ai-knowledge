@@ -1,6 +1,8 @@
 """In-memory protocol fixture, NOT evidence of a real S3 provider's guarantees."""
 import io
 import threading
+import hashlib
+from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError
 
@@ -29,7 +31,19 @@ class MemoryS3:
         if Key not in self.objects:
             raise ClientError({"Error": {"Code": "NoSuchKey"}, "ResponseMetadata": {"HTTPStatusCode": 404}}, "GetObject")
         value = self.objects[Key]
-        return {"ContentLength": len(value), "Body": io.BytesIO(value)}
+        return {"ContentLength": len(value), "Body": io.BytesIO(value), **self._version(value)}
+
+    @staticmethod
+    def _version(value):
+        return {"ETag": '"' + hashlib.sha256(value).hexdigest() + '"', "LastModified": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+
+    def list_objects_v2(self, *, Bucket, Prefix, MaxKeys, ContinuationToken=None):
+        keys = sorted(key for key in self.objects if key.startswith(Prefix) and (ContinuationToken is None or key > ContinuationToken))
+        result = {"Contents": [{"Key": key, "Size": len(self.objects[key]), **self._version(self.objects[key])} for key in keys[:MaxKeys]],
+                  "IsTruncated": len(keys) > MaxKeys}
+        if result["IsTruncated"]:
+            result["NextContinuationToken"] = keys[MaxKeys - 1]
+        return result
 
     def delete_object(self, *, Bucket, Key):
         self.objects.pop(Key, None)

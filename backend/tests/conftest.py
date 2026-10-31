@@ -44,6 +44,8 @@ def _flush_auth_env(monkeypatch):
     # Local edit-lock rollout must not change legacy API test preconditions.
     # Lock protocol tests enable it explicitly on their isolated Settings.
     monkeypatch.setenv("REFERENCE_EDIT_LOCKS_ENABLED", "false")
+    # Opt-in GC tests use explicit Settings; other test lifespans never start it.
+    monkeypatch.setenv("ARTIFACT_GC_ENABLED", "false")
     from app.config import get_settings
     get_settings.cache_clear()
     # Integration tests explicitly replace this boundary with a typed provider.

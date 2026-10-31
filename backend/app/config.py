@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     artifact_store_id: str = "local"
     # Stage gate: pipeline/retention migration is completed in S3/S4.
     artifact_uploads_enabled: bool = False
+    artifact_gc_enabled: bool = False
+    artifact_gc_interval_seconds: int = Field(default=60, ge=10, le=86400)
+    artifact_gc_grace_seconds: int = Field(default=86400, ge=86400, le=365 * 86400)
+    artifact_gc_batch_size: int = Field(default=100, ge=1, le=1000)
+    artifact_gc_verify_bytes: int = Field(default=2 * 1024 * 1024 * 1024, ge=1, le=8 * 1024 * 1024 * 10000)
     artifact_root: Path | None = None
     artifact_scratch_root: Path | None = None
     artifact_max_bytes: int = Field(default=2 * 1024 * 1024 * 1024, gt=0, le=8 * 1024 * 1024 * 10000)
@@ -66,6 +71,8 @@ class Settings(BaseSettings):
 
         if self.artifact_uploads_enabled and self.environment == "production":
             raise ValueError("Artifact upload preview requires completed retention/migration before production")
+        if self.artifact_gc_enabled and (self.environment == "production" or self.app_role != "combined"):
+            raise ValueError("Artifact GC preview requires non-production combined execution until migration/runtime acceptance")
         profile = ReplicaProfile(
             role=self.app_role, artifact_backend=self.artifact_backend,
             postgres_provider=self.postgres_provider, qdrant_provider=self.qdrant_provider,

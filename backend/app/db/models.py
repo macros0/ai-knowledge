@@ -1281,8 +1281,31 @@ class ArtifactObject(Base):
     delete_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
     delete_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())
-    __table_args__ = (CheckConstraint("size >= 0", name="ck_artifact_size"),
+    __table_args__ = (Index("ix_artifact_gc_candidates", "store_id", "state", "object_id"),
+                      CheckConstraint("size >= 0", name="ck_artifact_size"),
                       CheckConstraint("state IN ('ready', 'deleting', 'deleted')", name="ck_artifact_state"))
+
+
+class ArtifactGcState(Base):
+    __tablename__ = "artifact_gc_state"
+    store_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    scope_token: Mapped[str] = mapped_column(String(32), nullable=False)
+    location_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    inventory_cursor: Mapped[str | None] = mapped_column(Text, nullable=True)
+    orphan_cursor: Mapped[str] = mapped_column(String(32), nullable=False, default="", server_default="")
+    sweep_cursor: Mapped[str] = mapped_column(String(32), nullable=False, default="", server_default="")
+    owner_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ArtifactOrphan(Base):
+    __tablename__ = "artifact_orphans"
+    object_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.current_timestamp())
+    __table_args__ = (CheckConstraint("size >= 0", name="ck_artifact_orphan_size"),)
 
 
 class ArtifactReadLease(Base):
@@ -1299,7 +1322,7 @@ class SourceCacheHead(Base):
     cache_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     source_key: Mapped[str] = mapped_column(String(64), nullable=False)
     content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
-    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), nullable=False)
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), nullable=False, index=True)
 
 
 class CheckpointBinding(Base):
