@@ -30,7 +30,11 @@ canonical hash, BlobRef bindings, DB publication_version, leased hydration и
 защита cache-write от retired cleanup. Source/attachment API читает refs без
 локальных generation-файлов. SQLite и PostgreSQL проверяют cold publication и
 миграцию маркера; S3 protocol double не является сертификацией реального S3.
-Автозапуск GC, поиск provider-only orphans, интеграция StagingStore и перенос
+Staging preview сохраняет raw text/concepts/table refs/provenance в immutable
+checkpoint; progress+CAS pointer атомарны, cold resume не повторяет принятый LLM
+результат. Маркер rpl01d исключает filesystem downgrade; finalization использует
+только committed inventory. Actual PostgreSQL проверяет cold resume/CAS/миграцию.
+Автозапуск GC, поиск provider-only orphans, source-result caches и перенос
 остальных durable категорий остаются открытыми. Single-node kind
 не подтверждает RWX/CSI/S3 или устойчивость к потере ноды.
 

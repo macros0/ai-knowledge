@@ -1610,8 +1610,36 @@ Source/attachment routes authenticate before resolving registered ancestry and
 the active generation's refs; v2 reads do not trust local path resolution or fall
 back to old files. Private scratch, Range/disposition and transaction/disconnect
 cleanup remain enforced. Preview remains default-off/prohibited in production:
-complete staging/sidecar/remaining consumer migration, orphan discovery and R2
+remaining consumer migration, orphan discovery and R2
 fencing/provider acceptance are still required for distributed runtime.
+
+## 2026-10-31 — Portable staging checkpoint preview
+
+Opt-in staging snapshots keep raw chunk input, generated concepts, table-reference
+payload and provenance in one immutable blob. The durable put precedes the SQL
+transaction that atomically replaces the scoped checkpoint pointer and progress.
+Document/generation checks and CAS reject stale snapshots; abandoned/deleted
+owners cannot publish new checkpoint references. Existing partial results move
+to the new candidate without trusting the former worker's disk. Job lease/fence
+ownership remains the separate R2 gate; this does not enable multiple workers.
+
+Reads authorize the live owner and exact checkpoint binding before provider I/O,
+materialize under a renewable SQL read lease, and recheck the current staging
+pointer under the document lock before publishing local cache files. Cleanup
+cannot be undone by late hydration. Missing metadata/bytes and source signature
+changes never fall back to cache. Finalization uses the committed chunk inventory;
+unregistered leftover files on a worker do not enter the published corpus.
+Replacement/removal detach only the owned generation's references; checkpoints
+of other generations remain bound. Immutable byte deletion uses existing
+GC grace/read-lease rules. Automatic GC/provider-only orphan discovery remain off.
+
+The rpl01d migration preserves legacy rows as protocol1 and adds a durable
+checkpoint_version marker for protocol2, which survives feature-flag changes.
+Legacy checkpoints are not silently promoted. Downgrade refuses while portable
+rows exist, preventing loss of the marker and accidental filesystem fallback.
+Production preview remains prohibited; remaining consumers, explicit corpus
+migration and platform acceptance are still required. Working DB data is not
+migrated by these tests; PostgreSQL probes use disposable namespace/schemas only.
 
 ## 2026-10-31 — Dependency denial-of-service advisories
 

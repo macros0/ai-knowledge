@@ -1212,7 +1212,17 @@ class Pipeline:
         chunks_meta: list[dict] = []
         chunk_rows: list[dict] = []
         chunk_files: list[tuple[Path, int, str]] = []
-        for chunk_file in sorted(staging.dir.glob("chunk_*.md"), key=lambda path: int(path.stem.split("_")[-1])):
+        if manifest.get("checkpoint_version") == 2:
+            # A worker's directory may contain stale/unregistered cache files.
+            # Only the committed checkpoint inventory can become canonical data.
+            expected = list(range(manifest["total_chunks"]))
+            if sorted(manifest["processed_chunks"]) != expected:
+                from app.services.generation_artifacts import GenerationIntegrityError
+                raise GenerationIntegrityError()
+            input_files = (staging.dir / f"chunk_{index:02d}.md" for index in expected)
+        else:
+            input_files = sorted(staging.dir.glob("chunk_*.md"), key=lambda path: int(path.stem.split("_")[-1]))
+        for chunk_file in input_files:
             idx = int(chunk_file.stem.split("_")[-1])
             info = chunks_data.get(str(idx)) or {}
             text = chunk_file.read_text(encoding="utf-8")
@@ -1824,6 +1834,8 @@ def _chunks_meta_from_dir(directory: Path, manifest: dict | None = None) -> list
     meta: list[dict] = []
     for f in sorted(directory.glob("chunk_*.md")):
         idx = int(f.stem.split("_")[-1])
+        if manifest.get("checkpoint_version") == 2 and str(idx) not in manifest.get("chunks_data", {}):
+            continue
         info = manifest.get("chunks_data", {}).get(str(idx), {})
         meta.append(
             {

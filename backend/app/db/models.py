@@ -714,6 +714,7 @@ class DocumentStaging(Base):
     source_file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     processing_scope_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    checkpoint_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="in_progress")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow

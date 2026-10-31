@@ -13,6 +13,7 @@ from app.services.artifacts.lifecycle import claim_delete, collect_blob
 from app.services.artifacts.repository import attach_blob
 from tests.test_artifact_gc import DOC, orphan as orphan
 from tests.test_generation_pipeline import pipeline_env as pipeline_env
+from tests.test_portable_staging import portable as portable
 from tests.test_artifact_gc import (
     test_gc_skips_bound_or_leased_blob as test_gc_skips_bound_or_leased_blob,
     test_attach_races_gc as test_attach_races_gc,
@@ -99,6 +100,50 @@ def test_actual_postgres_lifecycle_migration_preserves_bound_object(orphan, monk
 def test_postgres_portable_publication_survives_cold_worker(pipeline_env, monkeypatch, tmp_path):
     from tests.test_portable_publication import test_candidate_publishes_after_worker_disk_loss
     test_candidate_publishes_after_worker_disk_loss(pipeline_env, monkeypatch, tmp_path, provider="local")
+
+
+def test_postgres_staging_survives_cold_worker(portable, tmp_path):
+    from tests.test_portable_staging import test_staging_checkpoint_survives_worker_disk_loss
+    test_staging_checkpoint_survives_worker_disk_loss(portable, tmp_path)
+
+
+def test_postgres_pipeline_resumes_without_checkpoint_disk(pipeline_env, monkeypatch, tmp_path):
+    from tests.test_portable_staging import test_pipeline_resume_reuses_durable_checkpoint_after_scratch_loss
+    test_pipeline_resume_reuses_durable_checkpoint_after_scratch_loss(pipeline_env, monkeypatch, tmp_path)
+
+
+def test_postgres_checkpoint_commit_rejects_stale_pointer(portable):
+    from tests.test_portable_staging import test_stale_checkpoint_commit_cannot_replace_new_result
+    test_stale_checkpoint_commit_cannot_replace_new_result(portable)
+
+
+def test_postgres_staging_marker_migration_preserves_legacy_and_refuses_portable_downgrade(orphan, monkeypatch):
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import text
+    from app.db.models import DocumentStaging
+    from app.db.session import get_engine
+    with session_scope() as session:
+        session.add(DocumentStaging(doc_id=DOC, chunks_data={"0": {"file": "chunk_00.json"}}, processed_chunks=[0]))
+        schema = session.scalar(text("select current_schema()"))
+    assert schema.startswith("artifact_") and len(schema) == 41
+    monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema} -clock_timeout=2000 -cstatement_timeout=10000")
+    url = get_engine().url.set(query={}).render_as_string(hide_password=False)
+    monkeypatch.setattr("app.config.get_settings", lambda: SimpleNamespace(db_url=url))
+    root = Path(__file__).resolve().parents[2]
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    command.stamp(config, "rpl01d_portable_staging")
+    command.downgrade(config, "rpl01c_portable_publication")
+    command.upgrade(config, "rpl01d_portable_staging")
+    with session_scope() as session:
+        row = session.get(DocumentStaging, DOC)
+        assert row.checkpoint_version == 1 and row.chunks_data == {"0": {"file": "chunk_00.json"}}
+        row.checkpoint_version = 2
+    with pytest.raises(RuntimeError, match="portable staging"):
+        command.downgrade(config, "rpl01c_portable_publication")
+    with session_scope() as session:
+        assert session.get(DocumentStaging, DOC).checkpoint_version == 2
 
 
 def test_postgres_publication_marker_upgrade_preserves_legacy_and_sealed_rows(orphan, monkeypatch):

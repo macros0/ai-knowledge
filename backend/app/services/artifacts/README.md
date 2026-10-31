@@ -75,10 +75,32 @@ retain their previous contracts. Already-active publication replay is a no-op
 and does not require provider access.
 
 V1 remains restricted to legacy local combined execution/migration. These
-changes do not yet restore every cold-worker consumer (full StagingStore, source
-result caches, table/export/diagnostic flows) or discover provider-only orphans.
+changes do not yet restore every cold-worker consumer (source result caches,
+remaining table/export/diagnostic flows) or discover provider-only orphans.
 Production/shared runtime gates remain closed. The S3 protocol double verifies
 adapter behavior but does not certify a customer S3 service.
+
+Staging preview uses one immutable JSON envelope per chunk containing raw input,
+concepts, table-reference payload and generation provenance. Compact SQL metadata
+and CheckpointBinding are replaced together using CAS under the document lock,
+after the durable put. Replacements leave ordinary unreferenced objects for GC;
+they never overwrite the previous snapshot or use mutable sidecar paths as truth.
+Read leases protect materialization. Cache publication rechecks the current
+document/generation/staging pointer under the document lock after provider I/O,
+so removal cannot be undone by late hydration. A cold worker restores raw text,
+concepts and hashed table-reference files before resume. Hot append reads only
+its own chunk payload, retaining the bounded metadata preparation batches.
+V2 finalization enumerates the committed checkpoint inventory, excluding stray
+local chunk files. Partial recovery copies checkpoints to the new candidate;
+removal detaches pointers and leaves byte deletion to GC/read-lease rules.
+
+Migration rpl01d adds checkpoint_version (legacy=1, portable=2). Apply it before
+running this build against an existing DB; create_all does not add columns.
+Legacy checkpoints require explicit migration/regeneration before preview use.
+Switching the flag off does not downgrade existing portable rows. Missing refs,
+changed source identity or missing/corrupt bytes fail even if local files remain.
+Downgrade refuses while portable rows exist, preserving their protocol marker.
+This is checkpoint portability; distributed job-owner fencing remains R2.
 
 PostgreSQL probes live in tests/replica_postgres and require the private URL file
 path in OKF_ARTIFACT_PG_URL_FILE. Only loopback replica_test_<run-id> databases are

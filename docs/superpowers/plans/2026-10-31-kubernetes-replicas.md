@@ -24,7 +24,9 @@ S2 preview: original binding+receipt фиксируются с документ�
 Новый admission default-off и запрещён в production до S3/S4 retention/migration.
 S3 foundation: leases/deletion claims/checkpoint CAS реализованы, проверены
 на SQLite и изолированном PostgreSQL учебной VM103. Manifest v2 preview и cold
-publication/source-download реализованы; полный перенос всех потребителей ещё
+publication/source-download и StagingStore checkpoint preview реализованы.
+Cold resume/CAS/миграция staging проверяются на отдельном PostgreSQL;
+полный перенос всех потребителей ещё
 не завершён. CT102 оставлен stopped по запросу пользователя.
 Python/npm advisory audits после исправлений не находят известных уязвимостей;
 S2–S4, runtime/operations и окруженческие проверки остаются открытыми.
