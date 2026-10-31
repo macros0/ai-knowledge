@@ -32,6 +32,38 @@ def test_handler_runs_outside_sql_and_finishes():
         assert session.get(WorkItem, work_id).status == "succeeded"
 
 
+def test_heartbeat_row_lock_timeout_retries_while_handler_owns_local_slot(monkeypatch):
+    from sqlalchemy.exc import OperationalError
+    from app.services.work import store
+    release = Event()
+    calls = []
+    original = store.renew
+    class LockBusy(Exception):
+        sqlstate = "55P03"
+    def renewal(session, work, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OperationalError("renew", {}, LockBusy())
+        result = original(session, work, **kwargs)
+        release.set()
+        return result
+    monkeypatch.setattr(store, "renew", renewal)
+    def handler(_work):
+        assert release.wait(10)
+    runner = worker(handler)
+    with session_scope() as session:
+        work_id = enqueue(session, spec())
+    try:
+        assert runner.run_once(Event())
+        assert len(calls) >= 2
+        with session_scope() as session:
+            assert session.get(WorkItem, work_id).status == "succeeded"
+    finally:
+        release.set()
+        if runner._future is not None:
+            runner._future.result(timeout=10)
+
+
 def test_only_classified_transient_errors_retry():
     def handler(_work):
         raise TransientWorkError("storage_unavailable")

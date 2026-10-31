@@ -261,11 +261,23 @@ class DocumentRegistry:
         processing_inventory=None, processing_limits=None,
         processing_artifacts_dir=None, processing_settings=None,
         artifact_ref=None, upload_receipt=None, file_hash=None,
+        work_is_admin=False,
+        initial_development=None,
+        initial_processing_scope=None,
     ) -> dict:
         from app.services.tag_registry import TagRegistry
 
         tag_ids = TagRegistry().get_or_create_ids(tags, created_by=uploaded_by, canonical_locale=canonical_locale)
         with session_scope() as s:
+            from app.config import get_settings
+            from app.services.work.admission import durable_documents, enqueue_document
+            settings = get_settings()
+            durable = durable_documents(settings)
+            if durable and processing_inventory is None:
+                if artifact_ref is None:
+                    raise ValueError("Durable document admission requires a verified original")
+                document_work_id = enqueue_document(s, settings, doc_id=doc_id, action="process", source_file_hash=artifact_ref.sha256,
+                    request_id="upload", is_admin=work_is_admin)
             from app.services.tag_registry import ensure_assigned_tags
             ensure_assigned_tags(s, tag_ids)
             doc = Document(
@@ -277,7 +289,14 @@ class DocumentRegistry:
                 uploaded_by=uploaded_by,
                 file_hash=file_hash,
             )
+            if initial_development is not None:
+                if set(initial_development) - {"development_id", "development_confidence", "development_confirmed_by", "development_suggestion"}:
+                    raise ValueError("Invalid initial document development metadata")
+                for key, value in initial_development.items():
+                    setattr(doc, key, value)
             s.add(doc)
+            if durable and processing_inventory is None:
+                doc.status = "queued"
             if processing_inventory is not None:
                 from app.services.processing_scope import create_review
                 doc.status='awaiting_attachments'
@@ -296,6 +315,10 @@ class DocumentRegistry:
             if artifact_ref is not None:
                 from app.services.artifacts.repository import record_upload
                 record_upload(s, document_id=doc_id, ref=artifact_ref, receipt=upload_receipt)
+            if durable and processing_inventory is None:
+                from app.services.work.admission import freeze_document_input, validate_document_scope
+                validate_document_scope(s, doc_id, initial_processing_scope, artifact_ref.sha256)
+                freeze_document_input(s, document_work_id, doc_id, initial_processing_scope)
         return self.get(doc_id)
 
     def get(self, doc_id: str) -> dict | None:
@@ -650,7 +673,12 @@ class DocumentRegistry:
 
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
+            from app.services.work.admission import invalidate_document_intents, retain_deleted_generations
+            invalidate_document_intents(s, doc_id)
             lock_document_write(s, doc_id)
+            retain_deleted_generations(s, doc_id)
+            from app.db.models import DocumentWorkInput
+            s.query(DocumentWorkInput).filter_by(doc_id=doc_id).delete(synchronize_session=False)
             from app.db.models import ArtifactBinding, CheckpointBinding, SourceCacheHead
             s.query(SourceCacheHead).filter(SourceCacheHead.doc_id == doc_id).delete(synchronize_session=False)
             s.query(CheckpointBinding).filter(CheckpointBinding.doc_id == doc_id).delete(synchronize_session=False)
@@ -673,11 +701,17 @@ class DocumentRegistry:
         False). Такой порядок сериализует запись также на SQLite.
         """
         with session_scope() as s:
+            from app.services.work.admission import lock_document_intents, invalidate_document_intents, retain_deleted_generations
+            lock_document_intents(s, doc_id)
             if not lock_document_write(s, doc_id):
                 return False
             doc = s.get(Document, doc_id)
             if doc is None or doc.deleted_at is None:
                 return False
+            invalidate_document_intents(s, doc_id)
+            retain_deleted_generations(s, doc_id)
+            from app.db.models import DocumentWorkInput
+            s.query(DocumentWorkInput).filter_by(doc_id=doc_id).delete(synchronize_session=False)
             from app.db.models import ArtifactBinding, CheckpointBinding, SourceCacheHead
             s.query(SourceCacheHead).filter(SourceCacheHead.doc_id == doc_id).delete(synchronize_session=False)
             s.query(CheckpointBinding).filter(CheckpointBinding.doc_id == doc_id).delete(synchronize_session=False)
@@ -690,11 +724,17 @@ class DocumentRegistry:
     def soft_delete(self, doc_id: str, deleted_by: str | None = None) -> bool:
         """Помечает документ удалённым (корзина, Этап 4a.2), не удаляя данные."""
         with session_scope() as s:
+            from app.services.work.admission import invalidate_document_intents
+            invalidated = invalidate_document_intents(s, doc_id)
             if not lock_document_write(s, doc_id):
                 return False
             doc = s.get(Document, doc_id)
             if doc is None:
                 return False
+            if invalidated and doc.status in {"uploaded", "queued", "processing", "splitting", "indexing"}:
+                # Trash stops execution but retains accepted draft checkpoints.
+                # Explicit cancel-update owns restoration/discard of that draft.
+                doc.status, doc.error, doc.error_code = "paused", None, None
             doc.deleted_at = datetime.now(timezone.utc)
             doc.deleted_by = deleted_by
         from app.services.deduplication import refresh_duplicate_flags
@@ -779,6 +819,10 @@ class DocumentRegistry:
 
     def reset_stale_statuses(self) -> None:
         """Переводит зависшие статусы в paused (вызывается на старте сервера)."""
+        from app.config import get_settings
+        from app.services.work.admission import durable_documents
+        if durable_documents(get_settings()):
+            return  # SQL work ownership/reclaim governs recovery across processes.
         from app.services.document_update import restore_canceled_update
         from app.services.staging import StagingStore
 

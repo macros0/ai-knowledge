@@ -87,7 +87,30 @@ def _validate_requested_chunk_projection_version(version: int | None) -> None:
         raise GenerationConflict("Unsupported chunk projection version")
 
 
+def _require_work_owner(session, generation):
+    if generation.work_id is None:
+        return
+    from app.services.work.context import current_claim, enforce_session
+    from app.services.work.models import LostOwnership
+    work = current_claim() or session.info.get("document_work_claim")
+    if (work is None or work.spec.doc_id != generation.doc_id
+            or (generation.work_id, generation.work_fence) != (work.work_id, work.fence)):
+        raise LostOwnership("Generation mutation requires its current work claim")
+    enforce_session(session)
+
+
 def begin_generation(session, doc_id: str, *, chunk_projection_version: int | None = None) -> DocumentGeneration:
+    from app.config import get_settings
+    from app.services.work.admission import durable_documents
+    from app.services.work.context import current_claim, enforce_session
+    from app.services.work.models import LostOwnership
+    work = current_claim() or session.info.get("document_work_claim")
+    if durable_documents(get_settings()) and (work is None or work.spec.doc_id != doc_id):
+        raise LostOwnership("Distributed generation allocation requires document work")
+    if work is not None:
+        if work.spec.doc_id != doc_id:
+            raise LostOwnership("Foreign document work")
+        enforce_session(session)
     _validate_requested_chunk_projection_version(chunk_projection_version)
     state = _locked_state(session, doc_id)
     if state.candidate_generation_id is not None:
@@ -119,6 +142,7 @@ def prepare_generation_attempt(session, doc_id: str, *, resume: bool,
     state = _locked_state(session, doc_id)
     if state.candidate_generation_id:
         generation = _generation(session, doc_id, state.candidate_generation_id)
+        _require_work_owner(session, generation)
         if resume:
             return generation
         abandon_generation(session, doc_id, generation.id)
@@ -131,6 +155,7 @@ def mark_generation_ready(session, doc_id: str, generation_id: str, *, publicati
     """Called only after all immutable files and search points were verified."""
     state = _locked_state(session, doc_id)
     generation = _generation(session, doc_id, generation_id)
+    _require_work_owner(session, generation)
     if state.candidate_generation_id != generation_id or generation.phase not in {"preparing", "ready"}:
         raise GenerationConflict("Generation is not the current preparing candidate")
     from app.services.table_store import verify_generation_tables
@@ -152,6 +177,7 @@ def publish_generation(session, doc_id: str, generation_id: str) -> bool:
 
         raise DocumentUpdateCancelled("Document update was canceled")
     generation = _generation(session, doc_id, generation_id)
+    _require_work_owner(session, generation)
     if state.active_generation_id == generation_id and generation.phase == "active":
         return False  # The caller must not replay canonical writes either.
     if state.candidate_generation_id != generation_id or generation.phase != "ready":
@@ -180,6 +206,22 @@ def publish_generation(session, doc_id: str, generation_id: str) -> bool:
 def abandon_generation(session, doc_id: str, generation_id: str) -> None:
     state = _locked_state(session, doc_id)
     generation = _generation(session, doc_id, generation_id)
+    if generation.work_id is not None:
+        from app.services.work.context import current_claim, enforce_session
+        from app.services.work.models import LostOwnership
+        from app.db.models import WorkItem
+        work = current_claim() or session.info.get("document_work_claim")
+        if work is not None and work.spec.doc_id == doc_id:
+            enforce_session(session)
+            if work.work_id != generation.work_id:
+                owner = session.get(WorkItem, generation.work_id)
+                if owner is None or owner.status in {"queued", "running"} and not owner.cancel_requested:
+                    raise LostOwnership("A different live work owns this generation")
+        else:
+            owner = session.get(WorkItem, generation.work_id)
+            if (doc_id not in session.info.get("locked_document_intents", ()) or owner is None
+                    or owner.status in {"queued", "running"} and not owner.cancel_requested):
+                raise LostOwnership("Abandoning a work generation requires coordinated cancellation")
     if generation.phase == "abandoned" and state.candidate_generation_id != generation_id:
         return
     if state.candidate_generation_id != generation_id or generation.phase not in {"preparing", "ready"}:
@@ -193,6 +235,7 @@ def lock_writable_generation(session, doc_id: str, generation_id: str) -> Docume
     """Hold the document lock while preparing a candidate's file directories."""
     state = _locked_state(session, doc_id)
     generation = _generation(session, doc_id, generation_id)
+    _require_work_owner(session, generation)
     if state.candidate_generation_id != generation_id or generation.phase != "preparing":
         raise GenerationConflict("Only the current preparing generation is writable")
     return generation

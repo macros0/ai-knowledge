@@ -101,11 +101,29 @@ generation tombstones сохраняются, пока нельзя исключ
 fail-closed для отсутствующего/неактивного generation. GC не удаляет active IDs.
 Существующие point IDs уже включают generation_id — использовать их.
 
-- [ ] Тесты `test_old_worker_returns_after_reclaim`, `test_cancel_delete_publish_race`, `test_upload_commit_enqueues_atomically`, `test_late_qdrant_write_never_visible`, `test_checkpoint_reuse_requires_matching_signature`. Assertions: old publication raises LostOwnership; active generation только нового claim; one upload receipt→one work; late upsert не попал в retrieval/download; delete не воскрешён.
-- [ ] RED: `python -m pytest tests/test_work_document_publication.py -q`; barriers в двух процессах через `test_work_recovery_postgres.py`.
-- [ ] Подключить enqueue к SQL transaction S2, global bounded admission к upload/resume/regenerate и existing four-eyes bulk Job. Заменить global reset_stale_statuses/recover all running на owner-aware recovery только distributed. Внешние writes перед publish исключительно в unique attempt/generation namespace. Все прямые writers из P0 либо проходят guard, либо вынесены в coordinated work; список пустых исключений проверить до R5.
+- [x] Тесты `test_old_worker_returns_after_reclaim`, `test_cancel_delete_publish_race`, `test_upload_commit_enqueues_atomically`, `test_late_qdrant_write_never_visible`, `test_checkpoint_reuse_requires_matching_signature`. Assertions: old publication raises LostOwnership; active generation только нового claim; one upload receipt→one work; late upsert не попал в retrieval/download; delete не воскрешён.
+- [x] RED: `python -m pytest tests/test_work_document_publication.py -q`; barriers в двух процессах через `test_work_recovery_postgres.py`.
+- [x] Подключить enqueue к SQL transaction S2, global bounded admission к upload/resume/regenerate и existing four-eyes bulk Job. Заменить global reset_stale_statuses/recover all running на owner-aware recovery только distributed. Внешние writes перед publish исключительно в unique attempt/generation namespace. Все прямые writers из P0 либо проходят guard, либо вынесены в coordinated work; список пустых исключений проверить до R5.
 - [ ] GREEN плюс `python -m pytest tests/test_generation_store.py tests/test_generation_search.py tests/test_generation_publication_service.py tests/test_pipeline_queue.py -q`; runner runtime реальный Qdrant + PG + shared storage, kill/partition/return старого worker.
-- [ ] Commit `feat: fence document execution and publication`.
+- [x] Commit `feat: fence document execution and publication`.
+
+Implementation milestone R2 (01.11.2026): `rpl02a_document_work`, transactional
+document/bulk admission, frozen processing policy, claim-bound generation writers,
+atomic publication/work success, checkpoint recovery and late-write tombstones.
+Core80 passed; affected regression initially393 passed/1 platform skipped and one
+checkpoint-retirement precondition updated, then its publication/cleanup/staging
+group74 passed. Actual PostgreSQL + server Qdrant: all5 R2 scenarios passed,
+including spawned old-process return through the real heartbeat worker, two
+cancel/delete barriers, global budget and schema preservation/downgrade refusal.
+R1's7 actual PostgreSQL cases also passed in the extended run. Mandatory gate:
+audit0, frontend740 passed/1 skipped, ESLint/Ruff. Soft delete preserves resumable
+draft checkpoints; explicit cancel-update discards/restores that draft.
+
+Ruling: full role/Pod/partition runner depends on R3/R4 and stays an R5 gate.
+These probes share a host filesystem adapter root, so they do not certify RWX/CSI
+or S3 durability. R3 still must register bulk, duplicate-refresh, cleanup and
+scope/repair handlers from the inventory. Direct distributed generation writers
+without a claim are rejected. No distributed capability is enabled by this milestone.
 
 ## Task R3: роли и все фоновые механизмы
 

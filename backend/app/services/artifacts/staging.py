@@ -88,13 +88,20 @@ class PortableStaging:
             raise GenerationIntegrityError()
         return _identity(self.doc_id, snapshot["generation_id"], index, marker["source_signature"])
 
-    def _assert_current(self, session, snapshot, index, info):
+    def _assert_current(self, session, snapshot, index, info, *, recovery=False):
+        phases = {"preparing", "ready", "active"}
+        if recovery:
+            from app.services.work.context import current_claim
+            work = current_claim()
+            if work is None or work.spec.doc_id != self.doc_id:
+                raise GenerationIntegrityError()
+            phases |= {"retired", "abandoned"}
         generation = session.get(DocumentGeneration, snapshot["generation_id"])
         doc = session.get(Document, self.doc_id)
         current = session.execute(select(DocumentStaging.generation_id, DocumentStaging.checkpoint_version,
             DocumentStaging.chunks_data[str(index)].label("info")).where(DocumentStaging.doc_id == self.doc_id)).mappings().one_or_none()
         if (doc is None or doc.deleted_at is not None or generation is None or generation.doc_id != self.doc_id
-                or generation.phase not in {"preparing", "ready", "active"} or current is None
+                or generation.phase not in phases or current is None
                 or current["generation_id"] != snapshot["generation_id"] or current["checkpoint_version"] != 2
                 or current["info"] != info):
             raise GenerationIntegrityError()
@@ -114,6 +121,17 @@ class PortableStaging:
             with session_scope() as session:
                 lock_generation_read(session, [self.doc_id])
                 ref = self._assert_current(session, snapshot, index, info)
+            return self._read_ref(snapshot, index, info, ref)
+        except DomainError:
+            raise
+        except Exception as exc:
+            if is_storage_full(exc):
+                raise StorageFullError() from exc
+            raise GenerationIntegrityError() from exc
+
+    def _read_ref(self, snapshot, index, info, ref):
+        """Decode a captured immutable ref; recovery commits still CAS the source snapshot."""
+        try:
             with materialize(ref, store=LeasedBlobStore(self._store()), scratch_root=self._scratch()) as path:
                 body = json.loads(path.read_text(encoding="utf8"))
             if (not isinstance(body, dict) or body.get("version") != 1

@@ -1,11 +1,12 @@
 """Retryable removal of retired artifacts after SQL publication.
 
-Qdrant is acknowledged before deleting the durable generation record, so an
-unfinished cleanup remains excluded from search and discoverable for retry.
+Qdrant is acknowledged before retiring durable bindings. Work generations keep
+exclusion identity after cleanup because an old process can still write points.
+An accepted checkpoint protects its source until an explicit handoff/retirement.
 """
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.db.models import DocumentGeneration, DocumentGenerationState, DocumentSource, OkfAttachment
 from app.db.session import session_scope
@@ -57,13 +58,22 @@ def cleanup_document_generations(settings, vector_store, doc_id: str) -> int:
 
 
 def _cleanup_retired_generations(settings, vector_store, doc_id: str) -> int:
+    from app.db.models import DocumentStaging
     with session_scope() as session:
         retired = list(session.scalars(select(DocumentGeneration.id).where(
             DocumentGeneration.doc_id == doc_id, DocumentGeneration.phase.in_(["retired", "abandoned"]),
+            or_(DocumentGeneration.work_id.is_(None), DocumentGeneration.work_cleanup_done.is_(False)),
+            ~select(DocumentStaging.doc_id).where(DocumentStaging.generation_id == DocumentGeneration.id).exists(),
         )))
     removed = 0
     for generation_id in retired:
         with session_scope() as session:
+            candidate = session.get(DocumentGeneration, generation_id)
+            if candidate is not None and candidate.work_id is not None:
+                from app.db.models import WorkItem
+                owner = session.scalar(select(WorkItem.id).where(WorkItem.id == candidate.work_id).with_for_update())
+                if owner is None:
+                    raise GenerationConflict("Work generation ownership record is missing")
             # Check existence only after taking the writer lock: another worker
             # may already have removed this row since the initial snapshot.
             generation = lock_cleanup_generation(session, doc_id, generation_id, missing_ok=True)
@@ -74,6 +84,11 @@ def _cleanup_retired_generations(settings, vector_store, doc_id: str) -> int:
             from app.db.models import ArtifactBinding, CheckpointBinding, SourceCacheHead
             for model in (SourceCacheHead, ArtifactBinding, CheckpointBinding):
                 session.query(model).filter(model.doc_id == doc_id, model.generation_id == generation_id).delete(synchronize_session=False)
-            session.delete(generation)
+            if generation.work_id is None:
+                session.delete(generation)
+            else:
+                # Late external writes can outlive a process/lease. Keep exclusion identity.
+                generation.migration_artifacts_id, generation.migration_artifacts_version = None, 1
+                generation.work_cleanup_done = True
         removed += 1
     return removed

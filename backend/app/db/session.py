@@ -30,6 +30,8 @@ _current_session = ContextVar("current_sql_session", default=None)
 @event.listens_for(Session, "do_orm_execute")
 def _track_storage_write(execution):
     if execution.is_insert or execution.is_update or execution.is_delete or getattr(execution.statement, "is_text", False):
+        from app.services.work.context import enforce_session as enforce_work
+        enforce_work(execution.session)
         execution.session.info["artifact_storage_write"] = True
         from app.services.artifacts.control import enforce_session, enforce_write
         enforce_session(execution.session)
@@ -39,6 +41,8 @@ def _track_storage_write(execution):
 @event.listens_for(Session, "before_flush")
 def _guard_storage_flush(session, _context, _instances):
     if session.new or session.dirty or session.deleted:
+        from app.services.work.context import enforce_session as enforce_work
+        enforce_work(session)
         session.info["artifact_storage_write"] = True
         from app.services.artifacts.control import enforce_session, enforce_write
         enforce_session(session)
@@ -109,12 +113,23 @@ def session_scope():
     Используется и в эндпоинтах, и в фоновом пайплайне (по одной операции на
     сессию, commit сразу после записи — поведение как у прежнего _save()).
     """
+    from app.services.work.context import current_claim, enforce_session as enforce_work
+    parent = _current_session.get()
+    if parent is not None and (current_claim() is not None or parent.info.get("document_work_claim") is not None):
+        enforce_work(parent)
+        with parent.begin_nested():
+            yield parent
+            enforce_work(parent)
+        return
     session = get_session_factory()()
     token = _current_session.set(session)
     try:
+        from app.services.work.context import enforce_session as enforce_work
+        enforce_work(session)
         from app.services.artifacts.control import enforce_session, enforce_write
         enforce_session(session)
         yield session
+        enforce_work(session)
         enforce_write(session)
         enforce_session(session)
         session.commit()
@@ -163,6 +178,8 @@ def init_db() -> None:
     Base.metadata.create_all(get_engine())
     from app.services.artifacts.control import initialize_control
     initialize_control(get_engine())
+    from app.services.work.admission import initialize_admission
+    initialize_admission(get_engine())
     # The glossary writer lock is a singleton row.  Seed it before request
     # threads can start so two first writers cannot race on its INSERT.
     if hasattr(models, "GlossaryState"):

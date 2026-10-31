@@ -70,6 +70,12 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _enqueue_bulk_work(session, job_id):
+    from app.services.work.models import WorkSpec
+    from app.services.work.store import enqueue
+    return enqueue(session, WorkSpec("bulk", 1, {"job_id": job_id}, f"bulk/{job_id}"))
+
+
 def _to_dict(job: Job) -> dict:
     result = dict(job.result or {})
     # Exact legacy message from our restart recovery, never arbitrary error text.
@@ -118,6 +124,9 @@ class JobQueue:
         (app.main) — после init_db(). Иначе импорт app.main падал бы на
         отсутствующих таблицах, ещё до мягкого старта.
         """
+        from app.services.work.admission import durable_documents
+        if durable_documents(get_settings()):
+            return
         with session_scope() as s:
             queued = list(
                 s.execute(
@@ -187,6 +196,8 @@ class JobQueue:
             raise DomainError("Список документов пуст", code=codes.EMPTY_DOCUMENT_LIST)
 
         settings = get_settings()
+        from app.services.work.admission import durable_documents, lock_admission
+        durable = durable_documents(settings)
         # Circuit breaker: проверяем ДО создания записи в jobs.
         if self.pending_count() >= settings.job_queue_max_pending:
             raise QueueOverloadedError(
@@ -202,6 +213,10 @@ class JobQueue:
         status = STATUS_AWAITING_APPROVAL if needs_approval else STATUS_QUEUED
 
         with session_scope() as s:
+            if durable:
+                lock_admission(s)
+                if s.query(Job).filter(Job.job_type.in_(JOB_TYPES), Job.status.in_(PENDING_STATUSES)).count() >= settings.job_queue_max_pending:
+                    raise QueueOverloadedError("Очередь массовых операций заполнена")
             if job_type == BULK_RESUME and set(doc_ids) & reserved_generation_doc_ids(s):
                 raise ConflictError("Документы уже ожидают обработки", code=codes.ALREADY_PROCESSING)
             job = Job(
@@ -218,8 +233,10 @@ class JobQueue:
             s.add(job)
             s.flush()
             job_id = job.id
+            if durable and not needs_approval:
+                _enqueue_bulk_work(s, job_id)
 
-        if not needs_approval:
+        if not needs_approval and not durable:
             self._queue.put(job_id)
         return self._get_or_raise(job_id)
 
@@ -257,7 +274,11 @@ class JobQueue:
     def approve(self, job_id: int, approver, *, ip_address: str | None = None) -> dict:
         """Одобрение (four-eyes) задачи в awaiting_approval вторым администратором."""
         with session_scope() as s:
-            job = s.get(Job, job_id)
+            from app.services.work.admission import durable_documents, lock_admission
+            durable = durable_documents(get_settings())
+            if durable:
+                lock_admission(s)
+            job = s.scalar(select(Job).where(Job.id == job_id).with_for_update())
             if job is None:
                 raise JobNotFoundError(f"Задача {job_id} не найдена")
             if job.job_type not in JOB_TYPES:
@@ -275,21 +296,35 @@ class JobQueue:
             job.status = STATUS_QUEUED
             job.approved_by = getattr(approver, "username", None) or getattr(approver, "user_id", None)
             job.approved_at = _utcnow()
+            if durable:
+                _enqueue_bulk_work(s, job_id)
+                audit_mod.record_in_session(s, action_type=audit_mod.JOB_APPROVE,
+                    user_id=getattr(approver, "user_id", None), username=getattr(approver, "username", None),
+                    target_type=audit_mod.TARGET_JOB, target_id=str(job_id), ip_address=ip_address)
 
-        audit_mod.record(
-            approver,
-            audit_mod.JOB_APPROVE,
-            audit_mod.TARGET_JOB,
-            target_id=str(job_id),
-            ip_address=ip_address,
-        )
-        self._queue.put(job_id)
+        if not durable:
+            audit_mod.record(
+                approver,
+                audit_mod.JOB_APPROVE,
+                audit_mod.TARGET_JOB,
+                target_id=str(job_id),
+                ip_address=ip_address,
+            )
+            self._queue.put(job_id)
         return self._get_or_raise(job_id)
 
     def cancel(self, job_id: int, canceller, *, ip_address: str | None = None) -> dict:
         """Отмена задачи в queued/awaiting_approval (running — не отменяется)."""
         with session_scope() as s:
-            job = s.get(Job, job_id)
+            from app.services.work.admission import durable_documents, lock_admission
+            from app.services.work.store import cancel
+            from app.db.models import WorkItem
+            durable = durable_documents(get_settings())
+            work_id = None
+            if durable:
+                lock_admission(s)
+                work_id = s.scalar(select(WorkItem.id).where(WorkItem.dedupe_key == f"bulk/{job_id}").with_for_update())
+            job = s.scalar(select(Job).where(Job.id == job_id).with_for_update())
             if job is None:
                 raise JobNotFoundError(f"Задача {job_id} не найдена")
             if job.job_type not in JOB_TYPES:
@@ -304,14 +339,21 @@ class JobQueue:
                 )
             job.status = STATUS_CANCELLED
             job.finished_at = _utcnow()
+            if durable:
+                if work_id is not None:
+                    cancel(s, work_id)
+                audit_mod.record_in_session(s, action_type=audit_mod.JOB_CANCEL,
+                    user_id=getattr(canceller, "user_id", None), username=getattr(canceller, "username", None),
+                    target_type=audit_mod.TARGET_JOB, target_id=str(job_id), ip_address=ip_address)
 
-        audit_mod.record(
-            canceller,
-            audit_mod.JOB_CANCEL,
-            audit_mod.TARGET_JOB,
-            target_id=str(job_id),
-            ip_address=ip_address,
-        )
+        if not durable:
+            audit_mod.record(
+                canceller,
+                audit_mod.JOB_CANCEL,
+                audit_mod.TARGET_JOB,
+                target_id=str(job_id),
+                ip_address=ip_address,
+            )
         return self._get_or_raise(job_id)
 
     # --- Worker ---

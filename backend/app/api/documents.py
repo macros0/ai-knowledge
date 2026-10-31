@@ -472,6 +472,26 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
     origin_locale = canonical_locale or request_locale(request, fallback="und")
     _tag_registry.add(user_tags, canonical_locale=origin_locale)
     scope_create_options={}
+    from app.services.work.admission import durable_documents
+    durable_work = durable_documents(get_settings())
+    bound_development_id: int | None = None
+    if durable_work:
+        scope_create_options["work_is_admin"] = "admin" in user.roles
+        scope_create_options["initial_processing_scope"] = processing_scope
+        if development_id is not None:
+            if get_development_registry().get(development_id) is None:
+                raise ApiError(status_code=422, code=errors.DEVELOPMENT_NOT_FOUND, detail="Разработка не найдена")
+            scope_create_options["initial_development"] = {
+                "development_id": development_id, "development_confidence": 1.0,
+                "development_confirmed_by": user.username, "development_suggestion": None}
+            bound_development_id = development_id
+        else:
+            initial_detection = detect("", file.filename or "unknown", doc_id)
+            if initial_detection.confidence is not None:
+                fields = {"development_confidence": initial_detection.confidence, "development_suggestion": initial_detection.suggestion}
+                if initial_detection.development_id is not None:
+                    fields["development_id"] = initial_detection.development_id
+                scope_create_options["initial_development"] = fields
     artifact_ref = None
     if get_settings().artifact_uploads_enabled:
         from app.services.artifacts import get_blob_store
@@ -492,23 +512,25 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
                               'processing_limits':assessment_limits(get_settings()),
                               'processing_artifacts_dir':processing_attempt,
                               'processing_settings':get_settings()})
-    doc = _registry.create(
-        doc_id,
-        file.filename or "unknown",
-        file.content_type or "",
-        size,
-        tags=user_tags,
-        canonical_locale=origin_locale,
-        uploaded_by=user.username,
-        **scope_create_options,
-    )
+    try:
+        doc = _registry.create(
+            doc_id,
+            file.filename or "unknown",
+            file.content_type or "",
+            size,
+            tags=user_tags,
+            canonical_locale=origin_locale,
+            uploaded_by=user.username,
+            **scope_create_options,
+        )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 503 if exc.code == errors.QUEUE_OVERLOADED else 409) from exc
     if file_hash and artifact_ref is None:
         set_file_hash(doc_id, file_hash)
     # Явная привязка разработки из контекста загрузки (Этап 4a.1, «поиск →
     # загрузка»): важнее автоопределения — при заданном development_id regex/
     # LLM-детект не запускается, dev_tags проставит пайплайн в _finalize.
-    bound_development_id: int | None = None
-    if development_id is not None:
+    if development_id is not None and not durable_work:
         if get_development_registry().get(development_id) is None:
             raise ApiError(
             status_code=422,
@@ -526,7 +548,7 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
         bound_development_id = development_id
     # Автоопределение номера разработки по имени файла (regex, без LLM) до
     # запуска пайплайна. LLM-детекция с титульного листа — позже, в pipeline.
-    if bound_development_id is None:
+    if bound_development_id is None and not durable_work:
         detection = detect("", file.filename or "unknown", doc_id)
         if detection.confidence is not None:
             attach_development(doc_id, detection)
@@ -535,7 +557,7 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
         if preview_markdown is not None:
             index_document(doc_id, preview_markdown, preview_mail_fingerprint)
             doc = _registry.get(doc_id) or doc
-        if processing_inventory is None:
+        if processing_inventory is None and not durable_work:
             get_pipeline().ingest(
                 doc_id,
                 get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}",

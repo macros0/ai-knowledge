@@ -403,11 +403,22 @@ def recover_review_admission(session, doc_id, settings, *, force=False):
     """Revoke an expired validator under the same lock used by its late writes."""
     from datetime import datetime, timezone, timedelta
     from app.db.models import Document
+    from app.services.work.admission import durable_documents, lock_document_intents
+    durable = durable_documents(settings)
+    if durable:
+        lock_document_intents(session, doc_id)
     if not lock_document_write(session, doc_id, allow_deleted=False):
         return False
     row = session.get(DocumentProcessingReview, doc_id, populate_existing=True)
     if not row or row.state not in {"validating", "submitted"} or row.generation_id is not None:
         return False
+    if durable and row.state == "submitted":
+        from app.db.models import DocumentWorkInput, WorkItem
+        accepted = session.scalar(select(WorkItem.id).join(DocumentWorkInput, DocumentWorkInput.work_id == WorkItem.id)
+            .where(DocumentWorkInput.doc_id == doc_id, DocumentWorkInput.scope_request_id == row.request_id,
+                   WorkItem.kind == "document", WorkItem.status.in_(["queued", "running"]), WorkItem.cancel_requested.is_(False)))
+        if accepted is not None:
+            return False
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=max(180, settings.parser_timeout_seconds + 60))
     started = row.validation_started_at
     if not force and started and (started.replace(tzinfo=timezone.utc) if started.tzinfo is None else started) > cutoff:

@@ -125,6 +125,8 @@ def finish(session, work: WorkClaim, *, outcome: str, error_code: str | None = N
     row.status, row.finished_at, row.error_code = outcome, now, error_code
     row.owner_id, row.lease_until = None, None
     session.flush()
+    from .context import note_completion
+    note_completion(session, work, outcome)
 
 
 def cancel(session, work_id: str) -> bool:

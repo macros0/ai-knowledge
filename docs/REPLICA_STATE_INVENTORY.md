@@ -1,22 +1,25 @@
 # Состояние, требующее координации между репликами
 
 Инвентарь P0, 31.10.2026. Пути в таблице относительно `backend/app/`, если не указано иное.
-Все механизмы пока работают в прежнем single-backend runtime; столбец «Перенос»
-описывает задачу, а не выполненную миграцию. Детали проверяются тестами каждой задачи.
+Рабочий runtime остаётся single-backend. В R1/R2 реализованы закрытые ветки
+work ownership, document admission и publication fencing; включение distributed
+по-прежнему запрещено. Ниже указаны также обязательные оставшиеся переносы.
 
 | Путь | Состояние / текущий владелец | Повтор, отмена и перенос |
 |---|---|---|
 | main.py lifespan | recovery всех running/processing; startup threads | owner-aware recovery R2/R3; убрать из API |
-| services/job_queue.py | in-memory queue/admission lock; Job в SQL | bulk four-eyes сохранить; enqueue/recovery R1/R2 |
-| services/pipeline.py | executor, semaphore, abort events, chunk locks | durable claim/cancel/checkpoints, R2/R3 |
-| services/registry.py reset_stale_statuses | глобальная правка статусов при старте | только просроченные owners R2 |
+| services/job_queue.py | combined queue; future Job + private bulk intent | R2: атомарный enqueue/approval/cancel, four-eyes сохранён; R3: handler/children без ожидания в той же очереди |
+| services/pipeline.py | combined executor; future document work | R2: enqueue/claim/cancel/recovery/publication; R3: убрать executors из API и зарегистрировать handlers |
+| services/registry.py reset_stale_statuses | глобальная правка только combined | R2: distributed не сбрасывает чужие статусы; R3: lifecycle не запускает global recovery из API |
 | services/staging.py | SQL manifest + chunk files, process locks | immutable artifacts S3, fenced checkpoint R2 |
-| services/generation_store.py | SQL document locks, active/candidate pointer | сохранить; добавить ownership guard R2 |
-| services/generation_publication.py | canonical commit + FS/Qdrant verification | immutable artifacts S3, claim transaction R2 |
+| services/generation_store.py | SQL document locks, active/candidate pointer | R2: matching claim для work generation; distributed begin требует claim; отказ от чужого candidate только после координированной отмены |
+| services/generation_publication.py | canonical commit + FS/Qdrant verification | R2: canonical + active pointer + work success вместе; R3: duplicate_refresh и retirement checkpoint по ожидаемому поколению |
 | services/generation_files.py, generation_artifacts.py | generation dirs/checksums | BlobRef/materialize S1–S3 |
 | services/generation_search.py, vector_store.py | exclusions, generation-aware IDs, clients | сохранить active filtering; stale writes R2 |
-| services/generation_cleanup.py | удаление неактивных FS/Qdrant generations | coordinated GC, read leases, tombstones S3/R2 |
-| services/processing_scope_jobs.py, update_workers.py | SQL owner token/lease/cancel + threads | переиспользовать; общий WorkClaim R2/R3 |
+| services/generation_cleanup.py | удаление неактивных FS/Qdrant generations | R2: Work→Doc, сохраняет exclusion identity, источник текущего checkpoint защищён; R3: scheduler/handler |
+| services/processing_admission.py, processing_scope.py | review leases + frozen work input | R2: confirmation/work/audit atomic, queued work защищён от legacy recovery; R3: role lifecycle |
+| services/processing_scope_jobs.py, update_workers.py | SQL owner token/lease/cancel + threads | R3: общий WorkClaim, новый candidate при reclaim; будущий прямой begin без claim уже отклоняется R2 |
+| services/canonical_repair.py, generation backfills and backend/scripts | legacy writers/read-repair | R2: distributed begin/publication без claim отклоняются; R3: coordinated handlers/cursors, явная инвентаризация каждого входа перед R5 |
 | services/processing_scope_cache.py, processing_scope_originals.py | source cache/original paths | portable durable refs S3; scratch может теряться |
 | services/reference_concurrency.py | durable revision/edit lease | сохранить SQL serialization; проверить cross-process R4 |
 | services/export_queue.py | local worker/locks, SQL public state, files/downloads | durable jobs R3, artifacts/leases S3 |

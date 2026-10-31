@@ -257,10 +257,19 @@ class Pipeline:
         *, is_admin: bool = False, processing_scope: dict | None = None,
         scope_request_id: str | None = None,
     ) -> None:
+        from app.services.work.admission import durable_documents, enqueue_existing_document
+        if durable_documents(self.settings):
+            enqueue_existing_document(self.settings, doc_id, "process", is_admin=is_admin,
+                processing_scope=processing_scope, scope_request_id=scope_request_id)
+            return
         self._start(doc_id, str(filepath), filename, user_tags or [], resume=False, is_admin=is_admin,
                     processing_scope=processing_scope,scope_request_id=scope_request_id)
 
     def resume(self, doc_id: str, *, is_admin: bool = False) -> None:
+        from app.services.work.admission import durable_documents, enqueue_existing_document
+        if durable_documents(self.settings):
+            enqueue_existing_document(self.settings, doc_id, "resume", is_admin=is_admin)
+            return
         doc = self.registry.get(doc_id)
         if not doc:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
@@ -314,6 +323,11 @@ class Pipeline:
             if requires_action:
                 return
 
+        from app.services.work.admission import durable_documents, enqueue_existing_document
+        if durable_documents(self.settings):
+            enqueue_existing_document(self.settings, doc_id, "regenerate", is_admin=is_admin,
+                processing_scope=processing_scope, scope_request_id=scope_request_id)
+            return
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False,
                     reset_staging=True, is_admin=is_admin,processing_scope=processing_scope,
                     scope_request_id=scope_request_id)
@@ -350,6 +364,10 @@ class Pipeline:
         with self._start_lock:
             with session_scope() as session:
                 from app.db.models import Document, DocumentGenerationState, DocumentUpdateAttempt
+                from app.services.work.admission import durable_documents, lock_document_intents, invalidate_document_intents
+                durable = durable_documents(self.settings)
+                if durable:
+                    lock_document_intents(session, doc_id)
 
                 if not lock_document_write(session, doc_id, allow_deleted=False):
                     raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
@@ -375,6 +393,11 @@ class Pipeline:
                         target_id=doc_id, ip_address=ip_address,
                         new_value={"update_id": attempt.id, "previous_version_preserved": True},
                     )
+                if durable:
+                    invalidate_document_intents(session, doc_id)
+                    restore_canceled_update(session, doc_id)
+            if durable:
+                return  # Generation cleanup is coordinated separately; no unguarded cache deletion.
             event = self._abort_events.get(doc_id)
             if event:
                 event.set()
@@ -1484,6 +1507,9 @@ class Pipeline:
         if not publish_prepared_document(self.settings, self.vector_store, doc_id, generation_id):
             return
         finish_stage("publish", publication_started)
+        from app.services.work.context import current_claim
+        if current_claim() is not None:
+            return  # R3 coordinates checkpoint retirement after the work transaction committed.
         # Keep incomplete generation checkpoints for selective recovery, even
         # after successful indexing. Clean runs release them after the DB update.
         try:

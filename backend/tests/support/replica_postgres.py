@@ -11,6 +11,12 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 
+class PrivatePostgresUrl(str):
+    """Keep driver compatibility without leaking fixture credentials on failure."""
+    def __repr__(self):
+        return "PrivatePostgresUrl(<redacted>)"
+
+
 @contextmanager
 def disposable_postgres():
     path = os.environ.get("OKF_ARTIFACT_PG_URL_FILE")
@@ -36,7 +42,7 @@ def disposable_postgres():
         init_db()
         reset_pipeline()
         try:
-            yield scoped.render_as_string(hide_password=False)
+            yield PrivatePostgresUrl(scoped.render_as_string(hide_password=False))
         finally:
             reset_pipeline()
             get_engine().dispose()

@@ -173,6 +173,10 @@ def test_cleanup_race_cannot_resurrect_retired_cache(pipeline_env, monkeypatch):
                 cleanup = False
                 with session_scope() as session:
                     abandon_generation(session, DOC_ID, candidate)
+                # R2 retains any generation still used by an accepted checkpoint.
+                # Retire that source before exercising cleanup versus hydration.
+                from app.services.staging import StagingStore
+                StagingStore(DOC_ID).remove()
                 cleanup_document_generations(pipeline.settings, pipeline.vector_store, DOC_ID)
                 assert not paths.uploads_root.exists() and not paths.bundle.exists()
             yield source

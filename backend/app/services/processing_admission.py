@@ -81,6 +81,15 @@ def confirm_processing_scope(
     if not doc or doc.get("deleted_at"):
         raise ProcessingScopeConflict("Документ недоступен.")
     with session_scope() as session:
+        from app.services.work.admission import durable_documents
+        if durable_documents(settings):
+            from app.db.models import DocumentWorkInput
+            accepted = session.scalar(select(DocumentWorkInput).where(DocumentWorkInput.scope_request_id == request_id))
+            if accepted is not None:
+                frozen = accepted.processing_scope_json or {}
+                if accepted.doc_id != doc_id or frozen.get("review_id") != review_id or frozen.get("review_revision") != revision:
+                    raise ProcessingScopeConflict("Этот идентификатор подтверждения уже использован.")
+                return ProcessingAdmissionResult("already_accepted", doc)
         prior = session.scalar(
             select(DocumentGeneration).where(DocumentGeneration.scope_request_id == request_id)
         )
@@ -214,6 +223,9 @@ def confirm_processing_scope(
                         },
                     )
             with session_scope() as session:
+                from app.services.work.admission import durable_documents, lock_document_intents, enqueue_existing_document
+                if durable_documents(settings):
+                    lock_document_intents(session, doc_id)
                 row = locked_review(session, doc_id, review_id, revision)
                 if row.validation_token != token:
                     raise ProcessingScopeConflict()
@@ -235,6 +247,11 @@ def confirm_processing_scope(
                 append_scope_audit(
                     session, doc_id, actor, "document_processing_scope_confirmed", row
                 )
+                if durable_documents(settings):
+                    enqueue_existing_document(settings, doc_id, "regenerate" if doc.get("has_published_version") else "process",
+                        is_admin=is_admin, processing_scope=snapshot, scope_request_id=request_id, session=session)
+            if durable_documents(settings):
+                return ProcessingAdmissionResult("accepted", registry.get(doc_id))
             pipeline = get_pipeline()
             if doc.get("has_published_version"):
                 pipeline.regenerate(

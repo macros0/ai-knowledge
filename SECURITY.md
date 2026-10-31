@@ -1790,6 +1790,25 @@ Desired/current frontend probe/grace budgets are checked before maintenance.
 Unknown writer/node states still require investigation; no force deletion or
 distributed-backend guarantee is introduced.
 
+## 2026-11-01 — Fenced document execution foundation
+
+Document execution foundation (replica runtime remains gated): a work claim fences
+SQL progress, checkpoint bindings and canonical publication. Publication and work
+success commit together. Reclaimed work uses a fresh generation and point IDs;
+completion authority is limited to that transaction, including callers that reuse
+a SQL session. Bulk approval/cancellation commits its private work intent with
+the public Job transition and audit, preserving the second-administrator rule.
+Accepted checkpoints are reused only with matching source, parser and scope
+signatures. A document's frozen work input retains its private processing policy
+under the document's existing access and retention rules and is removed on hard
+purge. Work payloads contain identifiers and hashes, without source content.
+Deletion invalidates outstanding document work before changing the document.
+Retired work generations retain exclusion identity against late external writes.
+After hard purge, only generation/document/work IDs and fence survive in a
+non-content tombstone; no processing policy, title or extracted text is retained
+there. These identities have no automatic expiry while late writes remain possible.
+This foundation does not enable distributed runtime or certify a storage provider.
+
 ## 2026-10-31 — Internal frontend diagnostics transport
 
 Added opt-in token authentication, strict content-free payload validation, bounded

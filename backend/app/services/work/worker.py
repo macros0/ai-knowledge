@@ -2,6 +2,9 @@
 from concurrent.futures import ThreadPoolExecutor, wait
 import logging
 
+from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
+
 from app.db.session import session_scope
 from .handlers import TransientWorkError
 from .models import LostOwnership
@@ -28,15 +31,29 @@ class Worker:
             future = executor.submit(self.registry.resolve(work.spec), work)
             self._future = future
             failure = None
+            heartbeat_wait = self.settings.work_heartbeat_seconds
             while True:
                 if stop.is_set():
                     return True  # Leave ownership to expire; no late ACK callback.
-                completed, _ = wait([future], timeout=self.settings.work_heartbeat_seconds)
+                completed, _ = wait([future], timeout=heartbeat_wait)
                 if completed:
                     failure = future.exception()
                     break
-                with session_scope() as session:
-                    work = store.renew(session, work, lease_seconds=self.settings.work_lease_seconds)
+                try:
+                    with session_scope() as session:
+                        if session.get_bind().dialect.name == "postgresql":
+                            # A document's short write transaction can hold the
+                            # same row. Bound the wait; retry in a fresh transaction.
+                            milliseconds = min(5000, max(100, int(self.settings.work_heartbeat_seconds * 500)))
+                            session.scalar(select(func.set_config("lock_timeout", f"{milliseconds}ms", True)))
+                        work = store.renew(session, work, lease_seconds=self.settings.work_lease_seconds)
+                except OperationalError as exc:
+                    if getattr(exc.orig, "sqlstate", None) != "55P03":
+                        raise
+                    heartbeat_wait = min(1, self.settings.work_poll_seconds)
+                    logger.debug("Work heartbeat row busy; retrying without an acknowledgement")
+                    continue
+                heartbeat_wait = self.settings.work_heartbeat_seconds
             with session_scope() as session:
                 if isinstance(failure, TransientWorkError):
                     row, _ = store._locked(session, work)

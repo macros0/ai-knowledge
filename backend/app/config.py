@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     work_lease_seconds: int = Field(default=120, ge=5, le=3600)
     work_heartbeat_seconds: int = Field(default=30, ge=1, le=600)
     work_max_attempts: int = Field(default=3, ge=1, le=10)
+    work_max_pending_documents: int = Field(default=1000, ge=1, le=100000)
     work_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
     work_retry_backoff_seconds: tuple[int, int, int] = (5, 30, 120)
     artifact_backend: str = "local"

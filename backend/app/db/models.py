@@ -565,6 +565,9 @@ class DocumentGeneration(Base):
     publication_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     migration_artifacts_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     migration_artifacts_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    work_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    work_fence: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    work_cleanup_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     processing_scope_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     processing_scope_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     scope_request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
@@ -576,7 +579,26 @@ class DocumentGeneration(Base):
             "phase IN ('preparing', 'ready', 'active', 'retired', 'abandoned')",
             name="ck_document_generations_phase",
         ),
+        Index("ix_generation_work_attempt", "work_id", "work_fence", unique=True),
     )
+
+
+class DocumentWorkInput(Base):
+    """Immutable, private policy captured in the same transaction as admission."""
+    __tablename__ = "document_work_inputs"
+    work_id: Mapped[str] = mapped_column(ForeignKey("work_items.id"), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    processing_scope_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    scope_request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
+
+
+class DeletedWorkGeneration(Base):
+    """Non-content exclusion identity survives the document's cascading purge."""
+    __tablename__ = "deleted_work_generations"
+    generation_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    work_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    work_fence: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class DocumentUpdateAttempt(Base):
@@ -1271,6 +1293,12 @@ class AnswerScenarioVersion(Base):
         CheckConstraint("version > 0", name="ck_answer_scenario_versions_positive"),
         CheckConstraint("visibility IN ('private', 'public')", name="ck_answer_scenario_versions_visibility"),
     )
+
+
+class WorkAdmissionState(Base):
+    __tablename__ = "work_admission_state"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_work_admission_singleton"),)
 
 
 class WorkItem(Base):
