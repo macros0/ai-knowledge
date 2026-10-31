@@ -1561,6 +1561,32 @@ a paused document/receipt, and a retry returns it without starting another job.
 No role, document scope, distributed-backend or provider certification gate is
 relaxed. No original bytes, raw attempt key or credential is added to audit.
 
+## 2026-10-31 — Artifact read leases, checkpoints and orphan deletion
+
+Metadata-known objects now have ready/deleting/deleted states. A shared SQL row
+lock serializes binding/checkpoint/read-lease creation against an orphan deletion
+claim. GC never detaches owners: live references or unexpired leases block its
+claim. Claimed/deleted identities cannot be rebound; deletion receipts use tokens
+so a stale collector cannot complete another attempt. Failed provider deletion
+leaves a retryable claim and tombstone. Default orphan grace is24hours; creation
+time comes from the database clock, matching lease/GC time rather than client clocks.
+
+Authorized original reads commit their document/ref snapshot before acquiring a
+separate durable read lease, avoiding a SQLite self-deadlock. Leases renew during
+provider verification and streaming; guards stop further byte delivery on loss
+or conservative local deadline expiry. Private materialized HTTP copies remain
+independent after provider reading finishes. Pipeline cache publication rechecks
+the live document under its writer lock. Checkpoints require the current writable
+generation, exact source signature and CAS for replacement. Purge/retired cleanup
+detach references without directly deleting provider objects; existing leases
+still protect in-progress readers.
+
+No automatic provider scan or GC scheduler is enabled. Provider-only unregistered
+orphans, manifest v2, remaining source/table/export consumers and R2 job fencing
+remain pending; production activation stays prohibited. The lifecycle contract
+and migration were exercised on isolated PostgreSQL in the user's training VM;
+this does not establish multi-node/provider failure certification.
+
 ## 2026-10-31 — Dependency denial-of-service advisories
 
 Updated tooling Zod to 4.6.7 (GHSA-mrhx-c7xc-m3w5) and all upstream minimatch

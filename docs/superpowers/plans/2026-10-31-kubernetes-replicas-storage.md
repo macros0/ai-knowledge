@@ -21,6 +21,14 @@ cache реализуются за ARTIFACT_UPLOADS_ENABLED (default false, produ
 Queue enqueue пока combined/post-commit: при отказе остаётся paused и тот же receipt.
 Перенос всех источников, поколений, exports и GC остаётся в S3; live приёмка открыта.
 
+S3 foundation: состояния объектов/leases/GC claims и CheckpointBinding/CAS
+реализованы; original download/cache используют leased materialization.
+SQLite contracts и реальные PostgreSQL гонки/миграция проверены в отдельном
+namespace учебной VM103. Clock-skew regression исправлена DB-side created_at.
+Автозапуск GC, поиск provider-only orphans, manifest v2, интеграция StagingStore
+и перенос остальных durable категорий остаются открытыми. Single-node kind
+не подтверждает RWX/CSI/S3 или устойчивость к потере ноды.
+
 ## Global Constraints
 
 Все ограничения [основного плана](2026-10-31-kubernetes-replicas.md) обязательны.

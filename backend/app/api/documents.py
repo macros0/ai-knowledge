@@ -1436,11 +1436,15 @@ def _bound_original_response(session, doc):
     if ref is None:
         return None
     from app.services.artifacts import get_blob_store
+    from app.services.artifacts.leased import LeasedBlobStore
     from app.services.artifacts.contract import BlobNotFound, BlobUnavailable, BlobIntegrityError
     from app.services.artifact_response import OpenedBlobResponse
     settings = get_settings()
+    # Authorization/ref resolution is a completed snapshot before independent
+    # lease writes. Holding a SQLite read transaction here would block them.
+    session.commit()
     try:
-        response = OpenedBlobResponse(store=get_blob_store(settings), ref=ref,
+        response = OpenedBlobResponse(store=LeasedBlobStore(get_blob_store(settings)), ref=ref,
             scratch_root=settings.artifact_scratch_root or settings.data_dir / "artifact-scratch",
             filename=doc.filename, headers={"X-Content-Type-Options": "nosniff"})
         session.info.setdefault("artifact_download_responses", []).append(response)

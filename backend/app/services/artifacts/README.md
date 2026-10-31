@@ -29,6 +29,34 @@ still require S3 conversion. Purge detaches bindings but never directly deletes
 objects; receipt tombstones survive purge. Unreferenced objects require S3 GC,
 which is why preview is disabled by default and prohibited in production.
 
+Lifecycle foundation (S3) adds durable read leases and deletion tombstones.
+LeasedBlobStore is read-only: its open verifies against registered metadata,
+renews a lease while the provider verifies/spools/reads, and passes loss guards
+into local/S3 verification and range reads. Database errors or a conservative
+monotonic deadline stop further byte delivery. An already materialized private
+copy no longer reads the provider and does not keep that lease alive.
+
+collect_blob only handles metadata-known, unbound objects older than its grace
+(24h default). It checks both ArtifactBinding and CheckpointBinding plus live
+leases under the object row lock, commits deleting before provider deletion,
+then acknowledges its exact claim token. Failed deletion can retry after claim
+expiry. Metadata tombstones prevent identity reuse. It never removes bindings,
+scans arbitrary provider keys or runs automatically. Owner lifecycle code alone
+detaches references under its document/job lock. Newly registered object creation
+uses server time; upgrades preserve historical timestamps conservatively.
+
+CheckpointBinding records generation/chunk/source signature and a verified blob.
+Replacement requires an explicit previous object ID; abandoned or missing
+generations reject writes. materialize_checkpoint reads with a lease on another
+scratch root. This interface is not yet wired into StagingStore's complete
+checkpoint/sidecar protocol, and job-owner fencing remains R2 work. Manifest v2,
+portable generation hydration and remaining consumers are also still pending.
+
+PostgreSQL probes live in tests/replica_postgres and require the private URL file
+path in OKF_ARTIFACT_PG_URL_FILE. Only loopback replica_test_<run-id> databases are
+accepted; each probe creates/removes its own fresh artifact_<uuid> schema. Without
+that explicit file they skip and must not be counted as completed live acceptance.
+
 Object IDs are server-generated 32-character lowercase hex strings. Put streams
 to a temporary file, fsyncs it and publishes through an exclusive hard link;
 existing IDs are never replaced. Filesystems without atomic hard-link support

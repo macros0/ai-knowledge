@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from app.services.diagnostics.paths import assert_no_links, canonical_root
 from app.services.storage import StorageFullError, is_storage_full
-from .contract import BlobConflict, BlobIntegrityError, BlobNotFound, BlobRef, BlobUnavailable, validate_object_id
+from .contract import BlobConflict, BlobIntegrityError, BlobLeaseLost, BlobNotFound, BlobRef, BlobUnavailable, validate_object_id
 
 BLOCK = 64 * 1024
 
@@ -20,8 +20,9 @@ def _storage_failure(exc):
 
 
 class _RangeReader(io.RawIOBase):
-    def __init__(self, source, remaining):
+    def __init__(self, source, remaining, guard=None):
         self.source, self.remaining = source, remaining
+        self.guard = guard
 
     def readable(self):
         return True
@@ -29,11 +30,15 @@ class _RangeReader(io.RawIOBase):
     def read(self, size=-1):
         if self.closed:
             raise ValueError("Artifact reader closed")
+        if self.guard:
+            self.guard()
         size = self.remaining if size is None or size < 0 else min(size, self.remaining)
         try:
             value = self.source.read(size)
         except OSError as exc:
             raise _storage_failure(exc) from None
+        if self.guard:
+            self.guard()
         self.remaining -= len(value)
         return value
 
@@ -70,9 +75,16 @@ class LocalBlobStore:
         return self._safe(self.root / ref.key)
 
     @staticmethod
-    def _digest(handle):
+    def _digest(handle, guard=None):
         digest, size = hashlib.sha256(), 0
-        while chunk := handle.read(BLOCK):
+        while True:
+            if guard:
+                guard()
+            chunk = handle.read(BLOCK)
+            if guard:
+                guard()
+            if not chunk:
+                break
             size += len(chunk)
             digest.update(chunk)
         return digest.hexdigest(), size
@@ -121,11 +133,13 @@ class LocalBlobStore:
                     raise _storage_failure(exc) from None
 
     @contextmanager
-    def open(self, ref: BlobRef, *, start: int = 0, end: int | None = None):
+    def open(self, ref: BlobRef, *, start: int = 0, end: int | None = None, guard=None):
         end = ref.size if end is None else end
         if type(start) is not int or type(end) is not int or not 0 <= start <= end <= ref.size:
             raise ValueError("Invalid artifact range")
         path = self._path(ref)
+        if guard:
+            guard()
         try:
             fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
         except FileNotFoundError:
@@ -136,12 +150,17 @@ class LocalBlobStore:
         try:
             try:
                 handle = os.fdopen(fd, "rb")
-                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode) or self._digest(handle) != (ref.sha256, ref.size):
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    raise BlobIntegrityError("Artifact is not a regular file")
+                actual = self._digest(handle, guard) if guard else self._digest(handle)
+                if actual != (ref.sha256, ref.size):
                     raise BlobIntegrityError("Artifact integrity check failed")
                 handle.seek(start)
+            except BlobLeaseLost:
+                raise
             except OSError as exc:
                 raise _storage_failure(exc) from None
-            reader = _RangeReader(handle, end - start)
+            reader = _RangeReader(handle, end - start, guard)
             yield reader
         finally:
             active_error = sys.exc_info()[0] is not None

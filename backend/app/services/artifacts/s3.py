@@ -11,7 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.services.diagnostics.paths import assert_no_links, canonical_root
 from app.services.storage import StorageFullError
-from .contract import BlobConflict, BlobIntegrityError, BlobNotFound, BlobRef, BlobUnavailable, validate_object_id
+from .contract import BlobConflict, BlobIntegrityError, BlobLeaseLost, BlobNotFound, BlobRef, BlobUnavailable, validate_object_id
 from .local import BLOCK, _RangeReader, _storage_failure
 
 PART = 8 * 1024 * 1024
@@ -162,10 +162,12 @@ class S3BlobStore:
                 with suppress(BlobUnavailable, StorageFullError):
                     self._call("abort_multipart_upload", Key=key, UploadId=upload_id)
 
-    def _verified_spool(self, ref):
+    def _verified_spool(self, ref, guard=None):
         key = self._key(ref)
         if ref.size > self.max_bytes:
             raise ValueError("Artifact size limit exceeded")
+        if guard:
+            guard()
         response = self._call("get_object", Key=key)
         body = response.get("Body")
         spool = None
@@ -174,7 +176,14 @@ class S3BlobStore:
                 raise BlobIntegrityError("Artifact size mismatch")
             spool = TemporaryFile(dir=self.scratch_root)
             digest, size = hashlib.sha256(), 0
-            while chunk := body.read(BLOCK):
+            while True:
+                if guard:
+                    guard()
+                chunk = body.read(BLOCK)
+                if guard:
+                    guard()
+                if not chunk:
+                    break
                 size += len(chunk)
                 if size > ref.size:
                     raise BlobIntegrityError("Artifact size mismatch")
@@ -188,6 +197,8 @@ class S3BlobStore:
             if spool is not None:
                 with suppress(OSError):
                     spool.close()
+            if isinstance(exc, BlobLeaseLost):
+                raise
             if isinstance(exc, (OSError, BotoCoreError)):
                 raise self._failure(exc) from None
             raise
@@ -197,18 +208,20 @@ class S3BlobStore:
                     body.close()
 
     @contextmanager
-    def open(self, ref, *, start=0, end=None):
+    def open(self, ref, *, start=0, end=None, guard=None):
         end = ref.size if end is None else end
         if type(start) is not int or type(end) is not int or not 0 <= start <= end <= ref.size:
             raise ValueError("Invalid artifact range")
-        spool = self._verified_spool(ref)
+        spool = self._verified_spool(ref, guard=guard) if guard else self._verified_spool(ref)
         reader = None
         try:
             try:
                 spool.seek(start)
             except OSError as exc:
                 raise self._failure(exc) from None
-            reader = _RangeReader(spool, end - start)
+            if guard:
+                guard()
+            reader = _RangeReader(spool, end - start, guard)
             yield reader
         finally:
             active_error = sys.exc_info()[0] is not None

@@ -28,6 +28,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     ForeignKeyConstraint,
+    func,
     Index,
     Integer,
     String,
@@ -1270,8 +1271,29 @@ class ArtifactObject(Base):
     size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     media_type: Mapped[str] = mapped_column(String(255), nullable=False)
     store_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    __table_args__ = (CheckConstraint("size >= 0", name="ck_artifact_size"),)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="ready", server_default="ready")
+    delete_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    delete_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())
+    __table_args__ = (CheckConstraint("size >= 0", name="ck_artifact_size"),
+                      CheckConstraint("state IN ('ready', 'deleting', 'deleted')", name="ck_artifact_state"))
+
+
+class ArtifactReadLease(Base):
+    __tablename__ = "artifact_read_leases"
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), primary_key=True)
+    owner_token: Mapped[str] = mapped_column(String(32), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class CheckpointBinding(Base):
+    __tablename__ = "artifact_checkpoints"
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(ForeignKey("document_generations.id"), primary_key=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_signature: Mapped[str] = mapped_column(String(64), primary_key=True)
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), nullable=False, index=True)
+    __table_args__ = (CheckConstraint("chunk_index >= 0", name="ck_artifact_checkpoint_index"),)
 
 
 class ArtifactBinding(Base):

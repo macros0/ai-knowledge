@@ -2,7 +2,8 @@
 import re
 
 from app.db.models import ArtifactBinding, ArtifactObject, UploadReceipt
-from app.services.generation_store import lock_document_write
+from app.services.generation_store import lock_document_write, lock_writable_generation
+from sqlalchemy import update
 from .contract import BlobConflict, BlobRef
 
 OWNER_TYPES = {"original", "source", "generation", "checkpoint", "export", "diagnostic_bundle"}
@@ -25,20 +26,36 @@ def _ref(row):
     return BlobRef(row.object_id, row.key, row.sha256, row.size, row.media_type, row.store_id)
 
 
-def attach_blob(session, *, ref, owner_type, owner_id, generation_id, logical_name):
-    identity = _identity(owner_type, owner_id, generation_id, logical_name)
+def lock_object(session, object_id):
+    session.flush()
+    session.execute(update(ArtifactObject).where(ArtifactObject.object_id == object_id)
+                    .values(state=ArtifactObject.state).execution_options(synchronize_session=False))
+    return session.get(ArtifactObject, object_id, populate_existing=True)
+
+
+def register_blob(session, ref):
     if not isinstance(ref, BlobRef):
         raise ValueError("Invalid artifact reference")
-    doc_id = owner_id if owner_type in DOCUMENT_OWNERS else None
-    if doc_id is not None and not lock_document_write(session, doc_id, allow_deleted=False):
-        raise BlobConflict("Artifact document missing or deleted")
-    row = session.get(ArtifactObject, ref.object_id)
+    row = lock_object(session, ref.object_id)
     if row is None:
         row = ArtifactObject(**vars(ref))
         session.add(row)
         session.flush()
     elif _ref(row) != ref:
         raise BlobConflict("Artifact reference already has different metadata")
+    if row.state != "ready":
+        raise BlobConflict("Artifact is being deleted or has been deleted")
+    return row
+
+
+def attach_blob(session, *, ref, owner_type, owner_id, generation_id, logical_name):
+    identity = _identity(owner_type, owner_id, generation_id, logical_name)
+    doc_id = owner_id if owner_type in DOCUMENT_OWNERS else None
+    if doc_id is not None and not lock_document_write(session, doc_id, allow_deleted=False):
+        raise BlobConflict("Artifact document missing or deleted")
+    if doc_id is not None and generation_id is not None:
+        lock_writable_generation(session, doc_id, generation_id)
+    register_blob(session, ref)
     binding = session.get(ArtifactBinding, identity)
     if binding is not None:
         if binding.object_id != ref.object_id:
@@ -55,6 +72,8 @@ def resolve_blob(session, *, owner_type, owner_id, generation_id, logical_name):
     row = session.get(ArtifactObject, binding.object_id)
     if row is None:
         raise BlobConflict("Artifact metadata missing")
+    if row.state != "ready":
+        raise BlobConflict("Artifact is not readable")
     return _ref(row)
 
 

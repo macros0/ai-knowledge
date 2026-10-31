@@ -115,3 +115,28 @@ def test_read_transaction_failure_closes_prepared_download(uploads, monkeypatch)
         event.remove(Session, "before_commit", fail)
     assert prepared[0]._file.closed
     assert not list((settings.data_dir / "artifact-scratch").iterdir())
+
+
+def test_download_holds_committed_lease_before_provider_io(uploads, monkeypatch):
+    from contextlib import contextmanager
+    from sqlalchemy import select
+    from app.db.models import ArtifactReadLease
+    from app.db.session import session_scope
+    from app.services import artifacts
+    client, settings, _ = uploads
+    doc_id = upload(client).json()["id"]
+    provider = artifacts.get_blob_store(settings)
+    original = provider.open
+    observed = []
+    @contextmanager
+    def checked(ref, **kwargs):
+        with session_scope() as session:
+            observed.append(len(session.scalars(select(ArtifactReadLease)).all()))
+        with original(ref, **kwargs) as stream:
+            yield stream
+    monkeypatch.setattr(provider, "open", checked)
+    monkeypatch.setattr(artifacts, "get_blob_store", lambda settings: provider)
+    response = client.get(f"/api/documents/{doc_id}/download")
+    assert response.status_code == 200
+    assert response.content == PAYLOAD
+    assert observed == [1]

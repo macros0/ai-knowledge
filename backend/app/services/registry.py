@@ -649,7 +649,8 @@ class DocumentRegistry:
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
             lock_document_write(s, doc_id)
-            from app.db.models import ArtifactBinding
+            from app.db.models import ArtifactBinding, CheckpointBinding
+            s.query(CheckpointBinding).filter(CheckpointBinding.doc_id == doc_id).delete(synchronize_session=False)
             s.query(ArtifactBinding).filter(ArtifactBinding.doc_id == doc_id).delete(synchronize_session=False)
             for model in (DocumentScopeEditLock, DocumentScopeChange, DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentProcessingReview, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
@@ -674,7 +675,8 @@ class DocumentRegistry:
             doc = s.get(Document, doc_id)
             if doc is None or doc.deleted_at is None:
                 return False
-            from app.db.models import ArtifactBinding
+            from app.db.models import ArtifactBinding, CheckpointBinding
+            s.query(CheckpointBinding).filter(CheckpointBinding.doc_id == doc_id).delete(synchronize_session=False)
             s.query(ArtifactBinding).filter(ArtifactBinding.doc_id == doc_id).delete(synchronize_session=False)
             for model in (DocumentScopeEditLock, DocumentScopeChange, DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentProcessingReview, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)

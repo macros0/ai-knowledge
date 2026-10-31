@@ -1,7 +1,7 @@
 """Immutable artifact references shared by filesystem and future object adapters."""
 from dataclasses import dataclass
 import re
-from typing import BinaryIO, ContextManager, Protocol
+from typing import BinaryIO, Callable, ContextManager, Protocol
 
 
 class BlobConflict(ValueError):
@@ -17,6 +17,10 @@ class BlobUnavailable(OSError):
 
 
 class BlobNotFound(BlobUnavailable):
+    pass
+
+
+class BlobLeaseLost(BlobUnavailable):
     pass
 
 
@@ -52,5 +56,6 @@ class BlobRef:
 class BlobStore(Protocol):
     def put(self, source: BinaryIO, *, object_id: str, media_type: str) -> BlobRef: ...
     def stat(self, ref: BlobRef) -> BlobRef: ...
-    def open(self, ref: BlobRef, *, start: int = 0, end: int | None = None) -> ContextManager[BinaryIO]: ...
+    def open(self, ref: BlobRef, *, start: int = 0, end: int | None = None,
+             guard: Callable[[], None] | None = None) -> ContextManager[BinaryIO]: ...
     def delete(self, ref: BlobRef) -> None: ...

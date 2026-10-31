@@ -22,6 +22,9 @@ S1: local/RWX/S3 adapters, factory/settings и общие контрактные
 S2 preview: original binding+receipt фиксируются с документом атомарно; повторные
 загрузки, verified download и восстановление pipeline-cache проверены локально.
 Новый admission default-off и запрещён в production до S3/S4 retention/migration.
+S3 foundation: leases/deletion claims/checkpoint CAS реализованы, проверены
+на SQLite и изолированном PostgreSQL учебной VM103; manifest v2 и перенос всех
+файловых категорий ещё не завершены. CT102 оставлен stopped по запросу пользователя.
 Python/npm advisory audits после исправлений не находят известных уязвимостей;
 S2–S4, runtime/operations и окруженческие проверки остаются открытыми.
 Ни P0, ни P1 целиком не объявляются завершёнными до их окруженческих проверок.
