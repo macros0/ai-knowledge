@@ -1512,6 +1512,15 @@ with SHA-256 verification and matching license notices. Review/audit records mus
 not contain raw cell contents, credentials or private helper errors.
 
 
+## 2026-10-31 — Local artifact contract foundation
+
+Added an unconnected local artifact adapter with opaque keys, immutable exclusive
+publication, SHA256/size checks, bounded range readers and existing link guards.
+Storage failures use typed, path-free errors; parser scratch is temporary and
+reverified before use. This does not change active retention/purge or permit
+multi-node local storage. Shared-adapter certification, DB reference/lease guards
+and pipeline integration remain required before runtime activation.
+
 ## 2026-10-31 — Dependency denial-of-service advisories
 
 Updated tooling Zod to 4.6.7 (GHSA-mrhx-c7xc-m3w5) and all upstream minimatch
