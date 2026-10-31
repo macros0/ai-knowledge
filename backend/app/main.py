@@ -157,6 +157,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.services.artifacts.control import enforce_runtime
+    enforce_runtime(get_settings())
     from app.services.diagnostics.runtime import initialize_diagnostics
 
     from app.services.audit_runtime import validate_existing_audit, validate_audit_transport_profile

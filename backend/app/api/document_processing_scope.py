@@ -463,6 +463,14 @@ def cancel_scope_review(
         raise _conflict(exc) from exc
 
 
+def _hydrate_review_originals(session, settings, row):
+    from app.services.artifacts.review_files import hydrate_review_files
+    try:
+        hydrate_review_files(session, settings, row)
+    except (ValueError, OSError):
+        raise ApiError(status_code=503, code="artifact_unavailable", detail="Не удалось проверить оригиналы вложений") from None
+
+
 @router.get("/{doc_id}/processing-scope/attachments/{source_key}")
 def download_review_attachment(doc_id: str, source_key: str, user: User = Depends(require_user)):
     _document(doc_id)
@@ -495,6 +503,7 @@ def download_review_attachment(doc_id: str, source_key: str, user: User = Depend
                     "download_url": f"/api/documents/{doc_id}/download",
                 },
             )
+        _hydrate_review_originals(session, settings, row)
         root = processing_review_paths(settings, doc_id, row.id) / "attachments"
         path = root / name
         _reject_links(path)
@@ -554,6 +563,7 @@ def preview_review_attachment(
             if kind not in PREVIEW_KINDS or node.get('supported') is False:
                 raise ApiError(status_code=422, code="invalid_request", detail="Формат вложения не поддерживает предпросмотр.")
             original = Path(folder) / ('original.' + kind)
+            _hydrate_review_originals(session, settings, row)
             root = processing_review_paths(settings, doc_id, row.id) / "attachments"
             name = node.get("saved_path")
             if not name or Path(name).name != name:

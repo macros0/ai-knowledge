@@ -264,6 +264,8 @@ class Document(Base):
     # Дедупликация (Этап 4.2): SHA-256 байтов файла и нормализованного текста.
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     source_cache_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    legacy_artifacts_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    legacy_artifacts_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Канонический отпечаток standalone EML/MSG, только при полном извлечении
     # вложений. Нужен для similar-review, не является hard duplicate.
@@ -561,6 +563,8 @@ class DocumentGeneration(Base):
     chunk_projection_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     publication_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     publication_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    migration_artifacts_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    migration_artifacts_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     processing_scope_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     processing_scope_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     scope_request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
@@ -1267,6 +1271,33 @@ class AnswerScenarioVersion(Base):
         CheckConstraint("version > 0", name="ck_answer_scenario_versions_positive"),
         CheckConstraint("visibility IN ('private', 'public')", name="ck_answer_scenario_versions_visibility"),
     )
+
+
+class ArtifactStorageControl(Base):
+    __tablename__ = "artifact_storage_control"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    active_store_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    active_descriptor: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    readonly_roots: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    maintenance_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    migration_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_artifact_storage_singleton"),)
+
+
+class ArtifactStorageMigration(Base):
+    __tablename__ = "artifact_storage_migrations"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    plan_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_revision: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    backup_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    receipts: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    verified_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    __table_args__ = (CheckConstraint("status IN ('copying','verified','cutover')", name="ck_artifact_storage_migration_status"),)
 
 
 class ArtifactObject(Base):

@@ -94,6 +94,9 @@ def retain_scope_originals(settings, doc_id, generation_id, snapshot, sources, a
         state = session.get(DocumentGenerationState, doc_id)
         if state and state.active_generation_id:
             hydrate_publication(settings, doc_id, state.active_generation_id)
+        else:
+            from app.services.artifacts.legacy import hydrate_snapshot
+            hydrate_snapshot(settings, doc_id)
         published = {
             (source.metadata_json or {}).get("source_key"): source.saved_path
             for source in session.scalars(select(DocumentSource).where(DocumentSource.doc_id == doc_id))

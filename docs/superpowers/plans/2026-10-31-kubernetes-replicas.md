@@ -33,7 +33,9 @@ Cold-worker сценарии и миграции rpl01e/rpl01f проверен�
 Provider-only orphan discovery и автоматический GC реализованы как отдельный
 opt-in combined preview: quarantine >=24h, ownership marker, bounded cursors,
 SQL leases/claims и остановка с приложением. Проверены реальные PG гонки/миграция.
-S4 и distributed scheduling/runtime/provider acceptance остаются открытыми.
+S4 offline preview реализует verified/resumable copy и atomic cutover (rpl01h),
+без source deletion/reindex; [runbook](../../ARTIFACT_STORAGE_MIGRATION.md).
+Production, distributed scheduling/runtime и real provider acceptance остаются открытыми.
 CT102 оставлен stopped, учебная VM103 running по запросу пользователя.
 Python/npm advisory audits после исправлений не находят известных уязвимостей;
 S2–S4, runtime/operations и окруженческие проверки остаются открытыми.

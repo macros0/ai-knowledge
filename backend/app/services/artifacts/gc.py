@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from sqlalchemy import delete, or_, select, update
 
-from app.db.models import ArtifactBinding, ArtifactGcState, ArtifactObject, ArtifactOrphan, ArtifactReadLease, CheckpointBinding, SourceCacheHead
+from app.db.models import ArtifactBinding, ArtifactGcState, ArtifactObject, ArtifactOrphan, ArtifactReadLease, CheckpointBinding, SourceCacheHead, Document, DocumentGeneration
 from app.db.session import session_scope
 from .contract import BlobConflict, BlobIntegrityError, BlobLeaseLost, BlobNotFound
 from .inventory import Candidate, location_hash
@@ -195,6 +195,8 @@ def _sweep(store, settings, guard, cursor, remaining, report):
                      for model in (ArtifactBinding, CheckpointBinding, SourceCacheHead)]
         protected.append(select(ArtifactReadLease.object_id).where(ArtifactReadLease.object_id == ArtifactObject.object_id,
                                                                   ArtifactReadLease.expires_at > now).exists())
+        protected.append(select(Document.id).where(Document.legacy_artifacts_id == ArtifactObject.object_id).exists())
+        protected.append(select(DocumentGeneration.id).where(DocumentGeneration.migration_artifacts_id == ArtifactObject.object_id).exists())
         rows = session.scalars(select(ArtifactObject).where(ArtifactObject.store_id == store.store_id,
             ArtifactObject.object_id > cursor, ArtifactObject.state.in_(["ready", "deleting"]),
             ArtifactObject.created_at <= now - timedelta(seconds=settings.artifact_gc_grace_seconds),

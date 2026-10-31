@@ -216,6 +216,11 @@ class PortableStaging:
 
     def load(self):
         snapshot = self._snapshot()
+        if snapshot is not None:
+            from .legacy import hydrate_snapshot
+            hydrate_snapshot(self.settings, self.doc_id)
+            if snapshot["generation_id"]:
+                hydrate_snapshot(self.settings, self.doc_id, snapshot["generation_id"])
         if snapshot is None:
             return None
         result = deepcopy(snapshot)

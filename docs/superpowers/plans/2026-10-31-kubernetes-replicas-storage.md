@@ -50,8 +50,13 @@ control/retention — R3/R4. Автозапуск GC и поиск provider-only
 DB cursors, quarantine >=24h от DB first-seen, full digest verification и claims.
 Scope token/marker защищает от чужой БД/смены root; unmarked existing store требует
 явного CLI adoption с --apply. Проверены реальные PG гонки attach/GC, leases и
-миграция rpl01g; production guard не снят. S4, distributed scheduling и platform
-acceptance остаются открытыми. Single-node kind
+миграция rpl01g; production guard не снят. S4 offline preview реализован:
+plan/copy/verify/cutover, persistent receipts/pins, installation identity,
+source/target SHA256 и SQL revision, independent backup evidence, atomic selection
+и блокировка старого runtime/cache roots. Legacy generations/staging/source caches/
+reviews/queued exports переносятся без reindex; source сохраняется.
+Runbook: [ARTIFACT_STORAGE_MIGRATION](../../ARTIFACT_STORAGE_MIGRATION.md).
+Distributed scheduling и platform acceptance остаются открытыми. Single-node kind
 не подтверждает RWX/CSI/S3 или устойчивость к потере ноды.
 
 ## Global Constraints
@@ -190,11 +195,21 @@ source_revision, completed copy receipts; credentials только из private 
 Cutover допускается при остановленных writers и полной verify. Retry copy идемпотентен.
 До cutover source authoritative; после cutover source read-only, не удаляется этим CLI.
 
-- [ ] `test_resume_copy_without_duplicates`, `test_bad_hash_refuses_cutover`, `test_paths_rebased_for_attachments`, `test_wrong_installation_refused`, `test_unverified_target_never_active`: assert source остаётся выбранным при любом отказе, counts/hash совпадают, storage refs не ссылаются на старый абсолютный путь.
-- [ ] RED: `python -m pytest tests/test_artifact_storage_migration.py -q`.
-- [ ] Реализовать phases и receipt. Existing generations/staging/scope sidecars сохраняют identity/signatures. Смена storage не меняет embedding model/sparse formula; reindex нужен только как проверенный recovery вариант. Перед миграцией обязателен отдельный backup, после начала новых записей rollback — согласованное восстановление, не обратный env toggle.
+- [x] `test_resume_copy_without_duplicates`, `test_bad_hash_refuses_cutover`, `test_paths_rebased_for_attachments`, `test_wrong_installation_refused`, `test_unverified_target_never_active`: assert source остаётся выбранным при любом отказе, counts/hash совпадают, storage refs не ссылаются на старый абсолютный путь.
+- [x] RED: `python -m pytest tests/test_artifact_storage_migration.py -q`.
+- [x] Реализовать phases и receipt. Existing generations/staging/scope sidecars сохраняют identity/signatures. Смена storage не меняет embedding model/sparse formula; reindex нужен только как проверенный recovery вариант. Перед миграцией обязателен отдельный backup, после начала новых записей rollback — согласованное восстановление, не обратный env toggle.
 - [ ] GREEN и runner storage: legacy nonempty corpus → local adapter → RWX и S3 на отдельных targets, затем download/search/export и прерванный copy/resume. Никакого запуска против рабочего `data/`.
-- [ ] Commit `feat: migrate artifact storage with verified cutover`.
+- [x] Commit `feat: migrate artifact storage with verified cutover`.
+
+Local/RWX adapter + S3 protocol double проверяют cold publication/export/attachments,
+legacy snapshots/checkpoints/source caches, failure/resume и повторный перенос.
+Проверки: core29 passed, affected portable consumers/GC158 passed,
+runtime/generation/Kubernetes/auth122 passed/11 environment-skipped; actual
+PostgreSQL8 новых сценариев и2 исторические миграции passed. Финальный повтор
+7 основных PG cases прошёл; additional candidate transfer отдельно прошёл на
+финальном compiler. Mandatory check-project: audit0, frontend740 passed/1 skipped,
+ESLint/Ruff passed. PostgreSQL probes используют только disposable схемы. Полный runner storage
+на реальных customer RWX/S3 targets остаётся открытым; локальный GREEN его не заменяет.
 
 ## Ключевые assertions для тестов задач
 

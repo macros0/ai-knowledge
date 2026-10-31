@@ -1448,6 +1448,15 @@ def _bound_generation_response(session, doc, saved_path, *, filename, media_type
     active = session.get(DocumentGeneration, state.active_generation_id) if state and state.active_generation_id else None
     if state and state.active_generation_id and active is None:
         raise ApiError(status_code=503, code="artifact_unavailable", detail="Версия источника недоступна")
+    if active is None and (doc.legacy_artifacts_version != 1 or doc.legacy_artifacts_id is not None):
+        from app.services.artifacts.legacy import snapshot_ref
+        try:
+            ref = snapshot_ref(session, doc.id, None, saved_path)
+        except (ValueError, OSError):
+            raise ApiError(status_code=503, code="artifact_unavailable", detail="Не удалось проверить файл источника") from None
+        if ref is None:
+            raise ApiError(status_code=503, code="artifact_unavailable", detail="Файл источника не перенесён")
+        return _blob_ref_response(session, ref, filename=filename, media_type=media_type, headers=headers)
     if active is None or active.publication_version == 1:
         return None
     try:

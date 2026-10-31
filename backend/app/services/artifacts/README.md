@@ -2,11 +2,11 @@
 
 LocalBlobStore, RwxBlobStore and S3BlobStore share an immutable artifact contract.
 Original admission, portable publication/checkpoints and durable file consumers
-are a staged preview; full migration and distributed execution remain pending.
+are a staged preview; distributed execution and real provider acceptance remain pending.
 
 S2 admission preview is enabled only with ARTIFACT_UPLOADS_ENABLED=true in a
 non-production combined process. Production activation is rejected until S3/S4
-retention/migration is implemented. A verified original blob, document binding
+retention/migration and runtime/provider acceptance are complete. A verified original blob, document binding
 and optional actor-scoped UploadReceipt are committed in one SQL transaction.
 Idempotency-Key is 16–128 ASCII letters/digits/underscore/hyphen; it is hashed
 in the database. Its fingerprint covers bytes, name, MIME type, tags, locale,
@@ -28,7 +28,7 @@ use bindings; source caches, review originals, table sidecars and ready job
 archives now also restore from registered bytes.
 Purge detaches bindings but never directly deletes
 objects; receipt tombstones survive purge. Unreferenced objects retire through
-GC; explicit corpus migration/runtime acceptance still keep preview disabled by
+GC; runtime/provider acceptance still keeps preview disabled by
 default and prohibited in production.
 
 Lifecycle foundation (S3) adds durable read leases and deletion tombstones.
@@ -135,7 +135,7 @@ existing DB. They preserve legacy protocol1 rows and add source/review/diagnosti
 markers. Export protocol2 is recorded in Job.result. Downgrade refuses portable
 rows/results whose metadata would become unreadable. An environment flag toggle
 does not migrate or downgrade known portable documents. Explicit legacy corpus
-migration is S4; automatic GC is an independent opt-in preview described below.
+migration uses the S4 CLI/runbook below; automatic GC is an independent opt-in preview.
 
 GC discovery/worker (rpl01g_artifact_gc) uses bounded inventory pages, persistent
 SQL cursors and a renewable token-checked run lease. The combined lifespan starts
@@ -179,7 +179,16 @@ Apply rpl01g before enabling; downgrade refuses initialized ownership metadata.
 GC never runs against a backup prefix/root. It handles completed current objects;
 local tmp, incomplete S3 multipart uploads and noncurrent S3 versions require
 separate scratch/provider lifecycle policies. Real CSI/S3 quota/failure acceptance,
-global runtime scheduling and corpus migration remain open.
+global runtime scheduling and real provider acceptance remain open.
+
+Offline corpus migration is available through `scripts/migrate_artifact_storage.py`
+after rpl01h. It plans by default; copy/verify/cutover require explicit apply,
+stopped writers and independent backup evidence. Stable copy receipts and pins
+support interruption recovery; full source/target verification precedes atomic
+SQL selection. Old runtime selection/cache writes are fenced; source bytes are
+retained. Production/distributed gates remain closed. See
+[`ARTIFACT_STORAGE_MIGRATION.md`](../../../../docs/ARTIFACT_STORAGE_MIGRATION.md)
+for private manifests, backup limits, cold-start and recovery procedures.
 
 PostgreSQL probes live in tests/replica_postgres and require the private URL file
 path in OKF_ARTIFACT_PG_URL_FILE. Only loopback replica_test_<run-id> databases are

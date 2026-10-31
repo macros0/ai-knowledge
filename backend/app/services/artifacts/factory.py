@@ -6,6 +6,8 @@ from .rwx import RwxBlobStore
 
 
 def get_blob_store(settings):
+    from .control import enforce_runtime
+    enforce_runtime(settings)
     backend = settings.artifact_backend
     root = getattr(settings, "artifact_root", None)
     store_id = settings.artifact_store_id

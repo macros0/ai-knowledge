@@ -11,7 +11,7 @@ from app.db.base import Base
 def test_alembic_upgrade_nonempty_legacy_database_preserves_document(tmp_path, monkeypatch):
     database = tmp_path / "legacy.db"
     engine = create_engine(f"sqlite:///{database.as_posix()}")
-    new_tables = {"artifact_objects", "artifact_bindings", "upload_receipts", "artifact_read_leases", "artifact_checkpoints", "artifact_source_caches", "artifact_gc_state", "artifact_orphans"}
+    new_tables = {"artifact_objects", "artifact_bindings", "upload_receipts", "artifact_read_leases", "artifact_checkpoints", "artifact_source_caches", "artifact_gc_state", "artifact_orphans", "artifact_storage_control", "artifact_storage_migrations"}
     Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables if t.name not in new_tables])
     from app.db.models import Document, DocumentGeneration, DocumentStaging
     with Session(engine) as session:
@@ -24,6 +24,12 @@ def test_alembic_upgrade_nonempty_legacy_database_preserves_document(tmp_path, m
         session.commit()
     # This target represents the pre-portable publication schema.
     with engine.begin() as connection:
+        connection.execute(text("DROP INDEX ix_documents_legacy_artifacts_id"))
+        connection.execute(text("DROP INDEX ix_document_generations_migration_artifacts_id"))
+        connection.execute(text("ALTER TABLE documents DROP COLUMN legacy_artifacts_id"))
+        connection.execute(text("ALTER TABLE documents DROP COLUMN legacy_artifacts_version"))
+        connection.execute(text("ALTER TABLE document_generations DROP COLUMN migration_artifacts_id"))
+        connection.execute(text("ALTER TABLE document_generations DROP COLUMN migration_artifacts_version"))
         connection.execute(text("ALTER TABLE document_generations DROP COLUMN publication_version"))
         connection.execute(text("ALTER TABLE document_staging DROP COLUMN checkpoint_version"))
         connection.execute(text("ALTER TABLE documents DROP COLUMN source_cache_version"))
@@ -53,7 +59,7 @@ def test_alembic_upgrade_nonempty_legacy_database_preserves_document(tmp_path, m
     command.upgrade(config, "head")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT filename FROM documents")).scalar_one() == "legacy.pdf"
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "rpl01g_artifact_gc"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "rpl01h_storage_migration"
         assert new_tables <= set(inspect(connection).get_table_names())
         assert connection.execute(text("SELECT count(*) FROM artifact_bindings")).scalar_one() == 2
         assert connection.execute(text("SELECT DISTINCT state FROM artifact_objects")).scalar_one() == "ready"
@@ -64,4 +70,10 @@ def test_alembic_upgrade_nonempty_legacy_database_preserves_document(tmp_path, m
     command.upgrade(config, "head")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT checkpoint_version FROM document_staging")).scalar_one() == 1
+    # A lost control/receipt must not let downgrade erase a portable snapshot marker.
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE documents SET legacy_artifacts_version=2, legacy_artifacts_id=:id"), {"id": "f" * 32})
+    import pytest
+    with pytest.raises(RuntimeError, match="snapshot"):
+        command.downgrade(config, "rpl01g_artifact_gc")
     engine.dispose()

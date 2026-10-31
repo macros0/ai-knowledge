@@ -20,11 +20,29 @@ from contextvars import ContextVar
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 _engine: Engine | None = None
 _session_factory: sessionmaker | None = None
 _current_session = ContextVar("current_sql_session", default=None)
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _track_storage_write(execution):
+    if execution.is_insert or execution.is_update or execution.is_delete or getattr(execution.statement, "is_text", False):
+        execution.session.info["artifact_storage_write"] = True
+        from app.services.artifacts.control import enforce_session, enforce_write
+        enforce_session(execution.session)
+        enforce_write(execution.session)
+
+
+@event.listens_for(Session, "before_flush")
+def _guard_storage_flush(session, _context, _instances):
+    if session.new or session.dirty or session.deleted:
+        session.info["artifact_storage_write"] = True
+        from app.services.artifacts.control import enforce_session, enforce_write
+        enforce_session(session)
+        enforce_write(session)
 # RLock (не Lock): get_session_factory() вызывает get_engine() внутри своей
 # критической секции — обычный Lock дал бы deadlock при первом создании движка.
 _lock = threading.RLock()
@@ -94,7 +112,11 @@ def session_scope():
     session = get_session_factory()()
     token = _current_session.set(session)
     try:
+        from app.services.artifacts.control import enforce_session, enforce_write
+        enforce_session(session)
         yield session
+        enforce_write(session)
+        enforce_session(session)
         session.commit()
     except Exception as exc:
         session.rollback()
@@ -117,6 +139,11 @@ def current_session():
 
 def configure_for_tests(url: str = "sqlite:///:memory:") -> None:
     """Подменяет глобальный движок (для тестов — in-memory SQLite)."""
+    configure_database(url)
+
+
+def configure_database(url: str) -> None:
+    """Select an explicit database before starting any runtime/CLI workers."""
     global _engine, _session_factory
     with _lock:
         _engine = _make_engine(url)
@@ -134,6 +161,8 @@ def init_db() -> None:
     from app.db import models  # noqa: F401  (регистрация таблиц)
 
     Base.metadata.create_all(get_engine())
+    from app.services.artifacts.control import initialize_control
+    initialize_control(get_engine())
     # The glossary writer lock is a singleton row.  Seed it before request
     # threads can start so two first writers cannot race on its INSERT.
     if hasattr(models, "GlossaryState"):

@@ -6,7 +6,7 @@ from app.services.generation_store import lock_document_write, lock_writable_gen
 from sqlalchemy import update, select, or_
 from .contract import BlobConflict, BlobRef
 
-OWNER_TYPES = {"original", "source", "generation", "checkpoint", "export", "diagnostic_bundle"}
+OWNER_TYPES = {"original", "source", "generation", "checkpoint", "export", "diagnostic_bundle", "migration"}
 DOCUMENT_OWNERS = {"original", "source", "generation", "checkpoint"}
 
 

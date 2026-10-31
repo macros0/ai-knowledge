@@ -605,6 +605,36 @@ class Manager:
             time.sleep(2)
         self.finish_job(name)
 
+    def migrate_artifacts(self, source, target, plan, phase, backup=None, private_config=None):
+        if phase not in {"plan", "copy", "verify", "cutover"} or (phase != "plan" and not backup):
+            raise OperationError("Explicit migration phase and independent backup evidence required")
+        for path in (source, target, plan, backup, private_config):
+            if path is not None and (not str(path).startswith("/") or ".." in Path(path).parts):
+                raise OperationError("Migration paths must be absolute paths mounted in the operation Pod")
+        self.preflight()
+        self.acquire()
+        self.stop()
+        command = ["python", "scripts/migrate_artifact_storage.py", "--source-manifest", str(source),
+                   "--target-manifest", str(target), "--plan", str(plan), "--phase", phase, "--apply", "--writers-stopped"]
+        if backup:
+            command += ["--backup-manifest", str(backup)]
+        if private_config:
+            command += ["--private-config", str(private_config)]
+        name = self.job(command)
+        deadline = time.monotonic() + 3600
+        while True:
+            status = self.get("job", name).get("status", {})
+            if any(c.get("type") == "Failed" and c.get("status") == "True" for c in status.get("conditions", [])):
+                raise OperationError("Artifact migration failed; application stays stopped and lock retained")
+            if status.get("succeeded") == 1:
+                break
+            if time.monotonic() > deadline:
+                raise OperationError("Artifact migration timed out; inspect the Job before recovery")
+            time.sleep(2)
+        self.finish_job(name)
+        self.release_lock()
+        # Never restore the old runtime configuration or scale writers here.
+
     def start(self):
         self.chart(True)
         self.kube("rollout", "status", "deployment/application", "--timeout=600s")
@@ -726,7 +756,7 @@ class Manager:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("preflight", "provision", "deploy", "backup", "restore", "recover-lock"))
+    parser.add_argument("operation", choices=("preflight", "provision", "deploy", "backup", "restore", "recover-lock", "migrate-artifacts"))
     parser.add_argument("--context", required=True)
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--release", default="ai-knowledge")
@@ -737,14 +767,27 @@ def main():
     parser.add_argument("--backup", type=Path)
     parser.add_argument("--operation-id")
     parser.add_argument("--migration-image", help="Deploy only: installed backend image for forward migrations during a validated binary rollback")
+    parser.add_argument("--source-manifest")
+    parser.add_argument("--target-manifest")
+    parser.add_argument("--migration-plan")
+    parser.add_argument("--migration-phase", choices=("plan", "copy", "verify", "cutover"), default="plan")
+    parser.add_argument("--backup-manifest")
+    parser.add_argument("--private-config")
+    parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     if args.operation == 'restore':
         parser.error('Automatic restore is unsupported in the compact home kit; use the stopped manual restore runbook before application startup')
+    if args.operation == "migrate-artifacts" and (not args.apply or not args.source_manifest or not args.target_manifest or not args.migration_plan
+            or args.migration_phase != "plan" and not args.backup_manifest):
+        parser.error("migrate-artifacts requires --apply, mounted manifests/plan and backup evidence for mutation phases")
     try:
         if args.migration_image and args.operation != "deploy":
             parser.error("--migration-image is allowed only for deploy")
         manager = Manager(args.context, args.namespace, args.release, args.values, args.chart, args.expected_tier, args.migration_image)
-        if args.operation in ("deploy", "backup"):
+        if args.operation == "migrate-artifacts":
+            manager.migrate_artifacts(args.source_manifest, args.target_manifest, args.migration_plan, args.migration_phase,
+                                      args.backup_manifest, args.private_config)
+        elif args.operation in ("deploy", "backup"):
             if not args.backup_root:
                 parser.error("--backup-root is required, outside application PVCs")
             getattr(manager, args.operation)(args.backup_root.resolve())

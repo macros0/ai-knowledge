@@ -1714,6 +1714,36 @@ uploads and noncurrent S3 versions retain separate scratch/provider lifecycle
 requirements. It does not certify customer CSI/S3 or enable distributed workers.
 PostgreSQL contention/migration probes use disposable schemas/namespace only.
 
+## 2026-10-31 — Verified offline artifact storage migration
+
+The rpl01h schema persists installation identity, maintenance/selected-store
+control, immutable-plan receipts and independent protocol markers for migrated
+legacy/candidate snapshots. Offline plan/copy/verify/cutover is an explicit
+operator operation, restricted to non-production combined execution pending
+runtime/provider acceptance. No source deletion, automatic reindex or credential
+export is performed. Transfer inventories contain private corpus metadata and
+require operator-only persistent storage outside runtime/provider/backup roots.
+
+Mutations require --apply, stopped writers and independent backup evidence bound
+to the source revision. Backup files are fully hashed; evidence attests operator
+backup selection and does not prove semantic restore completeness. A separate
+restore drill remains required. Source SQL, original bytes, target full SHA256,
+binding ownership, copy receipts and GC scope marker must match before atomic
+selection. Each copied object is pinned with its receipt in the same transaction;
+interrupted copy/commit resumes with stable IDs. Old snapshots/generation IDs,
+Qdrant identities and accepted source/checkpoint results are preserved.
+
+Maintenance blocks ordinary SQL sessions; selected-provider checks fence old
+runtime writes/startup and reject writable caches inside retired source roots.
+These application guards supplement stopped processes and OS/IAM source read-only
+permissions; privileged raw SQL/provider access remains an operator boundary.
+The CLI alone cannot stop external writers. Kubernetes maintenance stops both
+workloads; failure retains the operation lock and never restarts the old runtime.
+Source archive retention and cleanup are explicit later operations. Downgrade
+refuses migration receipts/selection/portable pointers; rollback after new writes
+requires a coherent restore, not an environment toggle. See
+[the migration runbook](docs/ARTIFACT_STORAGE_MIGRATION.md).
+
 ## 2026-10-31 — Dependency denial-of-service advisories
 
 Updated tooling Zod to 4.6.7 (GHSA-mrhx-c7xc-m3w5) and all upstream minimatch

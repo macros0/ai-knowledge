@@ -44,6 +44,12 @@ def cleanup_document_generations(settings, vector_store, doc_id: str) -> int:
                 state = session.get(DocumentGenerationState, doc_id)
                 vector_store.delete_generation_points(doc_id, None)
                 cleanup_legacy_files(settings, doc_id, state.active_generation_id)
+                from app.db.models import ArtifactBinding, Document
+                from sqlalchemy import delete
+                session.execute(delete(ArtifactBinding).where(ArtifactBinding.owner_type == "source", ArtifactBinding.owner_id == doc_id,
+                    ArtifactBinding.generation_id == "", ArtifactBinding.logical_name.startswith("legacy/")))
+                document = session.get(Document, doc_id)
+                document.legacy_artifacts_id, document.legacy_artifacts_version = None, 1
                 for generation in generations:
                     generation.legacy_cleanup_pending = False
 

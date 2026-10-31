@@ -10,7 +10,7 @@ import sys
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.db.models import ArtifactBinding, Document, DocumentGeneration
 from app.db.session import current_session, session_scope
@@ -256,6 +256,10 @@ def write_prepared_publication(session, settings, prepared):
         _write_canonical(path, body)
         _put_bound(session, store, path, doc_id, generation_id, "publication.json", digest, "application/json")
         generation.publication_version = 2
+        if generation.migration_artifacts_id is not None:
+            session.execute(delete(ArtifactBinding).where(ArtifactBinding.owner_type == "source", ArtifactBinding.owner_id == doc_id,
+                ArtifactBinding.generation_id == generation_id, ArtifactBinding.logical_name.startswith("migration/")))
+            generation.migration_artifacts_id, generation.migration_artifacts_version = None, 1
         session.flush()
         return digest
     except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
@@ -283,7 +287,8 @@ def hydrate_publication(settings, doc_id, generation_id, *, skip_active=False):
             if manifest is None:
                 if generation and generation.doc_id == doc_id and generation.publication_version != 1:
                     raise GenerationIntegrityError()
-                return False  # Legacy filesystem publication.
+                from .legacy import hydrate_snapshot
+                return hydrate_snapshot(settings, doc_id, generation_id)
             if (doc is None or doc.deleted_at is not None or generation is None or generation.doc_id != doc_id
                     or generation.phase not in {"ready", "active"} or generation.publication_hash != manifest.sha256
                     or generation.publication_version != 2):
@@ -328,7 +333,8 @@ def _hydrate_in_transaction(session, settings, doc_id, generation_id, *, skip_ac
         if ref is None:
             if generation and generation.publication_version != 1:
                 raise GenerationIntegrityError()
-            return False
+            from .legacy import hydrate_snapshot
+            return hydrate_snapshot(settings, doc_id, generation_id)
         if (doc is None or doc.deleted_at is not None or generation is None or generation.doc_id != doc_id
                 or generation.phase not in {"ready", "active"} or generation.publication_hash != ref.sha256
                 or generation.publication_version != 2):

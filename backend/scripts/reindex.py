@@ -31,6 +31,8 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
+    from app.services.artifacts.control import enforce_runtime
+    enforce_runtime(settings)
 
     vs = VectorStore()
     if vs.client.collection_exists(vs.collection):

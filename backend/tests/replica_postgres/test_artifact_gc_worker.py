@@ -92,9 +92,9 @@ def test_postgres_gc_migration_preserves_bound_objects(tmp_path, monkeypatch):
     alembic = Config(str(root / "alembic.ini"))
     alembic.set_main_option("script_location", str(root / "alembic"))
     command.stamp(alembic, "rpl01f_file_consumers")
-    command.upgrade(alembic, "head")
+    command.upgrade(alembic, "rpl01g_artifact_gc")
     command.downgrade(alembic, "rpl01f_file_consumers")
-    command.upgrade(alembic, "head")
+    command.upgrade(alembic, "rpl01g_artifact_gc")
     initialize_gc(settings, store=store, adopt_existing=True)
     assert run_gc_cycle(settings, store=store).deleted == 0
     with session_scope() as session:

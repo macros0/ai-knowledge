@@ -71,12 +71,12 @@ def test_postgres_consumer_migrations_preserve_legacy_rows(orphan, monkeypatch):
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     command.stamp(config, "rpl01d_portable_staging")
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl01f_file_consumers")
     with session_scope() as session:
         document = session.query(Document).one()
         assert document.source_cache_version == 1
         assert document.filename == "a.pdf"
     command.downgrade(config, "rpl01d_portable_staging")
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl01f_file_consumers")
     with session_scope() as session:
         assert session.query(Document).one().source_cache_version == 1

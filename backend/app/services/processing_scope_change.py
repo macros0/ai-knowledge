@@ -355,6 +355,9 @@ def load_scope_base(doc_id: str, *, session=None) -> ScopeBaseSnapshot:
         if gid:
             from app.services.artifacts.publication import hydrate_publication
             hydrate_publication(settings, doc_id, gid)
+        else:
+            from app.services.artifacts.legacy import hydrate_snapshot
+            hydrate_snapshot(settings, doc_id)
         rows = _canonical_rows(session, doc_id)
         rows["tables"] = [dict(row._mapping) for row in session.execute(
             select(DocumentTable.table_id, DocumentTable.source_id).where(

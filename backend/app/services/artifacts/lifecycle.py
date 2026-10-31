@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy import delete, func, select
 
-from app.db.models import ArtifactBinding, ArtifactReadLease, CheckpointBinding, SourceCacheHead
+from app.db.models import ArtifactBinding, ArtifactReadLease, CheckpointBinding, SourceCacheHead, Document, DocumentGeneration
 from app.db.session import session_scope
 from .contract import BlobLeaseLost, BlobRef
 from .repository import _ref, lock_object
@@ -81,6 +81,10 @@ def claim_delete(session, object_id, *, grace_seconds=86400, ttl_seconds=60, sto
     if session.scalar(select(CheckpointBinding.object_id).where(CheckpointBinding.object_id == object_id).limit(1)):
         return None
     if session.scalar(select(SourceCacheHead.object_id).where(SourceCacheHead.object_id == object_id).limit(1)):
+        return None
+    if session.scalar(select(Document.id).where(Document.legacy_artifacts_id == object_id).limit(1)):
+        return None
+    if session.scalar(select(DocumentGeneration.id).where(DocumentGeneration.migration_artifacts_id == object_id).limit(1)):
         return None
     if session.scalar(select(ArtifactReadLease.object_id).where(ArtifactReadLease.object_id == object_id,
                                                                ArtifactReadLease.expires_at > now).limit(1)):
