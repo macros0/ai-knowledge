@@ -3,8 +3,6 @@ from app.api import errors
 from app.services.errors import DomainError
 from app.api.errors import ApiError
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import FileResponse
-from starlette.background import BackgroundTask
 
 from app.auth.models import User
 from app.auth.service import require_role
@@ -93,12 +91,14 @@ def download_export_part(
     except ExportAdmissionError as exc:
         _raise_export_error(exc)
     try:
-        return FileResponse(
+        from app.services.artifact_response import LeasedFileResponse
+        return LeasedFileResponse(
             lease.path,
+            on_close=lease.release,
             media_type="application/zip",
             filename=lease.filename,
-            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
-            background=BackgroundTask(lease.release),
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+                     **({"ETag": lease.etag} if getattr(lease, "etag", None) else {})},
         )
     except Exception:
         lease.release()

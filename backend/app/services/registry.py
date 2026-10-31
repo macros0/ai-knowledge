@@ -290,6 +290,8 @@ class DocumentRegistry:
                     # Publish the document and review only after all originals exist.
                     target.mkdir(parents=True,exist_ok=False)
                     shutil.copytree(processing_artifacts_dir,target/'attachments')
+                    from app.services.artifacts.review_files import seal_review_files
+                    seal_review_files(s, processing_settings, review)
                 doc.status='awaiting_attachments'
             if artifact_ref is not None:
                 from app.services.artifacts.repository import record_upload
@@ -649,7 +651,8 @@ class DocumentRegistry:
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
             lock_document_write(s, doc_id)
-            from app.db.models import ArtifactBinding, CheckpointBinding
+            from app.db.models import ArtifactBinding, CheckpointBinding, SourceCacheHead
+            s.query(SourceCacheHead).filter(SourceCacheHead.doc_id == doc_id).delete(synchronize_session=False)
             s.query(CheckpointBinding).filter(CheckpointBinding.doc_id == doc_id).delete(synchronize_session=False)
             s.query(ArtifactBinding).filter(ArtifactBinding.doc_id == doc_id).delete(synchronize_session=False)
             for model in (DocumentScopeEditLock, DocumentScopeChange, DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentProcessingReview, DocumentGeneration, DocumentGenerationState):
@@ -675,7 +678,8 @@ class DocumentRegistry:
             doc = s.get(Document, doc_id)
             if doc is None or doc.deleted_at is None:
                 return False
-            from app.db.models import ArtifactBinding, CheckpointBinding
+            from app.db.models import ArtifactBinding, CheckpointBinding, SourceCacheHead
+            s.query(SourceCacheHead).filter(SourceCacheHead.doc_id == doc_id).delete(synchronize_session=False)
             s.query(CheckpointBinding).filter(CheckpointBinding.doc_id == doc_id).delete(synchronize_session=False)
             s.query(ArtifactBinding).filter(ArtifactBinding.doc_id == doc_id).delete(synchronize_session=False)
             for model in (DocumentScopeEditLock, DocumentScopeChange, DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentProcessingReview, DocumentGeneration, DocumentGenerationState):

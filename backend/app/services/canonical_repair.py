@@ -80,6 +80,9 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
         document = session.get(Document, doc_id)
         state = session.get(DocumentGenerationState, doc_id)
         if state and state.active_generation_id:
+            from app.services.artifacts.publication import hydrate_publication
+            hydrate_publication(settings, doc_id, state.active_generation_id)
+        if state and state.active_generation_id:
             from app.services.processing_scope import scope_for_generation
             if scope_for_generation(session,doc_id,state.active_generation_id) is not None:
                 return {'doc_id':doc_id,'status':'skipped','reason':'processing_scope_not_supported'}

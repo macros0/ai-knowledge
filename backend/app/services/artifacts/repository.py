@@ -1,13 +1,25 @@
 """Transactional bindings. Authorization is the caller's responsibility."""
 import re
 
-from app.db.models import ArtifactBinding, ArtifactObject, UploadReceipt
+from app.db.models import ArtifactBinding, ArtifactObject, UploadReceipt, Document, DocumentGeneration
 from app.services.generation_store import lock_document_write, lock_writable_generation
-from sqlalchemy import update
+from sqlalchemy import update, select, or_
 from .contract import BlobConflict, BlobRef
 
 OWNER_TYPES = {"original", "source", "generation", "checkpoint", "export", "diagnostic_bundle"}
 DOCUMENT_OWNERS = {"original", "source", "generation", "checkpoint"}
+
+
+def document_uses_portable_artifacts(session, settings, doc_id):
+    """Disabling new admission must not downgrade an existing durable document."""
+    if settings.artifact_uploads_enabled:
+        return True
+    original = select(ArtifactBinding.object_id).where(ArtifactBinding.owner_type == "original",
+        ArtifactBinding.owner_id == doc_id, ArtifactBinding.generation_id == "", ArtifactBinding.logical_name == "original").exists()
+    generation = select(DocumentGeneration.id).where(DocumentGeneration.doc_id == doc_id,
+        DocumentGeneration.publication_version == 2, DocumentGeneration.phase.in_(["preparing", "ready", "active"])).exists()
+    cache = select(Document.id).where(Document.id == doc_id, Document.source_cache_version == 2).exists()
+    return bool(session.scalar(select(or_(original, generation, cache))))
 
 
 def _identity(owner_type, owner_id, generation_id, logical_name):

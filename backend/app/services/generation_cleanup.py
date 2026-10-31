@@ -65,8 +65,8 @@ def _cleanup_retired_generations(settings, vector_store, doc_id: str) -> int:
                 continue
             vector_store.delete_generation_points(doc_id, generation_id)
             cleanup_generation_files(session, settings, doc_id, generation_id)
-            from app.db.models import ArtifactBinding, CheckpointBinding
-            for model in (ArtifactBinding, CheckpointBinding):
+            from app.db.models import ArtifactBinding, CheckpointBinding, SourceCacheHead
+            for model in (SourceCacheHead, ArtifactBinding, CheckpointBinding):
                 session.query(model).filter(model.doc_id == doc_id, model.generation_id == generation_id).delete(synchronize_session=False)
             session.delete(generation)
         removed += 1

@@ -38,6 +38,7 @@ class DownloadLease:
     filename: str
     size_bytes: int
     released: bool = False
+    artifact_context: object = None
 
     def chunks(self):
         try:
@@ -235,9 +236,15 @@ class DiagnosticBundleQueue:
             # Rename alone is insufficient; only this audited transaction makes
             # the download endpoint eligible to open final.
             with session_scope() as db:
-                row = db.get(DiagnosticBundle, bundle_id)
+                from app.services.artifacts.job_files import lock_job, bind_file
+                from app.config import get_settings
+                row = lock_job(db, DiagnosticBundle, bundle_id)
                 if row is None or row.status != "building":
                     raise RuntimeError("Bundle status changed")
+                if get_settings().artifact_uploads_enabled:
+                    bind_file(db, get_settings(), kind="diagnostic_bundle", job_id=bundle_id, filename="bundle.zip",
+                              path=final, size=built.size_bytes, sha256=built.sha256)
+                    row.artifact_version = 2
                 row.status = "ready"
                 row.finished_at = self.utcnow()
                 row.expires_at = row.finished_at + timedelta(seconds=self.store.limits.bundle_seconds)
@@ -386,21 +393,27 @@ class DiagnosticBundleQueue:
             if lease.released:
                 return
             lease.released = True
-            lease.handle.close()
-            count = self._downloads.get(lease.bundle_id, 0) - 1
-            if count > 0:
-                self._downloads[lease.bundle_id] = count
-            else:
-                self._downloads.pop(lease.bundle_id, None)
+            try:
                 try:
-                    with session_scope() as db:
-                        row = db.get(DiagnosticBundle, lease.bundle_id)
-                        retired = row is not None and row.status in {"deleted", "expired"}
-                    if retired:
-                        self._unlink_owned(self.store.safe_path(self.store.root / "bundles" / (lease.bundle_id + ".zip")))
-                except Exception:
-                    # Maintenance will clean a retired file when DB recovers.
-                    pass
+                    lease.handle.close()
+                finally:
+                    if lease.artifact_context is not None:
+                        lease.artifact_context.close()
+            finally:
+                count = self._downloads.get(lease.bundle_id, 0) - 1
+                if count > 0:
+                    self._downloads[lease.bundle_id] = count
+                else:
+                    self._downloads.pop(lease.bundle_id, None)
+                    try:
+                        with session_scope() as db:
+                            row = db.get(DiagnosticBundle, lease.bundle_id)
+                            retired = row is not None and row.status in {"deleted", "expired"}
+                        if retired:
+                            self._unlink_owned(self.store.safe_path(self.store.root / "bundles" / (lease.bundle_id + ".zip")))
+                    except Exception:
+                        # Maintenance will clean a retired file when DB recovers.
+                        pass
 
     def acquire_download(self, bundle_id, actor) -> DownloadLease:
         if "admin" not in actor.roles:
@@ -408,11 +421,19 @@ class DiagnosticBundleQueue:
         bundle_id = str(bundle_id)
         if valid_uuid(bundle_id) is None:
             raise BundleQueueError("invalid_request")
+        with session_scope() as db:
+            version = db.scalar(select(DiagnosticBundle.artifact_version).where(DiagnosticBundle.id == bundle_id))
+        if version == 2:
+            with self._condition:
+                return self._acquire_portable(bundle_id, actor)
+        if version not in {None, 1}:
+            raise BundleQueueError("diagnostic_bundle_gone")
         with self._condition:
             handle = None
             try:
                 with session_scope() as db:
-                    row = db.get(DiagnosticBundle, bundle_id)
+                    from app.services.artifacts.job_files import lock_job
+                    row = lock_job(db, DiagnosticBundle, bundle_id)
                     if row is None:
                         raise BundleQueueError("diagnostic_bundle_not_found")
                     if row.status in {"deleted", "expired"} or row.expires_at and _utc(row.expires_at) <= self.utcnow():
@@ -462,11 +483,14 @@ class DiagnosticBundleQueue:
         with self._condition:
             try:
                 with session_scope() as db:
-                    row = db.get(DiagnosticBundle, bundle_id)
+                    from app.services.artifacts.job_files import lock_job, retire_files
+                    row = lock_job(db, DiagnosticBundle, bundle_id)
                     if row is None:
                         raise BundleQueueError("diagnostic_bundle_not_found")
                     if row.status != "deleted":
                         row.status = "deleted"
+                        if row.artifact_version == 2:
+                            retire_files(db, kind="diagnostic_bundle", job_id=bundle_id)
                         row.finished_at = self.utcnow()
                         audit.record_in_session(
                             db, action_type="diagnostic_bundle_deleted", user_id=actor.user_id,
@@ -492,7 +516,13 @@ class DiagnosticBundleQueue:
                         DiagnosticBundle.status == "ready",
                         DiagnosticBundle.expires_at <= now)))
                     for row in retiring:
+                        from app.services.artifacts.job_files import lock_job, retire_files
+                        row = lock_job(db, DiagnosticBundle, row.id)
+                        if row.status != "ready" or _utc(row.expires_at) > now:
+                            continue
                         row.status = "expired"
+                        if row.artifact_version == 2:
+                            retire_files(db, kind="diagnostic_bundle", job_id=row.id)
                         audit.record_in_session(
                             db, action_type="diagnostic_bundle_expired", user_id="system",
                             username="system", target_type="diagnostic_bundle", target_id=row.id,
@@ -506,6 +536,58 @@ class DiagnosticBundleQueue:
                 return len(retiring)
             except Exception as exc:
                 raise BundleQueueError("diagnostic_audit_unavailable") from exc
+
+    def _portable_snapshot(self, db, bundle_id):
+        from app.services.artifacts.job_files import lock_job, file_ref
+        row = lock_job(db, DiagnosticBundle, bundle_id)
+        if row is None:
+            raise BundleQueueError("diagnostic_bundle_not_found")
+        if row.status != "ready" or row.artifact_version != 2 or row.expires_at is None or _utc(row.expires_at) <= self.utcnow():
+            raise BundleQueueError("diagnostic_bundle_gone")
+        return file_ref(db, kind="diagnostic_bundle", job_id=bundle_id, filename="bundle.zip", size=row.size_bytes, sha256=row.sha256)
+
+    def _acquire_portable(self, bundle_id, actor):
+        from app.config import get_settings
+        from app.services.artifacts.job_files import pin_file
+        context, handle = None, None
+        reservation = None
+        try:
+            with session_scope() as db:
+                ref = self._portable_snapshot(db, bundle_id)
+            try:
+                reservation = self.store.reserve(2 * ref.size)
+            except StorageQuotaError as exc:
+                raise BundleQueueError("diagnostic_storage_low") from exc
+            context, path = pin_file(get_settings(), ref)
+            context.callback(reservation.release)
+            reservation = None
+            handle = path.open("rb")
+            try:
+                with session_scope() as db:
+                    if self._portable_snapshot(db, bundle_id) != ref:
+                        raise BundleQueueError("diagnostic_bundle_gone")
+                    audit.record_in_session(db, action_type="diagnostic_bundle_download_started",
+                        user_id=actor.user_id, username=actor.username, target_type="diagnostic_bundle", target_id=bundle_id,
+                        new_value={"size_bytes": ref.size})
+            except BundleQueueError:
+                raise
+            except Exception as exc:
+                raise BundleQueueError("diagnostic_audit_unavailable") from exc
+            lease = DownloadLease(self, bundle_id, handle, f"okf-diagnostics-{bundle_id}.zip", ref.size, artifact_context=context)
+            self._downloads[bundle_id] = self._downloads.get(bundle_id, 0) + 1
+            return lease
+        except BaseException as exc:
+            if handle is not None:
+                handle.close()
+            if context is not None:
+                context.close()
+            if reservation is not None:
+                reservation.release()
+            if isinstance(exc, BundleQueueError):
+                raise
+            if isinstance(exc, (OSError, ValueError)):
+                raise BundleQueueError("diagnostic_bundle_gone") from exc
+            raise
 
     def prune_metadata(self, now=None):
         """Remove old terminal rows only after their files and readers are gone."""

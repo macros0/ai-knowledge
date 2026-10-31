@@ -12,11 +12,11 @@
 
 Статус 31.10.2026: реализация начата в `codex/kubernetes-replicas`.
 P0: инвентарь, platform schema и fail-closed acceptance entry point реализованы;
-live probes и выбор storage providers ожидают подтверждённого disposable окружения.
+live provider/CSI probes и выбор storage providers ожидают согласованного platform manifest.
 P1: pure profile validator, Settings/preflight wiring и Helm schema/capability guards
 реализованы; Helm 4.3.0 установлен локально с проверкой SHA256, render tests выполнены.
 F1/F2: внутренний транспорт и frontend-split реализованы и проверены локально;
-живой Kubernetes/Gateway smoke не выполнялся без разрешённого namespace/manifest.
+живой Kubernetes/Gateway smoke ещё не выполнен; в учебном kind нет GatewayClass CRD.
 S1: local/RWX/S3 adapters, factory/settings и общие контрактные тесты реализованы;
 проверки SDK не заменяют приёмку реального provider/CSI. Общая миграция файлов не включена.
 S2 preview: original binding+receipt фиксируются с документом атомарно; повторные
@@ -25,9 +25,13 @@ S2 preview: original binding+receipt фиксируются с документ�
 S3 foundation: leases/deletion claims/checkpoint CAS реализованы, проверены
 на SQLite и изолированном PostgreSQL учебной VM103. Manifest v2 preview и cold
 publication/source-download и StagingStore checkpoint preview реализованы.
-Cold resume/CAS/миграция staging проверяются на отдельном PostgreSQL;
-полный перенос всех потребителей ещё
-не завершён. CT102 оставлен stopped по запросу пользователя.
+Cold resume/CAS/миграция staging проверены на отдельном PostgreSQL.
+Source-result caches, retained review originals, table sidecars, OKF export и
+готовые export/diagnostic архивы переведены на bindings/materialize в preview.
+Cold-worker сценарии и миграции rpl01e/rpl01f проверены на SQLite/PostgreSQL;
+готовые архивы и оригиналы очереди защищены retention/read правилами.
+Provider-only orphan discovery, автоматический GC и S4 ещё не реализованы.
+CT102 оставлен stopped, учебная VM103 running по запросу пользователя.
 Python/npm advisory audits после исправлений не находят известных уязвимостей;
 S2–S4, runtime/operations и окруженческие проверки остаются открытыми.
 Ни P0, ни P1 целиком не объявляются завершёнными до их окруженческих проверок.

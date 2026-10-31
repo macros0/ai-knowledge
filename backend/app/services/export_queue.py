@@ -99,6 +99,7 @@ class ExportPlan:
                     "size_bytes": document.size_bytes,
                     "mtime_ns": document.mtime_ns,
                     "part_number": part_by_doc_id[document.doc_id],
+                    **({"source_blob": document.source_blob} if document.source_blob else {}),
                 }
                 for document in self.documents
             ],
@@ -138,6 +139,7 @@ class ExportDownloadLease:
     filename: str
     size_bytes: int
     release: Callable[[], None]
+    etag: str | None = None
 
 
 @dataclass(frozen=True)
@@ -179,6 +181,7 @@ class ExportQueue:
         self._worker: threading.Thread | None = None
         self._stop = object()
         self._accepting = True
+        self._download_reserved_bytes = 0
         self._leases: dict[tuple[int, int], int] = {}
         if start_worker:
             self._start_worker()
@@ -227,6 +230,18 @@ class ExportQueue:
                     )
                     s.add(job)
                     s.flush()
+                    from app.services.artifacts.contract import BlobRef
+                    from app.services.artifacts.repository import attach_blob, resolve_blob
+                    from app.services.generation_store import lock_document_write
+                    for document in sorted(plan.documents, key=lambda item: item.doc_id):
+                        if document.source_blob:
+                            ref = BlobRef(**document.source_blob)
+                            if (not lock_document_write(s, document.doc_id, allow_deleted=False)
+                                    or resolve_blob(s, owner_type="original", owner_id=document.doc_id,
+                                        generation_id=None, logical_name="original") != ref):
+                                raise ExportSourceChangedError(document.doc_id)
+                            attach_blob(s, ref=ref, owner_type="export", owner_id=str(job.id), generation_id=None,
+                                        logical_name="source-" + document.doc_id)
                     try:
                         audit_mod.record_in_session(
                             s,
@@ -268,9 +283,19 @@ class ExportQueue:
         with _ADMISSION_LOCK, session_scope() as session:
             jobs = list(session.execute(select(Job.id).where(Job.job_type == BULK_EXPORT)).scalars())
             leased = tuple(sorted(job_id for job_id in jobs if self.active_leases(job_id)))
+            candidates = list(session.execute(select(Job.id, Job.status, Job.result).where(Job.job_type == BULK_EXPORT,
+                Job.status.in_([*PENDING_STATUSES, STATUS_COMPLETED]))))
+            portable_ready = {row.id for row in candidates if row.status == STATUS_COMPLETED
+                              and (row.result or {}).get("artifact_version") == 2 and (row.result or {}).get("artifact_status") == "available"}
+            targets = {str(row.id) for row in candidates if row.status in PENDING_STATUSES
+                       or include_ready and row.id in portable_ready}
+            from app.db.models import ArtifactBinding, ArtifactObject
+            objects = session.execute(select(ArtifactObject.object_id, ArtifactObject.size).join(ArtifactBinding,
+                ArtifactBinding.object_id == ArtifactObject.object_id).where(ArtifactBinding.owner_type == "export",
+                ArtifactBinding.owner_id.in_(targets)).distinct())
+            total_bytes = sum(row.size for row in objects)
         root = get_settings().exports_dir
         names: list[str] = []
-        total_bytes = 0
         if root.is_dir():
             for path in root.iterdir():
                 if not path.is_dir() or _ARTIFACT_DIR_RE.fullmatch(path.name) is None:
@@ -278,7 +303,8 @@ class ExportQueue:
                 if path.name.endswith(".ready") and not include_ready:
                     continue
                 names.append(path.name)
-                total_bytes += sum(file.stat().st_size for file in path.rglob("*") if file.is_file())
+                if not (path.name.endswith(".ready") and int(path.name.split(".")[0]) in portable_ready):
+                    total_bytes += sum(file.stat().st_size for file in path.rglob("*") if file.is_file())
         return ExportRollbackPlan(tuple(sorted(jobs)), tuple(sorted(names)), total_bytes, leased, include_ready)
 
     def apply_rollback(self, plan: ExportRollbackPlan, *, actor) -> ExportRollbackResult:
@@ -305,9 +331,12 @@ class ExportQueue:
                     and (job.result or {}).get("artifact_status") == "available"
                     and plan.include_ready
                 ]
+                portable_ready = {job.id for job in jobs if job is not None and (job.result or {}).get("artifact_version") == 2}
             for job_id in ready_ids:
                 ready = self.ready_dir(job_id)
                 deleting = get_settings().exports_dir / f"{job_id}.deleting"
+                if job_id in portable_ready and not ready.exists():
+                    continue
                 if not ready.is_dir() or deleting.exists():
                     return ExportRollbackResult(0, 0, 0, (), 0, (f"ready_artifact_conflict:{job_id}",))
                 ready.replace(deleting)
@@ -317,11 +346,13 @@ class ExportQueue:
             try:
                 with session_scope() as session:
                     for job_id in plan.job_ids:
-                        job = session.get(Job, job_id)
+                        from app.services.artifacts.job_files import lock_job, retire_files
+                        job = lock_job(session, Job, job_id)
                         if job is None or job.job_type != BULK_EXPORT:
                             continue
                         result = dict(job.result or {})
                         if job.status in PENDING_STATUSES:
+                            retire_files(session, kind="export", job_id=job_id)
                             job.status = STATUS_FAILED
                             job.finished_at = _utcnow()
                             job.error = "operator_rollback"
@@ -338,6 +369,7 @@ class ExportQueue:
                             failed_jobs += 1
                             audit_events += 1
                         elif job.id in ready_ids:
+                            retire_files(session, kind="export", job_id=job_id)
                             result["artifact_status"] = "deleted"
                             result["deleted_at"] = _utcnow().isoformat()
                             job.result = result
@@ -355,7 +387,8 @@ class ExportQueue:
                         deleting.replace(ready)
                 return ExportRollbackResult(0, 0, 0, (), 0, (f"audit_or_database_failure:{exc}",))
 
-            deleted_ready = deleted_bytes = 0
+            deleted_ready = len(portable_ready & set(ready_ids)) - sum(job_id in portable_ready for job_id, _, _ in ready_dirs)
+            deleted_bytes = 0
             errors: list[str] = []
             for _, _, deleting in ready_dirs:
                 try:
@@ -395,6 +428,10 @@ class ExportQueue:
             )
             if part is None:
                 raise ExportAdmissionError("Часть экспорта не найдена", code=codes.BULK_EXPORT_PART_NOT_FOUND)
+            if result.get("artifact_version") == 2:
+                return self._acquire_portable(job_id, part_number, user, ip_address)
+            if result.get("artifact_version") not in {None, 1}:
+                raise ExportAdmissionError("Неизвестный формат экспорта", code=codes.BULK_EXPORT_GONE)
             filename = part.get("filename")
             if not isinstance(filename, str) or not filename.startswith(f"documents-export-{job_id}-part-"):
                 raise ExportAdmissionError("Артефакт экспорта недоступен", code=codes.BULK_EXPORT_GONE)
@@ -469,6 +506,8 @@ class ExportQueue:
                 return job
             if self.active_leases(job_id):
                 raise ExportAdmissionError("Экспорт сейчас скачивается", code=codes.BULK_EXPORT_NOT_READY)
+            if result.get("artifact_version") == 2:
+                return self._retire_portable(job_id, user, ip_address, reason)
             ready_dir = self.ready_dir(job_id)
             deleting_dir = get_settings().exports_dir / f"{job_id}.deleting"
             if not ready_dir.is_dir():
@@ -611,6 +650,24 @@ class ExportQueue:
             ):
                 raise ExportSourceChangedError(str(doc_id))
             path = settings.uploads_dir / basename
+            snapshot_ref = value.get("source_blob")
+            if snapshot_ref is not None:
+                from app.services.artifacts.contract import BlobRef
+                from app.services.artifacts.original import original_path
+                from app.services.artifacts.repository import resolve_blob
+                from app.db.models import Document
+                try:
+                    ref = BlobRef(**snapshot_ref)
+                    with session_scope() as session:
+                        document = session.get(Document, doc_id)
+                        current = resolve_blob(session, owner_type="original", owner_id=doc_id, generation_id=None, logical_name="original")
+                        if document is None or document.deleted_at is not None or current != ref:
+                            raise ExportSourceChangedError(doc_id)
+                    path = original_path(settings, doc_id, value.get("filename") or basename)
+                    if path.stat().st_size != ref.size:
+                        raise ExportSourceChangedError(doc_id)
+                except (OSError, ValueError) as exc:
+                    raise ExportSourceChangedError(doc_id) from exc
             if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
                 raise ExportSourceChangedError(doc_id)
             documents[doc_id] = ExportDocument(
@@ -618,7 +675,8 @@ class ExportQueue:
                 filename=str(value.get("filename") or "document.bin"),
                 path=path,
                 size_bytes=int(value.get("size_bytes")),
-                mtime_ns=int(value.get("mtime_ns")),
+                mtime_ns=path.stat().st_mtime_ns if snapshot_ref else int(value.get("mtime_ns")),
+                source_blob=snapshot_ref,
             )
         parts: list[ExportPart] = []
         for value in params.get("parts") or []:
@@ -705,9 +763,21 @@ class ExportQueue:
 
     def _finish_completed(self, job_id: int, result: dict) -> None:
         with session_scope() as session:
-            job = session.get(Job, job_id)
+            from app.services.artifacts.job_files import bind_file, lock_job
+            job = lock_job(session, Job, job_id)
             if job is None or job.job_type != BULK_EXPORT:
                 return
+            if get_settings().artifact_uploads_enabled or any(d.get("source_blob") for d in (job.params or {}).get("documents", [])):
+                if job.status != STATUS_RUNNING:
+                    raise ExportSourceChangedError("job")
+                result = dict(result, artifact_version=2, parts=[dict(part) for part in result["parts"]])
+                for part in result["parts"]:
+                    ref = bind_file(session, get_settings(), kind="export", job_id=job_id, filename=part["filename"],
+                                    path=self.ready_dir(job_id) / part["filename"], size=part["size_bytes"])
+                    part["sha256"] = ref.sha256
+            from app.db.models import ArtifactBinding
+            session.query(ArtifactBinding).filter(ArtifactBinding.owner_type == "export", ArtifactBinding.owner_id == str(job_id),
+                                                  ArtifactBinding.logical_name.startswith("source-")).delete(synchronize_session=False)
             job.status = STATUS_COMPLETED
             job.finished_at = _utcnow()
             job.result = result
@@ -726,6 +796,104 @@ class ExportQueue:
                 },
             )
 
+    def _portable_part(self, session, job_id, number):
+        from app.services.artifacts.job_files import lock_job, file_ref
+        job = lock_job(session, Job, job_id)
+        result = (job.result or {}) if job else {}
+        expires = _parse_utc(result.get("expires_at"))
+        if (job is None or job.job_type != BULK_EXPORT or job.status != STATUS_COMPLETED
+                or result.get("artifact_version") != 2 or result.get("artifact_status") != "available"
+                or expires is None or expires <= _utcnow()):
+            raise ExportAdmissionError("Экспорт недоступен", code=codes.BULK_EXPORT_GONE)
+        part = next((p for p in result.get("parts", []) if p["number"] == number), None)
+        if part is None:
+            raise ExportAdmissionError("Часть экспорта не найдена", code=codes.BULK_EXPORT_PART_NOT_FOUND)
+        ref = file_ref(session, kind="export", job_id=job_id, filename=part["filename"],
+                       size=part["size_bytes"], sha256=part.get("sha256"))
+        return part, ref
+
+    def _acquire_portable(self, job_id, number, user, ip_address):
+        from app.services.artifacts.job_files import pin_file
+        scratch = None
+        reserved = 0
+        try:
+            with session_scope() as session:
+                part, ref = self._portable_part(session, job_id, number)
+            settings = get_settings()
+            root = settings.artifact_scratch_root or settings.data_dir / "artifact-scratch"
+            from app.services.generation_files import _reject_links
+            _reject_links(root)
+            root.mkdir(parents=True, exist_ok=True)
+            peak = 2 * ref.size  # S3 verification spool plus private response copy.
+            if (self._download_reserved_bytes + peak > settings.bulk_export_max_retained_mb * 1024 * 1024
+                    or shutil.disk_usage(root).free < peak + self._download_reserved_bytes + settings.bulk_export_min_free_mb * 1024 * 1024):
+                raise ExportAdmissionError("Недостаточно места для скачивания", code=codes.STORAGE_FULL)
+            reserved = peak
+            self._download_reserved_bytes += reserved
+            scratch, path = pin_file(settings, ref)
+            self._download_reserved_bytes -= ref.size
+            reserved -= ref.size
+            try:
+                with session_scope() as session:
+                    current, current_ref = self._portable_part(session, job_id, number)
+                    if current != part or current_ref != ref:
+                        raise ExportAdmissionError("Экспорт изменился", code=codes.BULK_EXPORT_GONE)
+                    audit_mod.record_in_session(session, action_type=audit_mod.DOCUMENT_BULK_EXPORT_DOWNLOAD_STARTED,
+                        user_id=getattr(user, "user_id", None), username=getattr(user, "username", None),
+                        target_type=audit_mod.TARGET_JOB, target_id=str(job_id), ip_address=ip_address,
+                        new_value={"part_number": number, "filename": part["filename"], "size_bytes": ref.size})
+            except ExportAdmissionError:
+                raise
+            except Exception as exc:
+                raise ExportAuditUnavailableError("Не удалось зарегистрировать аудит скачивания", code=codes.BULK_EXPORT_AUDIT_UNAVAILABLE) from exc
+        except BaseException as exc:
+            try:
+                if scratch is not None:
+                    scratch.close()
+            finally:
+                self._download_reserved_bytes -= reserved
+            if isinstance(exc, (ExportAdmissionError, ExportAuditUnavailableError)):
+                raise
+            if is_storage_full(exc):
+                raise ExportAdmissionError("Недостаточно места для скачивания", code=codes.STORAGE_FULL) from exc
+            if isinstance(exc, (OSError, ValueError)):
+                raise ExportAdmissionError("Артефакт экспорта недоступен", code=codes.BULK_EXPORT_GONE) from exc
+            raise
+        key = (job_id, number)
+        self._leases[key] = self._leases.get(key, 0) + 1
+        released = False
+        def release():
+            nonlocal released
+            with _ADMISSION_LOCK:
+                if not released:
+                    released = True
+                    try:
+                        scratch.close()
+                    finally:
+                        self._download_reserved_bytes -= reserved
+                        self._release_lease(key)
+        return ExportDownloadLease(path, part["filename"], ref.size, release, etag=f'"{ref.sha256}"')
+
+    def _retire_portable(self, job_id, user, ip_address, reason):
+        from app.services.artifacts.job_files import lock_job, retire_files
+        with session_scope() as session:
+            job = lock_job(session, Job, job_id)
+            if job is None or job.job_type != BULK_EXPORT:
+                raise ExportAdmissionError("Экспорт не найден", code=codes.BULK_EXPORT_GONE)
+            result = dict(job.result or {})
+            if result.get("artifact_status") != "available":
+                return _job_to_dict(job)
+            result.update(artifact_status=reason, deleted_at=_utcnow().isoformat())
+            job.result = result
+            retire_files(session, kind="export", job_id=job_id)
+            audit_mod.record_in_session(session,
+                action_type=audit_mod.DOCUMENT_BULK_EXPORT_EXPIRED if reason == "expired" else audit_mod.DOCUMENT_BULK_EXPORT_DELETED,
+                user_id=getattr(user, "user_id", None), username=getattr(user, "username", None),
+                target_type=audit_mod.TARGET_JOB, target_id=str(job_id), ip_address=ip_address,
+                new_value={"reason": reason, "part_count": len(result.get("parts", []))})
+        self._retire_artifacts(job_id)
+        return self.get(job_id)
+
     def _finish_failed(self, job_id: int, error_code: str, *, total: int) -> None:
         public_error = (
             "Недостаточно свободного места на диске"
@@ -736,9 +904,11 @@ class ExportQueue:
         )
         try:
             with session_scope() as session:
-                job = session.get(Job, job_id)
-                if job is None or job.job_type != BULK_EXPORT:
+                from app.services.artifacts.job_files import lock_job, retire_files
+                job = lock_job(session, Job, job_id)
+                if job is None or job.job_type != BULK_EXPORT or job.status not in PENDING_STATUSES:
                     return
+                retire_files(session, kind="export", job_id=job_id)
                 job.status = STATUS_FAILED
                 job.finished_at = _utcnow()
                 job.error = public_error
@@ -905,6 +1075,14 @@ def _snapshot_sources(doc_ids: list[str], settings) -> list[ExportDocument]:
         record = metadata.get(doc_id)
         if record is None or record["deleted_at"] is not None:
             raise ExportAdmissionError("Источник экспорта недоступен", code=codes.BULK_EXPORT_SOURCE_CONFLICT)
+        from app.services.artifacts.repository import resolve_blob
+        with session_scope() as session:
+            ref = resolve_blob(session, owner_type="original", owner_id=doc_id, generation_id=None, logical_name="original")
+        if settings.artifact_uploads_enabled and ref is None:
+            raise ExportAdmissionError("Исходник ещё не перенесён в хранилище", code=codes.BULK_EXPORT_SOURCE_CONFLICT)
+        if ref is not None:
+            from app.services.artifacts.original import original_path
+            original_path(settings, doc_id, record["filename"])
         matches = sorted(settings.uploads_dir.glob(f"{doc_id}.*"))
         if len(matches) != 1:
             raise ExportAdmissionError("Источник экспорта неоднозначен или отсутствует", code=codes.BULK_EXPORT_SOURCE_CONFLICT)
@@ -922,6 +1100,7 @@ def _snapshot_sources(doc_ids: list[str], settings) -> list[ExportDocument]:
                 path=source,
                 size_bytes=stat.st_size,
                 mtime_ns=stat.st_mtime_ns,
+                source_blob=vars(ref) if ref else None,
             )
         )
     return documents

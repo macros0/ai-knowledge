@@ -1610,7 +1610,7 @@ Source/attachment routes authenticate before resolving registered ancestry and
 the active generation's refs; v2 reads do not trust local path resolution or fall
 back to old files. Private scratch, Range/disposition and transaction/disconnect
 cleanup remain enforced. Preview remains default-off/prohibited in production:
-remaining consumer migration, orphan discovery and R2
+explicit corpus migration, orphan discovery and R2
 fencing/provider acceptance are still required for distributed runtime.
 
 ## 2026-10-31 — Portable staging checkpoint preview
@@ -1637,9 +1637,48 @@ The rpl01d migration preserves legacy rows as protocol1 and adds a durable
 checkpoint_version marker for protocol2, which survives feature-flag changes.
 Legacy checkpoints are not silently promoted. Downgrade refuses while portable
 rows exist, preventing loss of the marker and accidental filesystem fallback.
-Production preview remains prohibited; remaining consumers, explicit corpus
+Production preview remains prohibited; explicit corpus
 migration and platform acceptance are still required. Working DB data is not
 migrated by these tests; PostgreSQL probes use disposable namespace/schemas only.
+
+## 2026-10-31 — Portable source caches and durable file consumers
+
+Source-result stage files and retained originals now have an immutable manifest,
+exact scoped bindings and an atomic SQL head. Known committed cache corruption
+raises an integrity failure rather than causing silent regeneration of accepted
+source identities. Pending review originals are sealed before acknowledgment.
+Document/review protocol markers survive preview flag changes; rpl01e/rpl01f
+preserve legacy rows and refuse unsafe downgrades. New portable documents cannot
+silently return to filesystem authority when admission preview is disabled.
+
+Repair, scope selection, table import and OKF export hydrate registered inputs.
+Owner/phase/version/hash are checked before provider access; hashes and exact
+binding sets are checked before local cache publication. Helpers inside an owner
+transaction use same-session read leases, with document locks/committed refs
+pinning the bytes. Sessions stay in the invoking thread. This preview can hold
+SQL locks during provider I/O; distributed owner fencing remains the R2 gate.
+
+Queued exports pin selected original refs in the admission/audit transaction.
+Ready export/diagnostic archives bind their bytes with audited ready metadata.
+Expiry/deletion/rollback retire only the matching job's refs, including when
+the former worker's disk is gone. Source refs remain until completion/failure;
+document purge cannot delete bytes needed by accepted queued exports. Object
+deletion still follows GC grace/read-lease rules, never direct purge unlink.
+
+Archive downloads authorize before SDK access, reserve scratch capacity,
+materialize verified private copies, recheck job/ref and record the audit before
+delivery. Missing bound bytes never fall back to cache. Response cancellation
+releases descriptors, private scratch and quota through shielded thread cleanup;
+retirement/GC cannot invalidate an already materialized private reader. Diagnostic
+stream Range policy remains unchanged. Diagnostic recorder spool is local scratch;
+distributed recorder/control and global quota coordination remain R3/R4.
+Portable export ETags use the immutable digest so If-Range does not depend on
+the timestamp of the current API's temporary file.
+
+Automatic GC/provider-only orphan discovery, explicit legacy corpus migration,
+distributed runtime and real RWX/S3 acceptance remain open. Bytes written before
+a failed SQL commit can still leave provider-only orphans. Production preview
+remains prohibited; tests do not modify the working application database.
 
 ## 2026-10-31 — Dependency denial-of-service advisories
 

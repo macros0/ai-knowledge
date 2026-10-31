@@ -5,9 +5,7 @@ from hashlib import sha256
 import json
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from starlette.background import BackgroundTask
 
 from app import error_codes as codes
 from app.api.errors import ApiError
@@ -212,8 +210,9 @@ def download_bundle(bundle_id: UUID, request: Request, user: User = admin):
         lease = diag.bundle_queue.acquire_download(bundle_id, user)
     except BundleQueueError as exc:
         error(exc)
-    return StreamingResponse(
-        lease.chunks(), media_type="application/zip", background=BackgroundTask(lease.release),
+    from app.services.artifact_response import LeasedStreamingResponse
+    return LeasedStreamingResponse(
+        lease.chunks(), media_type="application/zip", on_close=lease.release,
         headers={"Content-Length": str(lease.size_bytes),
                  "Content-Disposition": f'attachment; filename="{lease.filename}"',
                  "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",

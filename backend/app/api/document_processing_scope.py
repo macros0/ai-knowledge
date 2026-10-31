@@ -232,7 +232,8 @@ def create_scope_review(
             status_code=409, code="already_processing", detail="Дождитесь завершения обработки."
         )
     settings = get_settings()
-    path = settings.uploads_dir / (doc_id + Path(document["filename"]).suffix.lower())
+    from app.services.artifacts.original import original_path
+    path = original_path(settings, doc_id, document["filename"])
     filename = document["filename"]
     try:
         from docparser.attachment_policy import AttachmentInventory, inventory_traversal_limits, inventory_node_depth
@@ -246,6 +247,9 @@ def create_scope_review(
         with session_scope() as session:
             _require_editor(session, doc_id, body, user)
             existing_review = session.get(DocumentProcessingReview, doc_id)
+            if existing_review:
+                from app.services.artifacts.review_files import hydrate_review_files
+                hydrate_review_files(session, settings, existing_review)
             if (
                 not body.review_id
                 and existing_review
@@ -354,6 +358,8 @@ def create_scope_review(
                 target = processing_review_paths(settings, doc_id, review.id)
                 target.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(folder, target / "attachments", dirs_exist_ok=True)
+                from app.services.artifacts.review_files import seal_review_files
+                seal_review_files(session, settings, review)
         from app.services.processing_review_cleanup import cleanup_superseded_reviews
 
         cleanup_superseded_reviews(settings, doc_id, review.id)

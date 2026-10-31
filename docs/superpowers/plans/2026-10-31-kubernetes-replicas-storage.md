@@ -19,7 +19,7 @@ actor-scoped idempotency, authorized verified download и восстановле
 cache реализуются за ARTIFACT_UPLOADS_ENABLED (default false, production запрещён
 до S3/S4 retention/migration). Legacy paths продолжают читаться без binding.
 Queue enqueue пока combined/post-commit: при отказе остаётся paused и тот же receipt.
-Перенос всех источников, поколений, exports и GC остаётся в S3; live приёмка открыта.
+Потребители файлов переводятся в S3 preview ниже; live provider приёмка открыта.
 
 S3 foundation: состояния объектов/leases/GC claims и CheckpointBinding/CAS
 реализованы; original download/cache используют leased materialization.
@@ -34,8 +34,19 @@ Staging preview сохраняет raw text/concepts/table refs/provenance в im
 checkpoint; progress+CAS pointer атомарны, cold resume не повторяет принятый LLM
 результат. Маркер rpl01d исключает filesystem downgrade; finalization использует
 только committed inventory. Actual PostgreSQL проверяет cold resume/CAS/миграцию.
-Автозапуск GC, поиск provider-only orphans, source-result caches и перенос
-остальных durable категорий остаются открытыми. Single-node kind
+Source-result caches имеют immutable manifest/member bindings и SQL head;
+сохранены source IDs и streamed JSONL стадии. Cold scope exclude/restore не
+повторяет parser/LLM/embeddings. Pending review originals запечатаны до ACK.
+Table/repair/scope/OKF потребители гидратируют approved поколения; готовые ZIP
+exports/diagnostic bundles имеют bindings и read/retention cleanup. Queued export
+удерживает refs оригиналов до завершения/отказа, даже после удаления документа.
+Private download scratch ограничен квотой и очищается при disconnect.
+Миграции rpl01e/rpl01f сохраняют legacy1; отказ downgrade защищает protocol2,
+выключение preview-флага не возвращает portable документ к filesystem authority.
+Проверены cold caches/reviews/exports/table import и миграции на отдельном PG17.
+Diagnostic recorder spool остаётся local scratch по инвентарю; distributed
+control/retention — R3/R4. Автозапуск GC и поиск provider-only orphans остаются
+открытыми вместе с S4 и platform acceptance. Single-node kind
 не подтверждает RWX/CSI/S3 или устойчивость к потере ноды.
 
 ## Global Constraints

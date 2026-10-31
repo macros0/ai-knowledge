@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
@@ -23,6 +24,7 @@ from sqlalchemy.orm import sessionmaker
 
 _engine: Engine | None = None
 _session_factory: sessionmaker | None = None
+_current_session = ContextVar("current_sql_session", default=None)
 # RLock (не Lock): get_session_factory() вызывает get_engine() внутри своей
 # критической секции — обычный Lock дал бы deadlock при первом создании движка.
 _lock = threading.RLock()
@@ -90,6 +92,7 @@ def session_scope():
     сессию, commit сразу после записи — поведение как у прежнего _save()).
     """
     session = get_session_factory()()
+    token = _current_session.set(session)
     try:
         yield session
         session.commit()
@@ -101,7 +104,15 @@ def session_scope():
             translate_reference_timeout(exc, dialect)
         raise
     finally:
-        session.close()
+        try:
+            session.close()
+        finally:
+            _current_session.reset(token)
+
+
+def current_session():
+    """Caller-owned transaction, for artifact operations inside an owner guard."""
+    return _current_session.get()
 
 
 def configure_for_tests(url: str = "sqlite:///:memory:") -> None:

@@ -101,6 +101,8 @@ def create_review(session, doc_id, inventory, *, base_generation_id, actor, limi
     if (state.active_generation_id if state else None) != base_generation_id:
         raise ProcessingScopeConflict()
     if existing:
+        from app.services.artifacts.review_files import retire_review_files
+        retire_review_files(session, doc_id, existing.id)
         session.delete(existing)
         session.flush()
     scope = automatic_snapshot(inventory, limits)

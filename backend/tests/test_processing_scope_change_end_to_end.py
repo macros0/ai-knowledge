@@ -62,6 +62,9 @@ def source_environment(tmp_path, monkeypatch):
                        generation_id=base_id, source_ids=[c["source_id"] for c in chunks], chunk_indices=[c["chunk_index"] for c in chunks])
     pipeline = SimpleNamespace(settings=settings, vector_store=store, okf_generator=OKFGenerator(),
                                embedder=Mock(side_effect=AssertionError("No embeddings expected")))
+    # Load before replacing app.config so lazy import cannot retain this fixture.
+    from app.services import export_okf
+    monkeypatch.setattr(export_okf, "get_settings", lambda: settings)
     monkeypatch.setattr("app.config.get_settings", lambda: settings)
     monkeypatch.setattr("app.services.pipeline.get_pipeline", lambda: pipeline)
     monkeypatch.setattr(jobs, "_dispatch", lambda *args: None)

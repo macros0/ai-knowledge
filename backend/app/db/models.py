@@ -126,6 +126,7 @@ class DiagnosticBundle(Base):
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     audit_receipts: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    artifact_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
 
 class Organization(Base):
@@ -262,6 +263,7 @@ class Document(Base):
     development_suggestion: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Дедупликация (Этап 4.2): SHA-256 байтов файла и нормализованного текста.
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    source_cache_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Канонический отпечаток standalone EML/MSG, только при полном извлечении
     # вложений. Нужен для similar-review, не является hard duplicate.
@@ -679,6 +681,8 @@ class DocumentProcessingReview(Base):
     id: Mapped[str] = mapped_column(String(32),nullable=False,unique=True)
     revision: Mapped[int] = mapped_column(Integer,nullable=False,default=1)
     state: Mapped[str] = mapped_column(String(24),nullable=False,default='draft')
+    artifact_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    artifact_revision: Mapped[str | None] = mapped_column(String(32), nullable=True)
     source_file_hash: Mapped[str] = mapped_column(String(64),nullable=False)
     parser_version: Mapped[str] = mapped_column(String(64),nullable=False)
     assessor_version: Mapped[str] = mapped_column(String(64),nullable=False)
@@ -1286,6 +1290,16 @@ class ArtifactReadLease(Base):
     object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), primary_key=True)
     owner_token: Mapped[str] = mapped_column(String(32), primary_key=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class SourceCacheHead(Base):
+    __tablename__ = "artifact_source_caches"
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(String(32), primary_key=True, default="")
+    cache_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), nullable=False)
 
 
 class CheckpointBinding(Base):

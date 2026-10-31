@@ -82,3 +82,31 @@ class LeasedBlobStore:
     def stat(self, ref):
         with self.open(ref):
             return ref
+
+
+class TransactionLeasedBlobStore:
+    """Lease inside an existing owner transaction; never open a second SQL writer.
+
+    The caller holds the document/job lock and the committed binding remains
+    visible until this transaction ends. That binding pins bytes even while the
+    short read lease is uncommitted. SQLAlchemy sessions never cross threads.
+    """
+    def __init__(self, store, session):
+        self.store, self.session, self.store_id = store, session, store.store_id
+
+    @contextmanager
+    def open(self, ref, *, start=0, end=None, guard=None):
+        token = acquire_read_lease(self.session, ref)
+        renewed = time.monotonic()
+        def check():
+            nonlocal renewed
+            if time.monotonic() - renewed >= 10:
+                renew_read_lease(self.session, ref.object_id, token)
+                renewed = time.monotonic()
+            if guard:
+                guard()
+        try:
+            with self.store.open(ref, start=start, end=end, guard=check) as source:
+                yield source
+        finally:
+            release_read_lease(self.session, ref.object_id, token)

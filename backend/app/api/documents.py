@@ -1742,6 +1742,7 @@ def get_chunk(doc_id: str, chunk_index: int):
     try:
         staging = StagingStore(doc_id)
         if staging.exists():
+            staging.load()  # Rebuild disposable chunk files from committed checkpoints.
             staging_path = staging.dir / f"chunk_{chunk_index:02d}.md"
             if staging_path.is_file():
                 return Response(content=staging_path.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")

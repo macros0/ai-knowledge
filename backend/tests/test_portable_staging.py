@@ -57,6 +57,15 @@ def test_staging_checkpoint_survives_worker_disk_loss(portable, tmp_path):
     assert cold.load()["chunks_data"]["0"]["table_refs"] == [{"row_number": 7}]
 
 
+def test_table_ref_checkpoint_hash_is_stable_after_canonical_json_roundtrip(portable):
+    stage, _ = portable
+    refs = [{"kind": "table", "row_number": 7, "columns": [1, 2], "generation_id": stage.generation_id,
+             "source_id": "root", "table_id": "a" * 32}]
+    stage.save_chunk_text(0, "table input")
+    stage.set_chunks_metadata([{"index": 0, "source_id": "root", "table_refs": refs}])
+    assert stage.load()["chunks_data"]["0"]["table_refs"] == refs
+
+
 def test_staging_checkpoint_restores_through_s3_adapter(portable, monkeypatch, tmp_path):
     from app.services.artifacts.s3 import S3BlobStore
     from tests.support.blob_s3_fake import MemoryS3

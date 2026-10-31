@@ -35,7 +35,7 @@ def _metadata(info):
         refs = result.pop("table_refs")
         result.pop("table_refs_file", None)
         if refs:
-            payload = json.dumps(refs, ensure_ascii=False, indent=None).encode("utf8")
+            payload = json.dumps(refs, ensure_ascii=False, indent=None, sort_keys=True).encode("utf8")
             if not isinstance(refs, list) or len(payload) > 4 * 1024 * 1024:
                 raise GenerationIntegrityError()
             result["table_refs_file"] = f"table_refs_{sha256(payload).hexdigest()}.json"
@@ -151,7 +151,7 @@ class PortableStaging:
             if body["concepts"] is not None:
                 _write_canonical(self.owner.dir / f"chunk_{index:02d}.json", body["concepts"])
             if "table_refs_file" in info:
-                payload = json.dumps(body["info"]["table_refs"], ensure_ascii=False, indent=None).encode("utf8")
+                payload = json.dumps(body["info"]["table_refs"], ensure_ascii=False, indent=None, sort_keys=True).encode("utf8")
                 _atomic_write(self.owner.dir / info["table_refs_file"], lambda out: out.write(payload))
 
     def create(self, total_chunks, global_tags=None, parser_version=None, source_file_hash=None,

@@ -60,13 +60,15 @@ def _staging_lock(doc_id: str) -> threading.Lock:
 def _portable_method(method):
     @wraps(method)
     def dispatch(self, *args, **kwargs):
+        settings = get_settings()
         with session_scope() as session:
             version = session.scalar(select(DocumentStaging.checkpoint_version).where(DocumentStaging.doc_id == self.doc_id))
+            from app.services.artifacts.repository import document_uses_portable_artifacts
+            portable = document_uses_portable_artifacts(session, settings, self.doc_id)
         if version not in {None, 1, 2}:
             from app.services.generation_artifacts import GenerationIntegrityError
             raise GenerationIntegrityError()
-        settings = get_settings()
-        if version == 2 or settings.artifact_uploads_enabled:
+        if version == 2 or portable:
             from app.services.artifacts.staging import PortableStaging
             if version == 1 and method.__name__ != "remove":
                 from app.services.generation_artifacts import GenerationIntegrityError

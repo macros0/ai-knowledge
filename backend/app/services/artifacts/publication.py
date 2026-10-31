@@ -13,7 +13,7 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.db.models import ArtifactBinding, Document, DocumentGeneration
-from app.db.session import session_scope
+from app.db.session import current_session, session_scope
 from app.services.generation_artifacts import GenerationIntegrityError, _read_hashed_json, artifact_manifest, file_digest
 from app.services.generation_files import _reject_links, generation_paths
 from app.services.generation_store import lock_document_write, lock_generation_read, lock_writable_generation
@@ -21,9 +21,9 @@ from app.services.json_atomic import write_json_atomic
 from app.services.errors import DomainError
 from app.services.storage import StorageFullError, is_storage_full
 from .contract import BlobRef
-from .leased import LeasedBlobStore
+from .leased import LeasedBlobStore, TransactionLeasedBlobStore
 from .materialize import materialize
-from .repository import attach_blob, resolve_blob
+from .repository import attach_blob, resolve_blob, document_uses_portable_artifacts
 
 
 def _encoder():
@@ -218,7 +218,7 @@ def write_prepared_publication(session, settings, prepared):
     version = prepared.get("version", 1)
     if type(version) is not int or version not in {1, 2}:
         raise GenerationIntegrityError()
-    if not getattr(settings, "artifact_uploads_enabled", False):
+    if not document_uses_portable_artifacts(session, settings, doc_id):
         generation = session.get(DocumentGeneration, generation_id)
         if ((generation and generation.publication_version != 1) or resolve_blob(session, owner_type="generation", owner_id=doc_id,
                          generation_id=generation_id, logical_name="publication.json") is not None):
@@ -267,7 +267,9 @@ def write_prepared_publication(session, settings, prepared):
 
 
 def hydrate_publication(settings, doc_id, generation_id, *, skip_active=False):
-    """Read provider bytes before any publication SQL write lock/transaction."""
+    """Restore verified bytes, joining an existing owner transaction when present."""
+    if current_session() is not None:
+        return _hydrate_in_transaction(current_session(), settings, doc_id, generation_id, skip_active=skip_active)
     try:
         generation_paths(settings, doc_id, generation_id)
         with session_scope() as session:
@@ -310,6 +312,47 @@ def hydrate_publication(settings, doc_id, generation_id, *, skip_active=False):
             raise
         if isinstance(exc, OSError) and is_storage_full(exc):
             raise StorageFullError() from None
+        raise GenerationIntegrityError() from exc
+
+
+def _hydrate_in_transaction(session, settings, doc_id, generation_id, *, skip_active=False):
+    """The caller's document read/write lock pins committed generation bindings."""
+    try:
+        lock_generation_read(session, [doc_id])
+        doc = session.get(Document, doc_id)
+        generation = session.get(DocumentGeneration, generation_id)
+        if skip_active and generation and generation.doc_id == doc_id and generation.phase == "active":
+            return False
+        ref = resolve_blob(session, owner_type="generation", owner_id=doc_id, generation_id=generation_id,
+                           logical_name="publication.json")
+        if ref is None:
+            if generation and generation.publication_version != 1:
+                raise GenerationIntegrityError()
+            return False
+        if (doc is None or doc.deleted_at is not None or generation is None or generation.doc_id != doc_id
+                or generation.phase not in {"ready", "active"} or generation.publication_hash != ref.sha256
+                or generation.publication_version != 2):
+            raise GenerationIntegrityError()
+        from . import get_blob_store
+        store = TransactionLeasedBlobStore(get_blob_store(settings), session)
+        scratch = settings.artifact_scratch_root or settings.data_dir / "artifact-scratch"
+        paths = generation_paths(settings, doc_id, generation_id)
+        with materialize(ref, store=store, scratch_root=scratch) as manifest:
+            body = _read_hashed_json(manifest, ref.sha256)
+            refs = validate_v2(body, doc_id, generation_id)
+            if canonical_hash(body) != ref.sha256:
+                raise GenerationIntegrityError()
+            verify_bindings(session, doc_id, generation_id, refs, ref.sha256, ref.size)
+            for name, member in refs.items():
+                with materialize(member, store=store, scratch_root=scratch) as source:
+                    _atomic_write(artifact_path(paths, name), lambda output: _copy_file(source, output))
+            _atomic_write(paths.uploads_root / "publication.json", lambda output: _copy_file(manifest, output))
+        return True
+    except DomainError:
+        raise
+    except Exception as exc:
+        if is_storage_full(exc):
+            raise StorageFullError() from exc
         raise GenerationIntegrityError() from exc
 
 

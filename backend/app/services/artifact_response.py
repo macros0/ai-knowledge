@@ -6,7 +6,8 @@ from secrets import token_hex
 
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, StreamingResponse
+from anyio import CancelScope
 
 
 class OpenedFileResponse(FileResponse):
@@ -97,3 +98,33 @@ class OpenedBlobResponse(OpenedFileResponse):
             self._file.close()
         finally:
             self._scratch.close()
+
+
+class LeasedFileResponse(OpenedFileResponse):
+    def __init__(self, path, *, on_close, **kwargs):
+        self._on_close = on_close
+        try:
+            super().__init__(path, **kwargs)
+        except BaseException:
+            on_close()
+            raise
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            with CancelScope(shield=True):
+                await run_in_threadpool(self._on_close)
+
+
+class LeasedStreamingResponse(StreamingResponse):
+    def __init__(self, content, *, on_close, **kwargs):
+        self._on_close = on_close
+        super().__init__(content, **kwargs)
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            with CancelScope(shield=True):
+                await run_in_threadpool(self._on_close)

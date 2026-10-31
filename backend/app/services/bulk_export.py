@@ -46,6 +46,7 @@ class ExportDocument:
     path: Path
     size_bytes: int
     mtime_ns: int
+    source_blob: dict | None = None
 
 
 @dataclass(frozen=True)

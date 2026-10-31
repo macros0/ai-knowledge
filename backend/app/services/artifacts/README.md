@@ -1,8 +1,8 @@
 # Portable artifacts — staged implementation
 
 LocalBlobStore, RwxBlobStore and S3BlobStore share an immutable artifact contract.
-Original admission and portable generation publication are a staged preview;
-remaining consumers, full migration and distributed execution remain pending.
+Original admission, portable publication/checkpoints and durable file consumers
+are a staged preview; full migration and distributed execution remain pending.
 
 S2 admission preview is enabled only with ARTIFACT_UPLOADS_ENABLED=true in a
 non-production combined process. Production activation is rejected until S3/S4
@@ -24,7 +24,8 @@ verify/materialize to private scratch, and keep the opened descriptor through
 Range/HEAD streaming and disconnect cleanup. A missing or corrupt bound object
 never falls back to legacy bytes. The combined pipeline can rebuild its local
 original cache from the bound blob. Sources/attachments in v2 generations also
-use bindings; staging, table/export and other consumers still need conversion.
+use bindings; source caches, review originals, table sidecars and ready job
+archives now also restore from registered bytes.
 Purge detaches bindings but never directly deletes
 objects; receipt tombstones survive purge. Unreferenced objects require S3 GC,
 which is why preview is disabled by default and prohibited in production.
@@ -101,6 +102,41 @@ Switching the flag off does not downgrade existing portable rows. Missing refs,
 changed source identity or missing/corrupt bytes fail even if local files remain.
 Downgrade refuses while portable rows exist, preserving their protocol marker.
 This is checkpoint portability; distributed job-owner fencing remains R2.
+
+SourceResultCache keeps its existing JSONL stage/identity contracts. SourceCacheHead
+atomically selects a v2 manifest with bindings for every stage and retained
+original. Missing/corrupt committed bytes are integrity failures, never cache
+misses that regenerate accepted IDs. Document.source_cache_version survives
+preview flag changes. Pending review originals use a separate versioned manifest
+and revision pointer, sealed before acknowledgment. Replacement detaches the
+previous reference group in the same transaction.
+
+An artifact helper called inside session_scope joins that owner Session via a
+ContextVar. TransactionLeasedBlobStore takes/renews/releases leases in that same
+thread; the caller's document lock and committed bindings pin bytes until commit.
+This avoids an independent SQLite writer during scope/repair operations. Provider
+I/O can extend this transaction; distributed job fencing/lease budgets remain R2.
+Generation hydration checks owner/phase/version/hash before provider access and
+verifies all manifest members before publishing disposable cache files. Table
+import, canonical repair, source selection and OKF export hydrate approved inputs.
+
+Queued exports pin selected bound originals with their job/audit transaction.
+Ready export parts and diagnostic ZIPs are immutable bound job results. Ready
+state and refs commit together; deletion/expiry/rollback detach refs with audited
+metadata even on a cold API. Downloads recheck readiness/ref after verified
+private materialization, reserve local scratch capacity, and release handles,
+private copies and quota on completion/disconnect. HTTP cleanup runs off the
+event loop under cancellation shielding. Export ETags use the immutable digest,
+so If-Range resumes survive private-cache/API replacement. Provider GC cannot invalidate the
+already verified private copy. Diagnostic recorder spools remain reconstructible
+local scratch; their distributed control/retention work remains R3/R4.
+
+Apply rpl01e_source_caches and rpl01f_file_consumers before using this build on an
+existing DB. They preserve legacy protocol1 rows and add source/review/diagnostic
+markers. Export protocol2 is recorded in Job.result. Downgrade refuses portable
+rows/results whose metadata would become unreadable. An environment flag toggle
+does not migrate or downgrade known portable documents. Explicit legacy corpus
+migration is S4; provider-only orphan discovery/automatic GC are still pending.
 
 PostgreSQL probes live in tests/replica_postgres and require the private URL file
 path in OKF_ARTIFACT_PG_URL_FILE. Only loopback replica_test_<run-id> databases are

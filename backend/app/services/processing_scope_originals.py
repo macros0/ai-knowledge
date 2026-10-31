@@ -85,6 +85,15 @@ def retain_scope_originals(settings, doc_id, generation_id, snapshot, sources, a
 
     with session_scope() as session:
         lock_writable_generation(session, doc_id, generation_id)
+        from app.db.models import DocumentProcessingReview, DocumentGenerationState
+        from app.services.artifacts.review_files import hydrate_review_files
+        from app.services.artifacts.publication import hydrate_publication
+        review = session.get(DocumentProcessingReview, doc_id)
+        if review and review.id == snapshot["review_id"]:
+            hydrate_review_files(session, settings, review)
+        state = session.get(DocumentGenerationState, doc_id)
+        if state and state.active_generation_id:
+            hydrate_publication(settings, doc_id, state.active_generation_id)
         published = {
             (source.metadata_json or {}).get("source_key"): source.saved_path
             for source in session.scalars(select(DocumentSource).where(DocumentSource.doc_id == doc_id))

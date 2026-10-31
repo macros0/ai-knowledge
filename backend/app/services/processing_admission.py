@@ -128,7 +128,8 @@ def confirm_processing_scope(
         snapshot["confirmed_at"] = now.isoformat()
         consent = row.similarity_confirmation_json
     try:
-        path = settings.uploads_dir / (doc_id + Path(doc["filename"]).suffix.lower())
+        from app.services.artifacts.original import original_path
+        path = original_path(settings, doc_id, doc["filename"])
         with path.open("rb") as stream:
             if hashlib.file_digest(stream, "sha256").hexdigest() != snapshot["source_file_hash"]:
                 raise ProcessingScopeConflict("Исходный файл изменился. Обновите состав.")
@@ -297,7 +298,8 @@ def prepare_regeneration_scope(doc_id, settings):
                 snapshot = scope_for_generation(session, doc_id, review.generation_id)
     if snapshot is not None or not settings.attachment_review_enabled:
         return snapshot, False
-    path = settings.uploads_dir / (doc_id + Path(doc["filename"]).suffix.lower())
+    from app.services.artifacts.original import original_path
+    path = original_path(settings, doc_id, doc["filename"])
     with TemporaryDirectory(prefix="scope-regenerate-", dir=settings.uploads_dir) as folder:
         inventory, selection = prepare_upload_scope(
             path, doc["filename"], settings, attachments_dir=Path(folder)
@@ -318,6 +320,8 @@ def prepare_regeneration_scope(doc_id, settings):
             target = processing_review_paths(settings, doc_id, review.id)
             target.mkdir(parents=True, exist_ok=False)
             shutil.copytree(folder, target / "attachments")
+            from app.services.artifacts.review_files import seal_review_files
+            seal_review_files(session, settings, review)
             if not doc.get("has_published_version"):
                 session.get(Document, doc_id).status = "awaiting_attachments"
     return None, True
