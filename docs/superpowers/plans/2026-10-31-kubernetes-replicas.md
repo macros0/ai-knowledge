@@ -36,6 +36,9 @@ SQL leases/claims и остановка с приложением. Провер�
 S4 offline preview реализует verified/resumable copy и atomic cutover (rpl01h),
 без source deletion/reindex; [runbook](../../ARTIFACT_STORAGE_MIGRATION.md).
 Production, distributed scheduling/runtime и real provider acceptance остаются открытыми.
+R1 foundation (01.11.2026): transactional WorkItem ledger, DB-time leases,
+fencing/cancel/dedupe и explicit worker реализованы; public Job approval не меняется.
+R2 подключит document admission/publication, R3 роли, R4 global coordination.
 CT102 оставлен stopped, учебная VM103 running по запросу пользователя.
 Python/npm advisory audits после исправлений не находят известных уязвимостей;
 S2–S4, runtime/operations и окруженческие проверки остаются открытыми.

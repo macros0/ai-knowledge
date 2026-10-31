@@ -7,6 +7,12 @@
 **Tech Stack:** SQLAlchemy 2, psycopg/PostgreSQL 17, FastAPI, Alembic, existing Qdrant clients.
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
+Статус 01.11.2026: R1 foundation реализован (rpl02): caller-owned transactions,
+SKIP LOCKED, DB UTC leases, fencing/cancel/dedupe, bounded explicit worker и
+kind/version registry. Import не запускает executor. Публичные Job/four-eyes не
+изменены. R2–R5 и активация distributed ролей остаются открытыми; глобальную
+ёмкость и maintenance epoch этот foundation не обещает.
+
 ## Global Constraints
 
 Ограничения [основного плана](2026-10-31-kubernetes-replicas.md) обязательны.
@@ -55,11 +61,18 @@ DB UTC time; reclaim increment fence. Стартовые settings: lease 120 s, 
 30 s, attempts 3 для классифицированных transient errors, backoff 5/30/120 s;
 validation/unsupported не retries. Значения проверяются измерениями R5.
 
-- [ ] Тесты `test_two_processes_claim_once`, `test_dedupe_in_same_transaction`, `test_old_fence_cannot_renew_finish`, `test_unknown_version_not_claimed`, `test_cancel_prevents_publish_guard`: assert разные workers не получают один live claim; rollback не оставляет work; old token raises LostOwnership.
-- [ ] RED: `python -m pytest tests/test_work_store.py -q`; PG через runner runtime, не current dev DB. Harness создаёт/удаляет только run schema/database по P0 safety contract.
-- [ ] Реализовать store/DTO/migration. Lease не освобождает global capacity до атомарной передачи/истечения. Worker polling bounded; нет бесконечного цикла на PG outage. Wall clock worker не определяет ownership.
-- [ ] GREEN unit + PG multiprocess; crash после claim/before ACK и продление рядом с expiry проверяются детерминированными барьерами, не sleep-only tests. Migration непустой Job таблицы не меняет её статусы.
-- [ ] Commit `feat: add PostgreSQL work ownership and recovery`.
+- [x] Тесты `test_two_processes_claim_once`, `test_dedupe_in_same_transaction`, `test_old_fence_cannot_renew_finish`, `test_unknown_version_not_claimed`, `test_cancel_prevents_publish_guard`: assert разные workers не получают один live claim; rollback не оставляет work; old token raises LostOwnership.
+- [x] RED: `python -m pytest tests/test_work_store.py -q`; PG через runner runtime, не current dev DB. Harness создаёт/удаляет только run schema/database по P0 safety contract.
+- [x] Реализовать store/DTO/migration. Lease не освобождает global capacity до атомарной передачи/истечения. Worker polling bounded; нет бесконечного цикла на PG outage. Wall clock worker не определяет ownership.
+- [x] GREEN unit + PG multiprocess; crash после claim/before ACK и продление рядом с expiry проверяются детерминированными барьерами, не sleep-only tests. Migration непустой Job таблицы не меняет её статусы.
+- [x] Commit `feat: add PostgreSQL work ownership and recovery`.
+
+Проверки R1: queue/worker/schema + S4 core51 passed; settings/legacy queue/
+repository/chart/generation/export77 passed/11 environment-skipped. Actual
+PostgreSQL7 passed: spawned claims и dedupe, stale-owner return, expired renew,
+nonempty Job upgrade/downgrade refusal, process crash и DB-time expiry после
+подтверждённого row-lock wait. Mandatory gate: audit0, frontend740 passed/1 skipped,
+ESLint/Ruff passed. Это foundation, а не полный runtime/provider acceptance runner.
 
 ## Task R2: document jobs, admission и fencing публикации
 

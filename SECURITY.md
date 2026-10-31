@@ -1744,6 +1744,29 @@ refuses migration receipts/selection/portable pointers; rollback after new write
 requires a coherent restore, not an environment toggle. See
 [the migration runbook](docs/ARTIFACT_STORAGE_MIGRATION.md).
 
+## 2026-11-01 — Transactional work ownership foundation
+
+R1 adds an internal, versioned WorkItem ledger without changing public Job
+four-eyes approval/statuses or granting new API access. Enqueue/dedupe and caller
+metadata share one SQL transaction. Canonical JSON distinguishes booleans/numbers;
+payloads are bounded data, and a trusted registry selects handlers. Kind/version
+unsupported by a worker remains queued, with a non-destructive diagnostic marker.
+
+PostgreSQL row locks/SKIP LOCKED, DB UTC time, owner ID and monotonically increasing
+fence govern claim/renew/completion. Cancellation invalidates the publication
+guard; old/expired owners cannot ACK, even before reclaim. Handlers run outside
+SQL transactions. An orphaned running handler retains local worker capacity;
+coordinator failures back off, and only classified transient errors retry within
+a bounded attempt count. Exception text/payloads/credentials are not persisted or
+logged by this primitive. Accepted work history prevents schema downgrade.
+
+This foundation does not activate distributed roles or promise stale-write/global
+LLM fencing yet. R2/R3/R4/O2 must integrate publication, roles, capacity and
+installation epochs first. Existing runtime/production guards remain in force.
+Offline corpus transfer includes the work ledger in its source revision;
+rpl02 is required before using this build on an existing DB. Real multiprocess
+PostgreSQL checks run only in owned disposable schemas, never the working DB.
+
 ## 2026-10-31 — Dependency denial-of-service advisories
 
 Updated tooling Zod to 4.6.7 (GHSA-mrhx-c7xc-m3w5) and all upstream minimatch

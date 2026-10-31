@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # Opt-in contract only; runtime capability is enabled by code in a later stage.
     okf_deployment_schema: str | None = None
     app_role: str = "combined"
+    # Durable work foundation only: role/admission activation remains gated.
+    work_lease_seconds: int = Field(default=120, ge=5, le=3600)
+    work_heartbeat_seconds: int = Field(default=30, ge=1, le=600)
+    work_max_attempts: int = Field(default=3, ge=1, le=10)
+    work_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
+    work_retry_backoff_seconds: tuple[int, int, int] = (5, 30, 120)
     artifact_backend: str = "local"
     postgres_provider: str = "managed"
     qdrant_provider: str = "managed"
@@ -69,6 +75,10 @@ class Settings(BaseSettings):
     def validate_replica_runtime(self):
         from app.deployment.replica_profile import ReplicaProfile, validate_runtime_profile
 
+        if self.work_heartbeat_seconds * 3 > self.work_lease_seconds:
+            raise ValueError("Work heartbeat requires at least three intervals per lease")
+        if any(not 1 <= delay <= 3600 for delay in self.work_retry_backoff_seconds):
+            raise ValueError("Invalid bounded work retry backoff")
         if self.artifact_uploads_enabled and self.environment == "production":
             raise ValueError("Artifact upload preview requires completed retention/migration before production")
         if self.artifact_gc_enabled and (self.environment == "production" or self.app_role != "combined"):

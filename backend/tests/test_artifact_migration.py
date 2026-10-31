@@ -12,7 +12,7 @@ def test_alembic_upgrade_nonempty_legacy_database_preserves_document(tmp_path, m
     database = tmp_path / "legacy.db"
     engine = create_engine(f"sqlite:///{database.as_posix()}")
     new_tables = {"artifact_objects", "artifact_bindings", "upload_receipts", "artifact_read_leases", "artifact_checkpoints", "artifact_source_caches", "artifact_gc_state", "artifact_orphans", "artifact_storage_control", "artifact_storage_migrations"}
-    Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables if t.name not in new_tables])
+    Base.metadata.create_all(engine, tables=[t for t in Base.metadata.sorted_tables if t.name not in new_tables | {"work_items"}])
     from app.db.models import Document, DocumentGeneration, DocumentStaging
     with Session(engine) as session:
         session.add(Document(id="0123456789abcdef", filename="legacy.pdf"))
@@ -56,7 +56,7 @@ def test_alembic_upgrade_nonempty_legacy_database_preserves_document(tmp_path, m
         connection.execute(text("INSERT INTO artifact_bindings(owner_type,owner_id,generation_id,logical_name,object_id,doc_id) "
                                 "VALUES('generation','0123456789abcdef',:generation,'publication.json',:object,'0123456789abcdef')"),
                            {"generation": "d" * 32, "object": "d" * 32})
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl01h_storage_migration")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT filename FROM documents")).scalar_one() == "legacy.pdf"
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "rpl01h_storage_migration"
@@ -67,7 +67,7 @@ def test_alembic_upgrade_nonempty_legacy_database_preserves_document(tmp_path, m
         assert connection.execute(text("SELECT checkpoint_version FROM document_staging")).scalar_one() == 1
         assert 'chunk_00.json' in connection.execute(text("SELECT chunks_data FROM document_staging")).scalar_one()
     command.downgrade(config, "rpl01c_portable_publication")
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl01h_storage_migration")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT checkpoint_version FROM document_staging")).scalar_one() == 1
     # A lost control/receipt must not let downgrade erase a portable snapshot marker.

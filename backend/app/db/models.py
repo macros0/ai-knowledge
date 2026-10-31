@@ -1273,6 +1273,31 @@ class AnswerScenarioVersion(Base):
     )
 
 
+class WorkItem(Base):
+    """Internal at-least-once execution ledger; public Job approval stays separate."""
+    __tablename__ = "work_items"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    doc_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", server_default="queued")
+    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.current_timestamp())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.current_timestamp())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    __table_args__ = (Index("ix_work_claim", "status", "available_at", "created_at", "id"),
+        Index("ix_work_expired", "status", "lease_until"),
+        CheckConstraint("status IN ('queued','running','succeeded','failed','cancelled')", name="ck_work_status"),
+        CheckConstraint("fence >= 0 AND attempts >= 0 AND payload_version >= 1", name="ck_work_counters"))
+
+
 class ArtifactStorageControl(Base):
     __tablename__ = "artifact_storage_control"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
