@@ -43,6 +43,20 @@ class Settings(BaseSettings):
     postgres_provider: str = "managed"
     qdrant_provider: str = "managed"
     artifact_provider: str = "managed"
+    artifact_store_id: str = "local"
+    artifact_root: Path | None = None
+    artifact_scratch_root: Path | None = None
+    artifact_max_bytes: int = Field(default=2 * 1024 * 1024 * 1024, gt=0, le=8 * 1024 * 1024 * 10000)
+    artifact_s3_endpoint: str | None = None
+    artifact_s3_bucket: str | None = None
+    artifact_s3_prefix: str = ""
+    artifact_s3_region: str = "us-east-1"
+    artifact_s3_addressing_style: Literal["path", "virtual"] = "path"
+    artifact_s3_ca_bundle: Path | None = None
+    artifact_s3_allow_http: bool = False
+    artifact_s3_access_key: str | None = Field(default=None, exclude=True, repr=False)
+    artifact_s3_secret_key: str | None = Field(default=None, exclude=True, repr=False)
+    artifact_s3_session_token: str | None = Field(default=None, exclude=True, repr=False)
 
     @model_validator(mode="after")
     def validate_replica_runtime(self):

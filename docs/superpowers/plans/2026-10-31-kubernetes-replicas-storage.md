@@ -7,10 +7,11 @@
 **Tech Stack:** Python, SQLAlchemy/Alembic, файловая система, S3 SDK из общего requirements lock, существующие Qdrant generation filters.
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
-Статус 31.10.2026: S1 начат. Реализованы BlobRef/BlobStore, LocalBlobStore и
-materialize с проверкой integrity, concurrent publication и типизированных ошибок.
-Рабочий pipeline пока не подключён к адаптеру. RWX/S3, factory/runtime settings,
-реальные provider contract tests и S2–S4 остаются открытыми. Локальная проверка
+Статус 31.10.2026: S1 в работе. Реализованы BlobRef/BlobStore, local/RWX/S3,
+factory/settings и materialize с проверкой integrity, concurrent publication и
+типизированных ошибок. Есть общий suite и реальные botocore model/hook tests.
+Рабочий pipeline пока не подключён к адаптеру. Реальные provider contract tests
+на инфраструктуре заказчика и S2–S4 остаются открытыми. Локальная проверка
 не считается завершением S1 целиком или приёмкой общего хранилища.
 
 ## Global Constraints

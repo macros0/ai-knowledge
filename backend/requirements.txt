@@ -3,7 +3,8 @@ uvicorn[standard]>=0.32
 python-multipart>=0.0.9
 pydantic>=2.9
 pydantic-settings>=2.6
-litellm>=1.40
+# Temporary compatible release: 1.106.x caps filelock below its security fixes.
+litellm==1.103.10
 json-repair>=0.30.0
 qdrant-client~=1.19
 PyYAML>=6.0
@@ -17,3 +18,9 @@ alembic>=1.13
 mmh3>=4.0
 py3langid~=0.4.0
 python-json-logger>=3,<5
+boto3==1.43.117
+# Security floors for transitive JWT and archive dependencies.
+joserfc>=1.7.6
+brotli>=1.2.1; platform_python_implementation == "CPython"
+brotlicffi>=1.2.1.0; platform_python_implementation == "PyPy"
+filelock>=4.2.1,<5

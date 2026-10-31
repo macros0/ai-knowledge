@@ -1521,6 +1521,26 @@ reverified before use. This does not change active retention/purge or permit
 multi-node local storage. Shared-adapter certification, DB reference/lease guards
 and pipeline integration remain required before runtime activation.
 
+Shared adapter foundation now adds RWX existing-root checks and S3 conditional
+PUT/multipart completion, full SHA256 verification, bounded temporary spooling,
+explicit endpoint/credentials and TLS verification. SDK redirect authority is
+checked before transmission; secrets are excluded from Settings serialization.
+No automatic credential discovery or unconditional overwrite fallback is used.
+Missing buckets remain errors. Protocol doubles do not certify provider/CSI
+guarantees, and these adapters are not connected to production retention or GC.
+
+## 2026-10-31 — Python dependency security floors
+
+Raised pypdf to >=6.21.4, joserfc to >=1.7.6, Brotli to >=1.2.1 (CPython),
+brotlicffi to >=1.2.1.0 (PyPy) and filelock to
+>=4.2.1,<5. LiteLLM is temporarily pinned to published 1.103.10 because 1.106.x
+requires filelock<4; no wheel metadata override or advisory suppression is used.
+Boto3 is pinned to 1.43.117, satisfying that compatible LiteLLM release. The hash
+lock resolves the full graph. Real JWT decoder tests reject oversized compact
+tokens before segment allocation and retain signed-token/signature validation.
+LLM transport and cache-lock compatibility are checked separately from model
+quality; customer provider acceptance remains required.
+
 ## 2026-10-31 — Dependency denial-of-service advisories
 
 Updated tooling Zod to 4.6.7 (GHSA-mrhx-c7xc-m3w5) and all upstream minimatch

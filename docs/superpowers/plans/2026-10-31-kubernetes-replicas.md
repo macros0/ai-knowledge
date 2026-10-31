@@ -17,6 +17,10 @@ P1: pure profile validator, Settings/preflight wiring и Helm schema/capability 
 реализованы; Helm 4.3.0 установлен локально с проверкой SHA256, render tests выполнены.
 F1/F2: внутренний транспорт и frontend-split реализованы и проверены локально;
 живой Kubernetes/Gateway smoke не выполнялся без разрешённого namespace/manifest.
+S1: local/RWX/S3 adapters, factory/settings и общие контрактные тесты реализованы;
+проверки SDK не заменяют приёмку реального provider/CSI. Pipeline ещё не подключён.
+Python/npm advisory audits после исправлений не находят известных уязвимостей;
+S2–S4, runtime/operations и окруженческие проверки остаются открытыми.
 Ни P0, ни P1 целиком не объявляются завершёнными до их окруженческих проверок.
 
 ## Global Constraints

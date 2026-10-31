@@ -16,6 +16,10 @@ class BlobUnavailable(OSError):
     pass
 
 
+class BlobNotFound(BlobUnavailable):
+    pass
+
+
 def validate_object_id(value: str) -> None:
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{32}", value) is None:
         raise ValueError("Invalid artifact identity")
