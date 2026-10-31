@@ -558,6 +558,7 @@ class DocumentGeneration(Base):
     table_schema_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_projection_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     publication_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    publication_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     processing_scope_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     processing_scope_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     scope_request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)

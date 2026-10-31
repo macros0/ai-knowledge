@@ -25,8 +25,13 @@ S3 foundation: состояния объектов/leases/GC claims и Checkpoin
 реализованы; original download/cache используют leased materialization.
 SQLite contracts и реальные PostgreSQL гонки/миграция проверены в отдельном
 namespace учебной VM103. Clock-skew regression исправлена DB-side created_at.
-Автозапуск GC, поиск provider-only orphans, manifest v2, интеграция StagingStore
-и перенос остальных durable категорий остаются открытыми. Single-node kind
+Manifest v2 preview реализован для pipeline/canonical repair/scope worker:
+canonical hash, BlobRef bindings, DB publication_version, leased hydration и
+защита cache-write от retired cleanup. Source/attachment API читает refs без
+локальных generation-файлов. SQLite и PostgreSQL проверяют cold publication и
+миграцию маркера; S3 protocol double не является сертификацией реального S3.
+Автозапуск GC, поиск provider-only orphans, интеграция StagingStore и перенос
+остальных durable категорий остаются открытыми. Single-node kind
 не подтверждает RWX/CSI/S3 или устойчивость к потере ноды.
 
 ## Global Constraints

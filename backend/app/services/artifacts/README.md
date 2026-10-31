@@ -1,9 +1,8 @@
-# Artifact adapter foundation (S1)
+# Portable artifacts — staged implementation
 
-LocalBlobStore, RwxBlobStore and S3BlobStore are an unconnected foundation; the
-existing pipeline still uses its existing generation directories. The factory
-selects an adapter from artifact settings. Original bindings/admission are a
-staged preview below; full migration and distributed execution remain pending.
+LocalBlobStore, RwxBlobStore and S3BlobStore share an immutable artifact contract.
+Original admission and portable generation publication are a staged preview;
+remaining consumers, full migration and distributed execution remain pending.
 
 S2 admission preview is enabled only with ARTIFACT_UPLOADS_ENABLED=true in a
 non-production combined process. Production activation is rejected until S3/S4
@@ -24,8 +23,9 @@ Bound downloads authenticate/check document visibility before resolving metadata
 verify/materialize to private scratch, and keep the opened descriptor through
 Range/HEAD streaming and disconnect cleanup. A missing or corrupt bound object
 never falls back to legacy bytes. The combined pipeline can rebuild its local
-original cache from the bound blob; all other generation/source/export consumers
-still require S3 conversion. Purge detaches bindings but never directly deletes
+original cache from the bound blob. Sources/attachments in v2 generations also
+use bindings; staging, table/export and other consumers still need conversion.
+Purge detaches bindings but never directly deletes
 objects; receipt tombstones survive purge. Unreferenced objects require S3 GC,
 which is why preview is disabled by default and prohibited in production.
 
@@ -49,8 +49,36 @@ CheckpointBinding records generation/chunk/source signature and a verified blob.
 Replacement requires an explicit previous object ID; abandoned or missing
 generations reject writes. materialize_checkpoint reads with a lease on another
 scratch root. This interface is not yet wired into StagingStore's complete
-checkpoint/sidecar protocol, and job-owner fencing remains R2 work. Manifest v2,
-portable generation hydration and remaining consumers are also still pending.
+checkpoint/sidecar protocol, and job-owner fencing remains R2 work.
+
+Publication v2 is written by the ordinary pipeline, canonical repair and scope
+worker when preview is enabled. Every durable generation file and the canonical
+manifest are bound in the caller's SQL transaction before ready/publication.
+JSON hashes use deterministic UTF8/key ordering, normalize JSON key wire forms,
+reject ambiguous key aliases, and stream without building another full raw JSON
+document. Concept identities use logical bundle paths; bundle-off mode remains
+supported. The database publication_version marker survives cache/binding loss
+and prevents interpreting v2 as a legacy filesystem publication. Migration
+rpl01c_portable_publication adds/backfills it; apply migrations before running
+this build against an existing database. Sealed candidates cannot be downgraded
+by toggling the preview flag. Repeated sealing accepts identical refs only.
+
+Before publication, leased provider bytes restore disposable local generation
+caches. Each cache write rechecks current generation/hash/ref under the document
+writer lock, so retired cleanup cannot be undone by late hydration. Publication
+then verifies the complete cache and exact scoped bindings in its SQL transaction.
+Provider loss/corruption leaves the previous active generation unchanged.
+Authorized source/attachment downloads resolve registered ancestry and active
+generation bindings before filesystem paths; missing v2 bytes/metadata never
+fall back to an old local file. HTTP Range/disposition and private scratch cleanup
+retain their previous contracts. Already-active publication replay is a no-op
+and does not require provider access.
+
+V1 remains restricted to legacy local combined execution/migration. These
+changes do not yet restore every cold-worker consumer (full StagingStore, source
+result caches, table/export/diagnostic flows) or discover provider-only orphans.
+Production/shared runtime gates remain closed. The S3 protocol double verifies
+adapter behavior but does not certify a customer S3 service.
 
 PostgreSQL probes live in tests/replica_postgres and require the private URL file
 path in OKF_ARTIFACT_PG_URL_FILE. Only loopback replica_test_<run-id> databases are

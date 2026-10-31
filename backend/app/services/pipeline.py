@@ -43,7 +43,7 @@ from app.services.errors import (
 )
 from app.services import gen_quality
 from app.services.generation_files import generation_paths, merge_legacy_backfill_files, prepare_generation_paths
-from app.services.generation_artifacts import artifact_manifest, file_digest
+from app.services.generation_artifacts import artifact_manifest
 from app.services.artifacts.original import original_path
 from app.services.table_quality import bind_table_reports, has_content_omission, reports_from_chunks, write_table_quality_report
 from app.services.generation_publication import _merge_tags, publish_prepared_document
@@ -1452,10 +1452,10 @@ class Pipeline:
             prepared['processing_scope']=processing_scope
         if projection_version is not None:
             prepared["chunk_projection_version"] = projection_version
-        publication_path = paths.uploads_root / "publication.json"
-        write_json_atomic(publication_path, prepared)
+        from app.services.artifacts.publication import write_prepared_publication
         with session_scope() as session:
-            mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication_path),
+            publication_hash = write_prepared_publication(session, self.settings, prepared)
+            mark_generation_ready(session, doc_id, generation_id, publication_hash=publication_hash,
                                   table_schema_version=1 if self.settings.table_structure_enabled else None)
         finish_stage("index", indexing_started, counts={"concepts": len(okf_docs), "chunks": len(chunk_rows), "points": len(keep_point_ids)})
         indexed_concept_count = len(okf_docs)

@@ -771,16 +771,17 @@ def download_document_source(
         source = session.get(DocumentSource, {"doc_id": doc_id, "source_id": source_id})
         if source is None:
             raise ApiError(status_code=404, code=errors.DOCUMENT_NOT_FOUND, detail="Источник не найден")
-        if source.source_id == "root":
+        registered = _source_byte_source(session, doc.id, source)
+        if registered is not None and registered.source_id == "root":
             response = _bound_original_response(session, doc)
+            if response is not None:
+                return response
+        elif registered is not None:
+            response = _bound_generation_response(session, doc, registered.saved_path,
+                filename=registered.display_name or doc.filename)
             if response is not None:
                 return response
         target, download_name = _source_download_path(session, doc, source)
-        root_path = get_settings().uploads_dir / f"{doc.id}{Path(doc.filename).suffix.lower()}"
-        if target == root_path and source.source_id != "root":
-            response = _bound_original_response(session, doc)
-            if response is not None:
-                return response
         if target is None or not target.is_file():
             raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл источника не найден")
         return OpenedFileResponse(
@@ -1435,6 +1436,40 @@ def _bound_original_response(session, doc):
     ref = resolve_blob(session, owner_type="original", owner_id=doc.id, generation_id=None, logical_name="original")
     if ref is None:
         return None
+    return _blob_ref_response(session, ref, filename=doc.filename)
+
+
+def _bound_generation_response(session, doc, saved_path, *, filename, media_type="application/octet-stream", headers=None):
+    from app.db.models import DocumentGeneration
+    from app.services.artifacts.repository import resolve_blob
+    from app.services.artifacts.publication import _logical
+    from app.services.generation_artifacts import GenerationIntegrityError
+    state = session.get(DocumentGenerationState, doc.id)
+    active = session.get(DocumentGeneration, state.active_generation_id) if state and state.active_generation_id else None
+    if state and state.active_generation_id and active is None:
+        raise ApiError(status_code=503, code="artifact_unavailable", detail="Версия источника недоступна")
+    if active is None or active.publication_version == 1:
+        return None
+    try:
+        prefix = f"generations/{active.id}/"
+        if (active.doc_id != doc.id or active.phase != "active" or active.publication_version != 2
+                or not isinstance(saved_path, str) or not saved_path.startswith(prefix)):
+            raise GenerationIntegrityError()
+        name = _logical(saved_path[len(prefix):])
+        if not name.startswith("attachments/"):
+            raise GenerationIntegrityError()
+        manifest = resolve_blob(session, owner_type="generation", owner_id=doc.id,
+            generation_id=active.id, logical_name="publication.json")
+        ref = resolve_blob(session, owner_type="generation", owner_id=doc.id, generation_id=active.id, logical_name=name)
+        if (manifest is None or manifest.sha256 != active.publication_hash or ref is None
+                or ref.store_id != manifest.store_id):
+            raise GenerationIntegrityError()
+    except (ValueError, OSError):
+        raise ApiError(status_code=503, code="artifact_unavailable", detail="Не удалось проверить файл источника") from None
+    return _blob_ref_response(session, ref, filename=filename, media_type=media_type, headers=headers)
+
+
+def _blob_ref_response(session, ref, *, filename, media_type="application/octet-stream", headers=None):
     from app.services.artifacts import get_blob_store
     from app.services.artifacts.leased import LeasedBlobStore
     from app.services.artifacts.contract import BlobNotFound, BlobUnavailable, BlobIntegrityError
@@ -1446,7 +1481,7 @@ def _bound_original_response(session, doc):
     try:
         response = OpenedBlobResponse(store=LeasedBlobStore(get_blob_store(settings)), ref=ref,
             scratch_root=settings.artifact_scratch_root or settings.data_dir / "artifact-scratch",
-            filename=doc.filename, headers={"X-Content-Type-Options": "nosniff"})
+            filename=filename, media_type=media_type, headers={"X-Content-Type-Options": "nosniff", **(headers or {})})
         session.info.setdefault("artifact_download_responses", []).append(response)
         return response
     except BlobNotFound:
@@ -1644,7 +1679,7 @@ def get_okf_attachment(doc_id: str, filename: str):
     # Этап 2b: бинарники вложений — в uploads/<doc_id>/attachments/ (байты-источники
     # в FS, описанные в okf_attachments), а не в производном бандле.
     attach_dir = (get_settings().uploads_dir / doc_id / "attachments").resolve()
-    with session_scope() as session:
+    with _artifact_read_session() as session:
         lock_generation_read(session, [doc_id])
         # Корзина закрывает и legacy-путь без активной генерации: байты вложений
         # лежат в uploads/ до физической очистки.
@@ -1662,6 +1697,11 @@ def get_okf_attachment(doc_id: str, filename: str):
             ))
             if registered is None:
                 raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл не найден")
+            response = _bound_generation_response(session, document, saved_path, filename=filename,
+                media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                headers={"Content-Disposition": "attachment"})
+            if response is not None:
+                return response
             attach_dir = generation_paths(get_settings(), doc_id, active_id).attachments.resolve()
         filepath = (attach_dir / filename).resolve()
         if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
@@ -1851,32 +1891,35 @@ def _source_sort_key(row: DocumentSource) -> tuple:
     return tuple(segment(value) for value in row.source_id.split("/"))
 
 
-def _source_download_path(
-    session, document: Document, source: DocumentSource
-) -> tuple[Path | None, str | None]:
-    """Разрешает зарегистрированный файл и его честное имя контейнера."""
+def _source_byte_source(session, doc_id, source):
+    """Resolve registered ancestry without consulting worker-local files."""
     seen: set[str] = set()
     current = source
-    document_root = (get_settings().uploads_dir / document.id).resolve()
     while current is not None and current.source_id not in seen:
         seen.add(current.source_id)
-        if current.source_id == "root":
-            suffix = Path(document.filename).suffix.lower()
-            return get_settings().uploads_dir / f"{document.id}{suffix}", document.filename
-        if current.saved_path:
-            candidate = (document_root / current.saved_path).resolve()
-            try:
-                candidate.relative_to(document_root)
-            except ValueError:
-                return None, None
-            return candidate, current.display_name
+        if current.source_id == "root" or current.saved_path:
+            return current
         if not current.container_source_id:
-            return None, None
+            return None
         current = session.get(
             DocumentSource,
-            {"doc_id": document.id, "source_id": current.container_source_id},
+            {"doc_id": doc_id, "source_id": current.container_source_id},
         )
-    return None, None
+    return None
+
+
+def _source_download_path(session, document: Document, source: DocumentSource) -> tuple[Path | None, str | None]:
+    """Resolve only the legacy local path after metadata-based blob resolution."""
+    current = _source_byte_source(session, document.id, source)
+    if current is None:
+        return None, None
+    if current.source_id == "root":
+        return get_settings().uploads_dir / f"{document.id}{Path(document.filename).suffix.lower()}", document.filename
+    document_root = (get_settings().uploads_dir / document.id).resolve()
+    candidate = (document_root / current.saved_path).resolve()
+    if not candidate.is_relative_to(document_root):
+        return None, None
+    return candidate, current.display_name
 
 
 def _client_ip(request: Request) -> str | None:

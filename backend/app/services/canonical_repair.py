@@ -174,13 +174,13 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
             }
             if before.get("chunk_projection_version") is not None:
                 prepared["chunk_projection_version"] = before["chunk_projection_version"]
-            publication = paths.uploads_root / "publication.json"
             # Snapshot provenance includes datetimes; use the same JSON form as
             # Pydantic manifests so restored publication does not need ORM rows.
             serializable = json.loads(json.dumps(prepared, default=lambda value: value.isoformat()))
-            write_json_atomic(publication, serializable)
+            from app.services.artifacts.publication import write_prepared_publication
+            publication_hash = write_prepared_publication(session, settings, serializable)
         with session_scope() as session:
-            mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication))
+            mark_generation_ready(session, doc_id, generation_id, publication_hash=publication_hash)
         publish_prepared_document(settings, vector_store, doc_id, generation_id)
     except Exception as exc:
         try:

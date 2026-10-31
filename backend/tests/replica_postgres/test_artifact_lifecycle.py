@@ -12,6 +12,7 @@ from app.services.artifacts.contract import BlobConflict
 from app.services.artifacts.lifecycle import claim_delete, collect_blob
 from app.services.artifacts.repository import attach_blob
 from tests.test_artifact_gc import DOC, orphan as orphan
+from tests.test_generation_pipeline import pipeline_env as pipeline_env
 from tests.test_artifact_gc import (
     test_gc_skips_bound_or_leased_blob as test_gc_skips_bound_or_leased_blob,
     test_attach_races_gc as test_attach_races_gc,
@@ -93,3 +94,41 @@ def test_actual_postgres_lifecycle_migration_preserves_bound_object(orphan, monk
     with session_scope() as session:
         assert session.get(ArtifactObject, ref.object_id).state == "ready"
         assert not collect_blob(orphan[0], ref.object_id, grace_seconds=0)
+
+
+def test_postgres_portable_publication_survives_cold_worker(pipeline_env, monkeypatch, tmp_path):
+    from tests.test_portable_publication import test_candidate_publishes_after_worker_disk_loss
+    test_candidate_publishes_after_worker_disk_loss(pipeline_env, monkeypatch, tmp_path, provider="local")
+
+
+def test_postgres_publication_marker_upgrade_preserves_legacy_and_sealed_rows(orphan, monkeypatch):
+    import io
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import text
+    from app.db.session import get_engine
+    from app.db.models import DocumentGeneration
+    from app.services.generation_store import begin_generation
+    store, _ = orphan
+    ref = store.put(io.BytesIO(b"{}"), object_id="e" * 32, media_type="application/json")
+    with session_scope() as session:
+        generation = begin_generation(session, DOC)
+        sealed_id = generation.id
+        attach_blob(session, ref=ref, owner_type="generation", owner_id=DOC,
+                    generation_id=sealed_id, logical_name="publication.json")
+        generation.publication_version = 2
+        session.add(DocumentGeneration(id="f" * 32, doc_id=DOC, phase="retired"))
+        schema = session.scalar(text("select current_schema()"))
+    assert schema.startswith("artifact_") and len(schema) == 41
+    monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema} -clock_timeout=2000 -cstatement_timeout=10000")
+    url = get_engine().url.set(query={}).render_as_string(hide_password=False)
+    monkeypatch.setattr("app.config.get_settings", lambda: SimpleNamespace(db_url=url))
+    root = Path(__file__).resolve().parents[2]
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    command.stamp(config, "rpl01c_portable_publication")
+    command.downgrade(config, "rpl01b_artifact_lifecycle")
+    command.upgrade(config, "rpl01c_portable_publication")
+    with session_scope() as session:
+        assert session.get(DocumentGeneration, sealed_id).publication_version == 2
+        assert session.get(DocumentGeneration, "f" * 32).publication_version == 1

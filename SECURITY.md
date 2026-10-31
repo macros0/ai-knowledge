@@ -1582,10 +1582,36 @@ detach references without directly deleting provider objects; existing leases
 still protect in-progress readers.
 
 No automatic provider scan or GC scheduler is enabled. Provider-only unregistered
-orphans, manifest v2, remaining source/table/export consumers and R2 job fencing
+orphans, remaining staging/table/export consumers and R2 job fencing
 remain pending; production activation stays prohibited. The lifecycle contract
 and migration were exercised on isolated PostgreSQL in the user's training VM;
 this does not establish multi-node/provider failure certification.
+
+## 2026-10-31 — Portable publication manifest v2 preview
+
+The pipeline, canonical repair and scope writer now seal generation files and a
+canonical manifest to immutable blobs/bindings before publication. The v2 format
+uses scoped BlobRefs and portable logical paths, rejects path/Windows aliases
+and ambiguous JSON key representations, and retains the no-Markdown-bundle mode.
+Database publication_version identifies the authoritative protocol independently
+of cache presence; rpl01c adds/backfills it. Lost v2 references cannot enable
+filesystem fallback or a silent downgrade. Legacy manifests are accepted only
+for local combined execution/migration.
+
+Leased provider materialization precedes publication SQL; local cache writes
+reacquire the document writer lock and verify the current generation/hash/ref.
+A cleanup race cannot resurrect a retired generation directory. Publication
+verifies the canonical manifest hash, complete cache and exact scoped binding
+set before canonical rows/active pointer commit. Missing/corrupt provider bytes
+leave the prior publication active. Storage-full errors retain their existing
+domain classification. Idempotent active replay requires no old artifact read.
+
+Source/attachment routes authenticate before resolving registered ancestry and
+the active generation's refs; v2 reads do not trust local path resolution or fall
+back to old files. Private scratch, Range/disposition and transaction/disconnect
+cleanup remain enforced. Preview remains default-off/prohibited in production:
+complete staging/sidecar/remaining consumer migration, orphan discovery and R2
+fencing/provider acceptance are still required for distributed runtime.
 
 ## 2026-10-31 — Dependency denial-of-service advisories
 

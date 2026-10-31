@@ -25,11 +25,13 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
     any checkpoint cleanup, which must never turn a committed publication into
     a failed operation.
     """
+    from app.services.artifacts.publication import hydrate_publication
+    hydrate_publication(settings, doc_id, generation_id, skip_active=True)
     with session_scope() as session:
         if not publish_generation(session, doc_id, generation_id):
             return False
         generation = session.get(DocumentGeneration, generation_id)
-        prepared = load_verified_publication(settings, doc_id, generation_id, generation.publication_hash)
+        prepared = load_verified_publication(settings, doc_id, generation_id, generation.publication_hash, session=session)
         scope_change = None
         if prepared.get("scope_change_id"):
             from app.db.models import DocumentScopeChange, DocumentProcessingReview

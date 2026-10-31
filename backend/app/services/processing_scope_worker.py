@@ -18,7 +18,6 @@ from app.services.processing_scope_change import load_scope_base, ScopeChangePla
 from app.services.processing_scope_candidate import build_scope_candidate
 from app.services.processing_scope_cache import SourceResultCache
 from app.services.processing_scope_order import assign_scope_display_order
-from app.services.staging import write_json_atomic
 from app.services.update_workers import scope_write_guard, register_update_worker, finish_update_worker
 from app.services.vector_store import concept_point_id, chunk_point_id
 
@@ -408,10 +407,11 @@ def execute_scope_change(doc_id, plan_id, owner_token):
                 "parse_effects": effects, "point_ids": sorted(identities),
                 "chunk_projection_version": base.rows.get("chunk_projection_version"),
                 "artifacts": artifact_manifest(settings, doc_id, generation_id,written_hashes=written_hashes)}
-            publication = paths.uploads_root / "publication.json"
-            write_json_atomic(publication, json.loads(json.dumps(prepared, default=lambda v: v.isoformat())))
+            from app.services.artifacts.publication import write_prepared_publication
+            publication_hash = write_prepared_publication(session, settings,
+                json.loads(json.dumps(prepared, default=lambda v: v.isoformat())))
             from app.services.generation_store import mark_generation_ready
-            mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication))
+            mark_generation_ready(session, doc_id, generation_id, publication_hash=publication_hash)
             session.get(DocumentScopeChange, plan_id).state = "ready"
         from app.services.generation_publication import publish_prepared_document
         publish_prepared_document(settings, store, doc_id, generation_id)
