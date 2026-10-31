@@ -2,8 +2,32 @@
 
 LocalBlobStore, RwxBlobStore and S3BlobStore are an unconnected foundation; the
 existing pipeline still uses its existing generation directories. The factory
-selects an adapter from artifact settings. DB bindings, migration and pipeline
-activation remain pending; distributed backend execution is still rejected.
+selects an adapter from artifact settings. Original bindings/admission are a
+staged preview below; full migration and distributed execution remain pending.
+
+S2 admission preview is enabled only with ARTIFACT_UPLOADS_ENABLED=true in a
+non-production combined process. Production activation is rejected until S3/S4
+retention/migration is implemented. A verified original blob, document binding
+and optional actor-scoped UploadReceipt are committed in one SQL transaction.
+Idempotency-Key is 16–128 ASCII letters/digits/underscore/hyphen; it is hashed
+in the database. Its fingerprint covers bytes, name, MIME type, tags, locale,
+development and consent. An exact retry returns the original document; a changed
+request conflicts (409), and a deleted/purged result is gone (410).
+
+The combined queue is still submitted after that transaction. A queue error
+leaves a paused document and its receipt; retry never starts a second worker.
+Transactional enqueue belongs to R2. The browser retains each File attempt's
+key and consent across uncertain retries within the mounted upload controller;
+reload/unmount discards that client state.
+
+Bound downloads authenticate/check document visibility before resolving metadata,
+verify/materialize to private scratch, and keep the opened descriptor through
+Range/HEAD streaming and disconnect cleanup. A missing or corrupt bound object
+never falls back to legacy bytes. The combined pipeline can rebuild its local
+original cache from the bound blob; all other generation/source/export consumers
+still require S3 conversion. Purge detaches bindings but never directly deletes
+objects; receipt tombstones survive purge. Unreferenced objects require S3 GC,
+which is why preview is disabled by default and prohibited in production.
 
 Object IDs are server-generated 32-character lowercase hex strings. Put streams
 to a temporary file, fsyncs it and publishes through an exclusive hard link;

@@ -260,6 +260,7 @@ class DocumentRegistry:
         canonical_locale: str = "und",
         processing_inventory=None, processing_limits=None,
         processing_artifacts_dir=None, processing_settings=None,
+        artifact_ref=None, upload_receipt=None, file_hash=None,
     ) -> dict:
         from app.services.tag_registry import TagRegistry
 
@@ -274,6 +275,7 @@ class DocumentRegistry:
                 size=size,
                 tags_rel=[DocumentTag(tag_id=tid) for tid in tag_ids],
                 uploaded_by=uploaded_by,
+                file_hash=file_hash,
             )
             s.add(doc)
             if processing_inventory is not None:
@@ -289,6 +291,9 @@ class DocumentRegistry:
                     target.mkdir(parents=True,exist_ok=False)
                     shutil.copytree(processing_artifacts_dir,target/'attachments')
                 doc.status='awaiting_attachments'
+            if artifact_ref is not None:
+                from app.services.artifacts.repository import record_upload
+                record_upload(s, document_id=doc_id, ref=artifact_ref, receipt=upload_receipt)
         return self.get(doc_id)
 
     def get(self, doc_id: str) -> dict | None:
@@ -644,6 +649,8 @@ class DocumentRegistry:
     def delete(self, doc_id: str) -> bool:
         with session_scope() as s:
             lock_document_write(s, doc_id)
+            from app.db.models import ArtifactBinding
+            s.query(ArtifactBinding).filter(ArtifactBinding.doc_id == doc_id).delete(synchronize_session=False)
             for model in (DocumentScopeEditLock, DocumentScopeChange, DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentProcessingReview, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             doc = s.get(Document, doc_id)
@@ -667,6 +674,8 @@ class DocumentRegistry:
             doc = s.get(Document, doc_id)
             if doc is None or doc.deleted_at is None:
                 return False
+            from app.db.models import ArtifactBinding
+            s.query(ArtifactBinding).filter(ArtifactBinding.doc_id == doc_id).delete(synchronize_session=False)
             for model in (DocumentScopeEditLock, DocumentScopeChange, DocumentChunkFragment, DocumentChunkProjection, DocumentTableRow, DocumentTable, OkfConcept, DocumentChunk, OkfAttachment, DocumentSource, DocumentStaging, DocumentTag, DocumentLshBucket, DocumentUpdateAttempt, DocumentProcessingReview, DocumentGeneration, DocumentGenerationState):
                 s.query(model).filter(model.doc_id == doc_id).delete(synchronize_session=False)
             s.delete(doc)

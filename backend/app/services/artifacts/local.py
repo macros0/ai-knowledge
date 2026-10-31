@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from app.services.diagnostics.paths import assert_no_links, canonical_root
 from app.services.storage import StorageFullError, is_storage_full
-from .contract import BlobConflict, BlobIntegrityError, BlobRef, BlobUnavailable, validate_object_id
+from .contract import BlobConflict, BlobIntegrityError, BlobNotFound, BlobRef, BlobUnavailable, validate_object_id
 
 BLOCK = 64 * 1024
 
@@ -128,6 +128,8 @@ class LocalBlobStore:
         path = self._path(ref)
         try:
             fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+        except FileNotFoundError:
+            raise BlobNotFound("Artifact not found") from None
         except OSError:
             raise BlobUnavailable("Artifact storage unavailable") from None
         handle, reader = None, None

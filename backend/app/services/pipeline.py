@@ -44,6 +44,7 @@ from app.services.errors import (
 from app.services import gen_quality
 from app.services.generation_files import generation_paths, merge_legacy_backfill_files, prepare_generation_paths
 from app.services.generation_artifacts import artifact_manifest, file_digest
+from app.services.artifacts.original import original_path
 from app.services.table_quality import bind_table_reports, has_content_omission, reports_from_chunks, write_table_quality_report
 from app.services.generation_publication import _merge_tags, publish_prepared_document
 from app.services.generation_store import (
@@ -274,8 +275,7 @@ class Pipeline:
             ):
                 raise DomainError("Нет контрольных данных для догенерации", code=codes.PARTIAL_REGENERATION_UNAVAILABLE)
         filename = doc["filename"]
-        ext = Path(filename).suffix.lower()
-        filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
+        filepath = original_path(self.settings, doc_id, filename)
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=True, is_admin=is_admin)
@@ -304,8 +304,7 @@ class Pipeline:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         self._ensure_not_running(doc_id)
         filename = doc["filename"]
-        ext = Path(filename).suffix.lower()
-        filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
+        filepath = original_path(self.settings, doc_id, filename)
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
 
@@ -718,6 +717,7 @@ class Pipeline:
                 assert_full_regeneration_cache_safe(session,self.settings,doc_id,processing_scope)
             capture_published_update(session, doc_id, self.settings)
         self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
+        filepath = str(original_path(self.settings, doc_id, filename, legacy_path=filepath))
         source_file_hash = _sha256_file(filepath)
         staging = StagingStore(doc_id)
         with session_scope() as session:
@@ -1722,8 +1722,7 @@ class Pipeline:
         if not doc:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         filename = doc["filename"]
-        ext = Path(filename).suffix.lower()
-        filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
+        filepath = original_path(self.settings, doc_id, filename)
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
         self.settings.staging_dir.mkdir(parents=True, exist_ok=True)

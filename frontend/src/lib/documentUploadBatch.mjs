@@ -49,17 +49,31 @@ export async function runDocumentUploadBatch(files, {
 
 export function createDocumentUploadRunner({ uploadDocument, onBusy = () => {}, ...callbacks }) {
   let busy = false;
+  const attempts = new WeakMap();
   return {
     async start(files, parameters = {}) {
       if (busy || !files?.length) return null;
       const { tags = [], developmentId = null, canonicalLocale } = parameters;
       const snapshotTags = [...tags];
+      const signature = JSON.stringify({ tags: [...snapshotTags].sort(), developmentId, canonicalLocale: canonicalLocale ?? null });
       busy = true;
       onBusy(true);
       try {
         return await runDocumentUploadBatch(files, {
           ...callbacks,
-          uploadOne: (file, allowSimilar) => uploadDocument(file, snapshotTags, { developmentId, canonicalLocale, allowSimilar }),
+          uploadOne: async (file, allowSimilar) => {
+            let attempt = attempts.get(file);
+            if (!attempt || attempt.signature !== signature) {
+              attempt = { signature, key: globalThis.crypto.randomUUID() };
+              attempts.set(file, attempt);
+            }
+            attempt.allowSimilar = allowSimilar || attempt.allowSimilar || false;
+            const result = await uploadDocument(file, snapshotTags, {
+              developmentId, canonicalLocale, allowSimilar: attempt.allowSimilar, idempotencyKey: attempt.key,
+            });
+            attempts.delete(file);
+            return result;
+          },
         });
       } finally {
         busy = false;

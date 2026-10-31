@@ -10,9 +10,16 @@
 Статус 31.10.2026: S1 в работе. Реализованы BlobRef/BlobStore, local/RWX/S3,
 factory/settings и materialize с проверкой integrity, concurrent publication и
 типизированных ошибок. Есть общий suite и реальные botocore model/hook tests.
-Рабочий pipeline пока не подключён к адаптеру. Реальные provider contract tests
+По умолчанию pipeline сохраняет legacy режим (original preview описан ниже). Реальные provider contract tests
 на инфраструктуре заказчика и S2–S4 остаются открытыми. Локальная проверка
 не считается завершением S1 целиком или приёмкой общего хранилища.
+
+S2 preview: models/repository/migration, atomic document+original binding+receipt,
+actor-scoped idempotency, authorized verified download и восстановление original
+cache реализуются за ARTIFACT_UPLOADS_ENABLED (default false, production запрещён
+до S3/S4 retention/migration). Legacy paths продолжают читаться без binding.
+Queue enqueue пока combined/post-commit: при отказе остаётся paused и тот же receipt.
+Перенос всех источников, поколений, exports и GC остаётся в S3; live приёмка открыта.
 
 ## Global Constraints
 
@@ -99,8 +106,8 @@ document_id и состояние. Повтор того же запроса в�
 ключа; UI получает ключ на одну попытку upload и сохраняет его при retry.
 Для existing dedup проверить гонку по digest с текущими allow_similar правилами.
 
-- [ ] Тесты `test_commit_failure_has_no_success_ack`, `test_retry_returns_same_document`, `test_conflicting_key_returns_409`, `test_missing_blob_blocks_download`, `test_unauthorized_cannot_resolve_blob`. Assertions: отсутствует успешный ACK при сбое; один document/receipt; access denied до `store.open`; range корректен, stream закрыт при disconnect.
-- [ ] RED: `python -m pytest tests/test_artifact_upload_commit.py tests/test_artifact_download.py -q`.
+- [x] Тесты `test_commit_failure_has_no_success_ack`, `test_retry_returns_same_document`, `test_conflicting_key_returns_409`, `test_missing_blob_blocks_download`, `test_unauthorized_cannot_resolve_blob`. Assertions: отсутствует успешный ACK при сбое; один document/receipt; access denied до `store.open`; range корректен, stream закрыт при disconnect.
+- [x] RED: `python -m pytest tests/test_artifact_upload_commit.py tests/test_artifact_download.py -q` — 9 failures до реализации.
 - [ ] После полного durable put в одной SQL transaction создать document/binding/receipt; R2 добавляет enqueue в эту же transaction. Перед включением R2 новые paths работают только combined; crash между blob и SQL оставляет собираемый orphan. Download использует existing authorization/content disposition/range semantics. Не разрешать purge удалять используемый blob.
 - [ ] GREEN plus `python -m pytest tests/test_artifact_response.py tests/test_bulk_export_api.py -q`; Alembic upgrade непустой legacy БД в disposable target, NULL legacy references читаются. Migration revision rpl01 цепляется к фактическому текущему head, merge unrelated migrations разрешается явно.
 - [ ] Commit `feat: persist artifact references and upload receipts`.

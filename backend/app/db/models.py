@@ -1260,3 +1260,37 @@ class AnswerScenarioVersion(Base):
         CheckConstraint("version > 0", name="ck_answer_scenario_versions_positive"),
         CheckConstraint("visibility IN ('private', 'public')", name="ck_answer_scenario_versions_visibility"),
     )
+
+
+class ArtifactObject(Base):
+    __tablename__ = "artifact_objects"
+    object_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key: Mapped[str] = mapped_column(String(40), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    media_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    __table_args__ = (CheckConstraint("size >= 0", name="ck_artifact_size"),)
+
+
+class ArtifactBinding(Base):
+    __tablename__ = "artifact_bindings"
+    owner_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Empty string is the canonical absent version: SQL NULL would allow duplicates.
+    generation_id: Mapped[str] = mapped_column(String(32), primary_key=True, default="")
+    logical_name: Mapped[str] = mapped_column(String(512), primary_key=True)
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), nullable=False, index=True)
+    doc_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id"), nullable=True, index=True)
+
+
+class UploadReceipt(Base):
+    __tablename__ = "upload_receipts"
+    actor_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Retained tombstone after purge; a retry must not recreate a deleted document.
+    document_id: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="committed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

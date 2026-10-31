@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     qdrant_provider: str = "managed"
     artifact_provider: str = "managed"
     artifact_store_id: str = "local"
+    # Stage gate: pipeline/retention migration is completed in S3/S4.
+    artifact_uploads_enabled: bool = False
     artifact_root: Path | None = None
     artifact_scratch_root: Path | None = None
     artifact_max_bytes: int = Field(default=2 * 1024 * 1024 * 1024, gt=0, le=8 * 1024 * 1024 * 10000)
@@ -62,6 +64,8 @@ class Settings(BaseSettings):
     def validate_replica_runtime(self):
         from app.deployment.replica_profile import ReplicaProfile, validate_runtime_profile
 
+        if self.artifact_uploads_enabled and self.environment == "production":
+            raise ValueError("Artifact upload preview requires completed retention/migration before production")
         profile = ReplicaProfile(
             role=self.app_role, artifact_backend=self.artifact_backend,
             postgres_provider=self.postgres_provider, qdrant_provider=self.qdrant_provider,

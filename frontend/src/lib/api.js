@@ -216,7 +216,7 @@ export const previewDiagnosticBundle = (id) => jsonRequest(`${diagnosticBase}/bu
 export const deleteDiagnosticBundle = (id) => request(`${diagnosticBase}/bundles/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const diagnosticDownloadUrl = (id) => `${BASE}${diagnosticBase}/bundles/${encodeURIComponent(id)}/download`;
 
-export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale, allowSimilar = false } = {}) {
+export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale, allowSimilar = false, idempotencyKey } = {}) {
   const form = new FormData();
   form.append("file", file);
   if (allowSimilar) form.append("allow_similar", "true");
@@ -227,7 +227,9 @@ export function uploadDocument(file, tags = [], { developmentId = null, canonica
   if (developmentId != null) {
     form.append("development_id", String(developmentId));
   }
-  return request("/documents", { method: "POST", body: form });
+  return request("/documents", { method: "POST", body: form,
+    ...(idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : {}),
+  });
 }
 
 const scopeRoute = (docId) => `/documents/${encodeURIComponent(docId)}/processing-scope`;

@@ -1,5 +1,6 @@
 """Stream an already-open artifact so publication cannot invalidate its path."""
 import os
+from contextlib import ExitStack
 from pathlib import Path
 from secrets import token_hex
 
@@ -69,3 +70,30 @@ class OpenedFileResponse(FileResponse):
             await self._send_bytes(send, start, end)
             await send({"type": "http.response.body", "body": b"\r\n", "more_body": True})
         await send({"type": "http.response.body", "body": f"--{boundary}--".encode("ascii"), "more_body": False})
+
+
+class OpenedBlobResponse(OpenedFileResponse):
+    """Verify/materialize before headers, retaining private scratch through ASGI."""
+
+    def __init__(self, *, store, ref, scratch_root, filename, media_type="application/octet-stream", headers=None):
+        from app.services.artifacts.materialize import materialize
+        self._scratch = ExitStack()
+        try:
+            path = self._scratch.enter_context(materialize(ref, store=store, scratch_root=scratch_root))
+            super().__init__(path, media_type=media_type, filename=filename, headers=headers)
+            self.headers["etag"] = f'"{ref.sha256}"'
+        except BaseException:
+            self._scratch.close()
+            raise
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.close()
+
+    def close(self):
+        try:
+            self._file.close()
+        finally:
+            self._scratch.close()

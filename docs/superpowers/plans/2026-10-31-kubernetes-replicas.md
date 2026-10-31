@@ -18,7 +18,10 @@ P1: pure profile validator, Settings/preflight wiring и Helm schema/capability 
 F1/F2: внутренний транспорт и frontend-split реализованы и проверены локально;
 живой Kubernetes/Gateway smoke не выполнялся без разрешённого namespace/manifest.
 S1: local/RWX/S3 adapters, factory/settings и общие контрактные тесты реализованы;
-проверки SDK не заменяют приёмку реального provider/CSI. Pipeline ещё не подключён.
+проверки SDK не заменяют приёмку реального provider/CSI. Общая миграция файлов не включена.
+S2 preview: original binding+receipt фиксируются с документом атомарно; повторные
+загрузки, verified download и восстановление pipeline-cache проверены локально.
+Новый admission default-off и запрещён в production до S3/S4 retention/migration.
 Python/npm advisory audits после исправлений не находят известных уязвимостей;
 S2–S4, runtime/operations и окруженческие проверки остаются открытыми.
 Ни P0, ни P1 целиком не объявляются завершёнными до их окруженческих проверок.

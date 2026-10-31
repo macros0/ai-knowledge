@@ -1541,6 +1541,26 @@ tokens before segment allocation and retain signed-token/signature validation.
 LLM transport and cache-lock compatibility are checked separately from model
 quality; customer provider acceptance remains required.
 
+## 2026-10-31 — Atomic artifact upload preview
+
+Added immutable blob metadata/bindings and hashed actor-scoped upload receipt
+keys with full request fingerprints. A durable original is written before the
+single SQL transaction creates its document, binding and receipt. Conflicting
+keys fail with409; retries of removed documents fail with410. Receipts remain
+tombstones after purge and do not grant document access. Authentication/current
+document visibility precedes blob resolution/open. Verified private scratch
+preserves Range/HEAD and closes on disconnect; corruption/missing bound data
+cannot be hidden by legacy fallback. Pipeline originals are recoverable caches,
+never the authority after binding.
+
+The new admission path defaults off and is prohibited in production pending
+S3/S4 retention, orphan GC and migration. Purge detaches references without
+deleting provider objects; unreferenced bytes remain a preview limitation.
+Queue admission is still outside the SQL transaction until R2: failures retain
+a paused document/receipt, and a retry returns it without starting another job.
+No role, document scope, distributed-backend or provider certification gate is
+relaxed. No original bytes, raw attempt key or credential is added to audit.
+
 ## 2026-10-31 — Dependency denial-of-service advisories
 
 Updated tooling Zod to 4.6.7 (GHSA-mrhx-c7xc-m3w5) and all upstream minimatch

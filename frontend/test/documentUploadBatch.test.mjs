@@ -5,6 +5,53 @@ import { runDocumentUploadBatch, createDocumentUploadRunner } from "../src/lib/d
 const file = (name) => ({ name });
 const conflict = (code) => Object.assign(new Error(code), { code, data: {} });
 
+test("runner retains the attempt key after an uncertain response and rotates after success", async () => {
+  const item = file("retry.pdf"), keys = [];
+  let fail = true;
+  const runner = createDocumentUploadRunner({ uploadDocument: async (_file, _tags, options) => {
+    keys.push(options.idempotencyKey);
+    if (fail) { fail = false; throw Object.assign(new Error("lost response"), { status: 0 }); }
+    return { id: "accepted" };
+  }});
+  await runner.start([item], { tags: ["one"] });
+  await runner.start([item], { tags: ["one"] });
+  await runner.start([item], { tags: ["one"] });
+  assert.match(keys[0], /^[a-zA-Z0-9_-]{16,128}$/);
+  assert.equal(keys[0], keys[1]);
+  assert.notEqual(keys[1], keys[2]);
+});
+
+test("changed upload parameters and different files use different keys", async () => {
+  const item = file("retry.pdf"), keys = [];
+  const runner = createDocumentUploadRunner({ uploadDocument: async (_file, _tags, options) => {
+    keys.push(options.idempotencyKey);
+    throw Object.assign(new Error("lost response"), { status: 0 });
+  }});
+  await runner.start([item], { tags: ["one"] });
+  await runner.start([item], { tags: ["two"] });
+  await runner.start([file("retry.pdf")], { tags: ["two"] });
+  assert.equal(new Set(keys).size, 3);
+});
+
+test("retry retains consent in the same accepted attempt after a lost response", async () => {
+  const item = file("revision.pdf"), calls = [];
+  let loseResponse = true, reviews = 0;
+  const runner = createDocumentUploadRunner({
+    reviewUpload: async () => { reviews += 1; return true; },
+    uploadDocument: async (_file, _tags, options) => {
+      calls.push(options);
+      if (!options.allowSimilar) throw conflict("similar_document");
+      if (loseResponse) { loseResponse = false; throw Object.assign(new Error("lost"), { status: 0 }); }
+      return { id: "accepted" };
+    },
+  });
+  await runner.start([item]);
+  await runner.start([item]);
+  assert.deepEqual(calls.map(value => value.allowSimilar), [false, true, true]);
+  assert.equal(new Set(calls.map(value => value.idempotencyKey)).size, 1);
+  assert.equal(reviews, 1);
+});
+
 test("batch uploads sequentially and continues after a declined similar or exact duplicate", async () => {
   const calls = [], progress = [], uploaded = [];
   const result = await runDocumentUploadBatch([file("a.pdf"), file("b.pdf"), file("c.pdf"), file("skip.txt")], {
