@@ -275,8 +275,29 @@ auth probe passed after adding changed-group/missing-role cases. Both warmed API
 caches observe remote glossary edits. Root gate: audit0 vulnerabilities,
 frontend756 passed/1 skipped, ESLint/Ruff passed. Cookie/IdP/multi-Pod acceptance,
 common runtime/signing identity and all provider qualifications remain O1/R5.
-R4 remains open for audit dispatcher/durable spool and diagnostic instances/inbox;
+R4 remains open for diagnostic durable control/spool and diagnostic instances/inbox;
 none of these software milestones enables distributed deployment.
+
+R4 audit dispatcher software milestone (2026-11-01): API and worker participate
+in session advisory leadership scoped to the current database/schema. The owned
+connection executes all queue transactions; standby does not read the queue,
+lost connections cannot mark a previous write through a fresh connection, and
+stopped owners cannot reacquire. Candidate/owner connections are physically
+discarded on release. Preflight requires ownership access while accepting a busy
+healthy peer. Direct PostgreSQL or session pooling is required; transaction
+pooling is unsupported. Existing outbox/held state remains SQL, with no schema
+change; immutable payload/event ID and all sink modes remain intact. Future new
+event/eligibility/retry/marker timestamps use DB time. No downstream exactly-once
+guarantee is introduced.
+Checks:5 explicit isolated PostgreSQL cases passed, including another API process,
+standby without queue reads, killed owner connection between write and marker,
+same-ID replay in both stdout modes and a skewed host clock. Audit schema, denial
+transport and storage-mode group:98 passed/3 skipped; role/lifecycle/storage-mode
+group:55 passed; entrypoint/restore/Logstash compatibility:64 passed. Root check:
+audit0 vulnerabilities, frontend756 passed/1 skipped, ESLint/Ruff passed.
+R4 still needs diagnostic durable control, instance namespaces,
+inbox and segment references; `diagnostics/control/deferred.jsonl` is a separate
+file-only audit-intent dependency. This milestone does not enable replicas.
 
 ## Task R5: distributed chart и приёмка нескольких исполнителей
 

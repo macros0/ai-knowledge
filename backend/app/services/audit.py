@@ -245,11 +245,19 @@ def record_in_session(
         raise ValueError(f"Неизвестный action_type: {action_type}")
     from app.config import get_settings
     from app.services.diagnostics.context import current_context
-    mode = get_audit_mode(get_settings())
+    settings = get_settings()
+    mode = get_audit_mode(settings)
+    from .work.admission import durable_documents
+    replica = durable_documents(settings)
+    if replica:
+        from .work.store import _now
+        created_at = _now(session)
+    else:
+        created_at = datetime.now(timezone.utc)
     context = event_context or AuditContext(
         outcome=CATALOG[action_type].outcome, request_id=current_context().request_id)
     entry = SimpleNamespace(
-        id=None, created_at=datetime.now(timezone.utc), event_id=str(uuid4()),
+        id=None, created_at=created_at, event_id=str(uuid4()),
         schema_version=1, action_type=action_type, user_id=user_id, username=username,
         target_type=target_type, target_id=target_id, old_value=old_value,
         new_value=new_value, ip_address=ip_address, meta=meta,
@@ -264,7 +272,8 @@ def record_in_session(
         session.flush()
         entry.id = log.id
     if mode.stdout_enabled:
-        session.add(AuditOutbox(event_id=entry.event_id, created_at=entry.created_at, payload=payload))
+        eligibility = {"next_attempt_at": created_at} if replica else {}
+        session.add(AuditOutbox(event_id=entry.event_id, created_at=entry.created_at, payload=payload, **eligibility))
         session.flush()
     from app.services.audit_metrics import track_record
     track_record(session, denied=context.outcome == "denied")

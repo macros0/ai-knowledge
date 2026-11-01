@@ -359,6 +359,7 @@ async def _api_lifespan(app: FastAPI):
     from app.services.audit_runtime import validate_existing_audit, validate_audit_transport_profile, preflight_audit
     from app.services.diagnostics.runtime import initialize_diagnostics
     from app.services.work.runtime import start_runtime
+    from app.services.audit_outbox import start_audit_dispatcher
     from starlette.concurrency import run_in_threadpool
     settings = get_settings()
     enforce_runtime(settings)
@@ -369,12 +370,17 @@ async def _api_lifespan(app: FastAPI):
     diagnostic_runtime = initialize_diagnostics()
     handle = start_runtime(settings)
     app.state.runtime = handle
+    audit_dispatcher = None
     app.state.audit_dispatcher = None
     app.state.diagnostics = diagnostic_runtime if diagnostic_runtime.available else None
     try:
+        audit_dispatcher = await run_in_threadpool(start_audit_dispatcher, settings)
+        app.state.audit_dispatcher = audit_dispatcher
         diagnostic_runtime.start()
         yield
     finally:
+        if audit_dispatcher is not None:
+            await run_in_threadpool(audit_dispatcher.stop)
         handle.stop(timeout=2)
         diagnostic_runtime.stop()
         from app.services.vector_store import close_shared_qdrant_clients

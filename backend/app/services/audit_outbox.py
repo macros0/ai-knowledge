@@ -1,5 +1,6 @@
 """One bounded compact writer. Local stdout flush is not a downstream ACK."""
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -7,7 +8,7 @@ import threading
 import time
 from sqlalchemy import select, update
 from app.db.models import AuditOutbox
-from app.db.session import get_session_factory
+from app.db.session import get_engine, get_session_factory
 from .audit_catalog import CATALOG
 from .audit_event import AuditContext, MAX_EVENT_BYTES, encode_event
 from .diagnostics.paths import canonical_root, assert_no_links
@@ -56,6 +57,16 @@ def _validate_payload(payload):
     return data
 
 
+def start_audit_dispatcher(settings):
+    """Called only after mandatory schema/transport/permission preflight."""
+    from .audit_modes import get_audit_mode
+    if not get_audit_mode(settings).stdout_enabled:
+        return None
+    dispatcher = AuditDispatcher(settings)
+    dispatcher.start()
+    return dispatcher
+
+
 class AuditDispatcher:
     def __init__(self, settings, *, write_line=stdout_line, session_factory=None, clock=None):
         self.settings=settings
@@ -65,6 +76,11 @@ class AuditDispatcher:
         else:
             self.write_line = write_line
         self.sessions=session_factory or get_session_factory()
+        from .work.admission import durable_documents
+        self._leadership = None
+        if durable_documents(settings):
+            from .audit_leadership import AuditLeadership
+            self._leadership = AuditLeadership(get_engine())
         self.clock=clock or (lambda:datetime.now(timezone.utc))
         self._stop=threading.Event()
         self._thread=None
@@ -105,19 +121,23 @@ class AuditDispatcher:
             if self._thread is not None and self._thread.is_alive():
                 if self._stop.is_set():raise ValueError('Audit writer is still stopping')
                 return
-            self._lock()
+            if self._leadership is None:
+                self._lock()
             self._stop.clear()
             self._state='running'
             self._thread=threading.Thread(target=self._run,name='audit-outbox',daemon=True)
             try:self._thread.start()
             except Exception:
-                self._handle.close();self._handle=None
+                if self._handle is not None:self._handle.close();self._handle=None
+                if self._leadership is not None:self._leadership.close()
                 raise
 
     def stop(self,timeout_seconds=5):
         self._stop.set()
         thread=self._thread
-        if thread is None:return True
+        if thread is None:
+            if self._leadership is not None:self._leadership.close()
+            return True
         self._state='stopping'
         thread.join(timeout=max(0,timeout_seconds))
         return not thread.is_alive()
@@ -142,30 +162,54 @@ class AuditDispatcher:
         finally:
             with self._mutex:
                 if self._handle is not None:self._handle.close();self._handle=None
+                if self._leadership is not None:self._leadership.close()
                 self._state='stopped'
+
+    @contextmanager
+    def _session(self, *, write=False):
+        if self._leadership is not None:
+            with self._leadership.session() as session:
+                yield session
+        else:
+            context = self.sessions.begin() if write else self.sessions()
+            with context as session:
+                yield session
+
+    def _now(self, session):
+        if self._leadership is not None:
+            from .work.store import _now
+            return _now(session)
+        return self.clock()
 
     def _failure(self,outbox_id,attempts,code):
         self._counts[code]+=1
         self._last_error=code
-        with self.sessions.begin() as session:
-            session.execute(update(AuditOutbox).where(AuditOutbox.id==outbox_id,AuditOutbox.status=='pending').values(last_error_code=code,next_attempt_at=self.clock()+timedelta(seconds=min(60,2**min(attempts-1,6)))))
+        with self._session(write=True) as session:
+            session.execute(update(AuditOutbox).where(AuditOutbox.id==outbox_id,AuditOutbox.status=='pending').values(last_error_code=code,next_attempt_at=self._now(session)+timedelta(seconds=min(60,2**min(attempts-1,6)))))
 
     def _mark_written(self,outbox_id):
-        with self.sessions.begin() as session:
-            session.execute(update(AuditOutbox).where(AuditOutbox.id==outbox_id,AuditOutbox.status=='pending').values(status='stdout_written',stdout_written_at=self.clock(),last_error_code=None))
+        with self._session(write=True) as session:
+            session.execute(update(AuditOutbox).where(AuditOutbox.id==outbox_id,AuditOutbox.status=='pending').values(status='stdout_written',stdout_written_at=self._now(session),last_error_code=None))
 
     def tick(self):
         from .audit_modes import get_audit_mode
+        if self._stop.is_set():
+            return 0
         if not get_audit_mode(self.settings).stdout_enabled:
             return 0
         if time.monotonic()<self._database_retry_at:return 0
         delivered=0
         try:
-            with self.sessions() as session:
-                rows=list(session.execute(select(AuditOutbox.id).where(AuditOutbox.status=='pending',AuditOutbox.next_attempt_at<=self.clock()).order_by(AuditOutbox.next_attempt_at,AuditOutbox.id).limit(100)).scalars())
+            if self._leadership is not None:
+                if not self._leadership.acquire():
+                    self._state='standby'
+                    return 0
+                self._state='running'
+            with self._session() as session:
+                rows=list(session.execute(select(AuditOutbox.id).where(AuditOutbox.status=='pending',AuditOutbox.next_attempt_at<=self._now(session)).order_by(AuditOutbox.next_attempt_at,AuditOutbox.id).limit(100)).scalars())
             for outbox_id in rows:
                 if self._stop.is_set():break
-                with self.sessions.begin() as session:
+                with self._session(write=True) as session:
                     row=session.get(AuditOutbox,outbox_id)
                     if row is None or row.status!='pending':continue
                     try:payload=_validate_payload(row.payload)
@@ -191,6 +235,9 @@ class AuditDispatcher:
             self._database_backoff=0
             self._database_retry_at=0
         except Exception:
+            if self._leadership is not None:
+                self._leadership.close()
+                self._state='unavailable'
             self._counts['database_failure']+=1
             self._last_error='database_failure'
             self._database_backoff=min(60,2**min(self._counts['database_failure']-1,6))

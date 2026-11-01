@@ -58,6 +58,16 @@ def preflight_audit(settings, *, engine=None):
                     {name: AuditOutbox.__table__.c[name] for name in mutable}))
         finally:
             transaction.rollback()
+    from .work.admission import durable_documents
+    if mode.stdout_enabled and durable_documents(settings):
+        from .audit_leadership import AuditLeadership
+        leadership = AuditLeadership(engine)
+        try:
+            # A busy lock means a healthy peer is delivering. Inability to
+            # establish/check the dedicated session is a readiness failure.
+            leadership.acquire()
+        finally:
+            leadership.close()
 
 
 def delivery_status(*, engine=None, settings=None):

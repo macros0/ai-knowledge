@@ -197,8 +197,8 @@ Future rate limiting uses hashed actor/action keys and weighted rolling events.
 Bulk operation/document budgets commit together. Catalog writes bump their
 configuration revision with the existing reference/audit transaction; stopword
 cache hits compare that revision. Existing UI dictionary reads already use SQL.
-Audit and diagnostic instance coordination remain
-open; none of this enables distributed deployment.
+Diagnostic instance coordination remains open; none of this enables distributed
+deployment.
 Checks: `test_replica_coordination.py`, `test_replica_model_budget.py`,
 `test_replica_coordination_migration.py`, and explicit isolated PostgreSQL
 `test_replica_coordination_postgres.py`. The migration refuses lossy rollback.
@@ -243,3 +243,23 @@ All lookup reads bypass HTTP cache; old in-flight generations cannot replace new
 ones. Backend glossary snapshots already check their own SQL revision; the new
 two-process PostgreSQL probe verifies both warm caches after a remote alias edit.
 This changes presentation cache freshness, not reference edit/CAS permissions.
+
+Future durable audit senders run in API and worker entry points after mandatory
+preflight. A dedicated PostgreSQL session holds the advisory lock and executes
+all queue reads, attempts, retry updates and delivery markers. A standby sender
+does not read the queue. Connection loss discards the physical connection; no
+replacement connection can mark the previous write. A write/marker crash may
+repeat the exact immutable payload and event ID. This is not an external ACK.
+Stop does not release a blocked sender's connection while it can still finish;
+a stopped sender never reacquires ownership. New events, eligibility, backoff
+and local delivery markers use DB time in the future runtime.
+
+The lock domain is the current database/schema, independent of local disk and
+process role. Direct PostgreSQL or session pooling is required; transaction
+pooling does not preserve this contract. Budget one checked-out DB connection
+per active sender plus candidate connection activity on standby instances.
+Preflight checks lock access; a busy peer is a valid standby, unavailable lock
+transport is a startup failure. Legacy combined mode retains its local file lock.
+The security outbox and restored/rollback holds already live in SQL. The separate
+diagnostic `control/deferred.jsonl` still needs the R4 durable control replacement;
+the dispatcher milestone does not satisfy that remaining activation dependency.

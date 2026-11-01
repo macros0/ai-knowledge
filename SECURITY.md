@@ -1979,6 +1979,20 @@ capacity. Preview requests share the global chat/provider budgets while keeping
 their existing no-history contract. These checks preserve existing actor/history
 permissions and do not establish customer-provider or multi-Pod acceptance.
 
+Future audit delivery (2026-11-01, activation gated) uses one dedicated PostgreSQL
+session for advisory ownership and every queue transaction. Standby instances
+cannot read or mark the queue; lost/invalidated sessions cannot reconnect to
+acknowledge a previous stdout write. Candidate and owner connections are physically
+discarded on release, so session locks never return to the shared pool. Preflight
+fails if the ownership connection cannot be checked; another healthy owner is a
+valid standby. API and worker lifecycles participate in the same lock domain.
+DB-only, external-only and combined sinks retain their existing schema and
+immutable event identity. Retried output between stdout and marker may repeat the
+same ID; local stdout completion is not downstream acknowledgement. Future event
+and retry timing use PostgreSQL time. Direct PostgreSQL or session pooling is
+required; transaction pooling is unsupported. Diagnostic deferred stop journals
+remain a separate R4 dependency and must become durable before activation.
+
 ## User answer scenarios (2026-10-23)
 Authenticated users, including viewer, may create and publish their own answer
 instructions. The owner may edit, unpublish or delete their scenarios.

@@ -69,12 +69,14 @@ def main(argv=None, *, settings=None, stop_event=None):
         for name in (signal.SIGTERM, signal.SIGINT):
             previous[name] = signal.getsignal(name)
             signal.signal(name, request_stop)
-    handle, server, diagnostic_runtime, finished = None, None, None, False
+    handle, server, diagnostic_runtime, audit_dispatcher, finished = None, None, None, None, False
     try:
         from app.services.audit_runtime import validate_existing_audit, preflight_audit
+        from app.services.audit_outbox import start_audit_dispatcher
         from app.services.diagnostics.runtime import install_entrypoint_runtime
         validate_existing_audit()
         preflight_audit(settings)
+        audit_dispatcher = start_audit_dispatcher(settings)
         diagnostic_runtime = install_entrypoint_runtime(settings)
         if not diagnostic_runtime.start() and settings.diagnostics_bundle_enabled:
             raise RuntimeError("Worker diagnostic storage unavailable")
@@ -90,6 +92,8 @@ def main(argv=None, *, settings=None, stop_event=None):
             server.stop(timeout=1)
         if diagnostic_runtime is not None:
             diagnostic_runtime.stop()
+        if audit_dispatcher is not None:
+            audit_dispatcher.stop()
         for name, handler in previous.items():
             signal.signal(name, handler)
     return 0 if finished else 1

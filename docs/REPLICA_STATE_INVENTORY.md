@@ -34,7 +34,7 @@ work ownership, admission/publication, роли и часть общей коо�
 | services/diagnostics/bundle_queue.py, prepare_worker.py | combined local queue; future durable bundle Work | R3: bounded admission, unique attempt snapshot/part, verified blob + ready + audit + Work success atomic; cursor100 expiry/failure reconciliation/portable metadata TTL with pending-receipt protection; R4 cross-replica inbox ещё обязателен |
 | services/diagnostics/control.py, runtime.py, store.py | capture control, spool, instance lifecycle | internal transport F1; inbox/artifacts/R4 |
 | frontend/src/lib/diagnosticServer.mjs | frontend FS spool/control/recorder lock | bounded transport + instance IDs F1 |
-| services/audit_outbox.py, audit_runtime.py | SQL outbox + filesystem writer lock/hold | coordinated dispatcher R4; audit guarantees сохранить |
+| services/audit_outbox.py, audit_runtime.py | SQL outbox/held records; `.writer.lock` contains only a coordination byte | R4 dedicated PostgreSQL connection owns both advisory lock and queue transactions; standby never reads the queue; diagnostic deferred-control journal remains part of R4 diagnostics |
 | auth/service.py, auth_sessions, blocklist.py | SQL sessions/identity/blocks | R4: DB-time expiry, per-request identity/groups/block read; actual other-process block/unblock/role change/logout verified; shared signing secret/runtime identity and cookie/IdP Pod acceptance remain O1/R5 |
 | api/documents.py upload/download/delete | file paths, admission, auth | receipts S2; bindings/read leases S3; enqueue R2; R3 future delete/restore atomically enqueue latest-state visibility/badge intents |
 | scripts/kubernetes/lifecycle.py (repo root) | one application workload backup/scale | all writers drain/epoch + intended counts O2 |
