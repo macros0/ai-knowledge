@@ -220,3 +220,42 @@ leave maintenance and restart intended roles. This command does not migrate
 schemas, adopt unknown data or activate workloads. Physical proof collection,
 live image rollout and in-flight provider-loss rehearsal remain pending; these
 unit checks do not qualify a physical provider.
+
+## Owned live same-schema image rollout (2026-11-01)
+
+`scripts/kubernetes/replica_upgrade.py` coordinates the owned-kind lab recipe.
+Explicit protected `--config`, recorded `--namespace-uid`, selected `--image` and
+public `--report` inputs are required. It verifies ready roles/installed identity/
+quiescence before fencing, records the source plan privately and normally stops
+all roles plus the test provider. With the exact held operator it hashes corpus,
+artifact bindings and the work ledger. An immutable next runtime ConfigMap changes
+the image reference; a bootstrap-policy Job in the selected new image computes
+and audits the new Linux identity. API/worker image, runtime and identity references
+are staged together while replicas stay0. A separate owned offline release Job
+validates that identity against SQL and rechecks every held data hash before
+leaving maintenance. Only then are the intended counts restored and identities
+compared across the restarted API/worker processes.
+
+`--resume /protected/<operation>-upgrade-journal.json` resumes the same held
+operation, never inventing a new epoch after failure. Namespace/installation/image,
+owner/token, unchanged data and provider state are rechecked. Only an owned
+terminal failed operator Job may be removed for retry; active/unknown processes
+are not force-deleted. Immutable resources must match their exact prior data,
+and deployment replacement retains Kubernetes resourceVersion/UID checks. The
+initial Job's incorrect role label was denied PostgreSQL access by NetworkPolicy;
+roles remained0 and epoch4 stayed held. After fixing the label to the existing
+`okf-role=bootstrap` contract, the same operation resumed successfully.
+
+Actual update on `replica-test-r5o2t20261101` preserved installation5 and exact
+schema `rpl05_maintenance_epoch`, and changed the API/worker image from the saved
+b570457 build to `okf-backend:replicas-40b7972-559d6cb1e83e`. The new runtime image
+digest was `sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8`.
+The held corpus/work hashes matched; no queued application work executed before release. All
+2 frontend/2 API/2 worker became ready with zero restarts and the common new
+fingerprint. All8 saved documents remained present:7 active originals passed
+search/download SHA-256 checks and the trashed document stayed hidden. A fresh
+document completed without a problem and passed search/download in25.5s.
+See the [public result](superpowers/reports/2026-11-01-replica-same-schema-upgrade.json).
+This proves one same-schema synthetic managed-S3 rollout and its held Job-failure
+resume. Schema-version adoption, other providers and unknown-provider physical
+stop/reconciliation still require their own evidence. Production scheduling is off.

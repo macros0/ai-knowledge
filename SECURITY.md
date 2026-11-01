@@ -2127,6 +2127,18 @@ document without starting roles or releasing maintenance. Normal startup still
 requires matching file/build/SQL identity. Physical stop-proof collection, live
 image update and active-provider worker-loss acceptance remain to be exercised.
 
+Owned same-schema rollout follow-up: an explicit lab coordinator now binds the
+recorded namespace UID, creates a private source journal, fences/stops roles and
+hashes corpus/artifact bindings/work state while held. Bootstrap-policy Jobs in
+the selected new image compute the identity and separately verify the held data
+before exact-owner release. Role image/runtime/immutable identity references are
+changed only at replicas0, with UID/resourceVersion checks. A failed Job kept
+maintenance enabled and all writers off; same-operation resume with unchanged
+source checks passed after correcting its policy role. Live PG/S3/Qdrant lab
+rollout preserved all8 documents, source SHA/search/delete visibility and the
+held queue; a fresh document processed after release. This does not qualify schema
+migration, real/external providers or physical unknown-provider reconciliation.
+
 Replica maintenance foundation (2026-11-01, O2 incomplete): PostgreSQL shared
 transaction locks precede work/control locks, while offline entry obtains the
 exclusive epoch fence. Epochs bind once per process and per Work claim; ending

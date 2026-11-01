@@ -193,6 +193,19 @@ provider request and retained capacity; an already-drained worker loss is not a
 substitute. These foundations are prerequisites for that full scenario. Existing
 live images have not been updated by the library changes.
 
+O2 same-schema live rollout milestone (2026-11-01): the owned managed-S3 target
+actually upgraded b570457→40b7972 under held epoch4, preserving installation5,
+schema5, storage/credentials and corpus/work hashes. New-image bootstrap/release
+Jobs computed/verified Linux identity; immutable config/identity and role image
+bindings changed at replicas0. First Job failed closed on an incorrect policy
+role; after the bootstrap-label fix, the identical owned operation resumed,
+rechecked data and released. All six app Pods ready0restarts; all8 existing docs
+preserved,7 active search/download hashes matched,1trashed stayed hidden, a fresh
+doc done/problemNone/search/download PASS25.5s. Report:
+`../reports/2026-11-01-replica-same-schema-upgrade.json`. This closes the actual
+same-schema image-update proof for this recipe; schema upgrades/adoption, other
+providers, physical unknown-provider reconciliation/nightly/key gates remain open.
+
 **Files:** создать `docs/KUBERNETES_REPLICAS_ACCEPTANCE.md`,
 `deploy/kubernetes/replicas/support-matrix.json`,
 `backend/tests/test_replica_acceptance_report.py`;
