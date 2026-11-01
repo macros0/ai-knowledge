@@ -2275,6 +2275,24 @@ existing stable codes. HTTP statuses, admin/token checks, constant-time comparis
 batch limits and sanitized failure details are unchanged; provider exception text
 is never copied into a response.
 
+Owned bounded ENOSPC acceptance uses a separate restricted Pod/namespace with
+only size-limited Memory emptyDir volumes. No PVC, hostPath, host namespace,
+service-account token, external endpoint or working configuration is available.
+The writer accepts only the exact128Mi writable /full tmpfs and records a unique
+regular single-link filler inode/device before bounded writes. Recovery removes
+only that inode. Original namespace/Pod/spec/imageIDs, zero container restarts and
+a Ready node precede observations. Server TLS keys are absent from the probe;
+its client verifies the isolated root and obtains only this fixture's S3 keys.
+Operation/action/source-bound receipts atomically persist completed native phases;
+a started phase without a receipt is uncertain and is never silently reinjected.
+The public report allowlists refusal/integrity/recovery facts, not raw credentials,
+keys or provider messages. Normal cleanup deletes only the verified original
+memory-only Pod after its report; existing namespaces/PVCs and all app data remain.
+Native RustFS1.0.4 returned opaque500 InternalError on real ENOSPC: the adapter
+refuses the write as BlobUnavailable without claiming a successful receipt or
+misclassifying arbitrary500 responses as disk-full. This component contract does
+not qualify physical disk/PVC quotas or API/worker publication under storage-full.
+
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
 storage descriptor and receipt. Owned LLM requests prohibit it. Identity change

@@ -117,6 +117,19 @@ facts are freshly checked by a narrowly scoped drain view. Public receipt:
 recipe's coordinated CA gate, not all O1. Storage-full, RWX/external/mixed, customer
 PKI/provider and node/host failure qualification remain open. Production scheduleOFF.
 
+O1 bounded S3 ENOSPC component follow-up (2026-11-02): a separate restricted
+memory-only Pod (no PVC/hostPath/external endpoints) reached actual errno28 at128Mi.
+The real pinned RustFS and unchanged deployed S3BlobStore refused both conditional
+single and multipart writes, preserving the earlier object's SHA/range reads.
+After inode-bound filler recovery, the same IDs passed writes/conditional replay/
+integrity/ranges with zero native pending multipart uploads. RustFS returns opaque
+500 InternalError without an ENOSPC message: safe BlobUnavailable fallback remains,
+not a blanket500→storage-full mapping. Operation/action/source-bound receipt guards
+prevent uncertain observation retries from repeating a native request. See
+`../reports/2026-11-02-replica-bounded-s3-enospc.json`. This is only the S3 component
+contract; full API/worker, PG/Qdrant and physical/provider/RWX/external/mixed gates
+stay open. It does not complete O1 or certify production disk quotas/HA.
+
 **Files:** создать `scripts/kubernetes/replica_backup.py`,
 `backend/app/services/work/maintenance.py`,
 `backend/alembic/versions/rpl05_maintenance_epoch.py` (rpl04 is the existing runtime identity),

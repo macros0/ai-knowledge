@@ -1,0 +1,83 @@
+{
+  "status": "owned-bounded-s3-enospc-contract-passed",
+  "namespace": "replica-test-full20261102",
+  "namespace_uid": "909356a7-c8ea-4fff-bf6d-fcf187c18b5a",
+  "pod_uid": "8ef01df7-3350-4cbb-af01-b28965adf786",
+  "operation_id": "5563557482be42feb317276326d4f5a5",
+  "images": {
+    "artifacts": "docker.io/rustfs/rustfs@sha256:e287e99762a4a3e7b706526e01f2ff755f67db165e9be9f6b907adc6fb6d6ee1",
+    "probe": "docker.io/library/import-2026-11-01@sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8"
+  },
+  "scope": "native-rustfs-s3blobstore-memory-only-synthetic-contract",
+  "full": {
+    "inode": 129,
+    "device": 1048776,
+    "size": 134131712,
+    "capacity": 134217728,
+    "written": 134131712,
+    "errno": 28,
+    "free_bytes": 0
+  },
+  "single_refusal": {
+    "kind": "single",
+    "acknowledged": false,
+    "failure": "BlobUnavailable",
+    "protocol": [
+      {
+        "operation": "PutObject",
+        "status": 500,
+        "code": "InternalError"
+      }
+    ],
+    "existing_bytes_unchanged": true,
+    "free_bytes": 0
+  },
+  "multipart_refusal": {
+    "kind": "multipart",
+    "acknowledged": false,
+    "failure": "BlobUnavailable",
+    "protocol": [
+      {
+        "operation": "UploadPart",
+        "status": 500,
+        "code": "InternalError"
+      },
+      {
+        "operation": "AbortMultipartUpload",
+        "status": 500,
+        "code": "InternalError"
+      }
+    ],
+    "existing_bytes_unchanged": true,
+    "free_bytes": 0
+  },
+  "recovery": {
+    "filler_removed": true,
+    "free_bytes": 134131712
+  },
+  "verification": {
+    "seed_unchanged": true,
+    "same_ids_retried": true,
+    "conditional_replay": true,
+    "verified_range": true,
+    "pending_multipart_uploads": 0,
+    "object_sha256": {
+      "single": "e41884ae29c71f750b35fb8f7f70d29203699c695085a4ac243e1beadf31f86b",
+      "multipart": "dfa75d955d86775dfb925d7a1065d87f4d1325bc6fff5dbdfd848fe384a5c1b8"
+    }
+  },
+  "native_recipe_sha256": {
+    "verify": "ab468df7801fa322dbd6597bf1b4bd7e8d0d86dc40756e0c6dc24c5aec471aac"
+  },
+  "provider_capacity_error_classification": "opaque-server-error",
+  "physical_disk_or_pvc_quota_certified": false,
+  "application_publication_under_full_storage_certified": false,
+  "production_schedule": "disabled",
+  "verified_at": "2026-11-01T22:06:39.219025+00:00",
+  "limitations": [
+    "isolated128Mi tmpfs, not production PVC quota or physical disk failure",
+    "not PostgreSQL/Qdrant/RWX/external/mixed or node/host HA",
+    "RustFS1.0.4 returns opaque500 InternalError; do not classify every such error as capacity exhaustion",
+    "native S3 adapter contract only; full API/worker publication acceptance remains separate"
+  ]
+}

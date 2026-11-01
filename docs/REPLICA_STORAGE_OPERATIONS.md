@@ -248,3 +248,45 @@ The protected operator config now selects the new CA; production scheduleOFF.
 [Public result](superpowers/reports/2026-11-01-replica-coordinated-ca-rotation.json).
 This closes only coordinated CA rotation for the selected owned managed-S3 recipe;
 storage-full, RWX/external/mixed providers and node/host failover are still open.
+
+## Bounded native S3 ENOSPC contract
+
+`scripts/kubernetes/replica_storage_full.py` uses the separate owned
+`replica-test-full20261102` namespace. Its one restricted Pod has the pinned
+RustFS1.0.4 server and a probe using the deployed backend image. The S3 adapter
+component is unchanged from that image's source revision. All writable volumes
+are bounded memory filesystems; data is128Mi, scratch32Mi, logs/temp16Mi each.
+There are no PVCs, host mounts/namespaces, SA tokens or exposed Services. Network
+policy denies ingress/egress; the TLS client talks only to127.0.0.1 in its Pod.
+The client mounts the public root, not the server's TLS private key. See the
+[Kubernetes memory-volume contract](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir).
+
+```text
+prepare → seed → arm → fill → check-single → check-multipart → recover → verify → report → stop
+```
+
+Every phase requires `--apply --journal <protected-directory>/storage-full-journal.json`.
+The recipe only accepts the existing protected owned-lab directory. `report`
+additionally requires `--report docs/superpowers/reports/<result>.json`.
+It never reads the working app's env/config or connects to its SQL/model/storage.
+`arm` persists the unique filler inode/device. `fill` checks the exact writable
+tmpfs/mount capacity before writing at most its bounded capacity and requires a
+real errno28 with zero remaining bytes. It cannot fill a disk-backed directory.
+`recover` unlinks only the same regular single-link inode. Each native phase has
+an operation/action/recipe-hash receipt. A completed receipt is observed on retry;
+an in-progress marker without completion refuses execution until the same process
+and outcome have been inspected. Never remove markers merely to repeat a fault.
+
+The actual2026-11-02 contract passed: native ENOSPC at128Mi, single conditional
+PutObject and multipart UploadPart/Abort refused with500 InternalError, original
+8192-byte object still readable with matching SHA/range. RustFS's message contained
+no ENOSPC/errno28 signal, so the adapter correctly returned sanitized
+BlobUnavailable; converting all InternalError responses into StorageFullError
+would be incorrect. After freeing only the filler, the same single/multipart IDs
+published successfully, conditional replay verified their SHA/ranges, and native
+multipart inventory was empty. No provider errors or clients were mocked.
+[Public result](superpowers/reports/2026-11-02-replica-bounded-s3-enospc.json).
+
+This closes the bounded native S3 server/adapter contract only. Physical/PVC quota
+and PG/Qdrant/RWX/external/mixed full-storage checks, plus API/worker publication
+under full storage, remain required. No production or HA qualification is issued.
