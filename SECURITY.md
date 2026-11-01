@@ -2171,6 +2171,19 @@ returned to normal2/2/2. The report records that provider finish preceded the fi
 confirmed network sample, and that the process lease-loss metric stayed0; neither
 is hidden or substituted for the actual guard/ownership evidence.
 
+Owned load measurements use the same namespace/installation/fingerprint boundary
+and a protected journal. Only the worker count is varied1→2 after confirmed idle
+document/provider state; API/frontend stay2 each. Each case creates exactly three
+synthetic DOCX, observes the same receipts, validates done/problemNone and a single
+publication, and checks source SHA/search. Per-frontend Node probes retain their
+simulation cookies only in process memory and return bounded status/latency data.
+Cgroup comparisons require unchanged container identity/counters and refuse OOM
+or restart. An interrupted observation never re-uploads or reports interrupted
+timing as successful throughput; uncertain model capacity is never cleared.
+The full previous corpus/delete state is rechecked. These are small stub/fake,
+single-node application measurements, not production sizing or provider capacity
+certification; resource/model limits and production scheduling are unchanged.
+
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
 storage descriptor and receipt. Owned LLM requests prohibit it. Identity change

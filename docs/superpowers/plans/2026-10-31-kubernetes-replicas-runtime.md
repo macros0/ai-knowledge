@@ -436,6 +436,27 @@ mapping; production queue/handler/heartbeat/fencing code is unchanged. Resource/
 load qualification and O3 integration into the combined runner remain open;
 standalone fault receipts do not certify external providers or node/host loss.
 
+R5 small-load/resource milestone (2026-11-01): fixed2 frontend/2 API with worker
+count1 then2, three same-structure synthetic DOCX per sequential case. Measured
+batch completion69.594s/50.5s (2.586/3.564docs/min), observed ratio1.378; no linear
+or statistical speedup claim. Real simultaneous document owners peaked1/2.
+Each frontend ran20 authenticated list requests at concurrency4 in each case;
+all80 requests succeeded. Per-frontend p95 was372/776ms (one worker) and416/640ms
+(two workers). Upload p95 was2.157/2.406s. Highest container-lifetime cgroup peaks,
+including observer cost, were111.3MiB frontend,677.6MiB API and682.1MiB worker.
+Tested memory limits256Mi/1Gi/768Mi and CPU250m/500m/500m; workers reached about
+494m alone and940m summed with two, with observed CPU throttling. These are
+constrained lab measurements, not production sizing. Existing larger chart limits
+remain unchanged. Cgroup identity/counter resets, OOM, restarts, incomplete/
+degraded documents or changed requests/limits between cases refuse measurement.
+All6 new documents had exactly1active publication and SHA/search matches; all11
+previous documents retained content/generation/source/delete state. Final2/2/2
+Ready0restarts/common identity/epoch5 unchanged, model limit1 unchanged and idle,
+production scheduleOFF. Public report:
+`../reports/2026-11-01-replica-small-load.json`. This completes the selected owned
+basic lab's small-load evidence; combined-runner integration, full CI and profile/
+provider/customer certification remain O3/O1 gates, so R5 is not globally certified.
+
 R1: `assert len(live_claims_for_same_work) == 1`;
 `assert new_claim.fence > old_claim.fence`; старое finish проверяется через
 `pytest.raises(LostOwnership)`.

@@ -115,6 +115,55 @@ document cohorts took26.63s and24.09s with stub/fake models. Sampled container p
 reached about669MiB for API and654MiB for worker, including probe overhead; those
 numbers are observations of this small corpus and constrained lab only.
 
+### Owned replica load follow-up (2026-11-01)
+
+The later standalone owned-lab reports cover active cancel/delete and global
+capacity, active worker loss, PostgreSQL partition and stale-process return.
+Their scope/limitations are recorded in the [recovery runbook](KUBERNETES_REPLICAS_RECOVERY.md).
+The combined runner remains conservative until O3 integrates those recipes.
+
+`scripts/kubernetes/replica_load.py` provides `prepare`, `single`, `dual` and
+`verify` phases with explicit protected config/journal, recorded namespace UID,
+installed fingerprint and `--apply`. Only the owned kind test namespace is
+accepted. API/frontend counts stay2 each; only worker count changes1→2 after
+confirmed quiescence. Each case uploads three DOCX of the same structure and
+keeps their receipts. Two concurrent per-frontend Node probes each issue20
+authenticated list requests at concurrency4; cookies stay in process memory.
+The final phase verifies all existing documents and source SHA/search/delete
+visibility. Incomplete processing or observation does not become valid throughput;
+`observe-single`/`observe-dual` inspect the same receipts without re-uploading and
+refuse to present interrupted timing as successful throughput. Unknown model
+capacity is never cleared to finish a measurement.
+
+| Worker Pods | DOCX completed | Batch seconds | Documents/min | Frontend p95, each Pod |
+| --- | --- | --- | --- | --- |
+| 1 | 3 | 69.594 | 2.586 | 372 / 776 ms |
+| 2 | 3 | 50.500 | 3.564 | 416 / 640 ms |
+
+All80 authenticated list requests succeeded. Two distinct document owners were
+observed in the two-worker case. The observed throughput ratio was1.378, with
+only one sequential trial per case; this is not a statistical or linear scaling
+claim. Upload p95 was2.157s and2.406s. Stub model/fake embedding work and observer
+cost are included. The real model may dominate behind the unchanged global slot1.
+
+| Role | Tested CPU limit | Tested memory limit | Highest lifetime cgroup peak |
+| --- | --- | --- | --- |
+| frontend | 250m | 256Mi | 111.3MiB |
+| API | 500m | 1Gi | 677.6MiB |
+| worker | 500m | 768Mi | 682.1MiB |
+
+The single worker averaged494m CPU; the two workers summed940m, with cgroup
+throttling observed. Kernel memory peaks cover each container's lifetime and
+include Python/Node observer processes; they are not simultaneous aggregate RSS.
+No OOM/restart occurred. These tested limits fit this synthetic lab only: worker
+headroom was small, and PDF/XLSX, real models, larger corpora and storage resource
+requirements need separate measurements. The chart's larger defaults remain
+API2Gi/worker3Gi/frontend512Mi; do not lower them to the lab caps based on this run.
+Requests/limits are preserved in the [public report](superpowers/reports/2026-11-01-replica-small-load.json).
+All6 new documents published once, all11 previous documents stayed unchanged,
+and final2 frontend/2 API/2 worker were Ready with zero restarts, the same runtime
+identity/epoch and idle model capacity. Production scheduling remains off.
+
 Поддерживаемый путь этого merge: Linux/amd64, compact/bundled, один Pod приложения,
 один backend worker, Recreate, отдельные PG/Qdrant и внешние для release PVC.
 Авторизация сохраняется из текущего main: confidential client, client_secret_basic,

@@ -42,10 +42,14 @@ def role_pods(objects, role):
         and not p["metadata"].get("deletionTimestamp")]
 
 
-def validate_inventory(objects, value):
+def validate_inventory(objects, value, *, expected_counts=None):
+    counts = {r: 2 for r in ROLES} if expected_counts is None else expected_counts
+    if set(counts) != set(ROLES) or any(type(n) is not int or not 1 <= n <= 2 for n in counts.values()):
+        raise ValueError("Explicit one-or-two role counts required")
     release = value["application_release"]
     evidence = {"replicas": {}, "api_endpoints": 0, "images": {}, "restarts": {}}
     for role in ROLES:
+        count = counts[role]
         deployments = [o for o in objects if o.get("kind") == "Deployment" and o["metadata"]["name"] == role]
         if len(deployments) != 1:
             raise ValueError("Role deployment missing")
@@ -53,13 +57,13 @@ def validate_inventory(objects, value):
         labels = deployment["metadata"].get("labels", {})
         status = deployment.get("status", {})
         if (labels.get("app.kubernetes.io/instance") != release or labels.get("okf-run-id") != value["run_id"]
-                or deployment["spec"].get("replicas") != 2
+                or deployment["spec"].get("replicas") != count
                 or status.get("observedGeneration") != deployment["metadata"].get("generation")
-                or any(status.get(k) != 2 for k in ("readyReplicas", "updatedReplicas", "availableReplicas"))):
-            raise ValueError("Owned two-replica rollout is not ready")
+                or any(status.get(k) != count for k in ("readyReplicas", "updatedReplicas", "availableReplicas"))):
+            raise ValueError("Owned expected-count rollout is not ready")
         pods = role_pods(objects, role)
-        if len(pods) != 2:
-            raise ValueError("Two current role Pods required")
+        if len(pods) != count:
+            raise ValueError("Expected current role Pods required")
         images, restarts = set(), 0
         for pod in pods:
             statuses = pod.get("status", {}).get("containerStatuses", [])
@@ -74,7 +78,7 @@ def validate_inventory(objects, value):
             restarts += statuses[0].get("restartCount", 0)
         if len(images) != 1:
             raise ValueError("Role images differ")
-        evidence["replicas"][role] = 2
+        evidence["replicas"][role] = count
         evidence["images"][role] = next(iter(images))
         evidence["restarts"][role] = restarts
     expected = {p["metadata"]["uid"] for p in role_pods(objects, "api")}

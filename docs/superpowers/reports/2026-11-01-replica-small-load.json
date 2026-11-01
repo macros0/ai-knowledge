@@ -1,0 +1,356 @@
+{
+  "status": "owned-small-load-passed",
+  "namespace": "replica-test-r5o2t20261101",
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "installation_id": "55555555555555555555555555555555",
+  "fingerprint": "e307fe8dbd829e79e9291353994dfe245d28cf944b5b4674365fa0ba52bec83c",
+  "epoch": 5,
+  "cases": [
+    {
+      "workers": 1,
+      "documents": [
+        {
+          "id": "5f7f90c0db8d4654",
+          "sha256": "67f41e652c09c296c6df9eaf7006064c25c05234bc1a8edeffee2337f9870561"
+        },
+        {
+          "id": "0c5500d2a89d431f",
+          "sha256": "dafd92d8d5d98ed2051f13a67eef936a096dbad87707c825d5537cbee68fb2d3"
+        },
+        {
+          "id": "4f8928ef93fa4bbb",
+          "sha256": "327b6651bd4cceea177661bad9b64eb56ee78bf273286ac5210318a3e248e125"
+        }
+      ],
+      "seconds": 69.59399999999732,
+      "documents_per_minute": 2.5864298646436032,
+      "upload_latency": {
+        "count": 3,
+        "p50_ms": 1906.0000000026776,
+        "p95_ms": 2156.9999999919673,
+        "max_ms": 2156.9999999919673
+      },
+      "frontend_bursts": [
+        {
+          "pod_uid": "be8c77e6-3625-4c5a-b92f-4dee5fc9d039",
+          "concurrency": 4,
+          "authenticated": true,
+          "count": 20,
+          "p50_ms": 178.02203799999995,
+          "p95_ms": 371.819793,
+          "max_ms": 569.975445
+        },
+        {
+          "pod_uid": "e8bea8a8-0dbe-492f-b3cd-ad204617f860",
+          "concurrency": 4,
+          "authenticated": true,
+          "count": 20,
+          "p50_ms": 299.161969,
+          "p95_ms": 776.1725699999998,
+          "max_ms": 776.8661490000001
+        }
+      ],
+      "documents_state": [
+        {
+          "id": "5f7f90c0db8d4654",
+          "status": "done",
+          "problem": null,
+          "size_bytes": 36802,
+          "active_count": 1
+        },
+        {
+          "id": "0c5500d2a89d431f",
+          "status": "done",
+          "problem": null,
+          "size_bytes": 36802,
+          "active_count": 1
+        },
+        {
+          "id": "4f8928ef93fa4bbb",
+          "status": "done",
+          "problem": null,
+          "size_bytes": 36802,
+          "active_count": 1
+        }
+      ],
+      "peak_running": 1,
+      "peak_distinct_owners": 1,
+      "resources": [
+        {
+          "pod_uid": "be8c77e6-3625-4c5a-b92f-4dee5fc9d039",
+          "role": "frontend",
+          "average_cpu_millicores": 16.741,
+          "cpu_throttled_delta_usec": 1616164,
+          "memory_current_bytes": 72011776,
+          "memory_peak_bytes": 116715520,
+          "memory_limit_bytes": 268435456,
+          "memory_peak_fraction_of_limit": 0.4348,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 69.36
+        },
+        {
+          "pod_uid": "e8bea8a8-0dbe-492f-b3cd-ad204617f860",
+          "role": "frontend",
+          "average_cpu_millicores": 21.397,
+          "cpu_throttled_delta_usec": 4381769,
+          "memory_current_bytes": 57810944,
+          "memory_peak_bytes": 108781568,
+          "memory_limit_bytes": 268435456,
+          "memory_peak_fraction_of_limit": 0.4052,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 69.422
+        },
+        {
+          "pod_uid": "2e088794-4a10-438d-b71c-64baa4df2de9",
+          "role": "api",
+          "average_cpu_millicores": 228.874,
+          "cpu_throttled_delta_usec": 15068286,
+          "memory_current_bytes": 608477184,
+          "memory_peak_bytes": 676356096,
+          "memory_limit_bytes": 1073741824,
+          "memory_peak_fraction_of_limit": 0.6299,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 69.437
+        },
+        {
+          "pod_uid": "994f31bc-4036-4499-9482-cbdee00531a3",
+          "role": "api",
+          "average_cpu_millicores": 95.136,
+          "cpu_throttled_delta_usec": 4725174,
+          "memory_current_bytes": 643637248,
+          "memory_peak_bytes": 710516736,
+          "memory_limit_bytes": 1073741824,
+          "memory_peak_fraction_of_limit": 0.6617,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 69.422
+        },
+        {
+          "pod_uid": "12f275fd-d777-402b-a544-e9a2c1476cac",
+          "role": "worker",
+          "average_cpu_millicores": 493.799,
+          "cpu_throttled_delta_usec": 58493233,
+          "memory_current_bytes": 638558208,
+          "memory_peak_bytes": 711094272,
+          "memory_limit_bytes": 805306368,
+          "memory_peak_fraction_of_limit": 0.883,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 69.594
+        }
+      ]
+    },
+    {
+      "workers": 2,
+      "documents": [
+        {
+          "id": "300ac3909ed34014",
+          "sha256": "b1023f890f53a51c1b68724cd2c590918aab449b3f73a00756f843c52a485649"
+        },
+        {
+          "id": "cca50eedea6f4e2c",
+          "sha256": "61a64290fbd7a351572033f549807bd547b4d6f61f71b610ed7724b0fb3e5e75"
+        },
+        {
+          "id": "bc7242bf0e5444de",
+          "sha256": "eee44962ebab065303670b2d570ec0b2f4df9abada35018d577882a04946fef1"
+        }
+      ],
+      "seconds": 50.5,
+      "documents_per_minute": 3.5643564356435644,
+      "upload_latency": {
+        "count": 3,
+        "p50_ms": 1952.9999999940628,
+        "p95_ms": 2406.0000000026776,
+        "max_ms": 2406.0000000026776
+      },
+      "frontend_bursts": [
+        {
+          "pod_uid": "be8c77e6-3625-4c5a-b92f-4dee5fc9d039",
+          "concurrency": 4,
+          "authenticated": true,
+          "count": 20,
+          "p50_ms": 200.53015200000004,
+          "p95_ms": 416.26019600000006,
+          "max_ms": 599.9424750000001
+        },
+        {
+          "pod_uid": "e8bea8a8-0dbe-492f-b3cd-ad204617f860",
+          "concurrency": 4,
+          "authenticated": true,
+          "count": 20,
+          "p50_ms": 96.99095299999999,
+          "p95_ms": 639.565647,
+          "max_ms": 660.304261
+        }
+      ],
+      "documents_state": [
+        {
+          "id": "bc7242bf0e5444de",
+          "status": "done",
+          "problem": null,
+          "size_bytes": 36802,
+          "active_count": 1
+        },
+        {
+          "id": "300ac3909ed34014",
+          "status": "done",
+          "problem": null,
+          "size_bytes": 36802,
+          "active_count": 1
+        },
+        {
+          "id": "cca50eedea6f4e2c",
+          "status": "done",
+          "problem": null,
+          "size_bytes": 36802,
+          "active_count": 1
+        }
+      ],
+      "peak_running": 2,
+      "peak_distinct_owners": 2,
+      "resources": [
+        {
+          "pod_uid": "be8c77e6-3625-4c5a-b92f-4dee5fc9d039",
+          "role": "frontend",
+          "average_cpu_millicores": 19.343,
+          "cpu_throttled_delta_usec": 3147764,
+          "memory_current_bytes": 72790016,
+          "memory_peak_bytes": 116715520,
+          "memory_limit_bytes": 268435456,
+          "memory_peak_fraction_of_limit": 0.4348,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 50.313
+        },
+        {
+          "pod_uid": "e8bea8a8-0dbe-492f-b3cd-ad204617f860",
+          "role": "frontend",
+          "average_cpu_millicores": 19.043,
+          "cpu_throttled_delta_usec": 1533348,
+          "memory_current_bytes": 62808064,
+          "memory_peak_bytes": 108781568,
+          "memory_limit_bytes": 268435456,
+          "memory_peak_fraction_of_limit": 0.4052,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 50.375
+        },
+        {
+          "pod_uid": "2e088794-4a10-438d-b71c-64baa4df2de9",
+          "role": "api",
+          "average_cpu_millicores": 196.491,
+          "cpu_throttled_delta_usec": 11642907,
+          "memory_current_bytes": 608542720,
+          "memory_peak_bytes": 676909056,
+          "memory_limit_bytes": 1073741824,
+          "memory_peak_fraction_of_limit": 0.6304,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 50.391
+        },
+        {
+          "pod_uid": "994f31bc-4036-4499-9482-cbdee00531a3",
+          "role": "api",
+          "average_cpu_millicores": 119.839,
+          "cpu_throttled_delta_usec": 3991155,
+          "memory_current_bytes": 643772416,
+          "memory_peak_bytes": 710516736,
+          "memory_limit_bytes": 1073741824,
+          "memory_peak_fraction_of_limit": 0.6617,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 50.407
+        },
+        {
+          "pod_uid": "4526a75a-f9dc-4972-a643-d649a0b2d437",
+          "role": "worker",
+          "average_cpu_millicores": 455.501,
+          "cpu_throttled_delta_usec": 23600311,
+          "memory_current_bytes": 593395712,
+          "memory_peak_bytes": 609701888,
+          "memory_limit_bytes": 805306368,
+          "memory_peak_fraction_of_limit": 0.7571,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 50.406
+        },
+        {
+          "pod_uid": "12f275fd-d777-402b-a544-e9a2c1476cac",
+          "role": "worker",
+          "average_cpu_millicores": 484.746,
+          "cpu_throttled_delta_usec": 36178230,
+          "memory_current_bytes": 642207744,
+          "memory_peak_bytes": 715202560,
+          "memory_limit_bytes": 805306368,
+          "memory_peak_fraction_of_limit": 0.8881,
+          "oom_kill_delta": 0,
+          "sample_interval_seconds": 50.5
+        }
+      ]
+    }
+  ],
+  "tested_resources_by_role": {
+    "frontend": {
+      "limits": {
+        "cpu": "250m",
+        "memory": "256Mi"
+      },
+      "requests": {
+        "cpu": "50m",
+        "memory": "64Mi"
+      }
+    },
+    "api": {
+      "limits": {
+        "cpu": "500m",
+        "ephemeral-storage": "512Mi",
+        "memory": "1Gi"
+      },
+      "requests": {
+        "cpu": "100m",
+        "ephemeral-storage": "512Mi",
+        "memory": "256Mi"
+      }
+    },
+    "worker": {
+      "limits": {
+        "cpu": "500m",
+        "ephemeral-storage": "512Mi",
+        "memory": "768Mi"
+      },
+      "requests": {
+        "cpu": "200m",
+        "ephemeral-storage": "512Mi",
+        "memory": "128Mi"
+      }
+    }
+  },
+  "consumer_threads_per_worker": 1,
+  "observed_throughput_ratio_two_to_one_workers": 1.3780990099009371,
+  "global_model_limit": 1,
+  "preserved_existing_documents": 11,
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8",
+      "worker": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "production_schedule": "disabled",
+  "includes_observer_overhead": true,
+  "memory_peak_is_container_lifetime": true,
+  "verified_at": "2026-11-01T17:58:54.865103+00:00",
+  "limitations": [
+    "three synthetic DOCX per case, one sequential trial each",
+    "model stub and fake embeddings",
+    "single-node lab",
+    "frontend latency measured inside each Pod through its BFF and API Service",
+    "application containers only; storage sizing remains separate",
+    "not production sizing, model quality/capacity, statistical speedup or linear scalability certification"
+  ]
+}

@@ -50,6 +50,19 @@ def test_live_inventory_requires_two_ready_roles_and_api_only_service():
     assert "10.0." not in json.dumps(evidence)
 
 
+def test_explicit_single_worker_inventory_preserves_two_api_endpoints():
+    objects = inventory()
+    objects = [o for o in objects if o.get("metadata", {}).get("name") != "worker-1"]
+    worker = next(o for o in objects if o.get("kind") == "Deployment" and o["metadata"]["name"] == "worker")
+    worker["spec"]["replicas"] = 1
+    for key in ("readyReplicas", "updatedReplicas", "availableReplicas"):
+        worker["status"][key] = 1
+    result = validate_inventory(objects, live_inputs(), expected_counts={"frontend": 2, "api": 2, "worker": 1})
+    assert result["replicas"]["worker"] == 1 and result["api_endpoints"] == 2
+    with pytest.raises(ValueError):
+        validate_inventory(objects, live_inputs(), expected_counts={"frontend": 2, "api": 2, "worker": 3})
+
+
 @pytest.mark.parametrize("change", ["worker_endpoint", "stale_rollout", "foreign_release", "not_ready", "retiring_api"])
 def test_inventory_refuses_false_ready_or_foreign_membership(change):
     objects = copy.deepcopy(inventory())
