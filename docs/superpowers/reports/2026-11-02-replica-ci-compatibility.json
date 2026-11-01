@@ -1,0 +1,58 @@
+{
+  "status": "focused-compatibility-regressions-passed",
+  "scope": "isolated Windows SQLite and Linux SQLite/PostgreSQL fixtures; no working corpus or Kubernetes app rollout",
+  "base_revision": "4b8084489d875cf1873af0a25b28c376c17b92fb",
+  "source_overlay_sha256": {
+    "backend/scripts/migrate_mail_schema.py": "73947c14cd9fbd49c778283c83984917ee94974acd357a65d27bec0ceb380d9c",
+    "backend/scripts/mail_schema_v1.py": "89f87da9f350c8c0fcdbf7b57f8584062d2d4ffba3f12cbc118dd0f4fa9779b0",
+    "backend/test_scripts/benchmark_glossary_exact.py": "9796c84817cd9382ccdb65f5d8358842dd69ee86e9972c9d6efba6b5d8f09456",
+    "backend/tests/test_mail_migration.py": "bd66fb271d3363ddca45556f6178763c356f9d53ae84afb769ccc4c315d6f342",
+    "backend/tests/test_glossary_initial_startup.py": "1990fb63f090935bf36a5889e803d5996f7a5cafd8d7b95e433cdad63311c2fe",
+    "backend/tests/test_glossary_no_reindex_acceptance.py": "9dff0ac1f3b3952a86db524289d24fdb670155ced348b4e65edb0549be9ff94f"
+  },
+  "source_archive_sha256": "4e633f6d2b91c551298991159fa837f6fb26d493c59b39092f7f7c1cb79adca5",
+  "windows": {
+    "passed": 16,
+    "skipped_postgres": 10,
+    "log_sha256": "9e95eba0f57c44d9a31de4c24de47769314c67938ce6376f0f489184edd54990"
+  },
+  "adjacent_windows": {
+    "passed": 49,
+    "skipped": 1,
+    "log_sha256": "185ceef96f603a1a9e440b0e8c5e6adf0c113dfa5c5c6dda6828d75b2caeaa29"
+  },
+  "linux": {
+    "container_id": "c29da6d5e03d845fa68f273b3914ed274703a5e39bd4cf71581c20c0dca2c8bf",
+    "image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "postgres_image": "sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3",
+    "junit": {
+      "tests": 26,
+      "failed": 0,
+      "skipped": 0,
+      "sha256": "3e939e7652b8d3c897b2fb9fe3ad1db67f8094277fafe5c4e43fbacce2e0609a",
+      "failed_cases": []
+    },
+    "exit_code": 0,
+    "no_oom": true,
+    "isolated_network_verified": true,
+    "postgres_stopped": true
+  },
+  "invariants": [
+    "mail contract independent of current ORM; original three new tables only",
+    "legacy type/nullability and contract indexes/FKs still checked before DDL",
+    "current ORM parity checked at Alembic head; historical downgrade retains legacy rows",
+    "repair idempotent and does not stamp Alembic or add portable/scope/work columns",
+    "glossary startup tests use validated isolated Settings in both environments",
+    "benchmark total SQL includes fixed maintenance/storage/runtime-identity guards; batched corpus reads still 7/8"
+  ],
+  "project_gate": {
+    "passed": true,
+    "log_sha256": "b6ac745f9715102f9a0d71d83a14facd14da630e8dc7857facd1da3838b44686"
+  },
+  "full_backend_pass": false,
+  "production_provider_certification": false,
+  "limitations": [
+    "full frozen36579d2 CI still running separately; six additional checkpoint/scope failures reproduced and pending",
+    "current Kubernetes application image unchanged; no customer or node failure-domain qualification"
+  ]
+}

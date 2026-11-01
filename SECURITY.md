@@ -1915,6 +1915,13 @@ refuses to mutate canonical state in the future runtime: existing NULL-generatio
 corpora require verified adoption before activation. Read-only inspections keep
 their existing access contract. No override disables these maintenance guards.
 
+The development mail-schema repair compares and creates only its frozen
+mail/publication release contract. Later ORM fields cannot silently expand the
+repair into replica storage or work migration. Baseline column types/nullability
+and mail constraints/indexes remain checked; incompatible drift refuses all
+repair DDL. It never stamps Alembic or changes existing corpus rows. The existing
+development-only apply and stopped-writer/backup requirements remain in force.
+
 ## Replica coordination foundation (2026-11-01, activation gated)
 
 The future runtime shares capacity slots and rolling rate windows through short

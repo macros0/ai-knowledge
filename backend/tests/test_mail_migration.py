@@ -131,6 +131,15 @@ def test_mail_migrations_roundtrip_preserves_legacy_data(migration_db, populated
     assert inspector.get_pk_constraint("document_sources")["constrained_columns"] == ["doc_id", "source_id"]
     assert any(index["column_names"] == ["doc_id", "parent_source_id"]
                for index in inspector.get_indexes("document_sources"))
+    from scripts.migrate_mail_schema import migrate
+    assert migrate(engine)["ready"] is True
+    command.downgrade(config, BEFORE_MAIL)
+    assert "document_sources" not in inspect(engine).get_table_names()
+    _assert_legacy(engine, before)
+    command.upgrade(config, "head")
+    _assert_legacy(engine, before)
+    assert migrate(engine)["ready"] is True
+    # Current ORM parity is a head check, independent of historical rollback.
     with engine.connect() as conn:
         diffs = compare_metadata(MigrationContext.configure(conn, opts={
             "include_object": lambda _obj, name, type_, _reflected, _compare_to:
@@ -138,11 +147,6 @@ def test_mail_migrations_roundtrip_preserves_legacy_data(migration_db, populated
         }), Base.metadata)
     flat = [item for diff in diffs for item in (diff if isinstance(diff, list) else [diff])]
     assert not flat, flat
-    command.downgrade(config, BEFORE_MAIL)
-    assert "document_sources" not in inspect(engine).get_table_names()
-    _assert_legacy(engine, before)
-    command.upgrade(config, "head")
-    _assert_legacy(engine, before)
 
 
 def test_migrated_source_tree_constraints_and_restart(migration_db):
@@ -216,6 +220,60 @@ def test_dev_mail_repair_refuses_incompatible_existing_column_before_writes(migr
         connection.exec_driver_sql("ALTER TABLE document_chunks ADD COLUMN source_id INTEGER")
     report = migrate(engine)
     assert report["conflicts"] and not report["ready"]
+    with pytest.raises(ValueError, match="incompatible drift"):
+        migrate(engine, apply=True)
+    assert "document_sources" not in inspect(engine).get_table_names()
+
+
+def test_dev_mail_repair_creates_only_historical_mail_tables(migration_db):
+    from scripts.migrate_mail_schema import migrate
+
+    config, engine = migration_db
+    command.upgrade(config, BEFORE_MAIL)
+    _seed_legacy(engine)
+    before = _snapshot(engine)
+    assert migrate(engine, apply=True)["ready"] is True
+    inspector = inspect(engine)
+    assert {c["name"] for c in inspector.get_columns("document_generations")} == {
+        "id", "doc_id", "base_generation_id", "phase", "legacy_cleanup_pending",
+        "created_at", "activated_at", "publication_hash",
+    }
+    assert {c["name"] for c in inspector.get_columns("document_generation_states")} == {
+        "doc_id", "active_generation_id", "candidate_generation_id",
+    }
+    assert "artifact_blobs" not in inspector.get_table_names()
+    assert "legacy_artifacts_id" not in {c["name"] for c in inspector.get_columns("documents")}
+    assert "checkpoint_version" not in {c["name"] for c in inspector.get_columns("document_staging")}
+    assert migrate(engine, apply=True)["applied"] is False
+    _assert_legacy(engine, before)
+
+
+def test_dev_mail_repair_refuses_unexpected_index_on_mail_columns(migration_db):
+    from scripts.migrate_mail_schema import migrate
+
+    config, engine = migration_db
+    command.upgrade(config, "010b1c2d3e4f")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE INDEX unexpected_mail_index ON document_sources (source_id)")
+    report = migrate(engine)
+    assert report["conflicts"] and not report["ready"]
+    with pytest.raises(ValueError, match="incompatible drift"):
+        migrate(engine, apply=True)
+
+
+def test_dev_mail_repair_retains_legacy_nullability_checks(migration_db):
+    from alembic.operations import Operations
+    from sqlalchemy import DateTime
+    from scripts.migrate_mail_schema import migrate
+
+    config, engine = migration_db
+    command.upgrade(config, BEFORE_MAIL)
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        with operations.batch_alter_table("okf_attachments") as batch:
+            batch.alter_column("created_at", existing_type=DateTime(timezone=True), nullable=True)
+    report = migrate(engine)
+    assert "modify_nullable: okf_attachments.created_at" in report["conflicts"]
     with pytest.raises(ValueError, match="incompatible drift"):
         migrate(engine, apply=True)
     assert "document_sources" not in inspect(engine).get_table_names()
