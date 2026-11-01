@@ -10,43 +10,44 @@
 
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
-Статус 31.10.2026: реализация начата в `codex/kubernetes-replicas`.
-P0: инвентарь, platform schema и fail-closed acceptance entry point реализованы;
-live provider/CSI probes и выбор storage providers ожидают согласованного platform manifest.
-P1: pure profile validator, Settings/preflight wiring и Helm schema/capability guards
-реализованы; Helm 4.3.0 установлен локально с проверкой SHA256, render tests выполнены.
-F1/F2: внутренний транспорт и frontend-split реализованы и проверены локально;
-живой Kubernetes/Gateway smoke ещё не выполнен; в учебном kind нет GatewayClass CRD.
-S1: local/RWX/S3 adapters, factory/settings и общие контрактные тесты реализованы;
-проверки SDK не заменяют приёмку реального provider/CSI. Общая миграция файлов не включена.
-S2 preview: original binding+receipt фиксируются с документом атомарно; повторные
-загрузки, verified download и восстановление pipeline-cache проверены локально.
-Новый admission default-off и запрещён в production до S3/S4 retention/migration.
-S3 foundation: leases/deletion claims/checkpoint CAS реализованы, проверены
-на SQLite и изолированном PostgreSQL учебной VM103. Manifest v2 preview и cold
-publication/source-download и StagingStore checkpoint preview реализованы.
-Cold resume/CAS/миграция staging проверены на отдельном PostgreSQL.
-Source-result caches, retained review originals, table sidecars, OKF export и
-готовые export/diagnostic архивы переведены на bindings/materialize в preview.
-Cold-worker сценарии и миграции rpl01e/rpl01f проверены на SQLite/PostgreSQL;
-готовые архивы и оригиналы очереди защищены retention/read правилами.
-Provider-only orphan discovery и автоматический GC реализованы как отдельный
-opt-in combined preview: quarantine >=24h, ownership marker, bounded cursors,
-SQL leases/claims и остановка с приложением. Проверены реальные PG гонки/миграция.
-S4 offline preview реализует verified/resumable copy и atomic cutover (rpl01h),
-без source deletion/reindex; [runbook](../../ARTIFACT_STORAGE_MIGRATION.md).
-Production, distributed scheduling/runtime и real provider acceptance остаются открытыми.
-R1 foundation (01.11.2026): transactional WorkItem ledger, DB-time leases,
-fencing/cancel/dedupe и explicit worker реализованы; public Job approval не меняется.
-R2 milestone (`7cde4af`): document admission, frozen input, fresh generation per
-claim, atomic publication и cancellation fencing реализованы и проверены на
-изолированных PostgreSQL/Qdrant. R3 в работе: закрытые API/worker lifecycle,
-durable document/export/bulk handlers, periodic maintenance и versioned cursors;
-оставшиеся P0 writers, runtime acceptance и R4 global coordination ещё открыты.
-CT102 оставлен stopped, учебная VM103 running по запросу пользователя.
-Python/npm advisory audits после исправлений не находят известных уязвимостей;
-S2–S4, runtime/operations и окруженческие проверки остаются открытыми.
-Ни P0, ни P1 целиком не объявляются завершёнными до их окруженческих проверок.
+Статус 02.11.2026: реализация продолжается в `codex/kubernetes-replicas`.
+P0/P1, frontend split, local/RWX/S3 adapters, перенос файловых потребителей,
+поиск orphan-объектов/безопасный GC и verified/resumable offline-миграция корпуса
+реализованы. Миграция не удаляет исходник и не требует реиндексации;
+[runbook](../../ARTIFACT_STORAGE_MIGRATION.md). Поддержка конкретного provider/CSI
+по-прежнему требует собственной приёмки; SDK/unit tests её не заменяют.
+
+Runtime ledger/fencing/публикация, API/worker lifecycle и общая координация
+реализованы. На изолированном managed-S3 учебном профиле фактически проверены
+2 frontend + 2 API + 2 worker, прерванная публикация/отмена, потеря worker,
+PostgreSQL partition с возвращением старого процесса и небольшая нагрузка.
+Проверены независимая копия на отдельном ПК и восстановление в новый target,
+ограниченные credentials, согласованная смена CA и заполнение отдельного
+ограниченного S3 filesystem. Последнее подтверждает контракт S3-компонента,
+а не весь путь публикации приложения при заполнении production-диска.
+Подробные измерения, версии и ограничения сохранены в связанных runtime/operations
+планах и `docs/superpowers/reports/2026-11-01-replica-*.json`/`2026-11-02-*.json`.
+
+Открыты четыре крупных блока, частично выполненные:
+
+- **R5:** общий runner и повторная runtime-приёмка итоговой версии; отдельные
+  успешные fault receipts не закрывают всю приёмку.
+- **O1:** RWX, external/mixed end-to-end, заполнение хранилищ на уровне приложения
+  и квалификация инфраструктуры/failure domains выбранных профилей.
+- **O2:** schema-changing update/adoption существующих установок, key recovery,
+  backup-error/age alerts и оставшиеся profile-specific backup/restore recipes.
+- **O3:** полный CI итоговой версии, объединённая fault/profile matrix, итоговые
+  runbooks и свежее ревью всей ветки.
+
+Полный backend CI замороженной версии `36579d2` из 5892 случаев ещё выполняется;
+обнаруженные регрессии исправляются отдельными проверенными коммитами. Успех
+выбранных наборов не объявляется успехом полного CI. Исправление целостности
+diagnostic prefix проверено на Windows/Linux, но ещё не включено в образ текущего
+учебного приложения. Production-расписание backup выключено по решению пользователя.
+CT102 остановлен; рабочий корпус и сервисы заказчика не используются.
+Одноузловой kind не подтверждает устойчивость к потере физического узла;
+Gateway/SSO, реальные model providers и инфраструктура заказчика остаются
+отдельными окруженческими gates. Ни весь проект, ни resilient-профиль не завершены.
 
 ## Global Constraints
 

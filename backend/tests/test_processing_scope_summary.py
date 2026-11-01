@@ -5,6 +5,7 @@ from app.services.generation_store import begin_generation
 from app.services.processing_scope import automatic_snapshot, scope_summary
 from app.services.registry import DocumentRegistry
 from docparser.attachment_policy import AttachmentInventory
+from tests.sql_observer import SQLReadLog
 import pytest
 
 
@@ -25,10 +26,7 @@ def test_document_metadata_does_not_load_whole_inventory(count):
         state.candidate_generation_id = None
         for index in range(1, count):
             session.add(Document(id=f"{index:016x}", filename="legacy.docx", status="done"))
-    statements = []
-
-    def observe(conn, cursor, statement, parameters, context, executemany):
-        statements.append(statement)
+    observe = SQLReadLog()
 
     engine = get_engine()
     event.listen(engine, "before_cursor_execute", observe)
@@ -36,20 +34,24 @@ def test_document_metadata_does_not_load_whole_inventory(count):
         assert DocumentRegistry().get(doc_id)["processing_scope"]["mode"] == "all"
         from app.services.processing_scope import load_processing_scope_summaries
 
-        statements.clear()
+        observe.clear()
         with session_scope() as session:
             summaries = load_processing_scope_summaries(
                 session, [doc_id] + [f"{i:016x}" for i in range(1, count)]
             )
         assert len(summaries) == count
-        assert len(statements) == 3
+        # Both 1 and 100 documents use the same three batched data reads.
+        # Fixed transaction fences remain real SQL and are checked separately.
+        assert len(observe.data_selects) == 3
+        assert len(observe.guard_selects) == 7
+        assert not observe.other_statements
     finally:
         event.remove(engine, "before_cursor_execute", observe)
     assert not any(
-        "document_generations.processing_scope_json" in statement for statement in statements
+        "document_generations.processing_scope_json" in statement for statement in observe.statements
     )
     assert not any(
-        "document_processing_reviews.inventory_json" in statement for statement in statements
+        "document_processing_reviews.inventory_json" in statement for statement in observe.statements
     )
 def test_scope_availability_distinguishes_root_unknown_and_exclusions():
     from app.services.processing_scope import scope_availability

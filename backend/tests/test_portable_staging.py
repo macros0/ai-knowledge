@@ -281,22 +281,23 @@ def test_stale_checkpoint_commit_cannot_replace_new_result(portable):
     assert [c.content for c in stage.concepts()] == ["new accepted result"]
 
 
-def test_staging_migration_refuses_loss_of_portable_protocol_marker(portable, monkeypatch):
+def test_staging_migration_refuses_loss_of_portable_protocol_marker(portable):
     from pathlib import Path
-    from types import SimpleNamespace
     from alembic import command
     from alembic.config import Config
     from app.db.session import get_engine
     stage, _ = portable
     prepare(stage)
-    url = "sqlite:///" + Path(get_engine().url.database).as_posix()
-    monkeypatch.setattr("app.config.get_settings", lambda: SimpleNamespace(db_url=url))
     root = Path(__file__).resolve().parents[1]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
-    command.stamp(config, "rpl01d_portable_staging")
-    with pytest.raises(RuntimeError, match="portable staging"):
-        command.downgrade(config, "rpl01c_portable_publication")
+    # Keep the real runtime Settings for the post-refusal read. Alembic accepts
+    # the explicitly selected isolated connection without replacing config.
+    with get_engine().connect() as connection:
+        config.attributes["connection"] = connection
+        command.stamp(config, "rpl01d_portable_staging")
+        with pytest.raises(RuntimeError, match="portable staging"):
+            command.downgrade(config, "rpl01c_portable_publication")
     assert [c.content for c in stage.concepts()] == ["accepted result"]
 
 
