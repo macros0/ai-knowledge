@@ -100,6 +100,27 @@ def validate_drained(items, config, nodes):
             raise ValueError("Writer or unreachable node remains")
 
 
+def runtime_config_name(deployments):
+    names = set()
+    protected = {"MODEL_MODE", "LLM_BASE_URL", "EMBEDDING_PROVIDER", "AUTH_PROVIDER", "AUDIT_DB_ENABLED", "AUDIT_STDOUT_MODE"}
+    for role in ("api", "worker"):
+        if role not in deployments:
+            raise ValueError("Backup runtime role is missing")
+        containers = deployments[role]["spec"]["template"]["spec"]["containers"]
+        if len(containers) != 1:
+            raise ValueError("Explicit single-container backup runtime required")
+        container = containers[0]
+        refs = [entry["configMapRef"]["name"] for entry in container.get("envFrom", []) if "configMapRef" in entry]
+        overrides = [entry for entry in container.get("env", []) if entry["name"].upper() in protected]
+        if len(refs) != 1 or any(entry != {"name": entry["name"], "value": "http://model-stub:8000/v1"}
+                or entry["name"].upper() != "LLM_BASE_URL" for entry in overrides):
+            raise ValueError("Ambiguous or overridden backup runtime configuration")
+        names.add(refs[0])
+    if len(names) != 1:
+        raise ValueError("Backup runtime configurations differ")
+    return names.pop()
+
+
 class Lab:
     def __init__(self, config, namespace_uid):
         validate_config(config)
@@ -232,6 +253,8 @@ def run_backup(config, *, namespace_uid, evidence_file, archive, key_file, pg_du
         leave_maintenance,
     )
     from sqlalchemy import text
+    from test_scripts.replica_runtime_acceptance import Kubernetes
+    from test_scripts.replica_runtime_faults import FaultProbe, require_quiescent
     lab = Lab(config, namespace_uid)
     destination = destination_binding(evidence_file, archive)
     key = Path(key_file).read_bytes()
@@ -256,19 +279,40 @@ def run_backup(config, *, namespace_uid, evidence_file, archive, key_file, pg_du
         if len(image_ids) != 1:
             raise ValueError("Source role image is ambiguous")
         images[role] = image_ids.pop()
-    runtime = json.loads(lab.kubectl("get", "configmap", "runtime", "-o", "json"))["data"]
+    runtime_name = runtime_config_name(deployments)
+    selected = json.loads(lab.kubectl("get", "configmap", runtime_name, "-o", "json"))
+    if selected.get("immutable") is not True:
+        raise ValueError("Immutable selected backup runtime required")
+    runtime = selected["data"]
     if runtime.get("EMBEDDING_PROVIDER") != "fake" or runtime.get("AUTH_PROVIDER") != "simulation":
         raise ValueError("This recipe supports only the synthetic isolated lab")
+    value = {**config, "namespace_uid": namespace_uid, "frontend_url": f"http://127.0.0.1:{config['ports']['frontend']}", "simulation_username": "replica.admin"}
+    kube = Kubernetes(value, ssh_host="ubuntu@10.10.1.52", known_hosts=ROOT / "tests/tmp/replica-lab-known_hosts")
+    probe = FaultProbe(kube, value)
+    require_quiescent(probe)
+    actual = kube.python(probe.api_pods()[0]["metadata"]["name"], '''import json
+from app.config import get_settings
+from app.deployment.runtime_identity import enforce_runtime_identity
+s=get_settings();identity=enforce_runtime_identity(s)
+print(json.dumps({'fingerprint':identity.fingerprint,'audit_db_enabled':s.audit_db_enabled,'audit_stdout_mode':s.audit_stdout_mode}))
+''')
+    if (actual.get("fingerprint") != probe.identity["fingerprint"] or type(actual.get("audit_db_enabled")) is not bool
+            or actual.get("audit_stdout_mode") not in {"disabled", "durable"}):
+        raise ValueError("Actual backup runtime configuration differs")
     audit_settings = SimpleNamespace(okf_deployment_schema="replicas-v1", app_role="api",
-        audit_db_enabled=runtime.get("AUDIT_DB_ENABLED", "true").lower() == "true",
-        audit_stdout_mode=runtime.get("AUDIT_STDOUT_MODE", "disabled"))
+        audit_db_enabled=actual["audit_db_enabled"], audit_stdout_mode=actual["audit_stdout_mode"])
     engine, s3, q = connections(config)
     operation = uuid4().hex
     started = datetime.now(timezone.utc)
     with engine.connect() as preflight:
-        sql_source(preflight, config)
+        installed, _ = sql_source(preflight, config)
+        if installed["fingerprint"] != actual["fingerprint"]:
+            raise ValueError("Installed backup runtime identity differs")
     with MaintenanceOperator(engine, operation_id=operation, owner_id="owned-lab-pc", settings=audit_settings) as op:
         with op.transaction() as session:
+            installed, _ = sql_source(session.connection(), config)
+            if installed["fingerprint"] != actual["fingerprint"]:
+                raise ValueError("Installed backup runtime changed before maintenance")
             epoch = enter_maintenance(session, operation, kind="backup", intended_counts=intended)
         print(json.dumps({"phase": "fenced", "epoch": epoch, "operation_id": operation}), flush=True)
         for role in ("frontend", "api", "worker", "model-stub"):
@@ -287,6 +331,8 @@ def run_backup(config, *, namespace_uid, evidence_file, archive, key_file, pg_du
             snapshot = frozen.scalar(text("SELECT pg_export_snapshot()"))
             consistent = frozen.scalar(text("SELECT clock_timestamp()"))
             identity, _control = sql_source(frozen, config)
+            if identity["fingerprint"] != actual["fingerprint"]:
+                raise ValueError("Frozen backup runtime identity differs")
             if frozen.scalar(text("SELECT count(*) FROM replica_capacity_slots WHERE resource='llm' AND owner_id IS NOT NULL")):
                 raise ValueError("Provider requests are active or uncertain; source stays held")
             artifacts = frozen.execute(text("SELECT * FROM artifact_objects WHERE state='ready' ORDER BY object_id")).mappings().all()
@@ -353,6 +399,7 @@ def run_backup(config, *, namespace_uid, evidence_file, archive, key_file, pg_du
         lab.scale(role, 0, 1 if role == "model-stub" else intended[role])
     public = {"status": "independent-backup-verified", "format": 3, "backup_id": operation,
         "archive": str(Path(archive).absolute()), "namespace": config["namespace"], "source_epoch": epoch,
+        "runtime_configmap": runtime_name, "runtime_fingerprint": actual["fingerprint"],
         "consistent_at": consistent.isoformat(), "counts": counts, "encrypted_objects": len(cold.objects),
         "plaintext_bytes": sum(o.size for o in cold.objects.values()), "production_schedule": "disabled", "restore_verified": False}
     Path(report).write_text(json.dumps(public, indent=2) + "\n")

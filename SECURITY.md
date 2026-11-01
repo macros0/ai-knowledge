@@ -2233,6 +2233,21 @@ epoch/operation/owner/installation columns. Audit schema/metadata comparison and
 the independent full model-drift check remain required; an older head cannot
 satisfy the updated regression simply by preserving the historical audit tables.
 
+2026-11-01 backup source binding: the owned lab exporter resolves the common
+immutable runtime ConfigMap from the actual API/worker templates, rather than
+trusting a retained object named `runtime` after configuration upgrades. Ambiguous
+references and synthetic/auth/audit env overrides fail before entry; only the
+fixture's exact literal model-stub URL is allowed. Live role settings supply the
+audit flags, and their verified common fingerprint must match SQL before entry,
+inside the retained operator transaction and in the frozen export. The receipt
+contains only the selected configuration reference/fingerprint, not Secret data.
+The actual scoped-credential follow-up cold-verified92 encrypted objects covering
+18 synthetic documents and90 SQL-ready blobs. Normal restart preserved all source
+document/generation/hash/delete state and the common runtime identity; four scoped
+processes verified released epoch7 and its audit pair. This archive has not been
+restore-rehearsed, and its receipt explicitly says so. Existing independent copies
+and separate protected key are retained; production scheduling remains disabled.
+
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
 storage descriptor and receipt. Owned LLM requests prohibit it. Identity change

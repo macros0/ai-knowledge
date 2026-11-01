@@ -157,6 +157,21 @@ checked. Production generic CLI/activation is not implied by this lab recipe.
 
 ## Task O3: fault matrix, release gates и документация
 
+O2 selected-runtime backup follow-up (2026-11-01): backup now resolves the common
+immutable runtime from actual API/worker references and verifies live settings/
+fingerprint before entry and in the frozen export. A real epoch7 copy of the
+current scoped-credential target passed:18docs/18concepts/18chunks/3748work rows/
+90blobs,92encrypted objects and2,586,300 plaintext bytes cold-verified on the
+independent PC. All18 source documents retained content/generation/source/delete
+state and active search/downloads after normal restart. Four scoped API/worker
+processes proved the released epoch and maintenance audit pair;2/2/2 Ready0restarts,
+common identity unchanged. Initial preflight refused the fixture's explicit stub
+URL before entering maintenance; an exact-literal rule plus RED/GREEN regression
+allowed this known synthetic binding while still refusing other/indirect overrides.
+Report:`../reports/2026-11-01-replica-current-runtime-backup.json`. This new archive
+is not restore-rehearsed (`restore_verified=false`); previous source-unavailable
+restore evidence remains separate. Production scheduleOFF, O2 globally open.
+
 O2 fence foundation (2026-11-01): process/claim epochs and PostgreSQL shared
 transaction guards serialize with exclusive offline maintenance entry. Same-session
 operator advisory ownership spans separately committed phases, with bounded lock

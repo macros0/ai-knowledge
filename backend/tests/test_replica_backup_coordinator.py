@@ -108,3 +108,50 @@ def test_destination_requires_user_evidence_and_approved_parent(tmp_path):
     receipt.write_text(json.dumps(evidence))
     with pytest.raises(ValueError):
         module.destination_binding(receipt, tmp_path / "new-backup")
+
+
+def selected_deployments():
+    from copy import deepcopy
+    from tests.test_replica_upgrade_coordinator import deployment
+    result = {}
+    for role in ("api", "worker"):
+        result[role] = deepcopy(deployment())
+        result[role]["metadata"]["name"] = role
+        container = result[role]["spec"]["template"]["spec"]["containers"][0]
+        container["envFrom"][1]["configMapRef"]["name"] = "versioned-runtime"
+        container["env"] = [{"name": "APP_ROLE", "value": role}]
+    return result
+
+
+def test_backup_uses_the_common_selected_config_instead_of_a_legacy_name():
+    module = coordinator()
+    assert module.runtime_config_name(selected_deployments()) == "versioned-runtime"
+
+
+def test_backup_accepts_the_exact_owned_stub_url_in_the_explicit_environment():
+    module = coordinator()
+    deployments = selected_deployments()
+    for role in deployments.values():
+        role["spec"]["template"]["spec"]["containers"][0]["env"].append({"name": "LLM_BASE_URL", "value": "http://model-stub:8000/v1"})
+    assert module.runtime_config_name(deployments) == "versioned-runtime"
+
+
+@pytest.mark.parametrize("fault", ["different_config", "multiple_configs", "literal_override", "indirect_override", "model_url_override", "missing_role"])
+def test_backup_refuses_ambiguous_or_overridden_runtime_configuration(fault):
+    module = coordinator()
+    deployments = selected_deployments()
+    worker = deployments["worker"]["spec"]["template"]["spec"]["containers"][0]
+    if fault == "different_config":
+        worker["envFrom"][1]["configMapRef"]["name"] = "other-runtime"
+    elif fault == "multiple_configs":
+        worker["envFrom"].append({"configMapRef": {"name": "overlay"}})
+    elif fault == "literal_override":
+        worker["env"].append({"name": "MODEL_MODE", "value": "real"})
+    elif fault == "indirect_override":
+        worker["env"].append({"name": "embedding_provider", "valueFrom": {"secretKeyRef": {"name": "unexpected", "key": "provider"}}})
+    elif fault == "model_url_override":
+        worker["env"].append({"name": "LLM_BASE_URL", "value": "https://other.invalid/v1"})
+    else:
+        del deployments["worker"]
+    with pytest.raises(ValueError):
+        module.runtime_config_name(deployments)

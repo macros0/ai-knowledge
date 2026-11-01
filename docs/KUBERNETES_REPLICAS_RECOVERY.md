@@ -145,6 +145,31 @@ expiry substitutes for stopping a provider request. Intended role counts are
 restored with new processes after a successful verified backup. On failure the
 source stays held; an incomplete archive is retained and never accepted.
 
+After an update, the source configuration is resolved from the actual API and
+worker Deployment envFrom references. Both must select the same immutable
+ConfigMap; a retained legacy `runtime` object is not authoritative. Ambiguous
+references and model/auth/audit env overrides are refused, except the exact owned
+`http://model-stub:8000/v1` literal used by the synthetic fixture. Live role probes
+verify the common identity and quiescent stub; audit settings come from that
+validated process. Its fingerprint must match SQL before maintenance, again on
+the retained operator transaction before entry, and in the exported frozen
+snapshot. The backup receipt records the selected ConfigMap and fingerprint.
+
+The follow-up current-runtime run passed at epoch7 with the scoped application
+credentials and the versioned runtime configuration. At consistent_at
+2026-11-01T20:07:11.917915Z the source had18 documents,18 concepts,18 chunks,
+3748 work rows and90 ready blobs. PostgreSQL, Qdrant and those blobs produced92
+encrypted objects (2,586,300 plaintext bytes) on the user-confirmed independent PC.
+Cold verification passed; normal roles returned Ready2/2/2 with zero restarts.
+All18 prior document states/generations/source hashes/delete visibility and active
+search/downloads matched. Four API/worker processes proved their scoped SQL user,
+released epoch7 and the enter/leave audit pair; the common fingerprint stayed
+unchanged. [Public result](superpowers/reports/2026-11-01-replica-current-runtime-backup.json).
+This is a verified new recovery point, not a restore rehearsal of this archive;
+its receipt explicitly retains `restore_verified=false`. The earlier independent
+restore rehearsal below remains separate versioned evidence. Production scheduling
+and retention deletion remain disabled.
+
 One retained repeatable-read, read-only PostgreSQL connection exports the snapshot
 and obtains the database `consistent_at`. The selected server's `pg_dump` uses its
 Pod-local Unix socket with that exact snapshot; SSH/Kubernetes stream the dump to
