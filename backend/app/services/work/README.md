@@ -1,4 +1,4 @@
-# Transactional work and document execution foundation (R1/R2)
+# Transactional work and document execution foundation (R1–R3)
 
 `WorkItem` is an internal execution ledger, separate from public bulk `Job`
 approval/status records. The package starts no executor during import and is
@@ -8,12 +8,90 @@ registers background handlers, R4 coordinates global capacity,
 and O2 adds installation maintenance epochs. Existing replica/production gates
 remain closed. `WorkClaim.maintenance_epoch` is zero until O2.
 
-Apply Alembic through `rpl02a_document_work` before using this build on an existing database.
+R3 is still in progress. The closed API lifecycle owns request services only;
+`python -m app.worker` owns an independent heartbeat, required-storage readiness,
+consumers and a deduplicating periodic scheduler. Its internal health port8001
+must not be exposed through the public Gateway. Currently registered handlers
+cover documents, safe checkpoint retirement, duplicate/visibility projections,
+portable exports and diagnostic bundles, bulk coordinators/items/reconciliation,
+scope changes, auth/chat/export/trash retention, generation cleanup and artifact GC.
+Canonical repair work allows only attachment-path and comment-thread operations.
+It freezes base/canonical/original/vector identities and creates a fresh owned
+generation per reclaimed fence. Provider calls run outside SQL; immutable batches
+bound to that repair generation cache accepted embeddings by input/text hashes.
+Reclaim transfers their bindings before abandoning the old candidate. Publication
+checks the repair proof and acknowledges the work atomically. Processing-scope
+repairs retain their existing unsupported status. Future repair CLIs enqueue work
+instead of constructing providers/executing locally. A bounded reconciler
+abandons terminal repair candidates through the coordinated document-intent lock,
+so cancelled/failed attempts can be cleaned without changing the active version.
+Index maintenance sweeps at most100 documents per claim and creates scoped
+sparse/relations/chunks work for versioned active generations. Its versioned
+cursor and child admission commit together. Each child rechecks the frozen
+generation under the read lock; stale intents finish without modifying a newer
+publication. Direct future whole-corpus backfills require scoped ownership.
+Legacy NULL-generation documents require offline adoption before activation.
+Reference/glossary translation work keeps the existing admin authorization and
+result counters. API admits a public Job and hashed private work input; the UI
+waits for that Job without holding the original HTTP request. Reference work
+processes at most10 IDs per claim, glossary requests at most10 terms. Accepted
+translation writes, audit and versioned cursor share one SQL transaction, with
+the model call outside it. Existing source/target/reference revision and human
+translation checks remain in force. A bounded reconciler closes failed public
+jobs after worker failure. Global model admission still belongs to R4.
+Diagnostic maintenance scans at most100 bundle records per claim with a durable
+cursor, retires expired portable bindings with audit, and reconciles terminal
+bundle work. Existing read leases protect downloads. Portable terminal metadata
+retains the existing seven-day period and is not pruned with pending receipts.
+Export builders use private local `exports/attempts-v1` UUID directories. Kernel
+locks protect live attempts and release on process death. Worker-local cleanup
+pages100 directories, checks exact ownership/host/containment and rejects links
+and unknown markers. It never retires blobs or modifies public completion. An
+unavailable local cleanup is retried independently of the work outcome. This
+root is per-instance local storage, not shared RWX. Diagnostic child-process
+scratch remains a separate R4 lifecycle dependency.
+Legacy operator writers refuse the future runtime until the O2 maintenance
+protocol supplies validated replacements. Commands use their selected runtime
+settings, including explicit settings/env files. Supported repairs enqueue work;
+read-only inspection remains available. See the complete CLI inventory in
+`docs/REPLICA_STATE_INVENTORY.md`. Legacy canonical reconstruction on a viewer
+GET is also disabled; verified corpus adoption is required before activation.
+The remaining P0 mechanisms and R4 coordination must be migrated before any
+activation. This list is not a declaration of distributed readiness.
+
+`coordinator_session` requires a fresh transaction and locks global admission
+before parent Work, then Job/document state. It cannot be nested inside a
+Work-first execution context. `WorkDeferred` yields a coordinator's slot with a
+bounded delay; cooperative waits do not consume the transient-failure attempt
+budget, while every claim still gets a new fence. Bulk item receipts retain
+input ordinals, so public progress can be reconstructed after a failed write.
+Exports rebuild from frozen original bindings in unique per-attempt scratch;
+archive bindings, public completion and work success commit together. Future
+delete/restore enqueues latest-state visibility projection in its SQL transaction.
+Diagnostic bundle admission is globally bounded and does not reserve an API-local
+queue entry. A worker prepares a unique snapshot/part per attempt, then commits
+verified ZIP bindings, public readiness, audit and Work success atomically.
+Legacy bundle startup/recovery is disabled for the future schema. The worker
+command owns audit preflight and its recorder lifecycle; R4 still must supply
+cross-replica diagnostic inbox and instance paths before activation.
+Scope work keeps its accepted input immutable across reclaim and trash/resume.
+Transient errors pause the document without discarding its confirmation, including
+when retries are exhausted before generation allocation. Explicit cancel-update
+closes the scope receipt and restores the published snapshot. Reusing a current
+published scope after its review changes requires verified publication proof.
+
+Apply Alembic through `rpl02b_work_progress` before using this build on an existing database.
 The migrations preserve nonempty Job rows, create claim/reclaim indexes, and
 refuses downgrade while **any** work history exists. Work dedupe tombstones must
 not be removed to make a rollback appear safe. Restore a coherent backup instead.
 Offline artifact migration now fingerprints this ledger as part of its source
 revision; source/runtime schema must include the current head.
+Private `WorkProgress` stores bounded versioned cursor JSON separately from the
+immutable work input. Its input fingerprint and owner/fence are checked on every
+read/write. Cursor acceptance and each SQL side effect share one transaction;
+reclaim resumes the accepted cursor. Progress/history cannot be dropped to force
+a downgrade. Export retention pages100 jobs per claim and preserves existing
+materialized readers through the artifact read leases.
 
 `enqueue_existing_document` locks global admission, pending work, then Document.
 It commits the queued status, retained published diagnostics and frozen private

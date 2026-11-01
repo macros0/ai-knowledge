@@ -20,6 +20,8 @@ def main() -> int:
     parser.add_argument("--rules-file", type=Path, help="rule seed JSON path")
     parser.add_argument("--rules-only", action="store_true", help="seed rules without adding terms")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("seed_glossary")
     entries = [] if args.rules_only else load_seed(args.path)
     rules_path = args.rules_file
     if rules_path is None and (args.rules_only or Path(args.path).resolve() == DEFAULT_SEED_PATH):

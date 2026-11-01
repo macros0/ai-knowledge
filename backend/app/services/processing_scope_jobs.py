@@ -2,7 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor, Future
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from threading import BoundedSemaphore, Event, Thread
+from threading import BoundedSemaphore, Event, Thread, Lock
 import logging
 import uuid
 
@@ -14,9 +14,18 @@ from app.services.processing_scope_change import load_scope_base, analyze_scope_
 from app.services.generation_store import begin_generation, lock_document_write
 
 _fast_slots = BoundedSemaphore(1)
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="scope-reuse")
+_executor = None
+_executor_lock = Lock()
 TERMINAL = {"published", "failed", "canceled"}
 logger = logging.getLogger(__name__)
+
+
+def _get_executor():
+    global _executor
+    with _executor_lock:
+        if _executor is None:
+            _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="scope-reuse")
+        return _executor
 
 
 def _maintain_queued_owner(doc_id, plan_id, owner_token, pipeline):
@@ -87,7 +96,7 @@ def _dispatch(doc_id, plan_id, owner_token):
             pipeline._threads[doc_id] = pipeline._executor.submit(_run, doc_id, plan_id, owner_token, pipeline=pipeline)
         _maintain_queued_owner(doc_id, plan_id, owner_token, pipeline)
     else:
-        _executor.submit(_run, doc_id, plan_id, owner_token)
+        _get_executor().submit(_run, doc_id, plan_id, owner_token)
 
 
 def create_change_preview(doc_id, review_id, revision, expected_active_generation_id, actor_id, *, edit_owner_id=None, edit_token=None):
@@ -139,6 +148,12 @@ def apply_scope_change(doc_id, plan_id, request_id, expected_active_generation_i
         if not pending_plan or pending_plan.doc_id != doc_id:
             raise ProcessingScopeConflict()
         mode = pending_plan.plan_json["preview"]["mode"]
+    from app.config import get_settings
+    from app.services.work.admission import durable_documents
+    if durable_documents(get_settings()):
+        from app.services.work.scope import admit_scope_change
+        return admit_scope_change(doc_id, plan_id, request_id, expected_active_generation_id, actor_id, allowed_modes,
+            is_admin=is_admin, edit_owner_id=edit_owner_id, edit_token=edit_token)
     pipeline = None
     if mode == "incremental_generate":
         from app.services.pipeline import get_pipeline
@@ -287,6 +302,10 @@ def fail_scope_change(doc_id, plan_id, owner_token):
 
 def recover_scope_changes():
     """Reclaim only expired owners under the same lock as a bounded write."""
+    from app.config import get_settings
+    from app.services.work.admission import durable_documents
+    if durable_documents(get_settings()):
+        return 0  # Work claims, not the legacy token scheduler, own distributed recovery.
     now, reclaimed = datetime.now(timezone.utc), 0
     with session_scope() as session:
         ids = list(session.scalars(select(DocumentScopeChange.id).where(

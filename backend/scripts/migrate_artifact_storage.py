@@ -21,6 +21,7 @@ def main(argv=None, *, settings=None, stores=None):
     parser.add_argument("--runtime-env-file", type=Path, help="Explicit source runtime env, required for a production plan")
     parser.add_argument("--show-installation", action="store_true")
     args = parser.parse_args(argv)
+    from app.services.work.cli import require_single_process_writer
     if args.phase != "plan" and not args.apply:
         print("Mutation requires --apply", file=sys.stderr)
         return 2
@@ -30,8 +31,11 @@ def main(argv=None, *, settings=None, stores=None):
     from app.db.session import configure_database
     from app.services.artifacts.migration import StorageMigration, installation_id, _read
     try:
-        if settings is None:
+        configure_target = settings is None
+        if configure_target:
             settings = Settings(_env_file=str(args.runtime_env_file)) if args.runtime_env_file else get_settings()
+        require_single_process_writer("migrate_artifact_storage", settings=settings)
+        if configure_target:
             configure_database(settings.db_url)
         if settings.environment == "production" and not args.runtime_env_file:
             raise ValueError("Explicit production runtime env required")

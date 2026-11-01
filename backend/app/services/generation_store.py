@@ -203,8 +203,8 @@ def publish_generation(session, doc_id: str, generation_id: str) -> bool:
     return True
 
 
-def abandon_generation(session, doc_id: str, generation_id: str) -> None:
-    state = _locked_state(session, doc_id)
+def abandon_generation(session, doc_id: str, generation_id: str, *, allow_deleted: bool = False) -> None:
+    state = _locked_state(session, doc_id, allow_deleted=allow_deleted)
     generation = _generation(session, doc_id, generation_id)
     if generation.work_id is not None:
         from app.services.work.context import current_claim, enforce_session

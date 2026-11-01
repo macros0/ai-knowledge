@@ -164,6 +164,8 @@
   "admin.jobType.bulk_export": [],
   "admin.jobType.bulk_regenerate": [],
   "admin.jobType.bulk_resume": [],
+  "admin.jobType.glossary_translation": [],
+  "admin.jobType.reference_translation": [],
   "admin.languages.actError": [
     "message"
   ],
@@ -379,6 +381,8 @@
   "apiError.job_not_awaiting_approval": [],
   "apiError.job_not_cancellable": [],
   "apiError.job_not_found": [],
+  "apiError.job_still_running": [],
+  "apiError.legacy_corpus_adoption_required": [],
   "apiError.locale_not_found": [],
   "apiError.mail_import_disabled": [],
   "apiError.mail_object_unsupported": [],

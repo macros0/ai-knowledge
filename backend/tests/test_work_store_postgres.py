@@ -173,7 +173,8 @@ def test_two_processes_dedupe_one_committed_work(_db):
 
 def test_postgres_nonempty_job_schema_upgrade_and_unsafe_downgrade(_db, monkeypatch):
     # Exercise the historical R1 contract, before R2 introduces a dependent FK.
-    from app.db.models import DocumentWorkInput
+    from app.db.models import DocumentWorkInput, WorkProgress
+    WorkProgress.__table__.drop(get_engine())
     DocumentWorkInput.__table__.drop(get_engine())
     from types import SimpleNamespace
     from alembic import command

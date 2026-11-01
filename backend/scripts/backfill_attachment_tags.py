@@ -210,6 +210,8 @@ def main() -> None:
     parser.add_argument("--doc-id", type=str, default=None, help="Обработать один документ")
     parser.add_argument("--dry-run", action="store_true", help="Только отчёт, без записи")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("backfill_attachment_tags")
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     settings = get_settings()

@@ -27,6 +27,8 @@ def main() -> None:
     parser.add_argument("--doc-id", type=str, default=None, help="Обработать только конкретный документ")
     parser.add_argument("--force", action="store_true", help="Устарел: используйте регенерацию документа")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("backfill_chunks")
     if args.force:
         parser.error("--force не поддерживается: для замены чанков используйте регенерацию документа")
 

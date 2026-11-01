@@ -43,6 +43,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("backfill_translations")
     settings = get_settings()
     entities = [e.strip() for e in args.entities.split(",") if e.strip()]
     unknown = [e for e in entities if e not in ("tags", "developments", "attributes", "glossary")]

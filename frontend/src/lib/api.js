@@ -930,7 +930,7 @@ export function backfillGlossaryTranslations(locale, termIds, expectedTranslatio
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ locale, term_ids: termIds, expected_translation_versions: expectedTranslationVersions }),
-  });
+  }).then(translationBackfillResult);
 }
 
 export function listGlossaryRules() {
@@ -1108,7 +1108,26 @@ export function backfillTranslations(locale, entities) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ locale, entities }),
-  });
+  }).then(translationBackfillResult);
+}
+
+async function translationBackfillResult(receipt) {
+  if (!receipt || !("job_id" in receipt)) return receipt;
+  if (!Number.isSafeInteger(receipt.job_id) || receipt.job_id < 1) {
+    throw new ApiError("", {status: 502, code: "internal_error"});
+  }
+  for (let attempt = 0; attempt < 900; attempt++) {
+    const job = await request(`/jobs/${receipt.job_id}`, {cache: "no-store"});
+    if (job.id !== receipt.job_id || !["reference_translation", "glossary_translation"].includes(job.job_type)) {
+      throw new ApiError("", {status: 502, code: "internal_error"});
+    }
+    if (job.status === "completed") return job.result;
+    if (["failed", "cancelled"].includes(job.status)) {
+      throw new ApiError("", {status: 503, code: job.result?.error_code || "internal_error"});
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  throw new ApiError("", {status: 408, code: "job_still_running"});
 }
 
 export function translationPending(locale, entities) {

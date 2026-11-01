@@ -32,6 +32,67 @@ def test_handler_runs_outside_sql_and_finishes():
         assert session.get(WorkItem, work_id).status == "succeeded"
 
 
+def test_deferred_parent_releases_single_worker_for_its_child():
+    from app.services.work.handlers import WorkDeferred
+    calls = []
+    def handler(work):
+        calls.append(work.spec.dedupe_key)
+        if work.spec.dedupe_key == "parent":
+            with session_scope() as session:
+                enqueue(session, spec("child"))
+            return WorkDeferred(1)
+    runner = worker(handler)
+    with session_scope() as session:
+        parent_id = enqueue(session, spec("parent"))
+    assert runner.run_once(Event())
+    assert runner.run_once(Event())
+    assert calls == ["parent", "child"]
+    with session_scope() as session:
+        parent = session.get(WorkItem, parent_id)
+        assert parent.status == "queued" and parent.owner_id is None and parent.attempts == 0
+        assert session.query(WorkItem).filter_by(dedupe_key="child").one().status == "succeeded"
+
+
+def test_unready_worker_keeps_accepted_work_queued():
+    runner = worker(lambda _work: None)
+    with session_scope() as session:
+        work_id = enqueue(session, spec())
+    class Stop:
+        waits = 0
+        def is_set(self):
+            return self.waits >= 3
+        def wait(self, _delay):
+            self.waits += 1
+            return self.is_set()
+    runner.run(Stop(), ready=lambda: False)
+    with session_scope() as session:
+        assert session.get(WorkItem, work_id).status == "queued"
+
+
+def test_stop_after_claim_commit_does_not_start_the_handler():
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+    stop = Event()
+    def handler(_work):
+        with session_scope() as session:
+            enqueue(session, spec("must-not-start"))
+    runner = worker(handler)
+    with session_scope() as session:
+        enqueue(session, spec())
+    def signal(_session):
+        stop.set()
+    event.listen(Session, "after_commit", signal)
+    try:
+        assert runner.run_once(stop)
+        if runner._future is not None:
+            runner._future.result(timeout=3)
+    finally:
+        event.remove(Session, "after_commit", signal)
+    with session_scope() as session:
+        assert session.query(WorkItem).count() == 1
+        assert session.query(WorkItem).one().status == "running"
+
+
 def test_heartbeat_row_lock_timeout_retries_while_handler_owns_local_slot(monkeypatch):
     from sqlalchemy.exc import OperationalError
     from app.services.work import store

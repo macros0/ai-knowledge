@@ -103,7 +103,8 @@ class JobQueue:
         self._queue: queue.Queue[int] = queue.Queue()
         self._admission_lock = threading.Lock()
         self._worker: threading.Thread | None = None
-        if start_worker:
+        from app.services.work.admission import durable_documents
+        if start_worker and not durable_documents(get_settings()):
             self._start_worker()
 
     def _start_worker(self) -> None:

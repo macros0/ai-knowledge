@@ -121,6 +121,8 @@ def main() -> None:
         "--clean", action="store_true", help="Удалить сиднутые документы и выйти"
     )
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("seed_documents")
 
     if args.clean:
         removed = clean()

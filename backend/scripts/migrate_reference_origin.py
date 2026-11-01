@@ -21,5 +21,7 @@ def migrate(engine):
 
 
 if __name__ == "__main__":
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_reference_origin")
     migrate(get_engine())
     print("Reference origin schema is ready.")

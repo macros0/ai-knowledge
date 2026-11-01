@@ -10,6 +10,8 @@ import { useI18n } from "@/i18n/LocaleContext";
 import { useChat } from "@/context/ChatContext";
 
 const PENDING_STATUSES = ["queued", "running", "awaiting_approval"];
+const BULK_ACTION_TYPES = ["bulk_delete", "bulk_regenerate", "bulk_resume"];
+const TRANSLATION_TYPES = ["reference_translation", "glossary_translation"];
 
 function fmtTime(iso) {
   if (!iso) return "—";
@@ -38,6 +40,8 @@ export default function AdminPanel() {
     bulk_regenerate: t("admin.jobType.bulk_regenerate"),
     bulk_resume: t("admin.jobType.bulk_resume"),
     bulk_export: t("admin.jobType.bulk_export"),
+    reference_translation: t("admin.jobType.reference_translation"),
+    glossary_translation: t("admin.jobType.glossary_translation"),
   };
 
   const load = useCallback(async () => {
@@ -94,9 +98,10 @@ export default function AdminPanel() {
                   {JOB_STATUS_LABELS[job.status] ?? job.status}
                 </span>
                 <strong>{JOB_TYPE_LABELS[job.job_type] ?? job.job_type}</strong>
-                <span className="job-docs">
+                {!TRANSLATION_TYPES.includes(job.job_type) && <span className="job-docs">
                   {t("admin.jobDocs", { count: (job.params?.doc_ids ?? job.params?.documents ?? []).length })}
-                </span>
+                </span>}
+                {TRANSLATION_TYPES.includes(job.job_type) && <span className="job-meta">{job.params?.locale}</span>}
               </div>
               <div className="job-meta">
                 #{job.id} · {job.created_by ?? "—"} · {fmtTime(job.created_at)}
@@ -130,7 +135,7 @@ export default function AdminPanel() {
                 </div>
               )}
               <div className="job-actions">
-                {job.job_type !== "bulk_export" && job.status === "awaiting_approval" && (
+                {BULK_ACTION_TYPES.includes(job.job_type) && job.status === "awaiting_approval" && (
                   <button
                     className="modal-btn"
                     disabled={busy[job.id]}
@@ -139,7 +144,7 @@ export default function AdminPanel() {
                     {t("admin.approve")}
                   </button>
                 )}
-                {job.job_type !== "bulk_export" && (job.status === "queued" || job.status === "awaiting_approval") && (
+                {BULK_ACTION_TYPES.includes(job.job_type) && (job.status === "queued" || job.status === "awaiting_approval") && (
                   <button
                     className="modal-btn"
                     disabled={busy[job.id]}

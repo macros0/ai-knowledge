@@ -74,7 +74,7 @@ RUN groupadd --gid "${APP_GID}" app && \
     chmod +x /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-EXPOSE 8000
+EXPOSE 8000 8001
 
 # 0.0.0.0 нужен для межконтейнерной связи (frontend -> backend:8000); сам
 # контейнер наружу не публикуется (см. docker-compose.yml без ports у backend).

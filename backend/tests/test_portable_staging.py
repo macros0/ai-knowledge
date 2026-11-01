@@ -42,6 +42,26 @@ def prepare(stage):
                        degradation=[{"event": "llm_salvage"}], provenance={"model_id": "original"})
 
 
+def test_checkpoint_retirement_cannot_delete_a_newer_generation(portable):
+    stage, _ = portable
+    prepare(stage)
+    old_id = stage.generation_id
+    from app.services.generation_store import abandon_generation
+    with session_scope() as session:
+        abandon_generation(session, DOC, old_id)
+        new_id = begin_generation(session, DOC).id
+    stage.remove()
+    stage.create(1, global_tags=[], parser_version="parser-v2", source_file_hash="b" * 64, generation_id=new_id)
+    stage.save_chunk_text(0, "new attempt")
+    stage.remove(expected_generation_id=old_id)
+    assert stage.generation_id == new_id
+    assert stage.load()["total_chunks"] == 1
+    stage.remove(expected_generation_id=new_id)
+    with session_scope() as session:
+        assert session.get(DocumentStaging, DOC) is None
+        assert session.query(CheckpointBinding).filter_by(doc_id=DOC, generation_id=new_id).count() == 0
+
+
 def test_staging_checkpoint_survives_worker_disk_loss(portable, tmp_path):
     stage, settings = portable
     prepare(stage)

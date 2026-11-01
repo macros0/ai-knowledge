@@ -361,6 +361,11 @@ def backfill_glossary_translations_route(
     request: Request,
     user: User = Depends(require_role("admin")),
 ):
+    from app.services.work.admission import durable_documents
+    if durable_documents(get_settings()):
+        from app.services.work.glossary_translation import admit_glossary_translation
+        return admit_glossary_translation(body.locale, body.term_ids, body.expected_translation_versions,
+            user, ip_address=_client_ip(request))
     try:
         return backfill_glossary_translations(
             body.locale,

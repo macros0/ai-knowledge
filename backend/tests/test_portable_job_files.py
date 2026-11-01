@@ -11,6 +11,8 @@ from app.db.session import session_scope
 from app.services.artifacts import get_blob_store
 from app.services.artifacts.repository import attach_blob
 from app.services.export_queue import ExportQueue
+from app.services.work.models import WorkSpec, LostOwnership
+from app.services.work.store import enqueue, claim
 from tests.test_export_queue import _settings, _document
 
 DOC = "0123456789abcdef"
@@ -38,6 +40,133 @@ def portable_exports(tmp_path, monkeypatch):
 def cold(settings, tmp_path):
     shutil.rmtree(settings.data_dir)
     settings.data_dir = tmp_path / "worker-b"
+
+
+def test_future_export_admission_persists_work_without_starting_local_queue(portable_exports):
+    from app.db.models import WorkItem
+    service, settings, _ = portable_exports
+    settings.okf_deployment_schema, settings.app_role = "replicas-v1", "api"
+    before = service._queue.qsize()
+    actor = User(user_id="another-admin", username="other", roles=["admin"])
+    job = service.submit([DOC], actor, ip_address=None)
+    with session_scope() as session:
+        work = session.query(WorkItem).filter_by(kind="export").one()
+        assert work.payload_json == {"job_id": job["id"]}
+    assert service._queue.qsize() == before
+
+
+def test_transient_export_storage_failure_retries_without_closing_public_job(portable_exports, monkeypatch):
+    from threading import Event
+    from app.db.models import WorkItem
+    from app.services.artifacts.contract import BlobUnavailable
+    from app.services.work.runtime import build_handlers
+    from app.services.work.worker import Worker
+    import app.services.export_queue as module
+    service, settings, job_id = portable_exports
+    settings.okf_deployment_schema, settings.app_role = "replicas-v1", "worker"
+    monkeypatch.setattr(module, "get_export_queue", lambda: service)
+    with session_scope() as session:
+        work_id = enqueue(session, WorkSpec("export", 1, {"job_id": job_id}, "export-transient"))
+    build = module.build_export_parts
+    def offline(*_a, **_k):
+        raise BlobUnavailable("temporary storage outage")
+    monkeypatch.setattr(module, "build_export_parts", offline)
+    runner = Worker(settings, registry=build_handlers(), owner_id="export-retry")
+    assert runner.run_once(Event())
+    with session_scope() as session:
+        row = session.get(WorkItem, work_id)
+        assert row.status == "queued"
+        row.available_at = row.created_at
+    assert service.get(job_id)["status"] == "running"
+    monkeypatch.setattr(module, "build_export_parts", build)
+    assert runner.run_once(Event())
+    assert service.get(job_id)["status"] == "completed"
+
+
+def test_export_maintenance_reconciles_a_failed_work_receipt(portable_exports, monkeypatch):
+    from app.db.models import Job, WorkItem
+    from app.services.work.runtime import build_handlers
+    service, settings, job_id = portable_exports
+    settings.okf_deployment_schema, settings.app_role = "replicas-v1", "worker"
+    monkeypatch.setattr("app.services.export_queue.get_export_queue", lambda: service)
+    with session_scope() as session:
+        parent = enqueue(session, WorkSpec("export", 1, {"job_id": job_id}, "export-failed-receipt"))
+        session.get(WorkItem, parent).status = "failed"
+        session.get(Job, job_id).status = "running"
+        enqueue(session, WorkSpec("export_purge", 1, {}, "export-failure-maintenance"))
+        work = claim(session, owner_id="export-maintenance", supported={"export_purge": {1}}, lease_seconds=120)
+    build_handlers().resolve(work.spec)(work)
+    assert service.get(job_id)["status"] == "failed"
+
+
+def test_export_resume_after_worker_loss(portable_exports, tmp_path, monkeypatch):
+    from app.db.models import WorkItem
+    from app.services.work.runtime import build_handlers
+    from tests.test_work_store import expire
+    service, settings, job_id = portable_exports
+    settings.okf_deployment_schema, settings.app_role = "replicas-v1", "worker"
+    monkeypatch.setattr("app.services.export_queue.get_export_queue", lambda: service)
+    with session_scope() as session:
+        work_id = enqueue(session, WorkSpec("export", 1, {"job_id": job_id}, "export-loss"))
+        old = claim(session, owner_id="old", supported={"export": {1}}, lease_seconds=120)
+    import app.services.export_queue as module
+    original_build, replacement = module.build_export_parts, []
+    def old_returns(*args, **kwargs):
+        parts = original_build(*args, **kwargs)
+        from threading import Thread
+        def reclaim():
+            expire(work_id)
+            with session_scope() as session:
+                replacement.append(claim(session, owner_id="new", supported={"export": {1}}, lease_seconds=120))
+        other = Thread(target=reclaim)
+        other.start()
+        other.join(5)
+        assert not other.is_alive() and len(replacement) == 1
+        return parts
+    monkeypatch.setattr(module, "build_export_parts", old_returns)
+    with pytest.raises(LostOwnership):
+        build_handlers().resolve(old.spec)(old)
+    assert service.get(job_id)["status"] == "running"
+    monkeypatch.setattr(module, "build_export_parts", original_build)
+    cold(settings, tmp_path)
+    build_handlers().resolve(replacement[0].spec)(replacement[0])
+    with session_scope() as session:
+        assert session.get(WorkItem, work_id).status == "succeeded"
+    assert service.get(job_id)["status"] == "completed"
+    lease = service.acquire_download(job_id, 1, ACTOR, None)
+    try:
+        with ZipFile(lease.path) as archive:
+            assert archive.testzip() is None
+            assert any(archive.read(name) == b"approved original source" for name in archive.namelist())
+    finally:
+        lease.release()
+
+
+def test_export_retention_work_preserves_another_instances_reader(portable_exports, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from app.db.models import Job
+    from app.services.work.runtime import build_handlers
+    from app.services.work.progress import load_progress
+    service, settings, job_id = portable_exports
+    service._execute(job_id)
+    lease = service.acquire_download(job_id, 1, ACTOR, None)
+    try:
+        settings.okf_deployment_schema, settings.app_role = "replicas-v1", "worker"
+        other = ExportQueue(start_worker=False)
+        monkeypatch.setattr("app.services.export_queue.get_export_queue", lambda: other)
+        with session_scope() as session:
+            job = session.get(Job, job_id)
+            job.result = dict(job.result, expires_at=(datetime.now(timezone.utc) - timedelta(days=1)).isoformat())
+            enqueue(session, WorkSpec("export_purge", 1, {}, "export-purge"))
+            work = claim(session, owner_id="purge", supported={"export_purge": {1}}, lease_seconds=120)
+        build_handlers().resolve(work.spec)(work)
+        assert other.get(job_id)["result"]["artifact_status"] == "expired"
+        with ZipFile(lease.path) as archive:
+            assert archive.testzip() is None
+        with session_scope() as session:
+            assert load_progress(session, work, version=1)["last_id"] == job_id
+    finally:
+        lease.release()
 
 
 def test_queued_export_builds_from_bound_original_on_cold_worker(portable_exports, tmp_path):

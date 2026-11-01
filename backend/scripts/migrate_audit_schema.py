@@ -13,6 +13,8 @@ def main():
     owner=None
     try:
         settings=configure(args.runtime_env_file)
+        from app.services.work.cli import require_single_process_writer
+        require_single_process_writer("migrate_audit_schema")
         from app.services.audit_outbox import AuditDispatcher
         from app.db.session import get_engine
         from app.services.audit_schema import upgrade_audit_schema

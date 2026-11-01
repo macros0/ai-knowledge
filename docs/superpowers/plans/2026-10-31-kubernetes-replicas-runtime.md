@@ -159,6 +159,24 @@ Exports/bundles сохраняют существующие public records/statu
 - [ ] GREEN плюс `python -m pytest tests/test_export_queue.py tests/test_diagnostics_bundle_queue.py -q`; runner runtime на 1 API + 1 worker, restart API не останавливает worker.
 - [ ] Commit `feat: separate API and background runtime roles`.
 
+R3 software milestone, 01.11.2026: closed role lifecycles, periodic handlers,
+scope/repair/translation work, portable export/bundle completion, retention,
+versioned cursors and legacy-writer guards implemented. Final affected group:
+86 passed; export queue/scratch group:45 passed,1 Windows symlink permission skip;
+role/scratch group:24 passed,1 same skip. Actual isolated PostgreSQL runtime
+group:4 passed (220.44s), including independent-process fencing, nonempty schema
+upgrade, JSON coordinators and heartbeat-backed scope publication. Root check:
+npm audit0 vulnerabilities, frontend747 passed/1 skipped, ESLint and Ruff passed.
+These are scoped checks, not the entire backend suite or provider certification.
+
+Dependency ruling: commit the reviewed software milestone while keeping R3 open.
+The actual1 API+1 worker/restart runner needs R4's audit/diagnostic coordination
+and R5's role manifests/capability. R3 checkboxes and activation remain closed
+until that integrated acceptance. Legacy NULL-generation corpus adoption and
+new maintenance/backup entrypoints remain O2 prerequisites; no env bypass is
+introduced. Diagnostic child-process scratch lifecycle belongs to R4; the R3
+local scratch cleaner owns only in-process export attempts.
+
 ## Task R4: общие лимиты, конфигурация, чат и аудит
 
 **Files:** создать `backend/app/services/work/coordination.py`,

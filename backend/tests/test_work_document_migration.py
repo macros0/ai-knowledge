@@ -21,6 +21,7 @@ def test_document_work_migration_preserves_generations_and_refuses_lost_fencing(
         session.add(DocumentGeneration(id="a" * 32, doc_id="legacy", phase="active"))
         session.commit()
     with engine.begin() as connection:
+        connection.execute(text("DROP TABLE work_progress"))
         connection.execute(text("DROP TABLE document_work_inputs"))
         connection.execute(text("DROP TABLE deleted_work_generations"))
         connection.execute(text("DROP TABLE work_admission_state"))

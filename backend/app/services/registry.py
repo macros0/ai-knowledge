@@ -68,6 +68,20 @@ SORT_COLUMNS = {
 }
 
 
+def _defer_document_projections(session, doc_id):
+    from app.config import get_settings
+    from app.services.work.admission import durable_documents
+    if not durable_documents(get_settings()):
+        return False
+    from uuid import uuid4
+    from app.services.work.models import WorkSpec
+    from app.services.work.store import enqueue
+    identity = uuid4().hex
+    enqueue(session, WorkSpec("document_visibility", 1, {"doc_id": doc_id}, f"visibility/{doc_id}/{identity}"))
+    enqueue(session, WorkSpec("duplicate_refresh", 1, {"doc_id": doc_id, "previous_ids": []}, f"duplicate-state/{doc_id}/{identity}"))
+    return True
+
+
 def _glob_to_like(pattern: str) -> str:
     """Переводит glob-маску (* → %, ? → _) в LIKE-паттерн с полным совпадением.
 
@@ -737,9 +751,11 @@ class DocumentRegistry:
                 doc.status, doc.error, doc.error_code = "paused", None, None
             doc.deleted_at = datetime.now(timezone.utc)
             doc.deleted_by = deleted_by
+            deferred = _defer_document_projections(s, doc_id)
         from app.services.deduplication import refresh_duplicate_flags
 
-        refresh_duplicate_flags(doc_id)
+        if not deferred:
+            refresh_duplicate_flags(doc_id)
         return True
 
     def restore(self, doc_id: str) -> bool:
@@ -759,9 +775,11 @@ class DocumentRegistry:
                 raise ReferenceError("reference_write_busy", 503)
             doc.deleted_at = None
             doc.deleted_by = None
+            deferred = _defer_document_projections(s, doc_id)
         from app.services.deduplication import refresh_duplicate_flags
 
-        refresh_duplicate_flags(doc_id)
+        if not deferred:
+            refresh_duplicate_flags(doc_id)
         return True
 
     def list_trash(

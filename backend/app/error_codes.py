@@ -65,6 +65,7 @@ GENERATION_TIMEOUT = "generation_timeout"
 GENERATION_RATE_LIMITED = "generation_rate_limited"
 GENERATION_CONTEXT_EXCEEDED = "generation_context_exceeded"
 PROCESSING_UNAVAILABLE = "processing_unavailable"
+LEGACY_CORPUS_ADOPTION_REQUIRED = "legacy_corpus_adoption_required"
 
 # --- Доменные правила (коды для DomainError сервисного слоя) ---
 NOT_IN_TRASH = "not_in_trash"

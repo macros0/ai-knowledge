@@ -88,6 +88,8 @@ def main() -> None:
         help="Значения через запятую",
     )
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("seed_attribute_values")
 
     values = [v.strip() for v in args.values.split(",") if v.strip()]
     result = seed(args.org, args.key, values)

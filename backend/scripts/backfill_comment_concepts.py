@@ -172,6 +172,14 @@ def process_doc(doc_id: str, filename: str, settings, generator: OKFGenerator,
     if Path(filename).suffix.lower() != ".docx":
         result["skipped"].append("not_docx")
         return result
+    from app.services.work.admission import durable_documents
+    if durable_documents(settings) and not dry_run:
+        from app.services.work.repair import admit_canonical_repair
+        try:
+            result.update(admit_canonical_repair(settings, doc_id, "comment_threads"))
+        except Exception as exc:
+            result["error"] = str(exc)
+        return result
     src = settings.uploads_dir / f"{doc_id}.docx"
     if not src.is_file():
         result["skipped"].append("no_source_file")
@@ -207,7 +215,8 @@ def main() -> None:
         sys.exit(1)
 
     generator = embedder = vector_store = None
-    if docs and not args.dry_run:
+    from app.services.work.admission import durable_documents
+    if docs and not args.dry_run and not durable_documents(settings):
         from app.services.embedder import Embedder
         from app.services.vector_store import VectorStore
 
@@ -219,6 +228,9 @@ def main() -> None:
     for doc_id, filename, development_id in docs:
         r = process_doc(doc_id, filename, settings, generator, embedder, vector_store,
                         development_id=development_id, dry_run=args.dry_run)
+        if r.get("status") == "queued":
+            print(f"[{doc_id}] queued: {r['work_id']}")
+            continue
         if r["error"]:
             counters["errors"] += 1
             logger.error("%s: %s", doc_id, r["error"])

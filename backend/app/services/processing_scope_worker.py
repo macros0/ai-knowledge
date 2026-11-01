@@ -415,6 +415,9 @@ def execute_scope_change(doc_id, plan_id, owner_token):
             session.get(DocumentScopeChange, plan_id).state = "ready"
         from app.services.generation_publication import publish_prepared_document
         publish_prepared_document(settings, store, doc_id, generation_id)
+    from app.services.work.context import current_claim
+    if current_claim() is not None:
+        return  # Publication committed work success; maintenance owns retired cleanup.
     finish_update_worker(doc_id, plan_id, owner_token)
     try:
         from app.services.generation_cleanup import cleanup_document_generations

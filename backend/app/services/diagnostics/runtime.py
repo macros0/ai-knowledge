@@ -31,6 +31,7 @@ class DiagnosticRuntime:
         self.bundle_queue = None
         self.browser = None
         self._started = False
+        self._request_only = False
         self._bundle_recovered = False
         self._stop_event = threading.Event()
         self._maintenance_thread = None
@@ -65,6 +66,17 @@ class DiagnosticRuntime:
         if not self.available:
             return False
         if self._started:
+            return True
+        from app.services.work.admission import durable_documents
+        if durable_documents(self.settings):
+            self._request_only = True
+            set_browser_service(self.browser)
+            self._stop_event.clear()
+            self._maintenance_thread = threading.Thread(target=self._request_heartbeat_loop,
+                name="diagnostic-heartbeat", daemon=True)
+            self._maintenance_thread.start()
+            self._started = True
+            self.recorder.emit("server_started")
             return True
         try:
             write_projection(self.store, boot_id=self.boot_id, active=None,
@@ -146,6 +158,11 @@ class DiagnosticRuntime:
                 self.maintain_once()
                 last_sweep = time.monotonic()
 
+    def _request_heartbeat_loop(self):
+        # This request-local lease keeper never recovers or purges shared jobs.
+        while not self._stop_event.wait(1):
+            self.heartbeat_once()
+
     def stop(self):
         if not self.available:
             return
@@ -160,7 +177,8 @@ class DiagnosticRuntime:
                     self.sessions.stop(current["id"], reason="server_restarted")
                 except Exception:
                     pass
-            self.bundle_queue.shutdown(timeout_seconds=5)
+            if not self._request_only:
+                self.bundle_queue.shutdown(timeout_seconds=5)
             self.recorder.emit("server_stopped")
             self._started = False
         if self._handler_installed:
@@ -183,3 +201,11 @@ def install_entrypoint_runtime(settings=None) -> DiagnosticRuntime:
     if _entrypoint_runtime is None:
         _entrypoint_runtime = initialize_diagnostics(settings)
     return _entrypoint_runtime
+
+
+def entrypoint_bundle_queue():
+    """The command owns startup/shutdown; handlers never start a second recorder."""
+    if _entrypoint_runtime is None or not _entrypoint_runtime.available:
+        from app.services.work.handlers import TransientWorkError
+        raise TransientWorkError("storage_unavailable")
+    return _entrypoint_runtime.bundle_queue

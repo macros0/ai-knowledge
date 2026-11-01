@@ -156,7 +156,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _combined_lifespan(app: FastAPI):
     from app.services.artifacts.control import enforce_runtime
     enforce_runtime(get_settings())
     from app.services.diagnostics.runtime import initialize_diagnostics
@@ -353,8 +353,49 @@ async def lifespan(app: FastAPI):
         close_shared_qdrant_clients()
 
 
+@asynccontextmanager
+async def _api_lifespan(app: FastAPI):
+    from app.services.artifacts.control import enforce_runtime
+    from app.services.audit_runtime import validate_existing_audit, validate_audit_transport_profile, preflight_audit
+    from app.services.diagnostics.runtime import initialize_diagnostics
+    from app.services.work.runtime import start_runtime
+    from starlette.concurrency import run_in_threadpool
+    settings = get_settings()
+    enforce_runtime(settings)
+    _validate_runtime_dependencies()
+    await run_in_threadpool(validate_audit_transport_profile, settings)
+    await run_in_threadpool(validate_existing_audit)
+    await run_in_threadpool(preflight_audit, settings)
+    diagnostic_runtime = initialize_diagnostics()
+    handle = start_runtime(settings)
+    app.state.runtime = handle
+    app.state.audit_dispatcher = None
+    app.state.diagnostics = diagnostic_runtime if diagnostic_runtime.available else None
+    try:
+        diagnostic_runtime.start()
+        yield
+    finally:
+        handle.stop(timeout=2)
+        diagnostic_runtime.stop()
+        from app.services.vector_store import close_shared_qdrant_clients
+        close_shared_qdrant_clients()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.services.work.admission import durable_documents
+    settings = get_settings()
+    if settings.app_role == "worker":
+        raise ValueError("The worker role uses app.worker, without a public HTTP application")
+    chosen = _api_lifespan if durable_documents(settings) and settings.app_role == "api" else _combined_lifespan
+    async with chosen(app):
+        yield
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
+    if settings.app_role == "worker":
+        raise ValueError("The worker role uses app.worker, without a public HTTP application")
     get_store().ensure()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(CatchAllErrorsMiddleware)

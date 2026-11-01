@@ -89,6 +89,38 @@ def test_cleanup_removes_retired_artifacts_only_and_is_idempotent(pipeline_env):
     assert cleanup_document_generations(pipeline.settings, pipeline.vector_store, DOC_ID) == 0
 
 
+def test_durable_generation_cleanup_preserves_active_publication(pipeline_env, monkeypatch):
+    from app.services.work.runtime import build_handlers
+    from app.services.work.models import WorkSpec
+    from app.services.work.store import enqueue, claim
+    pipeline, first, active = _retire_first(pipeline_env)
+    monkeypatch.setattr("app.services.pipeline.get_pipeline", lambda: pipeline)
+    with session_scope() as session:
+        enqueue(session, WorkSpec("generation_cleanup", 1, {"doc_id": DOC_ID}, "cleanup/old"))
+        work = claim(session, owner_id="cleanup", supported={"generation_cleanup": {1}}, lease_seconds=120)
+    build_handlers().resolve(work.spec)(work)
+    assert _published_snapshot(pipeline) == active
+    with session_scope() as session:
+        assert session.get(DocumentGeneration, first) is None
+
+
+def test_generation_sweep_coalesces_pending_document_cleanup(pipeline_env):
+    from app.db.models import WorkItem
+    from app.services.work.runtime import build_handlers
+    from app.services.work.models import WorkSpec
+    from app.services.work.store import enqueue, claim
+    _retire_first(pipeline_env)
+    with session_scope() as session:
+        enqueue(session, WorkSpec("generation_sweep", 1, {}, "sweep"))
+        work = claim(session, owner_id="cleanup", supported={"generation_sweep": {1}}, lease_seconds=120)
+    handler = build_handlers().resolve(work.spec)
+    handler(work)
+    handler(work)
+    with session_scope() as session:
+        item = session.query(WorkItem).filter_by(kind="generation_cleanup").one()
+        assert item.doc_id == DOC_ID and item.payload_json == {"doc_id": DOC_ID}
+
+
 def test_concurrent_cleanup_rechecks_retired_row_after_document_lock(pipeline_env, monkeypatch):
     import app.services.generation_cleanup as module
     from sqlalchemy import update

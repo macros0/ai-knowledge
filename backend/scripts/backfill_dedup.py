@@ -110,6 +110,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Бэкфилл отпечатков дедупликации.")
     parser.add_argument("--doc-id", type=str, default=None, help="Обработать один документ")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("backfill_dedup")
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 

@@ -25,6 +25,26 @@ def age_observations():
             row.first_seen_at = _now(session) - timedelta(days=2)
 
 
+def test_durable_gc_handler_collects_only_quarantined_objects(adapter, tmp_path, monkeypatch):
+    from app.services.artifacts.gc import initialize_gc, run_gc_cycle
+    from app.services.work.models import WorkSpec
+    from app.services.work.runtime import build_handlers
+    from app.services.work.store import enqueue, claim
+    settings = config(tmp_path)
+    monkeypatch.setattr("app.config.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.artifacts.get_blob_store", lambda _settings=None: adapter)
+    initialize_gc(settings, store=adapter)
+    ref = adapter.put(io.BytesIO(b"orphan"), object_id="b" * 32, media_type="text/plain")
+    assert run_gc_cycle(settings, store=adapter).observed == 1
+    age_observations()
+    with session_scope() as session:
+        enqueue(session, WorkSpec("artifact_gc", 1, {}, "gc-cycle"))
+        work = claim(session, owner_id="gc-worker", supported={"artifact_gc": {1}}, lease_seconds=120)
+    build_handlers().resolve(work.spec)(work)
+    with session_scope() as session:
+        assert session.get(ArtifactObject, ref.object_id).state == "deleted"
+
+
 def test_provider_only_orphan_is_quarantined_then_deleted(adapter, tmp_path):
     from app.services.artifacts.gc import initialize_gc, run_gc_cycle
     settings = config(tmp_path)

@@ -14,7 +14,7 @@ def test_nonempty_jobs_preserved_and_work_ledger_cannot_be_downgraded(tmp_path, 
     database = tmp_path / "work-migration.db"
     url = "sqlite:///" + database.as_posix()
     engine = create_engine(url)
-    Base.metadata.create_all(engine, tables=[table for table in Base.metadata.sorted_tables if table.name not in {"work_items", "document_work_inputs"}])
+    Base.metadata.create_all(engine, tables=[table for table in Base.metadata.sorted_tables if table.name not in {"work_items", "document_work_inputs", "work_progress"}])
     with Session(engine) as session:
         session.add(Job(job_type="bulk_delete", status="awaiting_approval", created_by="admin-a", params={"doc_ids": ["a" * 16]}))
         session.commit()

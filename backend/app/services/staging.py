@@ -429,13 +429,17 @@ class StagingStore:
         return slugs
 
     @_portable_method
-    def remove(self) -> None:
-        with session_scope() as s:
+    def remove(self, *, expected_generation_id=None) -> None:
+        with self._lock, session_scope() as s:
+            from app.services.generation_store import lock_document_write
+            lock_document_write(s, self.doc_id)
             row = s.get(DocumentStaging, self.doc_id)
+            if expected_generation_id is not None and (row is None or row.generation_id != expected_generation_id):
+                return
             if row is not None:
                 s.delete(row)
-        if self.dir.exists():
-            shutil.rmtree(self.dir, ignore_errors=True)
+            if self.dir.exists():
+                shutil.rmtree(self.dir, ignore_errors=True)
 
     @staticmethod
     def _allocate_slugs(concepts: list[Concept], used: list[str]) -> list[str]:

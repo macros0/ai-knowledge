@@ -183,7 +183,8 @@ class ExportQueue:
         self._accepting = True
         self._download_reserved_bytes = 0
         self._leases: dict[tuple[int, int], int] = {}
-        if start_worker:
+        from app.services.work.admission import durable_documents
+        if start_worker and not durable_documents(get_settings()):
             self._start_worker()
 
     def _start_worker(self) -> None:
@@ -218,6 +219,10 @@ class ExportQueue:
             plan = self._preflight(unique_ids, settings)
             try:
                 with session_scope() as s:
+                    from app.services.work.admission import durable_documents, lock_admission
+                    durable = durable_documents(settings)
+                    if durable:
+                        lock_admission(s)
                     _assert_capacity(s, settings, user, plan.estimated_output_bytes)
                     params = plan.to_job_params(ip_address)
                     params["diagnostic_context"] = context_metadata(new_operation(current_context(), operation_kind="system"))
@@ -230,6 +235,12 @@ class ExportQueue:
                     )
                     s.add(job)
                     s.flush()
+                    if durable:
+                        if not all(document.source_blob for document in plan.documents):
+                            raise ExportSourceChangedError("job")
+                        from app.services.work.store import enqueue
+                        from app.services.work.models import WorkSpec
+                        enqueue(s, WorkSpec("export", 1, {"job_id": job.id}, f"export/{job.id}"))
                     from app.services.artifacts.contract import BlobRef
                     from app.services.artifacts.repository import attach_blob, resolve_blob
                     from app.services.generation_store import lock_document_write
@@ -261,7 +272,8 @@ class ExportQueue:
                     result = _job_to_dict(job)
             except DomainError:
                 raise
-        self._queue.put(result["id"])
+        if not durable:
+            self._queue.put(result["id"])
         return result
 
     def get(self, job_id: int) -> dict | None:
@@ -601,6 +613,49 @@ class ExportQueue:
         with bind_context(context):
             self._execute_bound(job_id, job)
 
+    def execute_work(self, work):
+        """Rebuild an owned export from its immutable snapshot after worker loss."""
+        from app.services.work.scratch import export_attempt
+        from app.services.work.context import work_execution
+        from app.services.work.models import LostOwnership
+        payload = work.spec.payload
+        if set(payload) != {"job_id"} or type(payload["job_id"]) is not int or payload["job_id"] <= 0:
+            raise ValueError("Invalid export work payload")
+        job_id, settings = payload["job_id"], get_settings()
+        with work_execution(work):
+            job = self.get(job_id)
+            if job is None or job["status"] not in PENDING_STATUSES:
+                raise ValueError("Export is no longer pending")
+            if not all(value.get("source_blob") for value in (job.get("params") or {}).get("documents", [])):
+                raise ExportSourceChangedError("job")
+            settings.exports_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                self._set_running(job_id, total=len(job["params"]["documents"]), work=work)
+                with export_attempt(settings) as directory:
+                    output = Path(directory) / "building"
+                    parts = self._rehydrate_parts(job)
+                    built = build_export_parts(job_id, parts, output,
+                        archive_limit_bytes=settings.bulk_export_part_size_mb * 1024 * 1024,
+                        on_part_built=lambda part: self._record_part_progress(job_id, part, len(parts)))
+                    self._verify_built_parts(built)
+                    self._finish_completed(job_id, self._completion_result(job, built), artifact_dir=output, work=work)
+            except LostOwnership:
+                raise
+            except Exception as exc:
+                from app.services.artifacts.contract import BlobUnavailable
+                from app.services.errors import public_error_code
+                from app.services.work.handlers import TransientWorkError
+                from app.services.work.store import _locked
+                transient = not is_storage_full(exc) and (isinstance(exc, (BlobUnavailable, TransientWorkError))
+                    or public_error_code(exc) in {codes.DEPENDENCY_UNAVAILABLE, codes.TIMEOUT, codes.RATE_LIMITED})
+                with session_scope() as session:
+                    item, _ = _locked(session, work)
+                    if not transient or item.attempts >= settings.work_max_attempts:
+                        self._finish_failed(job_id, _failure_code(exc), total=len(job["params"]["documents"]), strict=True)
+                if transient and not isinstance(exc, TransientWorkError):
+                    raise TransientWorkError("storage_unavailable") from exc
+                raise
+
     def _execute_bound(self, job_id: int, job) -> None:
         if job is None or job["status"] != STATUS_QUEUED:
             return
@@ -698,10 +753,10 @@ class ExportQueue:
             raise ExportSourceChangedError("unknown")
         return tuple(parts)
 
-    def _set_running(self, job_id: int, *, total: int) -> None:
+    def _set_running(self, job_id: int, *, total: int, work=None) -> None:
         with session_scope() as session:
             job = session.get(Job, job_id)
-            if job is None or job.job_type != BULK_EXPORT or job.status != STATUS_QUEUED:
+            if job is None or job.job_type != BULK_EXPORT or job.status not in (PENDING_STATUSES if work else {STATUS_QUEUED}):
                 return
             job.status = STATUS_RUNNING
             job.started_at = _utcnow()
@@ -761,19 +816,19 @@ class ExportQueue:
             "finished_at": finished_at.isoformat(),
         }
 
-    def _finish_completed(self, job_id: int, result: dict) -> None:
+    def _finish_completed(self, job_id: int, result: dict, *, artifact_dir=None, work=None) -> None:
         with session_scope() as session:
             from app.services.artifacts.job_files import bind_file, lock_job
             job = lock_job(session, Job, job_id)
             if job is None or job.job_type != BULK_EXPORT:
                 return
-            if get_settings().artifact_uploads_enabled or any(d.get("source_blob") for d in (job.params or {}).get("documents", [])):
+            if work is not None or get_settings().artifact_uploads_enabled or any(d.get("source_blob") for d in (job.params or {}).get("documents", [])):
                 if job.status != STATUS_RUNNING:
                     raise ExportSourceChangedError("job")
                 result = dict(result, artifact_version=2, parts=[dict(part) for part in result["parts"]])
                 for part in result["parts"]:
                     ref = bind_file(session, get_settings(), kind="export", job_id=job_id, filename=part["filename"],
-                                    path=self.ready_dir(job_id) / part["filename"], size=part["size_bytes"])
+                                    path=(artifact_dir or self.ready_dir(job_id)) / part["filename"], size=part["size_bytes"])
                     part["sha256"] = ref.sha256
             from app.db.models import ArtifactBinding
             session.query(ArtifactBinding).filter(ArtifactBinding.owner_type == "export", ArtifactBinding.owner_id == str(job_id),
@@ -781,6 +836,9 @@ class ExportQueue:
             job.status = STATUS_COMPLETED
             job.finished_at = _utcnow()
             job.result = result
+            if work is not None:
+                from app.services.work.store import finish
+                finish(session, work, outcome="succeeded")
             audit_mod.record_in_session(
                 session,
                 action_type=audit_mod.DOCUMENT_BULK_EXPORT_COMPLETED,
@@ -894,7 +952,7 @@ class ExportQueue:
         self._retire_artifacts(job_id)
         return self.get(job_id)
 
-    def _finish_failed(self, job_id: int, error_code: str, *, total: int) -> None:
+    def _finish_failed(self, job_id: int, error_code: str, *, total: int, strict: bool = False) -> None:
         public_error = (
             "Недостаточно свободного места на диске"
             if error_code == codes.STORAGE_FULL
@@ -923,6 +981,8 @@ class ExportQueue:
                     new_value={"error_code": error_code, "processed": 0, "total": total},
                 )
         except Exception:
+            if strict:
+                raise
             logger.exception("Не удалось атомарно записать сбой экспорта %s", job_id)
 
     def _retire_artifacts(self, job_id: int) -> None:

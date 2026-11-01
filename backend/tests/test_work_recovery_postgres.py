@@ -261,7 +261,8 @@ def test_postgres_document_work_schema_preserves_legacy_generation(_db, monkeypa
     from types import SimpleNamespace
     from alembic import command
     from alembic.config import Config
-    from app.db.models import Document
+    from app.db.models import Document, WorkProgress
+    WorkProgress.__table__.drop(get_engine())
     with session_scope() as session:
         session.add(Document(id=DOC_ID, filename="legacy.pdf", status="done"))
         session.flush()

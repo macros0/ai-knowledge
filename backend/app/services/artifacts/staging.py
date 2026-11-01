@@ -333,10 +333,12 @@ class PortableStaging:
             bodies = {int(key): self._read(snapshot, int(key)) for key in snapshot["chunks_data"]}
             self._commit(snapshot, bodies, generation_id=generation_id)
 
-    def remove(self):
+    def remove(self, *, expected_generation_id=None):
         with self.owner._lock, session_scope() as session:
             lock_document_write(session, self.doc_id)
             generation = session.scalar(select(DocumentStaging.generation_id).where(DocumentStaging.doc_id == self.doc_id))
+            if expected_generation_id is not None and generation != expected_generation_id:
+                return
             if generation is not None:
                 session.execute(delete(CheckpointBinding).where(CheckpointBinding.doc_id == self.doc_id,
                                                                  CheckpointBinding.generation_id == generation))

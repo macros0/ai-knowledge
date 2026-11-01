@@ -1818,6 +1818,103 @@ are validated/encoded so `..` cannot normalize the destination outside `/api`.
 Reason: independent frontend replicas must not require shared control files or
 expose the new internal endpoints through user-controlled proxy paths.
 
+## Replica runtime isolation (2026-11-01, activation remains gated)
+
+The future API role starts request services only. It does not recover global
+document/job state, start job executors, purge retained data or recover another
+instance's diagnostic capture. Its diagnostic heartbeat renews only its own
+in-memory capture. The separate worker command exposes process/storage health
+on internal port 8001; this port must not be routed through the user Gateway.
+Health responses contain no storage identities or credentials. Model outages
+do not invalidate the independent process heartbeat. Shutdown stops new claims
+and handlers; unfinished claims expire without a late success acknowledgement.
+Non-document durable handlers use the same owner/fence/lease SQL guard as
+document work. Checkpoint retirement names an expected generation and preserves
+partial output and checkpoints of newer attempts. Public permissions and
+retention periods remain those of the existing operations. The replicas-v1
+build/provider activation gates remain closed pending the complete runtime and
+coordination acceptance checks.
+Future export admission commits its public Job and private intent together.
+Only verified immutable archive bindings can authorize public completion;
+attempt scratch directories are unique and disposable. Bulk coordinators yield
+their worker slot while durable document children run. Approval remains a
+public Job transition, separate from execution. Future delete/restore commits
+visibility and duplicate-refresh intents with the document mutation; no Qdrant
+visibility write precedes that transaction. Projection handlers read the latest
+SQL state while holding the document lock, so a delayed delete cannot undo a
+subsequent restore. Classified transport failures use bounded work retries.
+Private work cursors are versioned, bounded and tied to the immutable input
+fingerprint. SQL ownership guards reject writes from an expired attempt, and
+accepted cursors survive reclaim. Artifact migration fingerprints this progress
+too; downgrade refuses to discard accepted cursor history. Export retention
+retires audited archive bindings in bounded pages while existing artifact read
+leases continue to protect readers. Chat retention commits audit and deletion
+in one transaction and preserves active/recent threads.
+Trash sweep cursors and document intents are durable. Each purge rechecks the
+exact deletion timestamp and current retention cutoff under the document lock;
+a restore or a later deletion invalidates the old intent. SQL deletion, audit
+and the follow-up cleanup intent commit together. Qdrant/cache cleanup runs
+separately after confirming that the document remains absent. Immutable blob
+collection retains the existing quarantine, binding and read-lease rules.
+Scope changes commit their frozen private plan and Work intent with confirmation
+and audit. Each reclaimed claim allocates a fresh generation. Trash/restore and
+classified transient failures retain the accepted selection for explicit resume;
+explicit cancellation discards it through the existing published-update restore
+path. Regeneration may reuse the current published selection only after verifying
+its immutable publication proof. Work payloads carry IDs and hashes, not content.
+Diagnostic bundle admission commits the public record, audit and work intent in
+one globally serialized transaction. Builders use unique snapshot/part identities
+per attempt; readiness requires verified immutable ZIP bindings and work success
+in the same audited transaction. An expired builder cannot publish. The separate
+worker starts audit preflight and its own diagnostic recorder without global
+capture recovery or a legacy bundle executor. Cross-replica diagnostic inbox and
+instance path coordination remain R4 prerequisites for activation.
+Index backfills use bounded sweep cursors and per-document work with a frozen
+generation identity. The generation is checked under the document read lock,
+including after embedding; a superseded intent cannot write a newer generation.
+Future whole-corpus entry points require a scoped work claim. Legacy NULL
+generation identities require offline adoption before distributed activation.
+Failed chunk batches propagate to durable retries instead of acknowledging a
+partial result as successful work. Existing combined maintenance remains intact.
+Future reference/glossary backfills are admin-admitted public Jobs backed by
+versioned work and bounded cursors. Input hashes protect the accepted locale,
+selection and expected versions. Model calls run outside SQL; each accepted
+translation, its revision checks, audit and cursor commit together. Human edits
+and reviewed translations retain their existing protection. Terminal work is
+reconciled to public status in bounded audited pages. Permissions and four-eyes
+rules for existing document operations are unchanged.
+Diagnostic maintenance retires expired portable bindings with audit and cursor
+in one transaction. Existing artifact read leases protect active downloads.
+Terminal portable bundle metadata is pruned after the existing seven-day period;
+pending audit receipts prevent pruning. Legacy local archives require migration.
+Future canonical repairs select only the trusted attachment-path/comment-thread
+operations. Admission freezes the published base, canonical digest, original hash
+and embedding identity. Every reclaimed attempt owns a fresh generation; verified
+immutable embedding batches are reused only for the same frozen input and text
+hashes. Provider calls run outside SQL. Publication validates the accepted repair
+proof and commits with work success. Direct future repair scripts enqueue work;
+they cannot select arbitrary callables from payload data. Stored processing
+selections keep their existing unsupported-repair protection. Terminal repair
+candidates are abandoned under coordinated cancellation before ordinary cleanup,
+including when the document is in trash; active publication remains intact.
+Future export storage failures retain a retryable public Job until the bounded
+retry limit. Terminal work receipts are reconciled to an audited public failure;
+an audit failure rolls back that projection. Local export attempt directories
+live under the worker's private `exports/attempts-v1` scratch root. A kernel lock
+protects each live builder; only recognised, unlocked UUID directories from the
+same host are eligible for bounded cleanup. Links, junctions, unknown markers
+and paths outside that exact root are retained. Scratch cleanup cannot retire
+blob bindings or change a completed receipt. This root must be per-instance local
+storage; diagnostic subprocess scratch has a separate lifecycle under R4.
+Legacy operator writers, backup/restore helpers and migration commands refuse
+replicas-v1 until the coordinated maintenance protocol replaces them. The guard
+uses the command's selected runtime settings, including explicit env files.
+Supported path/comment repairs enqueue trusted work; mail/table reprocessing
+uses existing durable admission. Legacy interactive chunk reconstruction also
+refuses to mutate canonical state in the future runtime: existing NULL-generation
+corpora require verified adoption before activation. Read-only inspections keep
+their existing access contract. No override disables these maintenance guards.
+
 ## User answer scenarios (2026-10-23)
 Authenticated users, including viewer, may create and publish their own answer
 instructions. The owner may edit, unpublish or delete their scenarios.

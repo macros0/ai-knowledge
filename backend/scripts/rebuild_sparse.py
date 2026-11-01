@@ -52,6 +52,8 @@ def main() -> None:
         "--qdrant-url", type=str, default=None, help="URL Qdrant (по умолчанию из .env)"
     )
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("rebuild_sparse")
 
     vs = VectorStore()
     if args.qdrant_url:

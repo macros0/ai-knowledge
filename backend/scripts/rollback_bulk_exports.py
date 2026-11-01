@@ -16,6 +16,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm")
     args = parser.parse_args(argv)
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("rollback_bulk_exports")
     if (args.apply and args.confirm != _CONFIRMATION) or (not args.apply and args.confirm):
         print(json.dumps({"error": "invalid_confirmation"}))
         return 2

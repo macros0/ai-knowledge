@@ -1326,6 +1326,16 @@ class WorkItem(Base):
         CheckConstraint("fence >= 0 AND attempts >= 0 AND payload_version >= 1", name="ck_work_counters"))
 
 
+class WorkProgress(Base):
+    """Private accepted cursor, retained across new claims of the same work."""
+    __tablename__ = "work_progress"
+    work_id: Mapped[str] = mapped_column(ForeignKey("work_items.id"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    state_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    __table_args__ = (CheckConstraint("version >= 1", name="ck_work_progress_version"),)
+
+
 class ArtifactStorageControl(Base):
     __tablename__ = "artifact_storage_control"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

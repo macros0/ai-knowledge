@@ -154,3 +154,13 @@ def retry(session, work: WorkClaim, *, error_code: str, delay_seconds: int, max_
         row.status, row.available_at = "queued", now + timedelta(seconds=delay_seconds)
     row.error_code, row.owner_id, row.lease_until = error_code, None, None
     session.flush()
+
+
+def defer(session, work: WorkClaim, *, delay_seconds: int) -> None:
+    """Yield a coordinator claim without consuming a transient-failure attempt."""
+    seconds = _duration(delay_seconds)
+    row, now = _locked(session, work)
+    row.status, row.available_at = "queued", now + timedelta(seconds=seconds)
+    row.owner_id, row.lease_until, row.error_code = None, None, None
+    row.attempts -= 1
+    session.flush()

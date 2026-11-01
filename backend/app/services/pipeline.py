@@ -205,7 +205,8 @@ class Pipeline:
         self.okf_generator = OKFGenerator()
         self._abort_events: dict[str, threading.Event] = {}
         self._threads: dict[str, Future] = {}
-        self._executor = ThreadPoolExecutor(
+        from app.services.work.admission import durable_documents
+        self._executor = None if durable_documents(self.settings) else ThreadPoolExecutor(
             max_workers=self.settings.pipeline_max_workers,
             thread_name_prefix="document-pipeline",
         )
@@ -268,6 +269,9 @@ class Pipeline:
     def resume(self, doc_id: str, *, is_admin: bool = False) -> None:
         from app.services.work.admission import durable_documents, enqueue_existing_document
         if durable_documents(self.settings):
+            from app.services.work.scope import resume_scope_change
+            if resume_scope_change(self.settings, doc_id, is_admin=is_admin) is not None:
+                return
             enqueue_existing_document(self.settings, doc_id, "resume", is_admin=is_admin)
             return
         doc = self.registry.get(doc_id)
@@ -395,6 +399,8 @@ class Pipeline:
                     )
                 if durable:
                     invalidate_document_intents(session, doc_id)
+                    from app.services.work.scope import cancel_scope_receipts
+                    cancel_scope_receipts(session, doc_id)
                     restore_canceled_update(session, doc_id)
             if durable:
                 return  # Generation cleanup is coordinated separately; no unguarded cache deletion.
@@ -1546,6 +1552,10 @@ class Pipeline:
         Delete Points) и `deleted_at` в БД. Векторы/файлы/концепты остаются на
         месте — восстановление не требует пере-эмбеддинга.
         """
+        from app.services.work.admission import durable_documents
+        if durable_documents(self.settings):
+            self.registry.soft_delete(doc_id, deleted_by)
+            return
         with self._start_lock:
             self._stop_task(doc_id)
             try:
@@ -1561,6 +1571,10 @@ class Pipeline:
 
         Точки физически не удалялись — эмбеддинги не пересчитываются.
         """
+        from app.services.work.admission import durable_documents
+        if durable_documents(self.settings):
+            self.registry.restore(doc_id)
+            return
         with self._start_lock:
             try:
                 self.vector_store.set_document_deleted(doc_id, False)
@@ -1570,12 +1584,13 @@ class Pipeline:
                 )
             self.registry.restore(doc_id)
 
-    def _physical_cleanup(self, doc_id: str) -> None:
+    def _physical_cleanup(self, doc_id: str, *, delete_vectors: bool = True) -> None:
         """Удаляет точки Qdrant, файлы и staging (без строки БД)."""
-        try:
-            self.vector_store.delete_document(doc_id)
-        except Exception as exc:
-            logger.warning("Не удалось удалить векторы документа %s: %s", doc_id, exc)
+        if delete_vectors:
+            try:
+                self.vector_store.delete_document(doc_id)
+            except Exception as exc:
+                logger.warning("Не удалось удалить векторы документа %s: %s", doc_id, exc)
         for base in (self.settings.uploads_dir, self.settings.okf_dir):
             target = base / doc_id
             if target.exists():
@@ -1754,6 +1769,10 @@ class Pipeline:
         with session_scope() as session:
             if not _can_backfill_legacy_chunks(session, doc_id):
                 return
+            from app.services.work.admission import durable_documents
+            if durable_documents(self.settings):
+                raise DomainError("Для этого документа требуется подготовка существующего корпуса",
+                    code=codes.LEGACY_CORPUS_ADOPTION_REQUIRED)
         doc = self.registry.get(doc_id)
         if not doc:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)

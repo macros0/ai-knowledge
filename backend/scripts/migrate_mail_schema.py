@@ -124,6 +124,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_mail_schema")
     if args.apply and get_settings().environment != "development":
         parser.error("--apply is only supported for development databases")
     result = migrate(get_engine(), apply=args.apply)

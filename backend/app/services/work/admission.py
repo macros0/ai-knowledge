@@ -14,6 +14,8 @@ from .models import WorkSpec
 from .store import enqueue
 
 PENDING = ("queued", "running")
+DOCUMENT_MUTATORS = ("document", "scope_change", "canonical_repair")
+DERIVED_SCOPE_OUTPUT_FIELDS = frozenset({"signature_cache", "chunk_counts", "archived_chunk_sources"})
 
 
 def durable_documents(settings):
@@ -36,7 +38,7 @@ def lock_admission(session):
 def lock_document_intents(session, doc_id):
     """Serialize new admissions before acquiring pending work in stable order."""
     lock_admission(session)
-    rows = list(session.scalars(select(WorkItem).where(WorkItem.doc_id == doc_id, WorkItem.kind == "document",
+    rows = list(session.scalars(select(WorkItem).where(WorkItem.doc_id == doc_id, WorkItem.kind.in_(DOCUMENT_MUTATORS),
         WorkItem.status.in_(PENDING)).order_by(WorkItem.id).with_for_update()))
     session.info.setdefault("locked_document_intents", set()).add(doc_id)
     return rows
@@ -60,22 +62,26 @@ def retain_deleted_generations(session, doc_id):
     session.flush()
 
 
+def document_request_key(doc_id, action, request_id):
+    return "document/" + doc_id + "/" + action + "/" + hashlib.sha256(request_id.encode()).hexdigest()
+
+
 def enqueue_document(session, settings, *, doc_id, action, source_file_hash, request_id, is_admin=False):
     _validate_ids(doc_id, "0" * 32)
     if (action not in {"process", "resume", "regenerate"} or not isinstance(source_file_hash, str)
             or not re.fullmatch(r"[0-9a-f]{64}", source_file_hash) or not isinstance(request_id, str) or not 1 <= len(request_id) <= 128):
         raise ValueError("Invalid document admission identity")
-    key = "document/" + doc_id + "/" + action + "/" + hashlib.sha256(request_id.encode()).hexdigest()
+    key = document_request_key(doc_id, action, request_id)
     spec = WorkSpec("document", 1, {"doc_id": doc_id, "action": action, "source_file_hash": source_file_hash}, key, doc_id)
     lock_admission(session)
     existing = session.scalar(select(WorkItem.id).where(WorkItem.dedupe_key == key))
     if existing is not None:
         return enqueue(session, spec)
-    pending = list(session.scalars(select(WorkItem).where(WorkItem.doc_id == doc_id, WorkItem.kind == "document",
+    pending = list(session.scalars(select(WorkItem).where(WorkItem.doc_id == doc_id, WorkItem.kind.in_(DOCUMENT_MUTATORS),
         WorkItem.status.in_(PENDING)).order_by(WorkItem.id).with_for_update()))
     if any(not row.cancel_requested for row in pending):
         raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
-    total = session.scalar(select(func.count()).select_from(WorkItem).where(WorkItem.kind == "document", WorkItem.status.in_(PENDING)))
+    total = session.scalar(select(func.count()).select_from(WorkItem).where(WorkItem.kind.in_(DOCUMENT_MUTATORS), WorkItem.status.in_(PENDING)))
     caller_limit = settings.pipeline_max_workers + (settings.pipeline_admin_max_pending if is_admin else settings.pipeline_max_pending)
     if total >= min(settings.work_max_pending_documents, caller_limit):
         raise DomainError("Очередь обработки заполнена", code=codes.QUEUE_OVERLOADED)
@@ -97,8 +103,24 @@ def freeze_document_input(session, work_id, doc_id, scope, request_id=None):
 
 
 def scope_policy(scope):
-    """Selection is immutable; vector-space proof is derived at publication."""
-    return {key: value for key, value in scope.items() if key != "vector_space"} if scope is not None else None
+    """Selection stays immutable while output counters/cache/proof are recomputed."""
+    return {key: value for key, value in scope.items() if key not in {*DERIVED_SCOPE_OUTPUT_FIELDS, "vector_space"}} if scope is not None else None
+
+
+def _active_published_scope_matches(session, doc_id, scope):
+    from app.config import get_settings
+    from app.db.models import DocumentGeneration, DocumentGenerationState
+    from app.services.artifacts.publication import hydrate_publication
+    from app.services.generation_artifacts import load_verified_publication
+    state = session.get(DocumentGenerationState, doc_id)
+    generation = session.get(DocumentGeneration, state.active_generation_id) if state and state.active_generation_id else None
+    if (generation is None or generation.doc_id != doc_id or generation.phase != "active"
+            or scope_policy(generation.processing_scope_json) != scope_policy(scope)):
+        return False
+    settings = get_settings()
+    hydrate_publication(settings, doc_id, generation.id)
+    prepared = load_verified_publication(settings, doc_id, generation.id, generation.publication_hash, session=session)
+    return scope_policy(prepared.get("processing_scope")) == scope_policy(scope)
 
 
 def validate_document_scope(session, doc_id, scope, source_hash, request_id=None):
@@ -116,12 +138,15 @@ def validate_document_scope(session, doc_id, scope, source_hash, request_id=None
     if scope.get("review_id"):
         review = session.get(DocumentProcessingReview, doc_id)
         expected = {key: value for key, value in scope_policy(scope).items() if key != "confirmed_at"}
-        if (review is None or review.state not in {"submitted", "published"} or snapshot_from_review(review) != expected
-                or request_id is not None and review.request_id != request_id):
-            raise ProcessingScopeConflict()
+        if (review is not None and review.state in {"submitted", "published"} and snapshot_from_review(review) == expected
+                and (request_id is None or review.request_id == request_id)):
+            return
+        if request_id is None and _active_published_scope_matches(session, doc_id, scope):
+            return  # Reprocessing the verified active policy does not depend on a later draft review.
+        raise ProcessingScopeConflict()
 
 
-def enqueue_existing_document(settings, doc_id, action, *, is_admin=False, processing_scope=None, scope_request_id=None, session=None):
+def enqueue_existing_document(settings, doc_id, action, *, is_admin=False, processing_scope=None, scope_request_id=None, session=None, request_id=None):
     """Admit an existing original without touching a worker's local filesystem."""
     from uuid import uuid4
     from contextlib import nullcontext
@@ -161,7 +186,7 @@ def enqueue_existing_document(settings, doc_id, action, *, is_admin=False, proce
         elif action == "regenerate" and doc.status in {"uploaded", "queued", "processing", "splitting", "indexing"}:
             raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
         work_id = enqueue_document(session, settings, doc_id=doc_id, action=action, source_file_hash=ref.sha256,
-            request_id=scope_request_id or ("upload" if action == "process" else uuid4().hex), is_admin=is_admin)
+            request_id=scope_request_id or request_id or ("upload" if action == "process" else uuid4().hex), is_admin=is_admin)
         if session.get(WorkItem, work_id).status not in PENDING:
             return work_id  # A receipt replay cannot restart completed/failed work.
         freeze_document_input(session, work_id, doc_id, processing_scope, scope_request_id)

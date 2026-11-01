@@ -25,10 +25,9 @@ test("disabled export does not raise the admin selection cap", () => {
   assert.equal(selectionLimit({ isAdmin: true, exportEnabled: false, exportMaxDocs: 1000 }), 50);
 });
 
-test("admin panel keeps export downloads as direct links and excludes generic controls", async () => {
+test("admin panel keeps export downloads as direct streaming links", async () => {
   const source = await readFile(new URL("../src/components/AdminPanel.jsx", import.meta.url), "utf8");
   assert.match(source, /href=\{`\/api\/jobs\/\$\{job\.id\}\/export\/\$\{part\.number\}`\}/);
-  assert.match(source, /job\.job_type !== "bulk_export"/);
   assert.doesNotMatch(source, /blob\(\)|URL\.createObjectURL/);
 });
 

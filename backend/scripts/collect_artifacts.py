@@ -15,6 +15,7 @@ def main(argv=None, *, settings=None):
     parser.add_argument("--adopt-existing", action="store_true", help="Explicitly adopt existing unmarked objects; verify the database/backup first")
     parser.add_argument("--apply", action="store_true", help="Apply initialization or one bounded collection cycle")
     args = parser.parse_args(argv)
+    from app.services.work.cli import require_single_process_writer
     if args.adopt_existing and not args.initialize:
         parser.error("--adopt-existing requires --initialize")
     if not args.apply:
@@ -24,6 +25,7 @@ def main(argv=None, *, settings=None):
     from app.config import get_settings
     from app.services.artifacts.gc import initialize_gc, run_gc_cycle
     settings = settings or get_settings()
+    require_single_process_writer("collect_artifacts", settings=settings)
     try:
         if args.initialize:
             initialize_gc(settings, adopt_existing=args.adopt_existing, explicit=True)

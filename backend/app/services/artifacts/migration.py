@@ -22,7 +22,7 @@ EXCLUDED = {"artifact_storage_control", "artifact_storage_migrations", "artifact
 CORPUS = ("documents", "document_generation_states", "document_generations", "document_work_inputs", "deleted_work_generations", "document_staging", "document_update_attempts",
     "document_processing_reviews", "document_scope_changes", "document_sources", "document_chunks", "okf_concepts", "okf_attachments",
     "document_tables", "document_table_rows", "document_chunk_projections", "document_chunk_fragments", "document_tags",
-    "artifact_source_caches", "artifact_checkpoints", "jobs", "work_items", "diagnostic_bundles", "upload_receipts", "artifact_bindings", "artifact_objects")
+    "artifact_source_caches", "artifact_checkpoints", "jobs", "work_items", "work_progress", "diagnostic_bundles", "upload_receipts", "artifact_bindings", "artifact_objects")
 
 
 def installation_id():

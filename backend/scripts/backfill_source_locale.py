@@ -98,6 +98,8 @@ def main() -> None:
     parser.add_argument("--payload", action="store_true",
                         help="Только синк Qdrant payload (без детекции/БД)")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("backfill_source_locale")
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 

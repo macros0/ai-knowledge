@@ -1,4 +1,4 @@
-"""Fence every SQL transaction used by a running document handler."""
+"""Fence SQL transactions used by a running durable handler."""
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -15,16 +15,36 @@ def current_claim():
 
 
 @contextmanager
-def document_execution(work):
-    spec = work.spec
-    if (spec.kind != "document" or spec.payload_version != 1 or spec.doc_id != spec.payload.get("doc_id")
-            or spec.doc_id is None or spec.payload.get("action") not in {"process", "resume", "regenerate"}):
-        raise ValueError("Invalid document work payload")
+def work_execution(work):
     token = _claim.set(work)
     try:
         yield
     finally:
         _claim.reset(token)
+
+
+@contextmanager
+def document_execution(work):
+    spec = work.spec
+    if (spec.kind != "document" or spec.payload_version != 1 or spec.doc_id != spec.payload.get("doc_id")
+            or spec.doc_id is None or spec.payload.get("action") not in {"process", "resume", "regenerate"}):
+        raise ValueError("Invalid document work payload")
+    with work_execution(work):
+        yield
+
+
+@contextmanager
+def coordinator_session(work):
+    """Acquire global admission before the parent Work row, then admit children."""
+    from app.db.session import current_session, session_scope
+    from .admission import lock_admission
+    if current_claim() is not None or current_session() is not None:
+        raise ValueError("Coordinator requires a fresh admission transaction")
+    with session_scope() as session:
+        lock_admission(session)
+        with work_execution(work):
+            bind_session(session, work)
+            yield session
 
 
 def enforce_session(session):

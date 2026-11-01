@@ -1,12 +1,13 @@
 """Opt-in worker primitive; no executor is constructed during module import."""
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 import logging
+import time
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 
 from app.db.session import session_scope
-from .handlers import TransientWorkError
+from .handlers import TransientWorkError, WorkDeferred
 from .models import LostOwnership
 from . import store
 
@@ -26,19 +27,27 @@ class Worker:
                                lease_seconds=self.settings.work_lease_seconds)
         if work is None:
             return False
+        if stop.is_set():
+            return True  # A committed claim is recoverable; do not start a new handler during shutdown.
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="durable-work")
         try:
             future = executor.submit(self.registry.resolve(work.spec), work)
             self._future = future
-            failure = None
+            failure, result = None, None
             heartbeat_wait = self.settings.work_heartbeat_seconds
+            heartbeat_at = time.monotonic() + heartbeat_wait
             while True:
                 if stop.is_set():
                     return True  # Leave ownership to expire; no late ACK callback.
-                completed, _ = wait([future], timeout=heartbeat_wait)
-                if completed:
+                if future.done():
                     failure = future.exception()
+                    if failure is None:
+                        result = future.result()
                     break
+                remaining = heartbeat_at - time.monotonic()
+                if remaining > 0:
+                    stop.wait(min(0.1, remaining))
+                    continue
                 try:
                     with session_scope() as session:
                         if session.get_bind().dialect.name == "postgresql":
@@ -51,11 +60,15 @@ class Worker:
                     if getattr(exc.orig, "sqlstate", None) != "55P03":
                         raise
                     heartbeat_wait = min(1, self.settings.work_poll_seconds)
+                    heartbeat_at = time.monotonic() + heartbeat_wait
                     logger.debug("Work heartbeat row busy; retrying without an acknowledgement")
                     continue
                 heartbeat_wait = self.settings.work_heartbeat_seconds
+                heartbeat_at = time.monotonic() + heartbeat_wait
             with session_scope() as session:
-                if isinstance(failure, TransientWorkError):
+                if failure is None and isinstance(result, WorkDeferred):
+                    store.defer(session, work, delay_seconds=result.delay_seconds)
+                elif isinstance(failure, TransientWorkError):
                     row, _ = store._locked(session, work)
                     delays = self.settings.work_retry_backoff_seconds
                     store.retry(session, work, error_code=failure.code, delay_seconds=delays[min(row.attempts - 1, len(delays) - 1)],
@@ -70,9 +83,12 @@ class Worker:
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
 
-    def run(self, stop):
+    def run(self, stop, *, ready=None):
         failures = 0
         while not stop.is_set():
+            if ready is not None and not ready():
+                stop.wait(self.settings.work_poll_seconds)
+                continue
             try:
                 occupied = self.run_once(stop)
                 failures = 0

@@ -147,6 +147,8 @@ def _repair_snapshot(snapshot: dict, changed_chunks: list[int], changed_concepts
 def fix_rows(dry_run: bool, *, doc_id=None, settings=None, generator=None, embedder=None, vector_store=None) -> dict:
     """Publish path repairs per document; failed documents remain unchanged."""
     settings = settings or get_settings()
+    from app.services.work.admission import durable_documents
+    durable = durable_documents(settings) and not dry_run
     with session_scope() as session:
         candidates = []
         for model in (DocumentChunk, OkfConcept):
@@ -158,14 +160,20 @@ def fix_rows(dry_run: bool, *, doc_id=None, settings=None, generator=None, embed
         if doc_id:
             query = query.where(Document.id == doc_id)
         doc_ids = list(session.scalars(query))
-    if not dry_run and doc_ids:
+    if not dry_run and doc_ids and not durable:
         generator = generator or OKFGenerator()
         embedder = embedder or Embedder()
         vector_store = vector_store or VectorStore()
     result = {"chunks": [], "concepts": [], "errors": [], "generations": {}}
+    if durable:
+        result["enqueued"] = []
     for current_id in doc_ids:
         chunks, concepts = [], []
         try:
+            if durable:
+                from app.services.work.repair import admit_canonical_repair
+                result["enqueued"].append(admit_canonical_repair(settings, current_id, "attachment_paths"))
+                continue
             outcome = repair_published_document(
                 current_id, settings, generator, embedder, vector_store,
                 lambda snapshot: _repair_snapshot(snapshot, chunks, concepts), dry_run=dry_run,
@@ -197,6 +205,8 @@ def main() -> None:
         print("dry-run: БД, файлы и Qdrant не изменены.")
     else:
         print(f"Опубликовано ремонтных версий: {len(stats['generations'])}")
+        for receipt in stats.get("enqueued", []):
+            print(f"[{receipt['doc_id']}] {receipt['status']}: {receipt.get('work_id', receipt.get('reason', ''))}")
     if stats["errors"]:
         raise SystemExit(1)
 

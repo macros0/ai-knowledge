@@ -9,6 +9,8 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply",action="store_true")
     args=parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_answer_scenarios")
     engine=get_engine()
     if not args.apply:
         print("Dry run. Existing scenario tables:", [name for name in inspect(engine).get_table_names() if name.startswith("answer_scenario")])

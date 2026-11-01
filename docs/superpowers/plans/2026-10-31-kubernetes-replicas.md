@@ -38,7 +38,11 @@ S4 offline preview реализует verified/resumable copy и atomic cutover 
 Production, distributed scheduling/runtime и real provider acceptance остаются открытыми.
 R1 foundation (01.11.2026): transactional WorkItem ledger, DB-time leases,
 fencing/cancel/dedupe и explicit worker реализованы; public Job approval не меняется.
-R2 подключит document admission/publication, R3 роли, R4 global coordination.
+R2 milestone (`7cde4af`): document admission, frozen input, fresh generation per
+claim, atomic publication и cancellation fencing реализованы и проверены на
+изолированных PostgreSQL/Qdrant. R3 в работе: закрытые API/worker lifecycle,
+durable document/export/bulk handlers, periodic maintenance и versioned cursors;
+оставшиеся P0 writers, runtime acceptance и R4 global coordination ещё открыты.
 CT102 оставлен stopped, учебная VM103 running по запросу пользователя.
 Python/npm advisory audits после исправлений не находят известных уязвимостей;
 S2–S4, runtime/operations и окруженческие проверки остаются открытыми.

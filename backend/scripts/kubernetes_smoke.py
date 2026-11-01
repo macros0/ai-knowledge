@@ -12,6 +12,8 @@ from app.config import get_settings
 
 
 def main():
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("kubernetes_smoke")
     settings = get_settings()
     if settings.deployment_tier not in {"home", "ci"} or settings.model_mode != "stub" or settings.auth_provider != "disabled":
         raise RuntimeError("Synthetic smoke requires an isolated home/CI stub with disabled auth")

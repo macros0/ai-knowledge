@@ -250,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error('--batch-size must be between 1 and 1000')
     except SystemExit as exc:
         return int(exc.code)
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("backfill_mail_scope")
     try:
         settings = get_settings()
         report = run_backfill(VectorStore(), settings, apply=args.apply,

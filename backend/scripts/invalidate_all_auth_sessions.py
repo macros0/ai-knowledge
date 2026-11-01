@@ -20,6 +20,8 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--confirm-stopped-and-key-rotated',action='store_true',required=True)
     parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("invalidate_all_auth_sessions")
     from app.db.session import get_engine
     print(json.dumps(invalidate_sessions(get_engine())))
 

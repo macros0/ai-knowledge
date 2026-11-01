@@ -1863,6 +1863,7 @@ def get_document_fulltext(doc_id: str):
 # Статусы ошибок ленивого построения текста при чтении. Прочие доменные коды
 # (например, file_not_found) сохраняют прежний контракт — 400.
 _CHUNK_READ_ERROR_STATUS = {
+    errors.LEGACY_CORPUS_ADOPTION_REQUIRED: 409,
     errors.RATE_LIMITED: 429,
     errors.PARSER_TIMEOUT: 422,
     errors.PARSER_RESOURCE_LIMIT: 422,

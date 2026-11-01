@@ -44,6 +44,35 @@ def test_document_handler_publishes_owned_attempt_and_acknowledges_atomically(pi
     assert pipeline.registry.get(DOC_ID)["status"] == "done"
 
 
+def test_default_runtime_dispatches_document_without_http_app(pipeline_env, tmp_path, monkeypatch):
+    from app.services.work.runtime import build_handlers
+    pipeline, _, _ = pipeline_env
+    ref = durable_original(pipeline_env, tmp_path)
+    monkeypatch.setattr("app.services.pipeline.get_pipeline", lambda: pipeline)
+    work = admitted(ref)
+    build_handlers().resolve(work.spec)(work)
+    with session_scope() as session:
+        assert session.get(WorkItem, work.work_id).status == "succeeded"
+        assert session.get(DocumentGenerationState, DOC_ID).active_generation_id is not None
+
+
+def test_successful_work_retires_only_its_checkpoint_durably(pipeline_env, tmp_path, monkeypatch):
+    from app.db.models import DocumentStaging
+    from app.services.work.runtime import build_handlers
+    pipeline, _, _ = pipeline_env
+    ref = durable_original(pipeline_env, tmp_path)
+    monkeypatch.setattr("app.services.pipeline.get_pipeline", lambda: pipeline)
+    run_document_job(admitted(ref))
+    with session_scope() as session:
+        stage = session.get(DocumentStaging, DOC_ID)
+        intent = session.query(WorkItem).filter_by(kind="checkpoint_retire").one()
+        assert intent.payload_json == {"doc_id": DOC_ID, "generation_id": stage.generation_id}
+        maintenance = claim(session, owner_id="maintenance", supported={"checkpoint_retire": {1}}, lease_seconds=120)
+    build_handlers().resolve(maintenance.spec)(maintenance)
+    with session_scope() as session:
+        assert session.get(DocumentStaging, DOC_ID) is None
+
+
 def test_document_handler_reuses_checkpoint_on_cold_new_attempt(pipeline_env, tmp_path, monkeypatch):
     from app.services.errors import VectorStoreError
     from app.services.staging import StagingStore

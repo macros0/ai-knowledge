@@ -53,6 +53,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot-file", type=Path, required=True)
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("restore_qdrant_snapshot")
     try:
         restore_snapshot(args.snapshot_file)
     except Exception as exc:
