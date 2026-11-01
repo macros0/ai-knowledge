@@ -1934,12 +1934,30 @@ not prove that the external model stopped computing. There is no automatic TTL
 reallocation of uncertain provider executions; O2 needs audited reconciliation
 with completion/provider-stop proof. This deliberately trades availability for
 bounded admission and does not certify the remote provider's execution cap.
-Localization mutations bump a durable revision in their existing reference/audit
+Catalog mutations bump a durable revision in their existing reference/audit
 transaction. Future stopword caches check that revision before a TTL hit; UI
-dictionary reads already use SQL. Frontend cache propagation, audit dispatcher
-failover and diagnostic instance/inbox
+dictionary reads already use SQL. Audit dispatcher failover and diagnostic instance/inbox
 coordination remain R4 work. Migration refuses to discard accepted coordination
 state. The distributed build/provider activation gates remain closed.
+
+Future session creation/expiry and active-user-block decisions use database time,
+so API host clock skew cannot extend a session or prematurely disable a block.
+Each request reloads the server-side identity and block state; group-to-role
+mapping remains the common deployment configuration and is recomputed per request.
+Independent-process PostgreSQL checks cover block/unblock, changed groups, removal
+of recognized roles and logout. They do not certify cookie signing/IdP failover.
+Reference creation and mutation bump one shared `references` epoch with the
+existing domain/audit transaction. Prior localization revision rows are retained;
+the current future build reads the catalog epoch. The authenticated revision
+probe exposes only known opaque decimal counters and uses private/no-store.
+Browser lookups recheck while visible, abort on unmount and refresh on foreground
+activity. Changed epochs invalidate UI overrides, shared tag lookups and language
+options without replacing editor-controlled selections. Transient dictionary
+failure is retried; obsolete lookup responses cannot replace a newer generation.
+Derived tag counts additionally expire through a bounded lookup TTL. These
+presentation caches never authorize operations; existing SQL permission, revision
+and edit-lease checks remain authoritative. All writer roles must use the same
+supported build/runtime identity before activation.
 
 Future persistent chats bind a unique actor/attempt ID to one assistant message
 and a leased owner/fence. Admission commits the placeholder, immutable request

@@ -92,19 +92,23 @@ def require_reference_revision(state, expected_revision):
         raise ReferenceError("version_conflict", current_reference_revision=state.revision)
 
 
-def bump_reference_revision(state):
-    state.revision += 1
+def _bump_cache_revision(state):
     from app.config import get_settings
     from app.services.work.admission import durable_documents
-    if durable_documents(get_settings()) and json.loads(state.resource_key)[0] in {"locale", "stopword_set", "ui_dictionary"}:
+    if durable_documents(get_settings()):
         from sqlalchemy.orm import object_session
         from app.services.work.coordination import bump_config_revision
         session = object_session(state)
         if session is None:
             raise ValueError("Configuration revision requires the writer transaction")
-        # One localization domain avoids acquiring domain locks in conflicting
-        # orders when locale, dictionary and word-set edits share a transaction.
-        bump_config_revision(session, "localization")
+        # A single catalog epoch covers localization and other lookup changes,
+        # avoiding conflicting per-domain lock orders in compound mutations.
+        bump_config_revision(session, "references")
+
+
+def bump_reference_revision(state):
+    state.revision += 1
+    _bump_cache_revision(state)
     return state.revision
 
 
@@ -116,6 +120,8 @@ def initialize_reference_resource(session, key):
         from app.services.reference_edit_lock import invalidate_reference_lease
         bump_reference_revision(state)
         invalidate_reference_lease(state)
+    else:
+        _bump_cache_revision(state)
     return state
 
 

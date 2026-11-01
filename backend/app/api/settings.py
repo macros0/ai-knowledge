@@ -1,5 +1,5 @@
 """Роут настроек чата: параметры выбора числа результатов и режимов поиска для UI."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app.config import Settings, get_settings
 from app.auth.models import User
@@ -9,6 +9,21 @@ from app.models.schemas import ChatSettingsOut
 from app.services.vector_store import SEARCH_MODES
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+@router.get("/revisions")
+def get_config_revisions(response: Response, settings: Settings = Depends(get_settings),
+                         user: User = Depends(require_user)):
+    from app.db.session import session_scope
+    from app.services.work.admission import durable_documents
+    from app.services.work.coordination import config_revision
+    response.headers["Cache-Control"] = "private, no-store"
+    if not durable_documents(settings):
+        return {"enabled": False, "revisions": {}}
+    with session_scope() as session:
+        revision = config_revision(session, "references")
+    # Opaque decimal strings avoid losing BIGINT precision in browser JSON.
+    return {"enabled": True, "revisions": {"references": str(revision)}}
 
 
 @router.get("", response_model=ChatSettingsOut)

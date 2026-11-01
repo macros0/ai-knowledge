@@ -135,7 +135,7 @@ def get_stopwords(kind: str) -> frozenset:
     if durable_documents(settings):
         from app.services.work.coordination import config_revision
         with session_scope() as session:
-            revision = config_revision(session, "localization")
+            revision = config_revision(session, "references")
     now = time.monotonic()
     with _cache_lock:
         entry = _cache.get(kind)

@@ -259,6 +259,25 @@ passed/1 skipped, ESLint and Ruff passed. No full backend/provider claim.
 Auth/revocation acceptance, frontend cache boundaries, audit dispatcher failover
 and diagnostic durable instances/inbox remain open. R4 and activation stay gated.
 
+R4 auth/cache milestone, 01.11.2026: future session/block expiry uses DB time;
+identity/groups/revocation are reloaded on each request under the shared deployment
+role mapping. Catalog creation and edits publish one `references` epoch with their
+existing SQL/audit transaction. No old revision rows are deleted. Stopword cache
+hits validate that epoch. The authenticated, noncached revision endpoint exposes
+only known opaque counters; legacy probes do not query future schema.
+Visible-browser metadata checks, foreground refresh and aborted/coalesced requests
+refresh UI overrides/tag lookups/language options. Transient failures retry, stale
+generations are ignored and derived tag counts have bounded TTL. Controlled editor
+selections retain their values. Existing glossary snapshot revision logic is reused.
+Checks:159 affected auth/reference/translation/localization tests passed;62 focused
+frontend tests passed. PostgreSQL:3 process/cache probes passed, plus the extended
+auth probe passed after adding changed-group/missing-role cases. Both warmed API
+caches observe remote glossary edits. Root gate: audit0 vulnerabilities,
+frontend756 passed/1 skipped, ESLint/Ruff passed. Cookie/IdP/multi-Pod acceptance,
+common runtime/signing identity and all provider qualifications remain O1/R5.
+R4 remains open for audit dispatcher/durable spool and diagnostic instances/inbox;
+none of these software milestones enables distributed deployment.
+
 ## Task R5: distributed chart и приёмка нескольких исполнителей
 
 **Files:** создать `deploy/helm/ai-knowledge/templates/api.yaml`, `templates/worker.yaml`,

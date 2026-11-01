@@ -19,15 +19,29 @@ export default function ReferenceLocaleSelect({
   const { t, locale } = useI18n();
   const [active, setActive] = useState([]);
   const [editing, setEditing] = useState(false);
+  const [version, setVersion] = useState(0);
   // Null means the stored language is unknown; do not silently display the
   // UI language as if it described the reference.
   const selectedLocale = value || "und";
   useEffect(() => {
     if (activeLocales) return;
+    const refresh = () => setVersion(value => value + 1);
+    const visible = () => {if (document.visibilityState === "visible") refresh();};
+    window.addEventListener("okf:locales-changed", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      window.removeEventListener("okf:locales-changed", refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, [activeLocales]);
+  useEffect(() => {
+    if (activeLocales) return;
     let cancelled = false;
     listActiveLocales().then((items) => { if (!cancelled) setActive(items); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [activeLocales]);
+  }, [activeLocales, version]);
   return (
     <span className="reference-locale-select">
       {editing ? (

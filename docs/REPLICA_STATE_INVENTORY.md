@@ -1,15 +1,15 @@
 # Состояние, требующее координации между репликами
 
 Инвентарь P0, 31.10.2026. Пути в таблице относительно `backend/app/`, если не указано иное.
-Рабочий runtime остаётся single-backend. В R1/R2 реализованы закрытые ветки
-work ownership, document admission и publication fencing; включение distributed
+Рабочий runtime остаётся single-backend. В R1–R4 реализованы закрытые ветки
+work ownership, admission/publication, роли и часть общей координации; включение distributed
 по-прежнему запрещено. Ниже указаны также обязательные оставшиеся переносы.
 
 | Путь | Состояние / текущий владелец | Повтор, отмена и перенос |
 |---|---|---|
 | main.py lifespan | combined recovery/startup threads; отдельная закрытая API ветка | R3: API lifecycle без global recovery, executors и purge; полный runtime acceptance ещё открыт |
 | services/job_queue.py | combined queue; future Job + private bulk intent | R2: атомарный enqueue/approval/cancel, four-eyes; R3: bulk/item receipts, cooperative deferral и projection reconciliation; single-worker сценарий проверен локально |
-| services/pipeline.py | combined executor; future document work | R2: enqueue/claim/cancel/recovery/publication; R3: убрать executors из API и зарегистрировать handlers |
+| services/pipeline.py | combined executor; future document work | R2: enqueue/claim/cancel/recovery/publication; R3: API без executor, worker handler зарегистрирован; интегрированная приёмка ролей остаётся R5 |
 | services/registry.py reset_stale_statuses | глобальная правка только combined | R2: distributed не сбрасывает чужие статусы; R3: lifecycle не запускает global recovery из API |
 | services/staging.py | SQL manifest + chunk files, process locks | immutable artifacts S3, fenced checkpoint R2 |
 | services/generation_store.py | SQL document locks, active/candidate pointer | R2: matching claim для work generation; distributed begin требует claim; отказ от чужого candidate только после координированной отмены |
@@ -18,7 +18,7 @@ work ownership, document admission и publication fencing; включение di
 | services/generation_search.py, vector_store.py | exclusions, generation-aware IDs, clients | сохранить active filtering; stale writes R2 |
 | services/generation_cleanup.py | удаление неактивных FS/Qdrant generations | R2: Work→Doc, exclusion identity/checkpoint protection; R3: sweep <=100 документов, pending coalescing и guarded per-document handler |
 | services/processing_admission.py, processing_scope.py | review leases + frozen work input | R2: confirmation/work/audit atomic, queued work защищён от legacy recovery; R3: role lifecycle |
-| services/processing_scope_jobs.py, update_workers.py | combined tokens/threads; future frozen scope Work | R3: новый candidate на claim/fence, renewed Work lease, cold source-cache reuse; trash/resume сохраняет принятую policy, cancel-update закрывает receipt; локальные проверки пройдены, actual PG ещё открыт |
+| services/processing_scope_jobs.py, update_workers.py | combined tokens/threads; future frozen scope Work | R3: новый candidate на claim/fence, renewed Work lease, cold source-cache reuse; trash/resume сохраняет принятую policy, cancel-update закрывает receipt; claim/publication проверены на actual PG, Pod/provider acceptance остаётся R5 |
 | services/canonical_repair.py; fix_attachment_paths/backfill_comment_concepts CLI | combined repair; future trusted work | R3: frozen base/input/vector proof, per-fence generation, immutable accepted embedding cache, no provider call in SQL; CLI enqueue-only; bounded terminal candidate reconciliation; legacy CLI inventory ниже |
 | services/processing_scope_cache.py, processing_scope_originals.py | source cache/original paths | portable durable refs S3; scratch может теряться |
 | services/reference_concurrency.py | durable revision/edit lease | сохранить SQL serialization; проверить cross-process R4 |
@@ -27,15 +27,15 @@ work ownership, document admission и publication fencing; включение di
 | services/chat_history.py | SQL history + combined purge thread; future leased ChatRun | R4: unique actor/attempt→message, fenced sources/scenario/completion, partial draft only matching terminal owner; retention removes Run with history under resource→Run→Session order |
 | services/chat_execution.py, api/chat.py; work/chat.py, chat_runtime.py | combined local inflight; future shared admission/cancel | R4: global chat capacity (including preview), request-local heartbeat, cross-API durable cancel, bounded25 expired-run reconciliation without LLM replay; actual independent API-process PostgreSQL proof, Pod/partition acceptance still R5 |
 | services/rate_limiter.py | combined per-process windows; future shared rolling SQL | R4 foundation: hashed key, weighted events, operation/document budgets atomic; actual multiprocess PG admission tested |
-| services/stopwords.py, ui_dictionary.py | combined local cache; future localization revision | R4 foundation: reference mutation + ConfigRevision + audit same SQL; stopword TTL hits validate revision, UI dictionary reads SQL; frontend/client cache propagation remains open |
+| services/stopwords.py, ui_dictionary.py; frontend LocaleContext/tagDictionary | combined local cache; future shared references epoch | R4: creation/mutation + epoch + audit same SQL; stopword hits validate epoch, UI SQL; browser visible/focus refresh, no-store, stale reply fencing and bounded derived-count TTL; two warm API processes verified |
 | services/llm_client.py, work/model_budget.py | local pools plus future global SQL capacity | R4 foundation: one shared completion budget, no provider admission in SQL; ambiguous completion/process loss quarantines capacity until trusted reconciliation; O2 reconciliation and provider qualification remain open |
-| services/reference_translation.py, glossary/translations.py | combined sync backfill; future public Job + work | R3: input hash, bounded versioned cursors, model outside SQL, translation+audit+cursor atomic, CAS/human-edit guards, public failure reconciliation; R4 global model budget still pending |
+| services/reference_translation.py, glossary/translations.py | combined sync backfill; future public Job + work | R3: input hash, bounded versioned cursors, model outside SQL, translation+audit+cursor atomic, CAS/human-edit guards, public failure reconciliation; R4 общий LLM budget подключён, provider qualification/reconciliation остаются открыты |
 | main.py run_backfills / vector_store.py | combined startup fills; future index sweep/children | R3: cursor100, frozen per-document generation, read-lock recheck including after embedding, bounded retries; legacy NULL identities require O2 adoption before activation |
 | services/diagnostics/bundle_queue.py, prepare_worker.py | combined local queue; future durable bundle Work | R3: bounded admission, unique attempt snapshot/part, verified blob + ready + audit + Work success atomic; cursor100 expiry/failure reconciliation/portable metadata TTL with pending-receipt protection; R4 cross-replica inbox ещё обязателен |
 | services/diagnostics/control.py, runtime.py, store.py | capture control, spool, instance lifecycle | internal transport F1; inbox/artifacts/R4 |
 | frontend/src/lib/diagnosticServer.mjs | frontend FS spool/control/recorder lock | bounded transport + instance IDs F1 |
 | services/audit_outbox.py, audit_runtime.py | SQL outbox + filesystem writer lock/hold | coordinated dispatcher R4; audit guarantees сохранить |
-| auth/service.py, auth_sessions | SQL sessions/rights, cleanup | R3 auth_purge handler/scheduler; shared secret/revocation on each API R4 |
+| auth/service.py, auth_sessions, blocklist.py | SQL sessions/identity/blocks | R4: DB-time expiry, per-request identity/groups/block read; actual other-process block/unblock/role change/logout verified; shared signing secret/runtime identity and cookie/IdP Pod acceptance remain O1/R5 |
 | api/documents.py upload/download/delete | file paths, admission, auth | receipts S2; bindings/read leases S3; enqueue R2; R3 future delete/restore atomically enqueue latest-state visibility/badge intents |
 | scripts/kubernetes/lifecycle.py (repo root) | one application workload backup/scale | all writers drain/epoch + intended counts O2 |
 

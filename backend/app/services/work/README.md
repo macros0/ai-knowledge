@@ -194,10 +194,10 @@ replies and definite request rejection release capacity; ambiguous transport
 errors and process death do not. Capacity admission refuses an open SQL session.
 
 Future rate limiting uses hashed actor/action keys and weighted rolling events.
-Bulk operation/document budgets commit together. Localization writes bump their
+Bulk operation/document budgets commit together. Catalog writes bump their
 configuration revision with the existing reference/audit transaction; stopword
 cache hits compare that revision. Existing UI dictionary reads already use SQL.
-Frontend cache propagation, audit and diagnostic instance coordination remain
+Audit and diagnostic instance coordination remain
 open; none of this enables distributed deployment.
 Checks: `test_replica_coordination.py`, `test_replica_model_budget.py`,
 `test_replica_coordination_migration.py`, and explicit isolated PostgreSQL
@@ -223,3 +223,23 @@ discard accepted execution identities, including completed ones. Checks include
 `test_replica_chat_runs.py`, `test_replica_chat_api.py`,
 `test_replica_chat_migration.py` and explicit isolated PostgreSQL
 `test_replica_chat_postgres.py`; direct API processes are not a multi-Pod proof.
+
+Future auth sessions and user-block expiry use DB time. Identity/group/block
+state is read again on each API request; common deployment role mapping is not
+cached on the user session. PostgreSQL process checks cover changed groups,
+block/unblock, missing roles and logout without restarting the other API.
+
+The current future catalog cache epoch is `references`, bumped for new resources
+and edits in the same SQL transaction. Old localization epoch rows are retained,
+not reset/deleted. `/settings/revisions` exposes only known decimal-string
+counters with private/no-store; legacy mode returns disabled without querying the
+future tables. Browser metadata checks run about every30s while visible and on
+foreground/navigation boundaries, coalesce requests and abort on cleanup.
+UI dictionary failures retry without permanently caching a missing override.
+Epoch changes refresh lookups and language options; controlled editor selections
+are retained. Tag counts also use a monotonic30s cache TTL, checked on successful
+polls (up to roughly60s between visible count refreshes while healthy).
+All lookup reads bypass HTTP cache; old in-flight generations cannot replace new
+ones. Backend glossary snapshots already check their own SQL revision; the new
+two-process PostgreSQL probe verifies both warm caches after a remote alias edit.
+This changes presentation cache freshness, not reference edit/CAS permissions.

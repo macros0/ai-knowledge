@@ -9,16 +9,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 
 from app.db.models import UserBlock
 from app.db.session import session_scope
 
 
-def _is_active(block: UserBlock) -> bool:
+def _is_active(block: UserBlock, *, now=None) -> bool:
     if not block.is_active:
         return False
     if block.expires_at is not None:
+        if now is not None:
+            from app.services.work.store import _utc
+            return _utc(block.expires_at) > now
         return block.expires_at > datetime.now(timezone.utc)
     return True
 
@@ -29,6 +32,13 @@ class Blocklist:
         if not external_id or external_id == "anonymous":
             return False
         with session_scope() as s:
+            from app.config import get_settings
+            from app.services.work.admission import durable_documents
+            if durable_documents(get_settings()):
+                from app.services.work.store import _now
+                return s.scalar(select(UserBlock.id).where(UserBlock.external_id == external_id,
+                    UserBlock.is_active.is_(True), or_(UserBlock.expires_at.is_(None),
+                        UserBlock.expires_at > _now(s))).limit(1)) is not None
             rows = (
                 s.execute(
                     select(UserBlock).where(UserBlock.external_id == external_id)
@@ -75,6 +85,10 @@ class Blocklist:
         поле active показывает фактическое состояние с учётом expires_at.
         """
         with session_scope() as s:
+            from app.config import get_settings
+            from app.services.work.admission import durable_documents
+            from app.services.work.store import _now
+            now = _now(s) if durable_documents(get_settings()) else None
             rows = (
                 s.execute(
                     select(UserBlock)
@@ -93,7 +107,7 @@ class Blocklist:
                     "blocked_by": b.blocked_by,
                     "created_at": b.created_at,
                     "expires_at": b.expires_at,
-                    "active": _is_active(b),
+                    "active": _is_active(b, now=now),
                 }
                 for b in rows
             ]

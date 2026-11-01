@@ -260,7 +260,7 @@ export async function logoutAuth() {
 }
 
 export function listTags() {
-  return request("/tags").then((data) => data.tags ?? []);
+  return request("/tags", {cache: "no-store"}).then((data) => data.tags ?? []);
 }
 
 function referenceLeaseRoute({ resource_type, resource_id, kind, org_id }) {
@@ -806,7 +806,7 @@ export function listDocumentDuplicates(docId) {
 // --- Языки и стоп-слова (Этап 7) ---
 
 export function listActiveLocales() {
-  return request("/locales").then((data) => data.locales ?? []);
+  return request("/locales", {cache: "no-store"}).then((data) => data.locales ?? []);
 }
 
 export function createBulkExport(docIds) {
@@ -972,12 +972,16 @@ export function commitGlossaryRuleMerge(data) {
 
 export async function getUiDictionary(locale) {
   try {
-    const r = await request(`/i18n/${encodeURIComponent(locale)}`);
+    const r = await request(`/i18n/${encodeURIComponent(locale)}`, {cache: "no-store"});
     return r.data ?? null;
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
+}
+
+export function getConfigRevisions({signal} = {}) {
+  return request("/settings/revisions", {cache: "no-store", signal}, 5000);
 }
 
 export function listLocales() {

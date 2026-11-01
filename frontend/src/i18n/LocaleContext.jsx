@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   detectBrowserLocale,
@@ -18,8 +18,9 @@ import {
   formatNumber,
 } from "./core";
 import { makeTitle } from "./titles";
-import { getUiDictionary } from "@/lib/api";
-import { bumpTagVersion } from "@/lib/tagDictionary";
+import { getUiDictionary, getConfigRevisions } from "@/lib/api";
+import { bumpTagVersion, refreshTagDictionaryIfStale } from "@/lib/tagDictionary";
+import { createReferenceWatcher } from "@/lib/referenceRevisionWatcher.mjs";
 
 const LocaleContext = createContext(null);
 
@@ -42,6 +43,9 @@ export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}
   // релиза (Этап 7 фаза C). SSR передаёт override текущей локали; прочие локали
   // догружаются на клиенте при переключении.
   const [overrides, setOverrides] = useState(initialOverrides || {});
+  const knownRevision = useRef(null);
+  const dictionaryFailed = useRef(false);
+  const [dictionaryRetry, setDictionaryRetry] = useState(0);
 
   // Язык всегда валиден (невалидный кламп в дефолт).
   const effective = normalizeLocale(locale);
@@ -49,17 +53,60 @@ export function LocaleProvider({ initialLocale: ssrLocale, initialOverrides = {}
   useEffect(() => {
     if (overrides[effective] !== undefined) return;
     let cancelled = false;
+    dictionaryFailed.current = false;
     getUiDictionary(effective)
       .then((data) => {
-        if (!cancelled) setOverrides((o) => ({ ...o, [effective]: data }));
+        if (!cancelled) {
+          dictionaryFailed.current = false;
+          setOverrides((o) => ({ ...o, [effective]: data }));
+        }
       })
       .catch(() => {
-        if (!cancelled) setOverrides((o) => ({ ...o, [effective]: null }));
+        // A transport failure is not a permanent "no override" snapshot.
+        if (!cancelled) dictionaryFailed.current = true;
       });
     return () => {
       cancelled = true;
     };
-  }, [effective, overrides]);
+  }, [effective, overrides, dictionaryRetry]);
+
+  useEffect(() => {
+    const watcher = createReferenceWatcher({
+      initialVersion: knownRevision.current,
+      load: signal => getConfigRevisions({signal}),
+      isVisible: () => document.visibilityState === "visible",
+      onChange: revision => {
+        knownRevision.current = revision;
+        dictionaryFailed.current = false;
+        setOverrides({});
+        bumpTagVersion();
+        window.dispatchEvent(new Event("okf:locales-changed"));
+        router.refresh();
+      },
+      onPoll: () => {
+        refreshTagDictionaryIfStale();
+        if (dictionaryFailed.current) {
+          dictionaryFailed.current = false;
+          setDictionaryRetry(value => value + 1);
+        }
+      },
+    });
+    const foreground = () => {
+      if (document.visibilityState !== "visible") return;
+      dictionaryFailed.current = false;
+      setOverrides({});
+      bumpTagVersion();
+      void watcher.refresh();
+    };
+    window.addEventListener("focus", foreground);
+    document.addEventListener("visibilitychange", foreground);
+    void watcher.refresh();
+    return () => {
+      watcher.stop();
+      window.removeEventListener("focus", foreground);
+      document.removeEventListener("visibilitychange", foreground);
+    };
+  }, [pathname, router]);
 
   const changeLocale = useCallback((next) => {
     const code = normalizeLocale(next);
