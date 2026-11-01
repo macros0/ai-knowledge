@@ -1379,6 +1379,7 @@ class WorkItem(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", server_default="queued")
     owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     fence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    maintenance_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
@@ -1469,6 +1470,23 @@ class ReplicaRuntimeIdentity(Base):
     schema_revision: Mapped[str] = mapped_column(String(32), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     __table_args__ = (CheckConstraint("id = 1", name="ck_replica_runtime_singleton"),)
+
+
+class MaintenanceState(Base):
+    __tablename__ = "replica_maintenance_state"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    operation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    operation_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    intended_counts_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    writer_receipts_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_replica_maintenance_singleton"),
+        CheckConstraint("epoch >= 0", name="ck_replica_maintenance_epoch"))
 
 
 class ArtifactStorageMigration(Base):

@@ -33,7 +33,7 @@ def _spec(row):
 
 
 def _claim(row):
-    return WorkClaim(row.id, row.owner_id, row.fence, _utc(row.lease_until), _spec(row))
+    return WorkClaim(row.id, row.owner_id, row.fence, _utc(row.lease_until), _spec(row), row.maintenance_epoch)
 
 
 def enqueue(session, spec: WorkSpec) -> str:
@@ -53,6 +53,10 @@ def enqueue(session, spec: WorkSpec) -> str:
 
 
 def claim(session, *, owner_id: str, supported: dict[str, set[int]], lease_seconds: int) -> WorkClaim | None:
+    from .maintenance_control import enforce_session as enforce_maintenance
+    enforce_maintenance(session)
+    from app.config import get_settings
+    epoch = getattr(get_settings(), "_maintenance_epoch", None) or 0
     seconds = _duration(lease_seconds)
     if not isinstance(owner_id, str) or not 1 <= len(owner_id) <= 128:
         raise ValueError("Invalid worker identity")
@@ -84,7 +88,7 @@ def claim(session, *, owner_id: str, supported: dict[str, set[int]], lease_secon
     # Conditional update is also the serialized single-writer SQLite fallback.
     token = session.scalar(update(WorkItem).where(WorkItem.id == row.id, WorkItem.fence == row.fence, eligible)
         .values(status="running", owner_id=owner_id, fence=WorkItem.fence + 1, attempts=WorkItem.attempts + 1,
-                lease_until=now + timedelta(seconds=seconds), error_code=None)
+                lease_until=now + timedelta(seconds=seconds), error_code=None, maintenance_epoch=epoch)
         .returning(WorkItem.id).execution_options(synchronize_session=False))
     if token is None:
         return None
@@ -93,6 +97,11 @@ def claim(session, *, owner_id: str, supported: dict[str, set[int]], lease_secon
 
 
 def _locked(session, work, *, allow_cancel=False):
+    from .maintenance_control import assert_writes_allowed, MaintenanceRefused
+    try:
+        assert_writes_allowed(session, work.maintenance_epoch)
+    except MaintenanceRefused:
+        raise LostOwnership("Work maintenance epoch is retired") from None
     if session.get_bind().dialect.name == "sqlite":
         session.execute(update(WorkItem).where(WorkItem.id == work.work_id).values(fence=WorkItem.fence)
                         .execution_options(synchronize_session=False))
@@ -100,7 +109,7 @@ def _locked(session, work, *, allow_cancel=False):
                          .with_for_update().execution_options(populate_existing=True))
     now = _now(session)
     if (row is None or row.status != "running" or row.owner_id != work.owner_id or row.fence != work.fence
-            or row.lease_until is None or _utc(row.lease_until) <= now or work.maintenance_epoch != 0
+            or row.lease_until is None or _utc(row.lease_until) <= now or row.maintenance_epoch != work.maintenance_epoch
             or row.cancel_requested and not allow_cancel):
         raise LostOwnership("Work ownership expired, changed or cancelled")
     return row, now

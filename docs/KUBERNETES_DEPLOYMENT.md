@@ -37,12 +37,16 @@ NetworkPolicy isolates frontend, API, worker and storage roles. CNI enforcement
 must be verified separately. Manual counts and topology spread do not certify HA.
 
 Startup requires a matching keyed configuration/build/storage receipt identity,
-namespace and installed database row, plus schema `rpl04_runtime_identity`.
+namespace and installed database row, plus schema `rpl05_maintenance_epoch` in
+the current source. The recorded basic runtime lab used the previous rpl04 image;
+it has not been upgraded by the maintenance foundation.
 API/worker never bootstrap that record or call create_all as an upgrade. SQL
 boundaries fence a process after installed identity changes. API readiness also
 checks this binding and artifact storage. Bootstrap/storage ownership, maintenance
 and real multi-Pod failure acceptance remain O1/O2/R5 requirements; these templates
 are not a completed production rollout.
+The [maintenance/recovery status](KUBERNETES_REPLICAS_RECOVERY.md) explains the new
+epoch fence, held schema upgrade and remaining operational gates.
 
 Operations metrics: administrator-only `/api/admin/replicas/metrics`; worker
 `/metrics` on its private health port (default ingress denied, use an explicitly

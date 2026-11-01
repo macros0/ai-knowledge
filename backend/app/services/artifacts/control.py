@@ -52,6 +52,11 @@ def read_control(session):
 def enforce_session(session):
     if _migration_access.get():
         return
+    from app.services.work.maintenance_control import owned_operator
+    if owned_operator(session):
+        return  # Exact retained offline operator connection, never an env flag.
+    from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+    enforce_maintenance(session)
     row = read_control(session)
     if row and row["maintenance_token"]:
         raise ValueError("Artifact storage migration maintenance is active")
@@ -62,6 +67,9 @@ def enforce_session(session):
 
 def enforce_write(session):
     if _migration_access.get() or not (session.new or session.dirty or session.deleted or session.info.get("artifact_storage_write")):
+        return
+    from app.services.work.maintenance_control import owned_operator
+    if owned_operator(session):
         return
     row = read_control(session)
     if row and row["active_store_id"] is not None:

@@ -10,7 +10,7 @@ import importlib.util
 import platform
 import re
 
-SCHEMA_REVISION = "rpl04_runtime_identity"
+SCHEMA_REVISION = "rpl05_maintenance_epoch"
 LOCAL_FIELDS = {"app_role", "runtime_identity_file", "data_dir", "diagnostics_dir", "artifact_scratch_root"}
 IDENTITY_KEYS = {"version", "deployment_schema", "installation_id", "artifact_backend", "artifact_store_id",
     "storage_receipt_digest", "runtime_fingerprint"}
@@ -142,6 +142,9 @@ def enforce_runtime_identity(settings):
         if (not inspect(connection).has_table("alembic_version")
                 or connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all() != [SCHEMA_REVISION]):
             raise ValueError("Replica database schema requires an explicit migration")
+        identity = enforce_session_identity(session, settings, require_installed=True)
+        from app.services.work.maintenance_control import bind_runtime_epoch
+        bind_runtime_epoch(session, settings)
         from app.services.artifacts.control import enforce_session
         enforce_session(session)
-        return enforce_session_identity(session, settings, require_installed=True)
+        return identity

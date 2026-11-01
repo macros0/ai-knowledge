@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     runtime_image_id: str | None = Field(default=None, min_length=1, max_length=512)
     runtime_trust_file: Path | None = None
     _runtime_identity: Any = PrivateAttr(default=None)
+    _maintenance_epoch: int | None = PrivateAttr(default=None)
     # Durable work foundation only: role/admission activation remains gated.
     work_lease_seconds: int = Field(default=120, ge=5, le=3600)
     work_heartbeat_seconds: int = Field(default=30, ge=1, le=600)

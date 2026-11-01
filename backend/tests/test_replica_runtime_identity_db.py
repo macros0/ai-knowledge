@@ -11,7 +11,7 @@ from tests.test_replica_runtime_identity import configured
 @pytest.fixture
 def installed(tmp_path, monkeypatch):
     from app.config import Settings
-    from app.db.models import ReplicaRuntimeIdentity
+    from app.db.models import ReplicaRuntimeIdentity, MaintenanceState
     from app.deployment.runtime_identity import SCHEMA_REVISION
     from app.services.work.store import _now
     values, document = configured(tmp_path)
@@ -25,9 +25,13 @@ def installed(tmp_path, monkeypatch):
         session.add(ReplicaRuntimeIdentity(id=1, installation_id=document["installation_id"],
             fingerprint=document["runtime_fingerprint"], storage_receipt_digest=document["storage_receipt_digest"],
             schema_revision=SCHEMA_REVISION, created_at=_now(session)))
+        session.add(MaintenanceState(id=1, installation_id=document["installation_id"], epoch=0,
+            enabled=False, intended_counts_json={}, writer_receipts_json={}))
     with get_engine().begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"))
         connection.execute(text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": SCHEMA_REVISION})
+    from app.deployment.runtime_identity import enforce_runtime_identity
+    enforce_runtime_identity(settings)
     return settings
 
 

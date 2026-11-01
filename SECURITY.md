@@ -2087,6 +2087,25 @@ clear those reservations. They provide no active-writer drain, provider-stop,
 backup-consistency or failover guarantee. Missing active fault/recovery checks keep
 the overall acceptance failed/pending.
 
+Replica maintenance foundation (2026-11-01, O2 incomplete): PostgreSQL shared
+transaction locks precede work/control locks, while offline entry obtains the
+exclusive epoch fence. Epochs bind once per process and per Work claim; ending
+maintenance cannot revive a stale process or claim. Request ORM/text writes,
+session scopes and the audit dispatcher's owned sessions use the same fence.
+Entry/exit audit events commit with state changes. An offline operator retains
+one advisory-lock-owning physical connection across phase transactions; only that
+exact scoped transaction bypasses retired live identity/epoch checks. Explicit
+offline audit settings avoid loading a retired runtime. Loss cannot ACK/reconnect
+through another connection, and releasing the operator discards its connection.
+The storage maintenance token excludes concurrent S4 migration. Unknown operations
+are retained, not automatically reversed. Exit refuses missing/unknown writer
+attestations and every owned/uncertain LLM reservation; no timed capacity release
+is introduced. These trusted library attestations are not physical stop proof.
+Kubernetes drain, provider-specific reconciliation, independent backup/restore
+and new-target release qualification remain mandatory and unimplemented here.
+The rpl05 upgrade holds installed replicas and requires stopped old writers and
+a future explicit adoption/release procedure; it is not an online upgrade.
+
 ## User answer scenarios (2026-10-23)
 
 Authenticated users, including viewer, may create and publish their own answer

@@ -27,7 +27,8 @@ def test_fresh_postgres_migrates_without_runtime_identity_file(bootstrap_setting
         with engine.begin() as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "head")
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "rpl04_runtime_identity"
+            from app.deployment.runtime_identity import SCHEMA_REVISION
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == SCHEMA_REVISION
             assert "replica_runtime_identity" in inspect(connection).get_table_names()
         from app.deployment.bootstrap import install_identity, probe_artifacts
         from app.services.artifacts.control import migration_access

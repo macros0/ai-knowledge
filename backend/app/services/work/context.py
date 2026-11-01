@@ -58,6 +58,11 @@ def enforce_session(session):
     session.info["document_work_claim"] = work
     session.info["work_guard_busy"] = True
     try:
+        from .maintenance_control import assert_writes_allowed, MaintenanceRefused
+        try:
+            assert_writes_allowed(session, work.maintenance_epoch)
+        except MaintenanceRefused:
+            raise LostOwnership("Work maintenance epoch is retired") from None
         from .store import _now, _utc
         with session.no_autoflush:
             if session.get_bind().dialect.name == "sqlite":
@@ -71,7 +76,7 @@ def enforce_session(session):
                     return
             if (row is None or row["owner_id"] != work.owner_id or row["fence"] != work.fence
                     or row["status"] != "running" or row["cancel_requested"] or row["lease_until"] is None
-                    or _utc(row["lease_until"]) <= _now(session) or work.maintenance_epoch != 0):
+                    or _utc(row["lease_until"]) <= _now(session) or row["maintenance_epoch"] != work.maintenance_epoch):
                 raise LostOwnership("Document execution no longer owns its work")
     finally:
         session.info.pop("work_guard_busy", None)

@@ -5,6 +5,12 @@ from app.services.generation_files import _validate_ids
 
 from .context import work_execution, coordinator_session
 
+# Offline operation control is separate from these durable periodic handlers.
+from .maintenance_control import (MaintenanceOperator as MaintenanceOperator,
+    MaintenanceRefused as MaintenanceRefused, REQUIRED_WRITERS as REQUIRED_WRITERS,
+    bind_runtime_epoch as bind_runtime_epoch, enter_maintenance as enter_maintenance,
+    leave_maintenance as leave_maintenance)
+
 
 def retire_checkpoint(work):
     payload = work.spec.payload

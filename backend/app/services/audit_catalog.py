@@ -98,4 +98,6 @@ CATALOG = MappingProxyType({
     'auth_login_denied': EventRule({}, 'denied'),
     'auth_login_success': EventRule({}, 'success'),
     'auth_logout': EventRule({}, 'success'),
+    'replica_maintenance_enter': EventRule({'epoch': 'int'}, 'success'),
+    'replica_maintenance_leave': EventRule({'epoch': 'int'}, 'success'),
 })

@@ -30,6 +30,8 @@ _current_session = ContextVar("current_sql_session", default=None)
 @event.listens_for(Session, "do_orm_execute")
 def _track_storage_write(execution):
     if execution.is_insert or execution.is_update or execution.is_delete or getattr(execution.statement, "is_text", False):
+        from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+        enforce_maintenance(execution.session)
         from app.services.work.context import enforce_session as enforce_work
         enforce_work(execution.session)
         execution.session.info["artifact_storage_write"] = True
@@ -41,6 +43,8 @@ def _track_storage_write(execution):
 @event.listens_for(Session, "before_flush")
 def _guard_storage_flush(session, _context, _instances):
     if session.new or session.dirty or session.deleted:
+        from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+        enforce_maintenance(session)
         from app.services.work.context import enforce_session as enforce_work
         enforce_work(session)
         session.info["artifact_storage_write"] = True
@@ -116,6 +120,8 @@ def session_scope():
     from app.services.work.context import current_claim, enforce_session as enforce_work
     parent = _current_session.get()
     if parent is not None and (current_claim() is not None or parent.info.get("document_work_claim") is not None):
+        from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+        enforce_maintenance(parent)
         enforce_work(parent)
         with parent.begin_nested():
             yield parent
@@ -124,6 +130,8 @@ def session_scope():
     session = get_session_factory()()
     token = _current_session.set(session)
     try:
+        from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+        enforce_maintenance(session)
         from app.services.work.context import enforce_session as enforce_work
         enforce_work(session)
         from app.services.artifacts.control import enforce_session, enforce_write

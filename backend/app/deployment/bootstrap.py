@@ -12,7 +12,7 @@ from pydantic import model_validator
 from sqlalchemy import inspect, literal, select, text
 
 from app.config import Settings
-from app.db.models import ArtifactStorageControl, ReplicaRuntimeIdentity
+from app.db.models import ArtifactStorageControl, ReplicaRuntimeIdentity, MaintenanceState
 from app.services.artifacts.control import descriptor, migration_access
 from app.services.artifacts.contract import BlobConflict, BlobNotFound
 from app.services.work.store import _now
@@ -106,10 +106,13 @@ def install_identity(session, settings, receipt):
         raise ValueError("Installation control is absent or undergoing maintenance")
     existing = session.get(ReplicaRuntimeIdentity, 1)
     if existing is not None:
+        maintenance = session.get(MaintenanceState, 1)
         if (existing.installation_id != document["installation_id"] or existing.fingerprint != document["runtime_fingerprint"]
                 or existing.storage_receipt_digest != document["storage_receipt_digest"]
                 or existing.schema_revision != SCHEMA_REVISION or control.installation_id != existing.installation_id
-                or control.active_store_id != settings.artifact_store_id or control.active_descriptor != descriptor(settings)):
+                or control.active_store_id != settings.artifact_store_id or control.active_descriptor != descriptor(settings)
+                or maintenance is None or maintenance.installation_id != existing.installation_id
+                or maintenance.enabled or maintenance.epoch != 0 or maintenance.operation_id is not None):
             raise ValueError("Installed runtime identity differs; coordinated maintenance is required")
         return document
     assert_fresh_installation(connection)
@@ -118,6 +121,8 @@ def install_identity(session, settings, receipt):
     session.add(ReplicaRuntimeIdentity(id=1, installation_id=document["installation_id"],
         fingerprint=document["runtime_fingerprint"], storage_receipt_digest=document["storage_receipt_digest"],
         schema_revision=SCHEMA_REVISION, created_at=_now(session)))
+    session.add(MaintenanceState(id=1, installation_id=document["installation_id"], epoch=0,
+        enabled=False, intended_counts_json={}, writer_receipts_json={}))
     session.flush()
     return document
 

@@ -87,7 +87,7 @@ pending TLS/network items; it does not complete O1 or certify customer storage.
 
 **Files:** создать `scripts/kubernetes/replica_backup.py`,
 `backend/app/services/work/maintenance.py`,
-`backend/alembic/versions/rpl04_maintenance_epoch.py`,
+`backend/alembic/versions/rpl05_maintenance_epoch.py` (rpl04 is the existing runtime identity),
 `backend/tests/test_replica_backup.py`, `backend/tests/test_replica_restore.py`,
 `docs/KUBERNETES_REPLICAS_RECOVERY.md`;
 изменить `scripts/kubernetes/lifecycle.py`, `scripts/kubernetes/backup.sh`,
@@ -136,6 +136,17 @@ release после проверки target model/storage endpoints. Измени
 - [ ] Commit `feat: recover replica deployments from independent backups`.
 
 ## Task O3: fault matrix, release gates и документация
+
+O2 fence foundation (2026-11-01): process/claim epochs and PostgreSQL shared
+transaction guards serialize with exclusive offline maintenance entry. Same-session
+operator advisory ownership spans separately committed phases, with bounded lock
+waits and no lost-connection ACK/reconnect. Intended counts and writer attestations
+persist; uncertain provider slots prohibit exit. The S4 storage token excludes
+parallel operations; entry/exit audit commits with state. Installed schema upgrades
+preserve queued work and start held; stale runtime revalidation cannot adopt a new
+epoch. Existing app images were not upgraded. Physical stop/drain collection,
+provider reconciliation, adoption/update, format3 independent backup/restore,
+nightly scheduling and operation acceptance remain OPEN. See the recovery runbook.
 
 **Files:** создать `docs/KUBERNETES_REPLICAS_ACCEPTANCE.md`,
 `deploy/kubernetes/replicas/support-matrix.json`,

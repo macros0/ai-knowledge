@@ -181,6 +181,7 @@ ACTION_TYPES = frozenset(
 )
 
 ACTION_TYPES = ACTION_TYPES | AUTH_ACTIONS | {"answer_scenario_"+action for action in ("create","update","publish","unpublish","copy","delete")}
+ACTION_TYPES = ACTION_TYPES | {"replica_maintenance_enter", "replica_maintenance_leave"}
 
 TARGET_DOCUMENT = "document"
 TARGET_JOB = "job"
@@ -239,13 +240,14 @@ def record_in_session(
     ip_address: str | None = None,
     meta: dict | None = None,
     event_context: AuditContext | None = None,
+    settings=None,
 ) -> dict:
     """Append an audit entry to an existing transaction without committing it."""
     if action_type not in CATALOG:
         raise ValueError(f"Неизвестный action_type: {action_type}")
     from app.config import get_settings
     from app.services.diagnostics.context import current_context
-    settings = get_settings()
+    settings = settings if settings is not None else get_settings()
     mode = get_audit_mode(settings)
     from .work.admission import durable_documents
     replica = durable_documents(settings)
