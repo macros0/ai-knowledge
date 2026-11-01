@@ -309,3 +309,62 @@ done/problemNone with fence1→3 and one publication. Search/original SHA passed
 all9 previous documents retained content/generations/bytes/delete visibility and
 all2/2/2 roles became ready0restarts. See the
 [public result](superpowers/reports/2026-11-01-replica-active-worker-loss.json).
+
+## Owned PostgreSQL partition and stale return
+
+`scripts/kubernetes/replica_postgres_partition.py` uses the same explicit protected
+config, namespace UID, installed fingerprint and private-journal arguments as the
+worker-loss recipe. It requires the owned Cilium cluster and unchanged worker
+image/configuration. The temporary startup wrapper changes only runtime's UUID
+source to the Pod UID, so the exact SQL owner can be located. Full worker startup,
+queue/handler/heartbeat, fencing, health and capacity code remain unchanged.
+
+`inject` starts one synthetic DOCX, captures its original owner/fence/reservation,
+and selects only that Pod with a namespaced Cilium egress deny to the managed
+PostgreSQL endpoint on TCP5432. Positive controls must still reach Qdrant/model
+and the peer worker must still reach PostgreSQL. The original container must stay
+live without restart and become unready. If observing the policy times out, use
+`confirm` to read the same Pod/container/policy; never inject again. The report
+records provider activity both before the patch and at the actual network sample.
+A late network sample does not prove the provider was still executing at denial;
+the partitioned document must still be unfinished and unpublished.
+
+`observe` requires the healthy peer to reclaim and prepare a newer generation
+while the original request reservation remains occupied. `heal` removes only the
+bound policy UID/spec. The returning old container must retain its identity.
+There are two valid completion paths:
+
+- If the original provider client remains alive and confirms a terminal reply,
+  normal exact-token completion may free capacity after reconnection. `finish`
+  verifies the newer work/generation succeeded alone, the old generation is
+  abandoned, model peak stayed1 and no slot remains owned. It probes the actual
+  publication entry guard in the original Pod with the captured old owner/fence
+  and a future client lease; refusal plus rollback and unchanged data are required.
+  Continued claims/completions prove the original process resumed. A zero
+  `lease_losses` counter is allowed: a disconnected heartbeat may have exited
+  through OperationalError instead of that counter's LostOwnership branch.
+- If completion remains uncertain, keep the original reservation, verify busy
+  admission and use the owned physical-stop `recover`/`release` recipe. Reconnecting
+  alone, elapsed time and a completed server counter never authorize clearing it.
+
+On the confirmed path, `restore` first requires quiescence, then restores the
+recorded ordinary worker entrypoint and success fixture through normal rollouts.
+`verify --report <public.json>` checks common runtime identity, unchanged maintenance
+epoch, the full previous corpus's content/generation/source/delete state and the
+recovered document's single publication, search and original SHA. No maintenance
+epoch or offline reconciliation is invented for a normally acknowledged reply.
+
+The actual2026-11-01 run passed the confirmed-reply path. Cilium identity/policy
+propagation exceeded the initial network-observation window; read-only `confirm`
+verified the same still-running fault without injecting again. At that first
+confirmed network sample the provider had already finished, but document work and
+publication remained unfinished. The peer reclaimed fence1→2. After reconnect,
+the unchanged old container resumed useful work, the captured old-token guard
+probe refused publication and rolled back, and only generation2 became active.
+The process lease-loss counter was0, so refusal is established by the explicit
+guard probe and persisted ownership/publication state, not that counter. Normal
+confirmed provider completion freed capacity without operator reconciliation;
+observed model peak remained1. The ordinary startup and success fixture were
+restored; all10 previous documents and the new document passed preservation,
+search/source SHA and delete-visibility checks with2/2/2 Ready0restarts. See the
+[public result](superpowers/reports/2026-11-01-replica-postgres-partition-stale-return.json).

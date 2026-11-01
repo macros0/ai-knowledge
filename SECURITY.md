@@ -2141,6 +2141,36 @@ the tested fix, same-operation resume succeeded. Held data hashes and the origin
 with a newer fence. This qualifies only that owned stub recipe; real providers,
 PostgreSQL partition, stale-process return and node/host loss remain separate gates.
 
+Owned PostgreSQL-partition coordinator: a namespace-local Cilium egress deny
+selects one bound worker's private fault label, application release and role,
+and only the managed PostgreSQL endpoint on TCP5432. Existing allow rules are not
+weakened. The test startup derives runtime's per-process UUID from the Pod UID to
+locate the SQL owner without reading process memory; the full worker entrypoint,
+queue, heartbeat, publication and capacity code remain unchanged. Pod/container/
+image/restart identities must survive the partition and return. A healthy peer
+must reclaim with a newer fence while the old process stays live and unready;
+healing requires the exact policy UID/spec. The returning container must be the
+same, and either the original claim loses ownership while capacity stays unknown,
+or a confirmed reply is acknowledged normally and only a newer fence publishes.
+The confirmed path also runs the real publication guard with the captured old
+owner/fence and a deliberately future client lease, requiring refusal and rollback.
+Unknown outcomes retain the original capacity. That path restores normal startup
+with workers stopped after physical provider reconciliation. Confirmed, quiescent
+completion instead permits the ordinary idle fixture rollout. Original tokens
+remain in a protected phase journal. This is a Cilium-specific owned-lab fixture,
+not an external-provider or node-loss recovery adapter; live evidence is separate.
+
+Actual owned Cilium follow-up: the old worker stayed live/unready with only PG
+denied; the peer reclaimed fence1→2. After healing the exact rule, the same old
+container resumed work, and the captured old-token publication probe was refused
+with rollback even when given a future client lease. Its generation remained
+abandoned; only the new owner published. A confirmed reply was acknowledged by
+the live provider client normally, model peak stayed1 and no uncertain slot was
+cleared by an operator. All10 previous documents were preserved and the fixture
+returned to normal2/2/2. The report records that provider finish preceded the first
+confirmed network sample, and that the process lease-loss metric stayed0; neither
+is hidden or substituted for the actual guard/ownership evidence.
+
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
 storage descriptor and receipt. Owned LLM requests prohibit it. Identity change

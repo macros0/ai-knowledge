@@ -457,9 +457,13 @@ with session_scope() as session:
             "production_schedule": "disabled", "verified_at": datetime.now(timezone.utc).isoformat(),
             "remaining_runtime_faults": ["postgres_partition", "stale_worker_return", "resource_load_qualification"],
             "limitations": ["not node or host failover", "not a real/external-provider recovery recipe", "no production SLA"]}
+        public = self.report_result(public)
         Path(report).write_text(json.dumps(public, indent=2) + "\n")
         self.save(phase="verified", report=str(Path(report).resolve()))
         print(json.dumps(public), flush=True)
+
+    def report_result(self, public):
+        return public
 
 
 def main():

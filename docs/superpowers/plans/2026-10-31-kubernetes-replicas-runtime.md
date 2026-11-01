@@ -411,6 +411,31 @@ until O3 integrates the phase-controlled recipe. PostgreSQL partition, stale
 worker return and resource/load qualification remain open. This single-node
 synthetic recipe does not qualify real providers or node/host failover.
 
+R5 PostgreSQL-partition/stale-return milestone (2026-11-01): one exact worker
+Pod was isolated from managed PostgreSQL on TCP5432 by an owned Cilium deny rule;
+Qdrant/model stayed reachable and the peer retained PG access. The old container
+stayed live, became unready and did not restart. The healthy peer reclaimed the
+unfinished document at fence2 instead of1 and abandoned generation1. Policy/label
+propagation exceeded the initial observation window; the same live fault was
+confirmed without re-injection. The first confirmed network sample followed the
+provider's server-side finish, while work/publication remained unfinished; no
+claim is made that the server was still active at that network sample.
+After exact-policy removal the original container resumed claims/completions.
+Its live provider client acknowledged a confirmed terminal reply normally; model
+peak stayed1 and capacity returned idle without offline reconciliation or a new
+maintenance epoch. The original-token publication guard probe in the old Pod
+was rejected even with a future client lease; its transaction rolled back and
+persisted generations were unchanged. Only generation/fence2 published. The
+process lease-loss counter remained0 (the disconnected heartbeat did not take
+that counter branch), so it is not used as the completion oracle. Normal worker
+startup/success fixture restored,2/2/2 Ready0restarts, source SHA/search passed and
+all10 earlier documents retained content/generation/source/delete state. Report:
+`../reports/2026-11-01-replica-postgres-partition-stale-return.json`.
+The test wrapper changes only runtime UUID selection to Pod UID for exact owner
+mapping; production queue/handler/heartbeat/fencing code is unchanged. Resource/
+load qualification and O3 integration into the combined runner remain open;
+standalone fault receipts do not certify external providers or node/host loss.
+
 R1: `assert len(live_claims_for_same_work) == 1`;
 `assert new_claim.fence > old_claim.fence`; старое finish проверяется через
 `pytest.raises(LostOwnership)`.
