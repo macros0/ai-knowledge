@@ -2184,6 +2184,43 @@ The full previous corpus/delete state is rechecked. These are small stub/fake,
 single-node application measurements, not production sizing or provider capacity
 certification; resource/model limits and production scheduling are unchanged.
 
+Owned credential bootstrap (O1): the selected dedicated PostgreSQL17 instance
+receives a separate LOGIN role without superuser, role/database creation,
+replication, bypass-RLS or inherited memberships. It gets schema USAGE, ordinary
+application DML and sequence USAGE, with no DDL/TRUNCATE or future default grants.
+Runtime identity, maintenance and storage-control singleton tables are SELECT-only
+except UPDATE(id) to permit PostgreSQL row locks; bootstrap verifies their id=1
+CHECK before granting this no-authority-change column permission. Audit log grants
+are SELECT/INSERT; migration ledger/history are read-only. Existing SQL roles need
+the exact operation/installation ownership comment and attributes; unknown roles
+are never adopted. Public CREATE/TEMP/CONNECT are removed only on the dedicated
+owned application database, and the runtime role receives explicit CONNECT.
+
+The native RustFS1.0.4 Admin API is called with SigV4 over verified TLS using
+operator credentials from the protected config. A separate runtime IAM user has
+bucket metadata/list access only to its dedicated installation bucket and object
+Get/Put/Delete/AbortMultipart rights only under the application prefix. No IAM,
+bucket-policy, bucket create/delete or cross-bucket permissions are included.
+HeadBucket uses ListBucket, so metadata listing covers that dedicated bucket;
+this recipe does not claim prefix-only listing isolation in a shared bucket.
+Secrets stay in a separate protected operation journal; creation/testing does not
+silently replace any running runtime Secret or installed identity. A credential
+transition must subsequently stop writers, use a separately held operator DB
+connection, audit the changed common fingerprint and explicitly release roles.
+`replica_credentials.py` now performs that transition in the selected owned lab:
+create-only immutable runtime/operator Secrets are separate. Only offline Jobs
+mount the operator database URL as a read-only file; it never enters application
+envFrom. Both API/worker controllers change Secret/identity bindings at replicas0.
+The old APP_SECRET_KEY is preserved. Compute/release Jobs use application settings
+for the HMAC and a distinct operator connection for authority changes. Exact
+maintenance ownership, zero uncertain model reservations and unchanged held
+corpus/work hashes precede release. Observation retries inspect the same bound
+Job; they do not start another Job or hide unrelated Pods/controllers. Actual
+PG/S3 deny probes and a new-document roundtrip passed on the owned synthetic lab;
+four running API/worker processes proved their scoped credentials, matching
+identity, transition audits and rejection of the retired identity. Shared-bucket
+listing isolation and customer/external/mixed/RWX privileges remain unqualified.
+
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
 storage descriptor and receipt. Owned LLM requests prohibit it. Identity change

@@ -85,6 +85,20 @@ pending TLS/network items; it does not complete O1 or certify customer storage.
 
 ## Task O2: maintenance, backup и restore с ночным RPO
 
+O1 scoped-runtime credentials milestone (2026-11-01): a dedicated PG17 role and
+RustFS1.0.4 IAM principal passed native permissions probes (10 SQL/9 S3 denials,
+positive DML/row-lock/range/conditional/multipart controls). Create-only immutable
+Secrets separate application inputs from an offline-only operator DB file. Actual
+transition held epoch6, stopped all application/provider roles, audited the new
+common fingerprint and verified unchanged held corpus/work hashes before release.
+All4 API/worker processes proved actual scoped credentials, TLS, transition audits
+and retired-identity rejection. All17 previous docs retained content/generation/
+source/delete state; fresh DOCX completed cleanly with1publication and SHA/search.
+Shared auth passed both APIs; final2/2/2 Ready0restarts. Public result:
+`../reports/2026-11-01-replica-scoped-credentials.json`. This closes scoped
+credentials only for the selected dedicated managed-S3 recipe; external/mixed/RWX,
+running-app CA rotation and storage-full remain O1 gates. Production scheduleOFF.
+
 **Files:** создать `scripts/kubernetes/replica_backup.py`,
 `backend/app/services/work/maintenance.py`,
 `backend/alembic/versions/rpl05_maintenance_epoch.py` (rpl04 is the existing runtime identity),

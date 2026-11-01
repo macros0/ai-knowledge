@@ -117,3 +117,59 @@ Independent recovery, application rotation, disk-full, RWX/provider and
 multi-node failure gates remain open. Local-path requested size
 does not establish an enforced per-volume disk quota; do not fill the host disk
 to simulate ENOSPC. Resources remain provisional until R5/O3 measurements.
+
+## Scoped credentials in the selected owned lab
+
+`scripts/kubernetes/replica_credentials.py` implements an explicit PG17/RustFS1.0.4
+recipe for a dedicated owned instance/database and a dedicated installation bucket.
+It is not a generic customer IAM administrator. Private configuration and journal
+must stay in the same protected directory; never commit either or pass passwords
+in command arguments. Each phase requires the recorded namespace UID, original
+runtime fingerprint and `--apply`:
+
+```text
+prepare → provision → rights → secrets → fence → compute → stage → release → start → verify
+```
+
+Use `--config <private-config.json> --namespace-uid <recorded-uid>
+--expected-fingerprint <original-fingerprint> --journal <private-journal.json>`.
+`verify` additionally requires `--report docs/superpowers/reports/<result>.json`.
+After a timeout inspect the same operation/Job; do not prepare a second operation
+or delete its Job to retry. A failed or uncertain offline phase leaves application
+roles stopped. After successful release, `start` resumes counts0→2 idempotently.
+
+The SQL role gets ordinary table DML, sequence USAGE and no DDL/TRUNCATE, superuser,
+role creation or memberships. Three authority singleton tables allow SELECT and
+UPDATE(id) only after verifying CHECK(id=1): PostgreSQL requires UPDATE on a column
+for row locks. Audit history is append-only; migration history is read-only. There
+are no automatic grants on future tables: a schema update must supply reviewed
+grants. Database PUBLIC grants are changed only in the dedicated selected instance.
+See [PostgreSQL row-lock privileges](https://www.postgresql.org/docs/17/ddl-priv.html).
+
+S3 object mutation is confined to the application prefix; bucket metadata/listing
+is confined to its dedicated bucket. Native RustFS returns a filtered ListBuckets
+result for this account. A separate operator-only bucket is used as a positive
+control: its discovery/list/read/write/delete must be refused. This does not
+certify prefix-only metadata isolation in a shared bucket. The pinned native
+Admin API uses verified TLS/SigV4 and JSON, following
+[RustFS1.0.4 user management](https://github.com/rustfs/rustfs/blob/1.0.4/rustfs/src/admin/handlers/user.rs)
+and [policy handling](https://github.com/rustfs/rustfs/blob/1.0.4/rustfs/src/admin/handlers/policies.rs).
+
+Immutable runtime Secret preserves the signing/model/vector/diagnostic keys and
+replaces only DATABASE_URL and the S3 access/secret pair. A separate operator
+Secret contains only the database URL and is mounted read-only by offline Jobs,
+never normal API/worker Pods. Jobs hash the new application settings while using
+the separate operator connection to update the accepted identity and release
+maintenance. Installation, schema, images, storage receipt and held corpus/work
+hashes stay unchanged. The protected config retains operator access for explicit
+maintenance; do not replace it with the application URL.
+
+The actual2026-11-01 transition passed at epoch6: 4 API/worker processes proved
+their scoped credentials over TLS, 10 SQL and9 S3 forbidden operations were denied,
+the retired identity was rejected and transition audits were present. All17 prior
+documents retained content/generation/source/delete state; a fresh DOCX completed
+with one publication, no problem and matching search/download SHA. Shared auth
+worked across both APIs. Final2/2/2 Ready0restarts, production scheduleOFF.
+[Public result](superpowers/reports/2026-11-01-replica-scoped-credentials.json).
+This closes scoped runtime credentials for this recipe. External/mixed/RWX,
+coordinated running-app CA rotation and storage-full acceptance remain open.
