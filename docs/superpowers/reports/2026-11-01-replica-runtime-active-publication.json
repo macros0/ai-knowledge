@@ -1,0 +1,113 @@
+{
+  "scope": "owned-managed-s3-synthetic",
+  "namespace": "replica-test-r5o2t20261101",
+  "checks": [
+    {
+      "name": "runtime.active_fault_scope",
+      "status": "passed",
+      "evidence": {
+        "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+        "model_image": "okf-model-stub:r5-active-f1852a67f4bd",
+        "fingerprint": "e2a95ba3946d6a74ed736c65117933f30867883a12cef3a1dc129fad534ba485",
+        "schema_revision": "rpl05_maintenance_epoch"
+      }
+    },
+    {
+      "name": "runtime.concurrent_cancel_delete",
+      "status": "passed",
+      "evidence": {
+        "cases": [
+          {
+            "operation": "cancel",
+            "provider_was_active": true,
+            "work_cancel_fenced": true,
+            "base_generation_preserved": true,
+            "base_content_sha256_preserved": true,
+            "active_publications": 1,
+            "search_visibility_verified": true,
+            "document_id": "586d71a791f04836"
+          },
+          {
+            "operation": "delete",
+            "provider_was_active": true,
+            "work_cancel_fenced": true,
+            "base_generation_preserved": true,
+            "base_content_sha256_preserved": true,
+            "active_publications": 1,
+            "search_visibility_verified": true,
+            "document_id": "9e4328867deb4af6"
+          }
+        ],
+        "late_publications": 0,
+        "limit": 1
+      }
+    },
+    {
+      "name": "runtime.model_capacity_exhaustion",
+      "status": "passed",
+      "evidence": {
+        "running_documents_when_saturated": 2,
+        "api_processes_rejected_without_provider_call": 2,
+        "global_limit": 1,
+        "peak_provider_calls": 1,
+        "completed_documents": 2,
+        "download_sha256_matches": 2,
+        "search_matches": 2,
+        "seconds": 142.95300000000861,
+        "document_ids": [
+          "943ebe884524408e",
+          "e2020814cf594c6a"
+        ]
+      }
+    },
+    {
+      "name": "runtime.active_fixture_restored",
+      "status": "passed"
+    }
+  ],
+  "remaining_runtime_faults": [
+    "active_worker_loss",
+    "postgres_partition",
+    "stale_worker_return"
+  ],
+  "production_schedule": "disabled",
+  "observed_at": "2026-11-01T17:41:23.432853+03:00",
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:b3a513dae96ff1b94c9955e124d135e01466c30764611a01e5f4add5fd491987",
+      "worker": "sha256:b3a513dae96ff1b94c9955e124d135e01466c30764611a01e5f4add5fd491987"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "post_probe": {
+    "owned_provider_slots": 0,
+    "active_provider_calls": 0,
+    "cancelled_work_terminal": 2,
+    "fixture_scenario": "success"
+  },
+  "executed_fault_module_sha256": "240d4f8bf915b546db94138094c96413546b68d46d7d57d0c417416aef1c7b62",
+  "test_model": {
+    "image": "okf-model-stub:r5-active-f1852a67f4bd",
+    "runtime_image_digest": "sha256:138688c8f2aab7cee19efcff389a9df802f7ea744796af381317dfaba5ec29c4",
+    "docker_image_id": "sha256:6c10511844bb0137c65134c3464a59abb4356ee1919f955b2d3ada68f97f8097",
+    "source_sha256": "f1852a67f4bd36b1677f097dcb94c1ecf7dfa6bf87e3ebfe2d96b3a70b0ba7de",
+    "files": {
+      "Dockerfile": "c9134db7b57609d4a3e4c32946316a287b2bd19263855239aded0dea8585fb9b",
+      "server.py": "8e183647288af567c51ed5b82b0cc67323a6a62c0bb91090c14c35315194a434"
+    },
+    "base_image": "python@sha256:dddfd7e07f9d15aeeca61529320492139d21cac7f0070c00609243e51e4e0016",
+    "injected_delay_seconds": 30
+  },
+  "qualification": "two-runtime-faults-only; remaining gates are required; not production certification"
+}

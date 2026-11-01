@@ -15,7 +15,7 @@ if __package__ in {None, ""}:
 from test_scripts.replica_runtime_acceptance import probe_runtime
 
 RUNNER_SHA256 = sha256(b"".join((Path(__file__).parent / name).read_bytes()
-    for name in ("run_replica_acceptance.py", "replica_runtime_acceptance.py"))).hexdigest()
+    for name in ("run_replica_acceptance.py", "replica_runtime_acceptance.py", "replica_runtime_faults.py"))).hexdigest()
 
 SUITES = ("contracts", "frontend", "storage", "runtime", "operations", "all")
 
@@ -53,7 +53,7 @@ def validate_manifest(value: dict) -> None:
         raise ValueError("Run-scoped artifact prefix required")
 
 
-def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known_hosts=None, idle_faults=False) -> dict:
+def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known_hosts=None, idle_faults=False, active_faults=False) -> dict:
     """Allowlist output; never include raw inputs or arbitrary exceptions."""
     valid = True
     try:
@@ -67,12 +67,14 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
                   for name in requested)
     if valid and live and "runtime" in requested:
         checks = [c for c in checks if c["name"] != "runtime"]
-        checks.extend(probe_runtime(manifest, ssh_host=ssh_host, known_hosts=known_hosts, idle_faults=idle_faults))
+        checks.extend(probe_runtime(manifest, ssh_host=ssh_host, known_hosts=known_hosts, idle_faults=idle_faults,
+            active_faults=active_faults))
         # A successful synthetic smoke cannot replace destructive failure,
         # stale-writer, model-capacity or independent recovery qualification.
+        observed = {c["name"] for c in checks}
         checks.extend({"name": "runtime." + name, "status": "pending", "reason": "required_fault_probe_pending"}
             for name in ("active_worker_loss", "postgres_partition", "stale_worker_return",
-                "concurrent_cancel_delete", "model_capacity_exhaustion"))
+                "concurrent_cancel_delete", "model_capacity_exhaustion") if "runtime." + name not in observed)
         if not idle_faults:
             checks.append({"name": "runtime.idle_rollout", "status": "pending", "reason": "explicit_idle_faults_required"})
     revision = subprocess.run(
@@ -98,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ssh-host", help="Optional pinned user@host for kubectl")
     parser.add_argument("--known-hosts", type=Path)
     parser.add_argument("--idle-faults", action="store_true", help="Also scale API/worker and normally replace idle owned Pods")
+    parser.add_argument("--active-faults", action="store_true", help="Also test cancel/delete and model saturation on new synthetic documents")
     args = parser.parse_args(argv)
     try:
         if args.manifest.stat().st_size > 1024 * 1024:
@@ -105,10 +108,10 @@ def main(argv: list[str] | None = None) -> int:
         value = json.loads(args.manifest.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise ValueError("Object required")
-        if args.idle_faults and not args.live:
-            raise ValueError("Idle faults require explicit live execution")
+        if (args.idle_faults or args.active_faults) and not args.live:
+            raise ValueError("Fault probes require explicit live execution")
         report = build_report(value, args.suite, live=args.live, ssh_host=args.ssh_host,
-            known_hosts=args.known_hosts, idle_faults=args.idle_faults)
+            known_hosts=args.known_hosts, idle_faults=args.idle_faults, active_faults=args.active_faults)
     except (OSError, ValueError, TypeError):
         report = {"suite": args.suite, "passed": False, "failed": 1,
                   "checks": [{"name": "manifest", "status": "failed"}], "skipped_required": 1}

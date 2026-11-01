@@ -85,6 +85,21 @@ deletion, clears provider slots, or claims that idle replacement proves recovery
 of an in-flight operation. Unknown outcomes remain failures, with no automatic
 force recovery. The run keeps its synthetic documents for inspection.
 
+`--active-faults` requires the recorded `namespace_uid` in the manifest and an
+owned `okf-model-stub:r5-active-<source-hash>` fixture with its aggregate read-only
+`/test/status` counters. It creates fresh test documents, normally switches the
+idle fixture to a30s synthetic delay, then cancels/deletes an update while a real
+model request is active. SQL work fencing, unchanged active generation/content
+hash, search visibility and download access are checked after the provider
+returns. A second case starts two document workers against global LLM limit1;
+both API processes must reject extra admission without contacting the provider,
+and the two documents must complete with correct search/download afterwards.
+No provider slot is cleared by the test. Normal fixture configuration is restored
+only after verified quiescence. Remaining worker-loss, PostgreSQL partition and
+stale-worker return checks stay required. The delay is fault injection, not a
+measurement of production model throughput. See the
+[owned live result](superpowers/reports/2026-11-01-replica-runtime-active-publication.json).
+
 An expected exit1 with `failed=0` still means required fault gates are pending.
 Inspect `checks` and `skipped_required`; a successful smoke does not make the
 runtime or whole deployment certified. Reports distinguish the Git revision,

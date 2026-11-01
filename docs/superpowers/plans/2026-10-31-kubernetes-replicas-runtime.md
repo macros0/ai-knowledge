@@ -376,6 +376,23 @@ delete and model exhaustion remain required pending gates; O2 recovery is still
 required. This milestone does not close R5 or certify production resources/SSO,
 live models, alternate provider combinations, node failover or independent restore.
 
+R5 active-publication/capacity milestone (2026-11-01): actual owned restored
+managed-S3 runtime passed cancel and delete during real synthetic model requests.
+Late worker output did not replace the published generation/content; exactly one
+publication remained, cancelled work became terminal, cancelled content stayed
+searchable/downloadable and deleted content stayed hidden. The instrumented model
+reported actual active/peak counters without retaining inputs. With two document
+workers running and one occupied global model slot, each of the two independent
+API processes received immediate busy admission without sending another provider
+request. Actual peak stayed1; both documents later completed with matching source
+hashes and search. The30s delay was deliberate fault injection. All application
+roles returned Ready2/2/2, model owners/calls0, fixture success configuration
+restored. Public result: `../reports/2026-11-01-replica-runtime-active-publication.json`.
+The runner now supports explicit `--active-faults`, binds namespace UID before
+mutation and removes only performed fault checks from pending. Active worker
+loss, PostgreSQL partition, stale-worker return and resource/load qualification
+remain open. These two checks do not close R5 or certify real provider/node failover.
+
 R1: `assert len(live_claims_for_same_work) == 1`;
 `assert new_claim.fence > old_claim.fence`; старое finish проверяется через
 `pytest.raises(LostOwnership)`.

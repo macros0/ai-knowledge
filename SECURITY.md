@@ -2087,6 +2087,23 @@ clear those reservations. They provide no active-writer drain, provider-stop,
 backup-consistency or failover guarantee. Missing active fault/recovery checks keep
 the overall acceptance failed/pending.
 
+The explicit `--active-faults` path additionally binds the recorded namespace UID
+and an owned instrumented test-model deployment before writing new synthetic
+documents. The model fixture's read-only `/test/status` exposes bounded aggregate
+active/peak/started/finished counters only, without prompts, model input or request
+identities; there is no reset endpoint. Fixture rollout/delay changes require no
+live or uncertain model owners, document work or chat, and use normal Kubernetes
+termination. Cancellation/deletion probes require a real in-flight provider call,
+then check the original SQL publication/content hash after that call returns,
+work cancellation fencing and search/download visibility. Capacity probes observe
+two running document workers with one actual provider call; independent API
+processes must reject admission without another provider request, and both
+documents must subsequently finish. The fixture returns to its prior success
+configuration only after quiescence is verified. These probes never free provider
+reservations, kill a live provider, or certify missing worker-loss/partition/stale
+return scenarios. Passing implemented checks removes only their own pending
+entries; missing required checks still fail overall acceptance.
+
 Replica maintenance foundation (2026-11-01, O2 incomplete): PostgreSQL shared
 transaction locks precede work/control locks, while offline entry obtains the
 exclusive epoch fence. Epochs bind once per process and per Work claim; ending

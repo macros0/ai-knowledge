@@ -80,6 +80,27 @@ def test_live_smoke_cannot_hide_remaining_runtime_faults(monkeypatch):
     assert any(c["name"] == "runtime.document_roundtrip" and c["status"] == "passed" for c in result["checks"])
 
 
+def test_completed_active_faults_remove_only_their_own_pending_entries(monkeypatch):
+    from test_scripts import run_replica_acceptance as runner
+    requested = []
+
+    def actual_probes(*_args, **kwargs):
+        requested.append(kwargs["active_faults"])
+        return [{"name": "runtime.concurrent_cancel_delete", "status": "passed"},
+            {"name": "runtime.model_capacity_exhaustion", "status": "passed"}]
+
+    monkeypatch.setattr(runner, "probe_runtime", actual_probes)
+    value = {**live_inputs(), "schema_version": 1, "profile": "basic",
+        "database_url": "postgresql+psycopg://replica@db/replica_test_abcdefgh",
+        "qdrant_collection": "replica_test_abcdefgh", "bucket_prefix": "replica_test/abcdefgh/"}
+    report = runner.build_report(value, "runtime", live=True, active_faults=True, idle_faults=True)
+    assert requested == [True]
+    assert report["passed"] is False
+    assert {c["name"] for c in report["checks"] if c["status"] == "pending"} == {
+        "runtime.active_worker_loss", "runtime.postgres_partition", "runtime.stale_worker_return"}
+    assert len([c for c in report["checks"] if c["name"] == "runtime.model_capacity_exhaustion"]) == 1
+
+
 def test_foreign_namespace_stops_before_inventory_or_http(monkeypatch):
     from test_scripts import replica_runtime_acceptance as live
 

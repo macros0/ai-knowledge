@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -77,3 +79,30 @@ def test_stub_interrupted_sse_has_no_success_marker(server):
     assert "delta" in content
     assert "[DONE]" not in content
     assert '"finish_reason": "stop"' not in content
+
+
+def test_stub_reports_actual_active_calls_without_payloads_or_reset(server, monkeypatch):
+    monkeypatch.setenv("MODEL_STUB_DELAY_SECONDS", "0.7")
+    endpoint = server.removesuffix("/v1") + "/test/status"
+
+    def complete():
+        with _post(server, model="test-stub-delay", messages=[{"role": "user", "content": "PRIVATE_CANARY"}]) as response:
+            return response.status
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        pending = [pool.submit(complete) for _ in range(2)]
+        deadline = time.monotonic() + 4
+        while True:
+            status = json.load(urlopen(endpoint, timeout=2))
+            if status["active"] == 2:
+                break
+            assert time.monotonic() < deadline, "Both real provider requests must be observable"
+            time.sleep(.01)
+        assert status == {"test_only": True, "active": 2, "peak_active": 2, "started": 2, "finished": 0}
+        assert "PRIVATE_CANARY" not in json.dumps(status)
+        assert [p.result(timeout=4) for p in pending] == [200, 200]
+    status = json.load(urlopen(endpoint, timeout=2))
+    assert status["active"] == 0 and status["finished"] == 2 and status["peak_active"] == 2
+    with pytest.raises(HTTPError) as failure:
+        urlopen(Request(endpoint, data=b"{}"), timeout=2)
+    assert failure.value.code == 404

@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import re
+import threading
 import time
 
 
@@ -61,6 +62,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"status": "alive", "test_only": True})
         if self.path == "/v1/models":
             return self._json(200, {"object": "list", "data": [{"id": "test-stub", "object": "model"}]})
+        if self.path == "/test/status":
+            with self.server.metrics_lock:
+                status = {"test_only": True, **self.server.metrics}
+            return self._json(200, status)
         self._json(404, {"error": {"message": "Unknown test endpoint"}})
 
     def do_POST(self):
@@ -75,6 +80,18 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Invalid payload")
         except (ValueError, TypeError):
             return self._json(400, {"error": {"message": "Invalid test request"}})
+        with self.server.metrics_lock:
+            self.server.metrics["started"] += 1
+            self.server.metrics["active"] += 1
+            self.server.metrics["peak_active"] = max(self.server.metrics["peak_active"], self.server.metrics["active"])
+        try:
+            self._completion(payload)
+        finally:
+            with self.server.metrics_lock:
+                self.server.metrics["active"] -= 1
+                self.server.metrics["finished"] += 1
+
+    def _completion(self, payload):
         model = str(payload.get("model", "test-stub"))
         scenario = os.environ.get("MODEL_STUB_SCENARIO", "success")
         for candidate in ("429", "503", "delay", "interrupted"):
@@ -113,6 +130,8 @@ class Handler(BaseHTTPRequestHandler):
 def make_server(host="0.0.0.0", port=8000):
     server = ThreadingHTTPServer((host, port), Handler)
     server.daemon_threads = True
+    server.metrics_lock = threading.Lock()
+    server.metrics = {"active": 0, "peak_active": 0, "started": 0, "finished": 0}
     return server
 
 

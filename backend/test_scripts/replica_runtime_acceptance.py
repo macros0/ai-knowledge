@@ -333,7 +333,7 @@ with session_scope() as s:
         "active_provider_loss_tested": False}
 
 
-def probe_runtime(value, *, ssh_host=None, known_hosts=None, idle_faults=False):
+def probe_runtime(value, *, ssh_host=None, known_hosts=None, idle_faults=False, active_faults=False):
     checks = []
     name = "runtime.scope"
     try:
@@ -369,6 +369,9 @@ def probe_runtime(value, *, ssh_host=None, known_hosts=None, idle_faults=False):
             name = "runtime.after_idle_replacement"
             evidence = document_roundtrip(value)
             checks.append({"name": name, "status": "passed", "evidence": evidence})
+        if active_faults:
+            from test_scripts.replica_runtime_faults import probe_active_faults
+            checks.extend(probe_active_faults(kube, value))
     except Exception:
         # Remote stderr, raw HTTP responses and Settings/provider errors may
         # contain credentials. They never become report fields or tracebacks.
