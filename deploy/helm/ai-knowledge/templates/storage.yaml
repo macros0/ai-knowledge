@@ -1,3 +1,4 @@
+{{- if ne .Values.deployment.mode "distributed" }}
 {{- range $name := list "postgres" "qdrant" }}
 ---
 apiVersion: apps/v1
@@ -63,4 +64,5 @@ spec:
         - name: storage
           persistentVolumeClaim:
             claimName: {{ (index $.Values.persistence $name).existingClaim | quote }}
+{{- end }}
 {{- end }}

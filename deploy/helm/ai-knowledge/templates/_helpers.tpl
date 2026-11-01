@@ -27,9 +27,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if ne .Values.resilience.class "basic" -}}
 {{- fail "Resilient storage and topology qualification is required before activation" -}}
 {{- end -}}
-{{- if or (ne .Values.replicaStorage.postgres.provider "managed") (ne .Values.replicaStorage.qdrant.provider "managed") -}}
-{{- fail "Distributed external database/vector wiring requires O1 storage packages" -}}
-{{- end -}}
 {{- end -}}
 {{- if not (kindIs "bool" .Values.runtime.auditDbEnabled) -}}
 {{- fail "runtime.auditDbEnabled must be a boolean" -}}
@@ -44,12 +41,12 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "DEV/TEST/PROD require production application protections" -}}
 {{- end -}}
 {{- if .Values.trust.existingConfigMap -}}
-{{- range $key := list "SSL_CERT_FILE" "REQUESTS_CA_BUNDLE" "NODE_EXTRA_CA_CERTS" "SSL_VERIFY" "NODE_TLS_REJECT_UNAUTHORIZED" -}}
+{{- range $key := list "SSL_CERT_FILE" "REQUESTS_CA_BUNDLE" "NODE_EXTRA_CA_CERTS" "SSL_VERIFY" "NODE_TLS_REJECT_UNAUTHORIZED" "RUNTIME_TRUST_FILE" "ARTIFACT_S3_CA_BUNDLE" -}}
 {{- if hasKey $.Values.runtime.config $key -}}{{- fail (printf "Runtime trust controls TLS key %s" $key) -}}{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- range $key, $value := .Values.runtime.config -}}
-{{- if and (eq $.Values.deployment.mode "distributed") (has $key (list "DEPLOYMENT_MODE" "DEPLOYMENT_NAMESPACE" "FRONTEND_REPLICAS" "API_REPLICAS" "WORKER_REPLICAS" "RESILIENCE_CLASS" "ARTIFACT_STORE_ID" "ARTIFACT_UPLOADS_ENABLED" "RUNTIME_IDENTITY_FILE" "ARTIFACT_ROOT" "ARTIFACT_SCRATCH_ROOT" "DIAGNOSTICS_DIR")) -}}
+{{- if and (eq $.Values.deployment.mode "distributed") (has $key (list "DEPLOYMENT_MODE" "DEPLOYMENT_NAMESPACE" "RUNTIME_IMAGE_ID" "FRONTEND_REPLICAS" "API_REPLICAS" "WORKER_REPLICAS" "RESILIENCE_CLASS" "ARTIFACT_STORE_ID" "ARTIFACT_UPLOADS_ENABLED" "RUNTIME_IDENTITY_FILE" "ARTIFACT_ROOT" "ARTIFACT_SCRATCH_ROOT" "DIAGNOSTICS_DIR")) -}}
 {{- fail (printf "Distributed runtime controls key %s" $key) -}}
 {{- end -}}
 {{- if and (eq $key "KEYCLOAK_TOKEN_ENDPOINT_AUTH_METHOD") (not (has $value (list "client_secret_basic" "client_secret_post" "none"))) -}}

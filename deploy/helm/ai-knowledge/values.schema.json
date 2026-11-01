@@ -167,7 +167,7 @@
         "properties": {
           "existingClaim": {
             "type": "string",
-            "minLength": 1
+            "minLength": 0
           }
         }
       }
@@ -346,6 +346,10 @@
               "type": "string"
             }
           }
+        },
+        "infrastructureRelease": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
         }
       }
     },
@@ -652,6 +656,41 @@
                   "backend": {
                     "const": "local"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "deployment": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "compact",
+                  "frontend-split"
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          }
+        },
+        "required": [
+          "deployment"
+        ]
+      },
+      "then": {
+        "properties": {
+          "persistence": {
+            "additionalProperties": {
+              "properties": {
+                "existingClaim": {
+                  "minLength": 1
                 }
               }
             }

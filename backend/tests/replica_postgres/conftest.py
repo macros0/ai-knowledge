@@ -14,6 +14,8 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 def _db():
     path = os.environ.get("OKF_ARTIFACT_PG_URL_FILE")
     if not path:
+        if os.environ.get("OKF_REPLICA_PG_REQUIRED") == "1" or os.environ.get("OKF_REPLICA_STORAGE_REQUIRED") == "1":
+            pytest.fail("Required isolated replica PostgreSQL target missing")
         pytest.skip("Explicit disposable artifact PostgreSQL URL file required")
     url = make_url(Path(path).read_text(encoding="utf-8-sig").strip())
     if (url.drivername != "postgresql+psycopg" or url.host != "127.0.0.1"

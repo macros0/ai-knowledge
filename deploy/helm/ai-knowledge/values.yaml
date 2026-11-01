@@ -6,6 +6,7 @@ application:
   replicas: 1
 # Shared runtime/storage identity is mandatory for distributed roles.
 replicaStorage:
+  infrastructureRelease: okf-storage
   postgres: {provider: managed}
   qdrant: {provider: managed, url: "http://qdrant:6333"}
   artifacts: {provider: managed, backend: local, storeId: ""}

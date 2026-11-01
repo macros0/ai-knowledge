@@ -1,0 +1,133 @@
+{{- range $name := list "postgres" "qdrant" "artifacts" }}
+{{- $component := index $.Values $name }}
+{{- if eq $component.provider "managed" }}
+{{- $uid := ternary 999 (ternary 1000 10001 (eq $name "qdrant")) (eq $name "postgres") }}
+{{- $port := ternary 5432 (ternary 6333 9000 (eq $name "qdrant")) (eq $name "postgres") }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+  labels:
+    {{- include "storage.labels" $ | nindent 4 }}
+spec:
+  serviceName: {{ $.Release.Name }}-{{ $name }}
+  replicas: 1
+  selector: {matchLabels: {okf-storage-component: {{ $name }}, app.kubernetes.io/instance: {{ $.Release.Name }}}}
+  template:
+    metadata:
+      labels:
+        {{- include "storage.labels" $ | nindent 8 }}
+        okf-storage-component: {{ $name }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $uid }}
+        runAsGroup: {{ $uid }}
+        fsGroup: {{ $uid }}
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: {{ $name }}
+          image: {{ $component.image | quote }}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          ports:
+            - {name: storage, containerPort: {{ $port }}}
+          {{- if eq $name "qdrant" }}
+            - {name: grpc, containerPort: 6334}
+          {{- end }}
+          {{- if eq $name "postgres" }}
+          {{- if $component.tlsSecret }}
+          args: [-c, ssl=on, -c, ssl_cert_file=/run/tls/tls.crt, -c, ssl_key_file=/run/tls/tls.key]
+          {{- end }}
+          env:
+            - {name: PGDATA, value: /data/pgdata}
+            - {name: POSTGRES_USER, value: {{ $component.user | quote }}}
+            - {name: POSTGRES_DB, value: {{ $component.database | quote }}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ $component.existingSecret | quote }}, key: POSTGRES_PASSWORD}}
+          readinessProbe:
+            exec: {command: [pg_isready, -U, {{ $component.user | quote }}, -d, {{ $component.database | quote }}]}
+            periodSeconds: 5
+          {{- else if eq $name "qdrant" }}
+          workingDir: /data
+          command: [/qdrant/qdrant]
+          args: [--config-path, /qdrant/config/production.yaml]
+          env:
+            - {name: QDRANT__TELEMETRY_DISABLED, value: "true"}
+            - {name: QDRANT__STORAGE__STORAGE_PATH, value: /data/storage}
+            - {name: QDRANT__STORAGE__SNAPSHOTS_PATH, value: /data/snapshots}
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom: {secretKeyRef: {name: {{ $component.existingSecret | quote }}, key: QDRANT_API_KEY}}
+            {{- if $component.tlsSecret }}
+            - {name: QDRANT__SERVICE__ENABLE_TLS, value: "true"}
+            - {name: QDRANT__TLS__CERT, value: /run/tls/tls.crt}
+            - {name: QDRANT__TLS__KEY, value: /run/tls/tls.key}
+            {{- end }}
+          readinessProbe:
+            httpGet: {path: /readyz, port: {{ $port }}, scheme: {{ ternary "HTTPS" "HTTP" (not (empty $component.tlsSecret)) }}}
+            periodSeconds: 5
+          {{- else }}
+          args: [/data]
+          env:
+            - {name: RUSTFS_ADDRESS, value: ":9000"}
+            - {name: RUSTFS_CONSOLE_ENABLE, value: "false"}
+            - {name: RUSTFS_OBS_LOG_DIRECTORY, value: /logs}
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: {{ $component.existingSecret | quote }}, key: S3_ROOT_ACCESS_KEY}}
+            - name: RUSTFS_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: {{ $component.existingSecret | quote }}, key: S3_ROOT_SECRET_KEY}}
+            {{- if $component.tlsSecret }}
+            - {name: RUSTFS_TLS_PATH, value: /run/tls}
+            {{- end }}
+          readinessProbe:
+            httpGet: {path: /health, port: {{ $port }}, scheme: {{ ternary "HTTPS" "HTTP" (not (empty $component.tlsSecret)) }}}
+            periodSeconds: 5
+          {{- end }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            {{- if eq $name "artifacts" }}
+            - {name: logs, mountPath: /logs}
+            {{- end }}
+            {{- if $component.tlsSecret }}
+            - {name: tls, mountPath: /run/tls, readOnly: true}
+            {{- end }}
+          resources: {{ toYaml $component.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: {{ $component.claim.name | quote }}}
+        {{- if eq $name "artifacts" }}
+        - name: logs
+          emptyDir: {sizeLimit: 256Mi}
+        {{- end }}
+        {{- if $component.tlsSecret }}
+        - name: tls
+          secret:
+            secretName: {{ $component.tlsSecret | quote }}
+            defaultMode: 0440
+            {{- if eq $name "artifacts" }}
+            items: [{key: tls.crt, path: rustfs_cert.pem}, {key: tls.key, path: rustfs_key.pem}]
+            {{- end }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+  labels:
+    {{- include "storage.labels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {okf-storage-component: {{ $name }}, app.kubernetes.io/instance: {{ $.Release.Name }}}
+  ports:
+    - {name: storage, port: {{ $port }}, targetPort: {{ $port }}}
+    {{- if eq $name "qdrant" }}
+    - {name: grpc, port: 6334, targetPort: 6334}
+    {{- end }}
+{{- end }}
+{{- end }}

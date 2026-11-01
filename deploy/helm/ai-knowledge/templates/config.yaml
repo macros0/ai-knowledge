@@ -8,7 +8,7 @@ metadata:
 data:
   ENVIRONMENT: {{ .Values.runtime.environment | quote }}
   DATA_DIR: {{ ternary "/scratch/data" "/data" (eq .Values.deployment.mode "distributed") | quote }}
-  STORAGE_MODE: bundled
+  STORAGE_MODE: {{ ternary "replicas" "bundled" (eq .Values.deployment.mode "distributed") }}
   QDRANT_URL: {{ ternary .Values.replicaStorage.qdrant.url "http://qdrant:6333" (eq .Values.deployment.mode "distributed") | quote }}
   DEPLOYMENT_TIER: {{ .Values.deployment.environment | quote }}
   MODEL_MODE: {{ .Values.models.mode | quote }}
@@ -19,6 +19,7 @@ data:
   {{- if eq .Values.deployment.mode "distributed" }}
   OKF_DEPLOYMENT_SCHEMA: replicas-v1
   DEPLOYMENT_MODE: distributed
+  RUNTIME_IMAGE_ID: {{ include "okf.image" (dict "image" .Values.images.backend "tier" .Values.deployment.environment) | quote }}
   FRONTEND_REPLICAS: {{ .Values.frontend.replicas | quote }}
   API_REPLICAS: {{ .Values.api.replicas | quote }}
   WORKER_REPLICAS: {{ .Values.worker.replicas | quote }}

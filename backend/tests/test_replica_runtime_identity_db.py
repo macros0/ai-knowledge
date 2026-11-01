@@ -62,6 +62,18 @@ def test_fenced_replica_is_not_ready(installed, monkeypatch):
     assert health._check_database()["status"] == "down"
 
 
+def test_http_command_validates_identity_before_recorder(tmp_path, monkeypatch):
+    from app.config import Settings
+    from app.diagnostic_entrypoint import main
+    settings = Settings(_env_file=None, data_dir=tmp_path)
+    settings.okf_deployment_schema, settings.app_role = "replicas-v1", "api"
+    def forbidden(*_a, **_k):
+        raise AssertionError("Recorder installed before identity admission")
+    monkeypatch.setattr("app.services.diagnostics.runtime.install_entrypoint_runtime", forbidden)
+    with pytest.raises(ValueError, match="identity"):
+        main([], settings=settings)
+
+
 @pytest.mark.parametrize("role", ["api", "worker"])
 def test_entrypoint_rejects_uninstalled_identity_before_starting_consumers(tmp_path, monkeypatch, role):
     # Import before patching the source of worker's module-bound runtime import.

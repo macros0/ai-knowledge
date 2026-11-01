@@ -16,6 +16,16 @@ def main() -> int:
     mode = os.environ.get("STORAGE_MODE", "")
     try:
         schema = os.environ.get("OKF_DEPLOYMENT_SCHEMA")
+        if schema == "replicas-v1":
+            from app.config import get_settings
+            from app.deployment.runtime_identity import enforce_runtime_identity
+            try:
+                enforce_runtime_identity(get_settings())
+            except Exception:
+                print("Invalid replica storage/configuration identity", file=sys.stderr)
+                return 1
+            print("Storage topology validated: replicas")
+            return 0
         profile = ReplicaProfile(
             role=os.environ.get("APP_ROLE", "combined"),
             artifact_backend=os.environ.get("ARTIFACT_BACKEND", "local"),

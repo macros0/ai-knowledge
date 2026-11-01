@@ -1,0 +1,9 @@
+# Overlay distributed-managed: customer PostgreSQL, our Qdrant, customer RWX.
+replicaStorage:
+  postgres: {provider: external}
+  qdrant: {provider: managed, url: "https://okf-storage-qdrant:6333"}
+  artifacts: {provider: external, backend: rwx, storeId: replace-with-verified-rwx-store}
+persistence:
+  data: {existingClaim: replace-with-verified-rwx-claim}
+# The shared claim must pass the RWX contract on the actual CSI/server/mount.
+# Do not reuse the S3 runtime.config entries from the managed example.

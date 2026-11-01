@@ -87,8 +87,12 @@ spec:
             - {name: ARTIFACT_ROOT, value: /artifacts}
             {{- end }}
             {{- if $root.Values.trust.existingConfigMap }}
+            - {name: RUNTIME_TRUST_FILE, value: /etc/okf/trust/ca-bundle.crt}
             - {name: SSL_CERT_FILE, value: /etc/okf/trust/ca-bundle.crt}
             - {name: REQUESTS_CA_BUNDLE, value: /etc/okf/trust/ca-bundle.crt}
+            {{- if eq $root.Values.replicaStorage.artifacts.backend "s3" }}
+            - {name: ARTIFACT_S3_CA_BUNDLE, value: /etc/okf/trust/ca-bundle.crt}
+            {{- end }}
             {{- end }}
           volumeMounts:
             - {name: scratch, mountPath: /scratch}
@@ -97,7 +101,7 @@ spec:
             - {name: artifacts, mountPath: /artifacts}
             {{- end }}
             {{- if $root.Values.trust.existingConfigMap }}
-            - {name: runtime-trust, mountPath: /etc/okf/trust, readOnly: true}
+            - {name: runtime-trust, mountPath: /etc/okf/trust/ca-bundle.crt, subPath: ca-bundle.crt, readOnly: true}
             {{- end }}
           startupProbe:
             httpGet: {path: /health/live, port: {{ $port }}}

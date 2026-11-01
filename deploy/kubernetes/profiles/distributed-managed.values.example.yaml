@@ -1,0 +1,23 @@
+# Application chart only; storage is a separate infrastructure release.
+deployment: {environment: home, mode: distributed}
+application: {enabled: false}
+frontend: {replicas: 2}
+api: {replicas: 2}
+worker: {replicas: 2}
+resilience: {class: basic}
+secrets: {existingSecret: okf-runtime}
+trust: {existingConfigMap: okf-public-roots}
+runtime:
+  environment: production
+  identityConfigMap: okf-runtime-identity
+  config:
+    ARTIFACT_S3_ENDPOINT: https://okf-storage-artifacts:9000
+    ARTIFACT_S3_BUCKET: replace-with-provisioned-bucket
+    ARTIFACT_S3_PREFIX: installation/
+replicaStorage:
+  infrastructureRelease: okf-storage
+  postgres: {provider: managed}
+  qdrant: {provider: managed, url: "https://okf-storage-qdrant:6333"}
+  artifacts: {provider: managed, backend: s3, storeId: replace-with-unique-store-id}
+# Supply immutable application images, auth, DB/application credentials and server
+# TLS/CA references privately. Keep off until bootstrap/maintenance acceptance.

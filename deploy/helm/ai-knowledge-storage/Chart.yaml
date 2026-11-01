@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ai-knowledge-storage
+description: Independently owned basic storage; no cluster operators or implicit adoption
+type: application
+version: 0.1.0
+appVersion: replicas-v1

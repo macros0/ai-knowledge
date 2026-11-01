@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     worker_replicas: int = Field(default=0, ge=0, le=64)
     resilience_class: str = "basic"
     runtime_identity_file: Path | None = None
+    runtime_image_id: str | None = Field(default=None, min_length=1, max_length=512)
+    runtime_trust_file: Path | None = None
     _runtime_identity: Any = PrivateAttr(default=None)
     # Durable work foundation only: role/admission activation remains gated.
     work_lease_seconds: int = Field(default=120, ge=5, le=3600)
@@ -96,6 +98,8 @@ class Settings(BaseSettings):
         if self.okf_deployment_schema == "replicas-v1":
             if not self.deployment_namespace:
                 raise ValueError("Replica runtime identity requires an explicit deployment namespace")
+            if self.environment == "production" and not self.runtime_image_id:
+                raise ValueError("Replica runtime identity requires an explicit image reference")
             from sqlalchemy.engine import make_url
             try:
                 dialect = make_url(self.db_url).get_backend_name()
@@ -114,6 +118,9 @@ class Settings(BaseSettings):
             **additional,
         )
         validate_runtime_profile(self.okf_deployment_schema, profile)
+        if self.okf_deployment_schema == "replicas-v1":
+            from app.deployment.replica_profile import validate_replica_endpoints
+            validate_replica_endpoints(self)
         return self
 
     # Diagnostics use a separate root so short-lived logs do not enter document backups.

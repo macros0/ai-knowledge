@@ -78,3 +78,15 @@ def test_legacy_single_process_guard_retained():
         assert render(override, check=False).returncode != 0
     documents = render()
     assert [item["metadata"]["name"] for item in documents if item["kind"] == "Deployment" and item["metadata"]["name"] != "model-stub"] == ["application"]
+
+
+def test_distributed_trust_is_a_bound_per_pod_snapshot():
+    documents = distributed("trust.existingConfigMap=runtime-roots")
+    for item in documents:
+        if item["kind"] != "Deployment" or item["metadata"]["name"] not in {"api", "worker"}:
+            continue
+        container = item["spec"]["template"]["spec"]["containers"][0]
+        environment = {entry["name"]: entry.get("value") for entry in container["env"]}
+        assert environment["RUNTIME_TRUST_FILE"] == environment["ARTIFACT_S3_CA_BUNDLE"] == "/etc/okf/trust/ca-bundle.crt"
+        mount = next(entry for entry in container["volumeMounts"] if entry["name"] == "runtime-trust")
+        assert mount["subPath"] == "ca-bundle.crt" and mount["readOnly"] is True

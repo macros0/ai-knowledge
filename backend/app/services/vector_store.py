@@ -341,8 +341,8 @@ def close_shared_qdrant_clients() -> None:
 
 
 class VectorStore:
-    def __init__(self):
-        self.settings = get_settings()
+    def __init__(self, *, settings=None):
+        self.settings = settings if settings is not None else get_settings()
 
     @property
     def client(self) -> QdrantClient:

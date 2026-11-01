@@ -79,3 +79,24 @@ def validate_runtime_profile(schema: str | None, profile: ReplicaProfile) -> Non
     validate_replica_profile(profile)
     if profile.resilience != "basic":
         raise ReplicaProfileError("Resilient runtime requires qualified storage/topology acceptance")
+
+
+def validate_replica_endpoints(settings):
+    """Ownership is explicit; hostname never implies a Compose storage mode."""
+    from sqlalchemy.engine import make_url
+    from urllib.parse import urlsplit
+    try:
+        database = make_url(settings.db_url)
+        qdrant = urlsplit(settings.qdrant_url)
+        _ = qdrant.port
+        if (database.get_backend_name() != "postgresql" or not database.host or not database.database
+                or qdrant.scheme not in {"http", "https"} or not qdrant.hostname
+                or qdrant.username or qdrant.password or qdrant.query or qdrant.fragment):
+            raise ValueError()
+        if settings.environment == "production":
+            if settings.postgres_provider == "external" and database.query.get("sslmode") != "verify-full":
+                raise ValueError()
+            if settings.qdrant_provider == "external" and qdrant.scheme != "https":
+                raise ValueError()
+    except (ValueError, TypeError, AttributeError):
+        raise ReplicaProfileError("Replica endpoints require explicit PostgreSQL/vector URLs and verified external TLS in production") from None

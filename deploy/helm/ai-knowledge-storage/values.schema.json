@@ -1,0 +1,296 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "installationId",
+    "profile",
+    "applicationRelease",
+    "postgres",
+    "qdrant",
+    "artifacts"
+  ],
+  "properties": {
+    "installationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "profile": {
+      "enum": [
+        "basic",
+        "resilient"
+      ]
+    },
+    "applicationRelease": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "postgres": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "recipe",
+        "image",
+        "provision",
+        "existingSecret",
+        "tlsSecret",
+        "claim",
+        "resources",
+        "user",
+        "database"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "managed",
+            "external"
+          ]
+        },
+        "recipe": {
+          "const": "postgres-17-single-v1"
+        },
+        "image": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./:-]*@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675$"
+        },
+        "provision": {
+          "type": "boolean"
+        },
+        "existingSecret": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        },
+        "tlsSecret": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        },
+        "claim": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "size",
+            "storageClass"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+            },
+            "size": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$"
+            },
+            "storageClass": {
+              "type": "string"
+            }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requests",
+            "limits"
+          ],
+          "properties": {
+            "requests": {
+              "type": "object"
+            },
+            "limits": {
+              "type": "object"
+            }
+          }
+        },
+        "user": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$"
+        },
+        "database": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$"
+        }
+      }
+    },
+    "qdrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "recipe",
+        "image",
+        "provision",
+        "existingSecret",
+        "tlsSecret",
+        "claim",
+        "resources"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "managed",
+            "external"
+          ]
+        },
+        "recipe": {
+          "const": "qdrant-1.19-single-v1"
+        },
+        "image": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./:-]*@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc$"
+        },
+        "provision": {
+          "type": "boolean"
+        },
+        "existingSecret": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        },
+        "tlsSecret": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        },
+        "claim": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "size",
+            "storageClass"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+            },
+            "size": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$"
+            },
+            "storageClass": {
+              "type": "string"
+            }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requests",
+            "limits"
+          ],
+          "properties": {
+            "requests": {
+              "type": "object"
+            },
+            "limits": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "recipe",
+        "image",
+        "provision",
+        "existingSecret",
+        "tlsSecret",
+        "claim",
+        "resources",
+        "backend"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "managed",
+            "external"
+          ]
+        },
+        "recipe": {
+          "const": "rustfs-1.0.4-single-v1"
+        },
+        "image": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./:-]*@sha256:e287e99762a4a3e7b706526e01f2ff755f67db165e9be9f6b907adc6fb6d6ee1$"
+        },
+        "provision": {
+          "type": "boolean"
+        },
+        "existingSecret": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        },
+        "tlsSecret": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        },
+        "claim": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "size",
+            "storageClass"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+            },
+            "size": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$"
+            },
+            "storageClass": {
+              "type": "string"
+            }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requests",
+            "limits"
+          ],
+          "properties": {
+            "requests": {
+              "type": "object"
+            },
+            "limits": {
+              "type": "object"
+            }
+          }
+        },
+        "backend": {
+          "enum": [
+            "s3",
+            "rwx"
+          ]
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

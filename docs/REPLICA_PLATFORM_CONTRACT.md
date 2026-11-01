@@ -32,7 +32,7 @@ Credentials этого manifest не выводятся в report. Наличи�
 | Разрешённый disposable namespace/context | Учебный kind-okf-policy: replica-test-s3rpl20261031; namespace проверен по managed-by/run-id |
 | PVC/CSI, диски и домены отказа | Учебный стенд: один node, local-path/RWO; RWX/CSI failover и независимые домены не подтверждены |
 | Разрешения на namespace/cluster components | Не проверены |
-| PG/Qdrant/RWX/S3 реализации и digests | Не выбраны до проверки платформы |
+| PG/Qdrant/RWX/S3 реализации и digests | Basic recipes: PG17, Qdrant1.19.0, RustFS1.0.4 закреплены; RWX/platform и resilient не выбраны/не квалифицированы |
 | Независимое backup destination | Не предоставлено |
 
 R5 foundation (01.11.2026): Helm формирует frontend/API/worker, но runtime требует
@@ -41,3 +41,10 @@ rpl04_runtime_identity. Автоматической инициализации 
 O1 storage bootstrap, O2 maintenance и реальные multi-Pod испытания ещё обязательны;
 пример basic держит application.enabled=false. Resilient остаётся запрещён.
 Наличие шаблонов не подтверждает доступность платформенных хранилищ заказчика.
+
+O1 basic evidence (01.11.2026): selected Qdrant/RustFS run in restricted non-root
+Pods with separate local-path PVCs on the owned lab. S3 publication/cold/range/
+delete and credential refusals, Qdrant schema/populated refusal, full PostgreSQL
+schema migration and competing initialization/retry have passed. Cilium is present;
+live policy/provider/TLS/restore and customer qualification remain separate gates.
+See `docs/REPLICA_STORAGE_OPERATIONS.md` for exact pins and remaining requirements.

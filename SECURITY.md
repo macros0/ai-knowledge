@@ -2042,6 +2042,31 @@ return generic503 on SQL failure. Uncertain provider reservations remain occupie
 These are implementation controls; provider, CNI and multi-Pod qualification and
 O1/O2 bootstrap/recovery remain required before customer activation.
 
+Basic storage/bootstrap implementation (2026-11-01, qualification pending):
+distributed application releases do not own database/vector storage workloads or
+PVCs. The separate infrastructure chart creates only explicitly managed
+namespace-scoped components and retained claims; external components create none.
+Provisioning cannot adopt a foreign live PVC. Selected image content digests are
+fixed, including when mirrored. Secret values are existing references, never Helm
+values. Storage accepts only the selected application release's API/worker/backup/
+bootstrap roles; no cluster operator or privileged storage-node change is installed.
+Managed single-node recipes provide no HA. Server TLS Secrets and application CA
+references remain separate. Root/admin lab accounts are not production scoped IAM;
+restricted application credentials and remaining provider gates are mandatory.
+
+The explicit offline bootstrap constructor can prepare a missing identity file;
+it does not alter the normal Settings loader or entrypoint enforcement. Fresh
+migration/installation refuses application data and edited reference seeds. Only
+new probe object IDs are written/deleted, and populated Qdrant collections cannot
+be adopted automatically. Existing installed identities cannot be replaced by
+this path. SQL acceptance and create-only atomic identity publication support a
+safe retry after interruption. CLI output omits raw validation/provider exceptions.
+The common identity now includes parser source, Python/package versions, backend
+image reference and custom CA bytes. API/worker CA files are mounted as per-Pod
+snapshots; coordinated rotation must update identity and restart the roles.
+External production PostgreSQL requires verify-full and Qdrant HTTPS. Plain HTTP
+credentials are used only by the isolated basic lab probes, not as a TLS result.
+
 ## User answer scenarios (2026-10-23)
 
 Authenticated users, including viewer, may create and publish their own answer

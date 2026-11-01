@@ -1,0 +1,24 @@
+# Infrastructure chart only; install/update independently of application release.
+installationId: "" # required private 32-hex installation identity
+profile: basic
+applicationRelease: okf
+postgres:
+  provider: managed
+  existingSecret: okf-postgres-admin
+  provision: false
+  claim: {name: okf-postgres, size: 10Gi, storageClass: ""}
+  tlsSecret: okf-postgres-tls
+qdrant:
+  provider: managed
+  existingSecret: okf-qdrant-auth
+  provision: false
+  claim: {name: okf-qdrant, size: 20Gi, storageClass: ""}
+  tlsSecret: okf-qdrant-tls
+artifacts:
+  provider: managed
+  backend: s3
+  existingSecret: okf-s3-root
+  provision: false
+  claim: {name: okf-artifacts, size: 20Gi, storageClass: ""}
+  tlsSecret: okf-s3-tls
+# Explicitly provision new retained claims first; never adopt unknown data.

@@ -5,6 +5,9 @@ from hashlib import sha256
 import hmac
 import json
 from pathlib import Path
+import importlib.metadata
+import importlib.util
+import platform
 import re
 
 SCHEMA_REVISION = "rpl04_runtime_identity"
@@ -22,12 +25,18 @@ class RuntimeIdentity:
 
 @lru_cache(maxsize=1)
 def build_fingerprint():
-    root = Path(__file__).resolve().parents[1]
     digest = sha256()
-    for path in sorted(root.rglob("*")):
-        if path.is_file() and path.suffix in {".py", ".md", ".json", ".yaml", ".yml", ".txt"}:
-            digest.update(path.relative_to(root).as_posix().encode() + b"\0")
-            digest.update(sha256(path.read_bytes()).digest())
+    roots = {"app": Path(__file__).resolve().parents[1]}
+    parser = importlib.util.find_spec("docparser")
+    if parser is not None and parser.origin:
+        roots["docparser"] = Path(parser.origin).parent
+    for name, root in sorted(roots.items()):
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and path.suffix in {".py", ".md", ".json", ".yaml", ".yml", ".txt"}:
+                digest.update((name + "/" + path.relative_to(root).as_posix()).encode() + b"\0")
+                digest.update(sha256(path.read_bytes()).digest())
+    packages = sorted((dist.metadata.get("Name", "").lower(), dist.version) for dist in importlib.metadata.distributions())
+    digest.update(json.dumps({"python": platform.python_version(), "packages": packages}, sort_keys=True).encode())
     return digest.hexdigest()
 
 
@@ -39,7 +48,16 @@ def _fingerprint(settings, envelope):
         if field.exclude is True and name not in LOCAL_FIELDS:
             value = getattr(settings, name)
             configuration[name] = value.get_secret_value() if hasattr(value, "get_secret_value") else value
-    raw = json.dumps({"configuration": configuration, "identity": envelope, "build": build_fingerprint()},
+    trust = {}
+    for name in ("runtime_trust_file", "artifact_s3_ca_bundle"):
+        path = getattr(settings, name, None)
+        if path is not None:
+            with Path(path).open("rb") as stream:
+                certificates = stream.read(4 * 1024 * 1024 + 1)
+            if not certificates or len(certificates) > 4 * 1024 * 1024 or b"PRIVATE KEY" in certificates:
+                raise ValueError("Runtime trust file is invalid")
+            trust[name] = sha256(certificates).hexdigest()
+    raw = json.dumps({"configuration": configuration, "identity": envelope, "build": build_fingerprint(), "trust": trust},
         sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False, default=str).encode()
     return hmac.new(settings.app_secret_key.encode(), raw, sha256).hexdigest()
 

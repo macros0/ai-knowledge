@@ -23,7 +23,7 @@ spec:
       ports: [{protocol: TCP, port: 8000}]
     - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
       ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
-{{- range $role := list "api" "worker" }}
+{{- range $role := list "api" "worker" "bootstrap" }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -44,6 +44,11 @@ spec:
             matchLabels: {app.kubernetes.io/instance: {{ $.Release.Name }}}
             matchExpressions: [{key: okf-role, operator: In, values: [postgres, qdrant, model-stub]}]
       ports: [{protocol: TCP, port: 5432}, {protocol: TCP, port: 6333}, {protocol: TCP, port: 6334}, {protocol: TCP, port: 8000}]
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/instance: {{ $.Values.replicaStorage.infrastructureRelease | quote }}}
+            matchExpressions: [{key: okf-storage-component, operator: In, values: [postgres, qdrant, artifacts]}]
+      ports: [{protocol: TCP, port: 5432}, {protocol: TCP, port: 6333}, {protocol: TCP, port: 6334}, {protocol: TCP, port: 9000}]
     - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
       ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
     {{- with $.Values.networkPolicy.externalEgress }}

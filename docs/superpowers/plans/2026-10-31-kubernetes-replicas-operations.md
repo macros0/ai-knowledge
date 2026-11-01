@@ -58,6 +58,20 @@ Basic и resilient имеют разные storage recipes, replicas и failure 
 - [ ] GREEN chart suite; runner contracts/storage на managed и external endpoints, включая CA rotation, wrong credentials, network deny, storage full и перезапуск. RWX и S3 проверяются отдельно; mixed smoke должен реально использовать разные ownership, а не только отличаться values.
 - [ ] Commit `feat: package managed and external replica storage`.
 
+O1 basic/bootstrap milestone (2026-11-01): independent namespace-scoped storage
+chart with explicit retained PVC provision and pinned PG17/Qdrant1.19/RustFS1.0.4
+recipes; external creates no resources, mixed ownership is per component. The app
+chart owns no distributed storage workloads/services. Fresh migration/bootstrap
+uses exact selected inputs, verified artifact operations, empty vector schema and
+serialized SQL identity; existing data/configurations require O2 adoption. Common
+identity includes image/source/package/namespace/CA content. Checks:92 focused
+unit/chart/lifecycle tests passed;4 required live tests passed (whole PG migration,
+competing init/retry, selected S3 contract/auth and Qdrant schema/nonempty refusal).
+Root audit0/frontend756+1skip/ESLint/Ruff passed. These are not full backend CI or
+customer/provider certification. Managed RWX/platform permission, scoped DB/S3
+credential provisioning, actual TLS/rotation/restart/full-storage and recovery
+qualification are still open; O1 is not complete. See REPLICA_STORAGE_OPERATIONS.
+
 ## Task O2: maintenance, backup и restore с ночным RPO
 
 **Files:** создать `scripts/kubernetes/replica_backup.py`,

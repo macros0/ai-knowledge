@@ -40,6 +40,7 @@ def test_api_and_worker_share_identity_with_different_local_scratch(tmp_path):
     ("database_url", "postgresql+psycopg://user:CANARY_PG_PASSWORD@different-db:5432/replica_test_example"),
     ("llm_global_max_concurrency", 2),
     ("deployment_namespace", "restored-namespace"),
+    ("runtime_image_id", "different-backend@sha256:" + "5" * 64),
 ])
 def test_identity_rejects_different_common_settings(tmp_path, field, value):
     values, _ = configured(tmp_path)
@@ -63,3 +64,19 @@ def test_distributed_without_identity_is_rejected(tmp_path):
             deployment_namespace="test-namespace",
             artifact_store_id="test-artifacts", artifact_uploads_enabled=True,
             worker_replicas=1, database_url="postgresql+psycopg://user:CANARY@database/test")
+
+
+def test_identity_binds_custom_ca_bytes_at_the_same_path(tmp_path):
+    from app.deployment.bootstrap import OperatorSettings
+    from app.deployment.runtime_identity import identity_document, validate_identity
+    values, _ = configured(tmp_path)
+    certificates = tmp_path / "ca-bundle.crt"
+    certificates.write_bytes(b"public-test-root-one")
+    values["runtime_trust_file"] = certificates
+    prepared = OperatorSettings(**values)
+    document = identity_document(prepared, installation_id="1" * 32, storage_receipt_digest="sha256:" + "2" * 64)
+    Path(values["runtime_identity_file"]).write_text(json.dumps(document), encoding="utf-8")
+    running = Settings(**values)
+    certificates.write_bytes(b"public-test-root-two")
+    with pytest.raises(ValueError, match="identity"):
+        validate_identity(running)
