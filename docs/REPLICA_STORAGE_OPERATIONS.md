@@ -59,7 +59,9 @@ bundle through the application trust ConfigMap. API/worker bind CA bytes into th
 common identity and mount a per-Pod file snapshot. Rotation requires new common
 identity and a coordinated restart, not a silent mounted-file change. External
 production PostgreSQL requires sslmode=verify-full and Qdrant requires HTTPS.
-SDK positive/wrong-hostname/CA-rotation probes remain separate from URL validation.
+The gRPC client uses the same snapshot through
+`GRPC_DEFAULT_SSL_ROOTS_FILE_PATH`; HTTP clients use the explicit CA/SSL settings.
+URL validation alone does not establish a working TLS connection.
 
 ## Fresh installation
 
@@ -103,7 +105,15 @@ publication/cold/range reads/deletion and wrong-credential refusals passed.
 Qdrant schema initialization and populated-collection refusal passed. The full
 PostgreSQL migration chain and competing fresh initialization/retry passed in a
 disposable schema. This is basic functional evidence, not storage failover or
-customer qualification. Actual TLS/CA rotation, independent recovery, disk-full,
-RWX/provider and multi-node failure gates remain open. Local-path requested size
+customer qualification. The same lab subsequently passed real TLS probes for
+PostgreSQL, Qdrant REST/gRPC and RustFS. PostgreSQL probes use direct Pod TCP,
+verify-full and SCRAM: rejected passwords, hostname mismatches and the retired CA
+are checked for their specific protocol failures, not just connection errors.
+All three storage Pods restarted onto a second CA with their original PVCs; an
+8192-byte pre-restart S3 object retained its full SHA-256. Qdrant's Python gRPC
+client verified the second CA through the explicit shared root file. This is
+storage-only CA rotation, not coordinated rotation of a running application.
+Independent recovery, application rotation, disk-full, RWX/provider and
+multi-node failure gates remain open. Local-path requested size
 does not establish an enforced per-volume disk quota; do not fill the host disk
 to simulate ENOSPC. Resources remain provisional until R5/O3 measurements.

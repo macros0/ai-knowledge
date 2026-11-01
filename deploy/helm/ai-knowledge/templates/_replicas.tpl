@@ -89,6 +89,7 @@ spec:
             {{- if $root.Values.trust.existingConfigMap }}
             - {name: RUNTIME_TRUST_FILE, value: /etc/okf/trust/ca-bundle.crt}
             - {name: SSL_CERT_FILE, value: /etc/okf/trust/ca-bundle.crt}
+            - {name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH, value: /etc/okf/trust/ca-bundle.crt}
             - {name: REQUESTS_CA_BUNDLE, value: /etc/okf/trust/ca-bundle.crt}
             {{- if eq $root.Values.replicaStorage.artifacts.backend "s3" }}
             - {name: ARTIFACT_S3_CA_BUNDLE, value: /etc/okf/trust/ca-bundle.crt}

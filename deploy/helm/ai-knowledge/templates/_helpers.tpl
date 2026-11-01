@@ -41,7 +41,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "DEV/TEST/PROD require production application protections" -}}
 {{- end -}}
 {{- if .Values.trust.existingConfigMap -}}
-{{- range $key := list "SSL_CERT_FILE" "REQUESTS_CA_BUNDLE" "NODE_EXTRA_CA_CERTS" "SSL_VERIFY" "NODE_TLS_REJECT_UNAUTHORIZED" "RUNTIME_TRUST_FILE" "ARTIFACT_S3_CA_BUNDLE" -}}
+{{- range $key := list "SSL_CERT_FILE" "REQUESTS_CA_BUNDLE" "NODE_EXTRA_CA_CERTS" "SSL_VERIFY" "NODE_TLS_REJECT_UNAUTHORIZED" "RUNTIME_TRUST_FILE" "ARTIFACT_S3_CA_BUNDLE" "GRPC_DEFAULT_SSL_ROOTS_FILE_PATH" -}}
 {{- if hasKey $.Values.runtime.config $key -}}{{- fail (printf "Runtime trust controls TLS key %s" $key) -}}{{- end -}}
 {{- end -}}
 {{- end -}}

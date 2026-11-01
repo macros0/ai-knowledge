@@ -88,5 +88,6 @@ def test_distributed_trust_is_a_bound_per_pod_snapshot():
         container = item["spec"]["template"]["spec"]["containers"][0]
         environment = {entry["name"]: entry.get("value") for entry in container["env"]}
         assert environment["RUNTIME_TRUST_FILE"] == environment["ARTIFACT_S3_CA_BUNDLE"] == "/etc/okf/trust/ca-bundle.crt"
+        assert environment["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] == environment["RUNTIME_TRUST_FILE"]
         mount = next(entry for entry in container["volumeMounts"] if entry["name"] == "runtime-trust")
         assert mount["subPath"] == "ca-bundle.crt" and mount["readOnly"] is True

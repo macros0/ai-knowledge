@@ -2064,8 +2064,15 @@ safe retry after interruption. CLI output omits raw validation/provider exceptio
 The common identity now includes parser source, Python/package versions, backend
 image reference and custom CA bytes. API/worker CA files are mounted as per-Pod
 snapshots; coordinated rotation must update identity and restart the roles.
-External production PostgreSQL requires verify-full and Qdrant HTTPS. Plain HTTP
-credentials are used only by the isolated basic lab probes, not as a TLS result.
+External production PostgreSQL requires verify-full and Qdrant HTTPS. HTTP and
+gRPC clients receive the same per-Pod CA snapshot; gRPC is configured explicitly
+with GRPC_DEFAULT_SSL_ROOTS_FILE_PATH. The isolated basic lab has now verified
+PostgreSQL direct-Pod TCP/SCRAM/verify-full, Qdrant REST/gRPC and RustFS TLS,
+including hostname/retired-CA rejection and specific authentication refusals.
+Storage Pods restarted onto a second CA without changing their owned PVCs, and
+a pre-restart S3 object's full SHA-256 was retained. This does not qualify a
+coordinated running-application CA/identity rotation, customer PKI, scoped IAM,
+independent restore or storage failover. Those gates remain open.
 
 ## User answer scenarios (2026-10-23)
 
