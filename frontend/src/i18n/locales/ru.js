@@ -1361,6 +1361,10 @@ export default {
   "security.action.diagnostic_browser_invited": "Создание приглашения браузера в диагностику",
   "security.action.diagnostic_browser_joined": "Подключение браузера к диагностике",
   "security.action.diagnostic_browser_left": "Отключение браузера от диагностики",
+  "security.action.replica_maintenance_enter": "Начало технического обслуживания реплик",
+  "security.action.replica_maintenance_leave": "Завершение технического обслуживания реплик",
+  "security.action.replica_model_reconcile": "Подтверждение остановки запросов модели",
+  "security.action.replica_runtime_upgrade": "Обновление конфигурации реплик",
 
   // Ошибки API: ключ = стабильный code из тела ответа (см. backend/app/api/errors.py).
   "apiError.document_not_found": "Документ не найден",

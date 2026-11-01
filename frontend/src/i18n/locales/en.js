@@ -1361,6 +1361,10 @@ export default {
   "security.action.diagnostic_browser_invited": "Invite browser to diagnostics",
   "security.action.diagnostic_browser_joined": "Join browser diagnostics",
   "security.action.diagnostic_browser_left": "Leave browser diagnostics",
+  "security.action.replica_maintenance_enter": "Start replica maintenance",
+  "security.action.replica_maintenance_leave": "Complete replica maintenance",
+  "security.action.replica_model_reconcile": "Confirm stopped model requests",
+  "security.action.replica_runtime_upgrade": "Update replica configuration",
 
   // API errors: key = stable code from the response body (see backend/app/api/errors.py).
   "apiError.document_not_found": "Document not found",

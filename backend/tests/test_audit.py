@@ -92,6 +92,7 @@ EXPECTED_ACTION_TYPES = {
     "diagnostic_bundle_requested", "diagnostic_bundle_ready", "diagnostic_bundle_failed",
     "diagnostic_bundle_download_started", "diagnostic_bundle_deleted", "diagnostic_bundle_expired",
     "diagnostic_view", "diagnostic_browser_invited", "diagnostic_browser_joined", "diagnostic_browser_left",
+    "replica_maintenance_enter", "replica_maintenance_leave", "replica_model_reconcile", "replica_runtime_upgrade",
 }
 
 

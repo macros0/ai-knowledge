@@ -2221,6 +2221,13 @@ four running API/worker processes proved their scoped credentials, matching
 identity, transition audits and rejection of the retired identity. Shared-bucket
 listing isolation and customer/external/mixed/RWX privileges remain unqualified.
 
+2026-11-01 replica audit UI correction: the fixed action catalogue and bundled
+ru/en dictionaries include maintenance entry/exit, stopped-provider reconciliation
+and runtime configuration upgrade. The full backend run exposed missing UI keys
+for these already recorded events. Canonical key/English seed manifests are
+regenerated from the locale sources; unknown actions remain rejected. This changes
+display labels and the explicit expected enum only, not event payloads or grants.
+
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
 storage descriptor and receipt. Owned LLM requests prohibit it. Identity change
