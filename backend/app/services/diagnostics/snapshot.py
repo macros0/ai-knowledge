@@ -347,7 +347,11 @@ def collect_prepared_snapshot(request: BundleRequest, *, cutoff_at: datetime, st
     view = store.pin_read_view(filt, cutoff_at)
     directory = store.root / "snapshots" / job_id
     try:
-        if frontend_root is not None:
+        durable = getattr(store, "durable_segments", False)
+        gaps.extend(view.initial_gaps)
+        if durable:
+            pass  # The immutable read view already contains every component.
+        elif frontend_root is not None:
             attach_frontend(view, frontend_root)
             gaps.extend(view.initial_gaps)
         else:
@@ -377,7 +381,11 @@ def collect_prepared_snapshot(request: BundleRequest, *, cutoff_at: datetime, st
         prepared = prepare_in_child(store, view, job_id, frontend_root=frontend_root, on_child=on_child)
         counts = dict(prepared.counts)
         gaps.extend(prepared.gaps)
-        if frontend_root is not None:
+        if durable:
+            shared_counts, shared_gaps = store.coverage(coverage_from)
+            counts.update(shared_counts)
+            gaps.extend(shared_gaps)
+        elif frontend_root is not None:
             try:
                 front_counts, front_gap = _frontend_status(frontend_root, coverage_from)
                 counts.update(front_counts)
@@ -385,7 +393,7 @@ def collect_prepared_snapshot(request: BundleRequest, *, cutoff_at: datetime, st
                     gaps.append(front_gap)
             except (OSError, ValueError, TypeError):
                 gaps.append("frontend_status_unavailable")
-        if recorder_status is not None:
+        if recorder_status is not None and not durable:
             try:
                 status = recorder_status()
                 counts["recorder_counters_unknown"] = int(_counter_history_unknown(

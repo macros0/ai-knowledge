@@ -56,6 +56,9 @@ class IngestReceipt(BaseModel):
 
 
 def current_control(store):
+    if getattr(store, "replica_settings", None) is not None:
+        from .replica_control import control_projection
+        return control_projection(boot_id=store.replica_boot_id)
     with store._projection_lock:
         path = store.safe_path(store.root / "control/capture.json")
         if not path.is_file() or path.stat().st_size > 4096:
@@ -86,6 +89,9 @@ def _deliver(store, row):
 
 def drain_ingest(store, *, limit: int = 25, now: datetime | None = None):
     """Retry durable admissions after transient spool errors, including restart."""
+    if getattr(store, "durable_segments", False):
+        from .replica_ingest import drain
+        return drain(store, limit=limit)
     now = now or datetime.now(timezone.utc)
     counts = {"delivered": 0, "deferred": 0}
     with _lock:
@@ -112,6 +118,9 @@ def drain_ingest(store, *, limit: int = 25, now: datetime | None = None):
 
 
 def ingest_events(batch: DiagnosticBatch, *, store, baseline_enabled: bool = True) -> IngestReceipt:
+    if getattr(store, "durable_segments", False):
+        from .replica_ingest import ingest
+        return ingest(batch, store=store, baseline_enabled=baseline_enabled)
     encoded = json.dumps(batch.events, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     if len(encoded) > MAX_BATCH_BYTES:
         raise ValueError("Batch too large")

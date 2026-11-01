@@ -79,6 +79,47 @@ class DiagnosticIngestBatch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
 
 
+class DiagnosticReplicaState(Base):
+    __tablename__ = "diagnostic_replica_state"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    evicted_segments: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_diagnostic_replica_singleton"),)
+
+
+class DiagnosticInstance(Base):
+    __tablename__ = "diagnostic_instances"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    role: Mapped[str] = mapped_column(String(12), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    counters: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    __table_args__ = (CheckConstraint("role IN ('api','worker','combined','frontend')", name="ck_diagnostic_instance_role"),)
+
+
+class DiagnosticSegment(Base):
+    """Immutable bounded canonical event bytes; local files are only read scratch."""
+    __tablename__ = "diagnostic_segments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    stream: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    component: Mapped[str] = mapped_column(String(12), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    first_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    __table_args__ = (
+        CheckConstraint("size > 0 AND size <= 65536 AND event_count > 0", name="ck_diagnostic_segment_size"),
+        CheckConstraint("component IN ('backend','frontend')", name="ck_diagnostic_segment_component"),
+        Index("ix_diagnostic_segment_window", "stream", "created_at", "id"),
+    )
+
+
 class DiagnosticSession(Base):
     __tablename__ = "diagnostic_sessions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

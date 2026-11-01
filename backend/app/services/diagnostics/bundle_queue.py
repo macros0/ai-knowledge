@@ -183,6 +183,14 @@ class DiagnosticBundleQueue:
             raise BundleQueueError("diagnostic_audit_unavailable") from exc
 
     def execute_work(self, work):
+        from .scratch import parent_operation
+        from app.services.work.handlers import WorkDeferred
+        with parent_operation(self.store.root) as owned:
+            if not owned:
+                return WorkDeferred(1)
+            return self._execute_work_owned(work)
+
+    def _execute_work_owned(self, work):
         from app.config import get_settings
         from app.services.artifacts.contract import BlobUnavailable
         from app.services.artifacts.job_files import lock_job, bind_file

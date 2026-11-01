@@ -16,7 +16,14 @@ from .store import _now, _utc
 def maintain_diagnostics(work):
     if work.spec.payload:
         raise ValueError("Invalid diagnostic maintenance input")
+    shared_more = False
     with work_execution(work):
+        from app.config import get_settings
+        from app.services.diagnostics.replica_ingest import drain
+        from app.services.diagnostics.replica_store import DiagnosticSqlRepository
+        repository = DiagnosticSqlRepository(get_settings())
+        drain(repository)
+        shared_more = repository.maintain()["more"]
         with session_scope() as session:
             cursor = load_progress(session, work, version=1).get("last_id", "")
             if not isinstance(cursor, str) or len(cursor) > 36:
@@ -46,4 +53,4 @@ def maintain_diagnostics(work):
                         retire_files(session, kind="diagnostic_bundle", job_id=bundle_id)
                         session.delete(row)
                 save_progress(session, work, version=1, state={"last_id": bundle_id})
-    return WorkDeferred(1) if len(ids) == 100 else None
+    return WorkDeferred(1) if len(ids) == 100 or shared_more else None

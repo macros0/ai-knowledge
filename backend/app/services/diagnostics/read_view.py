@@ -31,6 +31,8 @@ class ReadViewLease:
     cutoff_at: datetime
     released: bool = False
     initial_gaps: tuple[str, ...] = ()
+    input_root: Path | None = None
+    cleanup: object = None
 
     def release(self):
         if self.released:
@@ -47,6 +49,8 @@ class ReadViewLease:
                 else:
                     self.store._pins[descriptor.path] = count - 1
             self.released = True
+        if self.cleanup is not None:
+            self.cleanup()
 
 
 @dataclass(frozen=True)

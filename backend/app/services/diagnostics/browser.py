@@ -1,6 +1,7 @@
 """Explicit browser participation; raw client error text is never an input."""
 from collections import OrderedDict, deque
 import hashlib
+import json
 import secrets
 import threading
 from uuid import uuid4
@@ -37,6 +38,23 @@ class DiagnosticBrowserService:
         self._rate_lock = threading.Lock()
 
     def _rate(self, mapping, key, limit, *, global_limit=False):
+        from app.services.work.admission import durable_documents
+        if durable_documents(self.sessions.settings):
+            from app.services.work.coordination import consume_rate
+            domain = "join" if mapping is self._attempts else "report"
+            try:
+                with session_scope() as db:
+                    if not consume_rate(db, key=json.dumps(["diagnostic_browser", domain, key]),
+                            limit=limit, window_seconds=60):
+                        raise DiagnosticControlError("diagnostic_rate_limited")
+                    if global_limit and not consume_rate(db, key="diagnostic_browser/all_reports",
+                            limit=100, window_seconds=60):
+                        raise DiagnosticControlError("diagnostic_rate_limited")
+            except DiagnosticControlError:
+                raise
+            except Exception as exc:
+                raise DiagnosticControlError("diagnostic_audit_unavailable") from exc
+            return
         now = self.sessions.monotonic()
         with self._rate_lock:
             for identity, items in list(mapping.items()):
@@ -83,6 +101,17 @@ class DiagnosticBrowserService:
                                 username=user.username, target_type="diagnostic_session", target_id=session_id,
                                 new_value={"browser_participation": True})
 
+    def _require_active_row(self, db, row):
+        from app.services.work.admission import durable_documents
+        if durable_documents(self.sessions.settings):
+            from app.services.work.store import _now
+            from .sessions import utc
+            # Check after the row lock, using DB time. A cached ten-second
+            # selector cannot authorize joining an already stopped capture.
+            if (row is None or row.status != "active" or row.active_slot != 1
+                    or utc(row.expires_at) <= _now(db)):
+                raise DiagnosticControlError("diagnostic_browser_not_joined")
+
     def invite(self, session_id, actor):
         self._require_user(actor)
         if "admin" not in actor.roles:
@@ -95,6 +124,7 @@ class DiagnosticBrowserService:
             try:
                 with session_scope() as db:
                     row = db.scalar(select(DiagnosticSession).where(DiagnosticSession.id == str(session_id)).with_for_update())
+                    self._require_active_row(db, row)
                     if len(row.participants or {}) + len(row.invitations or {}) >= 10:
                         raise DiagnosticControlError("diagnostic_rate_limited")
                     row.invitations = {**(row.invitations or {}), digest: {"expires_at": row.expires_at.isoformat()}}
@@ -113,6 +143,7 @@ class DiagnosticBrowserService:
             try:
                 with session_scope() as db:
                     row = db.scalar(select(DiagnosticSession).where(DiagnosticSession.id == session_id).with_for_update())
+                    self._require_active_row(db, row)
                     own_browser = code is None and "admin" in user.roles
                     digest = hashlib.sha256(code.encode()).hexdigest() if isinstance(code, str) else None
                     if not own_browser and (digest is None or digest not in (row.invitations or {})):
@@ -145,6 +176,7 @@ class DiagnosticBrowserService:
             try:
                 with session_scope() as db:
                     row = db.scalar(select(DiagnosticSession).where(DiagnosticSession.id == session_id).with_for_update())
+                    self._require_active_row(db, row)
                     membership = (row.participants or {}).get(str(participation_id))
                     if not membership or membership.get("user_id") != user.user_id:
                         return
@@ -162,6 +194,7 @@ class DiagnosticBrowserService:
             try:
                 with session_scope() as db:
                     row = db.get(DiagnosticSession, session_id)
+                    self._require_active_row(db, row)
                     membership = (row.participants or {}).get(str(event.get("participation_id"))) if row else None
                     if not membership or membership.get("user_id") != user.user_id:
                         raise DiagnosticControlError("diagnostic_browser_not_joined")

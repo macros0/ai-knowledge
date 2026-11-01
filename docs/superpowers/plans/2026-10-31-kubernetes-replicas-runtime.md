@@ -213,11 +213,11 @@ Audit spool/hold files инвентаризировать: незавершён�
 с сохранением действующих audit tests. Диагностический inbox и чтение сегментов
 получают instance namespaces и durable refs, coverage gaps остаются явными.
 
-- [ ] `test_two_apis_share_capacity_and_rate`, `test_revocation_visible_on_second_api`, `test_cancel_chat_from_other_api`, `test_config_revision_invalidates_both`, `test_audit_failover_replays_same_event_id`. Assertions: суммарный admission ≤ limit; revoked actor получает 403; cancel сохранён; новая версия словаря на обоих; commit audit не теряется, duplicate имеет исходный ID.
-- [ ] RED: `python -m pytest tests/test_replica_coordination.py tests/test_replica_audit.py -q`; multiprocess PG cases через runner runtime.
-- [ ] Реализовать coordination, обновить API/settings/glossary/client cache paths из P0 inventory, вернуть подробные причины degraded без credentials. Distributed readiness не становится ready при ошибке обязательного audit preflight.
-- [ ] GREEN плюс `python -m pytest tests/test_authz.py tests/test_audit_outbox_dispatcher.py tests/test_audit_storage_modes.py tests/test_chat_stream.py -q`; проверить все DB-only/external-only/both audit modes. Не ослаблять strict audit schema для новой очереди.
-- [ ] Commit `feat: coordinate state across backend replicas`.
+- [x] `test_two_apis_share_capacity_and_rate`, `test_revocation_visible_on_second_api`, `test_cancel_chat_from_other_api`, `test_config_revision_invalidates_both`, `test_audit_failover_replays_same_event_id`. Assertions: суммарный admission ≤ limit; revoked actor получает 403; cancel сохранён; новая версия словаря на обоих; commit audit не теряется, duplicate имеет исходный ID.
+- [x] RED/GREEN: coordination/audit и остальные R4 suites; multiprocess PG cases выполнены через safe disposable-schema harness. Запуск тех же механизмов в Pods через общий runner относится к R5 и остаётся отдельным gate.
+- [x] Реализовать coordination, обновить API/settings/glossary/client cache paths из P0 inventory, вернуть подробные причины degraded без credentials. Distributed readiness не становится ready при ошибке обязательного audit preflight.
+- [x] GREEN плюс `python -m pytest tests/test_authz.py tests/test_audit_outbox_dispatcher.py tests/test_audit_storage_modes.py tests/test_chat_stream.py -q`; проверить все DB-only/external-only/both audit modes. Не ослаблять strict audit schema для новой очереди.
+- [x] Commit `feat: coordinate state across backend replicas` (заключительный R4 commit после отдельных проверенных milestones).
 
 R4 foundation milestone, 01.11.2026: caller-owned capacity/rate/revision schema,
 shared RateLimiter, localization revision invalidation and LLMClient global
@@ -275,8 +275,8 @@ auth probe passed after adding changed-group/missing-role cases. Both warmed API
 caches observe remote glossary edits. Root gate: audit0 vulnerabilities,
 frontend756 passed/1 skipped, ESLint/Ruff passed. Cookie/IdP/multi-Pod acceptance,
 common runtime/signing identity and all provider qualifications remain O1/R5.
-R4 remains open for diagnostic durable control/spool and diagnostic instances/inbox;
-none of these software milestones enables distributed deployment.
+At this cache milestone, diagnostic control/instances/inbox remained open; the
+final diagnostic software result is recorded below. Deployment remains gated.
 
 R4 audit dispatcher software milestone (2026-11-01): API and worker participate
 in session advisory leadership scoped to the current database/schema. The owned
@@ -295,9 +295,33 @@ same-ID replay in both stdout modes and a skewed host clock. Audit schema, denia
 transport and storage-mode group:98 passed/3 skipped; role/lifecycle/storage-mode
 group:55 passed; entrypoint/restore/Logstash compatibility:64 passed. Root check:
 audit0 vulnerabilities, frontend756 passed/1 skipped, ESLint/Ruff passed.
-R4 still needs diagnostic durable control, instance namespaces,
-inbox and segment references; `diagnostics/control/deferred.jsonl` is a separate
-file-only audit-intent dependency. This milestone does not enable replicas.
+At this dispatcher milestone, diagnostic control/instances/inbox were still open.
+The final diagnostic result follows. Legacy journal adoption remains O2.
+
+R4 diagnostic software completion (2026-11-01): SQL-authoritative capture control
+and security audit commit together; failed stops are not acknowledged as local
+journal intents. Short selector leases fail closed, including delayed SQL reads;
+one replica stopping does not end the shared capture. Browser admission/membership
+uses shared budgets and authoritative post-lock checks. Bounded immutable SQL
+segments carry canonical hashes and instance/stream identities. Shared quotas,
+frontend idempotency and segment/receipt publication are serialized; admitted
+batches survive API disk loss and replacement maintenance workers retry them.
+Previously admitted capture data can finish after stop; fresh stale writers cannot.
+Known loss and unknown historical frontend counters remain explicit. Retention is
+bounded and preserves pending/legacy audit evidence. Read views and supervised
+prepare/ZIP children use verified private inputs. Same-host scratch cleanup checks
+ownership, containment, links and recorder/parent/child OS locks; child watchdogs
+survive parent death. Offline collection marks shared SQL events unavailable.
+Unadopted legacy deferred journals are preserved and refuse the future runtime.
+Checks:402 diagnostic/role/worker/offline tests passed,2 skipped (host symlink
+privilege and an optional legacy PostgreSQL target). Explicit owned PostgreSQL:
+3 passed, including competing API receipt admission and nonempty schema upgrade.
+Required auth/chat/audit regression:77 passed. A cold API's local instance was
+removed before a replacement worker built the ZIP and another API downloaded all
+backend/frontend events;1 roundtrip test passed. Root check: audit0 vulnerabilities,
+frontend756 passed/1 skipped, ESLint/Ruff passed. Software R4 is complete; actual
+multi-Pod runtime/provider/maintenance qualification remains R5/O1–O3. The build's
+distributed activation gates remain closed until those requirements are met.
 
 ## Task R5: distributed chart и приёмка нескольких исполнителей
 

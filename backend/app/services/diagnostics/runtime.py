@@ -35,12 +35,22 @@ class DiagnosticRuntime:
         self._bundle_recovered = False
         self._stop_event = threading.Event()
         self._maintenance_thread = None
+        self._scratch_thread = None
         self._handler_installed = False
+        self._last_instance_heartbeat = 0.0
         configured_frontend = os.getenv("OKF_FRONTEND_DIAGNOSTICS_DIR")
         self.frontend_root = canonical_root(configured_frontend) if configured_frontend else None
         try:
-            self.store = DiagnosticStore(settings.diagnostics_dir, settings.diagnostics_limits())
-            self.sessions = DiagnosticSessionService(self.store, settings, boot_id=self.boot_id)
+            from app.services.work.admission import durable_documents
+            session_type = DiagnosticSessionService
+            if durable_documents(settings):
+                from .replica_control import ReplicaDiagnosticSessionService
+                from .replica_store import ReplicaDiagnosticStore
+                session_type = ReplicaDiagnosticSessionService
+                self.store = ReplicaDiagnosticStore(settings, instance_id=self.boot_id)
+            else:
+                self.store = DiagnosticStore(settings.diagnostics_dir, settings.diagnostics_limits())
+            self.sessions = session_type(self.store, settings, boot_id=self.boot_id)
             self.recorder = DiagnosticRecorder(
                 self.store, capture_selector=self.sessions.active_for,
                 capture_view_selector=self.sessions.runtime_view_for, boot_id=self.boot_id,
@@ -76,6 +86,9 @@ class DiagnosticRuntime:
                 name="diagnostic-heartbeat", daemon=True)
             self._maintenance_thread.start()
             self._started = True
+            self._scratch_thread = threading.Thread(target=self._scratch_loop,
+                name="diagnostic-local-scratch", daemon=True)
+            self._scratch_thread.start()
             self.recorder.emit("server_started")
             return True
         try:
@@ -143,6 +156,9 @@ class DiagnosticRuntime:
             return
         try:
             self.sessions.tick(now or datetime.now(timezone.utc))
+            if getattr(self.store, "durable_segments", False) and time.monotonic() - self._last_instance_heartbeat >= 5:
+                self.store.heartbeat(self.recorder.status())
+                self._last_instance_heartbeat = time.monotonic()
         except Exception:
             self.failure_code = "diagnostic_maintenance_degraded"
 
@@ -163,6 +179,16 @@ class DiagnosticRuntime:
         while not self._stop_event.wait(1):
             self.heartbeat_once()
 
+    def _scratch_loop(self):
+        from .scratch import clean_instances
+        cursor = None
+        while not self._stop_event.is_set():
+            try:
+                cursor = clean_instances(self.settings, after=cursor)
+            except Exception:
+                self.failure_code = "diagnostic_maintenance_degraded"
+            self._stop_event.wait(60)
+
     def stop(self):
         if not self.available:
             return
@@ -170,11 +196,14 @@ class DiagnosticRuntime:
             self._stop_event.set()
             if self._maintenance_thread:
                 self._maintenance_thread.join(timeout=1)
-            current = self.sessions.status()["session"]
+            if self._scratch_thread is not None and self._scratch_thread.ident is not None:
+                self._scratch_thread.join(timeout=1)
+            current = self.sessions._active if self._request_only else self.sessions.status()["session"]
             if current:
                 try:
                     self.recorder.drain_capture(current["id"])
-                    self.sessions.stop(current["id"], reason="server_restarted")
+                    if not self._request_only:
+                        self.sessions.stop(current["id"], reason="server_restarted")
                 except Exception:
                     pass
             if not self._request_only:

@@ -10,6 +10,7 @@ from .read_view import _safe_external
 from .sanitize import _encode_validated_event, sanitize_event, valid_uuid
 from .schema import EventFilter, MAX_EVENT_BYTES
 from .worker_protocol import FrameError, JobChannel
+from .scratch import child_lease
 
 
 class PrepareTooLarge(RuntimeError):
@@ -19,7 +20,7 @@ class PrepareTooLarge(RuntimeError):
 def _read_descriptor(item, payload, filt, outgoing, incoming, buffers, counts, gaps):
     if not isinstance(item, dict) or item.get("source") not in {"backend", "frontend"}:
         raise FrameError("Invalid prepare descriptor")
-    root = Path(payload["root"] if item["source"] == "backend" else payload["frontend_root"])
+    root = Path((payload.get("input_root") or payload["root"]) if item["source"] == "backend" else payload["frontend_root"])
     source = _safe_external(Path(item["path"]), root)
     if source.suffix != ".jsonl" or source.parent.parent != root / "events":
         raise FrameError("Invalid prepare source")
@@ -152,6 +153,15 @@ def work(job_id):
     if payload.get("job_id") != job_id or not isinstance(payload.get("descriptors"), list):
         raise FrameError("Invalid prepare payload")
     root = _safe_external(Path(payload["root"]), Path(payload["root"]))
+    with child_lease(root):
+        _prepare(payload, job_id, root, inbound, outbound)
+
+
+def _prepare(payload, job_id, root, inbound, outbound):
+    if payload.get("input_root") is not None:
+        input_root = _safe_external(Path(payload["input_root"]), root)
+        if input_root.parent != root / "inputs" or valid_uuid(input_root.name) is None:
+            raise FrameError("Invalid prepare input root")
     directory = _safe_external(root / "snapshots" / job_id, root)
     if not directory.is_dir():
         raise FrameError("Missing prepare output")

@@ -1,4 +1,4 @@
-# Transactional work and document execution foundation (R1–R3)
+# Transactional work and coordinated runtime (R1–R4)
 
 `WorkItem` is an internal execution ledger, separate from public bulk `Job`
 approval/status records. The package starts no executor during import and is
@@ -8,7 +8,7 @@ registers background handlers, R4 coordinates global capacity,
 and O2 adds installation maintenance epochs. Existing replica/production gates
 remain closed. `WorkClaim.maintenance_epoch` is zero until O2.
 
-R3 is still in progress. The closed API lifecycle owns request services only;
+The closed API lifecycle owns request services only;
 `python -m app.worker` owns an independent heartbeat, required-storage readiness,
 consumers and a deduplicating periodic scheduler. Its internal health port8001
 must not be exposed through the public Gateway. Currently registered handlers
@@ -38,7 +38,7 @@ processes at most10 IDs per claim, glossary requests at most10 terms. Accepted
 translation writes, audit and versioned cursor share one SQL transaction, with
 the model call outside it. Existing source/target/reference revision and human
 translation checks remain in force. A bounded reconciler closes failed public
-jobs after worker failure. Global model admission still belongs to R4.
+jobs after worker failure. Global model admission covers these calls as described below.
 Diagnostic maintenance scans at most100 bundle records per claim with a durable
 cursor, retires expired portable bindings with audit, and reconciles terminal
 bundle work. Existing read leases protect downloads. Portable terminal metadata
@@ -48,16 +48,16 @@ locks protect live attempts and release on process death. Worker-local cleanup
 pages100 directories, checks exact ownership/host/containment and rejects links
 and unknown markers. It never retires blobs or modifies public completion. An
 unavailable local cleanup is retried independently of the work outcome. This
-root is per-instance local storage, not shared RWX. Diagnostic child-process
-scratch remains a separate R4 lifecycle dependency.
+root is per-instance local storage. Diagnostic parent/child scratch uses separate
+ownership locks and cleanup, described below.
 Legacy operator writers refuse the future runtime until the O2 maintenance
 protocol supplies validated replacements. Commands use their selected runtime
 settings, including explicit settings/env files. Supported repairs enqueue work;
 read-only inspection remains available. See the complete CLI inventory in
 `docs/REPLICA_STATE_INVENTORY.md`. Legacy canonical reconstruction on a viewer
 GET is also disabled; verified corpus adoption is required before activation.
-The remaining P0 mechanisms and R4 coordination must be migrated before any
-activation. This list is not a declaration of distributed readiness.
+Deployment, provider, corpus-adoption and maintenance acceptance remain R5/O1–O3
+activation requirements. This list does not declare distributed readiness.
 
 `coordinator_session` requires a fresh transaction and locks global admission
 before parent Work, then Job/document state. It cannot be nested inside a
@@ -72,15 +72,15 @@ Diagnostic bundle admission is globally bounded and does not reserve an API-loca
 queue entry. A worker prepares a unique snapshot/part per attempt, then commits
 verified ZIP bindings, public readiness, audit and Work success atomically.
 Legacy bundle startup/recovery is disabled for the future schema. The worker
-command owns audit preflight and its recorder lifecycle; R4 still must supply
-cross-replica diagnostic inbox and instance paths before activation.
+command owns audit preflight and its recorder lifecycle; cross-replica diagnostic
+inbox and private instance paths are described below.
 Scope work keeps its accepted input immutable across reclaim and trash/resume.
 Transient errors pause the document without discarding its confirmation, including
 when retries are exhausted before generation allocation. Explicit cancel-update
 closes the scope receipt and restores the published snapshot. Reusing a current
 published scope after its review changes requires verified publication proof.
 
-Apply Alembic through `rpl02b_work_progress` before using this build on an existing database.
+Apply Alembic through `rpl03b_diagnostics` before using this build on an existing database.
 The migrations preserve nonempty Job rows, create claim/reclaim indexes, and
 refuses downgrade while **any** work history exists. Work dedupe tombstones must
 not be removed to make a rollback appear safe. Restore a coherent backup instead.
@@ -98,10 +98,10 @@ It commits the queued status, retained published diagnostics and frozen private
 processing policy with the work intent. Upload also commits the original binding
 and idempotency receipt with admission. Confirmed attachment selection and its
 audit event share that transaction; a full queue leaves the review editable.
-The document pending budget is global; global model/rate capacity remains R4.
+The document pending budget and model/rate capacity are global.
 Bulk Job approval/cancellation preserves four-eyes and commits its private `bulk`
-intent with the public transition and audit. R3 must register the nonblocking bulk
-handler and child completion tracking before enabling this branch.
+intent with the public transition and audit. The registered nonblocking bulk
+handler tracks child completion through durable receipts.
 
 `run_document_job(WorkClaim)` verifies the bound original hash, allocates a fresh
 generation for each new claim/fence and reuses accepted portable checkpoints only
@@ -121,8 +121,8 @@ until late external writes are provably impossible. The offline migration source
 fingerprint includes both inputs and tombstones.
 
 Publication records bounded `duplicate_refresh` intents instead of starting
-post-success guarded transactions. R3 must register that handler and coordinate
-checkpoint retirement by expected generation. Distributed startup does not run
+post-success guarded transactions. Its handler coordinates checkpoint retirement
+by expected generation. Distributed startup does not run
 legacy global document/Job resets; a submitted review with accepted work cannot
 be revoked by review-lease recovery. Existing combined behavior remains intact.
 
@@ -149,8 +149,8 @@ handler/admission path. No public queue API or new permission is introduced here
 Worker executes a handler outside SQL, renews in short transactions, and
 acknowledges only a still-live claim. A handler TimeoutError is a handler failure,
 not a heartbeat timeout. After DB/lease loss, it leaves the attempt unacknowledged
-and holds its local slot until the old handler returns. This is not yet a global
-LLM cap; R4 must supply that before distributed activation. Generation fencing
+and holds its local slot until the old handler returns. Completion-required global
+model admission is separate, as described below. Generation fencing
 excludes late document writes, but cannot cancel a provider's external call.
 Shutdown stops claims/renewal without a late ACK callback.
 Heartbeat row-lock waits are bounded on PostgreSQL. Only a `55P03` lock timeout
@@ -261,5 +261,31 @@ per active sender plus candidate connection activity on standby instances.
 Preflight checks lock access; a busy peer is a valid standby, unavailable lock
 transport is a startup failure. Legacy combined mode retains its local file lock.
 The security outbox and restored/rollback holds already live in SQL. The separate
-diagnostic `control/deferred.jsonl` still needs the R4 durable control replacement;
-the dispatcher milestone does not satisfy that remaining activation dependency.
+legacy diagnostic `control/deferred.jsonl` must be reconciled through O2 adoption;
+the dispatcher alone never acknowledges those legacy control intents.
+
+Future diagnostic control now reads the active capture from SQL across API/worker
+instances. Start/stop and their audit commit together; a failed stop disables the
+local selector and returns an error while retrying, without creating an accepted
+file-only journal entry. Local selectors have a maximum ten-second monotonic
+lease sampled before SQL; stalled refreshes cannot extend it. Frontend control
+uses the same SQL state. Browser membership checks revalidate active state/DB
+expiry after row locks, and join/report budgets share the rolling limiter.
+Stopping a replica drains its recorder without ending the shared capture.
+Events now live in immutable bounded SQL segments; final ZIP bundles remain
+portable blob artifacts. A SQL repository serializes shared quotas and retention
+without creating a recorder or local directory. Frontend inbox publication and
+payload clearing share one transaction; replacement maintenance workers retry
+accepted batches without the original API disk. Previously admitted events can
+finish after capture stop; fresh stale writes are refused. Retention records
+loss before retiring expired ordinary pending events. Shared counters are
+allowlisted and distinguish unknown history, loss and unavailable frontend state.
+Read views verify segment hashes and materialize private input files; supervised
+children preserve the existing component/path validation and delete inputs on
+release. Per-instance scratch has same-host ownership markers and separate OS
+locks for its recorder, live bundle parent and child; a child watchdog survives
+parent death. Cleanup retains busy/unknown/foreign/linked trees and validates
+absolute containment before removing an inactive instance. Runtime shutdown does
+not read SQL control. Offline filesystem export marks the missing shared SQL
+events explicitly. O2 adoption of legacy deferred journals and R5/O3 deployment
+and provider acceptance remain required before activation.

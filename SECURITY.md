@@ -1979,6 +1979,33 @@ capacity. Preview requests share the global chat/provider budgets while keeping
 their existing no-history contract. These checks preserve existing actor/history
 permissions and do not establish customer-provider or multi-Pod acceptance.
 
+Future diagnostic control (2026-11-01, activation gated) commits capture start and
+stop with their security audit in one SQL transaction. Another API reads the same
+control and can stop the capture. Failed stops disable the local selector, return
+an error and retry; they are never acknowledged solely through an ephemeral
+deferred journal. Combined mode retains its existing journal/recovery contract.
+Future hot selectors use a monotonic lease of at most ten seconds sampled before
+SQL, so a stalled refresh or DB outage cannot extend capture authorization.
+Frontend control reads shared SQL without a local projection file. Browser
+membership mutations recheck active state and DB expiry after the SQL row lock;
+a stale selector cannot join a stopped capture. Join/report rate budgets use the
+shared rolling limiter. Stopping one replica does not stop the global capture.
+Future diagnostic events use bounded immutable canonical SQL segments, separate
+from the security audit outbox and portable ZIP bundles. Shared row/byte quotas,
+capture state and publication use one coordinated SQL lock order. Frontend inbox
+admission is idempotent across APIs; segment publication and clearing the inbox
+payload commit together. Already admitted capture events may finish after stop;
+new stale producers cannot publish. Expired pending ordinary events become an
+explicit loss counter. Instance heartbeat/counter data is allowlisted, and missing
+coverage or unknown frontend counter history is never reported as verified.
+Read/prepare inputs are copied from verified segment hashes into private instance
+scratch. Cleanup checks known same-host markers, absolute containment, absence of
+links and OS locks held by the recorder, bundle parent and child. Children own a
+bounded watchdog even if their parent dies. Shutdown uses local capture state,
+without waiting for a fresh SQL read. Offline filesystem export explicitly marks
+unavailable shared SQL events. Legacy deferred journals are preserved and rejected
+by the future runtime until O2 adoption; customer/provider activation remains gated.
+
 Future audit delivery (2026-11-01, activation gated) uses one dedicated PostgreSQL
 session for advisory ownership and every queue transaction. Standby instances
 cannot read or mark the queue; lost/invalidated sessions cannot reconnect to
@@ -1990,8 +2017,8 @@ DB-only, external-only and combined sinks retain their existing schema and
 immutable event identity. Retried output between stdout and marker may repeat the
 same ID; local stdout completion is not downstream acknowledgement. Future event
 and retry timing use PostgreSQL time. Direct PostgreSQL or session pooling is
-required; transaction pooling is unsupported. Diagnostic deferred stop journals
-remain a separate R4 dependency and must become durable before activation.
+required; transaction pooling is unsupported. Existing legacy diagnostic deferred
+stop journals still require verified O2 adoption before activation.
 
 ## User answer scenarios (2026-10-23)
 Authenticated users, including viewer, may create and publish their own answer
