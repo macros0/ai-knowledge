@@ -2227,6 +2227,11 @@ and runtime configuration upgrade. The full backend run exposed missing UI keys
 for these already recorded events. Canonical key/English seed manifests are
 regenerated from the locale sources; unknown actions remain rejected. This changes
 display labels and the explicit expected enum only, not event payloads or grants.
+The fresh-main-chain regression explicitly pins `rpl05_maintenance_epoch` and
+requires artifact bindings, work items, runtime identity and the maintenance
+epoch/operation/owner/installation columns. Audit schema/metadata comparison and
+the independent full model-drift check remain required; an older head cannot
+satisfy the updated regression simply by preserving the historical audit tables.
 
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
