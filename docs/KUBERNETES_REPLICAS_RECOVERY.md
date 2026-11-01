@@ -1,10 +1,12 @@
 # Replica maintenance and recovery
 
-Status,2026-11-01: the SQL maintenance fence/operator and encrypted format3 archive
-library are implemented. Coordinated Kubernetes drain, provider reconciliation,
-actual provider exports/copy/restore and held restore release remain O2 work.
-There is no completed distributed backup/restore command or certified recovery
-procedure in this snapshot. The compact format2 path remains separate.
+Status,2026-11-01: the owned managed PostgreSQL/Qdrant/S3 lab has passed an actual
+encrypted backup to the user's separate PC and restore into new storage with the
+source switched off. PostgreSQL snapshot export, physical writer drain, all-object
+hash verification, held identity adoption and explicit release were exercised.
+This is a single-node synthetic lab result, not customer/provider certification.
+External/mixed/RWX recipes, uncertain provider reconciliation, installed-schema
+upgrades and production scheduling remain O2 work. The compact format2 path remains separate.
 
 ## Transaction boundary
 
@@ -19,7 +21,7 @@ Work claims carry the epoch and cannot renew/publish/finish under a retired one.
 
 After maintenance ends, the previous processes stay fenced. Revalidating the
 same Settings/process cannot adopt the new epoch; restart the application roles
-through the eventual coordinator. Transaction guard decisions are cached only
+through the coordinator. Transaction guard decisions are cached only
 while the exact PostgreSQL transaction retains its shared row lock. SQLite is a
 single-process development/test fallback, with no distributed guarantee.
 
@@ -69,14 +71,13 @@ application before its disposable namespace was removed.
 
 ## Remaining recovery acceptance
 
-A complete backup must verify every component at a destination independent of
-the source namespace/failure domain. Restore must use new storage targets, keep
-jobs held, rotate/invalidate authentication, verify content/search/download with
-the source unavailable and record measured consistent_at/RPO/RTO. Unknown writers,
-provider requests, partial components or missing hashes must prevent completion.
-Nightly scheduling still needs destination/access, encryption/key recovery,
-timezone/window, retention and alert recipient inputs. No nightly CronJob is
-enabled by this foundation.
+Each supported provider recipe must verify every component at a destination
+independent of its source failure domain. The managed-S3 lab result below covers
+one such recipe. Unknown writers, provider requests, partial components or missing
+hashes prevent completion. Additional provider recipes, installed-schema adoption
+and the remaining runtime fault matrix are open. Production scheduling is disabled
+by user instruction; its future activation requires independent key recovery,
+timezone/window, retention and alert recipient configuration. No nightly CronJob is enabled.
 
 ## Encrypted archive contract
 
@@ -130,6 +131,63 @@ targets isolated and jobs held on any decoding/import failure; decoding by itsel
 does not create a database, restore a collection, or release workloads.
 
 The user selected this physically separate Windows PC for the owned lab copy.
-Production scheduling remains explicitly disabled. The end-to-end acceptance must
-still export a nonempty source, make its storage unavailable, restore to new
-targets with jobs held, verify content/search/download and measure RTO/RPO.
+Production scheduling remains explicitly disabled.
+
+## Exercised managed-S3 recovery (2026-11-01)
+
+`scripts/kubernetes/replica_backup.py` is an explicit **owned-kind-lab** coordinator.
+It validates the recorded namespace UID, SQL installation/schema/storage scope,
+isolated loopback forwards and the approved separate-PC destination before entry.
+The SQL maintenance fence precedes normal scale-down. Completed Jobs are allowed;
+unknown/terminating writer Pods, unsuspended CronJobs, unfinished Jobs, unreachable
+nodes and owned LLM slots prohibit a verified drain. No force deletion or lease
+expiry substitutes for stopping a provider request. Intended role counts are
+restored with new processes after a successful verified backup. On failure the
+source stays held; an incomplete archive is retained and never accepted.
+
+One retained repeatable-read, read-only PostgreSQL connection exports the snapshot
+and obtains the database `consistent_at`. The selected server's `pg_dump` uses its
+Pod-local Unix socket with that exact snapshot; SSH/Kubernetes stream the dump to
+the PC. No credential enters argv. This avoids kubectl terminating its entire TCP
+forward when an individual PostgreSQL client resets a stream. Dump exit status is
+checked before completion. A Qdrant snapshot and every SQL-ready artifact's bytes,
+size and SHA-256 complete the encrypted archive. No lost snapshot is silently resumed.
+
+`scripts/kubernetes/replica_restore.py` authenticates the complete archive before
+import, requires new namespace/installation/PVCs and empty PG/Qdrant/S3 instances,
+and checks the source has no running workloads. Application roles stay at zero.
+PostgreSQL imports in one transaction; Qdrant imports the saved snapshot; S3 uses
+create-only writes and cold reads of every object. Counts and the work ledger are
+checked before reporting `providers-restored-held`. This command never activates jobs.
+
+`scripts/kubernetes/restore_identity.py` runs as an offline Job in the exact saved
+backend image, mounted outside `app/` so the application build fingerprint remains
+the saved one. It uses new target credentials, APP_SECRET_KEY and CA. On its exact
+owned operator connection it replaces source installation/storage bindings, computes
+the common fingerprint on Linux, increments the maintenance epoch, invalidates
+auth/OIDC sessions and holds pending audit events atomically. It refuses uncertain
+LLM owners and keeps maintenance enabled. SQL-commit/file-publication recovery only
+accepts the identical new identity, operation and bindings. Publish the resulting
+immutable identity ConfigMap, verify the held queue and target endpoints, then use
+the exact restore operator to leave maintenance and start the intended workloads.
+The owned rehearsal driver performs those explicit final operations; automated
+production deployment/activation is not provided by these lab entry points.
+
+Observed result: source `replica-test-r5o2r20261101` was fully stopped; target
+`replica-test-r5o2t20261101` used three different PVCs and installation IDs. The
+independent format3 archive held 17 encrypted objects (1,330,928 plaintext bytes):
+one PG dump, one Qdrant snapshot and 15 artifacts. Restore verified 3 documents,
+3 concepts, 3 chunks, 6 vector points and all 15 artifact hashes. All three originals
+passed search/download SHA-256 checks with the source unavailable. The restored
+work ledger was unchanged, execution before release was zero, and an actual write
+guard rejected access before release. One old auth session was invalidated.
+After release, 2 API + 2 worker + 2 frontend were ready with zero restarts; a new
+document finished without a problem and passed search/download in 26.688s.
+
+`consistent_at=2026-11-01T13:50:43.734141Z`; observed recovery-point age at the
+outage was 236.334s. Observed recovery elapsed time was 973.464s, including operator
+implementation/verification during the rehearsal. These measurements are not a
+production RPO/RTO guarantee. The public receipt is
+[`2026-11-01-replica-managed-s3-recovery.json`](superpowers/reports/2026-11-01-replica-managed-s3-recovery.json)
+(local original: `tests/tmp/replica-recovery-lab/recovery-report.json`); archives and keys stay in
+separate protected directories on the approved PC. Secret material is not committed.

@@ -2106,7 +2106,7 @@ and new-target release qualification remain mandatory and unimplemented here.
 The rpl05 upgrade holds installed replicas and requires stopped old writers and
 a future explicit adoption/release procedure; it is not an online upgrade.
 
-Replica backup format3 archive library (2026-11-01, end-to-end recovery pending):
+Replica backup format3 archive library (2026-11-01, owned managed-S3 recovery exercised):
 only encrypted data enters a new archive directory. AES256-GCM uses bounded4MiB
 frames, per-object HKDF keys with fresh128-bit file salts, distinct96-bit frame
 counter nonces and authenticated plan/object/order/finality. A separately derived
@@ -2120,9 +2120,24 @@ plaintext/ciphertext hashes/sizes before publishing complete. A changed source,
 missing component, corrupt object, wrong key or incomplete inventory cannot pass.
 Resume reauthenticates the same plan and published objects; it never overwrites
 an existing complete backup. Root keys are managed outside this library/archive.
-The original compact format2 path stays separate. Provider exports, physical drain,
-independent restore/held activation and destination durability qualification are
-still required. The selected lab destination is the user's separate Windows PC;
+The original compact format2 path stays separate. The owned-kind-lab coordinator
+now validates namespace UID, installation/schema/provider scope and explicit PC
+destination evidence, fences SQL writes and normally stops every application role
+and its synthetic provider. Unknown/terminating writers, unhealthy nodes, scheduled
+or unfinished jobs and uncertain LLM owners refuse completion. A retained PostgreSQL
+snapshot and Pod-local pg_dump, a Qdrant snapshot and all SQL-ready artifacts are
+streamed into encryption. Failed exports remain incomplete/held. No lost snapshot
+is silently recreated under an old plan. Restore authenticates before importing to
+new empty PG/Qdrant/S3/PVCs with source workloads unavailable and application roles
+stopped. All object hashes, counts and an unchanged held work ledger are verified.
+An offline operator in the saved image atomically rebinds installation/storage/
+Linux configuration identity under an incremented held epoch, revokes auth/OIDC
+sessions and holds pending audit events. It requires the exact operator connection,
+refuses uncertain model owners and never activates workloads itself. The rehearsal
+verified zero execution and denied writes before explicit release, and successful
+search/download/new processing afterwards. Generic production activation, external/
+mixed/RWX qualification, installed upgrades, durable destination/key recovery and
+remaining fault scenarios still require evidence. The selected lab destination is the user's separate Windows PC;
 production scheduling remains disabled, with no retention deletion or alerts sent.
 
 ## User answer scenarios (2026-10-23)

@@ -128,6 +128,12 @@ PG/files и Qdrant snapshot либо reindex, сверяет checksums/counts/id
 release после проверки target model/storage endpoints. Изменить один namespace
 недостаточно для изоляции от production buckets/DB/models.
 
+Ruling,2026-11-01: the first physical recipe uses separate explicit lab commands
+`scripts/kubernetes/replica_backup.py`, `replica_restore.py` and the offline
+`restore_identity.py` operator. Private config files hold credentials and explicit
+lab/context/namespace bindings; recorded namespace UIDs and new target volumes are
+checked. Production generic CLI/activation is not implied by this lab recipe.
+
 - [ ] `test_partial_backup_never_complete`, `test_unknown_writer_blocks_backup`, `test_restore_requires_new_target`, `test_restored_jobs_held`, `test_24h_age_from_consistent_at`, `test_maintenance_restores_intended_counts`. Assertions: corrupt/missing component→incomplete; no unverified writer; worker execution=0 до release; age=now−consistent_at; исходные counts восстановлены после успешного backup, при неизвестном исходе ничего автоматически не запускается.
 - [ ] RED: `python -m pytest tests/test_replica_backup.py tests/test_replica_restore.py -q`.
 - [ ] Реализовать operation lock, drain/fence, manifest/copy/verify и restore с отдельными recipes для managed/external. Внешний provider обязан предоставить пригодную согласованную копию или доступ для logical backup; иначе профиль backup unsupported. Backup destination вне рабочего failure domain, шифрование и least privilege; key recovery отдельно. Retention не должен удалить последнюю пригодную независимую копию.
@@ -155,6 +161,23 @@ same-source resume and recovery-point age are implemented in
 actual provider exports, physical drain, restore and held release remain open.
 User chose the physically separate PC for lab backup; production scheduling is off.
 This narrows the earlier archive-format item without completing O2/acceptance.
+
+O2 managed-S3 rehearsal,2026-11-01: **actual independent recovery PASS** for the
+owned synthetic single-node recipe. A retained PG snapshot, Qdrant snapshot and
+15 SQL-ready artifacts produced 17 encrypted objects; cold verification passed.
+Source workloads/storage were stopped and restore used a new namespace, three
+new PVCs, credentials, CA and installation. SQL counts (3 documents/3 concepts/
+3 chunks/298 work rows), 6 Qdrant points and all blob hashes matched. Before
+release, the work ledger remained unchanged, executed jobs=0, a real write guard
+denied access, and auth cleanup invalidated one source session. Linux identity
+adoption retained maintenance until explicit release. All three originals passed
+search/download; a fresh document completed after release (26.688s); all six app
+Pods ready with zero restarts. Observed RPO age236.334s/RTO973.464s includes operator
+implementation during rehearsal; no production SLA. A failed transport attempt
+stayed incomplete/held and was not resumed with a lost PG snapshot. Public report:
+`tests/tmp/replica-recovery-lab/recovery-report.json`. External/mixed/RWX recovery,
+unknown provider reconciliation, installed upgrade, nightly error alerts/key
+recovery remain open; production schedule stays OFF by explicit user choice.
 
 **Files:** создать `docs/KUBERNETES_REPLICAS_ACCEPTANCE.md`,
 `deploy/kubernetes/replicas/support-matrix.json`,

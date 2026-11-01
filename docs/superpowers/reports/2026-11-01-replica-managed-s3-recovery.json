@@ -1,0 +1,47 @@
+{
+  "status": "owned-managed-s3-recovery-passed",
+  "backup_id": "e1ed0ac38b2a437f82bab095e37f057d",
+  "source_namespace": "replica-test-r5o2r20261101",
+  "target_namespace": "replica-test-r5o2t20261101",
+  "source_unavailable": true,
+  "restored_documents": 3,
+  "download_sha256_matches": 3,
+  "search_matches": 3,
+  "restored_artifacts_sha256_matches": 15,
+  "restored_qdrant_points": 6,
+  "executed_jobs_before_release": 0,
+  "write_before_release": "denied",
+  "invalidated_old_sessions": 1,
+  "fresh_document": {
+    "id": "04e28d3001654bcc",
+    "status": "done",
+    "problem": null,
+    "search_download_verified": true,
+    "seconds": 26.688
+  },
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:b3a513dae96ff1b94c9955e124d135e01466c30764611a01e5f4add5fd491987",
+      "worker": "sha256:b3a513dae96ff1b94c9955e124d135e01466c30764611a01e5f4add5fd491987"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "consistent_at": "2026-11-01T13:50:43.734141+00:00",
+  "recovered_at": "2026-11-01T14:10:53.532321+00:00",
+  "observed_rpo_age_seconds": 236.334489,
+  "observed_rto_seconds": 973.463691,
+  "timing_scope": "single-node rehearsal including operator implementation/verification; not production SLA",
+  "production_schedule": "disabled",
+  "qualification": "owned-lab-managed-s3-only"
+}
