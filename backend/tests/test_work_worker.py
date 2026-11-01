@@ -140,6 +140,7 @@ def test_only_classified_transient_errors_retry():
     with session_scope() as session:
         row = session.get(WorkItem, work_id)
         assert row.status == "failed" and row.attempts == 2 and row.error_code == "storage_unavailable"
+    assert runner.metrics.snapshot() == {"claims": 2, "completed": 2, "retries": 1, "lease_losses": 0}
 
 
 def test_validation_failure_does_not_retry_or_persist_exception_content():
@@ -161,6 +162,7 @@ def test_expired_handler_return_cannot_ack():
     with session_scope() as session:
         work_id = enqueue(session, spec())
     runner.run_once(Event())
+    assert runner.metrics.snapshot()["lease_losses"] == 1
     with session_scope() as session:
         assert session.get(WorkItem, work_id).status == "running"
 

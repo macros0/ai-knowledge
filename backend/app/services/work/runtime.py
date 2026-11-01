@@ -162,7 +162,6 @@ def build_handlers():
 def probe_storage(settings):
     """Required storage only; no model call participates in process liveness."""
     from app.services.artifacts.control import enforce_runtime
-    from app.services.artifacts import get_blob_store
     from app.services.vector_store import shared_qdrant_client
     if get_engine().dialect.name != "postgresql" or settings.artifact_backend not in {"rwx", "s3"}:
         return False
@@ -170,6 +169,11 @@ def probe_storage(settings):
     with session_scope() as session:
         session.scalar(select(literal(1)))
     shared_qdrant_client(settings).get_collections()
+    return probe_artifacts(settings)
+
+
+def probe_artifacts(settings):
+    from app.services.artifacts import get_blob_store
     store = get_blob_store(settings)
     if settings.artifact_backend == "s3":
         store.client.head_bucket(Bucket=store.bucket)

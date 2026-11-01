@@ -1,4 +1,4 @@
-{{- if and .Values.application.enabled (eq .Values.deployment.mode "frontend-split") }}
+{{- if and .Values.application.enabled (has .Values.deployment.mode (list "frontend-split" "distributed")) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,7 +36,7 @@ spec:
       {{- end }}
       topologySpreadConstraints:
         - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
+          topologyKey: {{ .Values.placement.topologyKey | quote }}
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:

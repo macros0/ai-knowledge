@@ -10,6 +10,7 @@ from app.db.session import session_scope
 from .handlers import TransientWorkError, WorkDeferred
 from .models import LostOwnership
 from . import store
+from .metrics import ProcessMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class Worker:
     def __init__(self, settings, *, registry, owner_id):
         self.settings, self.registry, self.owner_id = settings, registry, owner_id
         self._future = None
+        self.metrics = ProcessMetrics()
 
     def run_once(self, stop):
         if stop.is_set() or self._future is not None and not self._future.done():
@@ -27,6 +29,7 @@ class Worker:
                                lease_seconds=self.settings.work_lease_seconds)
         if work is None:
             return False
+        self.metrics.increment("claims")
         if stop.is_set():
             return True  # A committed claim is recoverable; do not start a new handler during shutdown.
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="durable-work")
@@ -66,6 +69,7 @@ class Worker:
                 heartbeat_wait = self.settings.work_heartbeat_seconds
                 heartbeat_at = time.monotonic() + heartbeat_wait
             with session_scope() as session:
+                retried = False
                 if failure is None and isinstance(result, WorkDeferred):
                     store.defer(session, work, delay_seconds=result.delay_seconds)
                 elif isinstance(failure, TransientWorkError):
@@ -73,11 +77,16 @@ class Worker:
                     delays = self.settings.work_retry_backoff_seconds
                     store.retry(session, work, error_code=failure.code, delay_seconds=delays[min(row.attempts - 1, len(delays) - 1)],
                                 max_attempts=self.settings.work_max_attempts)
+                    retried = row.attempts < self.settings.work_max_attempts
                 else:
                     store.finish(session, work, outcome="failed" if failure else "succeeded",
                                  error_code="handler_failed" if failure else None)
+            self.metrics.increment("completed")
+            if retried:
+                self.metrics.increment("retries")
             return True
         except LostOwnership:
+            self.metrics.increment("lease_losses")
             logger.info("Work ownership lost; no acknowledgement")
             return True
         finally:

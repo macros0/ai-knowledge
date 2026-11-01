@@ -93,6 +93,9 @@ def test_worker_health_expires_with_mainloop_and_requires_storage():
 
 
 def configured_worker(monkeypatch, handler):
+    # Role/lifecycle tests isolate admission; installed-identity proof has its
+    # own DB and real-entrypoint rejection tests.
+    monkeypatch.setattr("app.deployment.runtime_identity.enforce_runtime_identity", lambda *_a: None)
     from app.services.work import runtime
     from app.services.work import scratch
     from app.services.work.handlers import HandlerRegistry
@@ -263,6 +266,7 @@ def test_worker_command_serves_health_until_stop(tmp_path, monkeypatch):
 
 
 def test_api_lifespan_does_not_run_legacy_recovery_or_schedulers(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.deployment.runtime_identity.enforce_runtime_identity", lambda *_a: None)
     from types import SimpleNamespace
     from fastapi.testclient import TestClient
     import app.main as application

@@ -55,6 +55,9 @@ def enforce_session(session):
     row = read_control(session)
     if row and row["maintenance_token"]:
         raise ValueError("Artifact storage migration maintenance is active")
+    from app.config import get_settings
+    from app.deployment.runtime_identity import enforce_session_identity
+    enforce_session_identity(session, get_settings())
 
 
 def enforce_write(session):

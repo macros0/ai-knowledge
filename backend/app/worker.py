@@ -10,12 +10,25 @@ from app.services.work.runtime import start_runtime
 
 
 class WorkerHealthServer:
-    def __init__(self, health, *, host="0.0.0.0", port=8001):
+    def __init__(self, health, *, host="0.0.0.0", port=8001, metrics=None):
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_args):
                 pass
 
             def do_GET(self):
+                if self.path == "/metrics" and metrics is not None:
+                    try:
+                        body = metrics().encode("utf-8")
+                    except Exception:
+                        self.send_response(503)
+                        self.end_headers()
+                        return
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 if self.path == "/health/live":
                     ok = health.live()
                 elif self.path == "/health/ready":
@@ -71,6 +84,8 @@ def main(argv=None, *, settings=None, stop_event=None):
             signal.signal(name, request_stop)
     handle, server, diagnostic_runtime, audit_dispatcher, finished = None, None, None, None, False
     try:
+        from app.deployment.runtime_identity import enforce_runtime_identity
+        enforce_runtime_identity(settings)
         from app.services.audit_runtime import validate_existing_audit, preflight_audit
         from app.services.audit_outbox import start_audit_dispatcher
         from app.services.diagnostics.runtime import install_entrypoint_runtime
@@ -81,7 +96,9 @@ def main(argv=None, *, settings=None, stop_event=None):
         if not diagnostic_runtime.start() and settings.diagnostics_bundle_enabled:
             raise RuntimeError("Worker diagnostic storage unavailable")
         handle = start_runtime(settings, stop_event=stop)
-        server = WorkerHealthServer(handle.health, host=args.health_host, port=args.health_port)
+        from app.services.work.metrics import render_metrics
+        server = WorkerHealthServer(handle.health, host=args.health_host, port=args.health_port,
+            metrics=lambda: render_metrics(settings, handle))
         server.start()
         while not stop.wait(0.25):
             pass

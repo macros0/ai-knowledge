@@ -33,6 +33,7 @@ from app.api import (
     jobs,
     locales,
     reference_editing,
+    replicas,
     search,
     tags,
     users,
@@ -355,6 +356,7 @@ async def _combined_lifespan(app: FastAPI):
 
 @asynccontextmanager
 async def _api_lifespan(app: FastAPI):
+    from app.deployment.runtime_identity import enforce_runtime_identity
     from app.services.artifacts.control import enforce_runtime
     from app.services.audit_runtime import validate_existing_audit, validate_audit_transport_profile, preflight_audit
     from app.services.diagnostics.runtime import initialize_diagnostics
@@ -362,6 +364,7 @@ async def _api_lifespan(app: FastAPI):
     from app.services.audit_outbox import start_audit_dispatcher
     from starlette.concurrency import run_in_threadpool
     settings = get_settings()
+    enforce_runtime_identity(settings)
     enforce_runtime(settings)
     _validate_runtime_dependencies()
     await run_in_threadpool(validate_audit_transport_profile, settings)
@@ -461,6 +464,7 @@ def create_app() -> FastAPI:
     protected.include_router(admin_locales.router)
     protected.include_router(i18n.router)
     protected.include_router(reference_editing.router)
+    protected.include_router(replicas.router)
     app.include_router(protected, prefix=settings.api_prefix)
 
     @app.exception_handler(ReferenceError)

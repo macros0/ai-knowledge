@@ -1,4 +1,4 @@
-{{- if .Values.networkPolicy.enabled }}
+{{- if and .Values.networkPolicy.enabled (ne .Values.deployment.mode "distributed") }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: {name: application-boundaries}

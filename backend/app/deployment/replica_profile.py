@@ -57,6 +57,8 @@ def validate_replica_profile(profile: ReplicaProfile) -> None:
             raise ReplicaProfileError("Distributed execution requires verified shared artifacts")
         if profile.role == "combined":
             raise ReplicaProfileError("Distributed execution requires an explicit API/worker role")
+        if profile.worker_replicas < 1:
+            raise ReplicaProfileError("Distributed execution requires worker replicas")
     if profile.resilience == "resilient":
         # Syntax only. Runtime must also verify topology/provider/version identity.
         if not isinstance(profile.storage_certification, str) or not re.fullmatch(
@@ -72,6 +74,8 @@ def validate_runtime_profile(schema: str | None, profile: ReplicaProfile) -> Non
         return
     if schema != "replicas-v1":
         raise ReplicaProfileError("Unsupported deployment schema")
+    if profile.mode != "distributed" or profile.role == "combined":
+        raise ReplicaProfileError("replicas-v1 requires distributed mode and an explicit API/worker role")
     validate_replica_profile(profile)
-    # Build-controlled gate: no environment variable can assert capability.
-    raise ReplicaProfileError("replicas-v1 runtime is not implemented in this build")
+    if profile.resilience != "basic":
+        raise ReplicaProfileError("Resilient runtime requires qualified storage/topology acceptance")

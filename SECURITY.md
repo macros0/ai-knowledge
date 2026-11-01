@@ -2020,7 +2020,30 @@ and retry timing use PostgreSQL time. Direct PostgreSQL or session pooling is
 required; transaction pooling is unsupported. Existing legacy diagnostic deferred
 stop journals still require verified O2 adoption before activation.
 
+Distributed runtime identity and exposure (2026-11-01): API/worker startup requires
+an operator-provided bounded identity document with a keyed HMAC over normalized
+common settings (including secrets), application source identity, namespace and
+storage receipt. Only the digest leaves memory; raw credentials are not in the
+document. A matching installed SQL singleton, selected artifact identity and exact
+Alembic revision are mandatory. Entrypoints never bootstrap or auto-adopt identity.
+Every guarded SQL boundary checks the installed identity; retired configurations
+fail closed. Trusted offline migration access remains a Python operator boundary,
+not an environment switch. Existing legacy databases without installed identity
+retain their existing behavior. Production auth protections still apply.
+
+The distributed chart exposes API through the backend Service and frontend only
+through Gateway rules. Workers have no public Service/route. Namespace policies
+deny worker ingress and restrict frontend egress to API/DNS; API/worker external
+egress is an explicit platform input. Kubelet probes remain private. Runtime
+ConfigMap values override chart-controlled Secret keys, and stub endpoints are
+pinned explicitly. Administrator metrics contain fixed-cardinality counts/ages,
+never document IDs/payloads, owners or endpoints. Worker metrics are private and
+return generic503 on SQL failure. Uncertain provider reservations remain occupied.
+These are implementation controls; provider, CNI and multi-Pod qualification and
+O1/O2 bootstrap/recovery remain required before customer activation.
+
 ## User answer scenarios (2026-10-23)
+
 Authenticated users, including viewer, may create and publish their own answer
 instructions. The owner may edit, unpublish or delete their scenarios.
 Administrators may edit or delete another user's public scenario, but cannot

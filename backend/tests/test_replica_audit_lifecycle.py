@@ -10,6 +10,7 @@ from app.config import Settings
 
 @pytest.mark.parametrize("role", ["api", "worker"])
 def test_replica_entrypoint_starts_and_stops_audit_after_preflight(tmp_path, monkeypatch, role):
+    monkeypatch.setattr("app.deployment.runtime_identity.enforce_runtime_identity", lambda *_a: None)
     # Import before patching the source of worker's module-bound runtime import.
     import app.worker as command
     from app.services import audit_outbox, audit_runtime

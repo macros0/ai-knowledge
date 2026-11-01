@@ -339,11 +339,26 @@ Topological spread по реальному failure domain, probes отдельн
 termination grace. Initial acceptance 2 frontend + 2 API + 2 workers, один Uvicorn
 на Pod; intended counts сохраняются maintenance receipt. Режим basic не обещает HA storage.
 
-- [ ] `test_api_service_excludes_workers`, `test_distributed_requires_shared_storage`, `test_role_probes_and_identity`, `test_legacy_single_process_guard_retained`. Assertions: endpoints только API; local rejected; worker не использует отсутствующий HTTP main; compact multiworker отвергнут.
-- [ ] RED: `python -m pytest tests/test_distributed_chart.py -q` с Helm.
+- [x] `test_api_service_excludes_workers`, `test_distributed_requires_shared_storage`, `test_role_probes_and_identity`, `test_legacy_single_process_guard_retained`. Assertions: endpoints только API; local rejected; worker не использует отсутствующий HTTP main; compact multiworker отвергнут.
+- [x] RED: `python -m pytest tests/test_distributed_chart.py -q` с Helm.
 - [ ] Добавить templates/capability, снять запрет replicas только после R1–R4. Не добавлять HPA. Метрики queue age/depth, claim/retry, lease loss, model saturation, per-role readiness; resources определить по небольшому corpus/load probe.
 - [ ] GREEN chart + runner runtime: 1→2 API, 1→2 workers, kill API/worker, partition PG, возврат старого процесса, concurrent cancel/delete, exhausted LLM capacity. Проверить отсутствие duplicates/loss, лимиты, стабильный auth. Записать latency/throughput и не объявлять линейное ускорение.
 - [ ] Commit `feat: enable verified API and worker replicas`.
+
+R5 foundation milestone (2026-11-01): separate role Deployments, API-only Service,
+bounded private scratch, manual counts/spread, private worker health/metrics and
+role NetworkPolicies are implemented. A namespace-bound keyed common configuration
+and source-build identity must match the explicitly installed SQL/storage identity
+and exact Alembic revision `rpl04_runtime_identity`. Startup has no bootstrap/env
+bypass; SQL boundaries/readiness fence retired configurations. ConfigMap authority
+and explicit stub endpoints prevent Secret overrides of chart-controlled settings.
+Shared SQL queue/model gauges and process claim/retry/lease-loss counters are
+implemented. Root checks passed (audit0, frontend756/1skip, ESLint/Ruff); focused
+foundation107 passed, final chart5 passed, metrics/auth/worker19 passed; explicit
+owned PostgreSQL identity3 passed. These overlapping cohorts are not additive and
+are not full backend CI. O1 bootstrap/storage wiring and O2 maintenance are required
+before actual multi-Pod failure/load acceptance. R5 remains open, including runner,
+resource measurements and rollout qualification; the basic example keeps app off.
 
 ## Ключевые assertions для тестов задач
 

@@ -25,6 +25,34 @@ images/values; старые compact restore-примеры не доказыва
 
 ## Компактная установка
 
+Distributed implementation status (2026-11-01): chart templates now separate
+frontend/API/worker, with the backend Service selecting API only. The basic
+example is `deploy/kubernetes/profiles/distributed-basic.values.example.yaml`;
+it intentionally starts with application workloads disabled. Each backend Pod
+uses one process, private bounded scratch, the same runtime ConfigMap/Secret and
+an operator-installed common identity. The ConfigMap overrides chart-controlled
+Secret keys; stub/unavailable model endpoints are explicitly pinned on containers.
+Worker probes use private port8001; there is no worker Service/public route.
+NetworkPolicy isolates frontend, API, worker and storage roles. CNI enforcement
+must be verified separately. Manual counts and topology spread do not certify HA.
+
+Startup requires a matching keyed configuration/build/storage receipt identity,
+namespace and installed database row, plus schema `rpl04_runtime_identity`.
+API/worker never bootstrap that record or call create_all as an upgrade. SQL
+boundaries fence a process after installed identity changes. API readiness also
+checks this binding and artifact storage. Bootstrap/storage ownership, maintenance
+and real multi-Pod failure acceptance remain O1/O2/R5 requirements; these templates
+are not a completed production rollout.
+
+Operations metrics: administrator-only `/api/admin/replicas/metrics`; worker
+`/metrics` on its private health port (default ingress denied, use an explicitly
+authorized monitoring policy or port-forward). Shared SQL gauges report queue
+depth/oldest age, running/expired claims, retry attempts and reserved/quarantined
+model capacity. Aggregate repeated shared gauges using max, never sum. Process
+claim/retry/lease-loss/completion counters reset on restart and may be summed by
+role. Expired uncertain model requests remain reserved until provider reconciliation.
+Resources in the chart are provisional until the O3 corpus/load measurement.
+
 Поддерживаемый путь этого merge: Linux/amd64, compact/bundled, один Pod приложения,
 один backend worker, Recreate, отдельные PG/Qdrant и внешние для release PVC.
 Авторизация сохраняется из текущего main: confidential client, client_secret_basic,

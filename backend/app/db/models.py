@@ -1460,6 +1460,17 @@ class ArtifactStorageControl(Base):
     __table_args__ = (CheckConstraint("id = 1", name="ck_artifact_storage_singleton"),)
 
 
+class ReplicaRuntimeIdentity(Base):
+    __tablename__ = "replica_runtime_identity"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_receipt_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    schema_revision: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_replica_runtime_singleton"),)
+
+
 class ArtifactStorageMigration(Base):
     __tablename__ = "artifact_storage_migrations"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)

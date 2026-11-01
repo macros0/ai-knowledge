@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from docparser.attachment_limits import DEFAULT_ATTACHMENT_MAX_DEPTH, MAX_CONFIGURABLE_ATTACHMENT_DEPTH
 
@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     # Opt-in contract only; runtime capability is enabled by code in a later stage.
     okf_deployment_schema: str | None = None
     app_role: str = "combined"
+    deployment_mode: str = "compact"
+    deployment_namespace: str = Field(default="", max_length=63, pattern=r"^$|^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
+    frontend_replicas: int = Field(default=1, ge=1, le=64)
+    api_replicas: int = Field(default=1, ge=1, le=64)
+    worker_replicas: int = Field(default=0, ge=0, le=64)
+    resilience_class: str = "basic"
+    runtime_identity_file: Path | None = None
+    _runtime_identity: Any = PrivateAttr(default=None)
     # Durable work foundation only: role/admission activation remains gated.
     work_lease_seconds: int = Field(default=120, ge=5, le=3600)
     work_heartbeat_seconds: int = Field(default=30, ge=1, le=600)
@@ -80,14 +88,30 @@ class Settings(BaseSettings):
             raise ValueError("Work heartbeat requires at least three intervals per lease")
         if any(not 1 <= delay <= 3600 for delay in self.work_retry_backoff_seconds):
             raise ValueError("Invalid bounded work retry backoff")
-        if self.artifact_uploads_enabled and self.environment == "production":
+        if self.artifact_uploads_enabled and self.environment == "production" and self.okf_deployment_schema != "replicas-v1":
             raise ValueError("Artifact upload preview requires completed retention/migration before production")
-        if self.artifact_gc_enabled and (self.environment == "production" or self.app_role != "combined"):
+        if self.artifact_gc_enabled and (self.environment == "production" or self.app_role != "combined") and self.okf_deployment_schema != "replicas-v1":
             raise ValueError("Artifact GC preview requires non-production combined execution until migration/runtime acceptance")
+        additional = {}
+        if self.okf_deployment_schema == "replicas-v1":
+            if not self.deployment_namespace:
+                raise ValueError("Replica runtime identity requires an explicit deployment namespace")
+            from sqlalchemy.engine import make_url
+            try:
+                dialect = make_url(self.db_url).get_backend_name()
+            except Exception:
+                raise ValueError("Replica database URL is invalid") from None
+            additional = {"database_dialect": dialect,
+                "shared_artifacts_verified": self.runtime_identity_file is not None}
+            if not self.artifact_uploads_enabled:
+                raise ValueError("Replica execution requires portable artifact uploads")
         profile = ReplicaProfile(
+            mode=self.deployment_mode, frontend_replicas=self.frontend_replicas,
+            api_replicas=self.api_replicas, worker_replicas=self.worker_replicas, resilience=self.resilience_class,
             role=self.app_role, artifact_backend=self.artifact_backend,
             postgres_provider=self.postgres_provider, qdrant_provider=self.qdrant_provider,
             artifact_provider=self.artifact_provider,
+            **additional,
         )
         validate_runtime_profile(self.okf_deployment_schema, profile)
         return self
@@ -878,6 +902,13 @@ class Settings(BaseSettings):
                 raise ValueError("PROD forbids EMBEDDING_PROVIDER=fake")
             if self.environment != "production":
                 raise ValueError("PROD requires ENVIRONMENT=production")
+        return self
+
+    @model_validator(mode="after")
+    def validate_common_runtime_identity(self):
+        if self.okf_deployment_schema == "replicas-v1":
+            from app.deployment.runtime_identity import validate_identity
+            self._runtime_identity = validate_identity(self)
         return self
 
     @field_validator("data_dir", mode="before")

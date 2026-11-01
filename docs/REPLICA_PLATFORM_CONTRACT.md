@@ -29,13 +29,15 @@ Credentials этого manifest не выводятся в report. Наличи�
 
 | Вход | Состояние |
 |---|---|
-| Разрешённый disposable namespace/context | Не предоставлен |
-| PVC/CSI, диски и домены отказа | Не проверены |
+| Разрешённый disposable namespace/context | Учебный kind-okf-policy: replica-test-s3rpl20261031; namespace проверен по managed-by/run-id |
+| PVC/CSI, диски и домены отказа | Учебный стенд: один node, local-path/RWO; RWX/CSI failover и независимые домены не подтверждены |
 | Разрешения на namespace/cluster components | Не проверены |
 | PG/Qdrant/RWX/S3 реализации и digests | Не выбраны до проверки платформы |
 | Независимое backup destination | Не предоставлено |
 
-Новые runtime настройки пока отклоняются кодом сборки. Pure validator описывает
-будущие сочетания и не является разрешением запуска. Helm распознаёт новые
-значения mode; frontend-split поддерживает независимые frontend при одном
-старом combined backend. Distributed backend mode по-прежнему отклоняется.
+R5 foundation (01.11.2026): Helm формирует frontend/API/worker, но runtime требует
+namespace-bound keyed identity с совпадающей установленной записью SQL и schema
+rpl04_runtime_identity. Автоматической инициализации этой записи при старте нет.
+O1 storage bootstrap, O2 maintenance и реальные multi-Pod испытания ещё обязательны;
+пример basic держит application.enabled=false. Resilient остаётся запрещён.
+Наличие шаблонов не подтверждает доступность платформенных хранилищ заказчика.

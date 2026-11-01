@@ -1,0 +1,3 @@
+{{- if and .Values.application.enabled (eq .Values.deployment.mode "distributed") }}
+{{ include "okf.replicaDeployment" (dict "root" . "role" "api") }}
+{{- end }}
