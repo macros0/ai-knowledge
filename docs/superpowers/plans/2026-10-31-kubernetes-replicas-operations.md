@@ -72,6 +72,17 @@ customer/provider certification. Managed RWX/platform permission, scoped DB/S3
 credential provisioning, actual TLS/rotation/restart/full-storage and recovery
 qualification are still open; O1 is not complete. See REPLICA_STORAGE_OPERATIONS.
 
+O1 storage-only TLS/restart follow-up (2026-11-01): actual PG direct-Pod TCP
+verify-full/SCRAM, Qdrant REST/gRPC and RustFS TLS passed; wrong hostname, retired
+CA and credentials were rejected for their specific failures. All three storage
+Pods restarted onto CA2 with the original PVCs and retained an8192-byte S3 object's
+SHA-256. Required native7-test cohort and separate gRPC1 passed; final chart6 passed.
+Actual frontend CNI denials passed against all three live storage endpoints from
+both frontend Pods, with API positive TCP controls. Coordinated running-app
+CA/identity rotation, scoped credentials, full-storage, RWX, external/mixed runtime
+and independent recovery qualification are still open. This narrows the earlier
+pending TLS/network items; it does not complete O1 or certify customer storage.
+
 ## Task O2: maintenance, backup и restore с ночным RPO
 
 **Files:** создать `scripts/kubernetes/replica_backup.py`,

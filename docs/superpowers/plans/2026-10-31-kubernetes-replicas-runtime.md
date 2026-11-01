@@ -362,6 +362,20 @@ resource measurements and rollout qualification; the basic example keeps app off
 
 ## Ключевые assertions для тестов задач
 
+R5 owned basic runtime milestone (2026-11-01): exact allowlisted backend/frontend
+Linux images built and a fresh TLS PG/Qdrant/S3 installation bootstrapped inside
+the backend image. Actual2 frontend/2 API/2 worker became Ready; shared sessions
+worked on distinct API Pods, and synthetic DOCX reached done/problem=None with
+BM25 visibility and SHA-256-identical source downloads. Manual API/worker scale
+2→1→2 and normal idle Pod replacement passed; document processing passed again
+after replacement. Initial lab API512Mi OOM led to1Gi; chart defaults retained.
+The runner now repeats owned-scope/identity/session/storage-boundary/document
+checks, records image/source digests and memory, and optionally performs idle
+replacement. Active worker loss, PG partition/stale return, concurrent cancel/
+delete and model exhaustion remain required pending gates; O2 recovery is still
+required. This milestone does not close R5 or certify production resources/SSO,
+live models, alternate provider combinations, node failover or independent restore.
+
 R1: `assert len(live_claims_for_same_work) == 1`;
 `assert new_claim.fence > old_claim.fence`; старое finish проверяется через
 `pytest.raises(LostOwnership)`.

@@ -1,0 +1,196 @@
+{
+  "suite": "runtime",
+  "run_id": "s3rpl20261031",
+  "profile": "basic",
+  "revision": "817405b448594091b2cfb92f99a31e8bb718ed2b",
+  "runner_sha256": "f1e83cee419a31aaf8963f8828040ab1d666f3ed0fd11845047e9d041fde3a9d",
+  "checks": [
+    {
+      "name": "target_identity",
+      "status": "passed"
+    },
+    {
+      "name": "runtime.scope",
+      "status": "passed"
+    },
+    {
+      "name": "runtime.role_inventory",
+      "status": "passed",
+      "evidence": {
+        "replicas": {
+          "frontend": 2,
+          "api": 2,
+          "worker": 2
+        },
+        "api_endpoints": 2,
+        "images": {
+          "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+          "api": "sha256:9f3ee7163fd1c365e2e0b6f672a7cbf02d5fc8e8fdadf9550d41a84a88be9019",
+          "worker": "sha256:9f3ee7163fd1c365e2e0b6f672a7cbf02d5fc8e8fdadf9550d41a84a88be9019"
+        },
+        "restarts": {
+          "frontend": 0,
+          "api": 0,
+          "worker": 0
+        }
+      }
+    },
+    {
+      "name": "runtime.common_identity",
+      "status": "passed",
+      "evidence": {
+        "fingerprint": "102af0d93491a3bd12093ea8d80cc42eb72925c8b19b69d3b9ed4a7bbb8530b8",
+        "schema_revision": "rpl04_runtime_identity"
+      }
+    },
+    {
+      "name": "runtime.shared_session",
+      "status": "passed",
+      "evidence": {
+        "shared_session": true,
+        "distinct_apis": 2
+      }
+    },
+    {
+      "name": "runtime.frontend_storage_boundary",
+      "status": "passed",
+      "evidence": {
+        "api_positive_endpoints": 3,
+        "frontend_denied_endpoints": 6,
+        "frontend_pods": 2
+      }
+    },
+    {
+      "name": "runtime.document_roundtrip",
+      "status": "passed",
+      "evidence": {
+        "documents": 2,
+        "download_sha256_matches": 2,
+        "search_matches": 2,
+        "duration_seconds": 26.625,
+        "upload_seconds": [
+          3.7810000000026776,
+          2.062999999994645
+        ],
+        "documents_per_minute": 4.507042253521127,
+        "model": "stub",
+        "embeddings": "fake"
+      }
+    },
+    {
+      "name": "runtime.memory_samples",
+      "status": "passed",
+      "evidence": {
+        "container_samples": {
+          "frontend": [
+            {
+              "memory_current_bytes": 69160960,
+              "memory_peak_bytes": 113639424
+            },
+            {
+              "memory_current_bytes": 61362176,
+              "memory_peak_bytes": 79134720
+            }
+          ],
+          "api": [
+            {
+              "memory_current_bytes": 536498176,
+              "memory_peak_bytes": 562974720
+            },
+            {
+              "memory_current_bytes": 648257536,
+              "memory_peak_bytes": 701460480
+            }
+          ],
+          "worker": [
+            {
+              "memory_current_bytes": 623239168,
+              "memory_peak_bytes": 663019520
+            },
+            {
+              "memory_current_bytes": 635863040,
+              "memory_peak_bytes": 686170112
+            }
+          ]
+        },
+        "includes_probe_overhead": true,
+        "production_sizing": false
+      }
+    },
+    {
+      "name": "runtime.idle_rollout",
+      "status": "passed",
+      "evidence": {
+        "manual_scale": {
+          "api": [
+            2,
+            1,
+            2
+          ],
+          "worker": [
+            2,
+            1,
+            2
+          ]
+        },
+        "idle_pod_replacements": [
+          "api",
+          "worker"
+        ],
+        "intended_counts": {
+          "frontend": 2,
+          "api": 2,
+          "worker": 2
+        },
+        "active_provider_loss_tested": false
+      }
+    },
+    {
+      "name": "runtime.after_idle_replacement",
+      "status": "passed",
+      "evidence": {
+        "documents": 2,
+        "download_sha256_matches": 2,
+        "search_matches": 2,
+        "duration_seconds": 24.093999999997322,
+        "upload_seconds": [
+          1.7969999999913853,
+          1.8280000000086147
+        ],
+        "documents_per_minute": 4.980493068814366,
+        "model": "stub",
+        "embeddings": "fake"
+      }
+    },
+    {
+      "name": "runtime.active_worker_loss",
+      "status": "pending",
+      "reason": "required_fault_probe_pending"
+    },
+    {
+      "name": "runtime.postgres_partition",
+      "status": "pending",
+      "reason": "required_fault_probe_pending"
+    },
+    {
+      "name": "runtime.stale_worker_return",
+      "status": "pending",
+      "reason": "required_fault_probe_pending"
+    },
+    {
+      "name": "runtime.concurrent_cancel_delete",
+      "status": "pending",
+      "reason": "required_fault_probe_pending"
+    },
+    {
+      "name": "runtime.model_capacity_exhaustion",
+      "status": "pending",
+      "reason": "required_fault_probe_pending"
+    }
+  ],
+  "passed": false,
+  "failed": 0,
+  "skipped_required": 5,
+  "durations": {},
+  "recovery_point_age_seconds": null
+}

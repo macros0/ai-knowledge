@@ -53,6 +53,49 @@ claim/retry/lease-loss/completion counters reset on restart and may be summed by
 role. Expired uncertain model requests remain reserved until provider reconciliation.
 Resources in the chart are provisional until the O3 corpus/load measurement.
 
+### Replica runtime smoke
+
+The acceptance manifest's existing run/context/namespace/database/collection/prefix
+fields are extended with `application_release`, `installation_id` (32 lowercase
+hex characters), `frontend_url` (an owned HTTP loopback tunnel), and
+`simulation_username`. This probe currently requires the basic managed S3 lab,
+simulation authentication, model stub and fake embeddings. It does not qualify
+customer SSO, a real model, RWX, external/mixed providers or resilient storage.
+The namespace must carry `okf-purpose=replica-test`, the matching `okf-run-id`, and
+`app.kubernetes.io/managed-by=okf-replica-acceptance`; deployment ownership is also
+checked before the synthetic HTTP writes. No application credentials/cookies or
+raw provider errors are included in its report.
+
+```sh
+python backend/test_scripts/run_replica_acceptance.py --suite runtime \
+  --manifest /private/replica-acceptance.json --live \
+  --ssh-host ubuntu@training-host --known-hosts /private/known_hosts
+```
+
+Omit the SSH arguments when `kubectl` runs locally against the explicit context.
+The frontend tunnel is prepared separately and remains bound to 127.0.0.1.
+Adding `--idle-faults` scales API and worker 2→1→2 and normally deletes one idle Pod
+of each role, then repeats upload/search/download. It refuses active document or
+owned model reservations, including quarantined requests. It never uses force
+deletion, clears provider slots, or claims that idle replacement proves recovery
+of an in-flight operation. Unknown outcomes remain failures, with no automatic
+force recovery. The run keeps its synthetic documents for inspection.
+
+An expected exit1 with `failed=0` still means required fault gates are pending.
+Inspect `checks` and `skipped_required`; a successful smoke does not make the
+runtime or whole deployment certified. Reports distinguish the Git revision,
+the executing runner SHA-256 and actual per-role container image digests.
+Cgroup memory samples include probe overhead and short synthetic throughput uses
+stub/fake model work; neither is a production sizing or linear speedup claim.
+The initial lab API limit512Mi produced an OOM; the owned lab was changed to1Gi.
+The chart's larger default limits were retained pending full corpus measurements.
+The owned lab [report](superpowers/reports/2026-11-01-replica-runtime-basic-smoke.json)
+records all smoke/idle/CNI checks passed,32 focused unit tests passed and the root
+project gate passed. Five required active fault checks remain pending. The two
+document cohorts took26.63s and24.09s with stub/fake models. Sampled container peaks
+reached about669MiB for API and654MiB for worker, including probe overhead; those
+numbers are observations of this small corpus and constrained lab only.
+
 Поддерживаемый путь этого merge: Linux/amd64, compact/bundled, один Pod приложения,
 один backend worker, Recreate, отдельные PG/Qdrant и внешние для release PVC.
 Авторизация сохраняется из текущего main: confidential client, client_secret_basic,

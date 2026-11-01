@@ -1,12 +1,21 @@
-"""Fail-closed entry point for isolated replica acceptance (no mutations yet)."""
+"""Fail-closed isolated acceptance; live runtime smoke never certifies missing faults."""
 from __future__ import annotations
 
 import argparse
+from hashlib import sha256
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from test_scripts.replica_runtime_acceptance import probe_runtime
+
+RUNNER_SHA256 = sha256(b"".join((Path(__file__).parent / name).read_bytes()
+    for name in ("run_replica_acceptance.py", "replica_runtime_acceptance.py"))).hexdigest()
 
 SUITES = ("contracts", "frontend", "storage", "runtime", "operations", "all")
 
@@ -44,7 +53,7 @@ def validate_manifest(value: dict) -> None:
         raise ValueError("Run-scoped artifact prefix required")
 
 
-def build_report(manifest: dict, suite: str) -> dict:
+def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known_hosts=None, idle_faults=False) -> dict:
     """Allowlist output; never include raw inputs or arbitrary exceptions."""
     valid = True
     try:
@@ -56,6 +65,16 @@ def build_report(manifest: dict, suite: str) -> dict:
     # Syntactic validation is not a live namespace/PVC/provider probe.
     checks.extend({"name": name, "status": "pending", "reason": "live_probe_not_implemented"}
                   for name in requested)
+    if valid and live and "runtime" in requested:
+        checks = [c for c in checks if c["name"] != "runtime"]
+        checks.extend(probe_runtime(manifest, ssh_host=ssh_host, known_hosts=known_hosts, idle_faults=idle_faults))
+        # A successful synthetic smoke cannot replace destructive failure,
+        # stale-writer, model-capacity or independent recovery qualification.
+        checks.extend({"name": "runtime." + name, "status": "pending", "reason": "required_fault_probe_pending"}
+            for name in ("active_worker_loss", "postgres_partition", "stale_worker_return",
+                "concurrent_cancel_delete", "model_capacity_exhaustion"))
+        if not idle_faults:
+            checks.append({"name": "runtime.idle_rollout", "status": "pending", "reason": "explicit_idle_faults_required"})
     revision = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[2],
         capture_output=True, text=True, check=False,
@@ -64,8 +83,9 @@ def build_report(manifest: dict, suite: str) -> dict:
         "suite": suite, "run_id": manifest["run_id"] if valid else None,
         "profile": manifest["profile"] if valid else None,
         "revision": revision if re.fullmatch(r"[0-9a-f]{40,64}", revision) else None,
-        "checks": checks, "passed": False, "failed": int(not valid),
-        "skipped_required": len(requested), "durations": {},
+        "runner_sha256": RUNNER_SHA256,
+        "checks": checks, "passed": False, "failed": sum(c["status"] == "failed" for c in checks),
+        "skipped_required": sum(c["status"] == "pending" for c in checks), "durations": {},
         "recovery_point_age_seconds": None,
     }
 
@@ -74,6 +94,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=SUITES, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--live", action="store_true", help="Run scoped synthetic runtime smoke; creates test documents")
+    parser.add_argument("--ssh-host", help="Optional pinned user@host for kubectl")
+    parser.add_argument("--known-hosts", type=Path)
+    parser.add_argument("--idle-faults", action="store_true", help="Also scale API/worker and normally replace idle owned Pods")
     args = parser.parse_args(argv)
     try:
         if args.manifest.stat().st_size > 1024 * 1024:
@@ -81,7 +105,10 @@ def main(argv: list[str] | None = None) -> int:
         value = json.loads(args.manifest.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise ValueError("Object required")
-        report = build_report(value, args.suite)
+        if args.idle_faults and not args.live:
+            raise ValueError("Idle faults require explicit live execution")
+        report = build_report(value, args.suite, live=args.live, ssh_host=args.ssh_host,
+            known_hosts=args.known_hosts, idle_faults=args.idle_faults)
     except (OSError, ValueError, TypeError):
         report = {"suite": args.suite, "passed": False, "failed": 1,
                   "checks": [{"name": "manifest", "status": "failed"}], "skipped_required": 1}

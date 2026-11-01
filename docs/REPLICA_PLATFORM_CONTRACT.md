@@ -19,11 +19,18 @@ Credentials этого manifest не выводятся в report. Наличи�
 доказывает изоляцию: перед будущими mutations проверяется живая метка
 `okf-purpose=replica-test`, актуальные endpoint identities и права.
 
-`backend/test_scripts/run_replica_acceptance.py --suite contracts --manifest PATH`
-сейчас проверяет только синтаксическую изоляцию входов. Live probes ещё не
-реализованы: обязательные проверки возвращают pending, passed=false и код 1.
-Ни запись на диски, ни установка/изменение компонентов этим инструментом сейчас
-не выполняются. Это намеренно незавершённый gate P0, а не успешная приёмка стенда.
+Без `--live` runner проверяет только синтаксическую изоляцию входов. Для
+`--suite runtime --live` он сверяет живые namespace labels, установленные
+идентичности SQL/storage/model, готовность шести реплик и состав Service,
+проверяет общую сессию, CNI-изоляцию frontend от managed storage и два синтетических
+DOCX через upload/worker/search/download с SHA-256. Тестовые документы сохраняются
+до явной очистки выделенного namespace. Дополнительный `--idle-faults` выполняет
+scale API/worker 2→1→2 и обычную замену простаивающих Pod без force delete, затем
+повторяет документный smoke. Активные/неопределённые model reservations запрещают
+этот idle probe; он не подтверждает drain или остановку внешнего запроса.
+Невыполненные активные fault/recovery сценарии сохраняют pending, passed=false и
+код 1. Отчёт содержит digest выполняемого runner и фактически запущенных образов.
+Подробный запуск и ограничения: [deployment](KUBERNETES_DEPLOYMENT.md#replica-runtime-smoke).
 
 ## Необходимые входы окружения
 

@@ -2074,6 +2074,19 @@ a pre-restart S3 object's full SHA-256 was retained. This does not qualify a
 coordinated running-application CA/identity rotation, customer PKI, scoped IAM,
 independent restore or storage failover. Those gates remain open.
 
+The explicit replica acceptance `--live` path creates synthetic documents only
+after verifying namespace purpose/run/manager labels, release ownership, two ready
+Pods per role, API-only service endpoints and the actual installed runtime/storage
+identities. It requires simulation/stub/fake models and an owned loopback frontend
+tunnel. Pinned SSH is optional; commands use argument arrays and quoted remote
+arguments, with bounded subprocess execution. Reports omit cookies, raw provider
+errors and credentials. TCP policy denial includes an API positive control against
+the same live storage endpoints. Optional idle fault probes refuse active or
+uncertain provider reservations, retain normal Kubernetes termination and never
+clear those reservations. They provide no active-writer drain, provider-stop,
+backup-consistency or failover guarantee. Missing active fault/recovery checks keep
+the overall acceptance failed/pending.
+
 ## User answer scenarios (2026-10-23)
 
 Authenticated users, including viewer, may create and publish their own answer
