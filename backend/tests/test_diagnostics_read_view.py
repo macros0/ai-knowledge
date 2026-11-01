@@ -39,18 +39,46 @@ def test_read_view_reports_same_length_prefix_mutation(tmp_path):
         view = store.pin_read_view(EventFilter(), now + timedelta(seconds=1))
         source = view.descriptors[0].path
         original = source.read_bytes()
-        changed = original.replace(b"internal_error", b"network_error ")
+        changed = original.replace(b"internal_error", b"file_too_large")
         assert len(changed) == len(original) and changed != original
         source.write_bytes(changed)
-        changed_ns = view.descriptors[0].mtime_ns + 1_000_000_000
-        os.utime(source, ns=(changed_ns, changed_ns))
+        pinned_ns = view.descriptors[0].mtime_ns
+        os.utime(source, ns=(pinned_ns, pinned_ns))
         try:
             page = store.read_event_page(view, offset=0, limit=50)
             assert page.events == ()
             assert page.partial
             assert "segment_unavailable" in page.gaps
+            assert store.append(event(now), stream="baseline")
+            grown = store.read_event_page(view, offset=0, limit=50)
+            assert grown.events == () and "segment_unavailable" in grown.gaps
         finally:
             view.release()
+
+
+def test_page_does_not_return_unverified_rows_when_source_changes_before_early_return(tmp_path, monkeypatch):
+    import app.services.diagnostics.read_view as module
+    now = datetime.now(timezone.utc)
+    with DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0)) as store:
+        for _ in range(4): assert store.append(event(now), stream="baseline")
+        view = store.pin_read_view(EventFilter(), now + timedelta(seconds=1))
+        source = view.descriptors[0].path
+        data = source.read_bytes()
+        changed = False
+        original = module.sanitize_event
+        def mutate(value):
+            nonlocal changed
+            if not changed:
+                changed = True
+                source.write_bytes(data.replace(b"internal_error", b"file_too_large"))
+                os.utime(source, ns=(view.descriptors[0].mtime_ns, view.descriptors[0].mtime_ns))
+            return original(value)
+        monkeypatch.setattr(module, "sanitize_event", mutate)
+        try:
+            page = store.read_event_page(view, offset=0, limit=1)
+            assert changed and page.events == ()
+            assert page.partial and "segment_unavailable" in page.gaps
+        finally: view.release()
 
 
 def test_pinned_expired_segment_survives_sweep_until_release(tmp_path):

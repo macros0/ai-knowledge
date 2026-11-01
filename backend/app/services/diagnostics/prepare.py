@@ -41,10 +41,12 @@ def prepare_in_child(store, view, job_id: str, *, frontend_root=None,
         "limits": {"baseline_seconds": store.limits.baseline_seconds,
                    "capture_seconds": store.limits.capture_seconds,
                    "frontend_bytes": store.limits.frontend_bytes,
+                   "input_bytes": store.limits.total_bytes,
                    "bundle_bytes": store.limits.bundle_bytes},
         "descriptors": [{"path": str(item.path), "stream": item.stream,
                          "identity": list(item.identity), "length": item.length,
                          "expires_at": item.expires_at, "mtime_ns": item.mtime_ns,
+                         "prefix_sha256": item.prefix_sha256,
                          "source": item.source} for item in view.descriptors],
     }
     module_root = str(Path(__file__).resolve().parents[3])

@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import json
 import os
+import re
 from pathlib import Path
 import sys
 
-from .read_view import _safe_external
+from .read_view import _safe_external, prefix_digest
 from .sanitize import _encode_validated_event, sanitize_event, valid_uuid
 from .schema import EventFilter, MAX_EVENT_BYTES
 from .worker_protocol import FrameError, JobChannel
@@ -30,12 +31,21 @@ def _read_descriptor(item, payload, filt, outgoing, incoming, buffers, counts, g
     if filt.session_id and stream not in {"baseline", filt.session_id}:
         return
     identity, length, mtime_ns = item.get("identity"), item.get("length"), item.get("mtime_ns")
+    pinned = item.get("prefix_sha256")
+    maximum = payload.get("limits", {}).get("input_bytes")
     if (not isinstance(identity, list) or len(identity) != 2 or any(type(x) is not int for x in identity)
-            or type(length) is not int or length < 0 or type(mtime_ns) is not int):
+            or type(length) is not int or type(maximum) is not int or not 0 <= length <= maximum or maximum < 1 or type(mtime_ns) is not int
+            or not isinstance(pinned, str) or not re.fullmatch(r"[0-9a-f]{64}", pinned)):
         raise FrameError("Invalid prepare identity")
     if datetime.now(timezone.utc).timestamp() >= item.get("expires_at", 0):
         counts["expired"] += 1
         gaps.add("segment_expired")
+        return
+    try:
+        prefix_digest(source, identity, length, max_bytes=maximum, expected=pinned)
+    except (OSError, ValueError):
+        counts["unavailable"] = counts.get("unavailable", 0) + 1
+        gaps.add("segment_unavailable")
         return
     digest = sha256()
     try:
@@ -113,11 +123,12 @@ def _read_descriptor(item, payload, filt, outgoing, incoming, buffers, counts, g
                     raise OSError("Prepare source shrank on verification")
                 verify.update(block)
                 remaining -= len(block)
-        if verify.digest() != digest.digest():
+        if verify.digest() != digest.digest() or digest.hexdigest() != pinned:
             raise OSError("Prepare source prefix changed")
     except (OSError, ValueError):
-        counts["unavailable"] = counts.get("unavailable", 0) + 1
-        gaps.add("segment_unavailable")
+        # Credit may already have committed output. Parent failure cleanup must
+        # remove the whole provisional result; a gap alone cannot revoke bytes.
+        raise FrameError("Diagnostic source changed during preparation") from None
 
 
 def _flush(component, payload, outgoing, incoming, buffers, counts):

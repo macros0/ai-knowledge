@@ -101,7 +101,7 @@ def query_events(body: EventQuery, request: Request, user: User = admin):
     try:
         if getattr(diag, "frontend_root", None):
             attach_frontend(view, diag.frontend_root)
-        token_source = [(str(item.path), item.identity, item.length, item.mtime_ns)
+        token_source = [(str(item.path), item.identity, item.length, item.mtime_ns, item.prefix_sha256)
                         for item in view.descriptors]
         view_token = sha256(json.dumps(token_source, separators=(",", ":")).encode()).hexdigest()
         changed = body.view_token is not None and body.view_token != view_token

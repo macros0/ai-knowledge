@@ -14,7 +14,7 @@ from uuid import uuid4
 from .sanitize import _encode_validated_event, encode_event, sanitize_event, valid_uuid
 from .segment_index import ReconcileResult, SegmentIndex
 from .paths import _is_link, assert_no_links, canonical_root  # noqa: F401 - _is_link is re-exported
-from .read_view import ReadViewLease, SegmentDescriptor, read_event_page as page_from_view
+from .read_view import ReadViewLease, SegmentDescriptor, prefix_digest, read_event_page as page_from_view
 from .schema import DiagnosticLimits, EventFilter, MAX_EVENT_BYTES
 
 
@@ -461,6 +461,8 @@ class DiagnosticStore:
             raise ValueError("Cutoff must be timezone-aware")
         with self._mutex:
             descriptors = []
+            gaps = []
+            input_bytes = 0
             streams = ("baseline", filter.session_id) if filter.session_id else tuple(
                 sorted(path.name for path in (self.root / "events").iterdir() if path.is_dir() and not _is_link(path)))
             try:
@@ -474,9 +476,17 @@ class DiagnosticStore:
                         identity, size = self._index.files[path]
                         if (metadata.st_dev, metadata.st_ino, metadata.st_size) != (*identity, size):
                             raise OSError("Diagnostic segment changed before pin")
+                        input_bytes += size
+                        if input_bytes > self.limits.total_bytes:
+                            raise OSError("Diagnostic input exceeds its budget")
+                        try:
+                            fingerprint = prefix_digest(path, identity, size, max_bytes=self.limits.total_bytes)
+                        except (OSError, ValueError):
+                            gaps.append("segment_unavailable")
+                            continue
                         expires_at = (expiry if expiry is not None else metadata.st_mtime + (
                             self.limits.baseline_seconds if stream == "baseline" else self.limits.capture_seconds + 3600))
-                        descriptors.append(SegmentDescriptor(path, stream, identity, size, expires_at, metadata.st_mtime_ns))
+                        descriptors.append(SegmentDescriptor(path, stream, identity, size, expires_at, metadata.st_mtime_ns, fingerprint))
                         self._pins[path] = self._pins.get(path, 0) + 1
             except Exception:
                 for descriptor in descriptors:
@@ -486,7 +496,7 @@ class DiagnosticStore:
                     else:
                         self._pins[descriptor.path] = count - 1
                 raise
-            return ReadViewLease(self, tuple(descriptors), filter, cutoff_at.astimezone(timezone.utc))
+            return ReadViewLease(self, tuple(descriptors), filter, cutoff_at.astimezone(timezone.utc), initial_gaps=tuple(gaps))
 
     def read_event_page(self, view: ReadViewLease, *, offset: int, limit: int):
         if view.store is not self:

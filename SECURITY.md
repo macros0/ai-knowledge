@@ -2006,6 +2006,21 @@ without waiting for a fresh SQL read. Offline filesystem export explicitly marks
 unavailable shared SQL events. Legacy deferred journals are preserved and rejected
 by the future runtime until O2 adoption; customer/provider activation remains gated.
 
+Diagnostic read leases pin a streamed SHA-256 of the exact selected prefix in
+addition to file identity/length/mtime. Legacy backend and attached frontend pins
+capture bounded prefixes; distributed materialization reuses the verified SQL
+segment digest. Child payloads require the digest and an input byte budget.
+Preserved/coarse timestamps and a later append cannot hide rewritten prefix bytes.
+Before selection, an unreadable or mismatched segment becomes an explicit coverage
+gap. If input changes after preparation starts emitting provisional bytes, the
+whole child fails; parent cleanup/reaccounting runs instead of returning a ready
+archive containing already emitted untrusted rows. Event pages validate their
+entire current prefix before an early page return and discard that segment's
+provisional rows/counters on failure. Pagination coverage tokens include the
+content digest. Benign appends outside a pinned prefix remain readable. Hashing
+uses64KiB blocks and configured input budgets, without a full prefix copy or
+uncredited spool. No raw diagnostic data or paths are added to public errors.
+
 Future audit delivery (2026-11-01, activation gated) uses one dedicated PostgreSQL
 session for advisory ownership and every queue transaction. Standby instances
 cannot read or mark the queue; lost/invalidated sessions cannot reconnect to

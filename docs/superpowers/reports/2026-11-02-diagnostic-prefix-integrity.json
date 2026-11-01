@@ -1,0 +1,58 @@
+{
+  "status": "diagnostic-prefix-integrity-regression-passed",
+  "scope": "isolated Windows and Linux fixtures; no working corpus or customer deployment",
+  "base_revision": "aff77e140e58c79e58a2658e4334b7ff6cfe02ce",
+  "source_overlay_sha256": {
+    "backend/app/services/diagnostics/read_view.py": "667ba9c7f2ac14b077376eb06122f5a635098cd5c39eac15e0c4f25846bff664",
+    "backend/app/services/diagnostics/store.py": "51a32dffb131fe4d209d5e94061b9812043a0db0fe4c02df9d156cd40dd31007",
+    "backend/app/services/diagnostics/replica_store.py": "65fb70bd77e0eec3fa3510ec9447171d118a6a984785c30cb41c41db5f329065",
+    "backend/app/services/diagnostics/prepare.py": "bfdb086e548c8a5678d4bd0d5fb8077091ea6f0f8b5463947f6de1093206b887",
+    "backend/app/services/diagnostics/prepare_worker.py": "4035c077e8ac9f9389f44f3c11fe2d8b4a32113da6d8e478ae0bf1a2b5f94ba4",
+    "backend/tests/test_diagnostics_read_view.py": "b9190ce6dbaa3104e2df87693d9f6437a503e24094aee24dfebe0bdc9cb91afe",
+    "backend/tests/test_diagnostics_prepare_worker.py": "d13a0ee8d85930c74aee84655f5978146e30d0ca0a30ca5e59091ec177e5d89c",
+    "backend/app/api/diagnostics.py": "e511c85c8d60e42b2ece000e168d392ce979cf56d86bccfb97f47e1cc9b3edf1",
+    "backend/tests/test_diagnostics_api.py": "70729325a0e0f7f162c45668986afdb9a0e2499185cbeab14ffaea79e4e238bf"
+  },
+  "source_manifest_sha256": "714904fde52b4762cebc4a889d504492222e9e9e4b9cabad2525cc84989cdf02",
+  "windows": {
+    "passed": 63,
+    "failures": 0,
+    "skipped": 0,
+    "log_sha256": "b888478b0a9fa9bd6d470bf92d8309f3661c90fb368cd8ec277bafdd96192662"
+  },
+  "linux": {
+    "container_id": "7c245c636e166a451f76f9c3c7610f8e84a0aa4425baf3165dfb862f95c5f8e3",
+    "image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "network": "none",
+    "user": "1000:1000",
+    "source_archive_sha256": "b304728f33ea16976d0863d563950e369907e462ca5cb811d16671bf68f87ef1",
+    "junit": {
+      "tests": 63,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "95e5e3839883e682fc38392cd821725b6df6831be887d11ca3f9747cc609f4b2"
+    },
+    "no_oom": true
+  },
+  "checks": [
+    "same-length valid rewrite with preserved mtime rejected",
+    "rewritten pinned prefix remains rejected after append",
+    "mutation before early page return exposes no provisional rows",
+    "mutation after child credit aborts output and releases reservations",
+    "content changes invalidate pagination coverage token",
+    "unreadable pinned input remains a partial result",
+    "benign append/narrow quota/spawn/private distributed input compatibility"
+  ],
+  "project_gate": {
+    "passed": true,
+    "log_sha256": "5fc573d5a1b4f99654c05f6d4e35c99f4a335b5e0b9782e61c9c5cb1d7e712e1"
+  },
+  "full_backend_pass": false,
+  "production_provider_certification": false,
+  "limitations": [
+    "focused source-overlay snapshot on the recorded base; hashes identify exact tested files",
+    "full5892-case baseline CI still runs separately on36579d2 with known pre-fix failures",
+    "current Kubernetes app image unchanged; this code has not yet been rolled out to the owned runtime"
+  ]
+}

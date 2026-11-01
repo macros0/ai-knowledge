@@ -319,6 +319,7 @@ class ReplicaDiagnosticStore(DiagnosticSqlRepository, DiagnosticStore):
                         stat = path.stat()
                         descriptors.append(SegmentDescriptor(path, row.stream, (stat.st_dev, stat.st_ino),
                             row.size, _utc(row.expires_at).timestamp(), stat.st_mtime_ns,
+                            row.sha256,
                             source="frontend" if row.component == "frontend" else "backend", root=directory))
                     except (OSError, ValueError, StorageQuotaError):
                         gaps.append("segment_unavailable")
