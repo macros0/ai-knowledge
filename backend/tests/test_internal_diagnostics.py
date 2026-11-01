@@ -47,6 +47,23 @@ def test_ingest_requires_internal_identity(api):
         assert session.query(DiagnosticIngestBatch).count() == 0
 
 
+@pytest.mark.parametrize("token,authorization,available,status,code", [
+    ("", "", False, 404, "diagnostic_disabled"),
+    (TOKEN, "Bearer invalid", True, 401, "auth_required"),
+    (TOKEN, "Bearer " + TOKEN, False, 503, "diagnostic_unavailable"),
+])
+def test_internal_identity_refusals_have_stable_codes(token, authorization, available, status, code):
+    from starlette.requests import Request
+    from app.api.errors import ApiError
+    from app.api.internal_diagnostics import internal_identity
+    app = FastAPI()
+    app.state.diagnostics = SimpleNamespace(available=available)
+    request = Request({"type": "http", "app": app, "headers": [(b"authorization", authorization.encode())]})
+    with pytest.raises(ApiError) as exc:
+        internal_identity(request, SimpleNamespace(diagnostics_ingest_token=token))
+    assert exc.value.status_code == status and exc.value.code == code
+
+
 def test_batch_limits_and_schema(api):
     client, _ = api
     headers = {"Authorization": f"Bearer {TOKEN}"}

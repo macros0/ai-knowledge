@@ -88,7 +88,28 @@ def bind_runtime_secret(deployment, previous, selected):
     return result
 
 
-def credential_job(api, *, name, runtime, inputs, runtime_secret, operator_secret, command, new_identity=None):
+def bind_trust_configmap(deployment, previous, selected):
+    result = copy.deepcopy(deployment)
+    if result["spec"].get("replicas") != 0:
+        raise ValueError("Trust changes require stopped application roles")
+    pod = result["spec"]["template"]["spec"]
+    if len(pod["containers"]) != 1:
+        raise ValueError("One explicit application container required")
+    volumes = [volume for volume in pod.get("volumes", []) if volume["name"] == "runtime-trust"]
+    mounts = [mount for mount in pod["containers"][0].get("volumeMounts", []) if mount["name"] == "runtime-trust"]
+    if (len(volumes) != 1 or volumes[0].get("configMap", {}).get("name") not in {previous, selected}
+            or volumes[0]["configMap"].get("items") != [{"key": "ca-bundle.crt", "path": "ca-bundle.crt"}]
+            or len(mounts) != 1 or mounts[0].get("readOnly") is not True
+            or mounts[0].get("mountPath") != "/etc/okf/trust/ca-bundle.crt"
+            or mounts[0].get("subPath") != "ca-bundle.crt" or mounts[0].get("subPathExpr")):
+        raise ValueError("Expected read-only projected trust file differs")
+    volumes[0]["configMap"]["name"] = selected
+    result.pop("status", None)
+    result.get("metadata", {}).pop("managedFields", None)
+    return result
+
+
+def credential_job(api, *, name, runtime, inputs, runtime_secret, operator_secret, command, new_identity=None, trust_configmaps=None):
     if runtime_secret == operator_secret:
         raise ValueError("Separate runtime and operator Secrets required")
     prepared = copy.deepcopy(api)
@@ -97,6 +118,8 @@ def credential_job(api, *, name, runtime, inputs, runtime_secret, operator_secre
     if len(refs) != 1:
         raise ValueError("One runtime credential reference required")
     prepared = bind_runtime_secret(prepared, refs[0], runtime_secret)
+    if trust_configmaps is not None:
+        prepared = bind_trust_configmap(prepared, trust_configmaps["previous"], trust_configmaps["selected"])
     image = prepared["spec"]["template"]["spec"]["containers"][0]["image"]
     result = operator_job(prepared, name=name, image=image, runtime=runtime, inputs=inputs, command=command, new_identity=new_identity)
     pod = result["spec"]["template"]["spec"]
@@ -389,10 +412,14 @@ class ReplicaCredentials(WorkerLoss):
             engine.dispose(); s3.close(); q.close()
 
     def job(self, name, command, *, identity=None):
-        assert_credential_stopped(self.lab.inventory(), self.journal["old_deployments"])
         desired = credential_job(self.journal["old_deployments"]["api"], name=name, runtime=self.journal["runtime_name"],
             inputs=self.journal["inputs"], runtime_secret=self.journal["runtime_secret"], operator_secret=self.journal["operator_secret"],
-            command=command, new_identity=identity)
+            command=command, new_identity=identity, trust_configmaps=self.journal.get("trust_transition"))
+        self.submit_job(desired)
+
+    def submit_job(self, desired):
+        assert_credential_stopped(self.lab.inventory(), self.journal["old_deployments"])
+        name = desired["metadata"]["name"]
         existing = self.kube.run("get", "job", name, "--ignore-not-found", "-o", "json")
         if existing.strip():
             previous = json.loads(existing)
@@ -402,15 +429,19 @@ class ReplicaCredentials(WorkerLoss):
                     or any(old.get(k) != new.get(k) for k in ("image", "command", "envFrom", "env", "volumeMounts"))):
                 raise ValueError("Existing credential Job differs; do not restart it")
             for volume in new_pod["volumes"]:
-                if volume["name"] not in {"operator-database", "upgrade-inputs", "new-identity"}:
+                if volume["name"] not in {"operator-database", "upgrade-inputs", "new-identity", "runtime-trust"}:
                     continue
                 matches = [v for v in old_pod["volumes"] if v["name"] == volume["name"]]
                 if len(matches) != 1:
                     raise ValueError("Credential Job input volume changed")
                 observed = copy.deepcopy(matches[0])
+                expected = copy.deepcopy(volume)
                 if "configMap" in observed:
+                    if observed["configMap"].get("defaultMode", 420) != expected["configMap"].get("defaultMode", 420):
+                        raise ValueError("Credential Job configuration projection mode changed")
                     observed["configMap"].pop("defaultMode", None)
-                if observed != volume:
+                    expected["configMap"].pop("defaultMode", None)
+                if observed != expected:
                     raise ValueError("Credential Job Secret/configuration binding changed")
             items = credential_wait_inventory(self.lab.inventory(), previous)
             nodes = json.loads(self.lab.kubectl("get", "nodes", "-o", "json", namespaced=False))["items"]
@@ -455,6 +486,8 @@ class ReplicaCredentials(WorkerLoss):
                 old_identity=self.journal["old_identity_name"], new_identity=self.journal["next_identity"],
                 image=old["spec"]["template"]["spec"]["containers"][0]["image"])
             selected = bind_runtime_secret(selected, self.journal["old_secret"]["metadata"]["name"], self.journal["runtime_secret"])
+            if (trust := self.journal.get("trust_transition")) is not None:
+                selected = bind_trust_configmap(selected, trust["previous"], trust["selected"])
             if self.journal["operator_secret"] in json.dumps(selected["spec"]["template"]):
                 raise ValueError("Operator credential leaked to a normal workload")
             self.lab.write(selected, verb="replace")

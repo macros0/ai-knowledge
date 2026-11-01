@@ -1,0 +1,158 @@
+{
+  "status": "owned-coordinated-ca-rotation-passed",
+  "scope": "single-node-managed-s3-synthetic-stub",
+  "namespace": "replica-test-r5o2t20261101",
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "installation_id": "55555555555555555555555555555555",
+  "operation_id": "ca69d14898cf45d2b5d00a3414298704",
+  "epoch": 8,
+  "old_fingerprint": "c1293d99079b9d988d27e9cf12e97886796d1538ec2570f761018cccc0e537d6",
+  "new_fingerprint": "13548fdb5c6e7ed466d3dd1c4d62010ce359da4563e32602a58bbb0a7cbeb3cc",
+  "runtime_secret": "replica-credentials-f3d736ea0ebe-runtime",
+  "identity_configmap": "replica-ca-ca69d14898cf-identity",
+  "actual_scoped_api_worker_processes": 4,
+  "operator_secret_in_application": false,
+  "s3_rights": {
+    "allowed": [
+      "dedicated_bucket_head_list",
+      "prefix_conditional_put",
+      "prefix_cold_range_read",
+      "prefix_delete",
+      "multipart_complete_conditional",
+      "multipart_abort"
+    ],
+    "denied": [
+      "foreign_prefix_read",
+      "foreign_prefix_write",
+      "foreign_prefix_delete",
+      "foreign_bucket_read",
+      "foreign_bucket_write",
+      "foreign_bucket_delete",
+      "foreign_bucket_list",
+      "iam_admin_list",
+      "wrong_secret"
+    ],
+    "tls_verified": true,
+    "bucket_listing_scope": "dedicated-installation-bucket",
+    "bucket_discovery": {
+      "mode": "filtered",
+      "visible_bucket_count": 1
+    }
+  },
+  "held_corpus_unchanged": true,
+  "audits_verified": true,
+  "retired_identity_rejected": true,
+  "signing_key_preserved": true,
+  "shared_session": {
+    "shared_session": true,
+    "distinct_apis": 2
+  },
+  "preserved_existing_documents": 18,
+  "new_document": {
+    "id": "5fb00b6d835f4c24",
+    "sha256": "4fe3117dde595defe7d0f264a22e6c8c340472cde96dc4958e0a7499dc741a0b",
+    "status": "done",
+    "problem": null,
+    "active_publications": 1,
+    "search_download_sha256_verified": true
+  },
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8",
+      "worker": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "production_schedule": "disabled",
+  "verified_at": "2026-11-01T21:28:05.708323+00:00",
+  "limitations": [
+    "dedicated PG instance and dedicated S3 bucket only",
+    "not customer/external/mixed/RWX certification",
+    "not node or host failover"
+  ],
+  "tls": {
+    "postgres": {
+      "new_ca": true,
+      "old_ca_denied": true,
+      "wrong_hostname_denied": true
+    },
+    "qdrant": {
+      "new_ca": true,
+      "old_ca_denied": true,
+      "wrong_hostname_denied": true
+    },
+    "grpc": {
+      "new_ca": true,
+      "old_ca_denied": true,
+      "wrong_hostname_denied": true
+    },
+    "artifacts": {
+      "new_ca": true,
+      "old_ca_denied": true,
+      "wrong_hostname_denied": true
+    }
+  },
+  "existing_session_preserved": true,
+  "pvc_identities_preserved": true,
+  "storage_certificate_refs": {
+    "postgres": "replica-ca-ca69d14898cf-postgres",
+    "qdrant": "replica-ca-ca69d14898cf-qdrant",
+    "artifacts": "replica-ca-ca69d14898cf-artifacts"
+  },
+  "old_ca_sha256": "8f15faf4749ec6c2f78fa8df084ceed0e32a185b1a4ae3a336602d6d899c487e",
+  "new_ca_sha256": "5c38ea36418baa6f435a3b7e259dc7cc07a2fa98e9469d4f6e04774bfef9ec32",
+  "diagnostic_corrections": [
+    {
+      "name": "replica-ca-ca69d14898cf-tls",
+      "uid": "7b9f3470-0a17-4eb3-a192-fea0ba8ae1ae",
+      "spec_sha256": "576ff6d53f25c54dd47ec39a2182445e4fb75343eec11aa15825c3e9639d3e1f",
+      "reason": "diagnostic-optional-grpc-port-correction"
+    }
+  ],
+  "storage_verification": {
+    "qdrant": "05c13f8bc55f0d26fa98473a8ca4e6c9640ea113a26323ba734369724724af04",
+    "artifacts": "bef1841621c65c1dc1cacf091f927d6fba8e2391c987875d52d2238cff556739",
+    "grpc": "05c13f8bc55f0d26fa98473a8ca4e6c9640ea113a26323ba734369724724af04",
+    "verified_artifacts": 90,
+    "vectors_unchanged": true
+  },
+  "source_vector_inventory": {
+    "count": 36,
+    "sha256": "909e263ab545dfab784f8b27c49f14681e5593683274b957f338fa26dd9e5229"
+  },
+  "prior_pg_rights": {
+    "allowed": [
+      "business_crud",
+      "row_lock_replica_maintenance_state",
+      "row_lock_replica_runtime_identity",
+      "row_lock_artifact_storage_control"
+    ],
+    "denied": [
+      "maintenance_epoch",
+      "runtime_fingerprint",
+      "storage_control",
+      "audit_update",
+      "audit_delete",
+      "migration_head",
+      "operator_password_catalog",
+      "public_ddl",
+      "temporary_ddl",
+      "truncate_privilege"
+    ],
+    "tls_verify_full": true,
+    "wrong_password_denied": true,
+    "connection_limit": 64
+  },
+  "prior_rights_operation": "f3d736ea0ebe457689d98187b3ba49a6"
+}

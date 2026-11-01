@@ -49,6 +49,22 @@ def test_worker_metrics_are_private_and_storage_failure_returns_503(monkeypatch)
         server.stop(timeout=1)
 
 
+@pytest.mark.parametrize("enabled,status", [(False, 404), (True, 503)])
+def test_api_metrics_failures_have_stable_code_and_hide_provider_details(monkeypatch, enabled, status):
+    from app.api import replicas
+    from app.api.errors import ApiError
+    settings = SimpleNamespace(okf_deployment_schema="replicas-v1" if enabled else "compact", app_role="api")
+    monkeypatch.setattr(replicas, "get_settings", lambda: settings)
+    def unavailable(*_args):
+        raise RuntimeError("CANARY_DATABASE_PASSWORD")
+    monkeypatch.setattr("app.services.work.metrics.render_metrics", unavailable)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(runtime=object())))
+    with pytest.raises(ApiError) as exc:
+        replicas.metrics(request)
+    assert exc.value.status_code == status and exc.value.code == "dependency_unavailable"
+    assert "CANARY" not in exc.value.detail
+
+
 @pytest.mark.parametrize("username,status", [(None, 401), ("demo.user", 403),
     ("demo.editor", 403), ("demo.security", 403), ("demo.admin", 200)])
 def test_api_metrics_require_administrator(tmp_path, monkeypatch, username, status):

@@ -97,7 +97,25 @@ source/delete state; fresh DOCX completed cleanly with1publication and SHA/searc
 Shared auth passed both APIs; final2/2/2 Ready0restarts. Public result:
 `../reports/2026-11-01-replica-scoped-credentials.json`. This closes scoped
 credentials only for the selected dedicated managed-S3 recipe; external/mixed/RWX,
-running-app CA rotation and storage-full remain O1 gates. Production scheduleOFF.
+running-app CA rotation and storage-full remain O1 gates at this milestone.
+Production scheduleOFF.
+
+O1 coordinated CA follow-up (2026-11-01): actual owned managed-S3 rotation passed
+under held epoch8. Independent authenticated backup checked before entry; new
+immutable CA/TLS resources, normal storage stops and unchanged3 PVCs/specs/images.
+Held11-table corpus,90 ready blob SHA/size values and all36 full Qdrant payloads/
+vectors matched. Native PG/REST/gRPC/S3 accepted new trust and refused retired
+roots/wrong names in8 specific negative checks. Identity rebind/release audited;
+all4 scoped processes verified the new fingerprint and retired-identity refusal.
+The retained pre-stop authenticated admin session survived. All18 previous docs
+remained unchanged; one new DOCX completed with1publication and SHA/search checks.
+Final2/2/2 Ready0restarts, protected PC config activated only after full verification.
+The first diagnostic's optional-gRPC-port defect was corrected in a different Job;
+its original Failed Job/Pod remains retained and its terminal identity/spec/process
+facts are freshly checked by a narrowly scoped drain view. Public receipt:
+`../reports/2026-11-01-replica-coordinated-ca-rotation.json`. This closes the selected
+recipe's coordinated CA gate, not all O1. Storage-full, RWX/external/mixed, customer
+PKI/provider and node/host failure qualification remain open. Production scheduleOFF.
 
 **Files:** создать `scripts/kubernetes/replica_backup.py`,
 `backend/app/services/work/maintenance.py`,

@@ -172,3 +172,86 @@ def test_offline_job_refuses_a_reenabled_controller_even_before_its_pod_exists()
     items[2]["spec"]["replicas"] = 2
     with pytest.raises(ValueError):
         tool.assert_credential_stopped(items, expected)
+
+
+def trust_deployment():
+    from tests.test_replica_upgrade_coordinator import deployment
+    api = deployment()
+    api["spec"]["template"]["metadata"] = {"labels": {"okf-role": "api"}}
+    pod = api["spec"]["template"]["spec"]
+    pod["containers"][0]["env"] = []
+    pod["volumes"].append({"name": "runtime-trust", "configMap": {"name": "old-roots", "defaultMode": 420,
+        "items": [{"key": "ca-bundle.crt", "path": "ca-bundle.crt"}]}})
+    pod["containers"][0]["volumeMounts"].append({"name": "runtime-trust", "mountPath": "/etc/okf/trust/ca-bundle.crt",
+        "subPath": "ca-bundle.crt", "readOnly": True})
+    return api
+
+
+def test_trust_rebinding_preserves_the_readonly_projected_file_and_other_inputs():
+    tool = module()
+    original = trust_deployment()
+    changed = tool.bind_trust_configmap(original, "old-roots", "next-roots")
+    pod = changed["spec"]["template"]["spec"]
+    assert next(v for v in pod["volumes"] if v["name"] == "runtime-trust")["configMap"]["name"] == "next-roots"
+    assert pod["containers"] == original["spec"]["template"]["spec"]["containers"]
+    assert original == trust_deployment()
+    assert tool.bind_trust_configmap(changed, "old-roots", "next-roots") == changed
+
+
+@pytest.mark.parametrize("fault", ["running", "foreign_root", "writable", "wrong_path", "wrong_subpath"])
+def test_trust_rebinding_refuses_running_or_unbound_mounts(fault):
+    tool = module()
+    api = trust_deployment()
+    pod = api["spec"]["template"]["spec"]
+    mount = pod["containers"][0]["volumeMounts"][-1]
+    if fault == "running":
+        api["spec"]["replicas"] = 2
+    elif fault == "foreign_root":
+        pod["volumes"][-1]["configMap"]["name"] = "unrelated"
+    elif fault == "writable":
+        mount["readOnly"] = False
+    elif fault == "wrong_path":
+        mount["mountPath"] = "/other/ca-bundle.crt"
+    else:
+        mount["subPath"] = "other.crt"
+    with pytest.raises(ValueError):
+        tool.bind_trust_configmap(api, "old-roots", "next-roots")
+
+
+def test_offline_identity_job_uses_the_planned_trust_without_changing_its_source():
+    tool = module()
+    api = trust_deployment()
+    job = tool.credential_job(api, name="compute", runtime="runtime", inputs="inputs", runtime_secret="new-runtime",
+        operator_secret="private-operator", command=["python"], trust_configmaps={"previous": "old-roots", "selected": "next-roots"})
+    volumes = job["spec"]["template"]["spec"]["volumes"]
+    assert next(v for v in volumes if v["name"] == "runtime-trust")["configMap"]["name"] == "next-roots"
+    assert api == trust_deployment()
+
+
+@pytest.mark.parametrize("foreign", [False, True])
+def test_existing_diagnostic_job_is_observed_without_recreation_or_operator_secret(foreign):
+    import copy
+    import json
+    tool = module()
+    from replica_upgrade import operator_job
+    api = trust_deployment()
+    desired = operator_job(api, name="tls", image="old-image", runtime="runtime", inputs="inputs", command=["python"], new_identity="identity")
+    existing = copy.deepcopy(desired)
+    existing["metadata"].update(uid="job-uid", labels={"okf-run-id": "fixture01"})
+    if foreign:
+        next(v for v in existing["spec"]["template"]["spec"]["volumes"] if v["name"] == "runtime-trust")["configMap"]["name"] = "different"
+    assert not any(v["name"] == "operator-database" for v in desired["spec"]["template"]["spec"]["volumes"])
+    class Lab:
+        def inventory(self): return [{"kind": "Deployment", **api}, {"kind": "Job", **existing}]
+        def kubectl(self, *_args, **_kwargs): return json.dumps({"items": [{"metadata": {"name": "node1"}, "status": {"conditions": [{"type": "Ready", "status": "True"}]}}]})
+        def write(self, *_args): pytest.fail("An existing Job must not be recreated")
+    class Kube:
+        def run(self, *_args): return json.dumps(existing)
+    operation = object.__new__(tool.ReplicaCredentials)
+    operation.lab, operation.kube = Lab(), Kube()
+    operation.config = {"run_id": "fixture01", "storage_release": "storage"}
+    operation.journal = {"old_deployments": {"api": api}}
+    if foreign:
+        with pytest.raises(ValueError): operation.submit_job(desired)
+    else:
+        operation.submit_job(desired)

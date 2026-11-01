@@ -171,5 +171,80 @@ documents retained content/generation/source/delete state; a fresh DOCX complete
 with one publication, no problem and matching search/download SHA. Shared auth
 worked across both APIs. Final2/2/2 Ready0restarts, production scheduleOFF.
 [Public result](superpowers/reports/2026-11-01-replica-scoped-credentials.json).
-This closes scoped runtime credentials for this recipe. External/mixed/RWX,
-coordinated running-app CA rotation and storage-full acceptance remain open.
+This closes scoped runtime credentials for this recipe. External/mixed/RWX and
+storage-full acceptance remain open; the coordinated CA follow-up is below.
+
+## Coordinated CA replacement in the owned lab
+
+`scripts/kubernetes/replica_ca_rotation.py` replaces the root and three storage
+certificates in the same synthetic installation. It requires the protected
+operator config/journal, recorded namespace UID, original runtime fingerprint,
+`--apply`, and an authenticated independent backup younger than24h with matching
+installation, schema and images. The current app remains on its scoped PG/S3
+credentials; the separate operator DB Secret is available only to offline
+compute/release Jobs. Normal API/worker Pods never receive it.
+
+```text
+prepare → fence → storage → check-storage → compute → tls → stage → release → start → verify → activate
+```
+
+`prepare` additionally requires `--archive`, `--key-file` and
+`--credential-journal` from the completed scoped-credential operation. It creates
+independent private lab key material and immutable new roots/TLS resources;
+existing trust, keys and application settings are retained. This is the explicit
+short-lived lab PKI recipe, not customer certificate lifecycle automation.
+
+`fence` records a held maintenance epoch, stops frontend/API/workers/model stub,
+requires zero uncertain model reservations and snapshots the corpus and full
+Qdrant payloads/vectors. `storage` stops each owned StatefulSet normally, changes
+only its TLS Secret reference and restarts it with the original PVC/spec/image.
+No claim is removed or recreated. After these Pod replacements, rebind the
+recorded owned storage forwards; a libpq connection close may itself terminate
+kubectl's PG forward, so inspect/rebind that exact helper before another PC check.
+Do not restart a maintenance operation or Job to repair a forwarding process.
+
+`check-storage` verifies the selected immutable material, all three claim UIDs and
+specs, new-root TLS, held SQL corpus hashes, every ready S3 object's bytes and
+complete Qdrant vectors/payloads. `compute` performs that check again, then
+audits/rebinds the common runtime identity under the same held operation.
+`tls` runs native PG/REST/gRPC/S3 clients in a scoped diagnostic Job: the new CA
+must work, the retired CA and wrong hostname must fail for certificate-specific
+reasons. That Job has no operator DB mount. `stage` changes only the stopped
+API/worker trust and identity bindings. `release` repeats the storage checks and
+requires all native negative receipts before the explicit audited release.
+
+`start` returns the recorded app counts. `verify --report
+docs/superpowers/reports/<result>.json` checks every original document's content,
+generation, original SHA and trash state, search/download, all four scoped role
+processes, a retained login session, transition audits and one new publication.
+Its PG privilege probe is identified as prior evidence; S3 deny probes are fresh.
+Only then does `activate` atomically select the new CA file in the protected PC
+operator config. Old CA/key files and independent backups remain retained.
+On uncertain outcomes inspect the same journal/Job and leave maintenance held;
+no timeout, TLS failure or missing receipt automatically starts the application.
+
+The first owned TLS diagnostic exposed an unset optional gRPC port in the probe;
+the application resolves that setting from the REST port plus1. `retry-tls` is an
+explicit correction path for precisely that terminal `_InactiveRpcError` and
+absent setting. It retains the original failed Job/Pod and records its UID and
+complete spec digest. Every drain observation revalidates the failed condition,
+zero active Pods, backoffLimit0 and terminated containers on Ready nodes. Changed
+inputs, an active process or an unreachable node refuse the correction. The next
+diagnostic gets a different name; the failed check never becomes a PASS, and no
+other failed Job is ignored. Ordinary observation timeouts still observe the same
+Job; they do not select this correction path.
+
+The actual2026-11-01 coordinated transition passed at epoch8. All18 prior
+documents retained their content/generation/source SHA/trash state;90 ready blobs
+and all36 original Qdrant payload/vector records matched while held. All3 PVC UIDs
+and specs and the application/storage images were preserved. Native new-root
+connections and8 specific old-root/hostname refusals passed across PG/REST/gRPC/S3.
+The retained pre-stop session still resolved to the same authenticated admin;
+four running API/worker processes proved the new common identity with unchanged
+scoped credentials. Fresh S3 denial probes passed. One new DOCX finished with no
+problem, one publication and matching search/download SHA. Final2/2/2 Ready,
+zero app container restarts. The old failed diagnostic remains explicitly failed.
+The protected operator config now selects the new CA; production scheduleOFF.
+[Public result](superpowers/reports/2026-11-01-replica-coordinated-ca-rotation.json).
+This closes only coordinated CA rotation for the selected owned managed-S3 recipe;
+storage-full, RWX/external/mixed providers and node/host failover are still open.

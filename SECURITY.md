@@ -2248,6 +2248,33 @@ processes verified released epoch7 and its audit pair. This archive has not been
 restore-rehearsed, and its receipt explicitly says so. Existing independent copies
 and separate protected key are retained; production scheduling remains disabled.
 
+Owned coordinated CA replacement (O1) uses immutable new trust/TLS resources and
+a separate protected journal. Authenticated independent backup verification,
+namespace/controller/claim identities, scoped runtime Secret data and the retained
+operator-only DB Secret precede the held maintenance epoch. All app/model writers
+stop before storage TLS references change. Installation, schema, image, credentials,
+PVCs, source corpus/work hashes, S3 bytes and complete Qdrant payloads/vectors are
+preserved. Only the common fingerprint, trust and certificate bindings change.
+Normal workloads keep scoped credentials; the diagnostic TLS Job has no operator
+database mount. Native PG/REST/gRPC/S3 clients must accept new trust and specifically
+reject the retired root and wrong hostname before audited release. Job observation
+reuses the same bound inputs rather than recreating a timed-out Job. The retained
+login session, four actual API/worker identities and a fresh publication are checked
+before the protected PC config selects the new CA. No uncertain phase resumes app
+roles automatically, no old key/backup is deleted, and no verification bypass is
+introduced. Short-lived lab certificates do not qualify customer PKI or node HA.
+An explicit correction of the first probe's unset optional gRPC port retains its
+failed Job/Pod and records the UID/full spec digest. Only that recorded terminal
+diagnostic leaves the drain view, after fresh failure/zero-active/terminated-state
+checks on Ready nodes. Its status remains failed. Changed identity/spec, running
+containers, unreachable nodes or an unrelated failed Job still block maintenance;
+no generic failure retry or broad drain exception is added.
+
+Replica metrics and internal diagnostic ingest/control errors use ApiError with
+existing stable codes. HTTP statuses, admin/token checks, constant-time comparison,
+batch limits and sanitized failure details are unchanged; provider exception text
+is never copied into a response.
+
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
 storage descriptor and receipt. Owned LLM requests prohibit it. Identity change
