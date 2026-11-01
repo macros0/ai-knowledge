@@ -191,3 +191,32 @@ production RPO/RTO guarantee. The public receipt is
 [`2026-11-01-replica-managed-s3-recovery.json`](superpowers/reports/2026-11-01-replica-managed-s3-recovery.json)
 (local original: `tests/tmp/replica-recovery-lab/recovery-report.json`); archives and keys stay in
 separate protected directories on the approved PC. Secret material is not committed.
+
+## Provider acknowledgement and same-schema image update foundation
+
+`app.services.work.provider_reconciliation` is an offline acknowledgement boundary
+for the **owned model-stub Pod-stop recipe only**. A coordinator must capture the
+original LLM reservations before the fault, enter an owned `recovery` epoch, stop
+all writers/provider processes and verify namespace/Pod/node/service endpoint facts.
+Its mandatory live guard returns the same typed proof before and after SQL changes.
+Proof/lease digests bind the exact operation, installation, epoch, namespace UID,
+retired Pod UIDs and provider image. Unknown writers, unreachable nodes, provider
+Pods/endpoints or changed lease owners/fences prohibit acknowledgement. Expiry
+alone never releases capacity. Slot changes and `replica_model_reconcile` audit
+are atomic; failed audit/last guard rolls them back. Repeated acknowledgement
+requires identical cleared leases and durable audit. Maintenance remains closed.
+External providers need their own implemented termination/cancellation recipe.
+
+`app.deployment.runtime_upgrade.rebind_runtime` and
+`backend/scripts/upgrade_replica_runtime.py` provide an offline **same-schema**
+identity update. Supply explicit runtime env file, expected old public identity,
+operation/owner IDs and `--apply`. Run in the selected new image with real target
+settings/trust and private scratch identity output. The owned held transaction
+compares old SQL identity/installation/storage/schema/receipt, requires no owned
+LLM slots and commits the new Linux fingerprint with its upgrade audit. SQL-commit/
+file-publication retry only accepts that identical audited identity/epoch. Publish
+the new immutable identity ConfigMap, verify image/config bindings, explicitly
+leave maintenance and restart intended roles. This command does not migrate
+schemas, adopt unknown data or activate workloads. Physical proof collection,
+live image rollout and in-flight provider-loss rehearsal remain pending; these
+unit checks do not qualify a physical provider.

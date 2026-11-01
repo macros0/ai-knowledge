@@ -2104,6 +2104,29 @@ reservations, kill a live provider, or certify missing worker-loss/partition/sta
 return scenarios. Passing implemented checks removes only their own pending
 entries; missing required checks still fail overall acceptance.
 
+Offline provider reconciliation foundation (2026-11-01): the first recipe accepts
+only the owned simulation/fake/stub lab and its namespace-local model-stub service.
+It is not a real/external-provider cancellation adapter. The exact retained
+operator connection and enabled recovery epoch are required. A typed proof binds
+operation/installation/epoch/namespace UID, retired provider/writer Pod UIDs,
+provider image, stopped writers, no unknown writers/unreachable nodes/provider
+Pods/endpoints, a physical-observation digest and original lease-set digest. A
+mandatory live coordinator guard revalidates before and after SQL changes; this
+library does not collect physical observations itself. Changed owners/fences or a
+failed guard refuse release. Elapsed time never signals completion. Slot completion
+and `replica_model_reconcile` audit commit atomically; its target is the proof digest,
+never input or credentials. Retry requires identical cleared lease identities and
+matching durable DB/outbox audit. Maintenance stays enabled.
+
+An explicit same-schema upgrade operator may replace the exact expected installed
+fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
+storage descriptor and receipt. Owned LLM requests prohibit it. Identity change
+and `replica_runtime_upgrade` audit are atomic; file-publication retry requires the
+same audited identity/epoch. `upgrade_replica_runtime.py` produces a public identity
+document without starting roles or releasing maintenance. Normal startup still
+requires matching file/build/SQL identity. Physical stop-proof collection, live
+image update and active-provider worker-loss acceptance remain to be exercised.
+
 Replica maintenance foundation (2026-11-01, O2 incomplete): PostgreSQL shared
 transaction locks precede work/control locks, while offline entry obtains the
 exclusive epoch fence. Epochs bind once per process and per Work claim; ending

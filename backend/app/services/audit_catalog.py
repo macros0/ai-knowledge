@@ -100,4 +100,6 @@ CATALOG = MappingProxyType({
     'auth_logout': EventRule({}, 'success'),
     'replica_maintenance_enter': EventRule({'epoch': 'int'}, 'success'),
     'replica_maintenance_leave': EventRule({'epoch': 'int'}, 'success'),
+    'replica_model_reconcile': EventRule({'epoch': 'int', 'count': 'int'}, 'success'),
+    'replica_runtime_upgrade': EventRule({'epoch': 'int'}, 'success'),
 })

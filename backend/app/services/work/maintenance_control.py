@@ -200,7 +200,7 @@ def _audit(session, action, operation_id, epoch):
 
 def enter_maintenance(session, operation_id, *, kind, intended_counts):
     op = _require_operator(session, operation_id)
-    if (not isinstance(kind, str) or kind not in {"backup", "upgrade", "restore", "migration"} or type(intended_counts) is not dict
+    if (not isinstance(kind, str) or kind not in {"backup", "upgrade", "restore", "migration", "recovery"} or type(intended_counts) is not dict
             or set(intended_counts) != {"frontend", "api", "worker"}
             or any(type(n) is not int or not 0 <= n <= 64 for n in intended_counts.values())):
         raise MaintenanceRefused("Explicit operation and intended workload counts required")

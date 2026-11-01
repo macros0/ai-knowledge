@@ -181,7 +181,7 @@ ACTION_TYPES = frozenset(
 )
 
 ACTION_TYPES = ACTION_TYPES | AUTH_ACTIONS | {"answer_scenario_"+action for action in ("create","update","publish","unpublish","copy","delete")}
-ACTION_TYPES = ACTION_TYPES | {"replica_maintenance_enter", "replica_maintenance_leave"}
+ACTION_TYPES = ACTION_TYPES | {"replica_maintenance_enter", "replica_maintenance_leave", "replica_model_reconcile", "replica_runtime_upgrade"}
 
 TARGET_DOCUMENT = "document"
 TARGET_JOB = "job"

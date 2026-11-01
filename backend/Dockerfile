@@ -12,8 +12,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # пользователь Linux; при несовпадении собирайте с APP_UID=$(id -u).
 ARG APP_UID=1000
 ARG APP_GID=1000
-ARG OKF_BUILD_REVISION=unknown
-ENV OKF_BUILD_REVISION=${OKF_BUILD_REVISION}
 
 WORKDIR /app
 
@@ -47,6 +45,9 @@ RUN --mount=type=secret,id=pip_config,target=/etc/pip.conf,required=false \
     pip check && \
     python -c "import importlib.metadata as m, importlib.util; assert m.version('pypdfium2'); assert importlib.util.find_spec('pymupdf') is None; assert importlib.util.find_spec('fitz') is None"
 
+# A source revision must not invalidate locked dependency installation layers.
+ARG OKF_BUILD_REVISION=unknown
+ENV OKF_BUILD_REVISION=${OKF_BUILD_REVISION}
 COPY backend/app ./app
 COPY backend/prompts ./prompts
 COPY backend/seeds ./seeds

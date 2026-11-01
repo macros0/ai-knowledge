@@ -179,6 +179,20 @@ stayed incomplete/held and was not resumed with a lost PG snapshot. Public repor
 unknown provider reconciliation, installed upgrade, nightly error alerts/key
 recovery remain open; production schedule stays OFF by explicit user choice.
 
+O2 reconciliation/upgrade foundation (2026-11-01): a held `recovery` operation,
+typed original-reservation/physical-stop proof with mandatory live guards, exact
+owner/fence matching, atomic acknowledgement audit and DB/stdout-only idempotency
+are implemented for the owned synthetic stub recipe. It never infers completion
+from expiry. Same-schema runtime fingerprint CAS under the exact held operator
+preserves installation/storage/schema/receipt, refuses owned provider slots and
+commits with an upgrade audit; SQL-commit/file-publication retry is supported.
+The explicit offline CLI produces an identity without activating roles. Physical
+proof producer, actual new-image rollout and unknown-provider-loss recovery still
+need live evidence. Ruling: R5 must exercise worker loss during a real active
+provider request and retained capacity; an already-drained worker loss is not a
+substitute. These foundations are prerequisites for that full scenario. Existing
+live images have not been updated by the library changes.
+
 **Files:** создать `docs/KUBERNETES_REPLICAS_ACCEPTANCE.md`,
 `deploy/kubernetes/replicas/support-matrix.json`,
 `backend/tests/test_replica_acceptance_report.py`;
