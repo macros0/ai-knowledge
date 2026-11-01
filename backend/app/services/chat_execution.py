@@ -1,5 +1,6 @@
 """Request-local scenario execution and shared chat admission boundaries."""
 from dataclasses import dataclass
+from contextlib import nullcontext
 from app.api.errors import ApiError
 from app.models.answer_scenarios import ScenarioExecution
 from app.services.chat_prompt_builder import build_scenario_prompts
@@ -39,13 +40,16 @@ def preview_answer(body,user):
     req=ChatRequest(**body.request.model_dump(),response_mode="full")
     run=ChatRunContext(body.draft,build_scenario_prompts(req.query,req.locale,settings),persist_history=False)
     check_chat_rate(user,settings)
-    slots=api._admit_chat(settings.chat_max_inflight)
-    try:
-        result=api._answer(req,user,settings,run=run)
-        result.preview=True
-        result.response_mode="scenario"
-        model_id=getattr(api._get_llm(),"model",None) if any(s.in_model_context for s in result.sources) else None
-        result.scenario_execution=run.execution(result,model_id)
-        return result
-    finally:
-        slots.release()
+    from app.services.work.admission import durable_documents
+    from app.services.work.chat_runtime import preview_chat_capacity
+    with preview_chat_capacity(settings) if durable_documents(settings) else nullcontext():
+        slots=api._admit_chat(settings.chat_max_inflight)
+        try:
+            result=api._answer(req,user,settings,run=run)
+            result.preview=True
+            result.response_mode="scenario"
+            model_id=getattr(api._get_llm(),"model",None) if any(s.in_model_context for s in result.sources) else None
+            result.scenario_execution=run.execution(result,model_id)
+            return result
+        finally:
+            slots.release()

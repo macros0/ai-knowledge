@@ -42,7 +42,8 @@ def enqueue_due(session, spec: PeriodicSpec, *, at_utc: datetime | None = None):
 def periodic_specs(settings):
     specs = [PeriodicSpec("auth_purge", 3600), PeriodicSpec("bulk_reconcile", 30),
         PeriodicSpec("generation_sweep", 60), PeriodicSpec("export_purge", 300), PeriodicSpec("index_backfill_sweep", 3600),
-        PeriodicSpec("translation_reconcile", 30), PeriodicSpec("diagnostic_maintenance", 60), PeriodicSpec("repair_reconcile", 60)]
+        PeriodicSpec("translation_reconcile", 30), PeriodicSpec("diagnostic_maintenance", 60), PeriodicSpec("repair_reconcile", 60),
+        PeriodicSpec("chat_run_reconcile", 30)]
     if settings.chat_history_purge_enabled:
         specs.append(PeriodicSpec("chat_purge", max(60, min(31 * 86400, int(settings.chat_history_purge_interval_seconds)))))
     if settings.artifact_gc_enabled:

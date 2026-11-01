@@ -197,8 +197,29 @@ Future rate limiting uses hashed actor/action keys and weighted rolling events.
 Bulk operation/document budgets commit together. Localization writes bump their
 configuration revision with the existing reference/audit transaction; stopword
 cache hits compare that revision. Existing UI dictionary reads already use SQL.
-ChatRun/history/cancel, frontend cache propagation, audit and diagnostic instance
-coordination remain open; none of this enables distributed deployment.
+Frontend cache propagation, audit and diagnostic instance coordination remain
+open; none of this enables distributed deployment.
 Checks: `test_replica_coordination.py`, `test_replica_model_budget.py`,
 `test_replica_coordination_migration.py`, and explicit isolated PostgreSQL
 `test_replica_coordination_postgres.py`. The migration refuses lossy rollback.
+
+`ChatRun` binds a unique actor/client-attempt identity to one assistant message.
+Its frozen input digest, owner/fence/DB lease and generic chat-capacity slot are
+admitted with history in one caller-owned transaction. Retries never replay a
+completed/interrupted model request. A request-local heartbeat renews ownership
+and observes cancellation from another API. History/source/scenario writers
+validate the private request token; late/expired owners cannot complete a turn.
+The existing finish wrapper commits managed history and run completion together.
+Legacy direct history admission refuses the future runtime. Private tokens are
+not stream fields. A matching terminal owner can retain its own partial draft
+only in an empty stopped/failed message. It cannot overwrite completed history.
+
+Soft deletion cancels active requests. Retention follows resource→Run→history
+locking and removes execution identities with their messages. A bounded25-row
+worker reconciliation marks expired runs interrupted/stopped, with no model
+replay or uncertain-provider slot release. Previews share global chat/model
+capacity and preserve their no-history contract. `rpl03a_chat_runs` refuses to
+discard accepted execution identities, including completed ones. Checks include
+`test_replica_chat_runs.py`, `test_replica_chat_api.py`,
+`test_replica_chat_migration.py` and explicit isolated PostgreSQL
+`test_replica_chat_postgres.py`; direct API processes are not a multi-Pod proof.

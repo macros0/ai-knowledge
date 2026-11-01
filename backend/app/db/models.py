@@ -1114,6 +1114,31 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages_rel")
+    run_rel: Mapped["ChatRun | None"] = relationship(back_populates="message", cascade="all, delete-orphan", uselist=False)
+
+
+class ChatRun(Base):
+    __tablename__ = "chat_runs"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    attempt_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    session_id: Mapped[str] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False, unique=True)
+    owner_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    fence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    lease_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    capacity_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    capacity_fence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    message: Mapped[ChatMessage] = relationship(back_populates="run_rel")
+    __table_args__ = (UniqueConstraint("actor_id", "attempt_id", name="uq_chat_actor_attempt"),
+        CheckConstraint("fence >= 1 AND capacity_fence >= 1", name="ck_chat_run_fence"),
+        CheckConstraint("status IN ('running','completed','stopped','failed','interrupted')", name="ck_chat_run_status"),
+        Index("ix_chat_run_expired", "status", "lease_until"))
 
 
 class Locale(Base):

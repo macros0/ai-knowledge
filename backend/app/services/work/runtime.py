@@ -126,6 +126,7 @@ def build_handlers():
     from .glossary_translation import run_glossary_translation
     from .diagnostics import maintain_diagnostics
     from .repair import run_canonical_repair, reconcile_repairs
+    from .chat import reconcile_chat_runs
     registry = HandlerRegistry()
     registry.register("document", 1, run_document_job)
     registry.register("checkpoint_retire", 1, retire_checkpoint)
@@ -154,6 +155,7 @@ def build_handlers():
     registry.register("diagnostic_maintenance", 1, maintain_diagnostics)
     registry.register("canonical_repair", 1, run_canonical_repair)
     registry.register("repair_reconcile", 1, reconcile_repairs)
+    registry.register("chat_run_reconcile", 1, reconcile_chat_runs)
     return registry
 
 

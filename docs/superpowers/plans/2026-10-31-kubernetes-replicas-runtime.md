@@ -237,6 +237,28 @@ cross-API cancel/history identity, auth/revocation acceptance, frontend cache
 boundaries, audit advisory-lock dispatcher and durable diagnostic instances/inbox
 remain open. Integrated R3/R5 role acceptance and production gates remain closed.
 
+R4 chat milestone, 01.11.2026: `rpl03a_chat_runs` adds unique actor/attempt→history
+ownership, DB-time leases/fences, shared chat admission (including preview),
+cross-API cancellation and request-local heartbeat. Private owner tokens guard
+history/source/scenario writes; completion and slot release commit together.
+Soft deletion cancels runs; retention removes them with history. Bounded25-row
+reconciliation stops expired requests without LLM replay. Partial drafts remain
+limited to the matching owner's empty stopped/failed message. Direct legacy
+history admission is closed in future mode. Rechecks after history locks and
+before/after model reservation prevent late owners from publishing or starting
+another provider request. Combined paths and existing public permissions remain.
+Scoped final checks:94 chat/model/coordination/LLM/schema tests passed;82 chat,
+history, streaming and preview regressions passed before the final model guard.
+Actual isolated PostgreSQL:3 passed, including independent API-process duplicate
+admission/cancel, legacy-history migration and expiry during a held history-row
+lock. SQLite migration roundtrip preserves history and rejects loss of completed
+Run identities. These checks do not certify multi-Pod or customer providers.
+The positive managed API→LLMClient→history path also passed with a controlled
+provider response. Final root check: npm audit0 vulnerabilities, frontend747
+passed/1 skipped, ESLint and Ruff passed. No full backend/provider claim.
+Auth/revocation acceptance, frontend cache boundaries, audit dispatcher failover
+and diagnostic durable instances/inbox remain open. R4 and activation stay gated.
+
 ## Task R5: distributed chart и приёмка нескольких исполнителей
 
 **Files:** создать `deploy/helm/ai-knowledge/templates/api.yaml`, `templates/worker.yaml`,

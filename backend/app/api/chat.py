@@ -275,6 +275,11 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
 
     # Допуск после дешёвых проверок, до embed → поиск → LLM: всё это время
     # запрос держит поток общего пула синхронных эндпоинтов.
+    from app.services.work.admission import durable_documents
+    if durable_documents(settings):
+        from app.services.work.chat_runtime import managed_chat
+        with managed_chat(settings, req, current_user) as ref:
+            return _execute_chat_attempt(req, current_user, settings, ref)
     slots = _admit_chat(settings.chat_max_inflight)
     try:
         if req.response_mode is None:
@@ -285,44 +290,50 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
             ref = chat_history.begin_attempt(req.session_id, current_user, req.query, attempt_id, req.response_mode, **({"scenario_id":str(req.scenario_id)} if req.scenario_id else {}))
         except ValueError as exc:
             raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Некорректный attempt_id") from exc
-        on_start = request_state().get("on_start")
-        if on_start:
-            on_start(ref)
-        if ref.existing or ref.status != "incomplete":
-            raise ApiError(status_code=409, code=errors.CONFLICT, detail="Эта попытка уже завершена")
-        try:
-            if req.search_doc_ids is not None:
-                chat_history.save_attempt_sources(ref, current_user, [],
-                    retrieval_metadata={'search_doc_ids': req.search_doc_ids})
-            remaining(settings.llm_chat_total_timeout_seconds)
-            snapshot = chat_history.read_attempt_scenario(ref, current_user)
-            run = ChatRunContext(snapshot,build_scenario_prompts(req.query,req.locale,settings)) if snapshot else None
-            if run:
-                accepted=ScenarioExecution(status="accepted",prompt_fingerprint=run.scenario_prompts.fingerprint)
-                chat_history.set_scenario_execution(ref,current_user,accepted)
-                on_progress=request_state().get("on_progress")
-                if on_progress:on_progress({"phase":"scenario","scenario":snapshot.model_dump(mode="json"),"scenario_execution":accepted.model_dump(mode="json")})
-            result = _answer(req, current_user, settings, attempt_ref=ref, **({"run":run} if run else {}))
-            if run:
-                result.scenario=snapshot
-                model_id=getattr(_get_llm(),"model",None) if any(s.in_model_context for s in result.sources) else None
-                result.scenario_execution=run.execution(result,model_id)
-                chat_history.set_scenario_execution(ref,current_user,result.scenario_execution)
-            cancel = request_state().get("cancel")
-            if cancel is not None and cancel.is_set():
-                chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
-                raise LLMCancelled()
-            if not chat_history.finish_attempt(ref, current_user, status="completed", answer=result.answer):
-                raise LLMCancelled()
-            return result
-        except LLMCancelled:
-            chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
-            raise
-        except Exception:
-            chat_history.finish_attempt(ref, current_user, status="failed", answer="")
-            raise
+        return _execute_chat_attempt(req, current_user, settings, ref)
     finally:
         slots.release()
+
+
+def _execute_chat_attempt(req, current_user, settings, ref):
+    on_start = request_state().get("on_start")
+    if on_start:
+        on_start(ref)
+    if ref.existing or ref.status != "incomplete":
+        raise ApiError(status_code=409, code=errors.CONFLICT, detail="Эта попытка уже завершена")
+    try:
+        if req.search_doc_ids is not None:
+            chat_history.save_attempt_sources(ref, current_user, [],
+                retrieval_metadata={'search_doc_ids': req.search_doc_ids})
+        remaining(settings.llm_chat_total_timeout_seconds)
+        snapshot = chat_history.read_attempt_scenario(ref, current_user)
+        run = ChatRunContext(snapshot,build_scenario_prompts(req.query,req.locale,settings)) if snapshot else None
+        if run:
+            accepted=ScenarioExecution(status="accepted",prompt_fingerprint=run.scenario_prompts.fingerprint)
+            chat_history.set_scenario_execution(ref,current_user,accepted)
+            on_progress=request_state().get("on_progress")
+            if on_progress:on_progress({"phase":"scenario","scenario":snapshot.model_dump(mode="json"),"scenario_execution":accepted.model_dump(mode="json")})
+        result = _answer(req, current_user, settings, attempt_ref=ref, **({"run":run} if run else {}))
+        if run:
+            result.scenario=snapshot
+            model_id=getattr(_get_llm(),"model",None) if any(s.in_model_context for s in result.sources) else None
+            result.scenario_execution=run.execution(result,model_id)
+            chat_history.set_scenario_execution(ref,current_user,result.scenario_execution)
+        cancel = request_state().get("cancel")
+        if cancel is not None and cancel.is_set():
+            chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
+            raise LLMCancelled()
+        if not chat_history.finish_attempt(ref, current_user, status="completed", answer=result.answer):
+            raise LLMCancelled()
+        return result
+    except LLMCancelled:
+        chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
+        raise
+    except Exception:
+        cancel = request_state().get("cancel")
+        stopped = ref.run_id is not None and cancel is not None and cancel.is_set()
+        chat_history.finish_attempt(ref, current_user, status="stopped" if stopped else "failed", answer="")
+        raise
 
 
 def _search_scope_documents(doc_ids: list[str]) -> list[ChatSearchScopeDocument]:
@@ -473,6 +484,7 @@ def _filtered_chat_blocks(hits, req, settings, exact_groups):
 
 
 def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_ref=None, *, run=None) -> ChatResponse:
+    from app.services.work.chat import ChatRunOwnershipLost
     assessment_config = resolve_assessment_config(settings)
     if attempt_ref:
         chat_history.save_attempt_sources(attempt_ref, current_user, [], retrieval_metadata={
@@ -723,6 +735,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
             code=errors.CONFLICT,
             detail=str(exc),
         ) from exc
+    except ChatRunOwnershipLost:
+        raise
     except Exception:
         logger.warning("Не удалось сохранить историю чата", exc_info=True)
 
@@ -1062,7 +1076,14 @@ def cancel_chat_attempt(attempt_id: str, req: ChatAttemptCancelRequest,
     ref = chat_history.find_attempt(req.session_id, current_user, attempt_id)
     if ref is None:
         raise ApiError(status_code=404, code=errors.SESSION_NOT_FOUND, detail="Попытка не найдена")
-    chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
+    from app.services.work.admission import durable_documents
+    managed = False
+    if durable_documents(get_settings()):
+        from app.services.work.chat import cancel_chat_run
+        with session_scope() as session:
+            managed = cancel_chat_run(session, session_id=req.session_id, attempt_id=attempt_id, user=current_user)
+    if not managed:
+        chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
     return {"status": chat_history.attempt_status(ref, current_user),
             "session_id": ref.session_id, "attempt_id": attempt_id}
 

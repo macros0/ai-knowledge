@@ -62,6 +62,13 @@ def _lease(row):
     return CapacityLease(row.id, row.resource, row.owner_id, row.fence, _utc(row.expires_at))
 
 
+def lock_capacity_resource(session, *, resource, limit):
+    _name(resource)
+    _integer(limit, 10000)
+    _insert(session, ReplicaCapacityResource, resource=resource, capacity_limit=limit)
+    return _resource(session, resource)
+
+
 def reserve_capacity(session, *, resource, owner_id, limit, ttl_seconds, hold_seconds=None, release_required=False):
     _name(resource)
     _integer(limit, 10000)
@@ -70,8 +77,7 @@ def reserve_capacity(session, *, resource, owner_id, limit, ttl_seconds, hold_se
     if (hold_seconds < ttl_seconds or not isinstance(owner_id, str) or not 1 <= len(owner_id) <= 128
             or type(release_required) is not bool):
         raise ValueError("Invalid capacity ownership/protection")
-    _insert(session, ReplicaCapacityResource, resource=resource, capacity_limit=limit)
-    policy = _resource(session, resource)
+    policy = lock_capacity_resource(session, resource=resource, limit=limit)
     now = _now(session)
     rows = list(session.scalars(select(ReplicaCapacitySlot).where(ReplicaCapacitySlot.resource == resource)
         .order_by(ReplicaCapacitySlot.slot).execution_options(populate_existing=True)))
@@ -99,7 +105,7 @@ def reserve_capacity(session, *, resource, owner_id, limit, ttl_seconds, hold_se
     return _lease(row)
 
 
-def _owned(session, lease, *, completed=False):
+def _owned(session, lease, *, completed=False, current_identity=False):
     if not isinstance(lease, CapacityLease):
         raise ValueError("Capacity token required")
     _resource(session, lease.resource)
@@ -107,10 +113,16 @@ def _owned(session, lease, *, completed=False):
     now = _now(session)
     if (row is None or row.resource != lease.resource or row.owner_id != lease.owner_id
             or row.fence != lease.fence or row.expires_at is None
-            or (not completed and (_utc(row.expires_at) != lease.expires_at or _utc(row.expires_at) <= now))
+            or (not completed and ((not current_identity and _utc(row.expires_at) != lease.expires_at)
+                or _utc(row.expires_at) <= now))
             or (completed and not row.release_required)):
         raise CoordinationOwnershipLost("Capacity ownership expired or changed")
     return row, now
+
+
+def assert_capacity_live(session, lease):
+    """Validate current DB expiry; renewal preserves this owner/fence identity."""
+    _owned(session, lease, current_identity=True)
 
 
 def renew_capacity(session, lease, *, ttl_seconds):

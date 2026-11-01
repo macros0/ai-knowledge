@@ -1936,10 +1936,30 @@ with completion/provider-stop proof. This deliberately trades availability for
 bounded admission and does not certify the remote provider's execution cap.
 Localization mutations bump a durable revision in their existing reference/audit
 transaction. Future stopword caches check that revision before a TTL hit; UI
-dictionary reads already use SQL. Frontend cache propagation, ChatRun admission
-and cancellation, audit dispatcher failover and diagnostic instance/inbox
+dictionary reads already use SQL. Frontend cache propagation, audit dispatcher
+failover and diagnostic instance/inbox
 coordination remain R4 work. Migration refuses to discard accepted coordination
 state. The distributed build/provider activation gates remain closed.
+
+Future persistent chats bind a unique actor/attempt ID to one assistant message
+and a leased owner/fence. Admission commits the placeholder, immutable request
+digest, ChatRun and global chat slot together. Repeated attempts do not call the
+model again; interrupted requests require a new explicit attempt. A request-local
+heartbeat renews the chat lease and observes durable cancellation. Another API
+can cancel the same actor's attempt; stopped/expired owners cannot complete it,
+change its sources or change its scenario execution. Completion commits history,
+run status and slot release together. Legacy direct history admission refuses
+the future runtime. Private owner/fence fields are never emitted in stream events.
+Ownership is checked again after history locks and before/after global provider
+reservation, so an expired lease cannot become valid through a lock/queue wait.
+An owned partial draft may fill only its own empty stopped/failed message; it
+cannot overwrite a completed response or another attempt. Soft deletion cancels
+the owning runs. Retention removes their identities with the history under the
+same coordinated lock order. Bounded reconciliation marks expired requests
+interrupted/stopped without replaying the model or releasing uncertain provider
+capacity. Preview requests share the global chat/provider budgets while keeping
+their existing no-history contract. These checks preserve existing actor/history
+permissions and do not establish customer-provider or multi-Pod acceptance.
 
 ## User answer scenarios (2026-10-23)
 Authenticated users, including viewer, may create and publish their own answer

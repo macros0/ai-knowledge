@@ -155,6 +155,8 @@ def purge_chat(work):
     if not settings.chat_history_purge_enabled:
         return
     with work_execution(work), session_scope() as session:
+        from .chat import lock_chat_history_purge
+        lock_chat_history_purge(session)
         cutoff = _now(session) - timedelta(days=settings.chat_history_retention_days)
         rows = list(session.scalars(select(ChatSession).where(ChatSession.deleted_at.is_not(None),
             ChatSession.deleted_at < cutoff).order_by(ChatSession.id).limit(100).with_for_update()))

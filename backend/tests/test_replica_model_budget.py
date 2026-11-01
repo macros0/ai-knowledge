@@ -99,3 +99,45 @@ def test_caller_timeout_keeps_the_live_provider_budget(settings, monkeypatch):
     finally:
         release.set()
         assert completed.wait(5)
+
+
+def test_expired_chat_owner_cannot_start_a_provider_call(settings, monkeypatch):
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from sqlalchemy import text
+    from app.db.session import session_scope
+    from app.models.schemas import ChatRequest
+    from app.services.llm_profiles import request_scope
+    from app.services.llm_scheduler import LLMCancelled
+    from app.services.work.chat import admit_chat_run
+    with session_scope() as session:
+        accepted = admit_chat_run(session, settings, ChatRequest(query="question", response_mode="full",
+            attempt_id=str(uuid4())), SimpleNamespace(user_id="actor", username="actor"), owner_id="api-a")
+        session.execute(text("UPDATE chat_runs SET lease_until='2000-01-01' WHERE id=:id"), {"id": accepted.run_id})
+    calls = []
+    def provider(**_kwargs):
+        calls.append(True)
+        return _stream_response_finished("unowned answer")
+    monkeypatch.setattr("litellm.completion", provider)
+    with request_scope(chat_claim=accepted, cancel=Event()), pytest.raises(LLMCancelled):
+        LLMClient(interactive=True, settings=settings)._complete_once("system", "user")
+    assert calls == []
+
+
+def test_expired_preview_owner_cannot_start_a_provider_call(settings, monkeypatch):
+    from sqlalchemy import text
+    from app.db.session import session_scope
+    from app.services.llm_profiles import request_scope
+    from app.services.llm_scheduler import LLMCancelled
+    from app.services.work.coordination import reserve_capacity
+    with session_scope() as session:
+        lease = reserve_capacity(session, resource="chat", owner_id="preview", limit=1, ttl_seconds=30)
+        session.execute(text("UPDATE replica_capacity_slots SET expires_at='2000-01-01' WHERE id=:id"), {"id": lease.id})
+    calls = []
+    def provider(**_kwargs):
+        calls.append(True)
+        return _stream_response_finished("unowned preview")
+    monkeypatch.setattr("litellm.completion", provider)
+    with request_scope(chat_capacity=lease, cancel=Event()), pytest.raises(LLMCancelled):
+        LLMClient(interactive=True, settings=settings)._complete_once("system", "user")
+    assert calls == []
