@@ -393,6 +393,24 @@ mutation and removes only performed fault checks from pending. Active worker
 loss, PostgreSQL partition, stale-worker return and resource/load qualification
 remain open. These two checks do not close R5 or certify real provider/node failover.
 
+R5 active-worker-loss milestone (2026-11-01): the two exact owned worker CRI
+containers were stopped while the instrumented provider still reported one actual
+in-flight request. The original reservation remained owned after provider finish
+and DB-clock expiry; both independent APIs returned busy without another provider
+request. Replacement workers ran but could not bypass quarantine. The same held
+recovery operation at epoch5 stopped all roles/provider normally; fresh Kubernetes
+and CRI guards confirmed no unknown/orphan writer, unchanged Ready node identities
+and zero provider endpoints before and after exact-token audited reconciliation.
+A same-image release Job verified held corpus/work hashes. The interrupted DOCX
+automatically completed with fence1→3, problemNone, one active publication and
+matching original SHA/search. All9 prior documents retained content, active
+generations, original bytes and delete visibility;2/2/2 ready0restarts. Report:
+`../reports/2026-11-01-replica-active-worker-loss.json`. The standalone coordinator
+records this check; the combined runner still conservatively lists it pending
+until O3 integrates the phase-controlled recipe. PostgreSQL partition, stale
+worker return and resource/load qualification remain open. This single-node
+synthetic recipe does not qualify real providers or node/host failover.
+
 R1: `assert len(live_claims_for_same_work) == 1`;
 `assert new_claim.fence > old_claim.fence`; старое finish проверяется через
 `pytest.raises(LostOwnership)`.

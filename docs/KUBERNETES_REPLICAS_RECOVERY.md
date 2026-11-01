@@ -259,3 +259,53 @@ See the [public result](superpowers/reports/2026-11-01-replica-same-schema-upgra
 This proves one same-schema synthetic managed-S3 rollout and its held Job-failure
 resume. Schema-version adoption, other providers and unknown-provider physical
 stop/reconciliation still require their own evidence. Production scheduling is off.
+
+## Owned in-flight worker-loss recipe
+
+Run `scripts/kubernetes/replica_worker_loss.py` with `PYTHONPATH=backend` and the
+backend virtualenv. Every phase requires explicit protected `--config`, recorded
+`--namespace-uid`, installed `--expected-fingerprint`, separate protected `--journal`
+and `--apply`. The journal must share the protected config directory; it contains
+original reservation tokens and must not be published. The phases are:
+
+1. `inject`: require idle 2/2/2 roles and the owned instrumented provider, save
+   existing document hashes/generations and exact node/Pod/container identities,
+   enable the bounded synthetic delay and upload one isolated DOCX. Capture the
+   original work/reservation before stopping the two exact worker containers via
+   CRI. Verify the provider is still executing afterward. Normally delete only
+   the bound old worker Pods; no force deletion or node shutdown is used.
+2. `observe`: wait on the same original reservation. After the provider finishes
+   and the DB clock passes lease expiry, require unchanged owner/fence, no new
+   provider call, replacement workers and immediate busy admission on both APIs.
+3. `recover`: enter an owned recovery epoch, normally stop roles/provider and
+   collect fresh controller/Pod/Job/endpoint/node plus CRI observations. Confirm
+   every writer node is the same and Ready, no orphan or unknown namespace process
+   remains and the provider Service has zero endpoints. Recheck before and after
+   exact-token SQL acknowledgement with atomic proof-digest audit. Stay held.
+4. `release`: recheck the physical stop, then run a bootstrap-policy release Job
+   in the same image with the current identity. It checks held corpus/work hashes
+   before leaving maintenance. Only after its receipt, restore the success fixture
+   and intended role counts. Rebind only the recorded frontend tunnel if needed.
+5. `verify --report <public.json>`: require automatic completion with a newer work
+   fence and exactly one active publication; verify original SHA/search and every
+   pre-existing document's content, generation, source hash and delete visibility.
+
+An observation timeout does not mean the process or provider stopped. Inspect the
+same live handle/journal, never repeat `inject` against an existing journal. A
+held recovery may resume with the same operation/owner and fresh physical guards;
+do not acknowledge through an old lost PostgreSQL connection. Any unknown node,
+writer, changed reservation or failed audit keeps maintenance/reservation held.
+This recipe is for the owned single-node stub lab, with production scheduling off.
+Real/external providers and node/host loss require separate qualified recipes.
+
+Actual rehearsal on2026-11-01 passed on the owned managed-S3 target: both worker
+containers were lost with provider active1; provider completion and reservation
+expiry still left the original slot occupied and both APIs busy. Under the same
+recovery operation at epoch5, physical Kubernetes/CRI stop guards authorized one
+audited completion. A nullable empty EndpointSlice initially stopped the observer
+without releasing anything; the same operation resumed after its tested fix.
+The release Job verified held data; the interrupted document automatically reached
+done/problemNone with fence1→3 and one publication. Search/original SHA passed,
+all9 previous documents retained content/generations/bytes/delete visibility and
+all2/2/2 roles became ready0restarts. See the
+[public result](superpowers/reports/2026-11-01-replica-active-worker-loss.json).

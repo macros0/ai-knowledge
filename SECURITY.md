@@ -2118,6 +2118,29 @@ and `replica_model_reconcile` audit commit atomically; its target is the proof d
 never input or credentials. Retry requires identical cleared lease identities and
 matching durable DB/outbox audit. Maintenance stays enabled.
 
+Owned worker-loss coordinator: `scripts/kubernetes/replica_worker_loss.py` has
+explicit inject/observe/recover/release phases and a protected original-token
+journal. Failure injection checks exact full container IDs, Pod UIDs, namespace,
+container name and the fixed owned kind node through CRI before stopping only
+the selected workers. Normal Pod termination is retained. Stop guards fetch fresh
+Kubernetes controller/Pod/endpoint/Job/node identities and a fresh CRI container
+list on every call, including both sides of reconciliation SQL. Unknown running
+namespace containers, orphan processes, changed/unreachable nodes or active
+controllers refuse proof. The provider must be the instrumented owned stub;
+neither server completion nor lease expiry authorizes release. Release uses the
+same image/identity and a separate held-corpus verification Job. No automatic
+cleanup or restart follows an uncertain outcome. Live qualification is recorded
+separately from these coordinator controls.
+
+Live owned-stub follow-up: worker-container loss was observed while the provider
+remained active; expiry/completion kept the original slot busy on both APIs. The
+same held epoch5 then passed fresh physical Kubernetes/CRI guards around exact
+audited completion. A nullable EndpointSlice failure retained maintenance; after
+the tested fix, same-operation resume succeeded. Held data hashes and the original
+9 documents were preserved; the interrupted document automatically published once
+with a newer fence. This qualifies only that owned stub recipe; real providers,
+PostgreSQL partition, stale-process return and node/host loss remain separate gates.
+
 An explicit same-schema upgrade operator may replace the exact expected installed
 fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
 storage descriptor and receipt. Owned LLM requests prohibit it. Identity change

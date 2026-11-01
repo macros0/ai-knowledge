@@ -206,6 +206,21 @@ doc done/problemNone/search/download PASS25.5s. Report:
 same-schema image-update proof for this recipe; schema upgrades/adoption, other
 providers, physical unknown-provider reconciliation/nightly/key gates remain open.
 
+O2 owned-provider physical recovery milestone (2026-11-01): actual active worker
+loss retained the original global model reservation through provider finish and
+lease expiry. Recovery epoch5 normally stopped all application/provider Pods;
+unchanged Ready node UIDs, stopped controllers, empty service endpoints and CRI
+absence of retired/unknown running processes were fetched live for each SQL guard.
+Exact-token completion plus proof-digest audit committed atomically and stayed
+held. An offline same-image Job checked held data hashes before release; the
+interrupted document recovered automatically with a newer fence and all9 previous
+documents preserved. The first observer rejected Kubernetes `endpoints:null` with
+a TypeError, leaving the same epoch held; RED/GREEN fixed empty-list handling and
+the identical operation resumed. Report:
+`../reports/2026-11-01-replica-active-worker-loss.json`. This closes physical
+reconciliation evidence only for the owned instrumented stub recipe, not unknown
+real/external providers, node loss, schema adoption or the remaining O2 profiles.
+
 **Files:** создать `docs/KUBERNETES_REPLICAS_ACCEPTANCE.md`,
 `deploy/kubernetes/replicas/support-matrix.json`,
 `backend/tests/test_replica_acceptance_report.py`;
