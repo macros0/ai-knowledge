@@ -21,7 +21,10 @@ if config.config_file_name is not None:
 
 # URL берётся из настроек приложения (DATABASE_URL / DATABASE_URL_DEV / SQLite),
 # а не из alembic.ini — единый источник правды о подключении.
-config.set_main_option("sqlalchemy.url", get_settings().db_url)
+# ConfigParser treats percent escapes in a valid URL as interpolation syntax.
+# Escape only for the configuration transport; engine_from_config/get_main_option
+# decode them back to the original URL without changing credentials/options.
+config.set_main_option("sqlalchemy.url", get_settings().db_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

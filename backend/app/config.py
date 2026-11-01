@@ -384,6 +384,7 @@ class Settings(BaseSettings):
     llm_truncation_max_tokens_multiplier: float = 1.5
 
     llm_max_concurrency: int = 1
+    llm_global_max_concurrency: int = Field(default=1, ge=1, le=64)
     llm_interactive_concurrency: int = 2
     llm_retry_attempts: int = 5
     llm_retry_backoff_seconds: float = 2.0

@@ -181,3 +181,24 @@ tests use barriers/pipes and explicit DB lease expiry rather than timing guesses
 It owns random `replica_test_<uuid>` collections and shares a test filesystem root
 between spawned processes. That root exercises adapter semantics; it does not
 certify a Kubernetes RWX/CSI provider or production S3 durability.
+
+R4 foundation uses caller-owned PostgreSQL transactions for resource slots,
+rolling rate windows and configuration revisions. Slots have stable IDs,
+owner/fence and DB-time expiry; a protected deadline can outlive the owner lease.
+Provider executions additionally require completion: uncertain model calls stay
+quarantined until a trusted completion or O2 reconciliation, even after expiry.
+No client timeout proves a remote model execution ended. Future LLMClient calls
+share `LLM_GLOBAL_MAX_CONCURRENCY` (default1), including the local-profile and
+source-assessment paths. Local pools remain secondary limits. Normal terminal
+replies and definite request rejection release capacity; ambiguous transport
+errors and process death do not. Capacity admission refuses an open SQL session.
+
+Future rate limiting uses hashed actor/action keys and weighted rolling events.
+Bulk operation/document budgets commit together. Localization writes bump their
+configuration revision with the existing reference/audit transaction; stopword
+cache hits compare that revision. Existing UI dictionary reads already use SQL.
+ChatRun/history/cancel, frontend cache propagation, audit and diagnostic instance
+coordination remain open; none of this enables distributed deployment.
+Checks: `test_replica_coordination.py`, `test_replica_model_budget.py`,
+`test_replica_coordination_migration.py`, and explicit isolated PostgreSQL
+`test_replica_coordination_postgres.py`. The migration refuses lossy rollback.

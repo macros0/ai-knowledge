@@ -406,6 +406,7 @@ class LLMClient:
             "finish_reason": None,
             "stream": None,
         }
+        model_budget = None
         lock = threading.Lock()
         cancelled = threading.Event()
         request = llm_profiles.request_state()
@@ -512,6 +513,12 @@ class LLMClient:
                 # пока поток жив, запрос к провайдеру реально выполняется.
                 if release_slot is not None:
                     release_slot()
+                if model_budget is not None:
+                    rejected = getattr(container.get("error"), "status_code", None) in {
+                        400, 401, 403, 404, 405, 413, 415, 422, 429}
+                    confirmed = ("error" not in container and container["finish_reason"] in {
+                        "stop", "length", "content_filter", "tool_calls", "function_call"}) or rejected
+                    model_budget.complete(confirmed=confirmed)
                 container["done"].set()
 
         queue_start = time.monotonic()
@@ -531,10 +538,23 @@ class LLMClient:
             release_slot = _acquire_slot(self.interactive,
                 min(slot_wait, max(0, call_deadline - time.monotonic())) if task == "source_assessment" else slot_wait,
                 **({"cancel": external_cancel} if task == "source_assessment" else {}))
+        from app.services.work.admission import durable_documents
+        if durable_documents(self.settings):
+            from app.services.work.model_budget import acquire_model_budget
+            wait_budget = (self.settings.llm_interactive_slot_wait_seconds if self.interactive else total)
+            wait_budget = min(max(0, wait_budget), max(0, call_deadline - time.monotonic()))
+            try:
+                model_budget = acquire_model_budget(self.settings, max_wait=wait_budget, cancel=external_cancel)
+            except BaseException:
+                if release_slot is not None:
+                    release_slot()
+                raise
         if assessment_metrics is not None:
             assessment_metrics["queue_ms"] = round((time.monotonic() - queue_start) * 1000, 2)
         if (self.local or task == "source_assessment") and (time.monotonic() >= call_deadline or
                            (external_cancel is not None and external_cancel.is_set())):
+            if model_budget is not None:
+                model_budget.complete(confirmed=True)  # The provider was never invoked.
             release_slot()
             if external_cancel is not None and external_cancel.is_set():
                 raise LLMCancelled()
@@ -545,6 +565,8 @@ class LLMClient:
             thread.start()
         except BaseException:
             _inflight_leave()
+            if model_budget is not None:
+                model_budget.complete(confirmed=True)  # Thread did not start.
             if release_slot is not None:
                 release_slot()
             raise

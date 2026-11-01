@@ -61,7 +61,7 @@ def test_progress_migration_preserves_jobs_and_refuses_lost_cursors(tmp_path, mo
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     command.stamp(config, "rpl02a_document_work")
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl02b_work_progress")
     assert "work_progress" in inspect(engine).get_table_names()
     with engine.begin() as connection:
         assert connection.scalar(text("SELECT status FROM jobs")) == "awaiting_approval"

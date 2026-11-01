@@ -36,12 +36,12 @@ def test_document_work_migration_preserves_generations_and_refuses_lost_fencing(
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     command.stamp(config, "rpl02_work_items")
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl02b_work_progress")
     assert {"work_id", "work_fence", "work_cleanup_done"} <= {column["name"] for column in inspect(engine).get_columns("document_generations")}
     with engine.begin() as connection:
         assert connection.scalar(text("SELECT phase FROM document_generations")) == "active"
     command.downgrade(config, "rpl02_work_items")
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl02b_work_progress")
     with engine.begin() as connection:
         connection.execute(text("UPDATE document_generations SET work_id=:id, work_fence=1"), {"id": "b" * 32})
     with pytest.raises(RuntimeError, match="fencing"):

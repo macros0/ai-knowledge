@@ -276,7 +276,7 @@ def test_postgres_document_work_schema_preserves_legacy_generation(_db, monkeypa
     config.set_main_option("script_location", str(root / "alembic"))
     command.stamp(config, "rpl02a_document_work")
     command.downgrade(config, "rpl02_work_items")
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl02b_work_progress")
     with session_scope() as session:
         generation = session.get(DocumentGeneration, "a" * 32)
         assert generation.phase == "active" and generation.work_id is None

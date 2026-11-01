@@ -1915,6 +1915,32 @@ refuses to mutate canonical state in the future runtime: existing NULL-generatio
 corpora require verified adoption before activation. Read-only inspections keep
 their existing access contract. No override disables these maintenance guards.
 
+## Replica coordination foundation (2026-11-01, activation gated)
+
+The future runtime shares capacity slots and rolling rate windows through short
+PostgreSQL transactions and database time. Resource locks serialize admission;
+release/renewal require the same slot/resource/owner/fence. Conflicting live
+policies fail closed. Rate keys are hashed, and bulk operation/document weights
+commit together, so a rejected request does not consume another budget. SQLite
+remains a single-writer test/development fallback.
+All future LLMClient completion paths, including chat, generation, translation
+and source assessment, share `LLM_GLOBAL_MAX_CONCURRENCY` (default1). Existing
+local pools remain secondary limits. Admission must commit outside a caller's
+SQL transaction before starting the provider. A normal confirmed terminal reply
+or definite rejected request releases the slot; abandoning a live provider call
+does not. Ambiguous transport failure, unconfirmed stream end or process loss
+leaves the slot quarantined even after lease expiry. A timeout/stream close does
+not prove that the external model stopped computing. There is no automatic TTL
+reallocation of uncertain provider executions; O2 needs audited reconciliation
+with completion/provider-stop proof. This deliberately trades availability for
+bounded admission and does not certify the remote provider's execution cap.
+Localization mutations bump a durable revision in their existing reference/audit
+transaction. Future stopword caches check that revision before a TTL hit; UI
+dictionary reads already use SQL. Frontend cache propagation, ChatRun admission
+and cancellation, audit dispatcher failover and diagnostic instance/inbox
+coordination remain R4 work. Migration refuses to discard accepted coordination
+state. The distributed build/provider activation gates remain closed.
+
 ## User answer scenarios (2026-10-23)
 Authenticated users, including viewer, may create and publish their own answer
 instructions. The owner may edit, unpublish or delete their scenarios.

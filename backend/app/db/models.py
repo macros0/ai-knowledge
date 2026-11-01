@@ -1336,6 +1336,52 @@ class WorkProgress(Base):
     __table_args__ = (CheckConstraint("version >= 1", name="ck_work_progress_version"),)
 
 
+class ReplicaCapacityResource(Base):
+    __tablename__ = "replica_capacity_resources"
+    resource: Mapped[str] = mapped_column(String(64), primary_key=True)
+    capacity_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (CheckConstraint("capacity_limit >= 1 AND capacity_limit <= 10000", name="ck_replica_capacity_limit"),)
+
+
+class ReplicaCapacitySlot(Base):
+    __tablename__ = "replica_capacity_slots"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    resource: Mapped[str] = mapped_column(ForeignKey("replica_capacity_resources.resource"), nullable=False)
+    slot: Mapped[int] = mapped_column(Integer, nullable=False)
+    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    protected_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    release_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    __table_args__ = (UniqueConstraint("resource", "slot", name="uq_replica_capacity_slot"),
+        CheckConstraint("slot >= 0 AND fence >= 1", name="ck_replica_capacity_slot"))
+
+
+class ReplicaRateBucket(Base):
+    __tablename__ = "replica_rate_buckets"
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    window_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (CheckConstraint("request_limit >= 1 AND window_seconds >= 1", name="ck_replica_rate_policy"),)
+
+
+class ReplicaRateEvent(Base):
+    __tablename__ = "replica_rate_events"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key_hash: Mapped[str] = mapped_column(ForeignKey("replica_rate_buckets.key_hash"), nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cost: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    __table_args__ = (Index("ix_replica_rate_window", "key_hash", "accepted_at"),
+        CheckConstraint("cost >= 1 AND cost <= 10000", name="ck_replica_rate_cost"))
+
+
+class ConfigRevision(Base):
+    __tablename__ = "config_revisions"
+    domain: Mapped[str] = mapped_column(String(64), primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    __table_args__ = (CheckConstraint("revision >= 0", name="ck_config_revision"),)
+
+
 class ArtifactStorageControl(Base):
     __tablename__ = "artifact_storage_control"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

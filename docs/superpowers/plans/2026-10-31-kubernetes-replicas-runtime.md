@@ -219,6 +219,24 @@ Audit spool/hold files инвентаризировать: незавершён�
 - [ ] GREEN плюс `python -m pytest tests/test_authz.py tests/test_audit_outbox_dispatcher.py tests/test_audit_storage_modes.py tests/test_chat_stream.py -q`; проверить все DB-only/external-only/both audit modes. Не ослаблять strict audit schema для новой очереди.
 - [ ] Commit `feat: coordinate state across backend replicas`.
 
+R4 foundation milestone, 01.11.2026: caller-owned capacity/rate/revision schema,
+shared RateLimiter, localization revision invalidation and LLMClient global
+provider admission implemented behind the closed capability. Weighted events
+keep bulk admission bounded without per-document SQL round trips. Uncertain
+external calls retain capacity until trusted completion/reconciliation; TTL alone
+does not establish that the model stopped. O2 must implement the audited recovery
+path before activation. Existing local pools remain secondary limits.
+Scoped checks:23 coordination/model/rate/schema tests passed;92 LLM/local-profile/
+assessment tests passed;83 localization/schema regressions passed. Isolated
+PostgreSQL:6 passed, including four-process limit contention and migration with
+nonempty Job/downgrade refusal. Root check: audit0 vulnerabilities, frontend747
+passed/1 skipped, ESLint/Ruff passed. Alembic now preserves percent-escaped URLs
+through ConfigParser, covered offline and on actual PostgreSQL.
+This intermediate commit does not complete R4. ChatRun/global chat admission,
+cross-API cancel/history identity, auth/revocation acceptance, frontend cache
+boundaries, audit advisory-lock dispatcher and durable diagnostic instances/inbox
+remain open. Integrated R3/R5 role acceptance and production gates remain closed.
+
 ## Task R5: distributed chart и приёмка нескольких исполнителей
 
 **Files:** создать `deploy/helm/ai-knowledge/templates/api.yaml`, `templates/worker.yaml`,

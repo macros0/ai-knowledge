@@ -93,7 +93,7 @@ def test_rpl02b_upgrade_preserves_jobs_and_refuses_cursor_loss(_db, monkeypatch)
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     command.stamp(config, "rpl02a_document_work")
-    command.upgrade(config, "head")
+    command.upgrade(config, "rpl02b_work_progress")
     with session_scope() as session:
         assert session.query(Job).one().status == "awaiting_approval"
         enqueue(session, WorkSpec("test", 1, {}, "schema-progress"))
