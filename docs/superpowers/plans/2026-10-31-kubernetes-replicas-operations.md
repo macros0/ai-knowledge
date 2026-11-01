@@ -148,6 +148,14 @@ epoch. Existing app images were not upgraded. Physical stop/drain collection,
 provider reconciliation, adoption/update, format3 independent backup/restore,
 nightly scheduling and operation acceptance remain OPEN. See the recovery runbook.
 
+O2 format3 archive follow-up: typed complete inventory and immutable plan, bounded
+authenticated encryption, independently keyed manifest, cold all-object verification,
+same-source resume and recovery-point age are implemented in
+`backend/app/deployment/replica_backup.py`. Source/destination guards are mandatory;
+actual provider exports, physical drain, restore and held release remain open.
+User chose the physically separate PC for lab backup; production scheduling is off.
+This narrows the earlier archive-format item without completing O2/acceptance.
+
 **Files:** создать `docs/KUBERNETES_REPLICAS_ACCEPTANCE.md`,
 `deploy/kubernetes/replicas/support-matrix.json`,
 `backend/tests/test_replica_acceptance_report.py`;

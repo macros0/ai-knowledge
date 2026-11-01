@@ -2106,6 +2106,25 @@ and new-target release qualification remain mandatory and unimplemented here.
 The rpl05 upgrade holds installed replicas and requires stopped old writers and
 a future explicit adoption/release procedure; it is not an online upgrade.
 
+Replica backup format3 archive library (2026-11-01, end-to-end recovery pending):
+only encrypted data enters a new archive directory. AES256-GCM uses bounded4MiB
+frames, per-object HKDF keys with fresh128-bit file salts, distinct96-bit frame
+counter nonces and authenticated plan/object/order/finality. A separately derived
+HMAC-SHA256 key binds the allowlisted manifest and full inventory. No backup key,
+connection string or source payload is serialized in metadata. Both frozen-source
+and actual destination-binding guards are required; independence depends on
+verified platform/host facts, not just different names. The filesystem destination
+requires create-only object publication, regular files, no linked archive paths
+and a single writer lock. Cold completion verifies every frame and complete
+plaintext/ciphertext hashes/sizes before publishing complete. A changed source,
+missing component, corrupt object, wrong key or incomplete inventory cannot pass.
+Resume reauthenticates the same plan and published objects; it never overwrites
+an existing complete backup. Root keys are managed outside this library/archive.
+The original compact format2 path stays separate. Provider exports, physical drain,
+independent restore/held activation and destination durability qualification are
+still required. The selected lab destination is the user's separate Windows PC;
+production scheduling remains disabled, with no retention deletion or alerts sent.
+
 ## User answer scenarios (2026-10-23)
 
 Authenticated users, including viewer, may create and publish their own answer

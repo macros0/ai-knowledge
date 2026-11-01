@@ -24,3 +24,4 @@ joserfc>=1.7.6
 brotli>=1.2.1; platform_python_implementation == "CPython"
 brotlicffi>=1.2.1.0; platform_python_implementation == "PyPy"
 filelock>=4.2.1,<5
+cryptography==50.0.2
