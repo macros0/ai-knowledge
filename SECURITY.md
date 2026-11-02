@@ -2713,3 +2713,33 @@ sign-any-JSON CLI. No real issuer/private key or actual certificate is configure
 by these tests. Historical reports are not retroactively signed, and inventory
 certificates remain null. Reverify trust and all files rather than treating
 `certificate_applies` as authenticated authority or production permission.
+
+2026-11-03: nonempty compact adoption has an explicit offline SQL/CLI phase.
+Fresh bootstrap still rejects existing application rows. The new phase requires
+the current Alembic head and known tables/columns/primary keys, a selected verified
+S4 shared-store cutover and reviewed logical source snapshot. All application
+tables are locked on the retained PostgreSQL operator connection before source
+comparison; original audit prefixes remain hashed and exactly one new adoption
+audit binds source, target identity, operation/owner, counts and writer receipts.
+Identity, storage token and enabled epoch1 are committed atomically. Audit failure
+rolls back all three. An existing installation is accepted only as the exact
+same held retry; a released or foreign operation cannot reuse the snapshot.
+
+The CLI reads only its bounded literal runtime file; ambient variables, the root
+dotenv and dotenv interpolation cannot select another database or secret. Input
+JSON is bounded with duplicate-key rejection. SQL credentials may differ only
+through the existing same-target offline operator transport. Identity publication
+is create-only after acknowledged SQL commit; publication failure retains the
+hold and can resume without a second audit. Unknown commit outcomes report an
+unknown hold status. Public errors contain fixed metadata, not private inputs.
+
+This phase preserves NULL/missing generations, configuration, authentication
+history, audit and supported durable queued work. It refuses active/uncertain
+work/chat/capacity ownership and unconverted legacy queued/running public Jobs
+or document intents. That refusal does not implement legacy queue handoff.
+Stop receipts and storage probes are trusted coordinator inputs, not independent
+physical evidence. The command does not migrate schema, revoke sessions, execute
+work, reconcile providers, release maintenance or start roles. Independent backup
+restoration, actual provider qualification and a populated source-off Kubernetes
+adoption/release rehearsal remain mandatory. Native PostgreSQL tests use only a
+new temporary cluster/database and synthetic filesystem/backup fixtures.

@@ -79,6 +79,85 @@ and the remaining runtime fault matrix are open. Production scheduling is disabl
 by user instruction; its future activation requires independent key recovery,
 timezone/window, retention and alert recipient configuration. No nightly CronJob is enabled.
 
+## Nonempty compact adoption: held SQL phase
+
+`backend/scripts/adopt_compact_runtime.py` supplies the offline bridge after a
+verified [S4 cutover](ARTIFACT_STORAGE_MIGRATION.md). Fresh bootstrap remains for
+empty installations. This command requires the real current Alembic head,
+no installed replica identity/maintenance state and the selected completed S4
+migration to the intended RWX/S3 descriptor. It does not upgrade schema.
+
+Before using this phase, the trusted coordinator must stop every source writer,
+resolve uncertain provider/child ownership, verify corpus bytes and prove an
+independent recoverable backup. The storage probe receipt and six writer
+stop/drain receipts are trusted inputs to SQL, not physical evidence collected
+by this command. Existing supported durable WorkItems remain queued. Unconverted
+legacy queued/running public Jobs or processing/queued documents without durable
+document work refuse adoption; legacy handoff and its actual rehearsal remain
+open. After a future explicit handoff, capture a new source snapshot.
+
+Select a protected, fully specified target runtime env file containing database,
+application secret, namespace, shared-store configuration, future image digest
+and identity output path. The loader uses literal values from this file only:
+ambient environment, root `.env` and `${...}` expansion do not supply secrets or
+redirect the database. Keep the selected file immutable across inspection and
+adoption. An optional `--operator-db-file` uses the existing same-target
+verify-full TLS credential contract; ordinary runtime Secrets must not receive
+administrator credentials. The native temporary-loopback tests do not qualify
+that provider transport.
+
+The following are command shapes for the offline coordinator, not permission to
+run against a live customer installation. Use a new nonzero32-hex operation ID,
+an explicit owner and separate protected files. `inspect` creates its snapshot
+once; it reports zero database mutations while explicitly reporting that file
+publication. Repeating inspection never overwrites a different snapshot.
+
+```bash
+python backend/scripts/adopt_compact_runtime.py --phase inspect \
+  --runtime-env-file "$runtime" --source-snapshot "$snapshot" \
+  --operation-id "$operation" --owner-id "$owner"
+```
+
+The reviewed snapshot binds installation, migration, selected descriptor,
+plan/backup evidence and every logical application table, including old auth,
+configuration, original audit history and queued payloads. Both absent generation
+rows and explicit NULL generation pointers remain unchanged. The backup digest
+alone does not establish independent restoration.
+
+```bash
+python backend/scripts/adopt_compact_runtime.py --phase adopt \
+  --runtime-env-file "$runtime" --source-snapshot "$snapshot" \
+  --operation-id "$operation" --owner-id "$owner" \
+  --storage-receipt "$probe" --counts "$counts" --writer-receipts "$writers"
+```
+
+Without `--apply`, this validates local inputs only and does not observe SQL or
+write files. Counts require exactly `frontend`, `api`, `worker` integer values
+0..64. Writer receipts require exactly `api`, `worker`, `audit_dispatcher`,
+`diagnostic_children`, `provider_requests`, `maintenance_jobs`, each `stopped` or
+`drained`. They must come from fresh physical checks, not copied example claims.
+
+Adding `--apply` acquires the exclusive retained operator connection, locks all
+application tables, compares the source and atomically installs identity plus
+enabled epoch1/storage token with one audit. SQL failure rolls back; publication
+failure after acknowledged commit leaves `jobs_held:true`. An uncertain outcome
+reports `jobs_held:null`: observe the same operation before any retry. The exact
+same held operation/owner/source/settings/receipts can complete create-only
+identity publication without another audit; another owner, changed source or
+released installation refuses. The success sentinel is
+`REPLICA_COMPACT_ADOPTION_IDENTITY:`. It always reports workloads not started.
+
+This is SQL/CLI foundation evidence, not completed O2 deployment acceptance.
+No work is executed, generation synthesized, source session revoked, provider
+reservation cleared or maintenance released. The coordinator must separately
+validate authorization/session policy, deploy the matching frozen image/common
+identity, complete provider/recovery checks and explicitly release/start roles.
+Old None/zero-epoch processes remain retired after release. The populated compact
+source-off Kubernetes rehearsal, legacy intent conversion and functional
+search/download/new-publication proof still need completion. See the
+[implementation plan](superpowers/plans/2026-11-02-replica-compact-adoption.md) and
+[SQL/CLI evidence](superpowers/reports/2026-11-03-replica-compact-adoption.json).
+
 ## Encrypted archive contract
 
 `app.deployment.replica_backup` defines the format3 plan/manifest, filesystem

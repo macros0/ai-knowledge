@@ -159,6 +159,19 @@ stay open. It does not complete O1 or certify production disk quotas/HA.
 `backend/app/services/generation_store.py`, `backend/app/services/audit_outbox.py`,
 `deploy/helm/ai-knowledge-storage/templates/backup.yaml` (создать), `SECURITY.md`.
 
+O2 compact SQL/CLI foundation (2026-11-03): a nonempty compact source after
+verified S4 cutover can now install a new identity and held epoch1 under an owned
+offline operator. Original logical SQL, NULL/missing generation pointers,
+configuration, auth/audit and supported durable queued work remain unchanged.
+Literal explicit runtime selection prevents ambient/root-dotenv redirection;
+create-only identity publication can resume after SQL commit with the exact same
+held proof. Real isolated PostgreSQL tests exercise the official Alembic chain,
+advisory exclusion, an actual conflicting writer, atomic rollback and CLI
+publication recovery. This does not implement legacy queued Job/document intent
+handoff or complete the populated source-off Kubernetes adoption/provider/release
+recipe. See [detail plan](2026-11-02-replica-compact-adoption.md) and
+[SQL phase procedure](../../KUBERNETES_REPLICAS_RECOVERY.md#nonempty-compact-adoption-held-sql-phase).
+
 O2 schema-adoption SQL foundation (2026-11-02): the specific populated
 rpl04-to-rpl05 transition now has an owned offline adoption step. It claims only
 the exact migration-created fence, checks original identity/storage and explicit

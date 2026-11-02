@@ -1,6 +1,6 @@
 # Матрица приёмки реплик и хранилищ
 
-Состояние доказательств на02.11.2026. План реализации:
+Состояние доказательств на03.11.2026. План реализации:
 [Kubernetes replicas and storage](superpowers/plans/2026-10-31-kubernetes-replicas.md).
 Зелёный отдельный тест или старый отказной прогон не заменяет приёмку всей
 текущей версии и выбранного профиля. Ни один профиль пока не объявлен resilient.
@@ -20,6 +20,7 @@
 
 | Испытание | Свидетельство и граница результата |
 |---|---|
+| Compact adoption SQL/CLI | [SQL/CLI evidence](superpowers/reports/2026-11-03-replica-compact-adoption.json):153 Windows passes/2 platform skips и18 native PostgreSQL passes; сохранение непустого корпуса/NULL generations, held epoch1 и возобновляемая публикация identity проверены на отдельной PostgreSQL17.11. Перенос старых очередей и фактическая source-off Kubernetes приёмка остаются открытыми |
 | Общий runtime | [Common runtime](superpowers/reports/2026-11-02-replica-common-runtime.json): все22 этапа одного текущего запуска, maintenance15→16→17,80 исходных документов сохранены; только учебный managed-S3/stub/fake profile |
 | Source-off backup/restore | [Managed-S3 recovery](superpowers/reports/2026-11-01-replica-managed-s3-recovery.json): прежний3-document архив восстановлен в новый target; это не restore последней копии |
 | Последняя независимая копия | [Before-scoped-faults backup](superpowers/reports/2026-11-02-replica-before-scoped-faults-backup.json):20 документов/100 blobs; [current-copy recovery](superpowers/reports/2026-11-02-replica-current-copy-recovery.json): фактический source-off restore в новый namespace, scoped permissions, отзыв25 сессий и7 runtime smoke checks. Полный22-stage R5 остаётся результатом исходной установки |

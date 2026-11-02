@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "status": "compact-held-sql-cli-foundation-verified",
+  "completed_at": "2026-11-02T22:18:27.088881+00:00",
+  "base_revision": "1a74604",
+  "scope": "Synthetic SQL/CLI adoption after fixture S4 cutover; not completed Kubernetes/provider adoption",
+  "source_sha256": {
+    "backend/app/deployment/compact_adoption.py": "bbd68b94ead8ab3bdd2a500c47a55622c1abed5722439198d433da28cc38cb6b",
+    "backend/scripts/adopt_compact_runtime.py": "2b71a4886a7364a2db178c84be63480a7e64c1b811e9c0d50dcde9058aed5916",
+    "backend/tests/test_replica_compact_adoption.py": "45edc0e9dc060546770ac7e94f4f66ee5a30e9cd6e91d701f5bcf851dedf5580",
+    "backend/tests/test_replica_compact_adoption_cli.py": "63a0af925f109fd82bf3f92188f9e2e3a917eb2abf2c444b1e81554ba1f7c8d1",
+    "backend/tests/replica_postgres/test_compact_adoption.py": "ceff2c8de84a3f6c920acf02f148493d0c0d37c24929839e278eaa1feb38a7ce"
+  },
+  "windows": {
+    "passed": 153,
+    "skipped": 2,
+    "failures": 0,
+    "errors": 0,
+    "duration_seconds": 289.75,
+    "selection": [
+      "tests/test_replica_compact_adoption.py",
+      "tests/test_replica_compact_adoption_cli.py",
+      "tests/test_replica_bootstrap.py",
+      "tests/test_replica_maintenance.py",
+      "tests/test_replica_runtime_upgrade.py",
+      "tests/test_replica_schema_adoption.py",
+      "tests/test_artifact_storage_migration.py",
+      "tests/test_replica_operator_database.py",
+      "tests/test_replica_schema_upgrade_cli.py"
+    ],
+    "skips": [
+      "existing projected-Secret symlink test requires Linux",
+      "existing FIFO test requires POSIX"
+    ],
+    "log_sha256": "37f17140ce7725c412e417c1e25fbf122e28679fd9b9dccfaa38c86da6cc730b",
+    "previous_handle": "missing; empty log and no process observed, excluded from results"
+  },
+  "native_postgresql": {
+    "platform": "Windows x86_64",
+    "server_version": "17.11",
+    "passed": 18,
+    "skipped": 0,
+    "errors": 0,
+    "failures": 0,
+    "duration_seconds": 67.92,
+    "compact_cases": [
+      "test_pg_compact_adoption_preserves_nonempty_source_and_held_retry",
+      "test_pg_compact_held_epoch_retires_legacy_writers_after_explicit_test_release",
+      "test_pg_compact_advisory_operator_excludes_second_owner",
+      "test_pg_compact_waits_for_existing_sql_writer_then_can_retry",
+      "test_pg_compact_audit_failure_rolls_back_identity_and_hold",
+      "test_pg_compact_rejects_committed_source_write_after_snapshot",
+      "test_pg_compact_cli_uses_literal_target_and_resumes_held_publication[False]",
+      "test_pg_compact_cli_uses_literal_target_and_resumes_held_publication[True]"
+    ],
+    "related_cases": 10,
+    "junit_sha256": "470e98574c1eb24448439c31c02e77ea8d5d4ebb784f62a179844aa3b369a549",
+    "fresh_isolated_loopback_cluster": true,
+    "working_pg17_data_untouched": true,
+    "pg10_service_untouched": true,
+    "official_alembic_chain_before_fixture": true,
+    "table_lock_conflict_sqlstate": "55P03",
+    "advisory_exclusion": true,
+    "audit_rollback_verified": true,
+    "source_change_refused": true,
+    "literal_cli_target_and_publication_resume": true,
+    "owned_postmaster_stopped": true,
+    "data_logs_retained": true
+  },
+  "project_check": {
+    "exit_code": 0,
+    "audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "eslint": "passed with existing warnings",
+    "ruff": "passed",
+    "log_sha256": "45b5437ac091462cdfe5fc8e23a82be3bd5b90b17f025480fe01852f6c6a8456",
+    "first_attempt": "sandbox network/cache access failed at npm audit; excluded; authorized retry passed"
+  },
+  "red_green": {
+    "sql_missing_module_failures": 32,
+    "fresh_bootstrap_control_passed": 1,
+    "cli_missing_module_failures": 11,
+    "malformed_own_audit_payload": "one meaningful failure before typed-refusal guard",
+    "corrected_test_expectations": [
+      "guard exception occurs at session entry",
+      "admin tamper uses explicit migration boundary",
+      "declared Settings retry-backoff field is tuple, not list"
+    ]
+  },
+  "contract": {
+    "logical_source_hashed": true,
+    "original_audit_prefix_hashed": true,
+    "exact_same_held_retry": true,
+    "held_epoch": 1,
+    "identity_and_hold_and_audit_atomic": true,
+    "source_auth_preserved": true,
+    "legacy_nulls_preserved": true,
+    "durable_queued_work_preserved": true,
+    "unconverted_legacy_intents": "refused, not migrated",
+    "normal_fresh_bootstrap_unchanged": true,
+    "automatic_release": false,
+    "work_execution": false,
+    "physical_receipts": "trusted coordinator inputs, not independently collected by SQL phase",
+    "filesystem": "RWX adapter on ordinary local temporary directory; not a CSI probe",
+    "backup": "checksum fixture bytes; not an independently restorable archive"
+  },
+  "open_gates": [
+    "versioned handoff of legacy public queues and accepted document intents",
+    "populated compact source-off Kubernetes schema/S4/handoff/adoption/provider/release rehearsal",
+    "independent restored backup and physical writer/provider verification for that recipe",
+    "functional search/download/new-publication/queued-work evidence after activation",
+    "remaining storage/provider/fault profiles, final full backend CI and fresh whole-branch review"
+  ],
+  "actual_profile_certifications_issued": 0,
+  "release_status": "incomplete",
+  "deployment_authorized": false,
+  "production_backup_schedule": "disabled"
+}
