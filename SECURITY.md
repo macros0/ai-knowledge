@@ -2612,5 +2612,20 @@ new held maintenance fence. DDL failure rolls back token clearance as well.
 Predecessor target rebinding requires the fresh migrated fence and authenticated
 source scope/counts, revokes old authentication and keeps jobs held at epoch2.
 No generic token-clearing, force deletion, automatic activation or customer
-provider qualification is introduced. The complete old-image backup/restore and
+provider qualification is introduced. The complete old-image restore and
 Kubernetes schema-update recipe still require live acceptance.
+
+The separate owned-kind predecessor export CLI requires explicit old schema,
+namespace UID, runtime fingerprint, independent destination evidence and a new
+protected operation journal. Its live guards revalidate the current audited S4
+token/identity, the retained advisory-lock connection and the original exported
+snapshot transaction/driver/backend together with fresh Kubernetes/node/CRI
+observations before archive publication. A connection/PID surviving commit or
+rollback cannot authorize the old snapshot. Native PG dump failure, changed
+physical/SQL authority or a missing/checksum-mismatched provider stream cannot
+complete the encrypted archive. Success and failure both leave the old source
+held/stopped; there is no automatic release or schema change. Journal/snapshot
+loss requires observation and explicit recovery, not a blind CLI retry. The
+actual synthetic rpl04 provider archive has been cold-verified on the independent
+PC and its source physically stopped with PVCs retained; this does not qualify
+source-off restoration, production scheduling or other provider recipes.

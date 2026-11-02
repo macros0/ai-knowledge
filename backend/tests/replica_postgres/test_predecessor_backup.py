@@ -30,6 +30,21 @@ def source_descriptor(value):
         'endpoint': f"https://{value['storage_release']}-artifacts.{value['namespace']}.svc:9000"}
 
 
+@pytest.mark.parametrize('end_transaction', ['commit', 'rollback'])
+def test_pg_export_snapshot_guard_rejects_same_backend_after_transaction_end(predecessor,end_transaction):
+    engine,_config,_settings,_old=predecessor
+    with engine.connect().execution_options(isolation_level='REPEATABLE READ') as connection:
+        connection.execute(text('SET TRANSACTION READ ONLY'))
+        connection.scalar(text('SELECT pg_export_snapshot()'))
+        backend=connection.scalar(text('SELECT pg_backend_pid()'))
+        check=load().retained_snapshot_guard(connection)
+        check()
+        getattr(connection,end_transaction)()
+        assert connection.scalar(text('SELECT pg_backend_pid()'))==backend
+        with pytest.raises(ValueError):
+            check()
+
+
 def test_pg_predecessor_source_guard_reads_actual_old_schema(predecessor):
     engine, _config, _settings, old = predecessor
     value = source_config(engine)

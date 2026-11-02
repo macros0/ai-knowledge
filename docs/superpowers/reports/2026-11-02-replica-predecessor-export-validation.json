@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "status": "predecessor-export-and-physical-source-off-passed",
+  "scope": "owned-basic-kind-rpl04-source-real-three-provider-independent-copy; restoration-not-performed",
+  "base_revision": "33e0ede02567dd7e7cc7d755fae174c4ffa9253d",
+  "source_overlay_sha256": {
+    "scripts/kubernetes/replica_predecessor_backup.py": "2faf560b6972e77203ce80e87161285f016822c41cb2ef1fd4fadb1218666965",
+    "backend/tests/test_replica_predecessor_export.py": "f0450a7bbc73f4e41bf91d6daacab1ea475d2a4cb704503543b93e7a7d55f785",
+    "backend/tests/replica_postgres/test_predecessor_backup.py": "a024aa8fa4a00c05b08cf77139d61d4b547e9da954216215bea8eb368cb5778b"
+  },
+  "windows": {
+    "passed": 109,
+    "failed": 0,
+    "duration_seconds": 147.7,
+    "scope": "predecessor export/archive/stop/restore and unchanged modern backup coordinator cohorts"
+  },
+  "linux": {
+    "ci_image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "container_id": "eff21db038d4a27d1e9c07f7136a33c936780813ad76953bd5e215b1761f6fed",
+    "started_at": "2026-11-02T15:56:05.972752349Z",
+    "finished_at": "2026-11-02T16:00:39.965783628Z",
+    "exit_code": 0,
+    "oom_killed": false,
+    "tests": 157,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "sha256": "4bec2ce870b2d3c9949d9b25eef183f150b2c24d48d74834c62a826b1fe59c8c",
+    "passed": 157,
+    "native_pg_cases": [
+      {
+        "name": "test_pg_export_snapshot_guard_rejects_same_backend_after_transaction_end[commit]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_export_snapshot_guard_rejects_same_backend_after_transaction_end[rollback]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_source_guard_reads_actual_old_schema",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_guard_refuses_real_uncertain_source[running_work]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_guard_refuses_real_uncertain_source[changed_schema]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_recovery_after_real_forward_migration",
+        "passed": true
+      },
+      {
+        "name": "test_pg_artifact_fence_transfers_atomically_to_real_maintenance[False]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_artifact_fence_transfers_atomically_to_real_maintenance[True]",
+        "passed": true
+      }
+    ],
+    "postgres_id": "36213e267d95fc715684166fa6be5a40ab9a5584df0fc6b9f3bb16c22f594187",
+    "postgres_version": "17.11-1.pgdg13+2",
+    "postgres_stopped_at": "2026-11-02T16:01:55.829305252Z",
+    "postgres_scope": "isolated SQL verification; cached17.11 CI image is not the selected Kubernetes provider recipe",
+    "host_ports": false,
+    "pvcs": false,
+    "working_service_mutations": false
+  },
+  "guard_properties": {
+    "exact_rpl04_schema_and_s4_audit_token_required": true,
+    "strict_zero_epoch": true,
+    "retained_offline_advisory_lock_connection": true,
+    "retained_exported_snapshot_transaction_driver_backend": true,
+    "same_backend_after_commit_or_rollback_refused": true,
+    "fresh_kubernetes_nodes_cri_each_publication": true,
+    "changed_physical_sql_snapshot_guards_keep_archive_incomplete": true,
+    "real_failing_pg_dump_subprocess_keeps_archive_incomplete": true,
+    "current_schema_cannot_use_predecessor_export_path": true,
+    "existing_journal_refuses_blind_repeat": true,
+    "automatic_source_release_or_schema_migration": false
+  },
+  "actual_copy": {
+    "backup_id": "4f3e1677bcb94fd88d5a271a979edb6b",
+    "namespace": "replica-test-r4o2s20261102",
+    "namespace_uid": "4b40533d-56bc-4c8b-875c-7080b50361b3",
+    "runtime_fingerprint": "4d3dd068f8866dbbbf126901d768cb2c4bf5d0897b2bbebb0bb6bfbb1c70faf8",
+    "schema_revision": "rpl04_runtime_identity",
+    "epoch": 0,
+    "consistent_at": "2026-11-02T15:53:18.901801+00:00",
+    "counts": {
+      "documents": 2,
+      "concepts": 2,
+      "chunks": 2,
+      "blobs": 10,
+      "work_items": 369,
+      "audit_events": 6
+    },
+    "encrypted_objects_verified_after_source_off": 12,
+    "plaintext_bytes": 1260646,
+    "destination_failure_domain": "separate-physical-controller-pc",
+    "source_failure_domain": "proxmox-training-host",
+    "provider_exports": [
+      "real PostgreSQL exported snapshot/native Unix-socket pg_dump",
+      "actual Qdrant snapshot",
+      "accepted S3 object bytes with exact size/SHA"
+    ],
+    "source_storage_and_app_pvcs_retained": true,
+    "restoration_performed": false
+  },
+  "source_off": {
+    "namespace": "replica-test-r4o2s20261102",
+    "namespace_uid": "4b40533d-56bc-4c8b-875c-7080b50361b3",
+    "controller_counts": {
+      "api": 0,
+      "frontend": 0,
+      "model-stub": 0,
+      "replica-storage-recovery-artifacts": 0,
+      "replica-storage-recovery-postgres": 0,
+      "replica-storage-recovery-qdrant": 0,
+      "worker": 0
+    },
+    "source_running_pods": 0,
+    "source_running_cri_containers": 0,
+    "same_ready_node_required": true,
+    "retained_claims": [
+      {
+        "name": "predecessor-source-artifacts",
+        "uid": "d586dbfa-f29a-4b6f-bf18-1256fbb13055",
+        "volume_name": "pvc-d586dbfa-f29a-4b6f-bf18-1256fbb13055"
+      },
+      {
+        "name": "predecessor-source-postgres",
+        "uid": "2fbeeb10-ea4c-47b9-a7f3-d4d67cc89a49",
+        "volume_name": "pvc-2fbeeb10-ea4c-47b9-a7f3-d4d67cc89a49"
+      },
+      {
+        "name": "predecessor-source-qdrant",
+        "uid": "189a2a20-bc0f-4ecd-9dd5-95c54d7f9b0e",
+        "volume_name": "pvc-189a2a20-bc0f-4ecd-9dd5-95c54d7f9b0e"
+      }
+    ],
+    "native_old_schema_s4_token_and_unique_epoch0_audit_verified_before_stop": true,
+    "source_pvcs_deleted": false,
+    "archive_reauthenticated_after_source_off": true
+  },
+  "transport_refusal": {
+    "first_attempt_refused_before_journal_fence_or_scale": true,
+    "pg_pod_ready_without_restart": true,
+    "exact_initial_pg_forward_confirmed_terminal": true,
+    "signals": [
+      "connection reset",
+      "lost connection to pod"
+    ],
+    "only_that_dead_forward_replaced_before_new_sql_operation": true,
+    "no_backup_restart_after_fence_or_snapshot_acquisition": true
+  },
+  "project_checks": {
+    "npm_audit_vulnerabilities": 0,
+    "eslint": "passed",
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff": "passed"
+  },
+  "not_proven": [
+    "rpl04 source-off provider import/restoration",
+    "Kubernetes rpl04-to-rpl05 rollout",
+    "compact/NULL-generation adoption",
+    "production/provider/physical-HA qualification",
+    "full final backend CI"
+  ],
+  "production_backup_schedule": "disabled"
+}

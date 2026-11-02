@@ -36,6 +36,8 @@
 | Операторский CLI обновления | [Schema upgrade CLI](superpowers/reports/2026-11-02-replica-schema-upgrade-cli.json): отдельный SQL credential при scoped Settings и повтор после SQL commit/ошибки identity-файла; проверка SQL на изолированном PostgreSQL не заменяет Kubernetes rollout |
 | Протокол копии rpl04 | [Predecessor protocol](superpowers/reports/2026-11-02-replica-predecessor-protocol.json): отдельный epoch0/S4-fence, неизменность старого формата, атомарный переход к rpl05 и SQL-восстановление; provider-copy/source-off recovery ещё не проверены |
 | Настоящий старый источник | [Predecessor live source](superpowers/reports/2026-11-02-replica-predecessor-live-source.json):498 файлов исторического образа сверены с Git, выполнена настоящая rpl04 миграция, отдельные PVC/scoped SQL/S3,2/2/2 без рестартов, shared session и2 DOCX upload→publish→search→download SHA. Это подготовка источника, не завершённое обновление схемы или восстановление |
+| Независимая копия старого источника | [Predecessor backup](superpowers/reports/2026-11-02-replica-predecessor-backup.json): настоящий PostgreSQL snapshot/native dump, Qdrant snapshot и10 blobs скопированы на отдельный ПК, все12 зашифрованных объектов проверены. Источник затем полностью отключён с сохранением PVC; восстановление и Kubernetes schema update ещё не выполнены |
+| Проверка экспортёра и source-off | [Export validation](superpowers/reports/2026-11-02-replica-predecessor-export-validation.json):109 Windows passes и157 Linux passes без skips,8 native PG cases; архив повторно аутентифицирован после физического отключения источника. Это проверка копии, не её восстановления |
 
 ## Условия окончательной приёмки
 

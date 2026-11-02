@@ -84,7 +84,10 @@ Alembic-цепочка до `rpl04_runtime_identity`. В новом namespace с
 проверены scoped SQL/S3,2/2/2 Ready без рестартов, общая сессия на двух API и
 upload→publish→search→download SHA для2 DOCX без problem-кодов.
 [Старый источник](../reports/2026-11-02-replica-predecessor-live-source.json).
-Это подготовленный живой источник; его независимая provider-copy,
+Из этого источника фактически получена независимая зашифрованная копия:
+PostgreSQL/Qdrant/10 blobs,12 объектов архива,2 документа/369 заданий.
+[Копия rpl04](../reports/2026-11-02-replica-predecessor-backup.json).
+После проверки копии источник полностью отключён с сохранением3 PVC;
 source-off restore и переход Kubernetes на rpl05 ещё не выполнены.
 CT102 остановлен; рабочий корпус и сервисы заказчика не используются.
 Одноузловой kind не подтверждает устойчивость к потере физического узла;

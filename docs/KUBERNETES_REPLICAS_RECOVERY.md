@@ -390,13 +390,58 @@ epoch2, revokes source sessions/login flows, holds old pending audit deliveries,
 and records the restore audit atomically. Same-operation retries preserve the
 identity and verify the restored counts. Failure leaves the target stopped.
 
-These are protocol/SQL building blocks, with
+The protocol/SQL building blocks have
 [focused evidence](superpowers/reports/2026-11-02-replica-predecessor-protocol.json).
-The existing modern backup command continues to require rpl05; these helpers do
-not yet supply a complete predecessor provider-export/import CLI or Kubernetes
-rollout. An actual old-image/source-off predecessor copy and recovery, followed
-by the Kubernetes schema update, remain mandatory O2 checks. Existing modern
-archives and their saved-image standalone recovery path remain supported.
+The existing modern backup command continues to require rpl05. The separate
+owned-kind predecessor exporter is available through:
+
+```text
+python scripts/kubernetes/replica_predecessor_backup.py --help
+```
+
+Its required inputs are `--config`, `--namespace-uid`, `--fingerprint`,
+`--evidence-file`, `--archive`, `--key-file`, `--pg-dump`, `--report` and
+`--operation-journal`. The protected configuration selects only the existing
+synthetic kind lab, dedicated PostgreSQL17/Qdrant/S3 scopes and loopback TLS
+transports. The journal must be new and in the protected CA/config directory;
+the archive must be new in the user-approved independent PC destination, with
+its32-byte key stored separately. The report goes in the repository reports
+directory. The exact old runtime must have immutable settings and a quiescent
+2/2/2 topology before the command installs the owned audited S4 token and
+normally stops all four application/model deployments.
+
+The exporter retains the PostgreSQL advisory-lock connection and an actual
+exported repeatable-read snapshot transaction throughout copying. Native
+`pg_dump` reads that snapshot through the selected PostgreSQL Pod's local Unix
+socket; Qdrant supplies a real snapshot and each accepted S3 object must match
+its size/SHA. Before every publication boundary the guard rechecks current
+S4 token/audit/old identity, the original transaction/driver/backend, and fresh
+Kubernetes/node/CRI stop facts. Reusing the same connection/PID after a commit
+or rollback does not preserve snapshot authority. All bytes enter an encrypted
+create-only archive, followed by independent cold authentication of every object.
+
+Success deliberately leaves the old source stopped and S4-held; it does not
+release, change schema or start jobs. Failure also attempts no release. An
+existing journal prohibits repeating the command: observe the same operation
+and process first. A lost snapshot cannot be recovered by reopening a database
+connection, deleting the journal or clearing the token. Provider error details
+stay in the protected config directory; console output uses fixed classes and
+source locations. A failed PG port-forward can require an exact owned transport
+replacement between operations, after proving the old process terminal and
+that no retained SQL operator/snapshot exists.
+
+The actual old-image run produced an
+[independent predecessor archive](superpowers/reports/2026-11-02-replica-predecessor-backup.json)
+on the separate PC:2 documents,2 concepts,2 chunks,369 work rows,6 audit events,
+10 blobs and12 verified encrypted objects. A separate guarded lab action then
+normally stopped its three storage StatefulSets, verified all seven controllers
+at0/no live source CRI processes on the same Ready node, and retained all three
+PVCs. Provider import into a new target, authenticated forward migration/new
+identity and the Kubernetes schema-update rollout remain mandatory O2 checks.
+The [export/source-off validation](superpowers/reports/2026-11-02-replica-predecessor-export-validation.json)
+records the separate109-pass Windows and157-pass Linux cohorts, including8
+native PostgreSQL cases and post-source-off cold archive verification.
+Existing modern archives and their saved-image recovery path remain supported.
 
 ### Explicit offline CLI
 

@@ -209,8 +209,19 @@ the verified build fingerprint and native digest mapping, not that hint.
 The existing restored22-document target returned to2/2/2 with9 canonical table
 hashes and all3 PVC bindings unchanged after temporary idle build scaling.
 [Live source evidence](../reports/2026-11-02-replica-predecessor-live-source.json).
-No predecessor provider archive, source-off restore or schema-changing Kubernetes
-rollout is claimed; those remain the next O2 checks. Production scheduleOFF.
+The subsequent explicit predecessor exporter produced a genuine independent
+encrypted PostgreSQL/Qdrant/S3 archive:2 documents,2 concepts,2 chunks,369 work
+rows,6 audit events and10 blobs; all12 encrypted objects cold-verified. Before
+each archive publication it rechecks the retained SQL operator/S4 audit/token,
+original snapshot transaction/driver/backend and fresh Kubernetes/node/CRI stop.
+The source stayed held, then its3 storage controllers were normally stopped;
+all7 controllers now have0 replicas, no source CRI process remains,3 PVCs retained.
+[Actual archive](../reports/2026-11-02-replica-predecessor-backup.json).
+The [validation receipt](../reports/2026-11-02-replica-predecessor-export-validation.json)
+pins the actual source overlay hashes,109 Windows passes,157 Linux passes with
+8 native PostgreSQL cases and a fresh12-object cold check after source shutdown.
+Source-off restoration and the schema-changing Kubernetes rollout remain open.
+Production scheduleOFF.
 
 **Interfaces:** `MaintenanceState` в PostgreSQL: installation_id, epoch bigint,
 enabled, operation_id, owner_id, started_at. `enter_maintenance(session, operation_id:
