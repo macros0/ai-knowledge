@@ -276,16 +276,24 @@ else:
         if result != {"busy": True}:
             raise ValueError("Independent API process over-admitted occupied model capacity")
         busy.append(True)
-    # Admission refusal must not have sent another request to the provider.
+    # The probes above only acquire/refuse a SQL budget; they never call the
+    # provider. Workers may legitimately complete one RPC and start the next
+    # while remote Python processes import their dependencies. Lifetime peak
+    # concurrency, not an unchanged cumulative start counter, proves the limit.
     occupied = probe.state(ids)
-    if occupied["provider"]["started"] != saturated["provider"]["started"] or occupied["provider"]["active"] != 1:
-        raise ValueError("Capacity refusal overlapped a different provider phase")
+    before, after = saturated["provider"], occupied["provider"]
+    if (after["peak_active"] != 1 or after["started"] < before["started"]
+            or after["finished"] < before["finished"]
+            or after["started"] - after["finished"] != after["active"]):
+        raise ValueError("Provider counters changed identity or lost concurrency evidence")
     finished = probe.wait(lambda s: all(s["documents"][doc_id]["status"] == "done" for doc_id in ids)
         and s["model_owners"] == s["provider"]["active"] == 0, doc_ids=ids, seconds=300)
     verify_corpus_search_download(client, documents)
     return {"running_documents_when_saturated": 2, "api_processes_rejected_without_provider_call": len(busy),
         "global_limit": 1, "peak_provider_calls": finished["provider"]["peak_active"], "completed_documents": 2,
         "download_sha256_matches": 2, "search_matches": 2, "seconds": time.monotonic() - started,
+        "provider_calls_started_during_admission_observation": after["started"] - before["started"],
+        "provider_calls_active_after_admission": after["active"],
         "document_ids": ids}
 
 

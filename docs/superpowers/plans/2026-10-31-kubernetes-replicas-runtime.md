@@ -545,3 +545,14 @@ reading is now streamed with a100000-row/table and64MiB total content budget,
 unchanged canonical digests, explicit cursor closing and no omitted/deleted rows.
 A native read-only snapshot counted every row. The same held operation is being
 completed idempotently; its parent remains unqualified after recipe changes.
+
+Capacity observation follow-up (2026-11-02): the seventh common execution
+stopped at active capacity after four completed stages. A separate native trial
+observed both exact API refusals, provider lifetime peak1, matching search/source
+hashes, and final quiescence. Remote imports took about10s per API process;
+unchanged cumulative RPC counters across that observation window are not a
+valid requirement because workers can legitimately finish and start another
+RPC. Regressions reproduce this legal handoff and complete-before-observation
+case while preserving refusal, peak-concurrency and counter-reset failures.
+The corrected oracle does not qualify the failed parent: another current-code
+22-stage execution remains required.

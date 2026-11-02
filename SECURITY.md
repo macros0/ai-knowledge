@@ -2533,3 +2533,11 @@ budgets cannot enlarge either limit. Budget refusal closes the cursor and keeps
 maintenance held. No row filtering, sampling or deletion is used to fit a corpus.
 The embedded release Job uses the same self-contained snapshot function before
 release, including recovery resumed after an already-audited slot reconciliation.
+
+The capacity acceptance oracle requires actual saturation and exact refusals
+from both API processes without a provider call. Normal worker RPC completion
+and subsequent admission may occur while the remote probes import; cumulative
+start counters need not stay fixed. Lifetime provider peak remains bounded by
+one, counter regression/reset is refused, both documents must complete with
+verified search/download, and uncertain reservations are never cleared by the
+probe. A missing refusal still leaves the trial unqualified.
