@@ -2573,3 +2573,15 @@ and three PVCs were preserved. One failed read-only diagnostic Job is retained
 and excluded from the drain view only after exact UID/spec/terminal-process
 validation. Schema-changing adoption, key recovery, alert delivery, other
 providers and physical failure domains still require their own qualification.
+
+Offline rpl04-to-rpl05 schema adoption can claim only the migration-created
+epoch1/zero-operation/schema-migration fence under an owned operator connection.
+The exact installed schema, original identity, unchanged storage and explicit
+writer-stop receipts/counts are required. Running or leased work, running chats,
+owned/unreconciled model slots and unknown storage-migration history fail closed.
+The new epoch2 remains held; no owner is cleared and no workload is started.
+Source/transition/owner/receipt hashes bind repeat calls to the same transactional
+maintenance audit, including durable-outbox-only mode. Identity replacement and
+the claim roll back together if auditing fails. This database primitive is not
+an application bypass, automatic release, compact/legacy-corpus adoption or
+qualification of a complete Kubernetes schema-update procedure.

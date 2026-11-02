@@ -159,6 +159,19 @@ stay open. It does not complete O1 or certify production disk quotas/HA.
 `backend/app/services/generation_store.py`, `backend/app/services/audit_outbox.py`,
 `deploy/helm/ai-knowledge-storage/templates/backup.yaml` (создать), `SECURITY.md`.
 
+O2 schema-adoption SQL foundation (2026-11-02): the specific populated
+rpl04-to-rpl05 transition now has an owned offline adoption step. It claims only
+the exact migration-created fence, checks original identity/storage and explicit
+writer-stop receipts, refuses running/uncertain work/chat/model/storage state,
+and atomically rebinds/audits while retaining maintenance at epoch2. Source and
+receipt hashes bind retries across DB and/or durable outbox audit modes. The
+actual PostgreSQL whole migration chain is exercised before populating the old
+installation and applying the real rpl05 change, including failure rollback and
+explicit release. This does not complete the Kubernetes schema-update
+coordinator, compact/NULL-generation corpus adoption or other O2 gates. See
+[SQL transition evidence](../reports/2026-11-02-replica-schema-adoption.json) and
+[procedure boundary](../../KUBERNETES_REPLICAS_RECOVERY.md#database-adoption-after-the-rpl04--rpl05-schema-change).
+
 **Interfaces:** `MaintenanceState` в PostgreSQL: installation_id, epoch bigint,
 enabled, operation_id, owner_id, started_at. `enter_maintenance(session, operation_id:
 str) -> int` increments epoch; `assert_writes_allowed(session, expected_epoch: int)

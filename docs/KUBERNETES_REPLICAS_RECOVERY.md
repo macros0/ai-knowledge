@@ -300,6 +300,54 @@ schemas, adopt unknown data or activate workloads. Physical proof collection,
 live image rollout and in-flight provider-loss rehearsal remain pending; these
 unit checks do not qualify a physical provider.
 
+## Database adoption after the rpl04 → rpl05 schema change
+
+`app.deployment.runtime_upgrade.adopt_schema_upgrade` provides the offline SQL
+step for this specific existing-installation transition. It is distinct from the
+same-schema `rebind_runtime` step and is never called at application startup.
+The actual Alembic migration must have installed `rpl05_maintenance_epoch`,
+retired the old schema identity, and left its exact initial fence: epoch1,
+operation `00000000000000000000000000000000`, owner `schema-migration`.
+Other schema transitions require their own implementation and evidence.
+
+Before calling it, the offline coordinator must authenticate the independent
+backup, preserve the saved source identity, verify normal stops/drains for every
+writer, verify the retained stores/corpus and supply explicit intended role
+counts. Use one `MaintenanceOperator` with the same operation/owner/settings and
+call inside its transaction:
+
+```python
+document = adopt_schema_upgrade(
+    session, settings, saved_source_identity,
+    operation_id=operation_id,
+    previous_revision="rpl04_runtime_identity",
+    intended_counts={"frontend": 2, "api": 2, "worker": 2},
+    writer_receipts=verified_writer_receipts,
+)
+```
+
+The transaction checks the exact installed schema, source identity/storage and
+the migration-created fence. Running/leased work, running chats, owned or
+unreconciled model slots and unknown storage-migration history refuse adoption.
+It atomically claims epoch2 for this operator, retains document/queue/auth rows,
+rebinds the runtime fingerprint, and records maintenance/runtime audit events.
+The maintenance event's `replica_schema_upgrade` target contains a hash of the
+source identity, transition, operation/owner, counts and stop receipts. Retries
+must match that proof and its committed audit in the DB and/or durable outbox;
+they do not create a second event or advance the epoch again. Audit failure
+rolls back both the claim and the new identity.
+
+The returned document is still held. Publish it only to the stopped matching
+roles, verify provider/corpus/legacy-generation invariants, then use a separate
+explicit release. This primitive supplies no stop evidence, clears no uncertain
+owner and starts no workload. It does not adopt a compact installation or
+legacy documents with missing generation identities. A downgrade after installed
+maintenance history is refused; use the coherent verified recovery procedure.
+The SQL transition is covered by its
+[schema-adoption receipt](superpowers/reports/2026-11-02-replica-schema-adoption.json).
+The complete Kubernetes schema-update coordinator and other legacy-corpus
+adoption recipes remain separate O2 gates.
+
 ## Owned live same-schema image rollout (2026-11-01)
 
 `scripts/kubernetes/replica_upgrade.py` coordinates the owned-kind lab recipe.
