@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "scope": "owned-basic-managed-s3-synthetic",
+  "base_revision": "56cbe85372e19e0211259d9e88b50ba9400f5cf6",
+  "status": "idle_probe_fix_verified",
+  "source_sha256": {
+    "backend/test_scripts/replica_runtime_acceptance.py": "a81bc85e93b724524fb41e8c2a9319f505c63111ff42a8ecfef22f5e7f6fcdb8",
+    "backend/tests/test_replica_runtime_acceptance.py": "df18a6efb865282c5a9bbd35a06c07f7c873b9cfd0574bd8e00e4f43b0b68988"
+  },
+  "regression": {
+    "red": "unbound remote SQL process refused before any mutation",
+    "green": "actual embedded probe binds its process identity before normal session; occupied provider still forbids mutation"
+  },
+  "windows": {
+    "passed": 81,
+    "skipped": 0,
+    "log_sha256": "5180051c40a9a0eecc6327cd4a668026c17ef88e22ecf4a8739c862e10e9e4fd"
+  },
+  "linux": {
+    "container_id": "719a776fa554e50fbdc91c2000ac1596c5d28d62f74311d494628305881304d5",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T04:41:05.848322751Z",
+    "FinishedAt": "2026-11-02T04:43:20.539637977Z",
+    "junit": {
+      "tests": 81,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "363061d7ac0d29fbf1401ca0aedcd3f6cfd078a60ff9a8d729ca291c87c4e891"
+    },
+    "failed_cases": []
+  },
+  "root_gate": {
+    "passed": true,
+    "audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff_passed": true,
+    "log_sha256": "79ef93fd8a700021f5051837b769845aeb4da5fc8eed375b742a43af7558942c"
+  },
+  "native_read_only_probe": {
+    "running_documents": 0,
+    "owned_provider_slots": 0,
+    "intended_replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2,
+      "model_stub": 1
+    }
+  },
+  "failed_run": {
+    "execution_id": "c0dca8ab51424b7686f59c20eb3149c7",
+    "completed_stages": [
+      "preflight",
+      "smoke"
+    ],
+    "failed_stage": "idle",
+    "workload_mutation_before_failure": false,
+    "qualified": false,
+    "retained_without_rewriting": true
+  },
+  "next": "new parent execution and all 22 stages under corrected recipe digest",
+  "runtime_qualified": false,
+  "full_ci_passed": false,
+  "production_backup_schedule_enabled": false
+}

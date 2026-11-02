@@ -503,3 +503,11 @@ remain pending even after runtime completion. Current native preflight and smoke
 passed in a partial prototype; after report-protocol changes a fresh final-code
 run was started instead of rewriting the older journal. This implements the
 runner but does not yet close current-version fault execution or all R5 gates.
+
+Current-run idle follow-up (2026-11-02): the first SQL admission probe correctly
+refused an unbound subprocess before any workload mutation. The probe now binds
+its own runtime identity/maintenance epoch before opening a normal session;
+operator bypass remains forbidden. An executable remote-source regression and
+the runner/safety cohorts passed 81 cases on both Windows and Linux. The failed
+parent remains unqualified and unchanged; corrected recipe bytes require a new
+execution and all 22 stages. See the idle-probe-binding receipt for evidence.

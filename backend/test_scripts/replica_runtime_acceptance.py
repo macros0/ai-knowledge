@@ -298,8 +298,11 @@ def idle_rollout(kube, value):
         validate_inventory(objects, value)
         source = '''import json
 from sqlalchemy import select,func
+from app.config import get_settings
+from app.deployment.runtime_identity import enforce_runtime_identity
 from app.db.session import session_scope
 from app.db.models import WorkItem,ReplicaCapacitySlot
+enforce_runtime_identity(get_settings())
 with session_scope() as s:
  print(json.dumps({'documents':s.scalar(select(func.count()).select_from(WorkItem).where(WorkItem.kind=='document',WorkItem.status=='running')),'providers':s.scalar(select(func.count()).select_from(ReplicaCapacitySlot).where(ReplicaCapacitySlot.resource=='llm',ReplicaCapacitySlot.owner_id.is_not(None)))}))
 '''

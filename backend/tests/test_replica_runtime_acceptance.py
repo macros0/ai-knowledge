@@ -154,6 +154,41 @@ def test_uncertain_provider_slot_prevents_idle_scale_or_deletion():
         idle_rollout(Busy(), live_inputs())
 
 
+def test_idle_remote_sql_binds_its_process_identity_before_opening_a_session(monkeypatch):
+    from contextlib import contextmanager, redirect_stdout
+    from io import StringIO
+    import json
+    from app import config
+    from app.db import session as db_session
+    from app.deployment import runtime_identity
+    from test_scripts.replica_runtime_acceptance import idle_rollout
+    settings, bound = object(), []
+    monkeypatch.setattr(config, "get_settings", lambda: settings)
+    def bind(value):
+        assert value is settings
+        bound.append(True)
+    monkeypatch.setattr(runtime_identity, "enforce_runtime_identity", bind)
+    @contextmanager
+    def guarded_session():
+        if not bound: raise ValueError("Remote process identity was not bound")
+        class Session:
+            answers = iter((0, 1))
+            def scalar(self, _statement): return next(self.answers)
+        yield Session()
+    monkeypatch.setattr(db_session, "session_scope", guarded_session)
+    class Busy:
+        def scope(self): pass
+        def inventory(self): return inventory()
+        def python(self, _pod, source):
+            output = StringIO()
+            with redirect_stdout(output): exec(source, {})
+            return json.loads(output.getvalue())
+        def run(self, *_args): pytest.fail("No mutation is allowed with an uncertain provider slot")
+    with pytest.raises(ValueError, match="provider"):
+        idle_rollout(Busy(), live_inputs())
+    assert bound == [True]
+
+
 def test_missing_owned_storage_cannot_be_reported_as_network_denial():
     from test_scripts.replica_runtime_acceptance import storage_network_boundary
 

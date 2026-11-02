@@ -2500,3 +2500,8 @@ are introduced. Native progress goes to stderr; stdout contains the sole common
 report, so a member PASS cannot be mistaken for completed-run qualification.
 Private failure evidence is retained for inspection, while public output contains
 allowlisted checks, timings and hashes rather than raw inputs/errors/documents.
+
+Runtime idle admission follow-up: probes now explicitly bind their own process
+runtime identity and maintenance epoch before opening a normal read session.
+An unbound process remains refused; read-only admission never uses the offline
+operator bypass to hide missing runtime initialization.
