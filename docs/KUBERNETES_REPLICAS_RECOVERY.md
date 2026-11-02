@@ -133,6 +133,40 @@ does not create a database, restore a collection, or release workloads.
 The user selected this physically separate Windows PC for the owned lab copy.
 Production scheduling remains explicitly disabled.
 
+## Training key recovery on the separate PC
+
+The user selected a separate protected directory on this PC for the training
+backup key: `tests/tmp/replica-key-vault`. The directory is Git-ignored, disables
+inherited ACL access, and permits only the current user, SYSTEM and Administrators.
+Its `training-format3.key` is a create-only32-byte backup of the existing training
+archive key; the primary file remains unchanged. Never print, commit or send key
+contents, and do not reuse this archive key for notification signing.
+
+The [actual key-recovery receipt](superpowers/reports/2026-11-02-replica-backup-key-recovery.json)
+records a separate Python process using only that vault copy. Its audited-open
+negative control refused the original key directory, then all12 authenticated
+objects of the real rpl04 backup decoded to count/hash sinks (1,260,646 bytes).
+No plaintext files or key values/digests were emitted; a wrong key was refused.
+The original source remained physically off with PVCs retained. This is a Python
+file-access guard, not OS sandbox isolation. A second full provider restoration
+with the copied key was not repeated; the same archive's actual restoration is
+recorded separately. The vault is a different directory on the archive PC, not
+an independent physical key-escrow device. No production installation exists.
+
+The existing health CLI accepts the separate vault key without any source service:
+
+```powershell
+backend/.venv/Scripts/python.exe scripts/kubernetes/replica_backup_health.py `
+  --archive tests/tmp/replica-recovery-backups/predecessor-r4o2s20261102-format3 `
+  --key-file tests/tmp/replica-key-vault/training-format3.key `
+  --installation-id 77777777777777777777777777777777 `
+  --destination-store-id separate-pc-training-backup
+```
+
+User also explicitly approved a local notification receiver on this PC. Its
+implementation/drill is tracked in the [local-alert plan](superpowers/plans/2026-11-02-replica-local-backup-alerts.md).
+Production scheduling remains disabled; this does not select external recipients.
+
 ## Local backup health and attempt status
 
 `scripts/kubernetes/replica_backup_health.py` performs a read-only cold check of

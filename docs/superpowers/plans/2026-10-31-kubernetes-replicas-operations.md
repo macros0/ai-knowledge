@@ -337,6 +337,20 @@ NULL-generation adoption, retained-namespace in-place update, other profiles,
 key recovery/delivered backup alerts and final whole-version CI remain unproven.
 Production backup scheduleOFF.
 
+O2 training key recovery,2026-11-02: user selected a protected key directory on
+the current independent PC and confirmed no production installation. Created
+Git-ignored vault with inherited access disabled/current-user+SYSTEM+Admin3 rules
+and a create-only32-byte training key copy; the original key is untouched. A
+separate-I Python worker audited/refused original-key-directory opens and decoded
+all12 real rpl04 archive objects/1,260,646 bytes into sinks using only the vault
+copy. Wrong-key control failed, primary reads0, plaintext files0. Source remained
+off/3 PVCs retained. [Key evidence](../reports/2026-11-02-replica-backup-key-recovery.json).
+This is directory-level recovery, not a different physical escrow device or OS
+sandbox; full provider restoration was already tested separately with the same
+archive and was not repeated. User also explicitly approved a local PC alert
+receiver. Implement/drill next via
+`2026-11-02-replica-local-backup-alerts.md`; no external recipient/schedule selected.
+
 ## Task O3: fault matrix, release gates и документация
 
 O3 artifact-CI milestone,2026-11-02: fresh full doc-parser557/557 tests with0 skips
