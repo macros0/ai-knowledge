@@ -352,8 +352,24 @@ room, then original2/2/2 and9-table/PVC/identity/epoch checks were restored.
 The public `deploy/kubernetes/replicas/support-matrix.json` lists all7 planned
 profiles and pins the limited managed/S3 binding to actual topology/providers/
 versions/runtime identity/evidence SHA. No profile has certification; automatic
-certification enforcement/negative tests and the remaining full O3 gates are open.
+receipt-based certification enforcement and the remaining full O3 gates are open.
 See `../../KUBERNETES_REPLICAS_ACCEPTANCE.md`.
+
+O3 policy foundation,2026-11-02: strict distributed S3/RWX binding/evidence models,
+fixed required checks, exact kind/binding/artifact metadata, verified live restore,
+per-component external ownership and resilient physical-domain/fault conditions
+are implemented in `backend/test_scripts/replica_acceptance_report.py`.
+Duplicate/unknown checks, extra fields and malformed hashes fail closed without
+echoing raw inputs. Profile topology/provider/version/image/config identity/model
+changes invalidate the binding; stale policy/class/hash certificates are refused.
+Kind cannot qualify physical resilience. TDD33 expected missing-module failures,
+then47 Windows passes including14 unchanged runner-safety cases; root audit0/
+frontend756+1skip/ESLint/Ruff. No Linux cohort for this new module is claimed.
+See `../reports/2026-11-02-replica-certification-policy.json`.
+This is a pure policy over trusted already-verified harness metadata, not raw
+receipt authentication or deployment authority. Bounded file-backed provenance/
+SHA/format verification, runner integration and compact/frontend-split coverage
+remain open. The actual inventory issues0 certificates and stays incomplete.
 
 O2 selected-runtime backup follow-up (2026-11-01): backup now resolves the common
 immutable runtime from actual API/worker references and verifies live settings/

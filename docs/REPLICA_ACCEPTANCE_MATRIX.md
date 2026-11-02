@@ -14,7 +14,7 @@
 | Runtime R5 | Общий текущий22-stage run прошёл без failures/required skips;80 прежних документов сохранены, финальные2 frontend +2 API +2 workers проверены | Другие providers, реальные модели/IdP и физические домены отказа требуют собственных gates |
 | Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, смена CA, CNI и отдельный S3 ENOSPC contract проверены | RWX, external/mixed end-to-end; заполнение storage через приложение; независимые failure domains |
 | Recovery O2 | Независимая20-document копия восстановлена при выключенном источнике; отдельно старая rpl04 копия прошла фактический rpl05 replacement recovery с новой identity, отзывом сессий и функциональной проверкой2/2/2. Журнал попыток и cold-check реализованы | Оставшиеся adoption/update recipes, key recovery, доставка alerts и остальные provider recipes |
-| Release O3 | Обязательные project checks и профильные Windows/Linux cohorts; свежие557 parser passes и standalone frontend build. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Полный backend CI итоговой версии, certification validator, общая fault/profile matrix, завершение runbooks и свежее ревью всей ветки |
+| Release O3 | Обязательные project checks и профильные Windows/Linux cohorts; свежие557 parser passes и standalone frontend build; policy validator проверен47 тестами. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Полный backend CI итоговой версии, доверенная загрузка receipts/интеграция policy с runner, общая fault/profile matrix, завершение runbooks и свежее ревью всей ветки |
 
 ## Доказательства учебного профиля
 

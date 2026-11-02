@@ -2658,3 +2658,16 @@ current identity/storage; it grants no old-image startup bypass. Retained source
 storage is not modified or deleted. The qualified training result covers only
 new-target recovery, not in-place/compact adoption, other providers, full current
 fault qualification or physical HA.
+
+The qualification policy module consumes only strict bounded public binding/check
+metadata from a trusted already-verified harness. Its fixed required check set
+cannot be shortened by a caller; missing/failed/pending/skipped, foreign binding,
+incorrect evidence kind or unverified restore prohibit qualification. Per-component
+external ownership requires its own live check, and kind cannot certify physical
+resilience. No input URLs, provider credentials or arbitrary output fields are
+accepted. Validation errors do not echo Pydantic input values. This policy reads
+no receipts and provides no signature/issuer authentication: SHA-shaped metadata
+alone proves no acceptance occurred, and `certificate_applies` is only a stale
+binding/policy check. File-backed receipt verification and runner integration
+remain separate gates. Repository inventory certificates remain null; this code
+does not authorize production deployment, notifications, scheduling or activation.

@@ -14,14 +14,38 @@ ownership/recipe/version/image каждого storage-компонента, фа
 image IDs, common identity и model/auth режимы. `binding_sha256` вычислен как
 SHA-256 UTF-8 JSON объекта `binding` с `sort_keys=True,separators=(',',':')`.
 Изменение любого из этих входов требует новой приёмки соответствующего профиля.
-Матрица пока является инвентарём доказательств: автоматический certification
-validator O3 и его отрицательные проверки ещё не завершены. Во всех записях
+Матрица пока является инвентарём доказательств: policy validator O3 реализован,
+но проверка доверенных файлов receipts и интеграция с runner ещё не завершены. Во всех записях
 `certification=null`, `qualification_complete=false`, release остаётся incomplete.
 
 Учебная topology — один kind node на одной VM, local-path/RWO. Она допускает
 проверку взаимодействия реплик и восстановления в новые PVC, но не подтверждает
 переживание потери физического хоста/диска. Simulation auth, stub LLM и fake
 embeddings не подтверждают реальные Gateway/IdP/model providers заказчика.
+
+## Policy validator и доверие к evidence
+
+`backend/test_scripts/replica_acceptance_report.py` проверяет строгую привязку
+distributed S3/RWX-профиля к topology, ownership/recipe/version/image и common
+runtime identity. Фиксированный набор обязательных checks нельзя сократить
+входным списком: missing/pending/skipped/failed или несовпадающие kind/binding
+исключают сертификат. Restore дополнительно требует `restore_verified=true`
+и live evidence; unit/integration/CI его не заменяют. Дубли checks, неизвестные
+поля и неверные hashes отвергаются без вывода исходных секретных значений.
+Для external ownership проверяется каждый выбранный внешний компонент;
+resilient требует независимых доменов и live node/storage/domain-restore checks.
+Kind не получает физический resilient-сертификат даже при заявленных нескольких
+узлах. [Policy tests](superpowers/reports/2026-11-02-replica-certification-policy.json):
+33 новых случая и14 прежних runner-safety tests прошли на Windows.
+
+Это policy для уже проверенных доверенным harness metadata. Она не читает и
+не аутентифицирует сырые provider receipts: строка SHA сама по себе не доказывает
+реальность испытания. `certificate_applies` проверяет только актуальность
+binding/policy и форму сертификата, а не доверие к его издателю. Загрузка
+ограниченных файлов, проверка их действительных SHA/формата/происхождения и
+интеграция с общим runner ещё открыты. Ни выдача production-разрешений, ни
+автоматическое изменение инвентаря, ни сетевые действия из этого модуля не
+выполняются. Фактическая матрица сохраняет `certification=null` для всех профилей.
 
 ## Подтверждённые проверки текущих источников
 
@@ -53,7 +77,7 @@ embeddings не подтверждают реальные Gateway/IdP/model prov
 прямым `node node_modules/next/dist/bin/next build`. Разрешённый `npm audit`
 требует доступного registry; ошибка сети не считается успешной проверкой.
 
-`backend/test_scripts/run_replica_acceptance.py --suite all --manifest PATH`
+`python backend/test_scripts/run_replica_acceptance.py --suite all --manifest PATH`
 без live inputs проверяет только синтаксическую изоляцию и возвращает failure
 при pending gates. Для реальных runtime действий требуются явные `--live`,
 разрешённый namespace/context и protected manifest; дополнительные fault stages
@@ -63,8 +87,8 @@ checks должны относиться к одной принятой конф
 
 Открыты фактические RWX/external/mixed проверки, application publication при
 заполнении storage, остальные adoption/recovery recipes, восстановление ключа,
-доставка backup error/age alerts, полный итоговый backend CI, certification
-validator и свежее ревью всей ветки. Для resilient дополнительно обязательны
+доставка backup error/age alerts, полный итоговый backend CI, доверенная загрузка
+receipts/интеграция policy с runner и свежее ревью всей ветки. Для resilient дополнительно обязательны
 независимые физические домены, выбранные storage recipes и реальные испытания
 потери узла/хранилища. Production backup schedule остаётся выключенным по
 решению пользователя; его включение не является автоматическим итогом CI.

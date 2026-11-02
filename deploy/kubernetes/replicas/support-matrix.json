@@ -8,7 +8,7 @@
     "resilient-certified"
   ],
   "purpose": "public evidence inventory; not a provider capability or release certificate",
-  "qualification_enforcement": "pending O3 certification validator; existing acceptance runner remains fail-closed",
+  "qualification_enforcement": "strict profile/evidence policy implemented; trusted file-backed receipt ingestion and runner integration pending; existing runner remains fail-closed",
   "binding_invalidation": "Any topology, component ownership, recipe/version/image, runtime/config/identity or model/auth change requires matching new acceptance evidence.",
   "profiles": [
     {

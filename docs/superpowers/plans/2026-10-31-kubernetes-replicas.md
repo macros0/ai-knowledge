@@ -55,7 +55,9 @@ standalone frontend production build с19 routes и проверенными hea
 revision stamp. [Artifact CI](../reports/2026-11-02-replica-current-artifact-ci.json).
 Созданы [машиночитаемая матрица семи профилей](../../../deploy/kubernetes/replicas/support-matrix.json)
 и [acceptance runbook](../../KUBERNETES_REPLICAS_ACCEPTANCE.md); во всех профилях
-certification=null, автоматический certification validator ещё открыт.
+certification=null. Чистая policy уже проверена47 тестами; доверенная загрузка
+receipts и интеграция certification с runner ещё открыты.
+[Policy validation](../reports/2026-11-02-replica-certification-policy.json).
 
 Полный backend CI итоговой версии ещё не подтверждён. Прогон базы `e3c7025`
 завершён:6093 случая,5910 passed,183 skipped,0 failures/errors; оба shard имеют
