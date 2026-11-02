@@ -56,10 +56,15 @@ Production-разрешения, автоматическая смена invento
 
 [Локальная проверка verifier/runner](superpowers/reports/2026-11-02-replica-trusted-evidence.json):
 186 passed,1 POSIX-only skip, включая прежние runtime-контракты; project check
-прошёл. Linux-прогон не состоялся: автоматическая проверка разрешений отклонила
-передачу исходников на учебную VM до явного разрешения пользователя. Исходники
-не переданы, контейнер CI не запущен; учебные реплики возвращены к2/2/2 с
-проверкой9 canonical tables/PVC/identity. Linux gate остаётся открытым.
+прошёл. После явного разрешения пользователя выполнен
+[Linux follow-up](superpowers/reports/2026-11-02-replica-evidence-alerts-linux.json):
+295 passed,0 skips/errors/failures, включая FIFO и symlink. Все2395 исходных файлов
+снимка остались неизменными; backend/parser/operator code совпадает с788a99b.
+Первый read-only checkout дал295 setup errors на создании служебных каталогов;
+он сохранён отдельно. Успешный запуск использовал свежую writable-копию того же
+разрешённого архива при network-none/read-only rootfs/non-root. Реплики возвращены
+к2/2/2,9 canonical tables/PVC/identity сохранены. Это выбранные cohorts,
+не полный backend suite и не фактическая сертификация профиля.
 
 ## Подтверждённые проверки текущих источников
 

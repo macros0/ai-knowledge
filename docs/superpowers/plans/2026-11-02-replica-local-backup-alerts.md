@@ -81,3 +81,11 @@ in the ACK; no redirect/proxy, wrong receipt or unknown response means undeliver
 - [x] Verify inbox event IDs/content hashes, matching sender ACKs, no duplicate unchanged events, wrong-key rejection and original archive/key/source PVC preservation. Retain all private data locally; report only bounded IDs/codes/counts/SHA.
 - [x] Update the parent O2 plan/matrix with training-only scope; production scheduling and external monitoring remain disabled/unqualified.
 - [x] Commit implementation, tests and sanitized evidence; do not claim whole O2/O3 completion.
+
+Linux follow-up after user-approved source transfer: [295 passed,0 skips](../reports/2026-11-02-replica-evidence-alerts-linux.json)
+across notification, health, verifier/policy and runner cohorts. Native symlink
+and FIFO cases passed. The earlier Windows alert/health skip was a symlink
+permission restriction, not FIFO; historical report wording is corrected in the
+follow-up. The first Linux checkout failed at setup because it was read-only;
+its results remain retained, and the fresh writable isolated copy passed with
+unchanged sources. Full backend CI and actual provider qualification stay open.

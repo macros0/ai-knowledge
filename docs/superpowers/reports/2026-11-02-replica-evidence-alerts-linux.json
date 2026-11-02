@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "status": "linux-evidence-alerts-and-runner-contracts-passed",
+  "scope": "selected implementation and regression cohorts; not full backend CI or actual profile certification",
+  "current_equivalent_code_revision": "788a99b779ea1f31a669ef50684175b2309162ed",
+  "authorized_source_base": "1c52d26f9b41e4186f9d60690d6c296520c281a5",
+  "authorized_source_overlay_sha256": {
+    "backend/test_scripts/replica_evidence.py": "964f7a15c003e75437150f38061f6d53c8fae1297507a555ef287c6827d4a967",
+    "backend/test_scripts/run_replica_acceptance.py": "f0d054d0486f5476ac537f28d673a3681caa4d0512e7c257cd59a0328abc2010",
+    "backend/tests/replica_evidence_fixture.py": "bb5609ca0d303d8d36b95c4a5242b753afff80f0113fd71fca7bd1d90a1f8b03",
+    "backend/tests/test_replica_evidence.py": "1e4c156c1a018c7d3ede7b00d17b5ffa8aafe2e14401712d2f4481d937754d5b",
+    "backend/tests/test_replica_evidence_runner.py": "36528821ce25657558da103ed6d05f77023bfc1d1e702bfd3c5373c4ab93aeee"
+  },
+  "source_archive_sha256": "1008d13d488300e8f0f971e930fa7ed7decf93492872f7ec885acd7854285e4c",
+  "source_archive_bytes": 84715520,
+  "source_authorization": "explicit user approval for isolated CI on training VM103; no env/private keys",
+  "operation_id": "98d0d3eb48cd46509694c9fb35d61a2f",
+  "ci_image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+  "container_id": "71fcab9c025b328c7e5ee4fda554b632b031ee41eee4b5b03b4b2ed724a0c87d",
+  "started_at": "2026-11-02T20:04:19.936463039Z",
+  "finished_at": "2026-11-02T20:12:40.860222751Z",
+  "exit_code": 0,
+  "oom_killed": false,
+  "tests": 295,
+  "passed": 295,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "junit_sha256": "3213ac8434945dafc5e2d0e4f54a5ee0766f11b39e7e6bcf64e3068b0552d626",
+  "source_input_verification": {
+    "frozen_regular_inputs_unchanged": 2395,
+    "source_overlay_files": 5,
+    "code_tree_equivalent_to": "788a99b",
+    "native_fifo_cases": [
+      {
+        "module": "tests.test_replica_evidence",
+        "name": "test_fifo_refused_without_waiting_for_writer",
+        "passed": true,
+        "kind": "fifo"
+      },
+      {
+        "module": "tests.test_replica_backup_health",
+        "name": "test_attempt_link_is_refused_without_touching_target",
+        "passed": true,
+        "kind": "symlink"
+      }
+    ],
+    "unique_executed_cases": 295,
+    "no_environment_or_private_keys_transferred": true
+  },
+  "isolation": {
+    "network": "none",
+    "root_filesystem": "read-only",
+    "user": "1000:1000",
+    "capabilities": "ALL dropped",
+    "memory_mib": 1024,
+    "cpus": 1,
+    "source_checkout": "fresh isolated writable test copy",
+    "pvc_mounts": false,
+    "host_service_access": false,
+    "raw_artifacts_returned_to_pc": false
+  },
+  "retained_initial_setup_failure": {
+    "container_id": "ed38291b388971553783aee69e43810e8f7e11be049983f4b26fe49d8b7271ff",
+    "exit_code": 1,
+    "tests": 295,
+    "errors": 295,
+    "failures": 0,
+    "skipped": 0,
+    "junit_sha256": "3964c7fbed190b0d3f69ee6f0fb7a31e2d604bca5d52ab07fb614ef9f5077354",
+    "cause": "read-only source checkout prevented legacy get_settings().ensure_dirs during fixture setup",
+    "product_scenarios_executed": false,
+    "product_code_changed_to_fix": false,
+    "correction": "fresh local extraction of same authorized on-VM archive; writable CI checkout as prior full-suite substrate",
+    "additional_source_transfer": false,
+    "original_failed_artifacts_retained": true
+  },
+  "historical_skip_scope_correction": "Windows alert/health cohort skip was symlink creation permission, not FIFO; verifier cohort skip was FIFO. Both passed on Linux.",
+  "restoration": {
+    "frontend": 2,
+    "api": 2,
+    "worker": 2,
+    "canonical_tables_unchanged": 9,
+    "pvcs_preserved": true,
+    "runtime_identity_and_epoch_preserved": true,
+    "source_physically_off": true,
+    "source_pvcs_retained": 3,
+    "target_pvcs_retained": 3,
+    "local_notification_receiver_same_process": true,
+    "local_inbox_events": 4
+  },
+  "limitations": [
+    "selected cohorts only; full final backend suite remains pending",
+    "tests use synthetic issuers and provider substitutes; no actual profile certificate",
+    "no actual issuer custody or terminal producer rollout",
+    "single physical training domain; no resilient qualification"
+  ],
+  "production_backup_schedule": "disabled",
+  "actual_profile_certificates_issued": 0
+}

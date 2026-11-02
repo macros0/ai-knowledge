@@ -210,7 +210,11 @@ private inbox is `scripts/kubernetes/replica_backup_alert_receiver.py --key-file
 
 The receiver shares the archive PC's failure domain and is a training service,
 not independently available production monitoring. The107 Windows tests passed
-with one existing POSIX-only health skip; no Linux alert cohort has run.
+with one health symlink-permission skip. The
+[Linux follow-up](superpowers/reports/2026-11-02-replica-evidence-alerts-linux.json)
+passed295 notification, verifier/policy and runner cases without skips, including
+native symlink and FIFO checks. The original Windows alert receipt called its
+health skip FIFO; that historical label is corrected by this Linux receipt.
 Production scheduling remains disabled, and no external recipient was selected.
 See the [completed local-alert plan](superpowers/plans/2026-11-02-replica-local-backup-alerts.md).
 

@@ -418,6 +418,21 @@ and no CI container started. The temporary idle target reduction was fully
 recovered to2/2/2 with9 canonical tables/PVC/identity unchanged. This is an open
 Linux check, not a successful skip. Production scheduleOFF; all actual certificates null.
 
+O3 Linux follow-up after explicit user approval,2026-11-02: the exact authorized
+1c52d26 archive plus5 Windows-validated overlays (code-equivalent to788a99b)
+passed295 selected notification/health/verifier/policy/runner cases,0 failures,
+errors or skips.2395 frozen files remained unchanged; actual FIFO and symlink
+cases passed. Initial read-only source caused295 setup errors before scenarios;
+the failed run is retained and a new writable checkout of the same on-VM archive
+passed without product changes or additional source transfer. Root filesystem
+read-only/network none/non-root/1GiB/1CPU retained. Same capacity operation restored
+target2/2/2 with9 canonical tables/PVC/identity unchanged; source stayed off.
+[Linux evidence](../reports/2026-11-02-replica-evidence-alerts-linux.json).
+The Windows alert/health skip's earlier FIFO label was incorrect: it was symlink
+creation permission; the verifier's Windows skip was FIFO. Both are now tested.
+This resolves the selected Linux source-transfer/check gate; full final backend
+suite, real evidence producers, compact/frontend-split and remaining profiles stay open.
+
 O2 selected-runtime backup follow-up (2026-11-01): backup now resolves the common
 immutable runtime from actual API/worker references and verifies live settings/
 fingerprint before entry and in the frozen export. A real epoch7 copy of the

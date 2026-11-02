@@ -57,3 +57,12 @@ is pending. Do not bypass/retry that rejection. The temporary idle capacity
 reduction was completely reversed:2/2/2 restored,9 canonical tables/PVCs/identity
 unchanged. The added workflow step has not run and the POSIX test is an open
 Linux check. Production schedule remains OFF.
+
+Follow-up after explicit user approval: [Linux validation](../reports/2026-11-02-replica-evidence-alerts-linux.json)
+passed295 cases/0 skips/errors/failures, including native FIFO and symlink.
+The initial read-only source copy's295 setup errors are retained; a fresh
+writable test copy from the same authorized on-VM archive passed with no product
+code change or second transfer.2395 frozen files stayed unchanged, target2/2/2
+and9 canonical tables/PVCs/identity restored. Source-transfer authorization is
+resolved for this snapshot; the selected POSIX checks are now verified. Full
+backend CI, real issuers/producers and profile acceptance remain open.

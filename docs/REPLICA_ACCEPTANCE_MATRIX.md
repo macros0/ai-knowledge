@@ -60,4 +60,8 @@ PVC/CSI, домены отказа и backup destination входят в док�
 дал четыре подтверждённые строки inbox: stale age86401 (учебные часы), ошибка
 неполной зашифрованной копии, изменение ошибки последней попытки и recovery.
 Повторы без изменения состояния не создавали событий.107 Windows tests passed,
-один существующий POSIX-only skip; Linux cohort ещё не запускался.
+один health symlink-permission skip. Последующий
+[Linux cohort](superpowers/reports/2026-11-02-replica-evidence-alerts-linux.json)
+прошёл295 notification/verifier/policy/runner cases без пропусков. FIFO и symlink
+фактически проверены; все2395 входных файлов остались неизменными, реплики и
+данные восстановлены. Полный backend CI итоговой версии остаётся открытым.
