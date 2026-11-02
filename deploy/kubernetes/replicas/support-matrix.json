@@ -1,0 +1,217 @@
+{
+  "schema_version": 1,
+  "release_status": "incomplete",
+  "profile_status_vocabulary": [
+    "planned",
+    "tested",
+    "basic-certified",
+    "resilient-certified"
+  ],
+  "purpose": "public evidence inventory; not a provider capability or release certificate",
+  "qualification_enforcement": "pending O3 certification validator; existing acceptance runner remains fail-closed",
+  "binding_invalidation": "Any topology, component ownership, recipe/version/image, runtime/config/identity or model/auth change requires matching new acceptance evidence.",
+  "profiles": [
+    {
+      "id": "compact-local",
+      "status": "planned",
+      "artifact_backend": "local",
+      "topology": "combined",
+      "providers": {
+        "postgres": "local-or-external",
+        "qdrant": "local-or-external",
+        "artifacts": "local"
+      },
+      "remaining_gates": [
+        "compact-legacy-and-null-generation-adoption",
+        "independent-backup-restore",
+        "final-version-ci"
+      ],
+      "certification": null,
+      "qualification_complete": false
+    },
+    {
+      "id": "frontend-split",
+      "status": "planned",
+      "artifact_backend": "local-or-shared",
+      "topology": "two-frontend-one-combined-backend",
+      "providers": {
+        "postgres": "selected-per-installation",
+        "qdrant": "selected-per-installation",
+        "artifacts": "selected-per-installation"
+      },
+      "remaining_gates": [
+        "gateway-sso-sse-acceptance",
+        "frontend-loss-functional-recovery",
+        "final-version-ci"
+      ],
+      "certification": null,
+      "qualification_complete": false
+    },
+    {
+      "id": "distributed-managed-rwx",
+      "status": "planned",
+      "artifact_backend": "rwx",
+      "topology": "distributed",
+      "providers": {
+        "postgres": "managed",
+        "qdrant": "managed",
+        "artifacts": "platform-rwx"
+      },
+      "remaining_gates": [
+        "select-and-qualify-real-rwx-csi-recipe",
+        "real-rwx-end-to-end-runtime",
+        "independent-restore",
+        "final-version-ci"
+      ],
+      "certification": null,
+      "qualification_complete": false
+    },
+    {
+      "id": "distributed-managed-s3",
+      "status": "tested",
+      "artifact_backend": "s3",
+      "topology": "distributed",
+      "providers": {
+        "postgres": "managed",
+        "qdrant": "managed",
+        "artifacts": "managed"
+      },
+      "binding": {
+        "deployment_schema": "replicas-v1",
+        "profile": "basic",
+        "artifact_backend": "s3",
+        "topology": {
+          "orchestrator": "kind",
+          "schedulable_nodes": 1,
+          "physical_failure_domains": 1,
+          "storage_class": "local-path",
+          "volume_access_modes": [
+            "ReadWriteOnce"
+          ],
+          "roles": {
+            "frontend": 2,
+            "api": 2,
+            "worker": 2
+          }
+        },
+        "components": {
+          "postgres": {
+            "provider": "managed",
+            "recipe": "postgres-17-single-v1",
+            "version": "17.11",
+            "image": "postgres:17@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675",
+            "license": "PostgreSQL"
+          },
+          "qdrant": {
+            "provider": "managed",
+            "recipe": "qdrant-1.19-single-v1",
+            "version": "1.19.0",
+            "image": "qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc",
+            "license": "Apache-2.0"
+          },
+          "artifacts": {
+            "provider": "managed",
+            "recipe": "rustfs-1.0.4-single-v1",
+            "version": "1.0.4",
+            "image": "rustfs/rustfs:1.0.4@sha256:e287e99762a4a3e7b706526e01f2ff755f67db165e9be9f6b907adc6fb6d6ee1",
+            "license": "Apache-2.0"
+          }
+        },
+        "runtime": {
+          "revision": "45403fc550d8e8833d6b64c856692e3f4e7c2922",
+          "images": {
+            "api": "sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba",
+            "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+            "worker": "sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba"
+          },
+          "identity_fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3",
+          "schema_revision": "rpl05_maintenance_epoch",
+          "authentication": "simulation",
+          "model_provider": "owned-stub",
+          "embeddings": "fake"
+        }
+      },
+      "binding_sha256": "4555f0d0598c2b36f694211d7273a5aaf1f3e98b04ae747997d86f50e1229bb3",
+      "evidence": [
+        {
+          "path": "docs/superpowers/reports/2026-11-02-replica-predecessor-schema-recovery.json",
+          "sha256": "403e3ebe484c513c9900615411514638db63d72d2ace13a9e2673f421b5ab1f6",
+          "scope": "actual source-off predecessor replacement recovery and seven smoke checks"
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-02-replica-current-artifact-ci.json",
+          "sha256": "0d0578ab57798cdfc502f78b07d6145459fe9b39f7f271031e675c8e3d8e8168",
+          "scope": "full parser tests and frontend production build; not full backend CI"
+        }
+      ],
+      "remaining_gates": [
+        "application-publication-storage-full",
+        "full-current-runtime-fault-qualification",
+        "backup-key-recovery",
+        "delivered-backup-error-and-age-alerts",
+        "final-version-full-backend-ci",
+        "fresh-whole-branch-review"
+      ],
+      "certification": null,
+      "qualification_complete": false
+    },
+    {
+      "id": "distributed-all-external",
+      "status": "planned",
+      "artifact_backend": "s3-or-rwx",
+      "topology": "distributed",
+      "providers": {
+        "postgres": "external",
+        "qdrant": "external",
+        "artifacts": "external"
+      },
+      "remaining_gates": [
+        "real-external-three-component-end-to-end",
+        "native-scoped-access-and-tls",
+        "external-provider-independent-restore",
+        "final-version-ci"
+      ],
+      "certification": null,
+      "qualification_complete": false
+    },
+    {
+      "id": "distributed-mixed",
+      "status": "planned",
+      "artifact_backend": "s3-or-rwx",
+      "topology": "distributed",
+      "providers": {
+        "postgres": "per-component-choice",
+        "qdrant": "per-component-choice",
+        "artifacts": "per-component-choice"
+      },
+      "remaining_gates": [
+        "real-mixed-per-component-ownership-end-to-end",
+        "mixed-independent-restore",
+        "final-version-ci"
+      ],
+      "certification": null,
+      "qualification_complete": false
+    },
+    {
+      "id": "distributed-resilient",
+      "status": "planned",
+      "artifact_backend": "s3-or-rwx",
+      "topology": "multiple-independent-physical-domains",
+      "providers": {
+        "postgres": "qualified-replicated-recipe",
+        "qdrant": "qualified-replicated-recipe",
+        "artifacts": "qualified-replicated-recipe"
+      },
+      "remaining_gates": [
+        "select-independent-domains-and-qualified-storage-recipes",
+        "actual-node-and-storage-loss",
+        "independent-domain-restore",
+        "complete-resilient-fault-matrix",
+        "final-version-ci"
+      ],
+      "certification": null,
+      "qualification_complete": false
+    }
+  ],
+  "production_backup_schedule": "disabled"
+}

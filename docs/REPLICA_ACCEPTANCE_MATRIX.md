@@ -13,8 +13,8 @@
 | Runtime R1–R4 | PostgreSQL ownership/fencing, роли API/worker и координация реализованы; cancel/delete, worker-loss и partition прошли в общем текущем запуске | Дополнительные внешние providers и полная release matrix |
 | Runtime R5 | Общий текущий22-stage run прошёл без failures/required skips;80 прежних документов сохранены, финальные2 frontend +2 API +2 workers проверены | Другие providers, реальные модели/IdP и физические домены отказа требуют собственных gates |
 | Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, смена CA, CNI и отдельный S3 ENOSPC contract проверены | RWX, external/mixed end-to-end; заполнение storage через приложение; независимые failure domains |
-| Recovery O2 | Последняя независимая20-document копия восстановлена с выключенным источником в отдельные stores:100 blob SHA,19 действующих оригиналов в поиске/download,1 скрытый документ в корзине,2 новые загрузки и2/2/2 Ready; журнал попыток и cold-check реализованы | Schema-changing update/adoption, key recovery, доставка alerts и остальные provider recipes |
-| Release O3 | Обязательные проверки проекта и профильные Windows/Linux cohorts проходят для соответствующих зафиксированных изменений | Полный CI итоговой версии, общая fault/profile matrix, завершение runbooks и свежее ревью всей ветки |
+| Recovery O2 | Независимая20-document копия восстановлена при выключенном источнике; отдельно старая rpl04 копия прошла фактический rpl05 replacement recovery с новой identity, отзывом сессий и функциональной проверкой2/2/2. Журнал попыток и cold-check реализованы | Оставшиеся adoption/update recipes, key recovery, доставка alerts и остальные provider recipes |
+| Release O3 | Обязательные project checks и профильные Windows/Linux cohorts; свежие557 parser passes и standalone frontend build. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Полный backend CI итоговой версии, certification validator, общая fault/profile matrix, завершение runbooks и свежее ревью всей ветки |
 
 ## Доказательства учебного профиля
 
@@ -40,6 +40,7 @@
 | Проверка экспортёра и source-off | [Export validation](superpowers/reports/2026-11-02-replica-predecessor-export-validation.json):109 Windows passes и157 Linux passes без skips,8 native PG cases; архив повторно аутентифицирован после физического отключения источника. Это проверка копии, не её восстановления |
 | Импорт старого корпуса | [Predecessor provider import](superpowers/reports/2026-11-02-replica-predecessor-provider-import.json): отдельный этап source-off импорта в новые PostgreSQL/Qdrant/S3,2 документа/369 заданий/4 точки/10 SHA, приложения0 и прежний S4-token |
 | Восстановление с обновлением схемы | [Predecessor schema recovery](superpowers/reports/2026-11-02-replica-predecessor-schema-recovery.json): фактический rpl04→rpl05 в новом target, новая identity/scoped SQL/S3, отзыв2 сессий, held epoch1→2 и явный release.9 таблиц/369 заданий/10 SHA/4 vectors проверены до старта;2/2/2 Ready без рестартов,2 прежних search/download SHA и2 новых документа,7 smoke checks. Не подтверждает in-place update старого namespace, compact/NULL-generation, остальные providers или полную R5 приёмку нового образа |
+| Parser/frontend итоговых источников | [Artifact CI](superpowers/reports/2026-11-02-replica-current-artifact-ci.json):557 parser tests/0 skips, новая frontend production build/19 routes, правильный health rewrite/revision stamp, network-none/read-only/non-root. Оба дерева97+366 файлов совпадают с записанной текущей revision; это не полный backend CI |
 
 ## Условия окончательной приёмки
 

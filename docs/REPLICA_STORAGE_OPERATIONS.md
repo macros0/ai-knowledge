@@ -491,5 +491,8 @@ one original remained hidden in trash, two new documents completed, and seven
 runtime smoke checks passed with2/2/2 Ready and no restarts. The new target has
 not repeated the full22-stage runtime fault suite. Timings include operator
 implementation and manual verification; they are not production RTO sizing.
-Schema-changing adoption, key recovery, alert delivery and the other provider
-recipes remain open. Production backup scheduling staysOFF.
+The later [predecessor replacement recovery](superpowers/reports/2026-11-02-replica-predecessor-schema-recovery.json)
+also verified a real rpl04→rpl05 transition in a new target, new scoped identity,
+source auth cleanup, explicit release and original/fresh functional checks.
+Compact/NULL-generation and other adoption/update recipes, key recovery, alert
+delivery and the other providers remain open. Production backup scheduling staysOFF.

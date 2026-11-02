@@ -227,10 +227,11 @@ operator, the exact source S4 token/audit/schema/fingerprint, all369 work rows,
 9 materialized-table hashes and4 Qdrant points. Fresh source node/CRI facts,
 source/target PVC bindings and stopped target controller/storage-Pod snapshots
 were rechecked through provider writes. No schema/identity change or job execution
-occurred; all applications remain0. See
+occurred; all applications remained0 at that provider-import checkpoint. See
 [provider import](../reports/2026-11-02-replica-predecessor-provider-import.json).
-The schema-changing Kubernetes rollout, new identity/auth cleanup and explicit
-activation plus functional recovery acceptance remain open.
+The subsequent selected-recipe schema transition, new identity/auth cleanup and
+explicit activation/functionality passed in the separate
+[schema recovery report](../reports/2026-11-02-replica-predecessor-schema-recovery.json).
 Production scheduleOFF.
 
 **Interfaces:** `MaintenanceState` в PostgreSQL: installation_id, epoch bigint,
@@ -337,6 +338,22 @@ key recovery/delivered backup alerts and final whole-version CI remain unproven.
 Production backup scheduleOFF.
 
 ## Task O3: fault matrix, release gates и документация
+
+O3 artifact-CI milestone,2026-11-02: fresh full doc-parser557/557 tests with0 skips
+and frontend production standalone build19 routes passed in isolated network-none,
+read-only non-root containers.97 parser and366 frontend files match the frozen
+snapshot and the recorded4fd5556 revision (Git tree diff empty). Locked dependency
+image was reused only after package-lock hash verification; every frontend source
+input was mounted read-only and .next output was new. Raw logs/build artifacts
+remain on the training VM. An initial1GiB available-memory preflight refused
+before allocating a container/output; normal idle target8 application stop made
+room, then original2/2/2 and9-table/PVC/identity/epoch checks were restored.
+[Artifact CI](../reports/2026-11-02-replica-current-artifact-ci.json).
+The public `deploy/kubernetes/replicas/support-matrix.json` lists all7 planned
+profiles and pins the limited managed/S3 binding to actual topology/providers/
+versions/runtime identity/evidence SHA. No profile has certification; automatic
+certification enforcement/negative tests and the remaining full O3 gates are open.
+See `../../KUBERNETES_REPLICAS_ACCEPTANCE.md`.
 
 O2 selected-runtime backup follow-up (2026-11-01): backup now resolves the common
 immutable runtime from actual API/worker references and verifies live settings/

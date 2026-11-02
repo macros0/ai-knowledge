@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "status": "parser-full-tests-and-frontend-production-build-passed",
+  "revision": "4fd55566652f63dd8795a5a8f75237179aeb831c",
+  "scope": "full unchanged doc-parser and frontend source trees at recorded revision; not full backend CI",
+  "source_provenance": {
+    "frozen_snapshot_revision": "cd7e0cb8842d8ca35f7f9e1e60ab36a5c6abeadb",
+    "git_diff_to_recorded_revision_empty_for_both_trees": true,
+    "frozen_archive_sha256": "5952ad6a825fe88cf779120439815d1e276bad506bcc576229a6e6580ff1ddc6",
+    "source_trees": {
+      "frontend": {
+        "files": 366,
+        "sha256": "740d008f04942f229386ae0dd79c1940d93052d46996da403382d47d7bab09cc"
+      },
+      "doc-parser": {
+        "files": 97,
+        "sha256": "7c7c73d7af33f35ca0ac755e5617ca516d7cae5008814f1ccdbb44d98b76feac"
+      }
+    },
+    "remote_files_sha_verified_before_execution": true,
+    "new_source_transfer": false,
+    "developer_env_or_working_data_copied": false
+  },
+  "parser": {
+    "container_id": "b23146343bbb5de8c669824dc748ab4d5d4c471f674f827e24e86990df54ffa8",
+    "image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "command": "python -m pytest tests/ -q --basetemp /ciout/pytest --junitxml=/ciout/results.xml",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T17:43:08.80446198Z",
+    "FinishedAt": "2026-11-02T17:43:25.055262069Z",
+    "junit": {
+      "tests": 557,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "d3ed03b621bea12a31c0e4890b1af67ca821678a830e5408f6ee2260dc66f6de"
+    },
+    "signals": {
+      "Permission denied": false,
+      "ModuleNotFoundError": false,
+      "AssertionError": false,
+      "ENOSPC": false,
+      "Error:": false
+    },
+    "passed": 557,
+    "memory_limit_bytes": 1073741824
+  },
+  "frontend": {
+    "container_id": "01b8a5fea34702343c4e32bb0d04876bbdcc85c144f3e32233586341ff77561d",
+    "image": "sha256:6e2a76ad496a9d48285098f1a3b2d2ae0170265bd4c25f865708dece5348323b",
+    "command": "node node_modules/next/dist/bin/next build",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T17:43:46.413067046Z",
+    "FinishedAt": "2026-11-02T17:44:06.772937016Z",
+    "build": {
+      "standalone_server_sha256": "1fbc2ef5f2622f48f8c728f7a9adbe880e99c01136a4600a7aba71ee41d5bbdc",
+      "build_id": "WJvwWwm4IzjDw0VBOA4HQ",
+      "app_routes": 19,
+      "health_rewrite": "http://backend:8000/health",
+      "compiled_revision_present": true
+    },
+    "signals": {
+      "Permission denied": false,
+      "ModuleNotFoundError": false,
+      "AssertionError": false,
+      "ENOSPC": false,
+      "Error:": false
+    },
+    "all_366_frontend_files_mounted_readonly": true,
+    "immutable_dependency_image_lock_sha_matches": true,
+    "new_isolated_next_output": true,
+    "memory_limit_bytes": 1610612736,
+    "built_output_deployed_to_running_frontend": false
+  },
+  "isolation": {
+    "network": "none",
+    "user": "1000:1000",
+    "read_only_rootfs": true,
+    "capabilities": "drop ALL",
+    "host_ports": false,
+    "pvcs": false,
+    "working_service_mutations": false,
+    "raw_logs_and_artifacts_retained_on_vm": true
+  },
+  "capacity_recovery": {
+    "first_preflight_refused_before_container_or_output_creation": true,
+    "available_memory_at_initial_refusal_bytes": 1033388032,
+    "only_idle_owned_target8_apps_temporarily_stopped": true,
+    "storage_stayed_on": true,
+    "original_2_2_2_restored": true,
+    "canonical_tables_unchanged": 9,
+    "pvc_runtime_identity_and_epoch2_preserved": true
+  },
+  "not_proven": [
+    "full final backend CI",
+    "remaining profile/fault/recovery gates",
+    "whole-branch review"
+  ],
+  "production_backup_schedule": "disabled"
+}

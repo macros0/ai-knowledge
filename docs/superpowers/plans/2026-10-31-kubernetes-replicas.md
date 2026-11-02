@@ -50,6 +50,13 @@ partition/возврат устаревшего процесса и нагруз
 - **O3:** полный CI итоговой версии, объединённая fault/profile matrix, итоговые
   runbooks и свежее ревью всей ветки.
 
+O3 частичная проверка текущих источников:557/557 doc-parser tests,0 skips и новая
+standalone frontend production build с19 routes и проверенными health rewrite/
+revision stamp. [Artifact CI](../reports/2026-11-02-replica-current-artifact-ci.json).
+Созданы [машиночитаемая матрица семи профилей](../../../deploy/kubernetes/replicas/support-matrix.json)
+и [acceptance runbook](../../KUBERNETES_REPLICAS_ACCEPTANCE.md); во всех профилях
+certification=null, автоматический certification validator ещё открыт.
+
 Полный backend CI итоговой версии ещё не подтверждён. Прогон базы `e3c7025`
 завершён:6093 случая,5910 passed,183 skipped,0 failures/errors; оба shard имеют
 точное совпадение собранных и выполненных case IDs. Последующие исправления
