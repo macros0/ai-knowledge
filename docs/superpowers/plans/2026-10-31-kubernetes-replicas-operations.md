@@ -195,6 +195,23 @@ release is exposed. See [protocol evidence](../reports/2026-11-02-replica-predec
 This is not a completed predecessor provider archive/recovery or Kubernetes
 schema-update rollout; those live checks and the remaining O2 gates stay open.
 
+O2 actual predecessor source follow-up (2026-11-02): the historical21f5a6d
+application was built from exact Git blobs with a documented Dockerfile-only
+cache-order overlay;498 copied files and the real rpl04 Alembic head were checked
+inside the image. Fresh native CRI config/layers/repoDigests bind the running
+Pods to that image. A separate owned namespace and three new PVCs now run2/2/2
+with scoped runtime SQL/S3 and an offline-only administrator file projection.
+The actual old migration/bootstrap,5 denied SQL operations, shared sessions on
+both APIs and2 real DOCX publish/search/download-SHA roundtrips passed without
+problem codes or restarts. The immutable runtime preserves the original setup
+values, including its inherited image-label hint; actual image authority is
+the verified build fingerprint and native digest mapping, not that hint.
+The existing restored22-document target returned to2/2/2 with9 canonical table
+hashes and all3 PVC bindings unchanged after temporary idle build scaling.
+[Live source evidence](../reports/2026-11-02-replica-predecessor-live-source.json).
+No predecessor provider archive, source-off restore or schema-changing Kubernetes
+rollout is claimed; those remain the next O2 checks. Production scheduleOFF.
+
 **Interfaces:** `MaintenanceState` в PostgreSQL: installation_id, epoch bigint,
 enabled, operation_id, owner_id, started_at. `enter_maintenance(session, operation_id:
 str) -> int` increments epoch; `assert_writes_allowed(session, expected_epoch: int)

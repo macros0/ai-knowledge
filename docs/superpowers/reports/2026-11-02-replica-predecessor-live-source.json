@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "status": "actual-predecessor-source-running-and-corpus-verified",
+  "scope": "owned-single-node-kind-rpl04-source-fixture-only",
+  "implementation_base_revision": "87e24be1718191e1437d11146965538f3847b369",
+  "historical_image": {
+    "code_revision": "21f5a6d29b8f642e32198415d16d571e728b3398",
+    "recipe_revision": "87e24be1718191e1437d11146965538f3847b369",
+    "recipe_overlay": "Only Dockerfile revision ARG/ENV placement after locked dependency layers; application bytes are exact historical Git blobs.",
+    "source_identity": "fa4b2602273760f0ed3bd9d04b702397f54766b1c494eeb55e9087bd65f674dd",
+    "archive_sha256": "f3fb07c33f3759b4dfb25d467ad2741f433cb80ac35d431ac4c4d53b23004e71",
+    "context_files": 500,
+    "context_bytes": 4551832,
+    "verified_copied_source_files": 498,
+    "git_source_transport": "git cat-file --batch exact blobs; Windows git archive was used only for path inventory because it converted LF to CRLF.",
+    "image": "okf-backend:replicas-21f5a6d-fa4b26022737",
+    "docker_image_id": "sha256:8c5912a17162859de5e8b80a83d95c6104b7df0b1dcad03316cd79d7f7b79fd4",
+    "cri_inventory_image_id": "sha256:ef95e4bf4a7d891a1e52b794dbe8e477636b067de98f9fae3a1191ef3371b2d4",
+    "pod_image_digest": "sha256:6b20daf9922ac1a3e5b3b87311e805edba55707c85f0735b32d52222a8cc98f0",
+    "native_repo_digests": [
+      "docker.io/library/import-2026-11-02@sha256:6b20daf9922ac1a3e5b3b87311e805edba55707c85f0735b32d52222a8cc98f0"
+    ],
+    "same_native_rootfs_layers_labels_environment": true,
+    "base_image": "python@sha256:dddfd7e07f9d15aeeca61529320492139d21cac7f0070c00609243e51e4e0016",
+    "schema_revision": "rpl04_runtime_identity",
+    "alembic_head": "rpl04_runtime_identity",
+    "packages": {
+      "SQLAlchemy": "2.1.5",
+      "psycopg": "3.3.6",
+      "qdrant-client": "1.19.1",
+      "boto3": "1.43.117",
+      "alembic": "1.20.0",
+      "pypdfium2": "5.14.0"
+    },
+    "historical_runtime_image_label": "okf-backend:replicas-b570457-e42f031cc7d7",
+    "historical_label_matches_actual_tag": false,
+    "image_authority": "Verified file bytes/build fingerprint and freshly resolved native CRI mapping; not the inherited runtime label."
+  },
+  "isolation": {
+    "namespace": "replica-test-r4o2s20261102",
+    "namespace_uid": "4b40533d-56bc-4c8b-875c-7080b50361b3",
+    "operation_id": "dc9f3d067a634909abf9262db2c76d35",
+    "installation_id": "77777777777777777777777777777777",
+    "application_release": "replica-application-recovery",
+    "storage_release": "replica-storage-recovery",
+    "claims": [
+      {
+        "name": "predecessor-source-artifacts",
+        "uid": "d586dbfa-f29a-4b6f-bf18-1256fbb13055",
+        "volume_name": "pvc-d586dbfa-f29a-4b6f-bf18-1256fbb13055",
+        "size": "1Gi",
+        "access_modes": [
+          "ReadWriteOnce"
+        ]
+      },
+      {
+        "name": "predecessor-source-postgres",
+        "uid": "2fbeeb10-ea4c-47b9-a7f3-d4d67cc89a49",
+        "volume_name": "pvc-2fbeeb10-ea4c-47b9-a7f3-d4d67cc89a49",
+        "size": "1Gi",
+        "access_modes": [
+          "ReadWriteOnce"
+        ]
+      },
+      {
+        "name": "predecessor-source-qdrant",
+        "uid": "189a2a20-bc0f-4ecd-9dd5-95c54d7f9b0e",
+        "volume_name": "pvc-189a2a20-bc0f-4ecd-9dd5-95c54d7f9b0e",
+        "size": "1Gi",
+        "access_modes": [
+          "ReadWriteOnce"
+        ]
+      }
+    ],
+    "logical_store_id": "replica-predecessor-app",
+    "physical_storage": "three fresh dedicated PVCs",
+    "failure_domain": "single existing training VM; no hardware HA",
+    "other_targets_modified_by_fixture": false,
+    "frontend_transport": "127.0.0.1:25479 only"
+  },
+  "bootstrap": {
+    "job_name": "predecessor-source-bootstrap-v1",
+    "job_uid": "55b02976-003e-4271-a5a4-385d566a8797",
+    "native_source_sha256": "1ec61934623362c7823738da884d1f6cee335dc4d63992ee8917ae0436039362",
+    "actual_old_alembic_chain_executed": true,
+    "maintenance_table_exists": false,
+    "work_maintenance_epoch_exists": false,
+    "runtime_fingerprint": "4d3dd068f8866dbbbf126901d768cb2c4bf5d0897b2bbebb0bb6bfbb1c70faf8",
+    "scoped_sql_principal": true,
+    "sql_tls_verified": true,
+    "scoped_s3_probe": true,
+    "native_denied_sql_operations": [
+      "ddl",
+      "identity_fingerprint",
+      "storage_fence",
+      "audit_update",
+      "audit_delete"
+    ],
+    "scoped_table_count": 80,
+    "operator_credentials": "offline Job separate readonly Secret file projection mode0440; absent from normal API/worker templates",
+    "immutable_runtime_config": "predecessor-source-runtime",
+    "immutable_identity_config": "predecessor-source-identity",
+    "runtime_settings_preserved_exactly_from_bootstrap": true
+  },
+  "runtime": {
+    "replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "restarts": {
+      "api": 0,
+      "frontend": 0,
+      "worker": 0
+    },
+    "images": {
+      "api": "sha256:6b20daf9922ac1a3e5b3b87311e805edba55707c85f0735b32d52222a8cc98f0",
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "worker": "sha256:6b20daf9922ac1a3e5b3b87311e805edba55707c85f0735b32d52222a8cc98f0"
+    },
+    "shared_session": {
+      "distinct_apis": 2,
+      "shared_session": true
+    },
+    "model": "stub",
+    "embeddings": "fake",
+    "auth": "simulation",
+    "roundtrip": {
+      "documents": 2,
+      "documents_per_minute": 3.476648510835226,
+      "download_sha256_matches": 2,
+      "duration_seconds": 34.51600000000326,
+      "embeddings": "fake",
+      "model": "stub",
+      "search_matches": 2,
+      "upload_seconds": [
+        2.5460000000020955,
+        2.1410000000032596
+      ]
+    },
+    "sql_counts": {
+      "artifact_bindings": 4,
+      "artifact_objects": 10,
+      "document_chunks": 2,
+      "okf_concepts": 2
+    },
+    "documents_done_without_problem": 2
+  },
+  "capacity_recovery": {
+    "namespace": "replica-test-r5o2u20261102",
+    "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+    "original_replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "temporary_build_replicas": {
+      "frontend": 0,
+      "api": 1,
+      "worker": 1
+    },
+    "restored_replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "documents_before": 22,
+    "materialized_tables_sha256_unchanged": 9,
+    "original_pvc_bindings_unchanged": 3,
+    "schema_epoch_preserved": 12,
+    "data_mutations": 0,
+    "verification_resumed_without_repeating_scaling": true,
+    "build_memory_guard": "4GiB available admission; never lowered",
+    "sql_observation": "native scoped API TLS read-only repeatable-read snapshot; PC administrator PostgreSQL tunnel remained unreliable"
+  },
+  "verification": {
+    "actual_native_old_image_bootstrap": true,
+    "native_scoped_negative_sql_checks": 5,
+    "real_http_document_roundtrip": true,
+    "shared_session_distinct_apis": 2,
+    "check_project": "passed: npm audit0/ESLint/frontend756 passed+1 skipped/Ruff",
+    "full_backend_final_ci": false
+  },
+  "observed_helper_failures_preserved": [
+    "Initial image build refused for low memory before remote preparation; same never-started intent continued after owned idle scaling.",
+    "Initial post-load matcher did not account for docker.io/library tag normalization; terminal load reconciled against actual rootfs/config with no repeated load.",
+    "Post-restore native read failed after counts had already returned to2/2/2; readonly postconditions resumed and all9 materialized table hashes matched.",
+    "Bootstrap staging initially expected SQL schema in identity JSON and immutable setup map; corrected to typed bootstrap receipt and immutable exact-value runtime copy before any normal role start.",
+    "Initial role observation preceded Ready; later strict validation used actual Ready Pods. Pod imageID mapped through fresh native repoDigests rather than equating it to CRI status.id."
+  ],
+  "not_proven": [
+    "rpl04 provider archive on independent PC",
+    "rpl04 source-off provider restore",
+    "Kubernetes rpl04 to rpl05 schema-changing rollout",
+    "compact/NULL-generation corpus adoption",
+    "other storage providers/RWX/external/mixed",
+    "production image-label wiring",
+    "physical-node failure tolerance",
+    "real LLM/embedding/IdP compatibility",
+    "whole final-version CI and review"
+  ],
+  "production_backup_schedule": "disabled",
+  "remaining_operations": "O1/O2/O3 open; next capture coherent old-schema provider archive before real source-off recovery and schema-changing update."
+}
