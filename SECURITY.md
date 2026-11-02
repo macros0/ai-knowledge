@@ -2690,3 +2690,26 @@ payloads are refused. This is local key-authenticated delivery, not arbitrary
 remote webhook support or production monitoring qualification. The approved PC
 drill used synthetic ciphertext copies and an isolated copy-attempt journal; no
 production installation, sender schedule or external recipient was created.
+
+2026-11-02: qualification now has a separate read-only file verifier. An operator
+selects expected binding, protected manifest and Ed25519 trust policy outside the
+evidence root. Issuers are enabled explicitly and pinned to producer SHA/check
+permissions. Receipts bind acceptance ID/run/namespace UID/installation/binding
+and the SHA of actual bounded strict outcome files. A separately authorized,
+domain-separated terminal bundle signature binds the complete receipt set;
+individual signatures alone would let an assembler choose or omit old results.
+Failed/pending/skipped summaries and unverified restore cannot qualify. Links,
+hardlinks, FIFO, duplicate keys, path aliases and unstable files are refused.
+Canonical external paths also prevent a parent-directory alias from disguising
+an evidence-supplied trust policy as a separately selected operator input.
+
+The common runner's explicit offline flags cannot combine with live/SSH/fault/
+owned/apply/resume actions or a partial suite. Public errors stay redacted, no
+network is opened and no evidence is rewritten. Signature validation authenticates
+the configured harness; its native-reference hashes remain attestations, not
+independently replayed observations. The issuer must close an acceptance ID once
+with immutable terminal evidence. There is no remote revocation log or generic
+sign-any-JSON CLI. No real issuer/private key or actual certificate is configured
+by these tests. Historical reports are not retroactively signed, and inventory
+certificates remain null. Reverify trust and all files rather than treating
+`certificate_applies` as authenticated authority or production permission.

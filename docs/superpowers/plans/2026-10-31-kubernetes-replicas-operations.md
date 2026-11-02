@@ -399,6 +399,25 @@ receipt authentication or deployment authority. Bounded file-backed provenance/
 SHA/format verification, runner integration and compact/frontend-split coverage
 remain open. The actual inventory issues0 certificates and stays incomplete.
 
+O3 trusted-file implementation follow-up,2026-11-02: bounded stable regular JSON,
+actual artifact SHA and independently selected Ed25519 issuer/producer/check
+authority are verified before policy. A separately authorized signed terminal
+receipt set and unique acceptance ID prevent silent assembly across results or
+sessions. Strict outcomes derive status; failed/skipped/pending and unverified
+restore block qualification. An added parent-alias regression caught and fixed
+embedded trust disguised as an external path. The common runner has an explicit
+all-suite offline-only mode; no live/apply/probes/deployment action occurs.
+No real issuer is configured and old reports are not signed retroactively.
+[Format/runbook](../../REPLICA_EVIDENCE_FORMAT.md),
+[implementation tests](../reports/2026-11-02-replica-trusted-evidence.json).
+Real terminal producer integration and full native/current-profile evidence remain
+gates; signatures attest configured harness observations rather than replay them.
+The attempted Linux CI source handoff was rejected before execution by automatic
+approval review pending explicit user authorization. No archive was transmitted
+and no CI container started. The temporary idle target reduction was fully
+recovered to2/2/2 with9 canonical tables/PVC/identity unchanged. This is an open
+Linux check, not a successful skip. Production scheduleOFF; all actual certificates null.
+
 O2 selected-runtime backup follow-up (2026-11-01): backup now resolves the common
 immutable runtime from actual API/worker references and verifies live settings/
 fingerprint before entry and in the frozen export. A real epoch7 copy of the

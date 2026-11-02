@@ -119,6 +119,29 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
     }
 
 
+def build_qualification_report(manifest, *, bundle_path, binding_path, trust_path, evidence_root):
+    """Offline configured-harness verification; never a probe or deployment action."""
+    from test_scripts.replica_acceptance_report import required_checks
+    from test_scripts.replica_evidence import read_public_json, verify_evidence
+
+    validate_manifest(manifest)
+    if Path(binding_path).absolute().is_relative_to(Path(evidence_root).absolute()):
+        raise ValueError('Expected binding must be independently selected')
+    binding, _ = read_public_json(binding_path)
+    if (manifest['profile'] != binding.get('profile')
+            or manifest.get('runtime_fingerprint') != binding.get('runtime', {}).get('identity_fingerprint')):
+        raise ValueError('Manifest differs from expected qualification binding')
+    scope = {name: manifest[name] for name in ('run_id','namespace_uid','installation_id','acceptance_id')}
+    qualification = verify_evidence(binding,scope,bundle_path=bundle_path,trust_path=trust_path,evidence_root=evidence_root)
+    missing, failed = set(qualification['missing_required']), set(qualification['failed_required'])
+    checks = [{'name':name,'status':'failed' if name in failed else 'pending' if name in missing else 'passed'}
+        for name in sorted(set(required_checks(binding)) | failed)]
+    return dict(suite='all',mode='offline-trusted-harness-verification',run_id=manifest['run_id'],
+        profile=manifest['profile'],runner_sha256=RUNNER_SHA256,checks=checks,
+        passed=qualification['qualification_complete'],failed=len(failed),skipped_required=len(missing),
+        qualification=qualification,deployment_authorized=False)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=SUITES, required=True)
@@ -132,20 +155,41 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runtime-journal", type=Path)
     parser.add_argument("--apply-owned-runtime", action="store_true", help="Explicitly authorize this owned mutating stage")
     parser.add_argument("--resume-owned-stage", action="store_true", help="Resume only a recognized existing child phase")
+    parser.add_argument('--qualification-bundle', type=Path, help='Offline signed harness receipt bundle')
+    parser.add_argument('--qualification-binding', type=Path, help='Independently selected expected public binding')
+    parser.add_argument('--qualification-trust', type=Path, help='Independently selected trusted public issuers')
+    parser.add_argument('--qualification-root', type=Path, help='Read-only root for referenced receipt/artifact files')
     args = parser.parse_args(argv)
     try:
-        if args.manifest.stat().st_size > 1024 * 1024:
+        qualification_inputs = (args.qualification_bundle,args.qualification_binding,
+            args.qualification_trust,args.qualification_root)
+        offline = any(value is not None for value in qualification_inputs)
+        if offline and (not all(value is not None for value in qualification_inputs) or args.suite != 'all'
+                or any((args.live,args.ssh_host,args.known_hosts,args.idle_faults,args.active_faults,
+                    args.owned_runtime_stage,args.runtime_journal,args.apply_owned_runtime,args.resume_owned_stage))):
+            raise ValueError('Complete offline-only qualification inputs required')
+        if offline:
+            from test_scripts.replica_evidence import read_public_json
+            if args.manifest.absolute().is_relative_to(args.qualification_root.absolute()):
+                raise ValueError('Manifest must be independently selected')
+            value, _ = read_public_json(args.manifest,max_bytes=1024*1024)
+        elif args.manifest.stat().st_size > 1024 * 1024:
             raise ValueError("Manifest too large")
-        value = json.loads(args.manifest.read_text(encoding="utf-8"))
+        else:
+            value = json.loads(args.manifest.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise ValueError("Object required")
         if (args.idle_faults or args.active_faults) and not args.live:
             raise ValueError("Fault probes require explicit live execution")
-        report = build_report(value, args.suite, live=args.live, ssh_host=args.ssh_host,
-            known_hosts=args.known_hosts, idle_faults=args.idle_faults, active_faults=args.active_faults,
-            owned_stage=args.owned_runtime_stage, owned_journal=args.runtime_journal,
-            apply_owned=args.apply_owned_runtime, resume_owned=args.resume_owned_stage)
-    except (OSError, ValueError, TypeError):
+        if offline:
+            report = build_qualification_report(value,bundle_path=args.qualification_bundle,
+                binding_path=args.qualification_binding,trust_path=args.qualification_trust,evidence_root=args.qualification_root)
+        else:
+            report = build_report(value, args.suite, live=args.live, ssh_host=args.ssh_host,
+                known_hosts=args.known_hosts, idle_faults=args.idle_faults, active_faults=args.active_faults,
+                owned_stage=args.owned_runtime_stage, owned_journal=args.runtime_journal,
+                apply_owned=args.apply_owned_runtime, resume_owned=args.resume_owned_stage)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
         report = {"suite": args.suite, "passed": False, "failed": 1,
                   "checks": [{"name": "manifest", "status": "failed"}], "skipped_required": 1}
     print(json.dumps(report, ensure_ascii=False))

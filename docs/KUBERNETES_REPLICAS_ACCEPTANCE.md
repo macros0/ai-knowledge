@@ -14,8 +14,9 @@ ownership/recipe/version/image каждого storage-компонента, фа
 image IDs, common identity и model/auth режимы. `binding_sha256` вычислен как
 SHA-256 UTF-8 JSON объекта `binding` с `sort_keys=True,separators=(',',':')`.
 Изменение любого из этих входов требует новой приёмки соответствующего профиля.
-Матрица пока является инвентарём доказательств: policy validator O3 реализован,
-но проверка доверенных файлов receipts и интеграция с runner ещё не завершены. Во всех записях
+Матрица пока является инвентарём доказательств: policy validator, проверка
+подписанных файлов receipts и read-only интеграция с runner реализованы;
+реальные доверенные issuers/producers ещё не подключены. Во всех записях
 `certification=null`, `qualification_complete=false`, release остаётся incomplete.
 
 Учебная topology — один kind node на одной VM, local-path/RWO. Она допускает
@@ -38,14 +39,27 @@ Kind не получает физический resilient-сертификат �
 узлах. [Policy tests](superpowers/reports/2026-11-02-replica-certification-policy.json):
 33 новых случая и14 прежних runner-safety tests прошли на Windows.
 
-Это policy для уже проверенных доверенным harness metadata. Она не читает и
-не аутентифицирует сырые provider receipts: строка SHA сама по себе не доказывает
-реальность испытания. `certificate_applies` проверяет только актуальность
-binding/policy и форму сертификата, а не доверие к его издателю. Загрузка
-ограниченных файлов, проверка их действительных SHA/формата/происхождения и
-интеграция с общим runner ещё открыты. Ни выдача production-разрешений, ни
-автоматическое изменение инвентаря, ни сетевые действия из этого модуля не
+Чистая policy принимает уже проверенные metadata. Отдельный
+`backend/test_scripts/replica_evidence.py` теперь проверяет фактические SHA
+ограниченных файлов, строгий формат и Ed25519-подписи issuer с независимо
+выбранными полномочиями check/producer. Terminal bundle подписывает весь набор
+receipts, а scope включает уникальную acceptance session и namespace UID/installation.
+Общий runner поддерживает только явно выбранный read-only режим всех checks без
+live/apply действий. [Формат, trust boundaries и команда](REPLICA_EVIDENCE_FORMAT.md).
+Подпись удостоверяет harness, а не воспроизводит удалённые native observations;
+их достоверность остаётся ответственностью доверенного producer. Реальные
+issuers и terminal producers ещё не подключены, исторические отчёты не
+подписываются задним числом. `certificate_applies` проверяет лишь актуальность
+binding/policy и форму, поэтому не заменяет повторную проверку trust/файлов.
+Production-разрешения, автоматическая смена inventory и сетевые действия не
 выполняются. Фактическая матрица сохраняет `certification=null` для всех профилей.
+
+[Локальная проверка verifier/runner](superpowers/reports/2026-11-02-replica-trusted-evidence.json):
+186 passed,1 POSIX-only skip, включая прежние runtime-контракты; project check
+прошёл. Linux-прогон не состоялся: автоматическая проверка разрешений отклонила
+передачу исходников на учебную VM до явного разрешения пользователя. Исходники
+не переданы, контейнер CI не запущен; учебные реплики возвращены к2/2/2 с
+проверкой9 canonical tables/PVC/identity. Linux gate остаётся открытым.
 
 ## Подтверждённые проверки текущих источников
 
@@ -91,8 +105,8 @@ backup error/age alerts: [key recovery](superpowers/reports/2026-11-02-replica-b
 Production key custody/monitoring этим не квалифицируются.
 
 Открыты фактические RWX/external/mixed проверки, application publication при
-заполнении storage, остальные adoption/recovery recipes, полный итоговый backend CI, доверенная загрузка
-receipts/интеграция policy с runner и свежее ревью всей ветки. Для resilient дополнительно обязательны
+заполнении storage, остальные adoption/recovery recipes, полный итоговый backend CI,
+подключение реальных доверенных evidence producers и свежее ревью всей ветки. Для resilient дополнительно обязательны
 независимые физические домены, выбранные storage recipes и реальные испытания
 потери узла/хранилища. Production backup schedule остаётся выключенным по
 решению пользователя; его включение не является автоматическим итогом CI.
