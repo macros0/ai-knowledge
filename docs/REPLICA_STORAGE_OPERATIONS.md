@@ -390,3 +390,58 @@ leaves already intended counts unchanged. Before recording `running`, it verifie
 the Ready runtime fingerprint, the exact released operation/epoch and its audit.
 A changed count/template/identity or a later maintenance operation refuses ACK.
 This is restart recovery, not evidence of physical-node or external-provider HA.
+
+## One current-version runtime acceptance run
+
+The common `backend/test_scripts/run_replica_acceptance.py` entrypoint supports
+`--owned-runtime-stage` with a protected `--runtime-journal`. This is an explicit
+owned basic managed-S3/model-stub/fake-embedding recipe. Default `--live` smoke
+behaviour stays unchanged. The manifest keeps its existing isolated namespace/DB/
+bucket-prefix fields and adds `runtime_fingerprint` plus `owned_runtime` with only
+four path references: `config`, `source_journal`, `archive`, `key_file`. Namespace
+UID, installation, release names, fixed kind context and loopback frontend must
+match the protected config. The key remains outside the archive.
+
+```text
+python backend/test_scripts/run_replica_acceptance.py --suite runtime --live
+  --manifest <protected-manifest> --runtime-journal <protected-directory>/runtime.json
+  --owned-runtime-stage preflight
+```
+
+Use the same files and recipe version for every stage. Mutating stages additionally
+require `--apply-owned-runtime`. The ordered stages are:
+
+1. `preflight`, `smoke`, `idle`, `after-idle`, `active`.
+2. `worker.inject`, `worker.observe`, `worker.recover`, `worker.release`, `worker.verify`.
+3. `partition.inject`, `partition.confirm`, `partition.observe`, `partition.heal`,
+   `partition.finish`, `partition.restore`, `partition.verify`.
+4. `load.prepare`, `load.single`, `load.dual`, `load.verify`, `final`.
+
+Smoke validates actual roles/identity/session/network/document flow and resources.
+Idle scaling/Pod replacement is separate from the following document roundtrip,
+allowing the recorded frontend transport to be refreshed between them. Likewise,
+refresh that transport after worker release/restart and before verification. The
+recorded PostgreSQL transport may need refresh before worker recovery or partition
+reconciliation; never refresh it while an operator still owns a physical SQL
+connection. This runner does not open host ports or replace unknown listeners.
+
+The parent journal fixes one execution ID, recipe/input hashes and original
+nonempty corpus. Generated child paths and their `runtime_run_id` prevent adoption
+of old standalone reports/journals. Parent intent is durable before mutation.
+Repeated completed stages return their existing outcome. An uncertain active
+injection refuses replay. Inspect the same child/Job; `--resume-owned-stage` can
+continue only recognized observable/idempotent child phases. A confirmed late
+provider reply and an uncertain quarantined reply retain their different recovery
+paths; the latter still needs physical proof and audited reconciliation. Known
+maintenance increments are verified as a chain, not treated as a reason to adopt
+an unrelated epoch.
+
+Each invocation writes one final JSON object to stdout; native member progress is
+on stderr. Exit0 means the requested suite has all required checks passed. Exit1
+with `failed=0` and remaining `skipped_required` means the staged run is incomplete,
+not qualified. A partial run never receives PASS. Runtime completion alone keeps
+`--suite all` unqualified while contracts/storage/operations or other required
+suites remain pending. Reports contain hashes/timings; detailed private outcomes
+stay in the protected journal. Changed code/inputs require a new run, preserving
+the previous journal rather than rewriting its identity or importing its results.
+Production backup scheduling staysOFF and this is not customer/model/HA sizing.

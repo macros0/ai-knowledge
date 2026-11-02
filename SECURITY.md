@@ -2475,3 +2475,28 @@ scales only stopped roles, and verifies released epoch/operation/audit before AC
 It cannot reclaim uncertain provider reservations by elapsed time or re-inject a
 fault as recovery. These are explicit synthetic owned-kind operations, not a
 production scheduler or authorization for customer/real-provider faults.
+
+## One-run owned runtime acceptance (2026-11-02)
+
+The common acceptance entrypoint has an explicit staged owned-runtime path. It
+accepts only the basic synthetic managed-S3 kind profile and protected references
+to the validated config, verified image journal, matching independent archive and
+separate key. Real image digests must match the authenticated archive; the verified
+source corpus must still be present. Profile/input/recipe-code changes invalidate
+qualification. The full fixed22-stage set is required; a smoke, empty set, skipped
+stage, foreign child or partial run cannot produce runtime PASS. Other suites and
+customer/physical-node/provider certification retain their independent gates.
+
+Parent state is bounded, no-link, mode0600, atomically replaced and fsynced under
+an exclusive per-run file lock. A write-intent marker blocks a false completion
+after uncertain status I/O. Mutation intent precedes execution, and every member
+is stamped with its unique parent run ID before its first save/action. Child scope,
+source/backup provenance and actual terminal outcomes are checked. Unknown active
+injections are never automatically replayed; explicit resume covers only recognized
+existing phases and cannot clear uncertain provider slots. Transport health probes
+precede HTTP mutation intent. Transport refresh stays outside retained SQL phases;
+no listener killing, NodePorts, TLS/CNI bypass, production scheduling or messages
+are introduced. Native progress goes to stderr; stdout contains the sole common
+report, so a member PASS cannot be mistaken for completed-run qualification.
+Private failure evidence is retained for inspection, while public output contains
+allowlisted checks, timings and hashes rather than raw inputs/errors/documents.

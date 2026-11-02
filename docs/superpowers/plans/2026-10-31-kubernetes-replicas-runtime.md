@@ -491,3 +491,15 @@ R4: `assert total_active_reservations <= configured_limit`;
 R5: `assert backend_endpoint_roles == {"api"}`;
 `assert completed_work_ids == accepted_work_ids` после recovery контрольного corpus;
 `assert duplicate_active_publications == 0`.
+
+R5 common staged runner implementation (2026-11-02): the shared acceptance
+entrypoint now dispatches one protected run with a fixed22-stage graph. It binds
+current recipe/config/image/backup identities, stamps child journals with the
+parent ID before actions, persists intent before mutation and refuses unknown
+replay. Split smoke/idle/after-idle stages permit explicit transport refresh.
+Native progress is separate from the sole stdout report; private failed outcomes
+remain inspectable. Required checks are explicit/nonempty, and unrelated suites
+remain pending even after runtime completion. Current native preflight and smoke
+passed in a partial prototype; after report-protocol changes a fresh final-code
+run was started instead of rewriting the older journal. This implements the
+runner but does not yet close current-version fault execution or all R5 gates.

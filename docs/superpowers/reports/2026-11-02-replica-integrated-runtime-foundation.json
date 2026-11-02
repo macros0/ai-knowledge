@@ -1,0 +1,82 @@
+{
+  "status": "runner-software-validated-current-run-incomplete",
+  "coordinator_base_revision": "457d7030212d9527cf41007fd917bc5f12414650",
+  "source_overlay_sha256": {
+    "scripts/kubernetes/replica_runtime_run.py": "65abd848d9869f991d902e1ab75ca297169e444572332ff3ee31cfbc438dbbc8",
+    "backend/test_scripts/replica_runtime_plan.py": "71fc46ab258b25cf3562e268b189eca91c6a969b44e80eb91c504f1a948fbebe",
+    "backend/test_scripts/run_replica_acceptance.py": "4e0a94dfdedcb8c2d19aeec56149d2c781db8658d40a04937c84f11ee782efa3",
+    "backend/tests/test_replica_runtime_run.py": "aef4d75ac33d9a42a6742f43180b77b4da15d6e201e249c19f567a3ad277af41",
+    "backend/tests/test_source_assessment_llm.py": "597fb3a3499fadcf445e090bb34877bdae9135d9cc5ce064f578ce8674a6bce7"
+  },
+  "linux": {
+    "image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "archive_sha256": "372db60a9b29b42b0f5b94e506efabbc1c17da621ec08cccb391fdbd2bfe5dc1",
+    "container_id": "128e8b32175d64f360f129584a2b5e40dd00622876d1f1d8d557d844d2b6c2f4",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T04:24:56.970670494Z",
+    "FinishedAt": "2026-11-02T04:29:29.16628234Z",
+    "junit": {
+      "tests": 165,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "505475e1faba1ea634780a21b0289dc335d4c54fd41a5501b7e877b272c36c11"
+    },
+    "failed_cases": []
+  },
+  "windows": {
+    "runner_related_passed": 145,
+    "runner_and_assessment_passed": 66,
+    "cohorts_overlap": true,
+    "skipped": 0
+  },
+  "root_gate": {
+    "command": "node scripts/check-project.mjs",
+    "exit_code": 0,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "log_sha256": "4b6bc581fe5ab1e42406b45cdd7c4ca09439ad40214b81f00c265bfc3077a489"
+  },
+  "native_current_execution_id": "c0dca8ab51424b7686f59c20eb3149c7",
+  "native_recipe_sha256": "e01b75f4c6ef1cf496bcd94c491eeab9a6955f0c6594c66d8474efa5f9007f15",
+  "native_stages": [
+    {
+      "stage": "preflight",
+      "passed": true,
+      "overall_exit_code": 1,
+      "required_stages_remaining": 21,
+      "report_sha256": "4ffc43d6b259483a8290b533e730732cced251de663bd01ff9c55fe6f70d91ea"
+    },
+    {
+      "stage": "smoke",
+      "passed": true,
+      "overall_exit_code": 1,
+      "required_stages_remaining": 20,
+      "report_sha256": "121068c663ff7cfc4fc3052bf15bd8b68f013eee84b87a40e00b685fd29cdfed"
+    }
+  ],
+  "required_runtime_stages": 22,
+  "current_runtime_qualified": false,
+  "full_backend_ci_pass": false,
+  "previous_full_ci": {
+    "revision": "0768dd9",
+    "cases": 5953,
+    "passed": 5769,
+    "failures": 1,
+    "skipped": 183,
+    "all_case_ids_matched": true,
+    "remaining_failure": "test_keyless_endpoint_does_not_inherit_ambient_credentials: one-second test timeout",
+    "fix_scope": "test budget only; network prohibition and all credential assertions retained; no production timeout change"
+  },
+  "retained_prototype_execution_id": "9135415b5c9c4c51a4ecea1853020d6a",
+  "prototype_reused_for_current_qualification": false,
+  "production_schedule": "disabled",
+  "limitations": [
+    "Current v2 run has only preflight and smoke completed; no combined runtime PASS.",
+    "Physical worker-loss/partition/load stages remain required for this run.",
+    "No customer/external/mixed/RWX/physical-node/HA or production RPO qualification."
+  ]
+}

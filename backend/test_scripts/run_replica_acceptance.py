@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_scripts.replica_runtime_acceptance import probe_runtime
+from test_scripts.replica_runtime_plan import REQUIRED_CHECKS, STAGES
 
 RUNNER_SHA256 = sha256(b"".join((Path(__file__).parent / name).read_bytes()
     for name in ("run_replica_acceptance.py", "replica_runtime_acceptance.py", "replica_runtime_faults.py"))).hexdigest()
@@ -53,7 +54,14 @@ def validate_manifest(value: dict) -> None:
         raise ValueError("Run-scoped artifact prefix required")
 
 
-def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known_hosts=None, idle_faults=False, active_faults=False) -> dict:
+def execute_owned_runtime(manifest, journal, stage, *, apply=False, resume=False):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/kubernetes"))
+    from replica_runtime_run import execute_owned_runtime as execute
+    return execute(manifest, journal, stage, apply=apply, resume=resume)
+
+
+def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known_hosts=None, idle_faults=False, active_faults=False,
+                 owned_stage=None, owned_journal=None, apply_owned=False, resume_owned=False) -> dict:
     """Allowlist output; never include raw inputs or arbitrary exceptions."""
     valid = True
     try:
@@ -65,7 +73,23 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
     # Syntactic validation is not a live namespace/PVC/provider probe.
     checks.extend({"name": name, "status": "pending", "reason": "live_probe_not_implemented"}
                   for name in requested)
-    if valid and live and "runtime" in requested:
+    owned = None
+    if valid and owned_stage is not None:
+        if not live or "runtime" not in requested or owned_journal is None:
+            raise ValueError("Owned stages require explicit live runtime and a protected journal")
+        checks = [check for check in checks if check["name"] != "runtime"]
+        try:
+            owned = execute_owned_runtime(manifest, owned_journal, owned_stage, apply=apply_owned, resume=resume_owned)
+            rows = owned.get("checks", [])
+            names = [row.get("name") for row in rows]
+            if set(names) != set(REQUIRED_CHECKS) or len(names) != len(REQUIRED_CHECKS):
+                raise ValueError("The full required owned runtime check set is missing")
+            checks.extend(rows)
+        except Exception:  # Provider, path and journal failures must never expose private inputs.
+            owned = None
+            checks.append({"name": "runtime.owned_stage", "status": "failed", "reason": "owned_stage_refused_or_interrupted"})
+            checks.append({"name": "runtime.current_run", "status": "pending", "reason": "same_run_completion_required"})
+    elif valid and live and "runtime" in requested:
         checks = [c for c in checks if c["name"] != "runtime"]
         checks.extend(probe_runtime(manifest, ssh_host=ssh_host, known_hosts=known_hosts, idle_faults=idle_faults,
             active_faults=active_faults))
@@ -81,14 +105,17 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
         ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[2],
         capture_output=True, text=True, check=False,
     ).stdout.strip()
+    passed = owned is not None and owned.get("passed") is True and all(check["status"] == "passed" for check in checks)
     return {
         "suite": suite, "run_id": manifest["run_id"] if valid else None,
         "profile": manifest["profile"] if valid else None,
         "revision": revision if re.fullmatch(r"[0-9a-f]{40,64}", revision) else None,
         "runner_sha256": RUNNER_SHA256,
-        "checks": checks, "passed": False, "failed": sum(c["status"] == "failed" for c in checks),
+        "checks": checks, "passed": passed, "failed": sum(c["status"] == "failed" for c in checks),
         "skipped_required": sum(c["status"] == "pending" for c in checks), "durations": {},
-        "recovery_point_age_seconds": None,
+        "recovery_point_age_seconds": owned.get("recovery_point_age_seconds") if owned else None,
+        **({"owned_runtime_execution_id": owned["execution_id"], "owned_runtime_recipe_sha256": owned.get("runner_sha256"),
+            "durations": owned["durations"]} if owned else {}),
     }
 
 
@@ -101,6 +128,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--known-hosts", type=Path)
     parser.add_argument("--idle-faults", action="store_true", help="Also scale API/worker and normally replace idle owned Pods")
     parser.add_argument("--active-faults", action="store_true", help="Also test cancel/delete and model saturation on new synthetic documents")
+    parser.add_argument("--owned-runtime-stage", choices=STAGES)
+    parser.add_argument("--runtime-journal", type=Path)
+    parser.add_argument("--apply-owned-runtime", action="store_true", help="Explicitly authorize this owned mutating stage")
+    parser.add_argument("--resume-owned-stage", action="store_true", help="Resume only a recognized existing child phase")
     args = parser.parse_args(argv)
     try:
         if args.manifest.stat().st_size > 1024 * 1024:
@@ -111,7 +142,9 @@ def main(argv: list[str] | None = None) -> int:
         if (args.idle_faults or args.active_faults) and not args.live:
             raise ValueError("Fault probes require explicit live execution")
         report = build_report(value, args.suite, live=args.live, ssh_host=args.ssh_host,
-            known_hosts=args.known_hosts, idle_faults=args.idle_faults, active_faults=args.active_faults)
+            known_hosts=args.known_hosts, idle_faults=args.idle_faults, active_faults=args.active_faults,
+            owned_stage=args.owned_runtime_stage, owned_journal=args.runtime_journal,
+            apply_owned=args.apply_owned_runtime, resume_owned=args.resume_owned_stage)
     except (OSError, ValueError, TypeError):
         report = {"suite": args.suite, "passed": False, "failed": 1,
                   "checks": [{"name": "manifest", "status": "failed"}], "skipped_required": 1}
