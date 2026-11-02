@@ -178,6 +178,62 @@ def member_record(adapter, state, member, phase):
     return child
 
 
+def real_partition_confirmation():
+    from tests.test_replica_postgres_partition import module as partition_module
+    cls = partition_module().PostgresPartition
+    partition = cls.__new__(cls)
+    old = {"metadata": {"name": "old-worker", "uid": "old-uid"}}
+    healthy = {"metadata": {"name": "healthy-worker", "uid": "healthy-uid"}}
+    policy = {"metadata": {"name": "owned-policy", "uid": "policy-uid"}, "spec": {"owned": True}}
+    lease = {"id": "slot", "resource": "llm", "owner_id": "owner", "fence": 3, "release_required": True}
+    partition.config = {"storage_release": "owned-storage"}
+    partition.journal = {"phase": "partition-applied", "operation_id": "c" * 32, "policy": policy,
+        "selected_worker": old, "workers": [old, healthy], "original_lease": lease, "provider_before": {"started": 4}}
+    observed = SimpleNamespace(policy=copy.deepcopy(policy),
+        network={"postgres": False, "qdrant": True, "model": True, "live": 200},
+        state={"work": [{"status": "running"}], "leases": [copy.deepcopy(lease)], "provider": {"started": 4, "active": 0}}, calls=[])
+    def get(*args):
+        assert args[:2] == ("get", "cnp"), "Confirmation must never mutate or re-inject"
+        observed.calls.append(args)
+        return json.dumps(observed.policy)
+    partition.kube = SimpleNamespace(run=get, python=lambda name, source:
+        copy.deepcopy(observed.network) if name == "old-worker" else {"postgres": True})
+    partition.preflight = lambda phase: None
+    partition.pod = lambda selected: selected
+    partition.state = lambda: copy.deepcopy(observed.state)
+    partition.doc_state = lambda: {"active_count": 0}
+    partition.save = lambda **updates: partition.journal.update(updates)
+    return partition, observed
+
+
+def test_real_automatic_partition_confirmation_can_complete_parent_injection(tmp_path):
+    # inject() calls the real confirm() before returning. Consume that actual
+    # producer's terminal state, rather than inventing an intermediate fixture.
+    partition, _ = real_partition_confirmation()
+    partition.confirm()
+    _, adapter, state = member_adapter(tmp_path)
+    adapter.child_record = lambda member, parent: copy.deepcopy(partition.journal)
+    assert adapter.observe("partition.inject", state)["passed"] is True
+
+
+def test_separate_confirmation_reobserves_an_already_automatically_confirmed_fault():
+    partition, observed = real_partition_confirmation()
+    partition.confirm()
+    partition.confirm()
+    assert partition.journal["phase"] == "partition-proven"
+    assert len(observed.calls) == 2
+
+
+@pytest.mark.parametrize("change", ["policy", "network", "reservation"])
+def test_reconfirmation_cannot_adopt_a_changed_fault(change):
+    partition, observed = real_partition_confirmation()
+    partition.confirm()
+    if change == "policy": observed.policy["metadata"]["uid"] = "foreign"
+    elif change == "network": observed.network["postgres"] = True
+    else: observed.state["leases"][0]["fence"] += 1
+    with pytest.raises(ValueError): partition.confirm()
+
+
 def test_old_member_copied_to_current_run_path_cannot_be_adopted(tmp_path):
     _, adapter, state = member_adapter(tmp_path)
     child = member_record(adapter, state, "worker", "waiting-for-quarantine")

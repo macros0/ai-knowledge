@@ -2512,3 +2512,9 @@ result is not an inventory and cannot prove that every retained document is
 indexed. Missing targeted hits, changed downloads and visible/downloadable trash
 still fail acceptance. Production query limits, visibility filters, credentials
 and runtime images are unchanged by this test-harness correction.
+
+The staged partition adapter accepts the real injector's already-confirmed
+terminal phase. A separate confirmation re-reads the same policy UID/spec,
+selected worker, PostgreSQL-only connectivity, unchanged provider reservation
+and healthy peer. It never re-injects, rewinds a journal or adopts another run;
+an interrupted parent stays unqualified after recipe code changes.

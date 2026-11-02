@@ -233,7 +233,7 @@ class PostgresPartition(WorkerLoss):
         self.preflight("confirm")
         # Observation timeout does not terminate the already-applied fault. This
         # phase only observes the same Pod/container/policy, never re-injects it.
-        if self.journal["phase"] != "partition-applied":
+        if self.journal["phase"] not in {"partition-applied", "partition-proven"}:
             raise ValueError("The same applied partition must be observed")
         expected = self.journal["policy"]
         current = json.loads(self.kube.run("get", "cnp", expected["metadata"]["name"], "-o", "json"))

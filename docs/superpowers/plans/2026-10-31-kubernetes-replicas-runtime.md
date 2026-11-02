@@ -520,3 +520,12 @@ documents. A read-only probe confirmed matching source SHA and targeted search
 for the omitted document. Verification is being changed to document-specific
 queries without increasing production limits. The failed parent remains
 unqualified; source changes require another complete current-recipe execution.
+
+Partition phase-contract follow-up (2026-11-02): the current worker-loss scenario
+passed through the common runner. The partition injector also proved its fault,
+but its automatic confirm advanced farther than the parent adapter expected.
+The same child operation was safely completed through the existing explicit
+observe/heal/restore/verify CLI, with normal entrypoint/model restored and no
+active work/provider slots. The parent remains failed. Regressions execute the
+real confirmation producer and its adapter consumer; correction preserves fresh
+read-only revalidation of an already-confirmed fault rather than injecting again.

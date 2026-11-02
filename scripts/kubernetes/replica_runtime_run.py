@@ -362,7 +362,7 @@ class OwnedAdapter:
         if child is None: return None
         expected = {"worker": {"inject": {"waiting-for-quarantine"}, "observe": {"quarantine-proven"}, "recover": {"reconciled"},
             "release": {"running"}, "verify": {"verified"}},
-            "partition": {"inject": {"partition-applied"}, "confirm": {"partition-proven"}, "observe": {"reclaim-proven"},
+            "partition": {"inject": {"partition-applied", "partition-proven"}, "confirm": {"partition-proven"}, "observe": {"reclaim-proven"},
                 "heal": {"confirmed-return", "quarantine-proven"}, "finish": {"confirmed-return", "running"}, "restore": {"normal-running", "running"}, "verify": {"verified"}},
             "load": {"prepare": {"prepared"}}}
         if member == "load" and action in {"single", "dual"}:

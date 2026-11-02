@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "scope": "owned-basic-managed-s3-synthetic",
+  "status": "partition_phase_contract_fix_verified",
+  "base_revision": "cfb8db2fb25848f36dc45f200952b1f1b03a9a77",
+  "source_sha256": {
+    "scripts/kubernetes/replica_runtime_run.py": "bf2b4287ef63057afa972e0650902c5097c9f70f6b3cde6b086593e531349a2e",
+    "scripts/kubernetes/replica_postgres_partition.py": "1c8450f2a8e91d59ab63acb45acfd06a2bede26a19e94652d0e20c1ccb7a11e6",
+    "backend/tests/test_replica_runtime_run.py": "935b20d90ce30adaea85ca946ff7ae4788ae85db1ce868910dfb38505e15d64f"
+  },
+  "root_cause": {
+    "producer": "PostgresPartition.inject calls confirm before returning",
+    "actual_terminal_phase": "partition-proven",
+    "parent_previously_accepted_only": "partition-applied"
+  },
+  "regression": {
+    "red_failures": 2,
+    "red_guard_passes": 3,
+    "real_confirmation_producer_executed": true,
+    "same_policy_network_reservation_revalidated_on_reconfirmation": true,
+    "reinject_allowed": false
+  },
+  "windows": {
+    "passed": 116,
+    "skipped": 0,
+    "seconds": 140.29,
+    "log_sha256": "72fbb2d07c18cf05c19fa8cb37d59103be608e5a575b612b5152980c5639a6f9"
+  },
+  "linux": {
+    "container_id": "bf31075af1b391a7a6ee0b26de1dc2c774a4616d0bb407f3e865885219470f3c",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T05:53:31.481014156Z",
+    "FinishedAt": "2026-11-02T05:59:43.395131108Z",
+    "junit": {
+      "tests": 116,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "9722e43ef6ca0ca3d011f2b8cccdc885b7a322f9b062b7e3f201602470631a6d"
+    },
+    "failed_cases": []
+  },
+  "root_gate": {
+    "passed": true,
+    "audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff_passed": true,
+    "log_sha256": "326953d7de71d0a499d89aa3be84e86476d37e1d51095e1e4146c5d329fba79d"
+  },
+  "native_failed_parent": {
+    "execution_id": "66fc4b11997e435cb50acea0f165398c",
+    "recipe_sha256": "f9fed3b55cbeedcee6b0a41f7f463eda144791faafe47016c3bc1bceb04426e4",
+    "completed_stages": 10,
+    "failed_stage": "partition.inject",
+    "retained_unchanged": true,
+    "qualified": false
+  },
+  "native_original_child_completed_safely": {
+    "status": "owned-postgres-partition-stale-return-passed",
+    "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+    "fault_operation_id": "37c0ef84cb4144849145bbca5b6cf905",
+    "maintenance_epoch": 13,
+    "partition": {
+      "policy_uid": "8c9a94b9-3c35-4e90-81ab-85800beea335",
+      "policy_sha256": "2c593e1edaaccc86a3795409d4f265247d140ef05aabae2407546f9b19f772fc",
+      "selected_workers": 1,
+      "port": 5432,
+      "old_worker_live": true,
+      "old_worker_ready": false,
+      "healthy_worker_postgres_positive": true,
+      "qdrant_model_positive": true,
+      "provider_active_before_policy_patch": 1,
+      "provider_active_at_network_sample": 0,
+      "timing_limit": "first confirmed network sample followed provider finish; processing/publication still unfinished"
+    },
+    "stale_return": {
+      "original_pod_uid": "bf166396-1571-4abb-9a7b-dd3de0d15033",
+      "same_container_no_restart": true,
+      "reclaimed_fence": 2,
+      "original_generation_abandoned": true,
+      "captured_old_owner_fence_publication_probe_rejected": true,
+      "probe_transaction_rolled_back": true,
+      "claims_total_at_return": 31.0,
+      "completed_total_at_return": 30.0,
+      "old_process_continued_work": true,
+      "process_lease_losses_delta": 0.0
+    },
+    "capacity": {
+      "original_slot_retained_until_reconnect": true,
+      "completion": "confirmed-provider-reply-acknowledged-normally",
+      "offline_reconciliation_required": false,
+      "provider_observations_after_reconnect": {
+        "test_only": true,
+        "active": 0,
+        "peak_active": 1,
+        "started": 3,
+        "finished": 3
+      },
+      "owned_slots_at_finish": 0
+    },
+    "preserved_existing_documents": 42,
+    "normal_entrypoint_restored": true,
+    "policy_removed": true,
+    "model_scenario": "success",
+    "verified_at": "2026-11-02T05:50:53.571165+00:00"
+  },
+  "native_completion_used_original_recipe": true,
+  "physical_proof_not_imported_into_new_parent": true,
+  "current_runtime_qualified": false,
+  "full_ci_passed": false,
+  "production_backup_schedule_enabled": false,
+  "next": "new complete current-recipe 22-stage execution; standalone diagnostics cannot qualify it"
+}
