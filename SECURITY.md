@@ -2642,5 +2642,19 @@ unknown descriptor fields fail closed. Conditional blob imports are read back
 for size/SHA and held SQL/corpus/work state must remain unchanged. No schema
 adoption, identity rebinding, authentication cleanup or activation is performed.
 Existing journals/targets cannot be blindly replayed. The selected synthetic
-source-off provider import passed; a complete schema-changing application
-recovery and other provider profiles still require their own acceptance.
+source-off provider import and subsequent replacement schema recovery passed;
+other provider profiles still require their own acceptance.
+
+The actual predecessor replacement recovery uses the verified current image's
+transactional rpl04-to-rpl05 migration and retains a held fence through new scoped
+identity and authentication cleanup. Administrator SQL/S3 material is projected
+only into offline Jobs, separately from the future application Settings and
+immutable scoped runtime Secret. Canonical corpus/work hashes, restored blob SHA,
+vectors/active-generation references, zero source sessions and a denied held
+write precede explicit same-operation release. Ordinary deployments cannot
+reference the offline administrator Secret. A genuine old-image read-only direct
+transactional guard probe isolates schema rejection with otherwise matching
+current identity/storage; it grants no old-image startup bypass. Retained source
+storage is not modified or deleted. The qualified training result covers only
+new-target recovery, not in-place/compact adoption, other providers, full current
+fault qualification or physical HA.

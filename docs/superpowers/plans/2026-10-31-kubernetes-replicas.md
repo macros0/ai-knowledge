@@ -43,7 +43,7 @@ partition/возврат устаревшего процесса и нагруз
 
 - **O1:** RWX, external/mixed end-to-end, заполнение хранилищ на уровне приложения
   и квалификация инфраструктуры/failure domains выбранных профилей.
-- **O2:** schema-changing update/adoption существующих установок, key recovery,
+- **O2:** оставшиеся adoption/update recipes, включая compact/NULL-generation, key recovery,
   доставка backup-error/age alerts в мониторинг и оставшиеся profile-specific
   backup/restore recipes. Локальный cold-check и журнал попыток реализованы;
   production-расписание и доставка уведомлений ещё не включены.
@@ -91,11 +91,20 @@ PostgreSQL/Qdrant/10 blobs,12 объектов архива,2 документа
 Копия фактически импортирована в новый namespace с отдельными3 PVC:
 2 документа/369 заданий,4 точки Qdrant и10 blob SHA проверены при выключенном
 источнике. [Импорт rpl04](../reports/2026-11-02-replica-predecessor-provider-import.json).
-Target пока сохраняет старые schema/identity/S4-token, все приложения0.
+На завершении отдельного этапа импорта target сохранял старые schema/identity/S4-token,
+все приложения0.
 Проверки импорта: Windows100 passed; Linux174 passed, включая11 native PostgreSQL,
 0 failures/errors/skips. [Валидация импорта](../reports/2026-11-02-replica-predecessor-import-validation.json).
-Переход Kubernetes на rpl05, новая identity, отзыв старой авторизации и запуск
-с функциональной приёмкой ещё не выполнены.
+Последующий [schema-changing recovery](../reports/2026-11-02-replica-predecessor-schema-recovery.json)
+фактически выполнен: настоящий Alembic rpl04→rpl05, удержание epoch1→2,
+новая identity/scoped SQL/S3 и отзыв2 старых сессий до запуска. Проверены9
+неизменных таблиц корпуса,369 work rows,10 blob SHA и4 точки с векторами.
+Старый образ отверг новую schema в read-only проверке транзакционного guard
+при совпадающих фактических identity/storage. После явного release2 все2/2/2
+Ready без рестартов,2 старых документа проходят поиск/download SHA,2 новые
+загрузки завершены без problem-кодов;7 runtime smoke checks passed.
+Это восстановление с обновлением в новый target, не in-place обновление старого
+namespace, не compact/NULL-generation adoption и не полная R5 приёмка нового образа.
 CT102 остановлен; рабочий корпус и сервисы заказчика не используются.
 Одноузловой kind не подтверждает устойчивость к потере физического узла;
 Gateway/SSO, реальные model providers и инфраструктура заказчика остаются

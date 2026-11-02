@@ -441,9 +441,11 @@ PVCs. The subsequent
 restored that archive into new PostgreSQL/Qdrant/S3 instances and disjoint PVCs:
 2 documents,369 work rows,4 points and10 verified blob SHA. The old source stayed
 physically off. Target schema/identity/token remain the authenticated rpl04/S4
-source values; all target application/model deployments remain0. Forward
-migration, new identity/authentication cleanup and explicit activation with
-functional acceptance remain mandatory O2 checks.
+source values and all application/model deployments remained0 at that import
+checkpoint. The later
+[schema-changing recovery](superpowers/reports/2026-11-02-replica-predecessor-schema-recovery.json)
+completed the actual forward migration, new scoped identity/authentication cleanup,
+explicit release and functional acceptance for this selected synthetic recipe.
 The [export/source-off validation](superpowers/reports/2026-11-02-replica-predecessor-export-validation.json)
 records the separate109-pass Windows and157-pass Linux cohorts, including8
 native PostgreSQL cases and post-source-off cold archive verification.
@@ -479,6 +481,45 @@ clear the token to start an application. A failed/uncertain import remains
 stopped; observe the same protected operation rather than repeating a fresh
 import against a partially populated target. The modern rpl05 import command
 and saved-image restore implementation retain their original contracts.
+
+### Verified predecessor replacement recovery
+
+The completed training recipe uses a new namespace and disjoint storage. The
+original rpl04 source remains physically off with all PVCs retained. It does not
+perform an in-place migration of that retained namespace. Reauthenticate the
+independent archive and its completed source provenance before provider import;
+never replace the original token/identity to make a current image start.
+
+Build the exact current committed backend, verify its source hashes and Alembic
+head inside the image, then resolve its Docker/CRI/rootfs/config mapping. Keep
+ordinary roles0 while binding immutable runtime/identity/scoped Secret objects.
+An offline-only Job uses `OperatorSettings` with the future scoped application
+credentials and a separately target-bound administrator URL projected0440.
+`migrate_fenced_predecessor(..., restore=True)` executes the real rpl05 migration
+and transfers the genuine S4 fence atomically to held migration epoch1. Provision
+the dedicated scoped SQL/S3 principals and verify their actual TLS/denied rights;
+then `rebind_predecessor_target` changes installation/config/storage at held epoch2,
+revokes source sessions/login flows and holds pending audit deliveries. Root
+credentials are never mounted in ordinary frontend/API/worker deployments.
+
+Before release, compare all9 canonical-table hashes, normalized old work/progress
+hashes (the added epoch column must be0),10 restored object size/SHA and4 complete
+Qdrant points with active-generation references. Verify0 source sessions and a
+real denied held write. The old-image direct transactional guard was separately
+tested read-only against the actual target with matching genuine identity/storage
+values, isolating its exact-schema refusal. This test is not normal old startup.
+After an explicit same-operation release, start2/2/2 and verify live image IDs,
+common identity, scoped SQL/TLS, original search/download SHA, fresh publication,
+shared sessions and frontend storage isolation. The selected run passed7 smoke
+checks and retained both originals after2 new clean uploads. It does not inherit
+the previous image's complete R5 fault qualification or prove other providers,
+compact/NULL-generation adoption, physical HA or a production RPO/RTO SLA.
+
+An uncertain Job/staging outcome requires observation of the same UID/operation.
+The recorded staging retry reused its already-created identity ConfigMap only
+after exact UID/data and unchanged Deployment checks; it repeated no schema or
+identity SQL and added no maintenance epoch. Preserve source PVCs and failed
+diagnostic artifacts. Production backup scheduling remains disabled.
 
 ### Explicit offline CLI
 

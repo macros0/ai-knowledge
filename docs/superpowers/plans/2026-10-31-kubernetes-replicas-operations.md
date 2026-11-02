@@ -314,6 +314,28 @@ confirmed old rpl04/source identity/S4 token, no maintenance table/epoch column,
 rebind, auth cleanup and activation are separate open gates.
 See `../reports/2026-11-02-replica-predecessor-import-validation.json`.
 
+O2 actual predecessor schema-changing recovery,2026-11-02: source-off rpl04 copy
+was migrated using the actual rpl05 Alembic revision inside the verified current
+image45403fc.509 installed source files match511 exact committed build inputs;
+Docker/CRI/rootfs/config mapping and live API/worker image IDs agree. Genuine S4
+token transferred atomically to held epoch1, then new scoped installation8 held
+epoch2;2 old sessions revoked before activation.9 canonical tables,369 work rows,
+10 S3 SHA and4 full-vector points verified before explicit release. An actual old
+image read-only direct guard probe refused rpl05 while all identity/storage
+comparisons matched; it does not claim normal old-image startup.2/2/2 Ready with
+zero restarts,2 preserved search/download SHA and2 fresh clean documents passed;
+7 current-runtime smoke checks passed. Retained old source remains off with PVCs.
+An operator-local variable collision stopped staging after identity CM creation,
+before role changes; the same CM UID/data and unchanged role specs were checked
+before resuming, without repeating schema/identity SQL or incrementing epoch.
+Build capacity was returned to the other owned target's original2/2/2 and9-table
+hashes/PVC/runtime identity reverified. Project audit0/frontend756+1skip/Ruff.
+See `../reports/2026-11-02-replica-predecessor-schema-recovery.json`.
+This closes only the selected source-off replacement-recovery recipe. Compact/
+NULL-generation adoption, retained-namespace in-place update, other profiles,
+key recovery/delivered backup alerts and final whole-version CI remain unproven.
+Production backup scheduleOFF.
+
 ## Task O3: fault matrix, release gates и документация
 
 O2 selected-runtime backup follow-up (2026-11-01): backup now resolves the common
