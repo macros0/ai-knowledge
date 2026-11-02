@@ -2585,3 +2585,17 @@ maintenance audit, including durable-outbox-only mode. Identity replacement and
 the claim roll back together if auditing fails. This database primitive is not
 an application bypass, automatic release, compact/legacy-corpus adoption or
 qualification of a complete Kubernetes schema-update procedure.
+
+The explicit offline upgrade CLI accepts schema adoption only with its supported
+predecessor plus complete bounded writer/count inputs. Input planning configures
+no SQL connection and publishes no identity. Its separately projected16KiB
+operator URL retains the application's exact verified PostgreSQL transport while
+only the SQL principal may differ; signed Settings remain scoped. Identity
+publication is create-only after the held SQL commit, allowing the same owned
+operation to retry a lost/failed file publication without advancing the epoch or
+duplicating audit. JSON inputs are bounded regular8KiB files; projection links
+are supported and FIFOs refused without waiting. Raw errors/credentials are not
+printed. The CLI never performs schema migration, clears uncertain owners,
+releases maintenance or scales workloads. Saved older recovery images retain
+the standalone transport implementation rather than importing a missing new
+application module.

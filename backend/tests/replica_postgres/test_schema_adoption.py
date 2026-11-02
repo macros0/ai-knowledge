@@ -139,3 +139,47 @@ def test_pg_conflicting_storage_operation_rolls_back_real_schema_ddl(predecessor
         assert 'replica_maintenance_state' not in inspect(conn).get_table_names()
         assert 'maintenance_epoch' not in {col['name'] for col in inspect(conn).get_columns('work_items')}
         assert conn.scalar(text('SELECT count(*) FROM documents')) == 1
+
+
+@pytest.mark.parametrize('publication_failure', [False, True])
+def test_pg_schema_cli_adopts_and_resumes_without_release(predecessor, tmp_path, monkeypatch, publication_failure, capsys):
+    import json
+    import app.deployment.bootstrap as bootstrap
+    from tests.test_replica_schema_upgrade_cli import load
+    engine, config, settings, old = predecessor
+    migrate(engine, config)
+    # The disposable server is isolated loopback, not a TLS provider fixture.
+    # This exercises real CLI SQL/adoption; scoped TLS transport is tested
+    # separately and the actual Kubernetes Job still needs its own recipe.
+    settings.database_url = engine.url.render_as_string(hide_password=False)
+    settings.runtime_identity_file = tmp_path / 'cli-output.json'
+    monkeypatch.setattr(bootstrap, 'OperatorSettings', lambda **kwargs: settings)
+    runtime, source, receipts, counts = [tmp_path / name for name in ('runtime.env', 'source.json', 'writers.json', 'counts.json')]
+    runtime.write_text('# Explicit isolated native fixture\n')
+    source.write_text(json.dumps(old))
+    receipts.write_text(json.dumps(stopped()))
+    counts.write_text(json.dumps(COUNTS))
+    operation = uuid4().hex
+    args = ['--runtime-env-file', str(runtime), '--expected-identity', str(source), '--operation-id', operation,
+        '--owner-id', 'pg-cli-test', '--adopt-schema-from', PREVIOUS, '--writer-receipts', str(receipts),
+        '--intended-counts', str(counts), '--apply']
+    publish, tool = bootstrap.write_identity, load()
+    if publication_failure:
+        def unavailable(*_args):
+            raise OSError('Simulated identity publication failure')
+        monkeypatch.setattr(bootstrap, 'write_identity', unavailable)
+        assert tool.main(args) == 2
+        assert not settings.runtime_identity_file.exists()
+        with engine.connect() as conn:
+            assert conn.scalar(text('SELECT epoch FROM replica_maintenance_state')) == 2
+            assert conn.scalar(text('SELECT count(*) FROM audit_log')) == 2
+        monkeypatch.setattr(bootstrap, 'write_identity', publish)
+    assert tool.main(args) == 0
+    assert tool.main(args) == 0
+    with engine.connect() as conn:
+        assert conn.execute(text('SELECT epoch,operation_id,enabled FROM replica_maintenance_state')).one() == (2, operation, True)
+        assert conn.execute(text('SELECT status,attempts FROM work_items')).one() == ('queued', 0)
+        assert conn.scalar(text('SELECT count(*) FROM audit_log')) == 2
+        assert conn.scalar(text('SELECT count(*) FROM auth_sessions')) == 1
+    assert json.loads(settings.runtime_identity_file.read_bytes())['installation_id'] == old['installation_id']
+    capsys.readouterr()

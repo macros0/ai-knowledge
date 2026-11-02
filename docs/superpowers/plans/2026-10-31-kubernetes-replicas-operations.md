@@ -172,6 +172,18 @@ coordinator, compact/NULL-generation corpus adoption or other O2 gates. See
 [SQL transition evidence](../reports/2026-11-02-replica-schema-adoption.json) and
 [procedure boundary](../../KUBERNETES_REPLICAS_RECOVERY.md#database-adoption-after-the-rpl04--rpl05-schema-change).
 
+O2 offline CLI follow-up (2026-11-02): the existing runtime-upgrade command now
+accepts the explicit predecessor/verified writer receipts/intended counts for
+the supported already-migrated installation. A separate bounded target-bound
+operator file configures SQL without changing scoped signed Settings. Regular
+JSON inputs are bounded8KiB, projected symlinks supported, FIFO/partial/foreign
+inputs refused. Actual SQL commit followed by failed identity publication is
+resumed idempotently with the same epoch/audit. The default same-schema mode and
+saved-image standalone restore remain compatible. See
+[CLI receipt](../reports/2026-11-02-replica-schema-upgrade-cli.json). No migration,
+release or scaling is automatic; full Kubernetes schema-update and other O2
+adoption/provider gates remain open.
+
 **Interfaces:** `MaintenanceState` в PostgreSQL: installation_id, epoch bigint,
 enabled, operation_id, owner_id, started_at. `enter_maintenance(session, operation_id:
 str) -> int` increments epoch; `assert_writes_allowed(session, expected_epoch: int)

@@ -348,6 +348,54 @@ The SQL transition is covered by its
 The complete Kubernetes schema-update coordinator and other legacy-corpus
 adoption recipes remain separate O2 gates.
 
+### Explicit offline CLI
+
+The current-version `backend/scripts/upgrade_replica_runtime.py` invokes this
+step only when all three schema inputs are supplied together:
+
+```text
+python backend/scripts/upgrade_replica_runtime.py
+  --runtime-env-file /run/upgrade/runtime.env
+  --expected-identity /run/upgrade/source-identity.json
+  --operation-id <owned-operation-id> --owner-id <owned-operator-id>
+  --adopt-schema-from rpl04_runtime_identity
+  --writer-receipts /run/upgrade/writer-receipts.json
+  --intended-counts /run/upgrade/intended-counts.json
+  --operator-db-file /run/operator-db/url
+  --apply
+```
+
+`writer-receipts.json` contains every `REQUIRED_WRITERS` key with its verified
+`stopped` or `drained` value; `intended-counts.json` contains exactly `frontend`,
+`api` and `worker` integer counts. Both and the saved source identity must be
+regular JSON-object files of at most8192 bytes. Projected symlinks are supported;
+FIFOs are refused without waiting. Missing, partial or unknown-transition inputs
+fail before database configuration. Omitting `--apply` performs input planning
+without configuring SQL or publishing an identity.
+
+Keep runtime env/Settings on the scoped application principals. The optional
+operator URL is a separate read-only Secret projection, at most16KiB, whose
+driver/named host/database/effective port/every query option must match the
+application URL with explicit TLS verify-full and the same root certificate.
+Only the username/password may differ. It configures only the offline SQL engine
+and is absent from the signed runtime settings and public output. The default
+without this projection preserves the existing bootstrap connection path.
+
+The CLI commits the held claim/identity/audit before create-only atomic identity
+publication. If publication fails or its reply is lost, inspect the same operation
+and repeat with identical source/settings/receipts. A successful repeat publishes
+the same document without another epoch or audit event. A different existing
+output document is refused, never overwritten. The public success receipt keeps
+`jobs_held=true`; neither mode performs Alembic migration, release or scaling.
+Without the schema inputs, the default remains the existing same-schema rebind.
+See [CLI evidence](superpowers/reports/2026-11-02-replica-schema-upgrade-cli.json).
+
+The standalone recovery tool keeps its own saved-image-compatible transport
+implementation: older archived images do not contain the new current-version
+operator module. Its file/projection contract remains covered separately. The
+native CLI SQL tests use an isolated loopback PostgreSQL17 server; they do not
+qualify Kubernetes operator projections or an end-to-end schema-update rollout.
+
 ## Owned live same-schema image rollout (2026-11-01)
 
 `scripts/kubernetes/replica_upgrade.py` coordinates the owned-kind lab recipe.
