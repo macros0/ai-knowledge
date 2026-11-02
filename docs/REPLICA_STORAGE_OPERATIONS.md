@@ -455,3 +455,22 @@ Older failed parent journals remain historical failures. Other suites/profiles,
 the latest20-document restore drill and final-version CI remain separate gates.
 Worker memory lifetime peak reached92.24% of its768MiB limit in the two-worker
 trial with no OOM; these bounds are lab measurements, not production sizing.
+
+## Restore with scoped runtime credentials
+
+When the fresh target uses scoped PG/S3 application principals, mount its
+administrative SQL URL separately as a read-only0440 Secret projection at
+`/run/operator-db/url`. Pass `--operator-db-file /run/operator-db/url` to the
+offline `restore_identity.py` Job. Keep envFrom/Settings on the scoped runtime
+Secret so the resulting signed identity belongs to the settings ordinary roles
+will actually use. The operator URL must retain the exact target driver, host,
+database, effective port, verify-full/root certificate and other query options;
+only its SQL username/password may differ. The file is bounded to16KiB and must
+resolve to regular material; supported projected-Secret symlinks are allowed.
+
+The option changes only the offline engine connection. It does not grant an
+application bypass or release restored work. Authenticate/import the backup into
+new disjoint stores with the source unavailable, create the scoped principals,
+verify imports and held jobs, rebind identity, then explicitly release the same
+restore operation after its checks. Keep failed targets stopped and preserve
+source PVCs. Current-copy restore execution remains a separate acceptance step.

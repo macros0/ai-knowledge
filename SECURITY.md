@@ -2548,3 +2548,16 @@ unchanged80-document baseline. It does not aggregate failed older runs or remove
 customer/provider/physical-failure-domain gates. Production backup scheduling
 remains disabled by the user's decision; the new independent20-document copy
 still requires its own source-off restore drill.
+
+Offline restore identity adoption accepts an explicit `--operator-db-file`
+projection so its SQL engine can use administrative credentials while Settings
+and the keyed runtime fingerprint retain the scoped application credentials.
+The opened projection must be a regular file of at most16KiB; supported Kubernetes
+projection symlinks are followed, and a FIFO is refused without waiting for a
+writer. Only the SQL principal/password may differ: driver, named TCP host,
+database, effective port and every query/TLS parameter must match the selected
+application target, with explicit verify-full and a root certificate. Invalid
+material is refused before provider probes or SQL configuration and is never
+printed. The separate operator Secret remains a read-only0440 Job projection;
+ordinary roles never receive it. Existing source-off/held-job/adoption guards
+and the legacy bootstrap connection path remain unchanged.

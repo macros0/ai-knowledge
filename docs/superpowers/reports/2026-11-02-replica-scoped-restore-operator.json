@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "status": "scoped-restore-operator-software-verified",
+  "scope": "owned-basic-managed-s3-offline-identity-adoption",
+  "base_revision": "c189d1a31610f75237ae72fa9ca5257af678bc14",
+  "source_sha256": {
+    "scripts/kubernetes/restore_identity.py": "c3e2492b797367caff77b875ad10b3cbdaaccedc614546241d311caa2e656f89",
+    "backend/tests/test_replica_restore_operator.py": "f24b5e99166df75a60ba6affec24ba6ba892df7e054a9d3f8cd552069663b37d"
+  },
+  "regression": {
+    "initial_red_failures": 18,
+    "initial_red_windows_posix_skips": 2,
+    "initial_red_seconds": 34.36,
+    "additional_target_binding_red_failures": 3,
+    "additional_red_seconds": 13.73,
+    "same_target_transport_and_tls_required": true,
+    "operator_credentials_not_in_signed_settings": true,
+    "actual_cli_rebind_auth_invalidation_and_held_state_verified": true,
+    "foreign_target_refused_before_provider_or_sql": true,
+    "secret_material_never_printed": true,
+    "file_limit_bytes": 16384
+  },
+  "windows": {
+    "passed": 54,
+    "skipped": 2,
+    "skip_scope": [
+      "Linux projected Secret symlink",
+      "Linux FIFO"
+    ],
+    "seconds": 81.15,
+    "log_sha256": "9f983ada2b3bfee1f7284f19537d4809ebe54d04b29e1f518ce97e1df323c602"
+  },
+  "linux": {
+    "container_id": "f54bc18892ed79ff40b86cdd3ba509a4a3890e42c9b13b8c760b1b859c6da1c9",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T10:04:16.475405045Z",
+    "FinishedAt": "2026-11-02T10:07:24.072925862Z",
+    "junit": {
+      "tests": 56,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "baae74f6ce9ae2ae06bf97411a7ff3a00e3274a185095a0ba5de993b5cef7216"
+    },
+    "failed_cases": []
+  },
+  "root_gate": {
+    "passed": true,
+    "audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff_passed": true,
+    "log_sha256": "741f48ee3036898b62cc6dbb49574a633d9e8d20f4bb1896c76a78f157e7c63a"
+  },
+  "current_copy_restore_performed": false,
+  "production_schedule": "disabled",
+  "limitations": [
+    "Linux filesystem symlink/FIFO regression is not a native Kubernetes restore Job.",
+    "New20-document target inputs are prepared locally; source-off restore remains required.",
+    "No external/mixed/RWX, customer infrastructure or physical HA qualification."
+  ]
+}

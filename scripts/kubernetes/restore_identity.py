@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import stat
 import sys
 from hashlib import sha256
 from pathlib import Path
@@ -16,6 +18,44 @@ from pathlib import Path
 # In the saved backend image app/ is under its working directory /app.
 if Path("/app/app").is_dir():
     sys.path.insert(0, "/app")
+
+
+def operator_database_url(settings, path):
+    """A projected operator credential may change only the selected SQL principal.
+
+    Settings keep the application credentials used by the keyed identity.
+    Kubernetes Secret projections legitimately use symlinks; the opened target
+    must be a bounded regular file. Nonblocking open refuses FIFOs without
+    waiting for a writer. The Job must mount this separate Secret read-only.
+    """
+    if path is None:
+        return settings.db_url
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.exc import ArgumentError
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+        with os.fdopen(os.open(path, flags), "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError()
+            raw = stream.read(16385)
+        if not raw or len(raw) > 16384:
+            raise ValueError()
+        value = raw.decode("utf-8").strip()
+        if not value or any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError()
+        expected, actual = make_url(settings.db_url), make_url(value)
+        if (expected.drivername not in {"postgresql", "postgresql+psycopg"}
+                or actual.drivername != expected.drivername or not actual.username or not actual.password
+                or not expected.host or not expected.database
+                or expected.port is not None and not 1 <= expected.port <= 65535
+                or actual.host != expected.host or actual.database != expected.database
+                or (5432 if actual.port is None else actual.port) != (5432 if expected.port is None else expected.port)
+                or actual.query != expected.query
+                or expected.query.get("sslmode") != "verify-full" or not expected.query.get("sslrootcert")):
+            raise ValueError()
+        return value
+    except (OSError, ValueError, UnicodeError, ArgumentError):
+        raise ValueError("Operator database file does not match the verified application target") from None
 
 
 def rebind_target(session, settings, plan, *, installation_id, operation_id, selection_digest):
@@ -93,6 +133,8 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--backup-plan", type=Path, required=True)
     parser.add_argument("--operation-id", required=True)
+    parser.add_argument("--operator-db-file", type=Path,
+        help="Separate read-only projected operator credential for the same verified PostgreSQL target")
     args = parser.parse_args()
     try:
         from app.db.session import configure_database, get_engine
@@ -113,7 +155,7 @@ def main():
                 or settings.deployment_namespace == plan.source.namespace or selection.installation_id == plan.source.installation_id
                 or settings.artifact_backend != "s3"):
             raise ValueError("Explicit isolated recovery target required")
-        configure_database(settings.db_url)
+        configure_database(operator_database_url(settings, args.operator_db_file))
         selection_digest = "sha256:" + sha256(canonical(selection.model_dump())).hexdigest()
         with MaintenanceOperator(get_engine(), operation_id=args.operation_id, owner_id="owned-lab-restore", settings=settings) as op:
             probe_artifacts(settings, installation_id=selection.installation_id, selection_digest=selection_digest)

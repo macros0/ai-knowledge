@@ -85,6 +85,14 @@ pending TLS/network items; it does not complete O1 or certify customer storage.
 
 ## Task O2: maintenance, backup и restore с ночным RPO
 
+Current-copy restore preparation (2026-11-02): a fresh isolated target has new
+local credentials/CA and disabled application inputs; no target namespace or
+restore has been executed yet. Offline identity adoption now supports a separate
+bounded operator Secret file, bound to the same verified PostgreSQL transport,
+while signing the scoped application settings. Windows54 checks passed with2
+POSIX-only skips; Linux56/56 passed including symlink/FIFO behaviour. This closes
+the software prerequisite for scoped restore, not the20-document source-off drill.
+
 O1 scoped-runtime credentials milestone (2026-11-01): a dedicated PG17 role and
 RustFS1.0.4 IAM principal passed native permissions probes (10 SQL/9 S3 denials,
 positive DML/row-lock/range/conditional/multipart controls). Create-only immutable
