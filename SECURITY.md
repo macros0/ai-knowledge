@@ -2743,3 +2743,33 @@ work, reconcile providers, release maintenance or start roles. Independent backu
 restoration, actual provider qualification and a populated source-off Kubernetes
 adoption/release rehearsal remain mandatory. Native PostgreSQL tests use only a
 new temporary cluster/database and synthetic filesystem/backup fixtures.
+
+2026-11-03: compact adoption can additionally consume an explicit reviewed
+version1 legacy handoff plan. The plan is bounded to4096 intents/4MiB and carries
+only known recipes, owner IDs, accepted-input hashes and deterministic Work IDs.
+The operator reproduces the complete plan from locked SQL; omitted/extra/changed
+entries, unknown versions and conflicting admission identities refuse the whole
+transaction. Bulk approvals/params, S4-frozen export refs, translation versions,
+accepted scope plans and portable document checkpoint policies remain unchanged.
+No current threshold grants approval, no draft substitutes for an accepted
+policy, and started/owned/ambiguous work cannot be made safe by lease expiry.
+
+New pristine WorkItems and DocumentWorkInputs commit with the held identity and
+one adoption audit binding the plan digest. The foreign-key parents are flushed
+before their inputs, within that same transaction; native PostgreSQL regression
+tests detected and verified this ordering. A retry excludes only those exact new
+IDs from original-source hashing and separately verifies spec, policy, admission
+timestamp, counters and unexecuted status. Changed/missing new rows refuse while
+retaining the fence. CLI inspect publishes source/plan create-only, and apply
+requires the same plan again after an acknowledged-commit publication failure.
+
+Pending splitting/indexing documents, diagnostic bundles and scope operations
+cannot escape adoption checks merely by living outside public Job status filters.
+Queued work for an awaiting-approval job is explicitly refused. Progress without
+an accepted portable checkpoint is not silently regenerated. Shared protocol2
+diagnostic requests can retain their existing request/cutoff; legacy protocol1
+requests are refused until a separate migration verifies their local recorder
+journal/input history. S4 ready-archive copying does not establish that migration.
+This remaining legacy migration and actual source-off Kubernetes/provider/release
+acceptance are still required; the SQL handoff does not execute jobs or qualify
+the platform.

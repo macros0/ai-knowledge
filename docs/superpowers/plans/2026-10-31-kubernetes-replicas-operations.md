@@ -172,6 +172,19 @@ handoff or complete the populated source-off Kubernetes adoption/provider/releas
 recipe. See [detail plan](2026-11-02-replica-compact-adoption.md) and
 [SQL phase procedure](../../KUBERNETES_REPLICAS_RECOVERY.md#nonempty-compact-adoption-held-sql-phase).
 
+O2 reviewed queue handoff follow-up (2026-11-03): an explicit bounded version1
+plan now creates supported orphan WorkItems/frozen document inputs in the same
+transaction as held identity and audit. Original jobs, approval decisions,
+accepted S4 export/checkpoint/scope inputs and all original SQL rows are retained;
+same-operation retry validates the pristine new rows rather than ignoring them.
+CLI inspection/apply and actual PostgreSQL rollback, conflicting-writer and
+publication-resume tests passed. This is still partial Task3: protocol1 diagnostic
+recorder history needs its own verified migration before pending local bundles
+can be handed off. Protocol2 shared-input tests do not close that gap. Running or
+owned legacy operations remain explicit reconciliation gates, and populated
+source-off Kubernetes/provider/restore/release acceptance is still required.
+See [handoff evidence](../reports/2026-11-03-replica-compact-handoff.json).
+
 O2 schema-adoption SQL foundation (2026-11-02): the specific populated
 rpl04-to-rpl05 transition now has an owned offline adoption step. It claims only
 the exact migration-created fence, checks original identity/storage and explicit

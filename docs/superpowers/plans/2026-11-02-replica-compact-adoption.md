@@ -71,3 +71,73 @@ refusal is not completion of legacy queue migration.
   a disposable target, with independently verified backup and source-off proof.
   Search/download/new publication and queued work require functional evidence.
   Unit/SQL phases alone do not close this O2 gate.
+
+### Task 3a: Reviewed atomic legacy handoff
+
+Implementation decision (2026-11-03, within approved O2): compose handoff into
+the held adoption transaction. A separate converter would expose durable work
+to a compact source before a fence exists; automatic startup recovery would
+hide the input/approval review. Neither fits the approved safety boundary.
+
+**Files:** create `backend/app/deployment/compact_handoff.py` and
+`backend/tests/test_replica_compact_handoff.py`; extend compact SQL/CLI and their
+native tests. No schema change, new dependency, queue thread or provider call.
+
+`plan_compact_handoff(session, settings, source) -> dict` emits a strict bounded
+version1 plan bound to the reviewed source SQL/selection hashes. Entries contain
+only recipe/version, owner ID, accepted-input hash and deterministic new Work ID;
+private params/policies stay in SQL. The planner compares the complete source
+before/after inspection. All eligible orphan intents must appear; changed,
+omitted, extra or unknown recipes refuse, never silently sample.
+
+Known recipes reuse existing worker contracts: bulk delete/regenerate/resume;
+S4-frozen export; reference/glossary translation; shared-protocol2 queued
+diagnostic bundle with its original request/cutoff; queued unowned scope change with accepted plan;
+interrupted document continuation with accepted portable checkpoint/generation
+scope and frozen DocumentWorkInput. S4 already enriches export source_blob and
+converts legacy checkpoints; handoff must verify those SQL bindings, not repeat
+copying or alter accepted params. Draft review is never substituted for an
+accepted scope. Unknown/owned/running/incomplete recipes remain refused until
+explicit reconciliation; lease expiry is not permission to clear ownership.
+
+Add optional `handoff` to `adopt_compact_runtime`. After existing table locks and
+original source comparison, reproduce the whole plan from SQL and create only
+its WorkItems/frozen inputs. Preserve every original row, including approval,
+queued status, NULL generations and accepted payloads. Install identity, held
+epoch1 and the one common audit in the same transaction; audit proof includes
+the complete reviewed plan digest. A held retry excludes only deterministic new
+rows from original-source hashing and separately verifies every new row's exact
+spec, frozen policy, pristine queue state and admission timestamp. Never exclude
+those IDs from initial source verification or allow a changed plan on retry.
+
+Extend CLI `--handoff-plan`: inspect publishes a create-only plan beside its
+source snapshot; adopt/dry-run read bounded strict unique-key JSON and check
+source binding. No flag preserves existing orphan refusal. Publication failure
+after acknowledged commit can resume with the exact same source/plan/settings.
+
+- [x] RED latent omissions: pending diagnostic bundles, splitting/indexing docs,
+  owned scope operations and queued work targeting awaiting-approval jobs.
+- [x] RED absent planner/atomic handoff; implement the listed version1 queued recipes,
+  complete-source/manifest and same-held retry verification; GREEN.
+- [x] CLI RED/GREEN, including failure after SQL commit, missing/changed plan,
+  bounded/duplicate-key inputs and no-execution/no-release assertions.
+- [x] Native PostgreSQL atomic rollback/locking/retry with populated S4 fixture;
+  relevant existing queue/scope/translation/migration regressions; project check.
+- [ ] Complete legacy local diagnostic journal/input migration before allowing
+  protocol1 pending bundles. S4 migrates ready archives, not recorder FS history;
+  a request/cutoff alone cannot prove that history reached the shared SQL store.
+  The current handoff refuses protocol1; this required migration stays open.
+- [x] Update SECURITY/procedure/evidence with exact scope; retain actual
+  source-off Kubernetes/provider/restore/release acceptance as Task3b; commit.
+
+SQL/CLI handoff verification (2026-11-03):176 Windows passes, zero skips/failures,
+including the existing bulk, scope, translation, export and S4 regressions;
+24 native PostgreSQL passes, including6 handoff cases. Native FK enforcement
+found and verified the fix to parent-before-input flush ordering, still inside
+one atomic transaction. Root project checks passed (audit0/frontend756 passed).
+The isolated cluster shut down normally after its initial30s stop-observation
+timeout; the same postmaster completed its47.925s checkpoint, disappeared and
+removed its PID file. Stop was observed, not repeated. Data/logs are retained.
+See [bounded public evidence](../reports/2026-11-03-replica-compact-handoff.json).
+The required legacy local diagnostic journal migration remains open above;
+this is progress toward Task3, not completion of all legacy variants or O2.

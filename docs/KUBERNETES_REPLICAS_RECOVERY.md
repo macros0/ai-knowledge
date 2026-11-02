@@ -93,8 +93,10 @@ independent recoverable backup. The storage probe receipt and six writer
 stop/drain receipts are trusted inputs to SQL, not physical evidence collected
 by this command. Existing supported durable WorkItems remain queued. Unconverted
 legacy queued/running public Jobs or processing/queued documents without durable
-document work refuse adoption; legacy handoff and its actual rehearsal remain
-open. After a future explicit handoff, capture a new source snapshot.
+document work refuse adoption unless the reviewed atomic handoff below applies.
+Legacy recorder-journal migration and the actual deployment rehearsal remain
+open. The handoff uses the original snapshot; it does not replace it with a
+snapshot that hides the original queued intent.
 
 Select a protected, fully specified target runtime env file containing database,
 application secret, namespace, shared-store configuration, future image digest
@@ -157,6 +159,44 @@ source-off Kubernetes rehearsal, legacy intent conversion and functional
 search/download/new-publication proof still need completion. See the
 [implementation plan](superpowers/plans/2026-11-02-replica-compact-adoption.md) and
 [SQL/CLI evidence](superpowers/reports/2026-11-03-replica-compact-adoption.json).
+
+### Reviewed legacy queue handoff
+
+Add `--handoff-plan "$handoff"` to both `inspect` and `adopt` when the source has
+eligible orphan intents. Inspect creates two separate create-only files, source
+snapshot and plan. If file publication fails, SQL is unchanged; observe the files
+and repeat the same inspection only while the source remains identical. Neither
+file can overwrite different existing bytes. Review and protect both files.
+
+The version1 plan lists every eligible orphan intent, with recipe, owner ID,
+accepted-input hash and deterministic Work ID. It has a4096-intent/4MiB limit;
+oversize or unknown input refuses the complete plan rather than sampling it.
+The plan contains no raw policy/translation/export payloads; those stay in SQL.
+Known recipes cover queued bulk delete/regenerate/resume, S4-frozen export,
+reference/glossary translation, unowned queued scope change, interrupted document
+continuation and already-shared protocol2 diagnostic requests. Existing matching
+durable work is preserved. Awaiting-approval jobs acquire no work or new approval.
+Started/running/owned jobs or changed accepted input require explicit reconciliation.
+
+S4 must already have frozen export originals and converted accepted checkpoints
+to portable protocol2. Document continuation preserves that checkpoint/generation
+and copies its accepted policy into DocumentWorkInput. Draft or unconfirmed
+reviews, missing policies, retired owners and progress without a recoverable
+checkpoint refuse; the command does not invent a new regenerate request.
+
+Legacy protocol1 diagnostic requests still depend on recorder files. Ready bundle
+archive copying does not move that history to shared SQL. Such requests therefore
+remain refused until the separate legacy journal/input migration is implemented
+and verified. A protocol2 fixture is not evidence for this outstanding case.
+
+Apply reproduces the entire plan under the retained table locks. It adds only
+WorkItems/frozen inputs, then commits them together with identity, held epoch1
+and one adoption audit containing the plan digest. Any SQL/audit failure rolls
+back the complete handoff. `handoff_intents` in CLI output is a count, not an
+execution or provider-qualification receipt. After acknowledged commit but failed
+identity publication, retry with the same source, plan, operation, owner and
+runtime. Every new row must still be pristine with the original admission time;
+changed/missing work or frozen input refuses and leaves the hold intact.
 
 ## Encrypted archive contract
 

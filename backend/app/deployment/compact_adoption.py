@@ -12,7 +12,7 @@ from sqlalchemy import func, inspect, or_, select, text
 
 from app.db.base import Base
 from app.db.models import (ArtifactStorageControl, ArtifactStorageMigration, AuditLog, AuditOutbox, ChatRun,
-    Document, DocumentGenerationState, Job, MaintenanceState, ReplicaCapacitySlot, ReplicaRuntimeIdentity, WorkItem)
+    Document, DocumentGenerationState, MaintenanceState, ReplicaCapacitySlot, ReplicaRuntimeIdentity, WorkItem)
 from app.services.artifacts.control import descriptor
 from app.services.artifacts.publication import canonical_hash
 from app.services.work.maintenance_control import MaintenanceRefused, REQUIRED_WRITERS, _require_operator
@@ -85,7 +85,7 @@ def _selection(session, settings):
     return control,history
 
 
-def _snapshot(session, settings, *, bounds=None):
+def _snapshot(session, settings, *, bounds=None, handoff_ids=()):
     control,history = _selection(session,settings)
     caps = bounds or {'audit_log':session.scalar(select(func.max(AuditLog.id))) or 0,
         'audit_outbox':session.scalar(select(func.max(AuditOutbox.id))) or 0}
@@ -97,6 +97,8 @@ def _snapshot(session, settings, *, bounds=None):
         statement = select(table).order_by(*table.primary_key.columns)
         if name in caps:
             statement = statement.where(table.c.id<=caps[name])
+        if handoff_ids and name in {'work_items','document_work_inputs'}:
+            statement=statement.where(table.c['id' if name=='work_items' else 'work_id'].not_in(handoff_ids))
         for row in session.execute(statement.execution_options(yield_per=100)).mappings():
             digest.update(canonical_hash(dict(row)).encode())
     selection = {name:getattr(control,name) for name in (
@@ -107,7 +109,8 @@ def _snapshot(session, settings, *, bounds=None):
         document_count=session.scalar(select(func.count()).select_from(Document)),
         legacy_document_count=session.scalar(select(func.count()).select_from(Document).outerjoin(
             DocumentGenerationState,DocumentGenerationState.doc_id==Document.id).where(DocumentGenerationState.active_generation_id.is_(None))),
-        queued_work_count=session.scalar(select(func.count()).select_from(WorkItem).where(WorkItem.status=='queued')),
+        queued_work_count=session.scalar(select(func.count()).select_from(WorkItem).where(
+            WorkItem.status=='queued',WorkItem.id.not_in(handoff_ids))),
         audit_log_upper_id=caps['audit_log'],audit_outbox_upper_id=caps['audit_outbox']))
 
 
@@ -127,13 +130,12 @@ def capture_compact_source(session, settings):
         raise MaintenanceRefused('Compact source is invalid or unavailable') from None
 
 
-def _pending(session):
+def _pending(session,settings):
     if (session.scalar(select(WorkItem.id).where(or_(WorkItem.status=='running',WorkItem.owner_id.is_not(None),
             WorkItem.lease_until.is_not(None),WorkItem.maintenance_epoch!=0)).limit(1))
             or session.scalar(select(ChatRun.id).where(ChatRun.status=='running').limit(1))
             or session.scalar(select(ReplicaCapacitySlot.id).where(or_(ReplicaCapacitySlot.owner_id.is_not(None),
-                ReplicaCapacitySlot.release_required.is_(True))).limit(1))
-            or session.scalar(select(Job.id).where(Job.status.in_(['queued','running'])).limit(1))):
+                ReplicaCapacitySlot.release_required.is_(True))).limit(1))):
         raise MaintenanceRefused('Running, uncertain or unconverted legacy intent requires explicit reconciliation')
     from app.services.work.runtime import build_handlers
     supported = build_handlers().supported
@@ -144,9 +146,8 @@ def _pending(session):
             WorkSpec(item.kind,item.payload_version,item.payload_json,item.dedupe_key,item.doc_id)
         except (ValueError,TypeError):
             raise MaintenanceRefused('Queued work payload requires explicit migration') from None
-    backed = select(WorkItem.id).where(WorkItem.doc_id==Document.id,WorkItem.kind=='document',WorkItem.status=='queued').exists()
-    if session.scalar(select(Document.id).where(Document.status.in_(['processing','queued']),~backed).limit(1)):
-        raise MaintenanceRefused('Unconverted document intent requires explicit reconciliation')
+    from .compact_handoff import validate_pending_intents
+    validate_pending_intents(session,settings)
 
 
 def _audit_extent(session, expected, proof, *, own):
@@ -175,10 +176,12 @@ def _audit_extent(session, expected, proof, *, own):
         raise MaintenanceRefused('A durable unique compact adoption audit is required')
 
 
-def adopt_compact_runtime(session, settings, expected, storage_receipt, *, operation_id, intended_counts, writer_receipts):
+def adopt_compact_runtime(session, settings, expected, storage_receipt, *, operation_id, intended_counts, writer_receipts, handoff=None):
     """Install identity and epoch1 atomically, with no activation or work execution."""
     op = _require_operator(session,operation_id)
     source = _expected(expected)
+    from .compact_handoff import apply_handoff, compile_handoff, reviewed_plan, verify_handoff
+    reviewed=reviewed_plan(handoff,source) if handoff is not None else None
     if (op.settings is not settings or operation_id=='0'*32 or settings.runtime_identity_file is None
             or type(intended_counts) is not dict or set(intended_counts)!={'frontend','api','worker'}
             or any(type(n) is not int or not 0<=n<=64 for n in intended_counts.values())
@@ -201,14 +204,18 @@ def adopt_compact_runtime(session, settings, expected, storage_receipt, *, opera
     installed=session.get(ReplicaRuntimeIdentity,1,with_for_update=True)
     state=session.get(MaintenanceState,1,with_for_update=True)
     bounds={'audit_log':source.audit_log_upper_id,'audit_outbox':source.audit_outbox_upper_id}
-    if _snapshot(session,settings,bounds=bounds)!=source:
+    retry=installed is not None or state is not None
+    handoff_ids=[entry.work_id for entry in reviewed.entries] if reviewed is not None else []
+    if _snapshot(session,settings,bounds=bounds,handoff_ids=handoff_ids if retry else ())!=source:
         raise MaintenanceRefused('Compact source differs from the reviewed snapshot')
-    _pending(session)
+    intents=compile_handoff(session,settings,source,reviewed,retry=retry) if reviewed is not None else []
     document=identity_document(settings,installation_id=source.installation_id,
         storage_receipt_digest='sha256:'+sha256(canonical(storage_receipt)).hexdigest())
-    proof=canonical_hash(dict(source=source.model_dump(),identity=document,operation_id=operation_id,owner_id=op.owner_id,
-        intended_counts=intended_counts,writer_receipts=writer_receipts))
-    if installed is not None or state is not None:
+    proof_inputs=dict(source=source.model_dump(),identity=document,operation_id=operation_id,owner_id=op.owner_id,
+        intended_counts=intended_counts,writer_receipts=writer_receipts)
+    if reviewed is not None:proof_inputs['handoff_sha256']=canonical_hash(reviewed.model_dump())
+    proof=canonical_hash(proof_inputs)
+    if retry:
         if (installed is None or state is None or not state.enabled or state.epoch!=1
                 or state.installation_id!=source.installation_id or state.operation_id!=operation_id
                 or state.owner_id!=op.owner_id or state.operation_kind!='upgrade'
@@ -217,6 +224,8 @@ def adopt_compact_runtime(session, settings, expected, storage_receipt, *, opera
                 or installed.fingerprint!=document['runtime_fingerprint'] or installed.schema_revision!=SCHEMA_REVISION
                 or installed.storage_receipt_digest!=document['storage_receipt_digest']):
             raise MaintenanceRefused('Existing installation is not this exact held compact adoption')
+        verify_handoff(session,intents,state.started_at)
+        _pending(session,settings)
         _audit_extent(session,source,proof,own=True)
         return document
     _audit_extent(session,source,proof,own=False)
@@ -226,6 +235,8 @@ def adopt_compact_runtime(session, settings, expected, storage_receipt, *, opera
     from app.services import audit
     from app.services.audit_event import AuditContext
     now=_now(session)
+    apply_handoff(session,intents,now)
+    _pending(session,settings)
     session.add(ReplicaRuntimeIdentity(id=1,installation_id=source.installation_id,
         fingerprint=document['runtime_fingerprint'],storage_receipt_digest=document['storage_receipt_digest'],
         schema_revision=SCHEMA_REVISION,created_at=now))
@@ -238,6 +249,7 @@ def adopt_compact_runtime(session, settings, expected, storage_receipt, *, opera
         event_context=AuditContext(actor_type='system'),settings=settings)
     session.flush()
     _audit_extent(session,source,proof,own=True)
-    if _snapshot(session,settings,bounds=bounds)!=source:
+    verify_handoff(session,intents,now)
+    if _snapshot(session,settings,bounds=bounds,handoff_ids=handoff_ids)!=source:
         raise MaintenanceRefused('Logical source changed during compact adoption')
     return document
