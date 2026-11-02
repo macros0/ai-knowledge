@@ -273,6 +273,57 @@ def test_load_report_uses_its_actual_fingerprint_field_and_current_run_child(tmp
     with pytest.raises(ValueError): adapter.observe("load.verify", state)
 
 
+@pytest.mark.parametrize("operation_fields", ["confirmed", "reconciled", "both"])
+def test_partition_reader_accepts_the_two_real_report_protocols(tmp_path, operation_fields):
+    _, adapter, state = member_adapter(tmp_path)
+    child = member_record(adapter, state, "partition", "verified")
+    report = {"namespace_uid": adapter.value["namespace_uid"],
+        "runtime_fingerprint": adapter.manifest["runtime_fingerprint"]}
+    if operation_fields != "reconciled": report["fault_operation_id"] = child["operation_id"]
+    if operation_fields != "confirmed": report["operation_id"] = child["operation_id"]
+    adapter.child_path("partition", state, report=True).write_text(json.dumps(report))
+    assert adapter.observe("partition.verify", state)["passed"] is True
+
+
+@pytest.mark.parametrize("fields", [{}, {"fault_operation_id": "9" * 32},
+    {"operation_id": "f" * 32, "fault_operation_id": "9" * 32},
+    {"operation_id": "9" * 32, "fault_operation_id": "f" * 32}])
+def test_partition_aliases_cannot_hide_a_missing_or_foreign_operation(tmp_path, fields):
+    _, adapter, state = member_adapter(tmp_path)
+    member_record(adapter, state, "partition", "verified")
+    report = {"namespace_uid": adapter.value["namespace_uid"],
+        "runtime_fingerprint": adapter.manifest["runtime_fingerprint"], **fields}
+    adapter.child_path("partition", state, report=True).write_text(json.dumps(report))
+    with pytest.raises(ValueError): adapter.observe("partition.verify", state)
+
+
+@pytest.mark.parametrize("partition_recovery", [False, True])
+def test_real_final_adapter_consumes_all_three_native_report_shapes(tmp_path, partition_recovery):
+    _, adapter, state = member_adapter(tmp_path)
+    original = {"id": "original", "sha256": "unchanged"}
+    state["baseline"] = {"documents": [original], "epoch": 13}
+    final_epoch = 15 if partition_recovery else 14
+    for member in ("worker", "partition", "load"):
+        child = member_record(adapter, state, member, "verified")
+        child.pop("cases")
+        if member == "worker": child.update(source_epoch=13, epoch=14)
+        elif member == "partition":
+            child.update(source_epoch=14, operation_id="8" * 32)
+            if partition_recovery: child["epoch"] = 15
+        else: child["epoch"] = final_epoch
+        adapter.child_path(member, state).write_text(json.dumps(child))
+        report = {"namespace_uid": adapter.value["namespace_uid"]}
+        report["fingerprint" if member == "load" else "runtime_fingerprint"] = adapter.manifest["runtime_fingerprint"]
+        if member != "load":
+            key = "fault_operation_id" if member == "partition" and not partition_recovery else "operation_id"
+            report[key] = child["operation_id"]
+        adapter.child_path(member, state, report=True).write_text(json.dumps(report))
+    adapter.baseline = lambda: {"documents": [original, {"id": "added"}], "images": {}, "epoch": final_epoch}
+    result = adapter.final(state)
+    assert result["passed"] is True and result["final_epoch"] == final_epoch
+    assert result["preserved_documents"] == 1
+
+
 def test_completion_write_failure_keeps_in_memory_and_durable_state_unqualified(tmp_path, monkeypatch):
     tool, adapter, current = run(tmp_path)
     original = tool.write_json

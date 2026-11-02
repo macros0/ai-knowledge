@@ -529,3 +529,11 @@ observe/heal/restore/verify CLI, with normal entrypoint/model restored and no
 active work/provider slots. The parent remains failed. Regressions execute the
 real confirmation producer and its adapter consumer; correction preserves fresh
 read-only revalidation of an already-confirmed fault rather than injecting again.
+
+Partition report-contract follow-up (2026-11-02): another common execution passed
+16 stages and the real worker/partition children both verified. The parent reader
+then refused the confirmed-return report's `fault_operation_id`, expecting only
+the offline-recovery protocol's `operation_id`. Reader correction accepts either
+real protocol, requires every present alias to match, and retains the failed
+parent unchanged. Regression coverage now exercises the real final adapter with
+all three member report shapes and both legitimate maintenance epoch chains.

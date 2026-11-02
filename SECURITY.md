@@ -2518,3 +2518,10 @@ terminal phase. A separate confirmation re-reads the same policy UID/spec,
 selected worker, PostgreSQL-only connectivity, unchanged provider reservation
 and healthy peer. It never re-injects, rewinds a journal or adopts another run;
 an interrupted parent stays unqualified after recipe code changes.
+
+Partition report validation recognizes the existing confirmed-return
+`fault_operation_id` and offline-recovery `operation_id` protocols. At least one
+must be present and every present operation field must equal the same owned
+child operation. Conflicting aliases never hide a foreign operation. Namespace,
+runtime fingerprint, parent-run ownership and recovery provenance checks remain
+mandatory; no failed parent/report is rewritten to manufacture qualification.

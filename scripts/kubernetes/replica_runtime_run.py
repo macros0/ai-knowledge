@@ -375,8 +375,11 @@ class OwnedAdapter:
             if (report.get("namespace_uid") != self.value["namespace_uid"]
                     or report.get("runtime_fingerprint", report.get("fingerprint")) != self.manifest["runtime_fingerprint"]):
                 raise ValueError("Runtime member report is foreign")
-            if member != "load" and report.get("operation_id") != child["operation_id"]:
-                raise ValueError("Runtime member report operation differs")
+            if member != "load":
+                fields = ("operation_id", "fault_operation_id") if member == "partition" else ("operation_id",)
+                observed = [report[name] for name in fields if name in report]
+                if not observed or any(value != child["operation_id"] for value in observed):
+                    raise ValueError("Runtime member report operation differs")
             return {"passed": True, "operation_id": child.get("operation_id"), "child_sha256": digest(child), "report_sha256": digest(report)}
         if not passed: return None
         return {"passed": True, "operation_id": child.get("operation_id"), "phase": child["phase"], "child_sha256": digest(child)}
