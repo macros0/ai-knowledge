@@ -436,12 +436,49 @@ on the separate PC:2 documents,2 concepts,2 chunks,369 work rows,6 audit events,
 10 blobs and12 verified encrypted objects. A separate guarded lab action then
 normally stopped its three storage StatefulSets, verified all seven controllers
 at0/no live source CRI processes on the same Ready node, and retained all three
-PVCs. Provider import into a new target, authenticated forward migration/new
-identity and the Kubernetes schema-update rollout remain mandatory O2 checks.
+PVCs. The subsequent
+[provider import](superpowers/reports/2026-11-02-replica-predecessor-provider-import.json)
+restored that archive into new PostgreSQL/Qdrant/S3 instances and disjoint PVCs:
+2 documents,369 work rows,4 points and10 verified blob SHA. The old source stayed
+physically off. Target schema/identity/token remain the authenticated rpl04/S4
+source values; all target application/model deployments remain0. Forward
+migration, new identity/authentication cleanup and explicit activation with
+functional acceptance remain mandatory O2 checks.
 The [export/source-off validation](superpowers/reports/2026-11-02-replica-predecessor-export-validation.json)
 records the separate109-pass Windows and157-pass Linux cohorts, including8
 native PostgreSQL cases and post-source-off cold archive verification.
 Existing modern archives and their saved-image recovery path remain supported.
+
+### Importing the predecessor providers
+
+The separate `scripts/kubernetes/replica_predecessor_restore.py` command requires
+`--config`, `--namespace-uid`, `--source-config`, `--source-namespace-uid`,
+`--source-operation-journal`, `--archive`, `--key-file`, `--report` and
+`--operation-journal`. It accepts only a fully authenticated predecessor archive
+and exact completed source backup provenance. The target must be a fresh empty
+owned namespace/database/Qdrant/S3 instance with new, disjoint PVCs and stopped
+application/model deployments. Both journals remain in their protected config/CA
+directory; an existing target operation or report prohibits blind replay.
+
+One retained target PostgreSQL advisory lock coordinates the import. Native
+`pg_restore` runs in a single transaction, followed by the actual Qdrant snapshot
+and conditional S3 copies with cold size/SHA reads. Every provider-write stage
+rechecks the original source's same Ready node UID, zero controllers/endpoints/
+Pod/CRI writers, both PVC bindings and pinned target controller/storage-Pod
+snapshots. Read-only SQL checks require the actual rpl04 head, absent maintenance
+table/work epoch column, unchanged source fingerprint/control/S4 token/unique
+epoch0 audit, exact metadata totals, accepted object references and bounded work/
+corpus hashes. The complete verified S3 TLS descriptor is preserved; HTTP, wrong
+CA or unknown descriptor fields are refused.
+
+The command performs no migration, identity rebinding, authentication revocation
+or activation. Successful import leaves the original source installation ID and
+fingerprint in SQL with its genuine S4 token; source auth sessions also remain
+until the explicit held target-rebinding step. Do not rewrite those fields or
+clear the token to start an application. A failed/uncertain import remains
+stopped; observe the same protected operation rather than repeating a fresh
+import against a partially populated target. The modern rpl05 import command
+and saved-image restore implementation retain their original contracts.
 
 ### Explicit offline CLI
 

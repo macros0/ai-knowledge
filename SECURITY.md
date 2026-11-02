@@ -2628,4 +2628,19 @@ held/stopped; there is no automatic release or schema change. Journal/snapshot
 loss requires observation and explicit recovery, not a blind CLI retry. The
 actual synthetic rpl04 provider archive has been cold-verified on the independent
 PC and its source physically stopped with PVCs retained; this does not qualify
-source-off restoration, production scheduling or other provider recipes.
+production scheduling or other provider recipes.
+
+The separate predecessor provider-import CLI accepts only an authenticated rpl04
+archive and matching completed source operation provenance. It requires a fresh
+empty target and disjoint PVCs, retains a target SQL advisory-lock connection,
+and rechecks original source node/CRI unavailability plus source/target PVC and
+target controller/storage-Pod identity through provider writes. Actual imported
+SQL must retain the old schema, absence of maintenance table/work epoch column,
+source identity/fingerprint/counts, exact S4 token and unique epoch0 audit.
+Known TLS descriptor fields are verified and preserved; HTTP, wrong CA and
+unknown descriptor fields fail closed. Conditional blob imports are read back
+for size/SHA and held SQL/corpus/work state must remain unchanged. No schema
+adoption, identity rebinding, authentication cleanup or activation is performed.
+Existing journals/targets cannot be blindly replayed. The selected synthetic
+source-off provider import passed; a complete schema-changing application
+recovery and other provider profiles still require their own acceptance.

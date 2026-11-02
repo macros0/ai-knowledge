@@ -87,8 +87,15 @@ upload→publish→search→download SHA для2 DOCX без problem-кодов.
 Из этого источника фактически получена независимая зашифрованная копия:
 PostgreSQL/Qdrant/10 blobs,12 объектов архива,2 документа/369 заданий.
 [Копия rpl04](../reports/2026-11-02-replica-predecessor-backup.json).
-После проверки копии источник полностью отключён с сохранением3 PVC;
-source-off restore и переход Kubernetes на rpl05 ещё не выполнены.
+После проверки копии источник полностью отключён с сохранением3 PVC.
+Копия фактически импортирована в новый namespace с отдельными3 PVC:
+2 документа/369 заданий,4 точки Qdrant и10 blob SHA проверены при выключенном
+источнике. [Импорт rpl04](../reports/2026-11-02-replica-predecessor-provider-import.json).
+Target пока сохраняет старые schema/identity/S4-token, все приложения0.
+Проверки импорта: Windows100 passed; Linux174 passed, включая11 native PostgreSQL,
+0 failures/errors/skips. [Валидация импорта](../reports/2026-11-02-replica-predecessor-import-validation.json).
+Переход Kubernetes на rpl05, новая identity, отзыв старой авторизации и запуск
+с функциональной приёмкой ещё не выполнены.
 CT102 остановлен; рабочий корпус и сервисы заказчика не используются.
 Одноузловой kind не подтверждает устойчивость к потере физического узла;
 Gateway/SSO, реальные model providers и инфраструктура заказчика остаются

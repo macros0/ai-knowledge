@@ -220,7 +220,17 @@ all7 controllers now have0 replicas, no source CRI process remains,3 PVCs retain
 The [validation receipt](../reports/2026-11-02-replica-predecessor-export-validation.json)
 pins the actual source overlay hashes,109 Windows passes,157 Linux passes with
 8 native PostgreSQL cases and a fresh12-object cold check after source shutdown.
-Source-off restoration and the schema-changing Kubernetes rollout remain open.
+An explicit separate rpl04 importer subsequently restored the real PG dump,
+Qdrant snapshot and10 blobs into a fresh namespace/disjoint PVCs while source
+storage remained physically unavailable. It retained a target SQL advisory
+operator, the exact source S4 token/audit/schema/fingerprint, all369 work rows,
+9 materialized-table hashes and4 Qdrant points. Fresh source node/CRI facts,
+source/target PVC bindings and stopped target controller/storage-Pod snapshots
+were rechecked through provider writes. No schema/identity change or job execution
+occurred; all applications remain0. See
+[provider import](../reports/2026-11-02-replica-predecessor-provider-import.json).
+The schema-changing Kubernetes rollout, new identity/auth cleanup and explicit
+activation plus functional recovery acceptance remain open.
 Production scheduleOFF.
 
 **Interfaces:** `MaintenanceState` в PostgreSQL: installation_id, epoch bigint,
@@ -293,6 +303,16 @@ restore_verified=false and rpo_assured=false. No messages/scheduler were enabled
 See `../reports/2026-11-02-replica-before-scoped-faults-backup.json`. This exercises
 the local health path on a genuine complete attempt without closing restore/key/
 notification/provider gates. Production scheduleOFF.
+
+O2 predecessor provider-import validation,2026-11-02: Windows100 passed;
+Linux174 passed/0 failures/0 errors/0 skips, including11 native PostgreSQL cases.
+The first Linux attempt retained3 native fixture-setup errors; explicit fixture
+import fixed the test harness without changing production import code. All raw
+CI artifacts remain on the training VM. Native post-import SQL independently
+confirmed old rpl04/source identity/S4 token, no maintenance table/epoch column,
+2 old auth sessions and0 active work. Apps remain0; schema transition, identity
+rebind, auth cleanup and activation are separate open gates.
+See `../reports/2026-11-02-replica-predecessor-import-validation.json`.
 
 ## Task O3: fault matrix, release gates и документация
 
