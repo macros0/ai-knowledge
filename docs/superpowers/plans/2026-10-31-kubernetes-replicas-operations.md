@@ -184,6 +184,17 @@ saved-image standalone restore remain compatible. See
 release or scaling is automatic; full Kubernetes schema-update and other O2
 adoption/provider gates remain open.
 
+O2 predecessor protocol foundation (2026-11-02): rpl04 has an existing S4 storage
+token but no epoch. A separate format3 source type retains strict epoch0 plus
+mandatory source/token/controller/CRI stop evidence without changing old archive
+canonical/HMAC bytes. Source SQL/physical guards and owned audited token capture
+precede export. The token transfers atomically with the real rpl05 DDL to the
+fresh held epoch1 fence; target rebinding then adopts a new identity at epoch2
+with auth revocation and restored-count checks. No writable gap or automatic
+release is exposed. See [protocol evidence](../reports/2026-11-02-replica-predecessor-protocol.json).
+This is not a completed predecessor provider archive/recovery or Kubernetes
+schema-update rollout; those live checks and the remaining O2 gates stay open.
+
 **Interfaces:** `MaintenanceState` в PostgreSQL: installation_id, epoch bigint,
 enabled, operation_id, owner_id, started_at. `enter_maintenance(session, operation_id:
 str) -> int` increments epoch; `assert_writes_allowed(session, expected_epoch: int)

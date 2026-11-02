@@ -34,6 +34,7 @@
 | Полный baseline CI | [Backend CI](superpowers/reports/2026-11-02-replica-baseline-backend-ci.json): снимок e3c7025,5910 passed/183 skipped/0 failures, точные case IDs обоих shard; не полный CI последующих изменений |
 | Принятие schema-fence | [Schema adoption](superpowers/reports/2026-11-02-replica-schema-adoption.json): реальная SQL-миграция непустой PostgreSQL rpl04→rpl05 и принятие maintenance с аудитом; полный Kubernetes update/adoption существующего корпуса остаётся отдельной проверкой |
 | Операторский CLI обновления | [Schema upgrade CLI](superpowers/reports/2026-11-02-replica-schema-upgrade-cli.json): отдельный SQL credential при scoped Settings и повтор после SQL commit/ошибки identity-файла; проверка SQL на изолированном PostgreSQL не заменяет Kubernetes rollout |
+| Протокол копии rpl04 | [Predecessor protocol](superpowers/reports/2026-11-02-replica-predecessor-protocol.json): отдельный epoch0/S4-fence, неизменность старого формата, атомарный переход к rpl05 и SQL-восстановление; фактическая старая установка/provider-copy/source-off recovery ещё не проверены |
 
 ## Условия окончательной приёмки
 

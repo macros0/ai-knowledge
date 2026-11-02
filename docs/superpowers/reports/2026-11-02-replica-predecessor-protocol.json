@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "status": "predecessor-backup-restore-protocol-passed",
+  "scope": "source-model-physical-guard-contracts-and-real-postgresql-sql-protocol",
+  "base_revision": "6d32ca7090fbd5c46b12110ca55c456bd82a5f4f",
+  "source_overlay_sha256": {
+    "backend/app/deployment/replica_backup.py": "94e83597de95920c6e68e87ef7e3746734b18c557fd0bf754002f2a18bcfb856",
+    "backend/app/deployment/predecessor_restore.py": "40b9c3285ae42a0e4dc6fa613c7df7b80a591007669d23ab2e8aabb9bf57e04a",
+    "scripts/kubernetes/replica_predecessor_backup.py": "91a4ea8ecd1354a584feff8bbc97188d5a203113c74b924f5b6b0bc00a0946d4",
+    "backend/tests/test_replica_predecessor_backup.py": "cfa2b5bf72361b0ff9098abf1b78a2ad14e4f6e10f2242cf4694ff17bbb3a356",
+    "backend/tests/test_replica_predecessor_restore.py": "2d3e8390992d328588e390de612fb08cc7d16c943a77c60451a969f01e932051",
+    "backend/tests/test_replica_predecessor_stop.py": "1130044a1b9cf37a0ebce1a61e96fdd915cabd5ed49ad139ad4172a6ae23f315",
+    "backend/tests/replica_postgres/test_predecessor_backup.py": "fd481d9caaed2f75872f56d2ee0bedddfa96ed56481106609a0c851bc4fd06a0",
+    "backend/app/deployment/predecessor_upgrade.py": "7b8d8cb1b811fc44eeba21639b183311f3aebbdd621afa6d55c386c854ce07e3"
+  },
+  "legacy_archive_bytes": {
+    "canonical_plan_bytes": 2609,
+    "canonical_plan_sha256": "db4386abe275b62874873b1e8d49acd723442cff91fa799ec1bf3b419d73cf80",
+    "deterministic_fixture_manifest_authentication": "1e92d6a1eb43cd1e8204aa2624b0d978a295d69b4a0406d5a52d6c21ca95b5b9",
+    "existing_independent_copy_cold_check": {
+      "status": "existing-copy-authentication-compatible",
+      "backup_id": "6bfd7725f526474990e1e706eb4201a4",
+      "source_type": "SourceState",
+      "source_epoch": 11,
+      "documents": 20,
+      "blobs": 100,
+      "encrypted_objects_verified": 102,
+      "archive_mutations": 0,
+      "restoration_performed_by_this_check": false,
+      "archive_model_source_sha256": "94e83597de95920c6e68e87ef7e3746734b18c557fd0bf754002f2a18bcfb856"
+    }
+  },
+  "predecessor_source": {
+    "schema_revision": "rpl04_runtime_identity",
+    "epoch": 0,
+    "fencing_kind": "owned-kind-normal-stop-rpl04-v1",
+    "same_owned_artifact_token_required": true,
+    "source_runtime_namespace_controller_cri_proof_required": true,
+    "fresh_source_guard_required_through_export": true,
+    "fake_positive_epoch_or_changed_scope_refused": true,
+    "saved_proof_or_scale_zero_is_not_stop_authority": true
+  },
+  "sql_protocol": {
+    "real_source_token_acquired_and_audited": true,
+    "same_operation_hold_retry": true,
+    "reserved_zero_operation_refused_before_source_row": true,
+    "real_rpl05_ddl_same_transaction_as_token_transfer": true,
+    "rollback_after_actual_ddl_keeps_old_token_and_schema": true,
+    "handover_result": "held-epoch1",
+    "recovery_result": "new-installation-held-epoch2",
+    "restored_auth_revoked": true,
+    "restored_jobs_executed": 0,
+    "replay_preserves_identity_and_metadata_counts": true,
+    "automatic_release_or_scaling": false
+  },
+  "windows": {
+    "primary_passed": 113,
+    "primary_skipped": 1,
+    "failures": 0,
+    "primary_seconds": 165.03,
+    "additional_reserved_id_case_passed": 1,
+    "additional_seconds": 10.1,
+    "primary_scope": "Before the final helper headline/reserved-ID check; final added branch verified separately.",
+    "skip_scope": "One POSIX case qualified in full final Linux cohort"
+  },
+  "linux": {
+    "passed": 121,
+    "skipped": 0,
+    "failures": 0,
+    "ci": {
+      "id": "9973725c1292fdd3b9298d04fce9addd3cc3f38c0b67aa7a43699473853f7a88",
+      "Running": false,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "StartedAt": "2026-11-02T13:48:43.177070341Z",
+      "FinishedAt": "2026-11-02T13:52:22.281534665Z"
+    },
+    "junit": {
+      "tests": 121,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "874a329a4e6f57f467c6a5b97bd39b6f1e7b88302dc5ddb4ce0551b6124a285f"
+    },
+    "native_pg_cases": [
+      {
+        "name": "test_pg_predecessor_source_guard_reads_actual_old_schema",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_guard_refuses_real_uncertain_source[running_work]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_guard_refuses_real_uncertain_source[changed_schema]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_recovery_after_real_forward_migration",
+        "passed": true
+      },
+      {
+        "name": "test_pg_artifact_fence_transfers_atomically_to_real_maintenance[False]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_artifact_fence_transfers_atomically_to_real_maintenance[True]",
+        "passed": true
+      }
+    ],
+    "postgres_version": "17.11-1.pgdg13+2",
+    "postgres_image": "sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3",
+    "postgres": {
+      "id": "ebc83083be9df2881b5da58ccad31eaa65f956c957a1b86461eac81b128fd256",
+      "Running": false,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "StartedAt": "2026-11-02T13:48:41.629813402Z",
+      "FinishedAt": "2026-11-02T13:55:48.827003428Z"
+    },
+    "no_host_ports_or_persistent_volumes": true,
+    "network": "isolated-loopback-only",
+    "postgres_stopped_after_terminal_ci": true,
+    "containers_logs_archives_retained": true
+  },
+  "red_green": {
+    "initial_archive": "3 failures/16 passes before source union/epoch rules",
+    "physical_guards": "11 failures before guard module",
+    "sql_source_scope": "12 failures before scope predicate",
+    "restore_rebind": "10 failures before predecessor target primitive",
+    "source_s3_scope": "3 failures before backend/bucket/prefix checks",
+    "artifact_fence_binding": "2 failures before mandatory token proof/owned SQL guard",
+    "native_atomic_transfer": {
+      "failed": 2,
+      "expected_missing_module_failures": 2,
+      "junit": {
+        "tests": 2,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "sha256": "730601ccc9b3a74ed9952daa81fddbb8d1376840ab56db43f80cb6684590a9cd"
+      }
+    },
+    "reserved_id": "1 failure before refusing reserved source operation"
+  },
+  "project_check": {
+    "passed": true,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "eslint": "passed",
+    "ruff": "passed"
+  },
+  "saved_image_standalone_restore_changed": false,
+  "production_schedule": "disabled",
+  "full_final_version_ci": false,
+  "actual_rpl04_provider_backup_and_source_off_restore": false,
+  "full_kubernetes_schema_update_verified": false,
+  "limitations": [
+    "Physical guards use contract observations in this cohort, not a live old-image Kubernetes source.",
+    "The native restore case seeds imported source SQL/fence audit data and performs real forward DDL; no pg_dump/provider recovery is claimed.",
+    "The existing-copy cold check verifies compatibility of the earlier rpl05 archive, not a new rpl04 copy.",
+    "Complete predecessor export/import orchestration, old-image provisioning and Kubernetes rollout remain open.",
+    "PG17.11 SQL tests do not qualify every production provider version or physical failure domain."
+  ]
+}

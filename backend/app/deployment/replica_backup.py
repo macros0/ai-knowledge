@@ -9,7 +9,7 @@ import os
 import stat
 import struct
 from typing import Annotated, Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -66,6 +66,47 @@ class SourceState(Model):
         return self
 
 
+class PreMaintenanceStopProof(Model):
+    """Evidence binding for the owned rpl04 recipe, re-observed by its guard."""
+    recipe: Literal["owned-kind-normal-stop-rpl04-v1"]
+    namespace_uid: UUID
+    controller_snapshot_sha256: Digest
+    process_observation_sha256: Digest
+    runtime_fingerprint_sha256: Digest
+    artifact_fence_operation_id: Hex32
+    source_scope_sha256: Digest
+    observed_at: AwareDatetime
+    unknown_writers: Annotated[int, Field(strict=True, ge=0, le=0)]
+    unreachable_nodes: Annotated[int, Field(strict=True, ge=0, le=0)]
+    provider_requests: Annotated[int, Field(strict=True, ge=0, le=0)]
+
+
+class PreMaintenanceSourceState(Model):
+    """A stopped predecessor has no maintenance epoch; it must not invent one.
+
+    Kept separate from SourceState so legacy manifest serialization/HMAC bytes
+    retain their exact shape. These fields are evidence, not a process-stop API.
+    """
+    installation_id: Hex32
+    namespace: Annotated[str, Field(pattern=r"^replica-test-[a-z0-9]{8,32}$")]
+    operation_id: Hex32
+    epoch: Annotated[int, Field(strict=True, ge=0, le=0)]
+    consistent_at: AwareDatetime
+    failure_domain: Name
+    unknown_writers: Annotated[int, Field(strict=True, ge=0, le=0)]
+    provider_requests: Annotated[int, Field(strict=True, ge=0, le=0)]
+    writers: Writers
+    snapshot_id: Name
+    fencing_kind: Literal["owned-kind-normal-stop-rpl04-v1"]
+    stop_proof: PreMaintenanceStopProof
+
+    @model_validator(mode="after")
+    def stopped(self):
+        if self.operation_id == "0" * 32 or any(value != "stopped" for value in self.writers.model_dump().values()):
+            raise ValueError("Every predecessor writer must be proven stopped")
+        return self
+
+
 class Destination(Model):
     backend: Literal["filesystem"] = "filesystem"
     store_id: Name
@@ -107,7 +148,7 @@ class BackupPlan(Model):
     backup_id: Hex32
     schema_revision: Annotated[str, Field(pattern=r"^[A-Za-z0-9_]{1,32}$")]
     started_at: AwareDatetime
-    source: SourceState
+    source: SourceState | PreMaintenanceSourceState
     destination: Destination
     images: dict[Literal["frontend", "api", "worker"], Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")]]
     storage: tuple[Storage, ...]
@@ -119,6 +160,19 @@ class BackupPlan(Model):
 
     @model_validator(mode="after")
     def complete_scope(self):
+        predecessor = isinstance(self.source, PreMaintenanceSourceState)
+        if predecessor != (self.schema_revision == "rpl04_runtime_identity"):
+            raise ValueError("The predecessor schema requires its explicit normal-stop protocol")
+        if predecessor:
+            proof = self.source.stop_proof
+            scope = {key: getattr(self.source, key) for key in ("installation_id", "namespace", "operation_id")}
+            scope.update(namespace_uid=str(proof.namespace_uid), schema_revision=self.schema_revision,
+                runtime_fingerprint_sha256=self.model_vector_sha256)
+            if (proof.runtime_fingerprint_sha256 != self.model_vector_sha256
+                    or proof.artifact_fence_operation_id != self.source.operation_id
+                    or proof.source_scope_sha256 != hashlib.sha256(canonical(scope)).hexdigest()
+                    or not self.started_at <= proof.observed_at <= self.source.consistent_at):
+                raise ValueError("Predecessor stop proof differs from the source scope or snapshot")
         if (self.backup_id != self.source.operation_id or self.started_at > self.source.consistent_at
                 or self.source.failure_domain == self.destination.failure_domain
                 or set(self.images) != {"frontend", "api", "worker"}

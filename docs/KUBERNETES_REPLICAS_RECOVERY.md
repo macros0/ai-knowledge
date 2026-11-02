@@ -348,6 +348,56 @@ The SQL transition is covered by its
 The complete Kubernetes schema-update coordinator and other legacy-corpus
 adoption recipes remain separate O2 gates.
 
+### Pre-maintenance predecessor archives
+
+The rpl04 source uses its existing S4 `artifact_storage_control.maintenance_token`
+to block ordinary SQL sessions; it has no maintenance epoch. The new format3
+`PreMaintenanceSourceState` therefore records strict `epoch=0` and the explicit
+`owned-kind-normal-stop-rpl04-v1` protocol. It requires the same nonzero operation
+in its artifact-fence proof, namespace UID, source/runtime scope hash, pinned
+controller generation/spec and physical CRI observation hashes, complete stopped
+writer receipts and bounded observation times. Other schemas and fabricated
+positive epochs cannot use this predecessor path. The original `SourceState`
+serialization and authentication bytes are unchanged.
+
+The owned-source helpers in `scripts/kubernetes/replica_predecessor_backup.py`
+check the exact old database/schema/identity/S3 scope, absence of epoch schema,
+and absence of running/leased work, running chats, owned/unreconciled model slots
+or uncertain artifact deletion. `hold_predecessor_source` explicitly commits and
+audits the real S4 token under one owned operator connection; a repeat must find
+the same token/audit. Backup guards must require that token throughout export.
+Physical guards additionally re-read Kubernetes/node/CRI facts and reject changed
+controller specs/generations or storage Pod bindings, active/unknown processes,
+autoscalers, schedules or unreachable nodes. A saved proof or scale0 alone does
+not authorize a copy.
+
+`app.deployment.predecessor_upgrade.migrate_fenced_predecessor` handles the
+already-authenticated snapshot's SQL transition. It requires a real non-autocommit
+PostgreSQL transaction, the retained operator connection, matching source fence
+audit/token, schema, fingerprint, logical store and metadata counts. In-place
+updates retain the source DB/namespace; restore uses a new isolated DB/namespace.
+The old token is cleared only inside the same transaction that executes the
+actual rpl05 DDL and installs the fresh held epoch1/zero-token fence. No other
+connection observes a writable gap. Failure after DDL rolls back both token
+clearance and the schema changes. A retry accepts only that exact fresh migrated
+state. The operation never releases maintenance or starts jobs.
+
+After verified provider imports and that forward migration,
+`app.deployment.predecessor_restore.rebind_predecessor_target` validates the new
+target's initial fence, source fingerprint/counts/owned S3 bucket-prefix and
+absence of uncertain work. It changes the target installation/identity at held
+epoch2, revokes source sessions/login flows, holds old pending audit deliveries,
+and records the restore audit atomically. Same-operation retries preserve the
+identity and verify the restored counts. Failure leaves the target stopped.
+
+These are protocol/SQL building blocks, with
+[focused evidence](superpowers/reports/2026-11-02-replica-predecessor-protocol.json).
+The existing modern backup command continues to require rpl05; these helpers do
+not yet supply a complete predecessor provider-export/import CLI or Kubernetes
+rollout. An actual old-image/source-off predecessor copy and recovery, followed
+by the Kubernetes schema update, remain mandatory O2 checks. Existing modern
+archives and their saved-image standalone recovery path remain supported.
+
 ### Explicit offline CLI
 
 The current-version `backend/scripts/upgrade_replica_runtime.py` invokes this

@@ -2599,3 +2599,18 @@ printed. The CLI never performs schema migration, clears uncertain owners,
 releases maintenance or scales workloads. Saved older recovery images retain
 the standalone transport implementation rather than importing a missing new
 application module.
+
+The predecessor format3 path has a separate strict-zero-epoch source type and
+versioned owned-kind stop proof. It requires an owned S4 artifact token, bound
+source/runtime/namespace/controller/CRI evidence, stopped writers and quiescent
+SQL state. It does not weaken the existing positive-epoch source or change its
+canonical/HMAC bytes. Snapshot export must retain fresh physical/SQL guards.
+The real rpl04 token already blocks ordinary old-code sessions. Its transfer to
+rpl05 is performed only in one owned non-autocommit PG transaction: NULL is
+visible to the migration, while other sessions see either the old token or the
+new held maintenance fence. DDL failure rolls back token clearance as well.
+Predecessor target rebinding requires the fresh migrated fence and authenticated
+source scope/counts, revokes old authentication and keeps jobs held at epoch2.
+No generic token-clearing, force deletion, automatic activation or customer
+provider qualification is introduced. The complete old-image backup/restore and
+Kubernetes schema-update recipe still require live acceptance.
