@@ -2541,3 +2541,10 @@ start counters need not stay fixed. Lifetime provider peak remains bounded by
 one, counter regression/reset is refused, both documents must complete with
 verified search/download, and uncertain reservations are never cleared by the
 probe. A missing refusal still leaves the trial unqualified.
+
+Current owned managed-S3 runtime evidence is one complete22-stage execution,
+including two physically proven/audited uncertain-provider recoveries and an
+unchanged80-document baseline. It does not aggregate failed older runs or remove
+customer/provider/physical-failure-domain gates. Production backup scheduling
+remains disabled by the user's decision; the new independent20-document copy
+still requires its own source-off restore drill.

@@ -11,11 +11,12 @@
 координация реализованы; подробные программные milestones R1–R4 приведены ниже.
 На изолированном managed-S3 стенде проверены 2 frontend + 2 API + 2 worker,
 отмена/прерванная публикация, потеря worker, PostgreSQL partition с возвращением
-старого процесса и небольшая нагрузка. После смены credentials/CA и обновления
-образа установка работает с released maintenance epoch10. Это отдельные receipts
-выбранного учебного профиля. Общий runner, повторная приёмка итоговой версии и
-оставшаяся fault/profile matrix R5 ещё открыты; customer/provider и physical-node
-gates не закрыты. Актуальная сводка — в основном плане.
+старого процесса и небольшая нагрузка. Общий текущий прогон учебного профиля
+завершён22/22:80 прежних документов сохранены, maintenance epoch15→16→17,
+все обязательные этапы прошли без skips/failures. Подробности и границы:
+[common runtime report](../reports/2026-11-02-replica-common-runtime.json).
+Полный CI итоговой версии, customer/provider/physical-node gates и оставшаяся
+fault/profile matrix относятся к O1–O3 и не закрыты.
 
 ## Global Constraints
 
@@ -345,9 +346,9 @@ termination grace. Initial acceptance 2 frontend + 2 API + 2 workers, один U
 
 - [x] `test_api_service_excludes_workers`, `test_distributed_requires_shared_storage`, `test_role_probes_and_identity`, `test_legacy_single_process_guard_retained`. Assertions: endpoints только API; local rejected; worker не использует отсутствующий HTTP main; compact multiworker отвергнут.
 - [x] RED: `python -m pytest tests/test_distributed_chart.py -q` с Helm.
-- [ ] Добавить templates/capability, снять запрет replicas только после R1–R4. Не добавлять HPA. Метрики queue age/depth, claim/retry, lease loss, model saturation, per-role readiness; resources определить по небольшому corpus/load probe.
-- [ ] GREEN chart + runner runtime: 1→2 API, 1→2 workers, kill API/worker, partition PG, возврат старого процесса, concurrent cancel/delete, exhausted LLM capacity. Проверить отсутствие duplicates/loss, лимиты, стабильный auth. Записать latency/throughput и не объявлять линейное ускорение.
-- [ ] Commit `feat: enable verified API and worker replicas`.
+- [x] Добавить templates/capability, снять запрет replicas только после R1–R4. Не добавлять HPA. Метрики queue age/depth, claim/retry, lease loss, model saturation, per-role readiness; resources определить по небольшому corpus/load probe. Scope: проверенный basic managed-S3 учебный профиль; production sizing не подтверждён.
+- [x] GREEN chart + runner runtime: 1→2 API, 1→2 workers, kill API/worker, partition PG, возврат старого процесса, concurrent cancel/delete, exhausted LLM capacity. Проверить отсутствие duplicates/loss, лимиты, стабильный auth. Записать latency/throughput и не объявлять линейное ускорение. Общий run f2c9adc272884484afaa4d1f6d58bcdf:22/22 без required skips.
+- [x] Зафиксировать включение реплик и доказательства текущей учебной приёмки; remaining profile/release gates сохранить в O1–O3.
 
 R5 foundation milestone (2026-11-01): separate role Deployments, API-only Service,
 bounded private scratch, manual counts/spread, private worker health/metrics and
@@ -556,3 +557,16 @@ RPC. Regressions reproduce this legal handoff and complete-before-observation
 case while preserving refusal, peak-concurrency and counter-reset failures.
 The corrected oracle does not qualify the failed parent: another current-code
 22-stage execution remains required.
+
+R5 current common-run result (2026-11-02): execution
+f2c9adc272884484afaa4d1f6d58bcdf on recipe
+68df1210509e44f05ecf0e84b693595fe6564eab4f128654db70a3a1aa375075
+completed all22 stages with0 failures/required skips. Preflight ran just before
+the capacity-fix commit, and its exact recipe bytes stayed unchanged through
+the final stage on b81328e. The80 baseline documents stayed unchanged.
+Physical worker recovery advanced15→16; uncertain partition completion used the
+physical-stop/audited recovery path16→17. Both child operations and the load
+child verified within this same parent. All older failed parents remain intact.
+The three-document load cases took77.297s with1 worker and52.797s with2; these
+are small shared-host/stub trials, not production or linear-scaling claims.
+Current basic runtime acceptance is complete; all-profile release acceptance is not.

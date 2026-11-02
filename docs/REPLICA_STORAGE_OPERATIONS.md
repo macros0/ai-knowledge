@@ -445,3 +445,13 @@ suites remain pending. Reports contain hashes/timings; detailed private outcomes
 stay in the protected journal. Changed code/inputs require a new run, preserving
 the previous journal rather than rewriting its identity or importing its results.
 Production backup scheduling staysOFF and this is not customer/model/HA sizing.
+
+The2026-11-02 current basic managed-S3 execution completed all22 stages with
+0 failures and0 required skips. It retained80 baseline documents and verified
+the legitimate epoch15→16→17 recovery chain, final2/2/2 replicas, model capacity,
+and source search/download. See the
+[common runtime receipt](superpowers/reports/2026-11-02-replica-common-runtime.json).
+Older failed parent journals remain historical failures. Other suites/profiles,
+the latest20-document restore drill and final-version CI remain separate gates.
+Worker memory lifetime peak reached92.24% of its768MiB limit in the two-worker
+trial with no OOM; these bounds are lab measurements, not production sizing.
