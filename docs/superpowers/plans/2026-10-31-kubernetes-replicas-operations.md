@@ -85,13 +85,23 @@ pending TLS/network items; it does not complete O1 or certify customer storage.
 
 ## Task O2: maintenance, backup и restore с ночным RPO
 
-Current-copy restore preparation (2026-11-02): a fresh isolated target has new
-local credentials/CA and disabled application inputs; no target namespace or
-restore has been executed yet. Offline identity adoption now supports a separate
+Current-copy restore (2026-11-02): the independent20-document/100-blob archive
+was restored into a fresh isolated target with new credentials/CA and three
+disjoint PVCs, while all source application/model/storage Pods were stopped.
+All20 rows/100 blob hashes/40 Qdrant points were verified before explicit release;
+restored work remained unexecuted. Fresh scoped SQL/S3 principals passed native
+controls and25 old sessions were invalidated. After release,19 visible originals
+passed search/download SHA,1 remained in trash,2 new uploads and7 runtime smoke
+checks passed with2/2/2 Ready. Source96 documents/PVCs were preserved. See
+[current-copy recovery](../reports/2026-11-02-replica-current-copy-recovery.json).
+This does not requalify the full22-stage R5 suite on the new target or close the
+remaining O2 schema/key/alerts/provider gates. Production scheduleOFF.
+
+Offline identity adoption supports a separate
 bounded operator Secret file, bound to the same verified PostgreSQL transport,
 while signing the scoped application settings. Windows54 checks passed with2
 POSIX-only skips; Linux56/56 passed including symlink/FIFO behaviour. This closes
-the software prerequisite for scoped restore, not the20-document source-off drill.
+the software prerequisite for the subsequent source-off drill above.
 
 O1 scoped-runtime credentials milestone (2026-11-01): a dedicated PG17 role and
 RustFS1.0.4 IAM principal passed native permissions probes (10 SQL/9 S3 denials,

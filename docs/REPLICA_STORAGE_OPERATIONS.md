@@ -451,8 +451,10 @@ The2026-11-02 current basic managed-S3 execution completed all22 stages with
 the legitimate epoch15→16→17 recovery chain, final2/2/2 replicas, model capacity,
 and source search/download. See the
 [common runtime receipt](superpowers/reports/2026-11-02-replica-common-runtime.json).
-Older failed parent journals remain historical failures. Other suites/profiles,
-the latest20-document restore drill and final-version CI remain separate gates.
+Older failed parent journals remain historical failures. Other suites/profiles
+and final-version CI remain separate gates. The latest20-document restore drill
+subsequently passed as recorded below; it does not transfer this22-stage runtime
+qualification to the new target.
 Worker memory lifetime peak reached92.24% of its768MiB limit in the two-worker
 trial with no OOM; these bounds are lab measurements, not production sizing.
 
@@ -473,4 +475,21 @@ application bypass or release restored work. Authenticate/import the backup into
 new disjoint stores with the source unavailable, create the scoped principals,
 verify imports and held jobs, rebind identity, then explicitly release the same
 restore operation after its checks. Keep failed targets stopped and preserve
-source PVCs. Current-copy restore execution remains a separate acceptance step.
+source PVCs.
+
+The2026-11-02 [current-copy recovery receipt](superpowers/reports/2026-11-02-replica-current-copy-recovery.json)
+records an actual restore of backup6bfd7725f526474990e1e706eb4201a4 from the
+independent PC into three new disjoint PVCs in `replica-test-r5o2u20261102`.
+Source application/model/storage Pods were stopped throughout import and
+functional checks; all96 source documents and its three PVCs were retained.
+Before explicit release, all20 document rows,100 blob hashes and40 vector points
+were verified, restored jobs remained unexecuted, ordinary writes were refused,
+and25 old sessions were invalidated. Fresh scoped PG/S3 principals passed native
+positive/negative controls; only the offline Job received the operator projection.
+After release,19 visible original documents passed targeted search/download SHA,
+one original remained hidden in trash, two new documents completed, and seven
+runtime smoke checks passed with2/2/2 Ready and no restarts. The new target has
+not repeated the full22-stage runtime fault suite. Timings include operator
+implementation and manual verification; they are not production RTO sizing.
+Schema-changing adoption, key recovery, alert delivery and the other provider
+recipes remain open. Production backup scheduling staysOFF.

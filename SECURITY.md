@@ -2546,8 +2546,10 @@ Current owned managed-S3 runtime evidence is one complete22-stage execution,
 including two physically proven/audited uncertain-provider recoveries and an
 unchanged80-document baseline. It does not aggregate failed older runs or remove
 customer/provider/physical-failure-domain gates. Production backup scheduling
-remains disabled by the user's decision; the new independent20-document copy
-still requires its own source-off restore drill.
+remains disabled by the user's decision. The independent20-document copy later
+passed its own source-off restore drill into a new namespace and disjoint PVCs;
+its receipt covers recovery and seven smoke checks, not a transferred22-stage
+runtime qualification.
 
 Offline restore identity adoption accepts an explicit `--operator-db-file`
 projection so its SQL engine can use administrative credentials while Settings
@@ -2561,3 +2563,13 @@ material is refused before provider probes or SQL configuration and is never
 printed. The separate operator Secret remains a read-only0440 Job projection;
 ordinary roles never receive it. Existing source-off/held-job/adoption guards
 and the legacy bootstrap connection path remain unchanged.
+
+The current-copy managed-S3 rehearsal verified all100 restored blob hashes and
+held20 document rows before release, with zero restored jobs executed. Fresh
+scoped SQL/S3 principals passed native permission controls,25 source sessions
+were invalidated, and ordinary roles received no operator credentials. The source
+remained unavailable throughout import and functional checks; its96 documents
+and three PVCs were preserved. One failed read-only diagnostic Job is retained
+and excluded from the drain view only after exact UID/spec/terminal-process
+validation. Schema-changing adoption, key recovery, alert delivery, other
+providers and physical failure domains still require their own qualification.

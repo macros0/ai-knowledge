@@ -38,11 +38,11 @@ scale API/worker 2→1→2 и обычную замену простаивающ
 
 | Вход | Состояние |
 |---|---|
-| Разрешённый disposable namespace/context | Учебный kind-okf-policy; текущая установка replica-test-r5o2t20261101 проверяется по UID, managed-by/run-id и installation identity |
+| Разрешённый disposable namespace/context | Учебный kind-okf-policy; активный restored target replica-test-r5o2u20261102 проверяется по UID, managed-by/run-id и installation identity. Источник replica-test-r5o2t20261101 остановлен, его PVC сохранены |
 | PVC/CSI, диски и домены отказа | Учебный стенд: один node, local-path/RWO; RWX/CSI failover и независимые домены не подтверждены |
 | Разрешения на namespace/cluster components | Namespace-scoped workloads, Secrets, PVC и Cilium policies проверены в учебном стенде; установка cluster-scoped operators и права заказчика не подтверждены |
 | PG/Qdrant/RWX/S3 реализации и digests | Basic recipes: PG17, Qdrant1.19.0, RustFS1.0.4 закреплены; RWX/platform и resilient не выбраны/не квалифицированы |
-| Независимое backup destination | Отдельный физический ПК согласован пользователем; зашифрованная копия проверена, более ранний source-off restore выполнен. Последняя копия20 документов ещё не восстановлена. Production-расписание выключено по решению пользователя |
+| Независимое backup destination | Отдельный физический ПК согласован пользователем; последняя зашифрованная копия20 документов/100 blobs фактически восстановлена при недоступном источнике в новый namespace с отдельными PVC и scoped credentials. Production-расписание выключено по решению пользователя |
 
 R5 foundation (01.11.2026): Helm формирует frontend/API/worker, но runtime требует
 namespace-bound keyed identity с совпадающей установленной записью SQL и schema

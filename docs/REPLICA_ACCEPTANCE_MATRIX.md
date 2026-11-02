@@ -13,7 +13,7 @@
 | Runtime R1–R4 | PostgreSQL ownership/fencing, роли API/worker и координация реализованы; cancel/delete, worker-loss и partition прошли в общем текущем запуске | Дополнительные внешние providers и полная release matrix |
 | Runtime R5 | Общий текущий22-stage run прошёл без failures/required skips;80 прежних документов сохранены, финальные2 frontend +2 API +2 workers проверены | Другие providers, реальные модели/IdP и физические домены отказа требуют собственных gates |
 | Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, смена CA, CNI и отдельный S3 ENOSPC contract проверены | RWX, external/mixed end-to-end; заполнение storage через приложение; независимые failure domains |
-| Recovery O2 | Независимая зашифрованная копия на ПК и более раннее восстановление3 документов при недоступном источнике проверены; журнал попыток и cold-check реализованы | Restore последней20-document копии; schema-changing update/adoption, key recovery, доставка alerts и остальные provider recipes |
+| Recovery O2 | Последняя независимая20-document копия восстановлена с выключенным источником в отдельные stores:100 blob SHA,19 действующих оригиналов в поиске/download,1 скрытый документ в корзине,2 новые загрузки и2/2/2 Ready; журнал попыток и cold-check реализованы | Schema-changing update/adoption, key recovery, доставка alerts и остальные provider recipes |
 | Release O3 | Обязательные проверки проекта и профильные Windows/Linux cohorts проходят для соответствующих зафиксированных изменений | Полный CI итоговой версии, общая fault/profile matrix, завершение runbooks и свежее ревью всей ветки |
 
 ## Доказательства учебного профиля
@@ -22,7 +22,7 @@
 |---|---|
 | Общий runtime | [Common runtime](superpowers/reports/2026-11-02-replica-common-runtime.json): все22 этапа одного текущего запуска, maintenance15→16→17,80 исходных документов сохранены; только учебный managed-S3/stub/fake profile |
 | Source-off backup/restore | [Managed-S3 recovery](superpowers/reports/2026-11-01-replica-managed-s3-recovery.json): прежний3-document архив восстановлен в новый target; это не restore последней копии |
-| Последняя независимая копия | [Before-scoped-faults backup](superpowers/reports/2026-11-02-replica-before-scoped-faults-backup.json):20 документов/100 blobs; проверка архива не равна восстановлению |
+| Последняя независимая копия | [Before-scoped-faults backup](superpowers/reports/2026-11-02-replica-before-scoped-faults-backup.json):20 документов/100 blobs; [current-copy recovery](superpowers/reports/2026-11-02-replica-current-copy-recovery.json): фактический source-off restore в новый namespace, scoped permissions, отзыв25 сессий и7 runtime smoke checks. Полный22-stage R5 остаётся результатом исходной установки |
 | Scoped permissions | [Credentials](superpowers/reports/2026-11-01-replica-scoped-credentials.json): фактические SQL/S3 положительные и отрицательные проверки |
 | Смена CA | [Coordinated CA rotation](superpowers/reports/2026-11-01-replica-coordinated-ca-rotation.json): согласованное обновление работающей учебной установки |
 | Обновление image | [Scoped image upgrade](superpowers/reports/2026-11-02-replica-scoped-image-upgrade.json): прежние документы и сессия сохранены; схема не менялась |
@@ -31,6 +31,7 @@
 | Лимит LLM | [Capacity observation](superpowers/reports/2026-11-02-replica-capacity-observation.json): оба API отказали при занятом слоте, нормальный RPC handoff допустим, пик1 и целостность документов подтверждены; отдельная диагностика не закрывает общий run |
 | Небольшая нагрузка | [Scoped load diagnostic](superpowers/reports/2026-11-02-replica-scoped-load-diagnostic.json): одна небольшая synthetic trial с1/2 workers; не оценка production throughput или линейного ускорения |
 | CI и свободный диск | [Lab CI capacity recovery](superpowers/reports/2026-11-02-replica-lab-ci-capacity-recovery.json): неуспешный ENOSPC CI сохранён; raw temporary artifacts проверены и скопированы на ПК до удаления только собственных временных деревьев |
+| Полный baseline CI | [Backend CI](superpowers/reports/2026-11-02-replica-baseline-backend-ci.json): снимок e3c7025,5910 passed/183 skipped/0 failures, точные case IDs обоих shard; не полный CI последующих изменений |
 
 ## Условия окончательной приёмки
 
