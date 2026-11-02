@@ -186,6 +186,20 @@ checked. Production generic CLI/activation is not implied by this lab recipe.
 - [ ] GREEN tests; runner operations: backup непустого корпуса/очереди, original storage недоступен, restore в новый target, функциональный search/download, measured RTO/RPO и error-night alert. Правильные count/hash без реального восстановления не считаются PASS.
 - [ ] Commit `feat: recover replica deployments from independent backups`.
 
+O2 local health/attempt milestone (2026-11-02): the read-only health CLI cold
+authenticates every format3 object and explicit installation/destination binding.
+Age comes from consistent_at:86401 seconds emits a stale-point alert regardless
+of copy finish time. An opt-in protected latest-attempt journal persists running
+before provider work, then only the verified backup ID or fixed failure code.
+File locking and an exclusive write-intent marker prevent concurrent takeover or
+a false-green status after uncertain replacement/fsync. Failed, overdue, foreign,
+unreadable and mismatched-latest attempts cannot hide behind an older good copy.
+JSON/exit codes are available for local supervision; no messages or CronJobs are
+created. Cold-copy health never asserts restore or production RPO qualification.
+See the local-health section in `../../KUBERNETES_REPLICAS_RECOVERY.md`.
+Notification routing/delivery, independent key recovery, scheduling and the other
+O2 provider/adoption/restore gates remain open. Production scheduleOFF.
+
 ## Task O3: fault matrix, release gates и документация
 
 O2 selected-runtime backup follow-up (2026-11-01): backup now resolves the common

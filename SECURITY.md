@@ -2427,3 +2427,30 @@ Catalog mutation audit events contain IDs, versions and public/private state,
 never instruction/name/description text. Mutations use the transactional audit
 outbox so audit failure rolls back the change. CHAT_SCENARIOS_ENABLED=false
 blocks new scenario operations while leaving historical snapshots readable.
+
+## Replica backup health and attempt journal (2026-11-02)
+
+The opt-in offline health command authenticates the full format3 archive and its
+installation/destination binding before reporting copy health. Recovery-point age
+comes from authenticated consistent_at; copy completion, mtime and a green Job do
+not refresh it. Missing/corrupt/incomplete/foreign/future archives fail closed.
+A healthy copy never asserts restore qualification or production RPO assurance.
+JSON uses fixed alert codes and excludes paths, raw exceptions, credentials and
+key material. The key is read separately with a33-byte bound. The monitor has no
+source-service connections, maintenance privileges, scheduling or message delivery.
+
+The optional backup attempt journal belongs to the protected config directory,
+outside the archive. Bounded regular-file/no-link reads, exclusive file locking,
+atomic mode0600 writes and fsync protect status publication. Running is durable
+before provider work; only the identical active attempt may finish, and foreign
+or unresolved attempts cannot be replaced. Failure records only backup_failed;
+an exclusive write-intent marker precedes status publication and remains on an
+uncertain write/rename/directory-sync. Readers reject it before and after reading
+JSON, so an unacknowledged complete-looking replacement cannot report healthy.
+A failed/overdue/invalid latest
+attempt or a completed ID different from the selected archive cannot be hidden
+behind an older fresh copy. The journal is trusted operator-owned local metadata,
+not a signed proof of provider recovery. Protect its directory and reuse it on
+all configured attempts; omitting it checks the selected copy only. No retention,
+source release, automatic retries, recipient configuration or production schedule
+is enabled by this change. Real delivery and independent key recovery remain gates.

@@ -427,6 +427,7 @@ print(json.dumps({'fingerprint':identity.fingerprint,'audit_db_enabled':s.audit_
     q.close()
     s3.close()
     engine.dispose()
+    return cold
 
 
 def main():
@@ -435,14 +436,37 @@ def main():
         parser.add_argument("--" + option, type=Path, required=True)
     parser.add_argument("--namespace-uid", required=True)
     parser.add_argument("--source-journal", type=Path, help="Verified owned source operation retaining an exact failed diagnostic")
+    parser.add_argument("--attempt-journal", type=Path, help="Protected latest-attempt status for backup health monitoring")
     args = parser.parse_args()
+    attempt = None
     try:
-        run_backup(json.loads(args.config.read_bytes()), namespace_uid=args.namespace_uid,
+        config = json.loads(args.config.read_bytes())
+        if args.attempt_journal is not None:
+            from app.deployment.replica_backup_health import (
+                finish_attempt,
+                start_attempt,
+            )
+            validate_config(config)
+            if (args.attempt_journal.absolute().parent != args.config.resolve(strict=True).parent
+                    or args.attempt_journal.resolve().is_relative_to(args.archive.resolve())):
+                raise ValueError("Attempt journal must remain in the protected config directory")
+            attempt = start_attempt(args.attempt_journal, installation_id=config["installation_id"], now=datetime.now(timezone.utc))
+        verified = run_backup(config, namespace_uid=args.namespace_uid,
             evidence_file=args.evidence_file, archive=args.archive, key_file=args.key_file, pg_dump=args.pg_dump, report=args.report,
             source_journal=args.source_journal)
+        if attempt is not None:
+            if verified.plan.source.installation_id != config["installation_id"]:
+                raise ValueError("Verified backup differs from the recorded installation")
+            finish_attempt(args.attempt_journal, attempt, backup_id=verified.plan.backup_id, now=datetime.now(timezone.utc))
         return 0
     except Exception as exc:  # noqa: BLE001 -- provider errors can contain credentials; public message is fixed.
         import traceback
+        if attempt is not None:
+            try:
+                finish_attempt(args.attempt_journal, attempt, failed=True, now=datetime.now(timezone.utc))
+            except Exception:  # noqa: BLE001 -- unknown status stays unacknowledged; never leak journal inputs.
+                # An uncertain status is never replaced or acknowledged as success.
+                print("Backup attempt status remains uncertain", file=sys.stderr)
         private_log = args.config.parent / "backup-error.log"
         with private_log.open("w", encoding="utf-8") as errors:
             traceback.print_exc(file=errors)

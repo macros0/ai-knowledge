@@ -35,7 +35,9 @@ PostgreSQL partition с возвращением старого процесса
 - **O1:** RWX, external/mixed end-to-end, заполнение хранилищ на уровне приложения
   и квалификация инфраструктуры/failure domains выбранных профилей.
 - **O2:** schema-changing update/adoption существующих установок, key recovery,
-  backup-error/age alerts и оставшиеся profile-specific backup/restore recipes.
+  доставка backup-error/age alerts в мониторинг и оставшиеся profile-specific
+  backup/restore recipes. Локальный cold-check и журнал попыток реализованы;
+  production-расписание и доставка уведомлений ещё не включены.
 - **O3:** полный CI итоговой версии, объединённая fault/profile matrix, итоговые
   runbooks и свежее ревью всей ветки.
 

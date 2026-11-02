@@ -133,6 +133,60 @@ does not create a database, restore a collection, or release workloads.
 The user selected this physically separate Windows PC for the owned lab copy.
 Production scheduling remains explicitly disabled.
 
+## Local backup health and attempt status
+
+`scripts/kubernetes/replica_backup_health.py` performs a read-only cold check of
+an explicitly selected format3 archive. It authenticates the manifest and every
+object with the separately supplied key, checks the installation/destination
+binding and measures age from `source.consistent_at`. Neither file modification
+time, successful Job status nor copy completion time resets the recovery point.
+Age86400 seconds remains within the target; age86401 emits
+`backup_recovery_point_stale`. Missing, incomplete, corrupt, foreign or future
+copies emit `backup_unverifiable`. Paths, key bytes and raw exception messages
+are absent from the JSON result. The command does not contact source services.
+
+```powershell
+backend/.venv/Scripts/python.exe scripts/kubernetes/replica_backup_health.py `
+  --archive <last-successful-archive> --key-file <separate-key-file> `
+  --installation-id <source-installation-id> --destination-store-id <archive-store-id> `
+  --attempt-journal <protected-config-directory>/backup-attempt.json
+```
+
+Pass the same `--attempt-journal` to `replica_backup.py` on every subsequent
+backup of this installation. The optional journal must reside in the existing
+protected config directory, outside the archive. A file lock and atomic durable
+replacement record `running` before provider work, then the exact verified backup
+ID on `complete`, or only the fixed `backup_failed` code on failure. It contains
+no DSNs, provider exception text, credentials or source data. A concurrent,
+foreign or unresolved running attempt cannot be overwritten; the exact active
+attempt owns its completion. A `.writing` marker precedes every status write and
+remains if write/rename/directory-sync fails. While it exists, readers refuse the
+status even when a complete-looking JSON is visible. A crash leaves uncertainty
+visible. Inspect the
+same backup process, maintenance operation and archive before resolving that
+status and its write marker; never delete either just to retry or release a source.
+
+A failed last attempt emits `backup_last_attempt_failed`, even when the older
+selected archive still verifies. A running attempt yields `pending`; after the
+explicit timeout (default3600 seconds) it emits `backup_attempt_overdue`.
+A completed newer backup ID that differs from the selected archive emits
+`backup_selection_stale`, so choosing an older good file cannot hide a missing
+latest copy. Invalid/unreadable/foreign attempt status emits
+`backup_attempt_unverifiable`. Without a journal the check covers only the
+selected archive, not the outcome of other attempts.
+
+Exit codes:0 means a fresh authenticated copy with no supplied-attempt problem,
+1 means a pending attempt,2 means an alert or unavailable health check. A local
+supervisor can consume the JSON `alerts` and these exit codes. This implementation
+does not send messages or install a scheduler. Production schedule staysOFF;
+the monitoring/notification recipient, delivery test and scheduled execution
+remain deployment gates. `--now` is available only as an explicit offline-drill
+observation time; operational checks should use the actual clock.
+
+Every result retains `restore_verified=false` and `rpo_assured=false`. Cold copy
+verification alone cannot certify restoration, independent key recovery,
+destination durability, notification delivery or a production RPO.
+
 ## Exercised managed-S3 recovery (2026-11-01)
 
 `scripts/kubernetes/replica_backup.py` is an explicit **owned-kind-lab** coordinator.

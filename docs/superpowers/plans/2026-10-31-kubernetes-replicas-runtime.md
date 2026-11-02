@@ -7,11 +7,15 @@
 **Tech Stack:** SQLAlchemy 2, psycopg/PostgreSQL 17, FastAPI, Alembic, existing Qdrant clients.
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
-Статус 01.11.2026: R1 foundation реализован (rpl02): caller-owned transactions,
-SKIP LOCKED, DB UTC leases, fencing/cancel/dedupe, bounded explicit worker и
-kind/version registry. Import не запускает executor. Публичные Job/four-eyes не
-изменены. R2–R5 и активация distributed ролей остаются открытыми; глобальную
-ёмкость и maintenance epoch этот foundation не обещает.
+Статус 02.11.2026: очередь, fencing публикации, разделение API/worker и общая
+координация реализованы; подробные программные milestones R1–R4 приведены ниже.
+На изолированном managed-S3 стенде проверены 2 frontend + 2 API + 2 worker,
+отмена/прерванная публикация, потеря worker, PostgreSQL partition с возвращением
+старого процесса и небольшая нагрузка. После смены credentials/CA и обновления
+образа установка работает с released maintenance epoch10. Это отдельные receipts
+выбранного учебного профиля. Общий runner, повторная приёмка итоговой версии и
+оставшаяся fault/profile matrix R5 ещё открыты; customer/provider и physical-node
+gates не закрыты. Актуальная сводка — в основном плане.
 
 ## Global Constraints
 
