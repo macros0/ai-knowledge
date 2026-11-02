@@ -2671,3 +2671,22 @@ alone proves no acceptance occurred, and `certificate_applies` is only a stale
 binding/policy check. File-backed receipt verification and runner integration
 remain separate gates. Repository inventory certificates remain null; this code
 does not authorize production deployment, notifications, scheduling or activation.
+
+The separate owned-lab backup notification tools use an explicitly selected
+protected local configuration and a signing key distinct from archive encryption.
+Only canonical HTTP127.0.0.1 endpoints and a bounded fixed event path are accepted;
+redirects and environment proxies are disabled. Public events project allowlisted
+health fields/codes and never provider paths, credentials or raw exceptions.
+Request HMAC timestamps use real wall time even during a marked offline health
+clock drill. ACK HMAC has a separate domain and binds event ID/body SHA.
+
+The sender locks the journal across durable pending publication, transport and
+matching signed ACK publication. Lost/untrusted responses retain the same ID/body;
+uncertain write-intent/fsync outcomes refuse further action. The receiver binds
+only IPv4 loopback, bounds body size/concurrency/socket time, suppresses raw
+request/error logs and commits SQLite FULL before ACK. Its inbox is bound to the
+signing authority; foreign databases and changed ID/body or corrupted persisted
+payloads are refused. This is local key-authenticated delivery, not arbitrary
+remote webhook support or production monitoring qualification. The approved PC
+drill used synthetic ciphertext copies and an isolated copy-attempt journal; no
+production installation, sender schedule or external recipient was created.

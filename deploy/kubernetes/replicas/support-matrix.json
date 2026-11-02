@@ -142,13 +142,21 @@
           "path": "docs/superpowers/reports/2026-11-02-replica-current-artifact-ci.json",
           "sha256": "0d0578ab57798cdfc502f78b07d6145459fe9b39f7f271031e675c8e3d8e8168",
           "scope": "full parser tests and frontend production build; not full backend CI"
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-02-replica-backup-key-recovery.json",
+          "sha256": "b3bb4762fe83187d6aada636e64921bb83b2209535001ce6bd16eb1e02dd68c3",
+          "scope": "protected separate-directory training key recovery; not physical escrow"
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-02-replica-local-backup-alerts.json",
+          "sha256": "0ab93d6948a863dcae1e06586f2b2bc10abcfd4912485c0dd28bea795204d1f8",
+          "scope": "actual local delivery of clock/candidate-copy drill alerts and recovery; no production monitoring"
         }
       ],
       "remaining_gates": [
         "application-publication-storage-full",
         "full-current-runtime-fault-qualification",
-        "backup-key-recovery",
-        "delivered-backup-error-and-age-alerts",
         "final-version-full-backend-ci",
         "fresh-whole-branch-review"
       ],

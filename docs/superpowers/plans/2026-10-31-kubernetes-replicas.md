@@ -43,10 +43,11 @@ partition/возврат устаревшего процесса и нагруз
 
 - **O1:** RWX, external/mixed end-to-end, заполнение хранилищ на уровне приложения
   и квалификация инфраструктуры/failure domains выбранных профилей.
-- **O2:** оставшиеся adoption/update recipes, включая compact/NULL-generation, key recovery,
-  доставка backup-error/age alerts в мониторинг и оставшиеся profile-specific
-  backup/restore recipes. Локальный cold-check и журнал попыток реализованы;
-  production-расписание и доставка уведомлений ещё не включены.
+- **O2:** оставшиеся adoption/update recipes, включая compact/NULL-generation,
+  и остальные profile-specific backup/restore recipes. Восстановление ключа из
+  отдельного защищённого каталога и доставка alerts локальному приёмнику на ПК
+  проверены на учебной копии. Production-расписание выключено; production
+  monitoring и независимый физический key escrow не квалифицированы.
 - **O3:** полный CI итоговой версии, объединённая fault/profile matrix, итоговые
   runbooks и свежее ревью всей ветки.
 

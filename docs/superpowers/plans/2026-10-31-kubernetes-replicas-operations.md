@@ -348,8 +348,22 @@ off/3 PVCs retained. [Key evidence](../reports/2026-11-02-replica-backup-key-rec
 This is directory-level recovery, not a different physical escrow device or OS
 sandbox; full provider restoration was already tested separately with the same
 archive and was not repeated. User also explicitly approved a local PC alert
-receiver. Implement/drill next via
-`2026-11-02-replica-local-backup-alerts.md`; no external recipient/schedule selected.
+receiver. No external recipient/schedule selected.
+
+O2 local alert milestone,2026-11-02: the completed
+[local-alert plan](2026-11-02-replica-local-backup-alerts.md) delivers through a
+loopback-only PC receiver using a separate protected signing key, durable pending
+sender journal and authenticated matching ACKs after SQLite FULL commit. Actual
+eight-step drill produced exactly4 inbox rows (3 alerts+1 recovery); unchanged
+states produced none. Staleness used explicit offline age86401, and failure used
+an isolated incomplete encrypted-copy candidate/attempt journal. An older good
+archive did not hide the latest failed copy attempt. Original13 archive files,
+key and3+3 PVCs preserved/source off. Windows107 passed/1 existing POSIX-only skip;
+root audit0/frontend756+1skip/ESLint/Ruff passed. Lost-ACK same-ID replay, invalid
+signatures/ACKs and uncertain writes are tested. No Linux alert cohort or actual
+missed nightly provider backup is claimed. [Delivery evidence](../reports/2026-11-02-replica-local-backup-alerts.json).
+This closes the selected local training delivery/key inputs, not all O2 profiles,
+production monitoring/physical key escrow or strict RPO. Production scheduleOFF.
 
 ## Task O3: fault matrix, release gates и документация
 

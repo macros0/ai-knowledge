@@ -85,9 +85,13 @@ binding/policy и форму сертификата, а не доверие к �
 checks должны относиться к одной принятой конфигурации. Отдельные успешные
 отчёты разных image/identity нельзя объединять в один зелёный полный прогон.
 
+На учебном ПК проверены отдельный защищённый каталог ключа и локальная доставка
+backup error/age alerts: [key recovery](superpowers/reports/2026-11-02-replica-backup-key-recovery.json),
+[notification drill](superpowers/reports/2026-11-02-replica-local-backup-alerts.json).
+Production key custody/monitoring этим не квалифицируются.
+
 Открыты фактические RWX/external/mixed проверки, application publication при
-заполнении storage, остальные adoption/recovery recipes, восстановление ключа,
-доставка backup error/age alerts, полный итоговый backend CI, доверенная загрузка
+заполнении storage, остальные adoption/recovery recipes, полный итоговый backend CI, доверенная загрузка
 receipts/интеграция policy с runner и свежее ревью всей ветки. Для resilient дополнительно обязательны
 независимые физические домены, выбранные storage recipes и реальные испытания
 потери узла/хранилища. Production backup schedule остаётся выключенным по

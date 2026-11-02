@@ -1,6 +1,6 @@
 # Local training backup alerts — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deliver authenticated backup failure/age alerts to the user-approved local PC receiver and prove meaningful-change deduplication and recovery.
 
@@ -43,9 +43,9 @@ ID/body replay returns its persisted receipt; a changed body with the same ID
 returns conflict. SQLite commit precedes ACK; GET health returns only readiness
 and an event count. Fixed refusal responses contain no raw input.
 
-- [ ] Add `backend/tests/test_replica_backup_alert_protocol.py` and `test_replica_backup_alert_receiver.py`: strict fields/types/bounds, wrong key/body/time/path, duplicate/conflicting IDs, actual HTTP ACK and committed inbox after a simulated lost response.
-- [ ] RED: run both cohorts with a distinct basetemp; expect missing modules/functions.
-- [ ] Implement protocol/receiver with no new dependencies; GREEN same cohorts and Ruff.
+- [x] Add `backend/tests/test_replica_backup_alert_protocol.py` and `test_replica_backup_alert_receiver.py`: strict fields/types/bounds, wrong key/body/time/path, duplicate/conflicting IDs, actual HTTP ACK and committed inbox after a simulated lost response.
+- [x] RED: run both cohorts with a distinct basetemp; expect missing modules/functions.
+- [x] Implement protocol/receiver with no new dependencies; GREEN same cohorts and Ruff.
 
 ## Task 2: Durable change-only sender and explicit health CLI
 
@@ -68,16 +68,16 @@ clock-age increments in the change signature. Retry lost HTTP ACKs with the same
 event ID/body and a new transport timestamp. Require matching event ID/body SHA
 in the ACK; no redirect/proxy, wrong receipt or unknown response means undelivered.
 
-- [ ] Add `backend/tests/test_replica_backup_alerts.py` and `test_replica_backup_alerts_cli.py`: quiet healthy/unchanged stale, failure and recovery transitions, current attempt failure, retained pending/ACK-loss retry, mismatched ACK, foreign scope, write-intent refusal, concurrent sender refusal, dry-run and safe CLI errors.
-- [ ] RED missing sender; implement and GREEN alongside unchanged health tests.
-- [ ] Run project check and update SECURITY/runbook with actual trust boundaries.
+- [x] Add `backend/tests/test_replica_backup_alerts.py` and `test_replica_backup_alerts_cli.py`: quiet healthy/unchanged stale, failure and recovery transitions, current attempt failure, retained pending/ACK-loss retry, mismatched ACK, foreign scope, write-intent refusal, concurrent sender refusal, dry-run and safe CLI errors.
+- [x] RED missing sender; implement and GREEN alongside unchanged health tests.
+- [x] Run project check and update SECURITY/runbook with actual trust boundaries.
 
 ## Task 3: Real local drill and bounded evidence
 
-- [ ] Create a separate notification signing key in the user-approved protected vault and an isolated private inbox/config/journal directory. Record ACLs, source/key identities and exact Hidden background receiver PID/start/argv; keys never enter argv or logs.
-- [ ] Start one receiver on an unused loopback port; observe the same process before any recovery/restart.
-- [ ] Cold-authenticate the real rpl04 archive using the separate vault key. A real-time healthy observation stays quiet; explicit observed age86401s sends one stale alert, a repeat remains quiet. Record clock simulation clearly.
-- [ ] Use a disposable encrypted archive shadow or isolated attempt-journal failure to prove a real verification/attempt error notification without modifying the original archive/latest-attempt file. Restore healthy observation and prove one recovery.
-- [ ] Verify inbox event IDs/content hashes, matching sender ACKs, no duplicate unchanged events, wrong-key rejection and original archive/key/source PVC preservation. Retain all private data locally; report only bounded IDs/codes/counts/SHA.
-- [ ] Update the parent O2 plan/matrix with training-only scope; production scheduling and external monitoring remain disabled/unqualified.
-- [ ] Commit implementation, tests and sanitized evidence; do not claim whole O2/O3 completion.
+- [x] Create a separate notification signing key in the user-approved protected vault and an isolated private inbox/config/journal directory. Record ACLs, source/key identities and exact Hidden background receiver PID/start/argv; keys never enter argv or logs.
+- [x] Start one receiver on an unused loopback port; observe the same process before any recovery/restart.
+- [x] Cold-authenticate the real rpl04 archive using the separate vault key. A real-time healthy observation stays quiet; explicit observed age86401s sends one stale alert, a repeat remains quiet. Record clock simulation clearly.
+- [x] Use a disposable encrypted archive shadow or isolated attempt-journal failure to prove a real verification/attempt error notification without modifying the original archive/latest-attempt file. Restore healthy observation and prove one recovery.
+- [x] Verify inbox event IDs/content hashes, matching sender ACKs, no duplicate unchanged events, wrong-key rejection and original archive/key/source PVC preservation. Retain all private data locally; report only bounded IDs/codes/counts/SHA.
+- [x] Update the parent O2 plan/matrix with training-only scope; production scheduling and external monitoring remain disabled/unqualified.
+- [x] Commit implementation, tests and sanitized evidence; do not claim whole O2/O3 completion.

@@ -13,7 +13,7 @@
 | Runtime R1–R4 | PostgreSQL ownership/fencing, роли API/worker и координация реализованы; cancel/delete, worker-loss и partition прошли в общем текущем запуске | Дополнительные внешние providers и полная release matrix |
 | Runtime R5 | Общий текущий22-stage run прошёл без failures/required skips;80 прежних документов сохранены, финальные2 frontend +2 API +2 workers проверены | Другие providers, реальные модели/IdP и физические домены отказа требуют собственных gates |
 | Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, смена CA, CNI и отдельный S3 ENOSPC contract проверены | RWX, external/mixed end-to-end; заполнение storage через приложение; независимые failure domains |
-| Recovery O2 | Независимая20-document копия восстановлена при выключенном источнике; отдельно старая rpl04 копия прошла фактический rpl05 replacement recovery с новой identity, отзывом сессий и функциональной проверкой2/2/2. Журнал попыток и cold-check реализованы | Оставшиеся adoption/update recipes, key recovery, доставка alerts и остальные provider recipes |
+| Recovery O2 | Независимая20-document копия восстановлена при выключенном источнике; отдельно старая rpl04 копия прошла фактический rpl05 replacement recovery с новой identity, отзывом сессий и функциональной проверкой2/2/2. Проверены cold-check, журнал попыток, учебное восстановление ключа и доставка локальных alerts | Оставшиеся adoption/update и provider recipes; production key custody/monitoring не квалифицированы |
 | Release O3 | Обязательные project checks и профильные Windows/Linux cohorts; свежие557 parser passes и standalone frontend build; policy validator проверен47 тестами. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Полный backend CI итоговой версии, доверенная загрузка receipts/интеграция policy с runner, общая fault/profile matrix, завершение runbooks и свежее ревью всей ветки |
 
 ## Доказательства учебного профиля
@@ -53,5 +53,11 @@ PVC/CSI, домены отказа и backup destination входят в док�
 Одноузловой kind на одной VM не доказывает переживание потери физического узла
 или хранилища. Stub-модель и fake embeddings не доказывают совместимость или
 производительность реальных моделей. Production backup schedule остаётся OFF
-по решению пользователя; проверка доставки alerts и восстановления ключа
-потребует соответствующих реальных тестовых входов.
+по решению пользователя. Восстановление ключа и доставка alerts проверены на
+согласованных локальных учебных входах; это не production escrow/monitoring.
+
+Локальный [прогон уведомлений](superpowers/reports/2026-11-02-replica-local-backup-alerts.json)
+дал четыре подтверждённые строки inbox: stale age86401 (учебные часы), ошибка
+неполной зашифрованной копии, изменение ошибки последней попытки и recovery.
+Повторы без изменения состояния не создавали событий.107 Windows tests passed,
+один существующий POSIX-only skip; Linux cohort ещё не запускался.

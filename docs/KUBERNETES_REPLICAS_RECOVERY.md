@@ -163,9 +163,56 @@ backend/.venv/Scripts/python.exe scripts/kubernetes/replica_backup_health.py `
   --destination-store-id separate-pc-training-backup
 ```
 
-User also explicitly approved a local notification receiver on this PC. Its
-implementation/drill is tracked in the [local-alert plan](superpowers/plans/2026-11-02-replica-local-backup-alerts.md).
-Production scheduling remains disabled; this does not select external recipients.
+## Local training notification receiver
+
+The user-approved receiver is running on `127.0.0.1:16491`, with readiness at
+`GET /health` and authenticated events at `POST /v1/backup-alerts`. It accepts
+only loopback traffic. The protected vault contains a separate32-byte
+`training-backup-alerts.key`; do not reuse the archive encryption key. The inbox,
+sender journal and explicit configuration are in the Git-ignored protected
+`tests/tmp/replica-backup-alerts-private` directory. No sender schedule is enabled.
+
+For a manual check, first preview the public health projection; add `--apply`
+only to deliver to the configured receiver:
+
+```powershell
+backend/.venv/Scripts/python.exe scripts/kubernetes/replica_backup_alerts.py `
+  --config tests/tmp/replica-backup-alerts-private/config.json
+```
+
+Configuration has strict `scope=owned-lab`, explicit archive/key/installation/
+destination bindings, loopback receiver URL, signing key, delivery journal and
+optional attempt journal. Keep it private; the CLI does not load the root `.env`.
+Dry-run does not read the signing key or open a delivery journal/network connection.
+An alert still exits2 after successful delivery; healthy exits0 and pending health
+exits1. Exit2 can also mean pending delivery or refusal: inspect the public JSON.
+Delivery does not certify restoration or a24-hour RPO.
+
+The [actual local drill](superpowers/reports/2026-11-02-replica-local-backup-alerts.json)
+produced exactly four durable inbox rows: one stale alert at explicitly simulated
+age86401s, one incomplete encrypted-copy verification/attempt error, one changed
+alert proving an older good archive cannot hide the latest failed copy attempt,
+and one recovery after a complete verified copy. Repeated unchanged checks were
+quiet. The failed journal belongs to an isolated local candidate-copy drill;
+this is not an actual missed nightly provider backup. Original13 archive files,
+primary key and source/target PVCs remained intact; the source stayed off.
+
+Sender persists one pending ID/body before HTTP and requires a matching signed
+ACK. Receiver commits its idempotent SQLite inbox before ACK; tests exercise a
+lost ACK, identical replay, conflicting ID, wrong signature and corrupt receipt.
+Increasing age alone sends no repeat. An older pending event must finish first;
+`recheck_required` means assess again afterwards. Never delete an uncertain
+`.writing` marker or replace a pending event to force progress. Observe the same
+recorded PID/start/argv and inbox before any receiver recovery; do not start a
+second instance on an occupied port. The receiver CLI for an explicitly prepared
+private inbox is `scripts/kubernetes/replica_backup_alert_receiver.py --key-file
+<protected-signing-key> --inbox <private-inbox>` (default loopback port16491).
+
+The receiver shares the archive PC's failure domain and is a training service,
+not independently available production monitoring. The107 Windows tests passed
+with one existing POSIX-only health skip; no Linux alert cohort has run.
+Production scheduling remains disabled, and no external recipient was selected.
+See the [completed local-alert plan](superpowers/plans/2026-11-02-replica-local-backup-alerts.md).
 
 ## Local backup health and attempt status
 
