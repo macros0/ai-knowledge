@@ -2525,3 +2525,11 @@ must be present and every present operation field must equal the same owned
 child operation. Conflicting aliases never hide a foreign operation. Namespace,
 runtime fingerprint, parent-run ownership and recovery provenance checks remain
 mandatory; no failed parent/report is rewritten to manufacture qualification.
+
+Owned-lab operation snapshots stream metadata in bounded batches, cover every
+row and preserve the existing sorted-JSON digest. Their hard limits are100000
+rows per table and64MiB of serialized content across all tables; lower test
+budgets cannot enlarge either limit. Budget refusal closes the cursor and keeps
+maintenance held. No row filtering, sampling or deletion is used to fit a corpus.
+The embedded release Job uses the same self-contained snapshot function before
+release, including recovery resumed after an already-audited slot reconciliation.

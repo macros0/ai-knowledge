@@ -27,20 +27,37 @@ CORPUS_TABLES = ("documents", "okf_concepts", "document_chunks", "document_gener
     "document_generations", "document_sources", "document_staging", "artifact_objects", "artifact_bindings", "work_items", "work_progress")
 
 
-def corpus(connection):
+def corpus(connection, *, max_rows=100000, max_bytes=64 * 1024 * 1024):
     from hashlib import sha256
 
     from sqlalchemy import text
+    if (type(max_rows) is not int or not 1 <= max_rows <= 100000
+            or type(max_bytes) is not int or not 1 <= max_bytes <= 64 * 1024 * 1024):
+        raise ValueError("Invalid owned lab corpus budgets")
     result, total = {}, 0
     for table in CORPUS_TABLES:
-        rows = list(connection.execute(text('SELECT * FROM "' + table + '" LIMIT 10001')).mappings())
-        if len(rows) > 10000:
-            raise ValueError("Owned lab corpus bound exceeded")
-        values = sorted(json.dumps(dict(row), sort_keys=True, separators=(",", ":"), default=str) for row in rows)
-        total += sum(len(row.encode()) for row in values)
-        if total > 64 * 1024 * 1024:
-            raise ValueError("Owned lab corpus byte bound exceeded")
-        result[table] = {"count": len(rows), "sha256": sha256("\n".join(values).encode()).hexdigest()}
+        statement = text('SELECT * FROM "' + table + '" LIMIT ' + str(max_rows + 1)).execution_options(
+            stream_results=True, yield_per=256)
+        cursor = connection.execute(statement)
+        values = []
+        try:
+            for row in cursor.mappings():
+                if len(values) >= max_rows:
+                    raise ValueError("Owned lab corpus row bound exceeded")
+                value = json.dumps(dict(row), sort_keys=True, separators=(",", ":"), default=str)
+                total += len(value.encode())
+                if total > max_bytes:
+                    raise ValueError("Owned lab corpus byte bound exceeded")
+                values.append(value)
+        finally:
+            cursor.close()
+        values.sort()
+        digest = sha256()
+        for index, value in enumerate(values):
+            if index:
+                digest.update(b"\n")
+            digest.update(value.encode())
+        result[table] = {"count": len(values), "sha256": digest.hexdigest()}
     return result
 
 

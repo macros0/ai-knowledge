@@ -537,3 +537,11 @@ the offline-recovery protocol's `operation_id`. Reader correction accepts either
 real protocol, requires every present alias to match, and retains the failed
 parent unchanged. Regression coverage now exercises the real final adapter with
 all three member report shapes and both legitimate maintenance epoch chains.
+
+Snapshot-budget follow-up (2026-11-02): the next run reached the worker recovery
+snapshot with10766 synthetic work rows, exceeding the old10000-row lab cap.
+Maintenance stayed held after the audited provider reconciliation. Snapshot
+reading is now streamed with a100000-row/table and64MiB total content budget,
+unchanged canonical digests, explicit cursor closing and no omitted/deleted rows.
+A native read-only snapshot counted every row. The same held operation is being
+completed idempotently; its parent remains unqualified after recipe changes.
