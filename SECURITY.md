@@ -2454,3 +2454,24 @@ not a signed proof of provider recovery. Protect its directory and reuse it on
 all configured attempts; omitting it checks the selected copy only. No retention,
 source release, automatic retries, recipient configuration or production schedule
 is enabled by this change. Real delivery and independent key recovery remain gates.
+
+## Scoped owned-lab fault authority (2026-11-02)
+
+Worker-loss and PostgreSQL-partition recipes can reuse a verified current image
+operation's immutable input pins and its exact retained failed-diagnostic verifier.
+New admission requires an authenticated independent backup for the current source
+fingerprint within24h. Protected fault journals pin its manifest authentication,
+backup ID and source-journal hash; resume cannot silently select new provenance.
+The original admission time is retained for recovery instead of rejecting an
+already-admitted recovery merely because its backup aged beyond24h. A standalone
+legacy injection refuses scoped credentials before starting the fault probe.
+
+Release keeps the application Secret in runtime Settings and projects privileged
+SQL only from a distinct read-only0440 offline operator file. Existing Jobs are
+observed with strict command/env/input bindings, never blindly replaced. The new
+read-only preflight phase cannot inject or create its journal. Restart after a
+verified release is a separate resumable phase: it checks source templates/UIDs,
+scales only stopped roles, and verifies released epoch/operation/audit before ACK.
+It cannot reclaim uncertain provider reservations by elapsed time or re-inject a
+fault as recovery. These are explicit synthetic owned-kind operations, not a
+production scheduler or authorization for customer/real-provider faults.

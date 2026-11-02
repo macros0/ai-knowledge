@@ -342,3 +342,51 @@ multipart inventory was empty. No provider errors or clients were mocked.
 This closes the bounded native S3 server/adapter contract only. Physical/PVC quota
 and PG/Qdrant/RWX/external/mixed full-storage checks, plus API/worker publication
 under full storage, remain required. No production or HA qualification is issued.
+
+## Scoped fault recovery after an image update
+
+The owned post-image managed-S3 recipe accepts `--source-journal`, `--archive`
+and `--key-file` together in `replica_worker_loss.py` and
+`replica_postgres_partition.py`. The source must be the verified image-operation
+journal for this namespace/installation/current fingerprint. Its existing exact
+immutable Secret/config/trust/PVC/controller guards and retained failed-diagnostic
+verifier are reused. The authenticated independent backup must match the current
+fingerprint and be no older than24h when a new fault is admitted. Resume retains
+the originally admitted provenance/time, so elapsed time alone cannot strand an
+already stopped installation. Changed journals or backup bindings refuse resume.
+This adapter covers the current owned post-image recipe, not other providers.
+
+Run the explicit `preflight` phase before `inject`, using the same protected inputs
+and a new fault journal name. Preflight reads/validates inputs and never writes a
+fault journal or injects a failure. An unconfigured legacy command refuses scoped
+runtime credentials before starting its fault probe. It never grants DDL/control
+privileges to the application role.
+
+```text
+replica_worker_loss.py preflight --apply --config <protected-config>
+  --namespace-uid <uid> --expected-fingerprint <current-fingerprint>
+  --journal <protected-directory>/scoped-worker-loss.json
+  --source-journal <protected-directory>/image-upgrade-journal.json
+  --archive <matching-independent-copy> --key-file <separate-key-file>
+```
+
+Use the same arguments for subsequent phases. Worker loss follows
+`inject → observe → recover → release → verify`. PostgreSQL partition retains
+its separate confirmed-reply flow `inject → confirm → observe → heal → finish →
+restore → verify`; uncertain provider completion still requires physical stop
+proof and the audited recovery path. Never repeat `inject` to recover a response.
+Privileged release SQL is read from the operator Secret only through the0440
+read-only `/run/operator-db/url` projection in an offline bootstrap Job. Normal
+Settings/envFrom keep the scoped application credentials and common identity.
+Existing release Jobs are checked through the strict credential-job observer,
+including command/environment and Secret/config bindings; they are not recreated.
+
+Release normally continues to application start. If its response is lost after
+release or during restart, inspect the same journal and use the explicit `start`
+phase when it records `released`. Start requires the exact release receipt,
+controller UIDs and original templates (or the stopped owned30-second model
+fixture). It restores that provider template, scales only still-zero roles and
+leaves already intended counts unchanged. Before recording `running`, it verifies
+the Ready runtime fingerprint, the exact released operation/epoch and its audit.
+A changed count/template/identity or a later maintenance operation refuses ACK.
+This is restart recovery, not evidence of physical-node or external-provider HA.

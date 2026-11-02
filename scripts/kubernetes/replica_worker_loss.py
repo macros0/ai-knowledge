@@ -7,24 +7,39 @@ Only the instrumented local model-stub is supported; no real provider is stopped
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+import copy
 import json
-from pathlib import Path
 import re
 import shlex
 import subprocess
 import sys
 import time
 import traceback
+from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from replica_backup import ROOT, connections, sql_source
 from replica_upgrade import UpgradeLab, corpus, operator_job, release_source
-from test_scripts.replica_provider_stop import (observation_digest, stopped_cri_facts, stopped_facts)
-from test_scripts.replica_runtime_acceptance import Kubernetes, role_pods, validate_inventory, verify_runtime
-from test_scripts.replica_runtime_faults import FaultProbe, assert_fault_scope, require_quiescent, upload
+from test_scripts.replica_provider_stop import (
+    observation_digest,
+    stopped_cri_facts,
+    stopped_facts,
+)
+from test_scripts.replica_runtime_acceptance import (
+    Kubernetes,
+    role_pods,
+    validate_inventory,
+    verify_runtime,
+)
+from test_scripts.replica_runtime_faults import (
+    FaultProbe,
+    assert_fault_scope,
+    require_quiescent,
+    upload,
+)
 
 
 class StopObservation:
@@ -55,6 +70,46 @@ def assert_released_state(state, expected):
     if (state.get("enabled") is not False or state.get("audit_count") != 1
             or any(state.get(k) != expected[k] for k in ("epoch", "operation_id"))):
         raise ValueError("Verification belongs to a different or unreleased recovery operation")
+
+
+def assert_recovery_role(current, original, *, model=False):
+    expected_count = 1 if model else 2
+    if (current["metadata"]["uid"] != original["metadata"]["uid"]
+            or original["spec"].get("replicas") != expected_count
+            or current["spec"].get("replicas") not in {0, expected_count}):
+        raise ValueError("Recovery controller identity/count changed")
+    observed, baseline = copy.deepcopy(current["spec"]), copy.deepcopy(original["spec"])
+    observed["replicas"] = baseline["replicas"] = 0
+    if observed == baseline:
+        return
+    if model and current["spec"]["replicas"] == 0:
+        container = baseline["template"]["spec"]["containers"][0]
+        env = container.setdefault("env", [])
+        if len({entry["name"] for entry in env}) != len(env):
+            raise ValueError("Ambiguous model environment")
+        for name, value in (("MODEL_STUB_SCENARIO", "delay"), ("MODEL_STUB_DELAY_SECONDS", "30")):
+            matches = [index for index, entry in enumerate(env) if entry["name"] == name]
+            if matches:
+                env[matches[0]] = {"name": name, "value": value}
+            else:
+                env.append({"name": name, "value": value})
+        if observed == baseline:
+            return
+    raise ValueError("Recovery source template changed outside the owned fault")
+
+
+def released_state_source(proof):
+    return '''import json
+from sqlalchemy import text
+from app.config import get_settings
+from app.deployment.runtime_identity import enforce_runtime_identity
+from app.db.session import session_scope
+enforce_runtime_identity(get_settings())
+with session_scope() as session:
+ state=dict(session.execute(text('SELECT epoch,operation_id,enabled FROM replica_maintenance_state WHERE id=1')).mappings().one())
+ state['audit_count']=session.scalar(text("SELECT count(*) FROM audit_log WHERE action_type='replica_model_reconcile' AND target_id=:proof"),{'proof':PROOF})
+ print(json.dumps(state))
+'''.replace("PROOF", repr(proof))
 
 
 def crash_source(selected):
@@ -114,7 +169,7 @@ def emit(phase, **kwargs):
 def remote(command, *, source=None):
     result = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=yes",
         "-o", f"UserKnownHostsFile={ROOT / 'tests/tmp/replica-lab-known_hosts'}", "ubuntu@10.10.1.52", shlex.join(command)],
-        input=source, text=True, capture_output=True, timeout=45)
+        input=source, text=True, capture_output=True, timeout=45, check=False)
     if result.returncode:
         raise ValueError("Owned node observation or exact container operation failed")
     if len(result.stdout.encode()) > 8 * 1024 * 1024:
@@ -123,7 +178,7 @@ def remote(command, *, source=None):
 
 
 class WorkerLoss:
-    def __init__(self, config, namespace_uid, journal, expected_fingerprint):
+    def __init__(self, config, namespace_uid, journal, expected_fingerprint, *, source_journal=None, archive=None, key_file=None):
         self.config, self.path = config, Path(journal)
         self.value = {**config, "namespace_uid": namespace_uid, "frontend_url": f"http://127.0.0.1:{config['ports']['frontend']}",
             "simulation_username": "replica.admin"}
@@ -136,8 +191,38 @@ class WorkerLoss:
         self.journal = json.loads(self.path.read_bytes()) if self.path.exists() else None
         if self.journal and (self.journal["namespace_uid"] != namespace_uid or self.journal["fingerprint"] != self.fingerprint):
             raise ValueError("Journal belongs to another installation")
+        self.authority = None
+        if any(value is not None for value in (source_journal, archive, key_file)):
+            if not all(value is not None for value in (source_journal, archive, key_file)):
+                raise ValueError("Explicit verified source, independent archive and key required together")
+            from replica_fault_authority import ScopedFaultAuthority
+            self.authority = ScopedFaultAuthority(self, source_journal, archive, key_file)
+            self.lab = self.authority.lab
+        elif self.journal and self.journal.get("fault_authority"):
+            raise ValueError("Resume requires the same scoped fault authority")
+
+    def preflight(self, phase):
+        if getattr(self, "authority", None) is not None:
+            self.authority.check(inject=phase == "inject")
+        elif phase == "inject":
+            from replica_upgrade import require_legacy_operator_principal
+            api = json.loads(self.kube.run("get", "deploy", "api", "-o", "json"))
+            refs = [v["secretRef"]["name"] for v in api["spec"]["template"]["spec"]["containers"][0].get("envFrom", []) if "secretRef" in v]
+            if len(refs) != 1:
+                raise ValueError("One explicit legacy runtime Secret required")
+            require_legacy_operator_principal(json.loads(self.kube.run("get", "secret", refs[0], "-o", "json")), "replica")
+        if phase == "inject":
+            probe = FaultProbe(self.kube, self.value)
+            if probe.identity["fingerprint"] != self.fingerprint:
+                raise ValueError("Installed runtime fingerprint differs")
+            require_quiescent(probe)
+            return probe
 
     def save(self, **updates):
+        if self.authority is not None:
+            if self.journal.get("fault_authority", self.authority.record) != self.authority.record:
+                raise ValueError("Recorded fault authority cannot change")
+            self.journal["fault_authority"] = self.authority.record
         self.journal.update(updates)
         temporary = self.path.with_suffix(".pending")
         temporary.write_text(json.dumps(self.journal, indent=2) + "\n")
@@ -157,10 +242,7 @@ class WorkerLoss:
         import httpx
         if self.journal is not None:
             raise ValueError("Existing journal prohibits repeating failure injection")
-        probe = FaultProbe(self.kube, self.value)
-        if probe.identity["fingerprint"] != self.fingerprint:
-            raise ValueError("Installed runtime fingerprint differs")
-        require_quiescent(probe)
+        self.preflight("inject")
         objects = self.lab.inventory()
         deployments = {o["metadata"]["name"]: o for o in objects if o["kind"] == "Deployment"}
         if set(deployments) != {"api", "worker", "frontend", "model-stub"}:
@@ -231,6 +313,7 @@ class WorkerLoss:
         self.save(phase="waiting-for-quarantine")
 
     def observe(self):
+        self.preflight("observe")
         if self.journal["phase"] not in {"waiting-for-quarantine", "quarantine-proven"}:
             raise ValueError("Recorded active loss must precede quarantine observations")
         deadline = time.monotonic() + 180
@@ -278,10 +361,19 @@ else:
         return items, nodes, containers
 
     def recover(self):
-        from sqlalchemy import text
+        self.preflight("recover")
         from app.services.work.coordination import CapacityLease
-        from app.services.work.maintenance_control import MaintenanceOperator, enter_maintenance, REQUIRED_WRITERS
-        from app.services.work.provider_reconciliation import ProviderStopProof, leases_digest, reconcile_stopped_provider
+        from app.services.work.maintenance_control import (
+            REQUIRED_WRITERS,
+            MaintenanceOperator,
+            enter_maintenance,
+        )
+        from app.services.work.provider_reconciliation import (
+            ProviderStopProof,
+            leases_digest,
+            reconcile_stopped_provider,
+        )
+        from sqlalchemy import text
         if self.journal["phase"] not in {"quarantine-proven", "held", "reconciled"}:
             raise ValueError("Quarantine proof must precede recovery")
         operation, owner = self.journal["operation_id"], self.journal["owner_id"]
@@ -349,6 +441,7 @@ else:
             engine.dispose(); s3.close(); q.close()
 
     def release(self):
+        self.preflight("release")
         if self.journal["phase"] != "reconciled":
             raise ValueError("Audited reconciliation must precede release")
         # Recheck physical facts immediately before submitting the owned release Job.
@@ -361,27 +454,57 @@ else:
         container = api["spec"]["template"]["spec"]["containers"][0]
         runtime = next(e["configMapRef"]["name"] for e in container["envFrom"] if "configMapRef" in e)
         identity = next(v["configMap"]["name"] for v in api["spec"]["template"]["spec"]["volumes"] if v["name"] == "runtime-identity")
+        if self.authority is not None:
+            source, job = self.authority.release_job(api, name=stem + "-release", inputs=stem + "-inputs", operation=operation, owner=owner)
+        else:
+            source = release_source()
+            job = operator_job(api, name=stem + "-release", image=container["image"], runtime=runtime,
+                inputs=stem + "-inputs", new_identity=identity, command=["python", "-u", "/run/upgrade/release.py", operation, owner])
         self.lab.write({"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": stem + "-inputs"}, "immutable": True,
-            "data": {"release.py": release_source(), "corpus.json": json.dumps(self.journal["corpus"])}})
-        self.lab.write(operator_job(api, name=stem + "-release", image=container["image"], runtime=runtime,
-            inputs=stem + "-inputs", new_identity=identity, command=["python", "-u", "/run/upgrade/release.py", operation, owner]))
+            "data": {"release.py": source, "corpus.json": json.dumps(self.journal["corpus"])}})
+        if self.authority is not None:
+            self.authority.submit_job(job)
+        else:
+            self.lab.write(job)
         receipt = self.lab.job_result(stem + "-release", "REPLICA_UPGRADE_RELEASE:")
         if receipt != {"epoch": self.journal["epoch"], "corpus_unchanged": True, "released": True}:
             raise ValueError("Recovery release receipt differs")
         self.save(phase="released", release_receipt=receipt)
-        self.kube.run("set", "env", "deployment/model-stub", "MODEL_STUB_SCENARIO=success", "MODEL_STUB_DELAY_SECONDS-")
+        self.start()
+
+    def start(self):
+        self.preflight("start")
+        if (self.journal["phase"] not in {"released", "running"}
+                or self.journal.get("release_receipt") != {"epoch": self.journal["epoch"], "corpus_unchanged": True, "released": True}):
+            raise ValueError("The recorded verified release must precede application start")
+        current = {}
+        for role, original in self.journal["old_deployments"].items():
+            current[role] = json.loads(self.kube.run("get", "deploy", role, "-o", "json"))
+            assert_recovery_role(current[role], original, model=role == "model-stub")
+        model, original = current["model-stub"], self.journal["old_deployments"]["model-stub"]
+        if model["spec"]["template"] != original["spec"]["template"]:
+            model["spec"]["template"] = copy.deepcopy(original["spec"]["template"])
+            model.pop("status", None)
+            model["metadata"].pop("managedFields", None)
+            self.lab.write(model, verb="replace")
         for role in ("model-stub", "api", "worker", "frontend"):
-            self.lab.scale(role, 0, 1 if role == "model-stub" else 2)
-        for role in ("model-stub", "api", "worker", "frontend"):
+            selected = json.loads(self.kube.run("get", "deploy", role, "-o", "json"))
+            assert_recovery_role(selected, self.journal["old_deployments"][role], model=role == "model-stub")
+            count = 1 if role == "model-stub" else 2
+            if selected["spec"]["replicas"] == 0:
+                self.lab.scale(role, 0, count)
             self.kube.run("rollout", "status", "deploy/" + role, "--timeout=45s")
         objects = self.kube.inventory()
         ready = validate_inventory(objects, self.value)
         if verify_runtime(self.kube, objects, self.value)["fingerprint"] != self.fingerprint:
             raise ValueError("Recovered identity changed")
+        api = role_pods(objects, "api")[0]["metadata"]["name"]
+        assert_released_state(self.kube.python(api, released_state_source(self.journal["proof_digest"])), self.journal)
         self.save(phase="running", runtime=ready)
         emit("recovery-running", epoch=self.journal["epoch"], replicas=ready["replicas"], functional_check="pending")
 
     def verify(self, report):
+        self.preflight("verify")
         import httpx
         from test_scripts.replica_runtime_faults import download_matches, search_ids
         if self.journal["phase"] not in {"running", "verified"}:
@@ -411,17 +534,7 @@ else:
             observed = probe.state([document["id"]])
             doc_state = observed["documents"][document["id"]]
             api_name = probe.api_pods()[0]["metadata"]["name"]
-            released_state = self.kube.python(api_name, '''import json
-from sqlalchemy import text
-from app.config import get_settings
-from app.deployment.runtime_identity import enforce_runtime_identity
-from app.db.session import session_scope
-enforce_runtime_identity(get_settings())
-with session_scope() as session:
- state=dict(session.execute(text('SELECT epoch,operation_id,enabled FROM replica_maintenance_state WHERE id=1')).mappings().one())
- state['audit_count']=session.scalar(text("SELECT count(*) FROM audit_log WHERE action_type='replica_model_reconcile' AND target_id=:proof"),{'proof':PROOF})
- print(json.dumps(state))
-'''.replace("PROOF", repr(self.journal["proof_digest"])))
+            released_state = self.kube.python(api_name, released_state_source(self.journal["proof_digest"]))
             assert_released_state(released_state, self.journal)
             docs = self.kube.python(api_name, BASELINE_SOURCE)
             assert_recovered(self.journal["original_work"], doc_state["work"], doc_state["active_count"],
@@ -468,26 +581,32 @@ with session_scope() as session:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=["inject", "observe", "recover", "release", "verify"])
+    parser.add_argument("phase", choices=["preflight", "inject", "observe", "recover", "release", "start", "verify"])
     parser.add_argument("--config", required=True)
     parser.add_argument("--namespace-uid", required=True)
     parser.add_argument("--expected-fingerprint", required=True)
     parser.add_argument("--journal", required=True)
     parser.add_argument("--report")
+    for option in ("source-journal", "archive", "key-file"):
+        parser.add_argument("--" + option, type=Path)
     parser.add_argument("--apply", action="store_true", required=True)
     args = parser.parse_args()
     try:
         config_path, journal_path = Path(args.config).resolve(strict=True), Path(args.journal).resolve()
         if journal_path.parent != config_path.parent or journal_path == config_path:
             raise ValueError("Journal must use the separate protected config directory")
-        recipe = WorkerLoss(json.loads(config_path.read_bytes()), args.namespace_uid, journal_path, args.expected_fingerprint)
-        if args.phase == "verify":
+        recipe = WorkerLoss(json.loads(config_path.read_bytes()), args.namespace_uid, journal_path, args.expected_fingerprint,
+            source_journal=args.source_journal, archive=args.archive, key_file=args.key_file)
+        if args.phase == "preflight":
+            recipe.preflight("inject")
+            emit("fault-preflight-passed", fault_injected=False, scoped_authority=recipe.authority is not None)
+        elif args.phase == "verify":
             if not args.report:
                 raise ValueError("Public report path required")
             recipe.verify(args.report)
         else:
             getattr(recipe, args.phase)()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- raw provider/credential errors stay private.
         frames = traceback.extract_tb(exc.__traceback__)
         print(json.dumps({"worker_loss_refused": type(exc).__name__, "maintenance": "never-released-on-error",
             "locations": [Path(f.filename).name + ":" + str(f.lineno) for f in frames[-3:]]}), file=sys.stderr)

@@ -8,21 +8,30 @@ from __future__ import annotations
 
 import argparse
 import copy
-from hashlib import sha256
 import json
-from pathlib import Path
 import re
 import sys
 import time
 import traceback
+from hashlib import sha256
+from pathlib import Path
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from replica_worker_loss import BASELINE_SOURCE, SQL_STATE, WorkerLoss, emit, same_reservation
-from test_scripts.replica_runtime_acceptance import role_pods, validate_inventory, verify_runtime
+from replica_worker_loss import (
+    BASELINE_SOURCE,
+    SQL_STATE,
+    WorkerLoss,
+    assert_recovered,
+    emit,
+    same_reservation,
+)
+from test_scripts.replica_runtime_acceptance import (
+    role_pods,
+    validate_inventory,
+    verify_runtime,
+)
 from test_scripts.replica_runtime_faults import FaultProbe, require_quiescent, upload
-from replica_worker_loss import assert_recovered
-
 
 LABEL = "okf-pg-partition"
 IDENTIFIED_START = "import os;from uuid import UUID;import app.services.work.runtime as runtime;runtime.uuid4=lambda:UUID(os.environ['OKF_ACCEPTANCE_POD_UID']);from app.worker import main;raise SystemExit(main())"
@@ -141,10 +150,7 @@ class PostgresPartition(WorkerLoss):
         import httpx
         if self.journal is not None:
             raise ValueError("Existing journal prohibits another partition injection")
-        probe = FaultProbe(self.kube, self.value)
-        if probe.identity["fingerprint"] != self.fingerprint:
-            raise ValueError("Installed runtime identity differs")
-        require_quiescent(probe)
+        self.preflight("inject")
         objects = self.lab.inventory()
         deployments = {o["metadata"]["name"]: o for o in objects if o["kind"] == "Deployment"}
         if set(deployments) != {"api", "worker", "frontend", "model-stub"}:
@@ -224,6 +230,7 @@ class PostgresPartition(WorkerLoss):
         self.confirm()
 
     def confirm(self):
+        self.preflight("confirm")
         # Observation timeout does not terminate the already-applied fault. This
         # phase only observes the same Pod/container/policy, never re-injects it.
         if self.journal["phase"] != "partition-applied":
@@ -247,6 +254,7 @@ class PostgresPartition(WorkerLoss):
             unfinished_document=True, healthy_worker_postgres=True, qdrant_model_reachable=True)
 
     def observe(self):
+        self.preflight("observe")
         if self.journal["phase"] not in {"partition-proven", "reclaim-proven"}:
             raise ValueError("A recorded active partition must precede reclaim observation")
         deadline = time.monotonic() + 200
@@ -286,6 +294,7 @@ class PostgresPartition(WorkerLoss):
         self.kube.run("delete", "ciliumnetworkpolicy", expected["metadata"]["name"], "--wait=false")
 
     def heal(self):
+        self.preflight("heal")
         if self.journal["phase"] not in {"reclaim-proven", "healing"}:
             raise ValueError("New healthy ownership must be observed before old worker return")
         self.pod(self.journal["selected_worker"])
@@ -340,6 +349,7 @@ else:
         That is different from an uncertain request after process loss: no offline
         acknowledgement or maintenance epoch is needed once normal capacity is idle.
         """
+        self.preflight("finish")
         if self.journal["phase"] != "healing":
             raise ValueError("Observe the same reconnected process, not a new fault")
         old = self.pod(self.journal["selected_worker"])
@@ -395,6 +405,7 @@ print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':
             published_fence=work["fence"], model_peak=state["provider"]["peak_active"], owned_slots=0)
 
     def restore(self):
+        self.preflight("restore")
         if self.journal["phase"] not in {"confirmed-return", "fixture-restoring"}:
             raise ValueError("Verified confirmed completion required before fixture restore")
         self.delete_policy()
@@ -420,10 +431,12 @@ print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':
         emit("partition-fixture-restored", normal_worker_entrypoint=True, model_scenario="success", maintenance_epoch_changed=False)
 
     def verify(self, report):
+        self.preflight("verify")
         if self.journal.get("completion_kind") != "confirmed-provider-reply":
             return super().verify(report)
-        import httpx
         from datetime import datetime, timezone
+
+        import httpx
         from test_scripts.replica_runtime_faults import download_matches, search_ids
         if self.journal["phase"] not in {"normal-running", "verified"}:
             raise ValueError("Normal fixture must be restored before functional verification")
@@ -481,6 +494,7 @@ print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':
         print(json.dumps(public), flush=True)
 
     def release(self):
+        self.preflight("release")
         if self.journal["phase"] != "reconciled":
             raise ValueError("Physical provider reconciliation required first")
         self.delete_policy()
@@ -518,26 +532,32 @@ print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=["inject", "confirm", "observe", "heal", "finish", "restore", "recover", "release", "verify"])
+    parser.add_argument("phase", choices=["preflight", "inject", "confirm", "observe", "heal", "finish", "restore", "recover", "release", "start", "verify"])
     parser.add_argument("--config", required=True)
     parser.add_argument("--namespace-uid", required=True)
     parser.add_argument("--expected-fingerprint", required=True)
     parser.add_argument("--journal", required=True)
     parser.add_argument("--report")
+    for option in ("source-journal", "archive", "key-file"):
+        parser.add_argument("--" + option, type=Path)
     parser.add_argument("--apply", action="store_true", required=True)
     args = parser.parse_args()
     try:
         config, journal = Path(args.config).resolve(strict=True), Path(args.journal).resolve()
         if config.parent != journal.parent or config == journal:
             raise ValueError("Separate protected original-token journal required")
-        recipe = PostgresPartition(json.loads(config.read_bytes()), args.namespace_uid, journal, args.expected_fingerprint)
-        if args.phase == "verify":
+        recipe = PostgresPartition(json.loads(config.read_bytes()), args.namespace_uid, journal, args.expected_fingerprint,
+            source_journal=args.source_journal, archive=args.archive, key_file=args.key_file)
+        if args.phase == "preflight":
+            recipe.preflight("inject")
+            emit("fault-preflight-passed", fault_injected=False, scoped_authority=recipe.authority is not None)
+        elif args.phase == "verify":
             if not args.report:
                 raise ValueError("Public report path required")
             recipe.verify(args.report)
         else:
             getattr(recipe, args.phase)()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- public refusal excludes provider/credential values.
         print(json.dumps({"partition_refused": type(exc).__name__, "maintenance": "never-released-on-error",
             "locations": [Path(f.filename).name + ":" + str(f.lineno) for f in traceback.extract_tb(exc.__traceback__)[-3:]]}), file=sys.stderr)
         return 2

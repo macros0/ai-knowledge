@@ -461,6 +461,22 @@ production scheduleOFF. Public report:
 basic lab's small-load evidence; combined-runner integration, full CI and profile/
 provider/customer certification remain O3/O1 gates, so R5 is not globally certified.
 
+R5 scoped fault/restart preparation (2026-11-02): explicit current-image source
+provenance and an authenticated matching independent copy now precede admission.
+The existing immutable input/CA/retained-diagnostic guards are reused; a legacy
+command refuses scoped credentials before its probe. Release uses a separate
+read-only operator URL file, keeping runtime Settings scoped. A distinct start
+phase resumes partial intended counts and verifies original controller templates,
+common identity, released operation/epoch and audit before ACK. Final Windows and
+Linux each passed116 cases without skips; root audit0/frontend756+1skip/Ruff passed.
+Actual current-profile worker-loss and PostgreSQL-partition preflight both passed
+with no injection or operation journal. Fresh independent epoch11 copy contains
+20 documents/100 blobs/102 encrypted objects; all20 documents and4 scoped processes
+were verified after restart and the real latest-attempt health check passed.
+The copy has not been restored. See the dated scoped-fault-authority and
+before-scoped-faults-backup reports. Combined runner and actual current-version
+fault replay remain required; this milestone does not certify all R5/profiles.
+
 R1: `assert len(live_claims_for_same_work) == 1`;
 `assert new_claim.fence > old_claim.fence`; старое finish проверяется через
 `pytest.raises(LostOwnership)`.

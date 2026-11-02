@@ -200,6 +200,18 @@ See the local-health section in `../../KUBERNETES_REPLICAS_RECOVERY.md`.
 Notification routing/delivery, independent key recovery, scheduling and the other
 O2 provider/adoption/restore gates remain open. Production scheduleOFF.
 
+O2 current-image copy/real-attempt follow-up (2026-11-02): authenticated independent
+copy6bfd7725f526474990e1e706eb4201a4 held/released epoch11 and contains20 documents,
+100 blobs and102 encrypted objects. All20 prior documents retained their exact
+content/generation/source/delete state and SHA/search/download availability after
+normal restart; four scoped processes verified the epoch and maintenance audit
+pair. The actual protected attempt journal completed with the same backup ID,
+and cold health returned healthy with age592.046346 seconds. It still reports
+restore_verified=false and rpo_assured=false. No messages/scheduler were enabled.
+See `../reports/2026-11-02-replica-before-scoped-faults-backup.json`. This exercises
+the local health path on a genuine complete attempt without closing restore/key/
+notification/provider gates. Production scheduleOFF.
+
 ## Task O3: fault matrix, release gates и документация
 
 O2 selected-runtime backup follow-up (2026-11-01): backup now resolves the common

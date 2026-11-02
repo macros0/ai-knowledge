@@ -1,0 +1,94 @@
+{
+  "status": "scoped-fault-authority-software-and-native-preflight-passed",
+  "coordinator_base_revision": "e8911dcbd332e638bcc767ea45ff87f99dd7744e",
+  "application_source_revision": "dc3534a29a07d6a6dd6f8c81dfa91562e7d58868",
+  "source_overlay_sha256": {
+    "scripts/kubernetes/replica_fault_authority.py": "c0f8a80e6b046b47f22783b2af368dbf1b81ac81e2fa1915a4975afa60ee68ea",
+    "scripts/kubernetes/replica_worker_loss.py": "02108252599d9b40bbfdccb3cfbf843112cafa7671d116d31369f47c15295561",
+    "scripts/kubernetes/replica_postgres_partition.py": "6766e43744cc1f20ebf487818f00b41125105126fec0dd3e09369b9b48e24cb7",
+    "backend/tests/test_replica_fault_authority.py": "fab502e29922af3c1db6163bfc51f3e79cbff2b5d8756f4bf025106e323efdb0"
+  },
+  "windows": {
+    "tests": 116,
+    "passed": 116,
+    "skipped": 0,
+    "log_sha256": "8310e0a6eb5fdd7afdc931225a66dfc173dd22b9b5385cf74042ef3879e30dfe"
+  },
+  "linux": {
+    "image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "archive_sha256": "c584cd13b124811b2b70b6823beda4c24074567a5124f98d8f0f7347f868c88c",
+    "container_id": "f15d61106e700900dfb92e0d7524099cfb4fdac27a9ad574a037b879ec84c61f",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T02:26:53.109149036Z",
+    "FinishedAt": "2026-11-02T02:33:06.276280929Z",
+    "junit": {
+      "tests": 116,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "d10917603c99981758db54817ec5543d622c2b7169d4dde42856ad08e9041360"
+    },
+    "failed_cases": []
+  },
+  "root_gate": {
+    "command": "node scripts/check-project.mjs",
+    "exit_code": 0,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "log_sha256": "ac1669513694d71dd10834d2df826f6f4b703da88004283e22eb65267ff3e673"
+  },
+  "native_preflight": [
+    {
+      "recipe": "worker-loss",
+      "exit_code": 0,
+      "fault_injected": false,
+      "operation_journal_created": false,
+      "log_sha256": "9c9be1852a1295f731ca4049577125aed77d8424c0434b971859cf8c4b155f0e"
+    },
+    {
+      "recipe": "postgres-partition",
+      "exit_code": 0,
+      "fault_injected": false,
+      "operation_journal_created": false,
+      "log_sha256": "9c9be1852a1295f731ca4049577125aed77d8424c0434b971859cf8c4b155f0e"
+    }
+  ],
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "installation_id": "55555555555555555555555555555555",
+  "runtime_fingerprint": "6a41ae2937c6e95d8877f36f3e884d05da3e522c27ae54f7c73d4e00841837e4",
+  "after_backup_released_epoch": 11,
+  "independent_backup_id": "6bfd7725f526474990e1e706eb4201a4",
+  "preserved_documents_after_backup": 20,
+  "runtime_after_backup": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e",
+      "worker": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "native_active_fault_replay": false,
+  "combined_runtime_runner_pass": false,
+  "full_backend_ci_pass": false,
+  "production_schedule": "disabled",
+  "observed_at": "2026-11-02T02:38:16.936812+00:00",
+  "limitations": [
+    "Owned post-image managed-S3 synthetic profile only.",
+    "Read-only native preflight is not actual scoped worker-loss/partition/release qualification.",
+    "No combined runner, customer, external/mixed/RWX or physical-node/HA certification.",
+    "Fresh independent archive has not been restored; no production RPO or key-recovery assurance."
+  ]
+}
