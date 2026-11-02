@@ -6,6 +6,7 @@ identity inside Linux. Normal role counts return only after held SQL verificatio
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import inspect
 import json
@@ -170,6 +171,13 @@ except Exception as exc:
 ''')
 
 
+def require_legacy_operator_principal(secret, operator_user):
+    from sqlalchemy.engine import make_url
+    url = make_url(base64.b64decode(secret["data"]["DATABASE_URL"], validate=True).decode())
+    if url.username != operator_user:
+        raise ValueError("The legacy upgrade recipe cannot use scoped credentials; use replica_image_upgrade.py")
+
+
 def run_upgrade(config, *, namespace_uid, image, report, resume=None):
     from app.services.work.maintenance_control import (
         MaintenanceOperator,
@@ -206,6 +214,8 @@ def run_upgrade(config, *, namespace_uid, image, report, resume=None):
             new_identity="planned-identity", image=image)
     old_identity = json.loads(json.loads(lab.kubectl("get", "cm", old_identity_name, "-o", "json"))["data"]["identity.json"])
     runtime = json.loads(lab.kubectl("get", "cm", old_runtime_name, "-o", "json"))["data"]
+    runtime_secret = next(e["secretRef"]["name"] for e in old_api["spec"]["template"]["spec"]["containers"][0]["envFrom"] if "secretRef" in e)
+    require_legacy_operator_principal(json.loads(lab.kubectl("get", "secret", runtime_secret, "-o", "json")), "replica")
     operation, owner = uuid4().hex, "owned-lab-upgrade"
     stem = "replica-upgrade-" + operation[:12]
     next_runtime, next_identity = stem + "-runtime", stem + "-identity"

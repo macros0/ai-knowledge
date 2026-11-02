@@ -249,6 +249,58 @@ The protected operator config now selects the new CA; production scheduleOFF.
 This closes only coordinated CA rotation for the selected owned managed-S3 recipe;
 storage-full, RWX/external/mixed providers and node/host failover are still open.
 
+## Image update after scoped credentials
+
+Use `scripts/kubernetes/replica_image_upgrade.py` for the owned same-schema
+backend-image rehearsal after credentials/CA activation. The earlier
+`replica_upgrade.py` recipe refuses a scoped SQL principal before fencing.
+This recipe changes the backend image and immutable runtime ConfigMap together;
+frontend/model images, scoped runtime Secret, session/signing keys, trust,
+storage controllers and all three PVCs remain bound to their captured identities.
+Privileged SQL access is projected only into offline bootstrap Jobs as the
+read-only `/run/operator-db/url` file. Runtime identity is computed from the
+application's scoped settings, using the candidate image inside Linux.
+
+```text
+prepare → fence → compute → stage → release → start → verify
+```
+
+Every command names the explicit owned `--config`, `--namespace-uid`,
+`--expected-fingerprint` and protected `--journal` beside the config file.
+`prepare` additionally requires `--image`, `--archive`, separate `--key-file`,
+the verified `--credential-journal` and latest verified `--source-journal`.
+The authenticated backup must match the current installation/fingerprint/images,
+be younger than24h and reside in an independent failure domain. A new backup
+after CA acceptance may supply that source journal through the backup command's
+`--source-journal`; only the recorded exact terminal diagnostic is recognised.
+All other unknown writers, failures and uncertain model reservations still refuse.
+
+`fence` records the operation before normal role shutdown. `compute` and
+`release` use the same journal and existing Jobs when observing uncertain outcomes;
+never delete them or start another operation merely after an observation timeout.
+`stage` accepts only stopped unchanged source templates or the exact already
+staged candidate; partial image/config/identity combinations are refused.
+The held SQL corpus, every ready object's size/SHA and full Qdrant vector/payload
+inventory are checked before release. `start` requires the successful release
+receipt and intended role counts. `verify --report docs/superpowers/reports/<name>.json`
+checks the existing authenticated session, all four scoped API/worker processes,
+transition audits, old identity rejection, original corpus/trash/search/download
+and one new clean publication. Prior privilege-denial evidence is identified as
+reused; it is not presented as a new privilege-probe run.
+
+This remains a synthetic managed-S3, single-node lab recipe. Schema-changing
+upgrades/adoption, rollback/restore, other storage profiles and final combined CI
+remain separate gates. Production backup scheduling stays disabled.
+
+The actual2026-11-02 run preserved19 prior documents, their generations/source SHA
+and trash state, the existing authenticated session, all storage claims and scoped
+credentials. One new document completed cleanly with exactly one publication;
+final2/2/2 Ready had zero restarts. Two PC PostgreSQL-forward closures after durable
+phase completion were handled by rebinding only that recorded forward and
+reverifying the same operation, not by repeating its fence or compute Job.
+[Image-update result](superpowers/reports/2026-11-02-replica-scoped-image-upgrade.json),
+[independent-copy result](superpowers/reports/2026-11-02-replica-current-runtime-backup.json).
+
 ## Bounded native S3 ENOSPC contract
 
 `scripts/kubernetes/replica_storage_full.py` uses the separate owned

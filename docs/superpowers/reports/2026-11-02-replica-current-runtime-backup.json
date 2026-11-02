@@ -1,0 +1,52 @@
+{
+  "format": 3,
+  "backup_id": "1e4f494397594f5e83daf39361996d04",
+  "namespace": "replica-test-r5o2t20261101",
+  "source_epoch": 9,
+  "runtime_configmap": "replica-upgrade-fd07c5dfcdd7-runtime",
+  "runtime_fingerprint": "13548fdb5c6e7ed466d3dd1c4d62010ce359da4563e32602a58bbb0a7cbeb3cc",
+  "consistent_at": "2026-11-01T23:46:22.856871+00:00",
+  "counts": {
+    "documents": 19,
+    "concepts": 19,
+    "chunks": 19,
+    "work_items": 5805,
+    "audit_events": 81,
+    "blobs": 95
+  },
+  "encrypted_objects": 97,
+  "plaintext_bytes": 2770059,
+  "production_schedule": "disabled",
+  "restore_verified": false,
+  "status": "owned-current-runtime-backup-passed",
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "installation_id": "55555555555555555555555555555555",
+  "destination": "user-confirmed-separate-physical-pc",
+  "signing_and_runtime_identity_preserved": true,
+  "preserved_documents": 19,
+  "source_search_download_sha_verified": true,
+  "scoped_processes_verified": 4,
+  "maintenance_audit_pair": true,
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8",
+      "worker": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "limitations": [
+    "cold verified copy; this archive has not been restored",
+    "owned single-node synthetic managed-S3 recipe only"
+  ]
+}

@@ -1922,6 +1922,25 @@ and mail constraints/indexes remain checked; incompatible drift refuses all
 repair DDL. It never stamps Alembic or changes existing corpus rows. The existing
 development-only apply and stopped-writer/backup requirements remain in force.
 
+Same-schema image updates after scoped credential activation use the explicit
+phase-controlled `replica_image_upgrade.py` recipe. Runtime Secrets and trust
+bindings stay unchanged; only offline bootstrap Jobs mount the separate operator
+database URL file. That URL never replaces the runtime settings used to compute
+the identity. A fresh authenticated independent backup, exact immutable input
+UIDs/data, stopped source templates and retained storage controller/PVC identities
+are checked before transition. Mixed image/config/identity templates refuse
+staging. While held, SQL corpus, object bytes and complete vector inventory are
+verified. A lost release response observes the same fully bound Job, without
+re-entering maintenance or submitting another release. The legacy recipe refuses
+a scoped SQL principal before taking a fence. Existing production/provider gates
+remain unchanged.
+
+An owned backup may use a verified prior source journal to recognise the exact
+retained failed diagnostic from CA acceptance. Its namespace/installation/current
+fingerprint must match. The existing UID/spec/terminated-process/Ready-node
+verifier runs on every drain observation; unrelated or changed failures still
+block. No failed Job is deleted, restarted or reported as successful.
+
 ## Replica coordination foundation (2026-11-01, activation gated)
 
 The future runtime shares capacity slots and rolling rate windows through short

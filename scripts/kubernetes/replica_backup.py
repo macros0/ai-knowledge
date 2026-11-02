@@ -244,7 +244,25 @@ def sql_source(connection, config):
     return dict(identity), dict(control)
 
 
-def run_backup(config, *, namespace_uid, evidence_file, archive, key_file, pg_dump, report):
+def source_journal_lab(config, namespace_uid, source_journal=None):
+    """A prior terminal diagnostic needs its exact verified source provenance."""
+    if source_journal is None:
+        return Lab(config, namespace_uid)
+    path = Path(source_journal).resolve(strict=True)
+    journal = json.loads(path.read_bytes())
+    identity = journal.get("new_identity", {})
+    if (path.parent != Path(config["ca_file"]).resolve().parent or journal.get("phase") != "verified"
+            or journal.get("namespace_uid") != namespace_uid or identity.get("installation_id") != config["installation_id"]
+            or not re.fullmatch(r"[0-9a-f]{64}", identity.get("runtime_fingerprint", ""))
+            or journal.get("retired_diagnostics") and not (journal.get("ca_verified") is True or journal.get("image_upgrade_verified") is True)):
+        raise ValueError("Verified owned source journal required for retained diagnostics")
+    from replica_ca_rotation import CaLab
+    lab = CaLab(config, namespace_uid, SimpleNamespace(journal=journal))
+    lab.expected_source_fingerprint = identity["runtime_fingerprint"]
+    return lab
+
+
+def run_backup(config, *, namespace_uid, evidence_file, archive, key_file, pg_dump, report, source_journal=None):
     from app.deployment.replica_backup import BackupPlan, BackupWriter, verify_backup
     from app.services.work.maintenance_control import (
         REQUIRED_WRITERS,
@@ -255,7 +273,7 @@ def run_backup(config, *, namespace_uid, evidence_file, archive, key_file, pg_du
     from sqlalchemy import text
     from test_scripts.replica_runtime_acceptance import Kubernetes
     from test_scripts.replica_runtime_faults import FaultProbe, require_quiescent
-    lab = Lab(config, namespace_uid)
+    lab = source_journal_lab(config, namespace_uid, source_journal)
     destination = destination_binding(evidence_file, archive)
     key = Path(key_file).read_bytes()
     if len(key) != 32 or Path(key_file).resolve().is_relative_to(Path(archive).resolve()):
@@ -290,6 +308,8 @@ def run_backup(config, *, namespace_uid, evidence_file, archive, key_file, pg_du
     kube = Kubernetes(value, ssh_host="ubuntu@10.10.1.52", known_hosts=ROOT / "tests/tmp/replica-lab-known_hosts")
     probe = FaultProbe(kube, value)
     require_quiescent(probe)
+    if getattr(lab, "expected_source_fingerprint", probe.identity["fingerprint"]) != probe.identity["fingerprint"]:
+        raise ValueError("Backup source identity differs from diagnostic provenance")
     actual = kube.python(probe.api_pods()[0]["metadata"]["name"], '''import json
 from app.config import get_settings
 from app.deployment.runtime_identity import enforce_runtime_identity
@@ -414,10 +434,12 @@ def main():
     for option in ("config", "evidence-file", "archive", "key-file", "pg-dump", "report"):
         parser.add_argument("--" + option, type=Path, required=True)
     parser.add_argument("--namespace-uid", required=True)
+    parser.add_argument("--source-journal", type=Path, help="Verified owned source operation retaining an exact failed diagnostic")
     args = parser.parse_args()
     try:
         run_backup(json.loads(args.config.read_bytes()), namespace_uid=args.namespace_uid,
-            evidence_file=args.evidence_file, archive=args.archive, key_file=args.key_file, pg_dump=args.pg_dump, report=args.report)
+            evidence_file=args.evidence_file, archive=args.archive, key_file=args.key_file, pg_dump=args.pg_dump, report=args.report,
+            source_journal=args.source_journal)
         return 0
     except Exception as exc:  # noqa: BLE001 -- provider errors can contain credentials; public message is fixed.
         import traceback

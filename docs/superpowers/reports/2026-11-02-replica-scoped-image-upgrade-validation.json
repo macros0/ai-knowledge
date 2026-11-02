@@ -1,0 +1,73 @@
+{
+  "status": "focused-validation-passed-full-tip-ci-pending",
+  "application_source_revision": "dc3534a29a07d6a6dd6f8c81dfa91562e7d58868",
+  "coordinator_source": {
+    "base_revision": "dc3534a29a07d6a6dd6f8c81dfa91562e7d58868",
+    "owned_overlay_sha256": {
+      "scripts/kubernetes/replica_image_upgrade.py": "5b8dd77a5d64e4e46c3629ddc8d46ff3da3bfb181ef22dbc36a9692fdf9be952",
+      "scripts/kubernetes/replica_backup.py": "86591ff8a3a16a4106ca720e21d1cd0379c4c6d379cf238491ed9bbc9ca29ba2",
+      "scripts/kubernetes/replica_upgrade.py": "fd396e667b4ac5158f1dfd09cb443cd2982306c9f87bfde31659bba8df6b75fb",
+      "backend/tests/test_replica_image_upgrade.py": "5f9a7492fde023fbaaa9ee7b0bdbd4a501679c9fa886fe2a32a28a67aec57382",
+      "backend/tests/test_retrieval_hydration.py": "d2cf6e8bf867d86c4a4a474a192a4e63d75dcbd7e481b07848cbee76bc4fa01e",
+      "backend/tests/test_table_probe.py": "bcba9cebdba56884b5dd4885ebc189d401367fca14871f035132e80ca94e0c6d"
+    }
+  },
+  "windows": {
+    "coordinator_and_related_cases": 151,
+    "table_probe_cases": 33,
+    "failures": 0,
+    "skipped": 0
+  },
+  "linux": {
+    "image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "archive_sha256": "bf3ed98c8ea823855bb00028c39f00534665ce856ae31ceca888a88dbb370fb1",
+    "selection": [
+      "tests/test_replica_image_upgrade.py",
+      "tests/test_replica_upgrade_coordinator.py",
+      "tests/test_replica_credentials.py",
+      "tests/test_replica_ca_rotation.py",
+      "tests/test_replica_runtime_upgrade.py",
+      "tests/test_replica_backup_coordinator.py",
+      "tests/test_replica_backup.py",
+      "tests/test_retrieval_hydration.py",
+      "tests/test_table_probe.py"
+    ],
+    "container_id": "eb748536b7bcd9368c371662e8fb19271523bdbb0daae63699ed1797db0a045f",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T00:14:47.589773845Z",
+    "FinishedAt": "2026-11-02T00:19:31.635892933Z",
+    "junit": {
+      "tests": 184,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "81ee8b64b632bdd71a748840a645405041b6550ccb9f0505a2eb3992fa5d1003"
+    },
+    "failed_cases": []
+  },
+  "root_gate": {
+    "command": "node scripts/check-project.mjs",
+    "passed": true,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "log_sha256": "2677433b3a3cb03f076bb419ed649769b6254e74d4de483da5735e1330a810e8"
+  },
+  "previous_full_ci": {
+    "revision": "36579d2",
+    "cases": 5892,
+    "passed": 5694,
+    "failures": 18,
+    "skipped": 180,
+    "all_known_causes_addressed": true,
+    "new_full_tip_passed": false
+  },
+  "production_schedule": "disabled",
+  "limitations": [
+    "Focused suites overlap earlier cohorts; counts are not cumulative.",
+    "New coordinator/test source and deployed application source have separate identities.",
+    "No customer, RWX, external/mixed or physical-node failure certification."
+  ]
+}

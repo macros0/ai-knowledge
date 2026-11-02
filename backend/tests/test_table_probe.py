@@ -45,7 +45,7 @@ def test_probe_unknown_evidence_is_not_success():
     assert not _probe().compare_reports({'schema_version': 1}, {'schema_version': 1})['passed']
 
 
-def test_probe_parse_cli_uses_original_coordinates_and_unknown_headers(tmp_path):
+def test_probe_parse_cli_uses_original_coordinates_and_unknown_headers(tmp_path, monkeypatch):
     import hashlib
     import json
     from openpyxl import Workbook
@@ -68,6 +68,9 @@ def test_probe_parse_cli_uses_original_coordinates_and_unknown_headers(tmp_path)
     manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
     output = tmp_path / 'report.json'
     probe = _probe()
+    # Geometry/typed-cell contracts use real parsing; Git workspace provenance
+    # is a separate boundary and is absent from the hermetic CI source archive.
+    monkeypatch.setattr(probe, 'metadata', lambda: {'fixture_metadata_only': True})
     assert probe.main(['--manifest', str(manifest_path), '--output', str(output), '--mode', 'parse']) == 1
     report = json.loads(output.read_text(encoding='utf-8'))
     assert report['gates']['0']['gates']['cell_coverage']['passed']
@@ -97,7 +100,7 @@ def test_compare_preserves_failed_original_gates():
     assert report['gates']['source_acceptance']['baseline']['original_oracle']['missing'] == 1
 
 
-def test_probe_preserves_sheet_identity_with_empty_and_reordered_sheets(tmp_path):
+def test_probe_preserves_sheet_identity_with_empty_and_reordered_sheets(tmp_path, monkeypatch):
     import hashlib
     import zipfile
     from lxml import etree
@@ -128,7 +131,9 @@ def test_probe_preserves_sheet_identity_with_empty_and_reordered_sheets(tmp_path
                                   {'source_id': 'root', 'sheet': 1, 'address': 'A2', 'value': 'Third'},
                                   {'source_id': 'root', 'sheet': 2, 'address': 'A2', 'value': 'Second'},
                               ], 'expected_headers': []}]}
-    report = _probe().parse_manifest(manifest, tmp_path)
+    probe = _probe()
+    monkeypatch.setattr(probe, 'metadata', lambda: {'fixture_metadata_only': True})
+    report = probe.parse_manifest(manifest, tmp_path)
     assert report['gates']['0']['gates']['cell_coverage']['passed']
     assert {c['sheet']: c['value'] for c in report['cells'] if c['address'] == 'A2'} == {1: 'Third', 2: 'Second'}
 

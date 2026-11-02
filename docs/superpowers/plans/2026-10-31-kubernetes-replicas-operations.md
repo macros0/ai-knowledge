@@ -307,6 +307,26 @@ pending gate, не зелёный пропуск. Platform acceptance привя
 - [ ] GREEN report suite и runner `--suite all`; общий `node scripts/check-project.mjs`, полный backend `python -m pytest tests/ -q`, doc-parser `python -m pytest tests/ -q` из `doc-parser/`, frontend production build прямым Node. Проверки с зависимостями выполняются в соответствующем lab; итог разделяет unit, integration, home и customer acceptance.
 - [ ] Заполнить runbooks для setup/update/scale/drain/storage migration/backup/restore/incident, ответственность и расходы ресурсов. Зафиксировать известные ограничения active SSE, внешних моделей, basic storage и RPO breach. Commit `test: certify replica deployment and recovery profiles`.
 
+O2 scoped same-schema image update milestone (2026-11-02): the selected owned
+managed-S3 installation passed `prepare/fence/compute/stage/release/start/verify`
+after credential and CA activation. An independent format3 copy contained
+19 documents/95 blobs/97 encrypted objects; cold verification passed, but this
+archive has not been restored. Epoch10 retained storage/PVC/Secret/trust bindings,
+verified held SQL corpus/blob SHA/full vectors, and moved API/worker together to
+the candidate image/config/identity. Two PC PostgreSQL-forward closures occurred
+after successful durable phases: the same operation/Job was observed, the exact
+forward rebound, and all held data reverified before staging/release. No new fence,
+repeated compute Job or automatic application start acknowledged uncertainty.
+All19 prior documents and the pre-stop authenticated session survived; four
+processes proved scoped principals, transition audits and retired-identity refusal.
+One new document completed with one publication and matching search/download SHA;
+final2/2/2 Ready with zero restarts. Runtime/app secrets and three storage claims
+remained unchanged. Earlier privilege-denial evidence is explicitly identified as
+reused. See `../reports/2026-11-02-replica-scoped-image-upgrade.json` and the dated
+backup report. This closes only the selected same-schema image-update recipe;
+schema-changing adoption/rollback, key recovery, backup alerts, other profiles and
+final combined CI/acceptance remain open. Production scheduleOFF.
+
 ## Ключевые assertions для тестов задач
 
 O1: `assert external_owned_workloads == []`; `assert secret_value not in rendered_yaml`;
