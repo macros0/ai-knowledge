@@ -437,7 +437,7 @@ print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':
         from datetime import datetime, timezone
 
         import httpx
-        from test_scripts.replica_runtime_faults import download_matches, search_ids
+        from test_scripts.replica_runtime_faults import verify_corpus_search_download
         if self.journal["phase"] not in {"normal-running", "verified"}:
             raise ValueError("Normal fixture must be restored before functional verification")
         probe = FaultProbe(self.kube, self.value)
@@ -456,15 +456,7 @@ print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':
             raise ValueError("Recovered document is incomplete")
         with httpx.Client(base_url=self.value["frontend_url"], trust_env=False, timeout=25) as client:
             client.post("/api/auth/simulate", json={"username": "replica.admin"}).raise_for_status()
-            hits = search_ids(client)
-            for d in self.journal["baseline_documents"] + [document]:
-                if d.get("deleted_at"):
-                    if d["id"] in hits or client.get(f"/api/documents/{d['id']}/download").status_code != 404:
-                        raise ValueError("Trashed document became visible")
-                else:
-                    download_matches(client, d)
-                    if d["id"] not in hits:
-                        raise ValueError("A preserved or recovered document disappeared from search")
+            verify_corpus_search_download(client, self.journal["baseline_documents"] + [document])
         ready = validate_inventory(self.kube.inventory(), self.value)
         public = {"status": "owned-postgres-partition-stale-return-passed", "scope": "single-node-managed-s3-synthetic-stub",
             "namespace": self.value["namespace"], "namespace_uid": self.value["namespace_uid"], "installation_id": self.config["installation_id"],

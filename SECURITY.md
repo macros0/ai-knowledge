@@ -2505,3 +2505,10 @@ Runtime idle admission follow-up: probes now explicitly bind their own process
 runtime identity and maintenance epoch before opening a normal read session.
 An unbound process remains refused; read-only admission never uses the offline
 operator bypass to hide missing runtime initialization.
+
+Synthetic replica acceptance verifies each live source SHA before searching its
+own UUID marker (or the original legacy fixture heading). A shared ranked top-N
+result is not an inventory and cannot prove that every retained document is
+indexed. Missing targeted hits, changed downloads and visible/downloadable trash
+still fail acceptance. Production query limits, visibility filters, credentials
+and runtime images are unchanged by this test-harness correction.

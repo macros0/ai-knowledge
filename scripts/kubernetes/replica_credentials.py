@@ -537,7 +537,7 @@ class ReplicaCredentials(WorkerLoss):
             shared_session,
             validate_inventory,
         )
-        from test_scripts.replica_runtime_faults import download_matches, search_ids
+        from test_scripts.replica_runtime_faults import verify_corpus_search_download
         if self.journal["phase"] not in {"running", "verified"} or Path(report).resolve().parent != ROOT / "docs/superpowers/reports":
             raise ValueError("Running credential operation and owned public report required")
         probe = FaultProbe(self.kube, self.value)
@@ -598,15 +598,7 @@ class ReplicaCredentials(WorkerLoss):
             by_id = {d["id"]: d for d in docs}
             if len(docs) != len(self.journal["baseline_documents"]) + 1 or any(by_id.get(d["id"]) != d for d in self.journal["baseline_documents"]):
                 raise ValueError("Existing corpus changed during credential transition")
-            hits = search_ids(client)
-            for doc in self.journal["baseline_documents"] + [document]:
-                if doc.get("deleted_at"):
-                    if doc["id"] in hits or client.get(f"/api/documents/{doc['id']}/download").status_code != 404:
-                        raise ValueError("Trashed document became visible")
-                else:
-                    download_matches(client, doc)
-                    if doc["id"] not in hits:
-                        raise ValueError("Document disappeared from search")
+            verify_corpus_search_download(client, self.journal["baseline_documents"] + [document])
             require_quiescent(probe)
         ready = validate_inventory(self.kube.inventory(), self.value)
         if any(ready["restarts"].values()):

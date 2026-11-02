@@ -159,7 +159,7 @@ def upload(client, name):
     doc_id = response.json()["id"]
     if not re.fullmatch(r"[0-9a-f]{16}", doc_id):
         raise ValueError("Upload returned an invalid document receipt")
-    return {"id": doc_id, "sha256": sha256(body).hexdigest()}
+    return {"id": doc_id, "sha256": sha256(body).hexdigest(), "search_query": marker}
 
 
 def download_matches(client, doc):
@@ -167,12 +167,47 @@ def download_matches(client, doc):
     response.raise_for_status()
     if sha256(response.content).hexdigest() != doc["sha256"]:
         raise ValueError("Original bytes changed during fault probe")
+    return response.content
 
 
-def search_ids(client):
-    response = client.post("/api/search", json={"query": "ТЕСТОВЫЙ концепт", "mode": "bm25", "top_k": 40})
+def search_ids(client, *, query="ТЕСТОВЫЙ концепт"):
+    response = client.post("/api/search", json={"query": query, "mode": "bm25", "top_k": 40})
     response.raise_for_status()
     return {h["doc_id"] for h in response.json()["hits"]}
+
+
+def source_search_query(body):
+    """Use the verified synthetic source, never its ranked shared top-N query."""
+    from docx import Document
+    try:
+        paragraphs = [p.text.strip() for p in Document(BytesIO(body)).paragraphs if p.text.strip()]
+    except Exception as exc:
+        raise ValueError("Synthetic source cannot supply a search query") from exc
+    markers = set(re.findall(r"\b[0-9a-f]{32}\b", "\n".join(paragraphs)))
+    if len(markers) == 1:
+        return markers.pop()
+    # The original recovery fixtures predate UUID markers. Their source heading
+    # remains a useful query, but an actual matching doc_id is still mandatory.
+    if markers or not paragraphs or len(paragraphs[0]) > 1000:
+        raise ValueError("An unambiguous bounded synthetic source query is required")
+    return paragraphs[0]
+
+
+def verify_corpus_search_download(client, documents):
+    deleted = [doc for doc in documents if doc.get("deleted_at")]
+    broad = search_ids(client) if deleted else set()
+    for doc in documents:
+        if doc.get("deleted_at"):
+            # Retain the historical negative control and the independent 404.
+            # New receipts additionally permit a document-specific negative query.
+            targeted = search_ids(client, query=doc["search_query"]) if doc.get("search_query") else set()
+            if doc["id"] in broad | targeted or client.get(f"/api/documents/{doc['id']}/download").status_code != 404:
+                raise ValueError("Trashed document became visible")
+        else:
+            body = download_matches(client, doc)
+            query = source_search_query(body)
+            if doc["id"] not in search_ids(client, query=query):
+                raise ValueError("A preserved document disappeared from targeted search")
 
 
 def interruptions(probe, client, bases):
@@ -199,7 +234,7 @@ def interruptions(probe, client, bases):
         # Observe again after the real provider has returned; a ready/status check alone cannot prove this.
         observed = probe.state([doc_id])
         assert_interrupted(original, observed["documents"][doc_id], operation=operation, work_ids=work_ids)
-        hits = search_ids(client)
+        hits = search_ids(client, query=base["search_query"])
         if (operation == "cancel" and doc_id not in hits) or (operation == "delete" and doc_id in hits):
             raise ValueError("Interrupted document has wrong search visibility")
         if operation == "cancel":
@@ -247,10 +282,7 @@ else:
         raise ValueError("Capacity refusal overlapped a different provider phase")
     finished = probe.wait(lambda s: all(s["documents"][doc_id]["status"] == "done" for doc_id in ids)
         and s["model_owners"] == s["provider"]["active"] == 0, doc_ids=ids, seconds=300)
-    if not set(ids) <= search_ids(client):
-        raise ValueError("Capacity wait lost a completed document")
-    for doc in documents:
-        download_matches(client, doc)
+    verify_corpus_search_download(client, documents)
     return {"running_documents_when_saturated": 2, "api_processes_rejected_without_provider_call": len(busy),
         "global_limit": 1, "peak_provider_calls": finished["provider"]["peak_active"], "completed_documents": 2,
         "download_sha256_matches": 2, "search_matches": 2, "seconds": time.monotonic() - started,

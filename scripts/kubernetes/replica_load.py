@@ -7,19 +7,28 @@ certification. No production schedules, resource limits or model limits change.
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 import json
 import math
-from pathlib import Path
 import sys
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from replica_worker_loss import BASELINE_SOURCE, WorkerLoss, emit
-from test_scripts.replica_runtime_acceptance import role_pods, validate_inventory, verify_runtime
-from test_scripts.replica_runtime_faults import (FaultProbe, require_quiescent, upload, download_matches, search_ids)
+from test_scripts.replica_runtime_acceptance import (
+    role_pods,
+    validate_inventory,
+    verify_runtime,
+)
+from test_scripts.replica_runtime_faults import (
+    FaultProbe,
+    require_quiescent,
+    upload,
+    verify_corpus_search_download,
+)
 
 
 def latencies(values):
@@ -232,10 +241,7 @@ class ReplicaLoad(WorkerLoss):
         elapsed = time.monotonic() - measured_from
         with httpx.Client(base_url=self.value["frontend_url"], trust_env=False, timeout=25) as client:
             client.post("/api/auth/simulate", json={"username": "replica.admin"}).raise_for_status()
-            if not set(ids) <= search_ids(client):
-                raise ValueError("Load batch missing from search")
-            for document in case["documents"]:
-                download_matches(client, document)
+            verify_corpus_search_download(client, case["documents"])
         self.idle()
         case.update({"status": "passed", "seconds": elapsed, "documents_per_minute": 180 / elapsed,
             "upload_latency": latencies(case["http_upload_ms"]), "frontend_bursts": bursts,
@@ -266,15 +272,7 @@ class ReplicaLoad(WorkerLoss):
             raise ValueError("Unexpected document appeared under load")
         with httpx.Client(base_url=self.value["frontend_url"], trust_env=False, timeout=25) as client:
             client.post("/api/auth/simulate", json={"username": "replica.admin"}).raise_for_status()
-            hits = search_ids(client)
-            for d in self.journal["baseline_documents"] + batches:
-                if d.get("deleted_at"):
-                    if d["id"] in hits or client.get(f"/api/documents/{d['id']}/download").status_code != 404:
-                        raise ValueError("Deleted document reappeared")
-                else:
-                    download_matches(client, d)
-                    if d["id"] not in hits:
-                        raise ValueError("Preserved document disappeared from search")
+            verify_corpus_search_download(client, self.journal["baseline_documents"] + batches)
         public_cases = []
         for case in self.journal["cases"].values():
             public_cases.append({k: case[k] for k in ("workers", "documents", "seconds", "documents_per_minute", "upload_latency",
@@ -320,7 +318,7 @@ def main():
             recipe.observe(1 if args.phase.endswith("single") else 2)
         else:
             recipe.case(1 if args.phase == "single" else 2)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- redact provider errors and preserve the same operation.
         print(json.dumps({"load_refused": type(exc).__name__, "action": "inspect_same_journal_no_automatic_capacity_clear",
             "locations": [Path(f.filename).name + ":" + str(f.lineno) for f in traceback.extract_tb(exc.__traceback__)[-3:]]}), file=sys.stderr)
         return 2

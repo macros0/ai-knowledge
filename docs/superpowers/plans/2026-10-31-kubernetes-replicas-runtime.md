@@ -511,3 +511,12 @@ operator bypass remains forbidden. An executable remote-source regression and
 the runner/safety cohorts passed 81 cases on both Windows and Linux. The failed
 parent remains unqualified and unchanged; corrected recipe bytes require a new
 execution and all 22 stages. See the idle-probe-binding receipt for evidence.
+
+Current-run search follow-up (2026-11-02): the new run completed idle, active
+cancel/delete/capacity and physical worker-loss recovery/release (epoch11→12).
+Its worker verification refused an incomplete shared search result: the selected
+runtime has a 30-candidate branch limit and the synthetic corpus now has31 visible
+documents. A read-only probe confirmed matching source SHA and targeted search
+for the omitted document. Verification is being changed to document-specific
+queries without increasing production limits. The failed parent remains
+unqualified; source changes require another complete current-recipe execution.

@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "scope": "owned-basic-managed-s3-synthetic",
+  "base_revision": "ff0bf50c9ca1c851ba4e0c2a6f9b0c3143b5a87e",
+  "status": "targeted_search_evidence_fix_verified",
+  "source_sha256": {
+    "backend/test_scripts/replica_runtime_acceptance.py": "779ea2b2b823ade79dcb7804643e78aa61c628d018b42a1a53f5e7876c19609e",
+    "backend/test_scripts/replica_runtime_faults.py": "eb00b3b59df2ac605b25824caab270688b5288eabc43e67a6670c6b136371431",
+    "backend/tests/test_replica_search_evidence.py": "8d66be2ad2e3f3c3f774f9562df87708382f90ac36354967678594dd235081b3",
+    "scripts/kubernetes/replica_worker_loss.py": "20cca0d5de4cb6d428059cf4c83aa16e59578d876e5a6269b2237c34bae15284",
+    "scripts/kubernetes/replica_postgres_partition.py": "223b3830e3ce61535db7281470bb2cb71c20e13919eb2da3719c5c1de13b1b86",
+    "scripts/kubernetes/replica_load.py": "eb5ee322509661ea36c726c6121d1acebbca9d9736d133538bbf5e7596dc8743",
+    "scripts/kubernetes/replica_credentials.py": "e75cbbe40caf4d215ea32438eb8970368f66e93ab03cf10ed368af710f631e0b"
+  },
+  "root_cause": {
+    "shared_query_hit_documents": 30,
+    "expected_visible_documents": 31,
+    "missing_from_shared_query": 1,
+    "source_sha_and_targeted_search_for_missing_document": true,
+    "shared_ranked_results_are_not_a_corpus_inventory": true
+  },
+  "regression": {
+    "red_cases": 8,
+    "red_reason": "missing targeted corpus verification",
+    "candidate_limit_fixture_documents": 42,
+    "guards": [
+      "source SHA mismatch",
+      "actual missing index",
+      "trash search visibility",
+      "trash download visibility",
+      "malformed source"
+    ]
+  },
+  "windows": {
+    "passed": 135,
+    "skipped": 0,
+    "seconds": 159.78,
+    "log_sha256": "af75fd10d0768d9c1fc21e049e9c20b9a0117f4899c0e89c3a7fbf65b3eb2016"
+  },
+  "linux": {
+    "container_id": "3b37b54ecb0975e9c6e4a3416e4cbe1ddb1e2a2f5cbef2ec9943c0ef740e3d4a",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T05:15:29.982331105Z",
+    "FinishedAt": "2026-11-02T05:22:04.256260505Z",
+    "junit": {
+      "tests": 135,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "f121a1894cc4cb6c733ac756934f2c130b04df7faa81516ddff6bca429d6114c"
+    },
+    "failed_cases": []
+  },
+  "root_gate": {
+    "passed": true,
+    "audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff_passed": true,
+    "log_sha256": "2dd2d4d69c6cd80a4b42ef4c3509f76409d496a49231fa5344b8a28d2afc2a5b"
+  },
+  "native_read_only_postconditions": {
+    "read_only": true,
+    "visible_verified": 31,
+    "trashed_unsearchable_404": 2,
+    "current_runtime": {
+      "epoch": 12,
+      "search_per_branch_top_k": 30
+    },
+    "recovery_released": true,
+    "newer_work_fence_and_single_publication": true,
+    "no_active_provider_or_work": true,
+    "failed_parent_unchanged": true,
+    "runtime_qualified": false
+  },
+  "failed_parent": {
+    "execution_id": "8c82ee74340e44eab7246d55b8bd5b20",
+    "recipe_sha256": "502f028cee28eed56da391e87ea348c9a81f735e5c071efdb64ba495ff7c5c9e",
+    "completed_stages": 9,
+    "failed_stage": "worker.verify",
+    "retained_unchanged": true,
+    "qualified": false
+  },
+  "production_search_limits_changed": false,
+  "runtime_images_changed": false,
+  "current_runtime_qualified": false,
+  "full_ci_passed": false,
+  "production_backup_schedule_enabled": false,
+  "next": "complete all 22 stages in a new parent under corrected recipe bytes"
+}

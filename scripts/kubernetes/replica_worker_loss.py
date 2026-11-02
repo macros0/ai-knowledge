@@ -506,7 +506,7 @@ else:
     def verify(self, report):
         self.preflight("verify")
         import httpx
-        from test_scripts.replica_runtime_faults import download_matches, search_ids
+        from test_scripts.replica_runtime_faults import verify_corpus_search_download
         if self.journal["phase"] not in {"running", "verified"}:
             raise ValueError("Running recovered installation required")
         probe = FaultProbe(self.kube, self.value)
@@ -541,15 +541,7 @@ else:
                 self.journal["baseline_documents"], docs)
             if len(docs) != len(self.journal["baseline_documents"]) + 1:
                 raise ValueError("Unexpected document appeared during the owned scenario")
-            hits = search_ids(client)
-            for doc in self.journal["baseline_documents"] + [document]:
-                if doc.get("deleted_at"):
-                    if doc["id"] in hits or client.get(f"/api/documents/{doc['id']}/download").status_code != 404:
-                        raise ValueError("Trashed document became visible")
-                else:
-                    download_matches(client, doc)
-                    if doc["id"] not in hits:
-                        raise ValueError("Recovered or original document disappeared from search")
+            verify_corpus_search_download(client, self.journal["baseline_documents"] + [document])
             require_quiescent(probe)
         ready = validate_inventory(self.kube.inventory(), self.value)
         work = next(w for w in doc_state["work"] if w["id"] == self.journal["original_work"]["id"])

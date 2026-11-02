@@ -257,12 +257,12 @@ def document_roundtrip(value):
             doc_id = response.json()["id"]
             if not re.fullmatch(r"[0-9a-f]{16}", doc_id):
                 raise ValueError("Invalid document receipt")
-            documents.append((doc_id, sha256(body).hexdigest()))
+            documents.append((doc_id, sha256(body).hexdigest(), marker))
             latencies.append(time.monotonic() - before)
         deadline = time.monotonic() + 120
         while True:
             states = []
-            for doc_id, _digest in documents:
+            for doc_id, _digest, _marker in documents:
                 response = client.get(f"/api/documents/{doc_id}")
                 response.raise_for_status()
                 doc = response.json()
@@ -274,16 +274,15 @@ def document_roundtrip(value):
             if time.monotonic() >= deadline:
                 raise ValueError("Document completion deadline exceeded")
             time.sleep(2)
-        for doc_id, digest in documents:
+        for doc_id, digest, marker in documents:
             response = client.get(f"/api/documents/{doc_id}/download")
             response.raise_for_status()
             if sha256(response.content).hexdigest() != digest:
                 raise ValueError("Source integrity differs")
-        response = client.post("/api/search", json={"query": "ТЕСТОВЫЙ концепт", "mode": "bm25", "top_k": 40})
-        response.raise_for_status()
-        hits = {hit["doc_id"] for hit in response.json()["hits"]}
-        if not {doc_id for doc_id, _ in documents} <= hits:
-            raise ValueError("Completed document missing from search")
+            response = client.post("/api/search", json={"query": marker, "mode": "bm25", "top_k": 40})
+            response.raise_for_status()
+            if doc_id not in {hit["doc_id"] for hit in response.json()["hits"]}:
+                raise ValueError("Completed document missing from targeted search")
     duration = time.monotonic() - started
     return {"documents": 2, "download_sha256_matches": 2, "search_matches": 2,
         "duration_seconds": duration, "upload_seconds": latencies,
