@@ -220,6 +220,13 @@ Do not replace/remove a lock file or resume a source writer during this procedur
 Extra/changed files or SQL prevent cutover. PostgreSQL cutover also locks the
 diagnostic tables against concurrent writers.
 
+The stopped recorder's `control/counters.json` is part of that inventory. Its
+version1 UUID, aware timestamps and exact nonnegative integer counter fields are
+validated; bytes, size and nanosecond modification time remain source-bound.
+The checkpoint does not establish live ownership or complete historical coverage:
+imported recorder counters remain unknown. Keep it in the retained journal;
+removing it to pass planning would discard evidence.
+
 Verified raw event blobs become bounded immutable SQL segments at the same atomic
 cutover, retaining original modification/expiry times and unknown recorder
 counters. Backend events must be canonical; frontend JSON may be canonicalized

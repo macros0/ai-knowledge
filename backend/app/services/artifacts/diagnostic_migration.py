@@ -114,6 +114,26 @@ def _read(path,root,limit):
     return data,dict(size=len(data),sha256=sha256(data).hexdigest(),mtime_ns=before.st_mtime_ns)
 
 
+def _counter_checkpoint(data):
+    """Recognize the stopped recorder's sidecar without inferring live coverage."""
+    try:
+        value=_json(data)
+        names={'written','dropped','invalid','expired_queue','storage_errors','drain_timeouts',
+            'sampled_success','aggregated_success','sampled_out_traces','policy_omitted'}
+        if (not isinstance(value,dict)
+                or set(value)!={'schema_version','boot_id','started_at_utc','checkpoint_at_utc','counters'}
+                or type(value['schema_version']) is not int or value['schema_version']!=1
+                or not isinstance(value['boot_id'],str) or valid_uuid(value['boot_id'])!=value['boot_id']
+                or not isinstance(value['counters'],dict) or set(value['counters'])!=names
+                or any(type(number) is not int or number<0 for number in value['counters'].values())):
+            raise ValueError()
+        started,checkpoint=(datetime.fromisoformat(value[key]) for key in ('started_at_utc','checkpoint_at_utc'))
+        if started.utcoffset() is None or checkpoint.utcoffset() is None or checkpoint<started:
+            raise ValueError()
+    except (ValueError,TypeError,KeyError):
+        raise ValueError('Invalid legacy recorder counter checkpoint') from None
+
+
 def inventory(backend,frontend,limits):
     result=[];used={'backend':0,'frontend':0}
     for role,root in (('backend',backend),('frontend',frontend)):
@@ -140,7 +160,7 @@ def inventory(backend,frontend,limits):
             directory=root/name
             if not directory.exists():continue
             for path in sorted(directory.iterdir()):
-                if (name=='control' and path.name not in {'deferred.jsonl','capture.json'}
+                if (name=='control' and path.name not in {'deferred.jsonl','capture.json','counters.json'}
                         or name=='capture-expiry' and (path.suffix!='.json' or valid_uuid(path.stem)!=path.stem)):
                     raise ValueError('Unknown diagnostic control file')
                 selected.append((path,limits.control_bytes))
@@ -148,6 +168,8 @@ def inventory(backend,frontend,limits):
             selected.extend((root/name,limits.control_bytes) for name in ('status.json','sessions.json') if (root/name).exists())
         for path,limit in selected:
             data,metadata=_read(path,root,limit)
+            if role=='backend' and path.relative_to(root).as_posix()=='control/counters.json':
+                _counter_checkpoint(data)
             used[role]+=len(data)
             if used[role]>(limits.backend_bytes if role=='backend' else limits.frontend_bytes) or len(result)>=MAX_FILES:
                 raise ValueError('Legacy diagnostic input exceeds its bounded budget')

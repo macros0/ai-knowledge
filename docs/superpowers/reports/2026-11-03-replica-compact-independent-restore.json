@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "status": "independent-compact-restore-verified-s4-adoption-incomplete",
+  "observed_at": "2026-11-03T08:29:00.732600+00:00",
+  "scope": "Synthetic compact local-files rpl04 source; independent encrypted PC backup; all source providers physically off; separate Kubernetes restore and official rpl05 upgrade. S4 planning found a real recorder-counter compatibility defect; local fix is not yet running in the cluster.",
+  "operation_id": "d085c9ee969a42e3a42ae6ea6e731c33",
+  "backup_id": "61b33d604f9648e097b6ab30ef57b2c3",
+  "installation_id": "73545d7af3a9493485dde22d2d379270",
+  "source": {
+    "namespace": "replica-test-c4s20261103",
+    "namespace_uid": "6d7d1ad9-803d-4c44-8dce-750cf164bb98",
+    "schema_revision": "rpl04_runtime_identity",
+    "mode": "compact",
+    "role": "combined",
+    "artifact_backend": "local",
+    "image": "okf-backend:replicas-21f5a6d-fa4b26022737",
+    "docker_image_id": "sha256:8c5912a17162859de5e8b80a83d95c6104b7df0b1dcad03316cd79d7f7b79fd4",
+    "replica_identity_rows": 0,
+    "physically_all_off": {
+      "observed_at": "2026-11-03T07:59:17.949773+00:00",
+      "all_off": true,
+      "active_pods": 0,
+      "running_containers": 0,
+      "retained_pvcs": 3,
+      "controllers_zero": 4,
+      "node_ready": true,
+      "unreachable_nodes": 0
+    },
+    "retained_pvcs": 3
+  },
+  "accepted_intents": {
+    "documents": 2,
+    "legacy_document_without_generation_state": "c400000000000001",
+    "interrupted_document": "c400000000000002",
+    "accepted_checkpoint_version": 1,
+    "accepted_checkpoint_sha256": "b5b5098b3b67044a20d5ee59be9a7ff860168b5a722f14b9f9ae1721683de4b0",
+    "queued_export": 1,
+    "awaiting_approval": 1,
+    "queued_diagnostic_bundle": 1,
+    "work_items": 0,
+    "original_export_mtime_ns": 1793685903578727386,
+    "parser_requires_mail_import_disabled": true
+  },
+  "independent_backup": {
+    "backup_id": "61b33d604f9648e097b6ab30ef57b2c3",
+    "completed_at": "2026-11-03T07:58:07.842202+00:00",
+    "manifest_sha256": "b74a96f7b044a93822206885f21ff30e4bfdde01e1873e09c8bf42ae7cd0b787",
+    "catalog_sha256": "30ad4e2db665c4afa9a9986e772376f4f2b708f991b1be9bc319d8a246e6423c",
+    "sql_catalog_sha256": "c07959ee7a2135d9ebb0d33a65a56588c2a23974ea10138698a0d694002295bc",
+    "q_points_sha256": "122b7754a66c069c0e42a8954f66116ead3c3c69c217d06b5b11d12b4c48e2ac",
+    "plaintext_sizes": {
+      "postgres": 205068,
+      "qdrant": 897536,
+      "artifacts": 194560
+    },
+    "counts": {
+      "documents": 2,
+      "concepts": 1,
+      "chunks": 1,
+      "blobs": 1,
+      "work_items": 0,
+      "audit_events": 13
+    },
+    "files": 16,
+    "directories": 21,
+    "capture_before_cutoff_ids": [
+      "938cf31d-2c64-458f-97f1-027cd17c5e34"
+    ],
+    "capture_after_cutoff_ids": [
+      "7077eb71-9e22-40b0-a485-1c955df2e602",
+      "74e706c6-8e6f-4f91-8921-f89f102c6fd8",
+      "75b06ffe-88e6-48e5-bec7-44d0d05dd7d4",
+      "97722b6d-817b-4624-829d-1621be47b238"
+    ],
+    "destination_independence": "user-declared-training-pc"
+  },
+  "backup_checks": {
+    "format": 3,
+    "encryption": "AES256-GCM with HKDF and authenticated manifest",
+    "native_pg17_snapshot_held": true,
+    "all_objects_cold_decrypted_and_authenticated": true,
+    "repeated_source_sql_vector_file_physical_guards": true,
+    "plaintext_provider_backups_written_to_pc_disk": false,
+    "raw_ci_payload_exported": false,
+    "production_schedule": "disabled"
+  },
+  "target": {
+    "namespace": "replica-test-c5t20261103",
+    "namespace_uid": "cca375ba-0948-4dff-acf5-c0951fb09101",
+    "new_pvcs": 4,
+    "pvc_requests": {
+      "postgres": "1Gi",
+      "qdrant": "1Gi",
+      "artifacts": "512Mi",
+      "legacy_restore": "512Mi"
+    },
+    "postgres": {
+      "phase": "native-pg-restore-verified",
+      "backup_id": "61b33d604f9648e097b6ab30ef57b2c3",
+      "started_at": "2026-11-03T08:06:28.744759+00:00",
+      "dump_sha256": "72e08b31af1b33727fc29a963dfc5d863f810c5142aa0e557e5d94071a570813",
+      "preflight": {
+        "database": "replica_test_c5t20261103",
+        "user": "replica",
+        "version": "170011",
+        "public_tables": 0
+      },
+      "exit_code": 0,
+      "completed_at": "2026-11-03T08:06:30.617704+00:00",
+      "catalog_sha256": "c07959ee7a2135d9ebb0d33a65a56588c2a23974ea10138698a0d694002295bc",
+      "tables": 80,
+      "sequences": 27,
+      "control": {
+        "schema": "rpl04_runtime_identity",
+        "installation_id": "73545d7af3a9493485dde22d2d379270",
+        "fence": "61b33d604f9648e097b6ab30ef57b2c3",
+        "replica_identities": 0
+      },
+      "source_all_off": true
+    },
+    "qdrant": {
+      "phase": "native-snapshot-restore-verified",
+      "snapshot_sha256": "06eb4c4e406a99b14fd6b8c7973ec211dc7e234c75fa3c6eb397b9ce3a795fb3",
+      "points": 2,
+      "points_sha256": "122b7754a66c069c0e42a8954f66116ead3c3c69c217d06b5b11d12b4c48e2ac",
+      "status": "green"
+    },
+    "files": {
+      "files": 16,
+      "directories": 20,
+      "mount_root_metadata_excluded": true,
+      "all_file_bytes_modes_owners_mtime_ns_equal": true,
+      "catalog_without_mount_root_sha256": "72554194cb5c6bd9660364f67d1207186e8c2f806eb04dc9a4d4a61bbbe55ca4",
+      "source_all_off": true
+    },
+    "schema_upgrade": {
+      "schema_revision": "rpl05_maintenance_epoch",
+      "official_alembic": true,
+      "restored_tables_preserved": 79,
+      "sequences_preserved": 27,
+      "replica_identity_rows": 0,
+      "maintenance_state_rows": 0,
+      "work_items": 0,
+      "source_all_off": true,
+      "restored_target_own_backup_fence_released": true,
+      "source_fence_untouched": true,
+      "applications_started": false
+    },
+    "applications_started": false,
+    "replica_identity_issued": false
+  },
+  "target_image": {
+    "revision": "5f5c43d2e9356ae251658e8b911cfb5e0a511ce6",
+    "tag": "okf-backend:replicas-5f5c43d-delta-2ebe20eb912b",
+    "docker_image_id": "sha256:860ffa98fc173b6540b82a5d72a6b62872e65865be8cf3a5988ab222f2edecfa",
+    "kind_image_id": "sha256:9424cd49de6d1e399ea644ffffd866bfc219385625ea6739e1c44380b124dd5e",
+    "build_fingerprint": "562b09dd94745b2afa44dc7f9f43df59c247c6bde2f102e3bf6d81ae26d2c5f3",
+    "canonical_image_id": "sha256:3d53d4e9b985f4beb9fc1b9da4f0aae11af67c96ce301db22625b40b6e995628",
+    "canonical_material_exact": true,
+    "git_files_verified": 572,
+    "all_app_files": 577,
+    "packages": 117,
+    "cached_dependency_prefix_layers": 20,
+    "stream_import_exit_codes": [
+      0,
+      0
+    ]
+  },
+  "s4_plan": {
+    "job": {
+      "kind": "Job",
+      "name": "compact-target-s4-plan-v1",
+      "uid": "893b3faf-2c8b-4b20-8ce1-1a30f9264602"
+    },
+    "terminal_exit": "failed",
+    "failure": {
+      "stage": "real-s4-plan",
+      "error_type": "ValueError",
+      "frames": [
+        {
+          "file": "plan.py",
+          "line": 73,
+          "function": "<module>"
+        },
+        {
+          "file": "migration.py",
+          "line": 171,
+          "function": "plan"
+        },
+        {
+          "file": "migration_plan.py",
+          "line": 526,
+          "function": "build"
+        },
+        {
+          "file": "diagnostic_migration.py",
+          "line": 263,
+          "function": "compile_diagnostics"
+        },
+        {
+          "file": "diagnostic_migration.py",
+          "line": 286,
+          "function": "_compile_diagnostics"
+        },
+        {
+          "file": "diagnostic_migration.py",
+          "line": 145,
+          "function": "inventory"
+        }
+      ]
+    },
+    "cause": "Standard stopped DiagnosticRecorder creates control/counters.json; predecessor inventory did not recognize that file.",
+    "source_files_deleted_or_modified_to_bypass": false,
+    "scoped_sql_role_created": true,
+    "scoped_s3_principal_created": true,
+    "new_empty_bucket_created": true,
+    "source_revision_published": false,
+    "copy_started": false,
+    "cutover": false
+  },
+  "local_fix": {
+    "source_sha256": {
+      "backend/app/services/artifacts/diagnostic_migration.py": "71a773f4c1e5cdca26048466485225f4ac9dd484a97fa12070d4ed7d7cb812f2",
+      "backend/tests/test_artifact_legacy_diagnostics.py": "f4973e812bf599dc6ff34ceb7d0af5ad4d72c68aeabf344a2d08cd6a1e502d92"
+    },
+    "red": {
+      "tests": 8,
+      "failed": 8,
+      "reason": "Unknown diagnostic control file before the fix"
+    },
+    "actual_source_checkpoint": {
+      "actual_immutable_source_checkpoint_accepted": true,
+      "source_bytes": 367,
+      "source_sha256": "a077634b8ceb465c992da62363a3934738471608bae80192d2c64620899d53c9",
+      "source_modified": false,
+      "source_copy": "authenticated-independent-backup",
+      "counter_coverage_promoted": false
+    },
+    "focused": {
+      "tests": 147,
+      "passed": 147,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0
+    },
+    "project_checks": {
+      "passed": true,
+      "npm_audit_vulnerabilities": 0,
+      "frontend_tests": 757,
+      "frontend_passed": 756,
+      "frontend_skipped": 1,
+      "frontend_failed": 0,
+      "ruff": true
+    },
+    "linux_fix_ci_performed": false,
+    "new_runtime_image_built": false
+  },
+  "limits": [
+    "All data are synthetic; one physical kind node.",
+    "Independent-PC failure domain is user-declared training evidence.",
+    "Provisioner-owned PVC mount root metadata is excluded; all 16 files and 20 application directories match including nanosecond mtime.",
+    "Source-off S4 interruption/resume, compact handoff, held adoption and 2/2/2 application acceptance remain open.",
+    "The earlier full Linux backend CI covers 5f5c43d, not this new fix. All seven profile certifications remain null."
+  ]
+}

@@ -54,6 +54,64 @@ def migrate(legacy):
     return factory.__wrapped__((legacy['source'],legacy['root']))
 
 
+def stopped_recorder_checkpoint(legacy):
+    from app.services.diagnostics.recorder import DiagnosticRecorder
+    source=legacy['source']
+    recorder=DiagnosticRecorder(DiagnosticStore(source.diagnostics_dir,source.diagnostics_limits()))
+    recorder.start()
+    recorder.stop()
+    assert not recorder.status()['running']
+    path=source.diagnostics_dir/'control/counters.json'
+    assert path.is_file()
+    return path
+
+
+def test_s4_accepts_real_stopped_recorder_counter_checkpoint_without_rewriting_it(legacy):
+    path=stopped_recorder_checkpoint(legacy)
+    before=files(legacy['source'].diagnostics_dir);mtime=path.stat().st_mtime_ns
+    _,_,task=migrate(legacy)
+    entry=next(item for item in task.plan()['diagnostics']['files']
+        if item['role']=='backend' and item['path']=='control/counters.json')
+    assert entry['sha256']==before['control/counters.json']
+    assert entry['mtime_ns']==mtime and entry['size']==path.stat().st_size
+    assert files(legacy['source'].diagnostics_dir)==before and path.stat().st_mtime_ns==mtime
+    with migration_access(),session_scope() as session:
+        bundle=session.get(DiagnosticBundle,legacy['bundle_id'])
+        assert bundle.artifact_version==2 and bundle.status=='queued'
+        assert all(row.counters=={} for row in session.scalars(select(DiagnosticInstance)))
+
+
+@pytest.mark.parametrize('fault',['version','boolean-counter','negative-counter','missing-counter','null-boot','unknown-field','naive-time','reversed-time'])
+def test_s4_refuses_unknown_or_invalid_recorder_counter_checkpoint(legacy,fault):
+    from tests.test_artifact_storage_migration import migration
+    path=stopped_recorder_checkpoint(legacy);value=json.loads(path.read_bytes())
+    if fault=='version':value['schema_version']=2
+    elif fault=='boolean-counter':value['counters']['written']=False
+    elif fault=='negative-counter':value['counters']['written']=-1
+    elif fault=='missing-counter':value['counters'].pop('written')
+    elif fault=='null-boot':value['boot_id']=None
+    elif fault=='unknown-field':value['new_protocol']={}
+    elif fault=='naive-time':value['checkpoint_at_utc']='2026-01-01T12:00:00'
+    else:value['checkpoint_at_utc']='2000-01-01T00:00:00+00:00'
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError,match='counter checkpoint'):
+        migration((legacy['source'],legacy['root'])).plan()
+    with migration_access(),session_scope() as session:
+        assert session.scalar(select(DiagnosticSegment.id)) is None
+        assert session.get(DiagnosticBundle,legacy['bundle_id']).artifact_version==1
+
+
+def test_changed_recorder_counter_checkpoint_invalidates_the_retained_s4_plan(legacy):
+    from tests.test_artifact_storage_migration import migration,backup
+    path=stopped_recorder_checkpoint(legacy);task=migration((legacy['source'],legacy['root']))
+    proof=backup(task,legacy['root']);value=json.loads(path.read_bytes());value['counters']['written']+=1
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError,match='diagnostic files changed'):
+        task.copy(apply=True,writers_stopped=True,backup=proof)
+    with migration_access(),session_scope() as session:
+        assert session.get(DiagnosticBundle,legacy['bundle_id']).artifact_version==1
+
+
 def test_s4_transfers_all_retained_journal_bytes_and_freezes_pending_request(legacy):
     settings,_,task=migrate(legacy)
     with migration_access(),session_scope() as session:
