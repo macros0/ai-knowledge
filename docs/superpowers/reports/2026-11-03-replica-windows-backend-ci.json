@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "status": "failed-full-windows-run-with-causal-harness-validation",
+  "completed_at": "2026-11-03T03:17:35.868040+00:00",
+  "revision": "5f5c43d2e9356ae251658e8b911cfb5e0a511ce6",
+  "full_run": {
+    "exit_code": 1,
+    "tests": 6610,
+    "passed": 6381,
+    "skipped": 228,
+    "failures": 1,
+    "errors": 0,
+    "skip_categories": {
+      "postgresql-opt-in": 203,
+      "platform-or-permission": 19,
+      "other-explicit-skip": 1,
+      "real-enospc-opt-in": 5
+    },
+    "junit_sha256": "edc859489a355d2a792c28dfceb631f4a42217a752d4e95802649119be2f2927",
+    "coverage": {
+      "lines_covered": 38342,
+      "statements": 43681,
+      "line_rate": 0.8778
+    },
+    "source_files_unchanged": 2418,
+    "duration_seconds": 10059.55
+  },
+  "failed_case": "tests.test_replica_bootstrap::test_cli_plan_has_no_database_or_storage_side_effects",
+  "cause": {
+    "source": "local frozen CI launcher",
+    "setting": "DATABASE_URL",
+    "behavior": "Outer SQLite URL overrides the private test env PostgreSQL URL; replica Settings correctly refuse SQLite",
+    "application_change_required": false
+  },
+  "causal_followup": {
+    "finished_at": "2026-11-03T03:15:02.877905+00:00",
+    "exit_code": 0,
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "only_outer_environment_change": "DATABASE_URL absent; other full-run application overrides preserved",
+    "original_full_run_exit_code": 1,
+    "original_full_run_not_relabelled": true,
+    "source_files_unchanged": true,
+    "junit_sha256": "c35746d642ca77da9516e7f9c9412478b1beff2618e3f6efe067d8282e46e641"
+  },
+  "interpretation": {
+    "original_full_run_remains_failed": true,
+    "clean_full_windows_rerun_performed": false,
+    "independent_full_linux_result": "6390 passed/220 skipped/0 failures/errors; all6610 exact nodes and87.62% coverage",
+    "linux_evidence": "2026-11-03-replica-full-linux-backend-ci.json",
+    "distinct_windows_passed_across_both_runs": 6382
+  },
+  "release_status": "incomplete",
+  "production_backup_schedule": "disabled"
+}
