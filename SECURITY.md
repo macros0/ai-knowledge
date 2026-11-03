@@ -3020,3 +3020,14 @@ retained. The512Mi PVC request is not a quota: capacity is limited by the NAS
 user's quota over volume1. Existing NAS files and the user-created identity output
 remain. This closes these component gates only; ordinary application, backup,
 restore, sustained outage/cross-node and synchronous durability remain separate.
+
+### Filesystem readiness mutation scope (2026-11-04)
+
+The selected NAS demonstrated successful blob create/read/delete with W_OK false
+on the mounted root, while owned `objects` and `tmp` reported full access. Root
+owner alignment alone did not resolve this. Filesystem readiness now requires
+root read/traverse and read/write/traverse on both actual mutation directories.
+An unavailable or unwritable object/temp directory still refuses readiness. The
+probe creates no test objects and does not broaden filesystem permissions. S3
+retains its bounded prefix-scoped list probe. This change grants no provider or
+power-loss certification and does not change runtime/maintenance identity guards.

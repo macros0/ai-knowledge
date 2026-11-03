@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "status": "readiness-fix-unit-verified-native-redeployment-pending",
+  "trigger": "Selected Synology DS211 DSM6.2.4-25556 Update8 NFSv4.0 root W_OK false despite successful blob CRUD in owned objects/tmp.",
+  "initial_mixed_trial": {
+    "operation_id": "626e101b256c424db9c853d72b9706c2",
+    "namespace": "replica-test-syn20261103",
+    "namespace_uid": "96f11efe-fb07-4e0f-b0db-70caf8b85df8",
+    "image": "okf-backend:replicas-cf74f8a-rwxt-16185383212a",
+    "identity": {
+      "version": 1,
+      "deployment_schema": "replicas-v1",
+      "installation_id": "cf329d8815cd4c3885ae5557a62d8cbc",
+      "artifact_backend": "rwx",
+      "artifact_store_id": "syn-626e101b256c424d",
+      "storage_receipt_digest": "sha256:093d34c958a5d15d133c22a9081e5eae8068c0712d9a5d377ba022655265c923",
+      "runtime_fingerprint": "1c49fcee872164f4be2e41f31313f1896b8e5d1726393cf90de19ee3a9ff7a6b"
+    },
+    "bootstrap": {
+      "active": 0,
+      "succeeded": 1,
+      "failed": 0,
+      "receipts": [
+        {
+          "identity": {
+            "version": 1,
+            "deployment_schema": "replicas-v1",
+            "installation_id": "cf329d8815cd4c3885ae5557a62d8cbc",
+            "artifact_backend": "rwx",
+            "artifact_store_id": "syn-626e101b256c424d",
+            "storage_receipt_digest": "sha256:093d34c958a5d15d133c22a9081e5eae8068c0712d9a5d377ba022655265c923",
+            "runtime_fingerprint": "1c49fcee872164f4be2e41f31313f1896b8e5d1726393cf90de19ee3a9ff7a6b"
+          },
+          "rights": {
+            "tables": 81,
+            "denied": [
+              "maintenance_epoch",
+              "runtime_fingerprint",
+              "storage_control",
+              "audit_update",
+              "audit_delete",
+              "migration_head",
+              "password_catalog",
+              "public_ddl",
+              "temp_ddl",
+              "truncate"
+            ],
+            "allowed": [
+              "business_crud_rollback",
+              "row_lock_artifact_storage_control",
+              "row_lock_replica_maintenance_state",
+              "row_lock_replica_runtime_identity"
+            ],
+            "authentication": [
+              "authenticated-tls",
+              "invalid-password",
+              "authenticated-tls"
+            ],
+            "operator_secret_in_application": false
+          },
+          "artifact_probe": {
+            "version": 1,
+            "installation_id": "cf329d8815cd4c3885ae5557a62d8cbc",
+            "namespace": "replica-test-syn20261103",
+            "store_id": "syn-626e101b256c424d",
+            "backend": "rwx",
+            "descriptor_sha256": "fb76977e69651c977264b92447f7ea3d33297ed3723921a3bfe19d9ebb91a5ab",
+            "selection_digest": "sha256:e8ee24a23814b1a9d84c7f881b3d5b92d0fff58b67d3f2e41d638cfe9684771e",
+            "checks": [
+              "conditional_put",
+              "cold_read",
+              "range_read",
+              "delete"
+            ],
+            "qualification": "basic-bootstrap-only"
+          },
+          "uid": 1031,
+          "gid": 100,
+          "application_replicas": 0
+        }
+      ],
+      "errors": [],
+      "stages": [
+        "migrated",
+        "identity-committed-apps-off",
+        "scoped-role-committed"
+      ]
+    },
+    "runtime_probe": {
+      "uid": 1031,
+      "euid": 1031,
+      "gid": 100,
+      "egid": 100,
+      "groups": [
+        100
+      ],
+      "fingerprint": "1c49fcee872164f4be2e41f31313f1896b8e5d1726393cf90de19ee3a9ff7a6b",
+      "access": {
+        "read": true,
+        "write": false,
+        "execute": true,
+        "combined": false
+      },
+      "effective_access": {
+        "read": true,
+        "write": false,
+        "execute": true,
+        "combined": false
+      },
+      "actual_write_read_delete": true
+    },
+    "directory_permissions": [
+      {
+        "path": "/artifacts",
+        "uid": 0,
+        "gid": 100,
+        "mode": "0o2770",
+        "read": true,
+        "write": false,
+        "execute": true
+      },
+      {
+        "path": "/artifacts/objects",
+        "uid": 65534,
+        "gid": 100,
+        "mode": "0o2775",
+        "read": true,
+        "write": true,
+        "execute": true
+      },
+      {
+        "path": "/artifacts/tmp",
+        "uid": 65534,
+        "gid": 100,
+        "mode": "0o2775",
+        "read": true,
+        "write": true,
+        "execute": true
+      }
+    ],
+    "owner_alignment": {
+      "phase": "applied-numeric-owner",
+      "inode": 15944,
+      "before_uid": 0,
+      "gid": 100,
+      "selected_uid": 1031,
+      "v4_failure": "SETATTR owner EINVAL; no change confirmed through numeric NFSv3",
+      "numeric_before": {
+        "inode": 15944,
+        "numeric_uid": 0,
+        "numeric_gid": 100,
+        "mode": "0o2770",
+        "nfs_version": "3",
+        "read_only": true,
+        "attribute_changes": 0
+      },
+      "receipt": {
+        "inode": 15944,
+        "numeric_uid": 1031,
+        "numeric_gid": 100,
+        "mode": "0o2770",
+        "recursive": false,
+        "contents_changed": false,
+        "other_nas_files_changed": 0,
+        "admin_metadata_protocol": "NFSv3 numeric SETATTR; application mounts remain NFSv4.0"
+      },
+      "post_runtime_probe": {
+        "uid": 65534,
+        "gid": 100,
+        "mode": "0o2770",
+        "write": false,
+        "probe": false
+      }
+    },
+    "application_acceptance": false,
+    "closure": {
+      "operation_id": "e45bced9379d456e9f1fb4f042d78b8b",
+      "owner_id": "owned-synology-rehearsal-stop",
+      "phase": "held1",
+      "observation": {
+        "active": 0,
+        "succeeded": 1,
+        "failed": 0,
+        "receipts": [
+          {
+            "operation_id": "e45bced9379d456e9f1fb4f042d78b8b",
+            "owner_id": "owned-synology-rehearsal-stop",
+            "epoch": 1,
+            "held": true,
+            "running_work": 0,
+            "provider_owners": 0,
+            "active_captures": 0
+          }
+        ]
+      }
+    },
+    "stopped": {
+      "remaining_application_pods": 0,
+      "live_application_cri": 0,
+      "all_storage_stopped": true,
+      "pvcs_retained": 3
+    }
+  },
+  "fix": "Require root read/traverse and read/write/traverse on both objects and tmp; no active health writes, ACL relaxation, identity bypass or S3 probe change.",
+  "tests": {
+    "valid_red_failures": 6,
+    "previous_s3_passed": 4,
+    "focused_green": 10,
+    "health_runtime_worker_cohort_passed": 57,
+    "mandatory_project_checks": {
+      "frontend_passed": 756,
+      "frontend_optional_skips": 1,
+      "ruff": "passed",
+      "npm_audit_vulnerabilities": 0,
+      "eslint": "passed with existing warnings"
+    }
+  },
+  "preserved_setup_failure": "Initial pytest from repository root hit the fixture basetemp path before test execution; corrected backend cwd produced the recorded6 proper RED assertions.",
+  "capacity": {
+    "old_target8_six_roles_borrowed": true,
+    "loan_journal": "synology-mixed-capacity.json",
+    "must_restore_at_end": true
+  },
+  "full_current_linux_ci": false,
+  "current_fixed_image": false,
+  "fixed_native_mixed_runtime": false,
+  "certification": null,
+  "production_backup_schedule": "disabled"
+}

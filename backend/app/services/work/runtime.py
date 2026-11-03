@@ -180,8 +180,15 @@ def probe_artifacts(settings):
         # Prefix-scoped ListBucket grants intentionally do not authorize HEAD
         # bucket, whose request has no prefix. Keep readiness within our scope.
         store.client.list_objects_v2(Bucket=store.bucket, Prefix=store.prefix, MaxKeys=1)
-    elif not store.root.is_dir() or not os.access(store.root, os.R_OK | os.W_OK | os.X_OK):
-        return False
+    else:
+        if not store.root.is_dir() or not os.access(store.root, os.R_OK | os.X_OK):
+            return False
+        # NFS ACLs can deny W_OK on the mount root while allowing blob CRUD.
+        # Writes target these owned directories, not the mount root itself.
+        for name in ("objects", "tmp"):
+            directory = store.root / name
+            if not directory.is_dir() or not os.access(directory, os.R_OK | os.W_OK | os.X_OK):
+                return False
     return True
 
 

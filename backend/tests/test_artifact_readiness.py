@@ -1,4 +1,6 @@
-"""Runtime probes respect the application's selected S3 prefix permissions."""
+"""Runtime probes respect the selected storage's actual mutation scope."""
+import io
+import os
 from types import SimpleNamespace
 
 import boto3
@@ -44,3 +46,60 @@ def test_api_readiness_keeps_denied_prefix_unavailable(monkeypatch, scoped_store
         expected_params={"Bucket": store.bucket, "Prefix": store.prefix, "MaxKeys": 1})
     monkeypatch.setattr(health, "get_settings", lambda: SimpleNamespace(artifact_backend="s3"))
     assert health._check_artifacts() == {"status": "down", "error": "artifact storage unavailable"}
+
+
+@pytest.fixture(params=["local", "rwx"])
+def filesystem_store(request, tmp_path, monkeypatch):
+    from app.services.artifacts.local import LocalBlobStore
+    from app.services.artifacts.rwx import RwxBlobStore
+    root = tmp_path / "mounted-root"
+    root.mkdir()
+    cls = RwxBlobStore if request.param == "rwx" else LocalBlobStore
+    store = cls(root, store_id="readiness-test")
+    monkeypatch.setattr("app.services.artifacts.get_blob_store", lambda _settings: store)
+    return store, SimpleNamespace(artifact_backend=request.param)
+
+
+def test_filesystem_readiness_accepts_working_store_without_root_write_permission(
+    monkeypatch, filesystem_store,
+):
+    from app.services import health
+    from app.services.work.runtime import probe_artifacts
+    store, settings = filesystem_store
+    real_access = os.access
+
+    def access(path, mode, **kwargs):
+        # Observed Synology NFS ACL: the mounted root reports W_OK false,
+        # while the application's owned object/temp directories are writable.
+        if path == store.root and mode & os.W_OK:
+            return False
+        return real_access(path, mode, **kwargs)
+
+    monkeypatch.setattr(os, "access", access)
+    payload = b"an actual immutable blob remains writable and readable"
+    ref = store.put(io.BytesIO(payload), object_id="1" * 32, media_type="application/octet-stream")
+    with store.open(ref) as stream:
+        assert stream.read() == payload
+    before = sorted(path.relative_to(store.root) for path in store.root.rglob("*"))
+    assert probe_artifacts(settings) is True
+    monkeypatch.setattr(health, "get_settings", lambda: settings)
+    assert health._check_artifacts() == {"status": "ok"}
+    assert sorted(path.relative_to(store.root) for path in store.root.rglob("*")) == before
+    store.delete(ref)
+
+
+@pytest.mark.parametrize("directory", ["objects", "tmp"])
+def test_filesystem_readiness_rejects_unwritable_mutation_directory(
+    monkeypatch, filesystem_store, directory,
+):
+    from app.services.work.runtime import probe_artifacts
+    store, settings = filesystem_store
+    real_access = os.access
+
+    def access(path, mode, **kwargs):
+        if path == store.root / directory and mode & os.W_OK:
+            return False
+        return real_access(path, mode, **kwargs)
+
+    monkeypatch.setattr(os, "access", access)
+    assert probe_artifacts(settings) is False
