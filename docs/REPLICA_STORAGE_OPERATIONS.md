@@ -601,3 +601,29 @@ business jobs. Closure held epoch3, stopped all target Pods/CRI, retained three
 PVCs and restored prior2/2/2/runtime/PVCs/nine tables without data mutations.
 Other NFS servers, the earlier failed large buffered write, prolonged outage,
 cross-node and physical failure domains remain unqualified. ScheduleOFF.
+
+## Remote Synology component check (2026-11-03)
+
+The supplied `10.10.1.5:/volume1/Vitaliy` accepts NFSv4.0; v4.1 returns
+`Protocol not supported`. [Bounded current-image evidence](superpowers/reports/2026-11-03-replica-synology-nfs4-component.json)
+passed256MiB RwxBlobStore write/fsync/atomic publish and a fresh process cold SHA,
+range read and conflicting-put refusal. Client UID1000 sees owner65534; the
+observed mapping is explicit and does not change product restore requirements.
+This test used independent Docker processes, not Kubernetes/CSI or application
+replicas. Existing share files were preserved despite permission to clear them.
+
+The quota probe accepted1025MiB without storage-full error and stopped at its
+hard cap. Thus the requested1GiB limit is not enforced on these writes; do not
+continue filling the underlying NAS. Both probes removed their own files and
+mounts, all owned containers stopped, and prior2/2/2 stayed Ready. Enforce a bounded
+quota before NAS storage-full/retry acceptance. The user clarified that this
+Synology offers a user quota: use a dedicated NAS account with its actual numeric
+UID/GID and a1GiB volume1 limit. The original clientUID1000 probe does not test
+another account’s quota. Folder quotas, where supported, require Btrfs. An
+independent NFS VM is deferred while this user-quota path is prepared. CSI/application, outage, restore and profile gates
+remain open; the earlier selected NFSv4.1 result remains a separate recipe.
+
+The supplied NFS rule screenshot selects no squash mapping and asynchronous
+writes. Its applied state was not read from DSM. Use a synchronous export for
+subsequent preservation tests; the existing write/read proof does not establish
+power-loss durability. See the report’s upstream Synology references.

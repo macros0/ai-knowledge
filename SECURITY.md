@@ -2980,3 +2980,30 @@ checks. Final target is stopped/held3 with three PVCs retained; prior2/2/2 and n
 canonical tables are restored. Source claim was unmounted while the same NFS
 server stayed up. Large-write/outage/cross-node gates and provider certification
 remain open; production scheduling stays off.
+
+### Remote Synology native component boundary (2026-11-03)
+
+The user supplied `10.10.1.5:/volume1/Vitaliy`, enabled its NFS access and allowed
+clearing that share. Tests instead used fresh random child directories and
+preserved existing files. [Native evidence](docs/superpowers/reports/2026-11-03-replica-synology-nfs4-component.json)
+confirms NFSv4.0 and a256MiB current-image RwxBlobStore write/cold hash/range/
+conflict refusal through separate non-root containers. Actual in-container NFS
+mount and owned directory inode/observed UID/GID were checked before writes.
+The observed65534 owner mapping is recorded; no production mapping/authorization
+claim or change to the selected restore guard is implied. Initial strict owner
+refusal is preserved, with no blob writes before its read-only reconciliation.
+
+A separately bounded quota probe accepted1025MiB without storage-full failure;
+the claimed1GiB limit is therefore not enforced for this NFS path. The probe
+stopped at its cap, preserved its baseline and removed only its own files. Both
+mounts and all owned running containers are gone; prior2/2/2 remains Ready.
+No SQL, secrets, Kubernetes resources, NAS configuration or other NAS files were
+changed. CSI/application/outage/restore and quota acceptance remain open for
+this recipe; NFSv4.1 refused and is not qualified by the v4.0 result.
+
+The user clarified that the available Synology limit is a per-user quota. Use a
+dedicated NAS principal with the correct numeric UID/GID; an SMB login name does
+not switch AUTH_SYS credentials for UID1000 clients. The shown rule selects no
+squash mapping and asynchronous writes; its applied DSM state is not independently
+read. No power-loss durability is claimed. Separate VM provisioning is deferred;
+next tests wait for the dedicated NAS UID/GID and quota, without NAS passwords.
