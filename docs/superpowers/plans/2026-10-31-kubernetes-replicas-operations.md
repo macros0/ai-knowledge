@@ -642,3 +642,16 @@ the archive; keys never left the PC. See [backup receipt](../reports/2026-11-03-
 Actual RWX restore/release remains open: the current rebind CLI is S3-only, and
 equal local root paths on distinct PVCs require an explicit strict relocation
 proof before support can be added. No descriptor bypass or provider relabeling.
+
+O2 cross-provider milestone (2026-11-03): [RWX-source→real S3 recovery](../reports/2026-11-03-replica-rwx-source-s3-restore.json)
+passed from the independent PC archive while source NFS/PG/Qdrant/app were
+physically off. All81 tables/28 sequences/four full points/11 blobs matched
+before unchanged official identity adoption; normal held2 refusals and explicit
+release passed.2/2/2 verified old-cookie401, old documents/search/download/export,
+new shared session and new upload/export. Four native processes verified17 hashes,
+empty scratch and no legacy job re-execution. Target is stopped/held3 with three
+PVCs retained, source NFS restored, prior2/2/2/PVC/runtime/nine tables unchanged.
+Original failed parents/harness assertions are preserved. This closes the selected
+RWX-source→S3-target recipe, while strict fresh RWX-target relocation, failed
+large writes, prolonged outage/cross-node/external/mixed and final certification
+gates remain open. No product changes afterccfcf9e; scheduleOFF/certificationnull.

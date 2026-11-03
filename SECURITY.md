@@ -2935,3 +2935,24 @@ authenticated source and observed target binding must precede RWX restore/releas
 The NFS server itself was available during export, and large-write/outage/cross-node
 qualification remains open. Production scheduleOFF, certificationnull. See the
 [backup-only evidence](docs/superpowers/reports/2026-11-03-replica-rwx-independent-backup.json).
+
+### RWX-source to S3 recovery evidence
+
+The [2026-11-03 completed drill](docs/superpowers/reports/2026-11-03-replica-rwx-source-s3-restore.json)
+used real fresh S3/PG/Qdrant targets, independent PC-only backup custody and the
+unchanged scoped restore CLI while source NFS/PG/Qdrant were physically off.
+Exact source/target node, controller, claim and native-container guards remained
+active. All original SQL/sequence/vector/blob hashes matched before identity
+adoption; old auth was revoked under held2 before explicit release. The original
+163-row Work table stayed identical until release. Runtime/operator Secrets
+remain separate and the master backup key never reached the VM.
+
+Native PG password denial was proved through the actual Pod IP/SCRAM route;
+local Pod-loopback trust and a failed port-forward are not authentication proof.
+The public auth/me contract returns anonymous200; actual old-cookie rejection
+was proved as401 on protected documents across four endpoints. Held startup,
+writes, claims and artifact-runtime access refused correctly. Failed harness
+parents remain recorded, alongside successful corrected checks. Cleanup retained
+all data/PVCs, held the target at epoch3, restored NFS and prior lab capacity.
+This proves no fresh RWX-target relocation, physical HA or certification; the
+previous failed large buffered NFS write remains unqualified. ScheduleOFF.

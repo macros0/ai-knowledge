@@ -1021,3 +1021,36 @@ key on the PC. Source app/storage are stopped under epoch1, with three retained
 PVCs and earlier lab2/2/2 restored. Actual RWX restoration is still pending: the
 current identity rebind CLI is S3-only and same local mount paths do not establish
 separate RWX storage. A strict physical relocation proof is required first.
+
+## RWX source recovered into real S3 (2026-11-03)
+
+The [cross-provider recovery receipt](superpowers/reports/2026-11-03-replica-rwx-source-s3-restore.json)
+closes the selected RWX-source → fresh S3-target path. The unchanged official
+restore CLI restricts the target backend; it accepts this genuine S3 target
+without changing source BlobRefs or weakening descriptor checks. The same logical
+store ID is preserved, while new PostgreSQL/Qdrant/RustFS stores and three PVCs
+are disjoint. The independent PC archive supplied all bytes while source
+application/PG/Qdrant stayed off and the actual NFS service had zero threads and
+no2049 listener. All81 tables/28 sequences, four full points and11 blob hashes
+matched before any identity mutation. The master key stayed on the PC.
+
+Scoped PG/S3 rights passed10/9 denials. Password rejection was checked over the
+actual Pod IP/SCRAM rule: port-forward reaches Pod loopback, whose bootstrap
+trust rule cannot prove password enforcement. Ordinary runtime CA/TLS checks
+passed separately. Official adoption revoked the old session and held epoch2;
+normal startup, writes, Work claims and artifact-runtime access were refused
+until explicit release. The complete original163-row Work table stayed identical
+through adoption. Both old documents/search/download/export and a new shared
+session passed across two frontend/two API endpoints; the actual old cookie
+received401 on a protected document. One new idempotent upload and export passed.
+Four native API/worker processes cold-checked all17 resulting objects, empty
+original scratch and unchanged once-completed legacy jobs.
+
+The target is now physically stopped under audited epoch3, with all three PVCs
+retained. The owned NFS service returned to its original filesystem/private
+listener/four threads; original source app/PG/Qdrant remain off under epoch1.
+Prior lab2/2/2, runtime/PVCs and nine canonical tables were restored. Original
+failed tunnel parents and corrected harness assertions remain in the receipt.
+Fresh RWX-target relocation/adoption is still unsupported by this CLI. The failed
+large NFS write, prolonged outage/cross-node/provider gates and production
+qualification remain open; schedulingOFF, certificationnull.

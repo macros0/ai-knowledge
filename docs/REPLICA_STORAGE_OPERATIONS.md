@@ -561,3 +561,23 @@ CLI currently accepts S3 only; equal `/artifacts` paths on two RWX PVCs cannot p
 relocation. Strict authenticated physical-source/actual-target binding support is
 required before RWX adoption/release. Do not bypass the guard or relabel RWX as S3.
 NFS server unavailability, large-write and cross-node gates remain separate.
+
+## RWX source-off restore into real S3 (2026-11-03)
+
+The [completed independent recovery](superpowers/reports/2026-11-03-replica-rwx-source-s3-restore.json)
+used the RWX-source backup with all source providers unavailable, including the
+actual stopped NFS server. New managed PostgreSQL/Qdrant and real RustFS used
+three fresh claims, fresh TLS/scoped credentials and the unchanged restore CLI.
+All81 tables/28 sequences, four full points and11 blobs matched before identity
+adoption. Held2/explicit release, old-cookie rejection, old search/download/export
+and new upload/export passed on2/2/2. Four current-image API/worker processes
+verified all17 resulting objects and empty scratch; original business tasks
+remained succeeded once at epoch0, new tasks succeeded once at epoch2.
+
+Closure is verified: target roles/storage0, liveCRI0, held3, three PVCs retained;
+source NFS restored to the same filesystem and172.18.0.1:2049/four threads; prior
+lab2/2/2/PVCs/runtime/nine tables unchanged. Source app/PG/Qdrant stay off. This
+qualifies only the bounded RWX-source→S3-target recovery recipe on the training
+node. A fresh RWX target still requires authenticated physical relocation support.
+Large-write, sustained outage, cross-node and customer provider qualification
+remain open, with production schedulingOFF.
