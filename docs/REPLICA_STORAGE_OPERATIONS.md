@@ -670,3 +670,28 @@ The earlier failed cf74 trial remains recorded and retained separately. NAS-sour
 independent backup/recovery, prolonged outage and cross-node gates remain open.
 This bounded recipe does not certify physical failure or power-loss durability;
 models/auth are stub/simulation. Production schedule remains off; certification null.
+
+
+## Independent NAS corpus copy (2026-11-04)
+
+The [Synology format3 copy](superpowers/reports/2026-11-04-replica-synology-independent-backup.json)
+contains native PG17, native Qdrant1.19 and all11 accepted NAS objects in13
+authenticated encrypted objects on the user-declared independent PC. Cold reopening,
+decryption, MAC/SHA and the native Qsnapshot checksum passed. The master key stayed
+on the PC. Keep the adjacent authenticated source-binding JSON with the archive.
+
+The reader ran as1031:100 with a read-only NFSv4.0 bind, no service-account token,
+no provider or database secrets, and a read-only container root. Its15 guard cases
+passed after15 proper RED assertions. The binding records actual client mount and
+inode provenance; it does not assert direct access to the NAS server filesystem.
+The initial plan-header failure happened before any destination or sidecar existed;
+all native owners closed. The one already-created Qsnapshot was reconciled and
+reused without another POST. A new read-only PG snapshot captured the unchanged
+held source. No encrypted stream was replayed.
+
+All native handles and the reader are closed; source app/PG/Q are off under held1,
+the source claim is unmounted, and three PVCs plus the completed reader/code objects
+remain retained. The borrowed worker returned1→2, with old2/2/2, runtime/PVC and
+nine canonical tables verified. NAS service stayed up. This is a backup checkpoint;
+independent restore has not yet been performed for this NAS source. The existing
+strict NFSv4.1 target-relocation guard is unchanged. Production schedule stays off.

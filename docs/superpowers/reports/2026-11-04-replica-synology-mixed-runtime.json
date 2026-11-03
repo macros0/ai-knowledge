@@ -1206,5 +1206,6 @@
     "overall O1-O3 qualification"
   ],
   "certification": null,
-  "production_backup_schedule": "disabled"
+  "production_backup_schedule": "disabled",
+  "subsequent_backup_report": "2026-11-04-replica-synology-independent-backup.json"
 }

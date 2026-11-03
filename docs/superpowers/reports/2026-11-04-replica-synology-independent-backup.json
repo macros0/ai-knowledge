@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "status": "independent-NAS-backup-cold-verified-restore-pending",
+  "source_revision": "96931d1cfa05dc7f3e685305016f792ad7a9ce50",
+  "operation_id": "e284fc9480a1423dbc6f3690cb930899",
+  "backup_id": "d90b9d5f09464b54b142d0a0427325b6",
+  "source": {
+    "namespace": "replica-test-synr20261104",
+    "namespace_uid": "2b02a536-f2c2-4f50-a79d-319bf6a7e545",
+    "installation_id": "cf6444f6b99944438c4ed295292c0dbe",
+    "identity": {
+      "version": 1,
+      "deployment_schema": "replicas-v1",
+      "installation_id": "cf6444f6b99944438c4ed295292c0dbe",
+      "artifact_backend": "rwx",
+      "artifact_store_id": "synr-5f4f1a2106b340c2",
+      "storage_receipt_digest": "sha256:cdab0a79774a7b1c65477a6807cfc0d4db53dfbb15d0962ac90284695195ef2f",
+      "runtime_fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7"
+    },
+    "phase": "held1 with application and storage stopped",
+    "provider_inventory": {
+      "model": "DS211",
+      "dsm": "6.2.4-25556 Update 8",
+      "source": "user-confirmed",
+      "server": "10.10.1.5",
+      "nfs": "4.0"
+    }
+  },
+  "verification": {
+    "status": "independent-synology-client-backup-authenticated-cold-verified",
+    "backup_id": "d90b9d5f09464b54b142d0a0427325b6",
+    "format": 3,
+    "manifest_sha256": "30a4855b5b2112d6e29aaa59467fa5acbb6a08426bbda6c1224cb7d066da9027",
+    "encrypted_objects": 13,
+    "plaintext_bytes": 1171590,
+    "counts": {
+      "documents": 2,
+      "concepts": 2,
+      "chunks": 2,
+      "blobs": 11,
+      "work_items": 112,
+      "audit_events": 11
+    },
+    "postgres_tables": 81,
+    "postgres_sequences": 28,
+    "qdrant_points": 4,
+    "native_catalog_sha256": "c09b2b028d2e530a77d47a247eb8aa21563d203247b077a418bdff848ed5bd9a",
+    "qdrant_points_sha256": "2536719db229f1aedf7a967920d5e12d5c5edfda982da099a6685ecb9b3ce6f9",
+    "source_binding_sha256": "c2640b71d6144724fbc9a9f50999df7c755479e9bb95e72e8b6789c2fd7884f2",
+    "blobs_sha_verified": 11,
+    "source_application_writers": 0,
+    "source_still_held_epoch": 1,
+    "destination_independence": "user-declared separate PC",
+    "source_binding_file_required": true,
+    "key_transferred_to_vm": false,
+    "source_server_unavailable": false,
+    "source_access": "read-only native NAS client",
+    "server_filesystem_identity_claimed": false,
+    "restore_performed": false,
+    "production_schedule": "disabled",
+    "native_q_snapshot_api_checksum_matches_copied_sha256": true
+  },
+  "readonly_reader": {
+    "pod_uid": "a6a359e7-a26e-4deb-a2ab-2c9c2e4de194",
+    "immutable_image_ref": "docker.io/library/import-2026-11-03@sha256:67eed6411099cca3b3674733032d53147421f8ea5a0d0c8465e9c18ecad3072a",
+    "source_code_sha256": "925bb8f9e5bdeaab2a74c82e25ceb830857e1fa97f2b07b5382b3c4d3974c7ec",
+    "mount": {
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+      "nfs_version": "4.0",
+      "mount_root": "/",
+      "readonly": true,
+      "client_directory_inode": 16314,
+      "client_directory_device": 2097308,
+      "client_directory_uid": 0,
+      "client_directory_gid": 100,
+      "client_directory_mode": 1528,
+      "client_objects_inode": 16315,
+      "uid": 1031,
+      "gid": 100,
+      "reader_code_sha256": "925bb8f9e5bdeaab2a74c82e25ceb830857e1fa97f2b07b5382b3c4d3974c7ec"
+    },
+    "credentials_mounted": false,
+    "service_account_token": false,
+    "guard_tests": {
+      "valid_red_failures": 15,
+      "green_passed": 15,
+      "errors": 0,
+      "unmodified_test_source_sha256": "3672635cfc5d02fda4f6618612b060f09ebea102998e16aa76d8780435060055"
+    },
+    "closed": {
+      "reader_succeeded": true,
+      "reader_live_cri": 0,
+      "source_nfs_node_mounts": 0,
+      "reader_job_and_code_retained": true
+    }
+  },
+  "source_binding": {
+    "version": 1,
+    "provenance_kind": "selected-nas-readonly-client-source-v1",
+    "recipe": "synology-ds211-dsm6.2.4-25556-u8-nfs4.0-csi4.13.6-training-v1",
+    "namespace": "replica-test-synr20261104",
+    "namespace_uid": "2b02a536-f2c2-4f50-a79d-319bf6a7e545",
+    "node_uid": "9020a1d9-843e-4947-8808-53477289b863",
+    "claim_uid": "07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+    "pv_uid": "ce1841b7-b8b1-4bda-b7f1-c1c62d8fe139",
+    "driver": "okf-training-nfs.csi.k8s.io",
+    "volume_handle": "10.10.1.5#volume1/Vitaliy#okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f#pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f#retain",
+    "server": "10.10.1.5",
+    "share": "/volume1/Vitaliy",
+    "subdir": "okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+    "reader_pod_uid": "a6a359e7-a26e-4deb-a2ab-2c9c2e4de194",
+    "reader_image_ref": "docker.io/library/import-2026-11-03@sha256:67eed6411099cca3b3674733032d53147421f8ea5a0d0c8465e9c18ecad3072a",
+    "wire_uid": 1031,
+    "wire_gid": 100,
+    "reader_source_sha256": "925bb8f9e5bdeaab2a74c82e25ceb830857e1fa97f2b07b5382b3c4d3974c7ec",
+    "server_filesystem_identity_claimed": false,
+    "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+    "nfs_version": "4.0",
+    "mount_root": "/",
+    "readonly": true,
+    "client_directory_inode": 16314,
+    "client_directory_device": 2097308,
+    "client_directory_uid": 0,
+    "client_directory_gid": 100,
+    "client_directory_mode": 1528,
+    "client_objects_inode": 16315
+  },
+  "closure": {
+    "source_app_and_storage_live_cri": 0,
+    "source_nfs_node_mounts": 0,
+    "source_held_epoch": 1,
+    "claims_retained": 3,
+    "readonly_reader_completed": true
+  },
+  "capacity": {
+    "reduced_only": "one owned worker 2 to1; frontend/API remained2/2",
+    "restored": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "canonical_tables_unchanged": 9,
+    "pvc_runtime_bindings_retained": true
+  },
+  "preserved_failures": {
+    "preflight": {
+      "reason": "Imported source guard loop variable shadowed backup input; rejected before remote directory or any provider scale",
+      "proof": {
+        "directory_absent": true,
+        "all_source_provider_counts_zero": true
+      }
+    },
+    "image_ref": "CRI imageRef equals the verified imported repoDigest; inspecti does not resolve that alias. Require membership in the already UID/digest-pinned cached image repoDigests plus exact configured tag.",
+    "pre_plan": [
+      {
+        "attempt_id": "4914a3a242fc47c3a654d4b5575bcdb9",
+        "phase": "failed-review-required",
+        "started_at": "2026-11-03T23:32:01.443189+00:00",
+        "process_id": 28360,
+        "error_type": "KeyError",
+        "frames": [
+          {
+            "file": "synology_backup_create.py",
+            "line": 60,
+            "function": "<module>"
+          }
+        ]
+      }
+    ],
+    "resume_proof": {
+      "other_client_transactions": 0,
+      "exported_snapshot_files": 0,
+      "vm_q_loopback_port_free": true,
+      "no_destination_or_binding": true,
+      "full_pg_catalog_unchanged": true,
+      "q_snapshot_reused_without_post": true
+    },
+    "existing_q_snapshot_reused_without_post": true
+  },
+  "destination": "user-declared physically independent training PC; encrypted format3 archive and authenticated adjacent source binding",
+  "master_key_transferred": false,
+  "restore_performed": false,
+  "nas_server_stopped": false,
+  "server_filesystem_identity_claimed": false,
+  "remaining_gates": [
+    "independent NAS-source recovery",
+    "selected NAS target relocation qualification",
+    "prolonged outage and cross-node/physical failure",
+    "real model/IdP and customer acceptance"
+  ],
+  "certification": null,
+  "production_backup_schedule": "disabled"
+}

@@ -679,3 +679,12 @@ retained/owned forwards and NFS mounts gone. All borrowed old services/2/2/2,
 S3 hashes were returned/verified. Initialcf74 failure remains retained separately.
 NAS independent backup/recovery, prolonged outage/cross-node/real-model/IdP and
 overall qualification remain open; no certification or production schedule.
+
+O2 NAS backup milestone (2026-11-04): [read-only-client independent copy](../reports/2026-11-04-replica-synology-independent-backup.json)
+passed cold authentication/decryption for13 objects: native PG81tables/28sequences,
+Q4fullpoints and11 NAS blobs. UID1031/G100 reader had actual NFSv4.0 RO/noSecrets,
+15 guard cases RED→GREEN, and the key remained on the independent PC. One pre-plan
+header failure left no archive/sidecar; closed owners were proved and the existing
+Qsnapshot reused without another POST. Source is physically off/held1/unmounted,
+completed reader retained, old2/2/2/runtime/PVC/nine tables restored. NAS server
+stayed up. NAS-source independent recovery remains open; no4.0 target-guard bypass.
