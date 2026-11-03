@@ -10,7 +10,7 @@
 
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
-Статус 02.11.2026: реализация продолжается в `codex/kubernetes-replicas`.
+Статус 03.11.2026: реализация продолжается в `codex/kubernetes-replicas`.
 P0/P1, frontend split, local/RWX/S3 adapters, перенос файловых потребителей,
 поиск orphan-объектов/безопасный GC и verified/resumable offline-миграция корпуса
 реализованы. Миграция не удаляет исходник и не требует реиндексации;
@@ -41,15 +41,17 @@ partition/возврат устаревшего процесса и нагруз
 
 Открыты три крупных блока, частично выполненные:
 
-- **O1:** RWX, external/mixed end-to-end, заполнение хранилищ на уровне приложения
+- **O1:** RWX application/restore/cross-node после проверенного NFS/CSI bootstrap,
+  external/mixed end-to-end, заполнение хранилищ на уровне приложения
   и квалификация инфраструктуры/failure domains выбранных профилей.
-- **O2:** оставшиеся adoption/update recipes, включая compact/NULL-generation,
+- **O2:** оставшиеся adoption/update recipes; compact/NULL-generation source-off рецепт проверен,
   и остальные profile-specific backup/restore recipes. Восстановление ключа из
   отдельного защищённого каталога и доставка alerts локальному приёмнику на ПК
   проверены на учебной копии. Production-расписание выключено; production
   monitoring и независимый физический key escrow не квалифицированы.
-- **O3:** полный CI итоговой версии, объединённая fault/profile matrix, итоговые
-  runbooks и свежее ревью всей ветки.
+- **O3:** объединённая fault/profile matrix, квалификация текущего runtime/провайдеров,
+  итоговые runbooks и доверенные producers. Единственное свежее ревью всей ветки,
+  единый проход пяти исправлений и полный ccfcf9e CI уже завершены.
 
 O3 частичная проверка текущих источников:557/557 doc-parser tests,0 skips и новая
 standalone frontend production build с19 routes и проверенными health rewrite/
@@ -61,7 +63,7 @@ certification=null. Чистая policy проверена47 тестами. П�
 issuers/producers ещё не подключены.
 [Policy validation](../reports/2026-11-02-replica-certification-policy.json).
 
-Полный Linux backend CI текущего кода `5f5c43d` подтверждён:6610 точных case IDs,
+Полный Linux backend CI исторического `5f5c43d` подтверждён:6610 точных case IDs,
 6390 passed,220 skipped,0 failures/errors,87,62% покрытия при пороге85%.
 Пропуски:203 opt-in PostgreSQL,12 для других ОС,5 real ENOSPC opt-in; отдельные
 нативные/provider испытания остаются самостоятельными gates. Собран новый runtime
@@ -275,3 +277,5 @@ scope leases и outbox. Проверены интерфейсы и ссылки 
 P0: `assert mutations == []`; `assert required_skip_exit_code != 0`;
 `assert secret not in report`. P1: `assert validate_replica_profile(valid_mixed) is None`;
 опасные профили проверять через `pytest.raises(ReplicaProfileError)`.
+
+03.11.2026: завершена [compact source-off репетиция](../reports/2026-11-03-replica-compact-independent-restore.json): независимое восстановление/S4 crash-resume/held handoff/adoption и функциональные2/2/2, accepted checkpoint, экспорт/frozen bundle, невыполнение approval и новая публикация на b5a9775. Затем закрыт [единый проход пяти замечаний](../reports/2026-11-03-replica-final-review-fixes.json): ccfcf9e full Linux6431 passes/221 explicit optional skips/0fail/87,67% coverage, неизменные2429 Git-файлов. Новый точный runtime собран и импортирован. Новая отдельная CI capacity-операция вернула прежние2/2/2 с теми же runtime/PVC и девятью неизменными каноническими таблицами. Compact target остаётся остановлен под held epoch3; PVC/backup сохранены. Отдельно разрешённый [NFS/CSI bootstrap](../reports/2026-11-03-replica-nfs-rwx-bootstrap.json) прошёл двух-Pod adapter contract; RWX application/restore/cross-node и остальные O1/O2/O3 gates остаются открытыми, certifications=null.

@@ -94,8 +94,9 @@ stop/drain receipts are trusted inputs to SQL, not physical evidence collected
 by this command. Existing supported durable WorkItems remain queued. Unconverted
 legacy queued/running public Jobs or processing/queued documents without durable
 document work refuse adoption unless the reviewed atomic handoff below applies.
-Legacy recorder-journal migration and the actual deployment rehearsal remain
-open. The handoff uses the original snapshot; it does not replace it with a
+Legacy recorder-journal migration and one managed basic source-off deployment
+rehearsal are now verified in the [compact report](superpowers/reports/2026-11-03-replica-compact-independent-restore.json).
+Other provider/update recipes remain open. The handoff uses the original snapshot; it does not replace it with a
 snapshot that hides the original queued intent.
 
 Select a protected, fully specified target runtime env file containing database,
@@ -107,6 +108,14 @@ adoption. An optional `--operator-db-file` uses the existing same-target
 verify-full TLS credential contract; ordinary runtime Secrets must not receive
 administrator credentials. The native temporary-loopback tests do not qualify
 that provider transport.
+
+Include effective Settings supplied by the selected image, not only the Helm
+ConfigMap and Secret. For example, this backend image defines
+`ARCHIVE_7ZIP_PATH=/opt/7zip/7zz`; the literal operator file must specify the same
+value. A normal runtime probe must validate the resulting identity while all
+roles are stopped and claims remain held. If a committed held identity differs,
+use the owned audited runtime rebind with separate create-only output; retain
+the old identity and do not patch SQL or weaken validation.
 
 The following are command shapes for the offline coordinator, not permission to
 run against a live customer installation. Use a new nonzero32-hex operation ID,
@@ -155,8 +164,15 @@ reservation cleared or maintenance released. The coordinator must separately
 validate authorization/session policy, deploy the matching frozen image/common
 identity, complete provider/recovery checks and explicitly release/start roles.
 Old None/zero-epoch processes remain retired after release. The populated compact
-source-off Kubernetes rehearsal, legacy intent conversion and functional
-search/download/new-publication proof still need completion. See the
+source-off Kubernetes rehearsal now covers absent/NULL generation input,
+document resume, queued export and frozen diagnostic handoff, preserved approval
+and functional search/download/new publication on2/2/2. The source-off proof,
+all-ten-object cold read-back,13 original events/expiry and scope limitations are
+recorded in the [rehearsal report](superpowers/reports/2026-11-03-replica-compact-independent-restore.json).
+It uses simulation auth, a model stub and fake embeddings; the original source
+cookie was unavailable, so session HTTP proof uses a new session across the
+four frontend/API instances. Other profiles and recipes still require their own
+acceptance. See the
 [implementation plan](superpowers/plans/2026-11-02-replica-compact-adoption.md) and
 [SQL/CLI evidence](superpowers/reports/2026-11-03-replica-compact-adoption.json).
 
@@ -979,3 +995,18 @@ observed model peak remained1. The ordinary startup and success fixture were
 restored; all10 previous documents and the new document passed preservation,
 search/source SHA and delete-visibility checks with2/2/2 Ready0restarts. See the
 [public result](superpowers/reports/2026-11-01-replica-postgres-partition-stale-return.json).
+
+## Current code and RWX scope (2026-11-03)
+
+The [single final-review fix pass](superpowers/reports/2026-11-03-replica-final-review-fixes.json)
+completed a full frozen ccfcf9e Linux suite:6431 passes/221 explicit optional skips,
+zero failures/errors,87.67% coverage and unchanged2429 Git files. The exact current
+backend image was built and imported; the separate CI capacity operation restored
+the previous2/2/2 runtime/PVCs and verified nine unchanged canonical tables.
+The compact functional source-off rehearsal remains bound to its b5a9775 image.
+
+The separately authorized [NFS/CSI platform](superpowers/reports/2026-11-03-replica-nfs-rwx-bootstrap.json)
+has a real private NFSv4 mount and successful two-Pod adapter checks. RWX application
+lifecycle, server-loss/full-storage, independent provider restore and cross-node
+proof remain required. Its shared1GiB backing filesystem provides the test limit;
+individual PVC requests are not quotas. Production backup scheduling remainsOFF.

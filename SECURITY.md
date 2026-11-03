@@ -2860,3 +2860,27 @@ retired or unknown live processes, changed nodes or incomplete storage-process
 observations, and repeats the guard after cold archive verification. Uncertainty
 keeps maintenance held. This single-node training recipe is not a production
 failure-domain or backup-schedule qualification.
+
+### Explicitly admitted single-node NFS training platform
+
+2026-11-03: the user separately authorized the reviewed NFS/CSI package on VM103.
+The new NFSv4 server exports only a fresh bounded1GiB ext4 regular-file filesystem
+to the bound kind node172.18.0.2, listens on172.18.0.1:2049, uses root_squash and
+keeps RPC bind/statd network services masked. This private sec=sys recipe has no
+production transport/authentication or physical-HA qualification. Its backing
+capacity is shared across test PV directories; a PVC request is not a per-PVC quota.
+
+The pinned official NFS CSI4.13.6 render creates a separate namespace, privileged
+node plugin/kubelet mounts and six explicit cluster-scoped resources including a
+nondefault Retain StorageClass. Every create is journaled with its UID; existing
+resources are not adopted. No snapshot CRDs are installed. The first offline apt
+step refused local archives before installation; its startup guard and evidence
+were retained. The same operation recovered through only the five SHA-verified
+offline debs. Private bind/mount dependencies were persisted before package setup.
+
+Two non-root/read-only/no-token, network-denied probe Pods passed real NFS mount,
+immutable/idempotent creation, other-Pod read/range, one-winner concurrent creation
+and deletion of only their two known synthetic objects. Application lifecycle,
+server-loss/full-storage, independent restore and cross-node gates remain open;
+no certification or production backup schedule is enabled. See the
+[bounded NFS evidence](docs/superpowers/reports/2026-11-03-replica-nfs-rwx-bootstrap.json).

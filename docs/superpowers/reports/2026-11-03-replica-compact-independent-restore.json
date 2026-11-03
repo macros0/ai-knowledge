@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "status": "independent-compact-restore-verified-s4-adoption-incomplete",
-  "observed_at": "2026-11-03T08:57:58.208599+00:00",
-  "scope": "Synthetic compact rpl04 independent source-off restore and official rpl05 upgrade verified. Live S4 planning progressed after the recorder checkpoint fix and found UTC timestamp spelling incompatibility in actual Node frontend events; its local fix is verified, live cutover/adoption remain incomplete.",
+  "status": "compact-source-off-functional-rehearsal-verified-final-review-fix-pass-verified",
+  "observed_at": "2026-11-03T10:49:37.655886+00:00",
+  "scope": "Synthetic compact rpl04 corpus independently restored with the original source physically off, upgraded through official rpl05, migrated by actual S4 crash/resume, adopted with held atomic legacy handoff and accepted through 2 frontend/2 API/2 worker instances. Source PVCs and encrypted PC backup retained. New target gracefully stopped at held epoch3; older training installation role counts are restored and verified. The five final-review findings are fixed with a green full ccfcf9e unit/optional-integration suite. The actual compact functional rehearsal remains bound to its b5a9775 runtime; current application/provider qualification remains separate.",
   "operation_id": "d085c9ee969a42e3a42ae6ea6e731c33",
   "backup_id": "61b33d604f9648e097b6ab30ef57b2c3",
   "installation_id": "73545d7af3a9493485dde22d2d379270",
@@ -260,8 +260,10 @@
     "All data are synthetic; one physical kind node.",
     "Independent-PC failure domain is user-declared training evidence.",
     "Provisioner-owned PVC mount root metadata is excluded; all 16 files and 20 application directories match including nanosecond mtime.",
-    "Source-off S4 interruption/resume, compact handoff, held adoption and 2/2/2 application acceptance remain open.",
-    "The earlier full Linux backend CI covers 5f5c43d, not this new fix. All seven profile certifications remain null."
+    "This is one managed basic single-node training recipe with fake embeddings, model stub and simulation auth; RWX/external/mixed/physical failure-domain and customer Gateway/IdP qualification remain open.",
+    "Original source HTTP cookie was not retained; the new session was exercised across two frontends and two APIs. Original SQL rows and application key were independently restored.",
+    "The current190-test Linux cohort passed; full b5a9775 Linux CI was stopped without OOM after final review; it is not a passing full suite. Older full Windows failure remains recorded separately, not relabelled green.",
+    "All seven profile certifications remain null. Production backup scheduling remains disabled. Older training2/2/2 topology and nine canonical tables are restored and verified."
   ],
   "counter_fix_linux_ci": {
     "first_attempt": {
@@ -416,7 +418,1068 @@
       "frontend_skipped": 1,
       "ruff": true
     },
-    "linux_performed": false,
-    "new_image_built": false
+    "linux_performed": true,
+    "new_image_built": true,
+    "revision": "a95d5894c87cadf50ccf8259f55034e5522e0003",
+    "linux": {
+      "container_id": "59b1ae79625cf8443350881fe7dada0fc5289018a6d7543b87cfdb2dfc8dc3da",
+      "running": false,
+      "exit_code": 0,
+      "oom": false,
+      "source_unchanged": true,
+      "tests": 154,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "8d5eadad351c6bd7430f406faa825bd4fad1658d4a9e9953e3170b9c394b57a5"
+    }
+  },
+  "current_runtime": {
+    "operation_id": "0cdf2cf855794fa1b55978e97c969afe",
+    "build_exit": 0,
+    "tag": "okf-backend:replicas-b5a9775-prefix-0cdf2cf85579",
+    "image_id": "sha256:a0ff7767fb5041d0bc06d21f6b729b33584be6789361ca9a5d7701ff2484d59f",
+    "build_fingerprint": "8ebd0c1e6d846fccdd84d813373bd593add24e6bfefc6eb3489f482cdc745180",
+    "source_identity": "c6b6a7892cc854d7ea7483694a88bf3306889119ef7ab5521a300f3127351855",
+    "git_source_files": 572,
+    "all_app_files": 577,
+    "only_runtime_file_changed": [
+      "app/services/work/runtime.py"
+    ],
+    "packages_exact": true,
+    "package_count": 117,
+    "schema_revision": "rpl05_maintenance_epoch",
+    "cached_prefix_layers": 29,
+    "total_layers": 30,
+    "free_bytes": 15692566528
+  },
+  "current_runtime_import": {
+    "operation_id": "7c8059b4b979450791cc10b60e763023",
+    "producer_exit": 0,
+    "consumer_exit": 0,
+    "kind_image_id": "sha256:2757085ca14f8e93eafefa829e0f08d4d51262ae0950d7b4427b41efc446543d",
+    "kind_repo_digests": [
+      "docker.io/library/import-2026-11-03@sha256:cf1d635b31d4357cd6e928b5ee012e7486315a80c7aa41c34bcee4dd59dc13c3"
+    ],
+    "rootfs_exact": true,
+    "free_bytes": 15691796480
+  },
+  "current_s4_plan": {
+    "succeeded": 1,
+    "failed": 0,
+    "active": 0,
+    "receipt": {
+      "migration_id": "10882ec0e0e0447e8fd96fea651f604a",
+      "source_revision": "75706f1d58222f637def24873fd9db0f7ccef4b40b8558d3f23d5752ddeaa311",
+      "plan_hash": "ecf80cbc6743f38c892e4dc4e0344c9bf6797780de87a17c2be2e0489a48fd97",
+      "counts": {
+        "documents": 2,
+        "generations": 1,
+        "objects": 10,
+        "bytes": 84755,
+        "bindings": 7
+      },
+      "objects": 10,
+      "diagnostics_mode": "legacy",
+      "source_counter_checkpoint_sha256": "a077634b8ceb465c992da62363a3934738471608bae80192d2c64620899d53c9",
+      "existing_provisioning_verified_not_replayed": true,
+      "sql_denied": [
+        "ddl",
+        "identity",
+        "storage_fence",
+        "epoch",
+        "audit_update",
+        "audit_delete"
+      ],
+      "s3_denied": [
+        "outside_prefix_write",
+        "bucket_create"
+      ],
+      "applications_started": false,
+      "source_all_off": true,
+      "build_fingerprint": "272756ead9c815d2aca9ef671e4bfc8e4f0d99fd7ad85718b0d512f9dafac0a7"
+    }
+  },
+  "s4_copy_attempts": {
+    "pre_native_operator_failures_retained": [
+      {
+        "job": {
+          "kind": "Job",
+          "name": "compact-target-s4-copy-crash-v1",
+          "uid": "c51e89a3-fb46-4489-98fb-6cbacd94b065"
+        },
+        "observation": {
+          "succeeded": 0,
+          "failed": 1,
+          "active": 0,
+          "pod_name": "compact-target-s4-copy-crash-v1-hsvr9",
+          "pod_uid": "12af0a7a-136e-4ea8-af85-36e34878b26b",
+          "ready": false,
+          "container_exit_code": 1,
+          "receipts": []
+        },
+        "cause": "operator script copy.py shadowed stdlib copy before native execution"
+      },
+      {
+        "job": {
+          "kind": "Job",
+          "name": "compact-target-s4-copy-crash-v2",
+          "uid": "ff5febda-f467-4df4-8f04-4035adfaab2f"
+        },
+        "observation": {
+          "succeeded": 0,
+          "failed": 1,
+          "active": 0,
+          "pod_name": "compact-target-s4-copy-crash-v2-lrzmv",
+          "pod_uid": "e83ad6aa-d348-40f7-9a02-95deef128948",
+          "ready": false,
+          "container_exit_code": 1,
+          "receipts": [
+            {
+              "marker": "COMPACT_S4_COPY_ERROR",
+              "value": {
+                "stage": "inputs",
+                "error_type": "OSError",
+                "frames": [
+                  {
+                    "file": "transfer.py",
+                    "line": 39,
+                    "function": "<module>"
+                  },
+                  {
+                    "file": "migration.py",
+                    "line": 111,
+                    "function": "store"
+                  },
+                  {
+                    "file": "__init__.py",
+                    "line": 6,
+                    "function": "get_blob_store"
+                  },
+                  {
+                    "file": "factory.py",
+                    "line": 10,
+                    "function": "get_blob_store"
+                  },
+                  {
+                    "file": "control.py",
+                    "line": 91,
+                    "function": "enforce_runtime"
+                  },
+                  {
+                    "file": "control.py",
+                    "line": 59,
+                    "function": "enforce_session"
+                  },
+                  {
+                    "file": "maintenance_control.py",
+                    "line": 89,
+                    "function": "enforce_session"
+                  },
+                  {
+                    "file": "config.py",
+                    "line": 978,
+                    "function": "get_settings"
+                  },
+                  {
+                    "file": "config.py",
+                    "line": 969,
+                    "function": "ensure_dirs"
+                  },
+                  {
+                    "file": "pathlib.py",
+                    "line": 1311,
+                    "function": "mkdir"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "cause": "operator provider constructed outside explicit migration context"
+      }
+    ],
+    "planned_crash": {
+      "succeeded": 0,
+      "failed": 1,
+      "active": 0,
+      "pod_name": "compact-target-s4-copy-crash-v3-22vhw",
+      "pod_uid": "896d763e-6937-42cb-b0f4-2bd4e40163d2",
+      "ready": false,
+      "container_exit_code": 23,
+      "receipts": [
+        {
+          "marker": "COMPACT_S4_COPY_CRASH",
+          "value": {
+            "version": 1,
+            "migration_id": "10882ec0e0e0447e8fd96fea651f604a",
+            "plan_hash": "ecf80cbc6743f38c892e4dc4e0344c9bf6797780de87a17c2be2e0489a48fd97",
+            "source_revision": "75706f1d58222f637def24873fd9db0f7ccef4b40b8558d3f23d5752ddeaa311",
+            "receipts": 1,
+            "uploaded_objects": 2,
+            "unreceipted_ref": {
+              "object_id": "19df62b005cb500c80cabf9829a6501e",
+              "key": "objects/19df62b005cb500c80cabf9829a6501e",
+              "sha256": "a21d09e55f32db12b4a63a2f28cccd90adbbbb8057f349e106d904494119d60d",
+              "size": 434,
+              "media_type": "application/octet-stream",
+              "store_id": "compact-c5t-s3"
+            },
+            "unreceipted_head": {
+              "etag": "\"df53cafd3a4ca0f64f25978aa75f6593\"",
+              "last_modified": "2026-11-03T09:13:54+00:00",
+              "size": 434,
+              "metadata": {
+                "sha256": "a21d09e55f32db12b4a63a2f28cccd90adbbbb8057f349e106d904494119d60d"
+              }
+            },
+            "planned_exit_code": 23,
+            "cutpoint": "after-real-second-s3-put-before-sql-receipt",
+            "observed_at": "2026-11-03T09:13:54.270569+00:00"
+          }
+        }
+      ]
+    },
+    "resume": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "pod_name": "compact-target-s4-resume-v1-nkfwk",
+      "pod_uid": "798e8fa9-bbb2-45ba-8bda-cff9b7679ece",
+      "ready": false,
+      "container_exit_code": 0,
+      "receipts": [
+        {
+          "marker": "COMPACT_S4_COPY_RESUMED",
+          "value": {
+            "migration_id": "10882ec0e0e0447e8fd96fea651f604a",
+            "copied": 10,
+            "unreceipted_object_reused_without_overwrite": true
+          }
+        },
+        {
+          "marker": "COMPACT_S4_CUTOVER",
+          "value": {
+            "migration_id": "10882ec0e0e0447e8fd96fea651f604a",
+            "plan_hash": "ecf80cbc6743f38c892e4dc4e0344c9bf6797780de87a17c2be2e0489a48fd97",
+            "source_revision": "75706f1d58222f637def24873fd9db0f7ccef4b40b8558d3f23d5752ddeaa311",
+            "store_id": "compact-c5t-s3",
+            "objects_verified": 10,
+            "actual_process_crash_exit": 23,
+            "one_durable_receipt_and_one_orphan_reconciled": true,
+            "unreceipted_object_not_overwritten": true,
+            "cutover": true,
+            "repeat_cutover_same_outcome": true,
+            "source_all_off": true,
+            "source_data_retained": true,
+            "replica_identity_rows": 0,
+            "work_items": 0,
+            "legacy_generation_state_still_absent": true,
+            "checkpoint_version": 2,
+            "queued_export_unchanged": true,
+            "approval_not_executed": true,
+            "bundle_queued_protocol": 2,
+            "frozen_bundle_exact_original_cutoff": true,
+            "frozen_event_ids": [
+              "938cf31d-2c64-458f-97f1-027cd17c5e34"
+            ],
+            "raw_history_events": 13,
+            "original_capture_expiry_preserved": true,
+            "build_fingerprint": "272756ead9c815d2aca9ef671e4bfc8e4f0d99fd7ad85718b0d512f9dafac0a7",
+            "application_started": false
+          }
+        }
+      ]
+    }
+  },
+  "s4_cutover": {
+    "migration_id": "10882ec0e0e0447e8fd96fea651f604a",
+    "plan_hash": "ecf80cbc6743f38c892e4dc4e0344c9bf6797780de87a17c2be2e0489a48fd97",
+    "source_revision": "75706f1d58222f637def24873fd9db0f7ccef4b40b8558d3f23d5752ddeaa311",
+    "store_id": "compact-c5t-s3",
+    "objects_verified": 10,
+    "actual_process_crash_exit": 23,
+    "one_durable_receipt_and_one_orphan_reconciled": true,
+    "unreceipted_object_not_overwritten": true,
+    "cutover": true,
+    "repeat_cutover_same_outcome": true,
+    "source_all_off": true,
+    "source_data_retained": true,
+    "replica_identity_rows": 0,
+    "work_items": 0,
+    "legacy_generation_state_still_absent": true,
+    "checkpoint_version": 2,
+    "queued_export_unchanged": true,
+    "approval_not_executed": true,
+    "bundle_queued_protocol": 2,
+    "frozen_bundle_exact_original_cutoff": true,
+    "frozen_event_ids": [
+      "938cf31d-2c64-458f-97f1-027cd17c5e34"
+    ],
+    "raw_history_events": 13,
+    "original_capture_expiry_preserved": true,
+    "build_fingerprint": "272756ead9c815d2aca9ef671e4bfc8e4f0d99fd7ad85718b0d512f9dafac0a7",
+    "application_started": false
+  },
+  "s4_backup_evidence": {
+    "actual_ciphertexts_mirrored": {
+      "mirrored_files": 3,
+      "actual_ciphertext_copies": true,
+      "independent_pc_original_retained": true,
+      "key_transferred": false
+    },
+    "ciphertext_mirror_archive_sha256": "e93d5ba05aa1ae67de33b7c441cf0fe42a8d4148ccef37e0847c0d90f5f6b91a",
+    "backup_proof_sha256": "0a9a63893731fb3541618a5740a70c78744417f68c33d0945737d7e63ef8de90",
+    "independent_manifest_sha256": "b74a96f7b044a93822206885f21ff30e4bfdde01e1873e09c8bf42ae7cd0b787",
+    "source_revision": "75706f1d58222f637def24873fd9db0f7ccef4b40b8558d3f23d5752ddeaa311",
+    "independent_pc_original_retained": true,
+    "encryption_key_transferred": false
+  },
+  "current_frontend": {
+    "build": {
+      "container_id": "43b18235e3883c778a7397276931e67314110a7d2e0a5dc25c61fd6603517dd4",
+      "exit_code": 0,
+      "oom": false,
+      "source_files": 366,
+      "source_files_unchanged": true,
+      "all_source_files_readonly": true,
+      "compiled_revision_present": true,
+      "standalone_server_sha256": "1fbc2ef5f2622f48f8c728f7a9adbe880e99c01136a4600a7aba71ee41d5bbdc",
+      "build_id": "hKRW12mbQWOwcsaVHKnyP",
+      "app_routes": 19,
+      "health_rewrite": "http://backend:8000/health",
+      "output_bytes": 125707510,
+      "free_bytes": 16080175104,
+      "capacity_floor_with_full_target_growth_bytes": 13510035046,
+      "postcheck_only_reconciled": true,
+      "build_repeated": false,
+      "original_postcheck_error": "Directory package name matched *.js; filter regular files before reading"
+    },
+    "runtime": {
+      "operation_id": "47c3fb55015248d4873057fd8b212093",
+      "build_exit": 0,
+      "image_id": "sha256:5bc5ab86dea7b9c8e213284d022177f64366bac9053b41d96cf499bcb111be41",
+      "tag": "okf-frontend:replicas-a95d589-current-47c3fb550152",
+      "source_identity": "c381bec9e3938034b671bb23a1eb152aa8d3307f762295a58019a7558c3e6f30",
+      "source_files": 366,
+      "all_runtime_files_exact": true,
+      "probe": {
+        "node": "v20.20.2",
+        "next": "16.4.2",
+        "uid": 1000,
+        "files": 2177,
+        "tree_sha256": "36ffd09e90959dd7fd4ee0f366bdd0df5a0aa1e6a935e105d73b9c50cbfc5c50",
+        "build_id": "hKRW12mbQWOwcsaVHKnyP",
+        "revision": "a95d5894c87cadf50ccf8259f55034e5522e0003"
+      },
+      "base_image": "sha256:7e2880dfc2580529c34c7c2ce221148511e2121341a23bfea22c9d19d33f02b5",
+      "cached_prefix_layers": 12,
+      "layers": 14,
+      "image_size": 353831691,
+      "free_bytes": 15814877184
+    },
+    "kind_import": {
+      "operation_id": "3d27f441f3d04ab8b8a6ca08ad348ac4",
+      "producer_exit": 0,
+      "consumer_exit": 0,
+      "exit_codes_reconstructed_from_success_guarded_saved_worker_error": true,
+      "kind_image_id": "sha256:4f41f1c72d1815d1a68ebb98ccaa321cbf6b380019ef4c9488ab6b6ac9e435c1",
+      "kind_repo_digests": [
+        "docker.io/library/import-2026-11-03@sha256:eebf4d7ad177f43a8cef10eade6fb5ccc92ae8177bd4e22c9d497c908cdfe4c9"
+      ],
+      "rootfs_exact": true,
+      "free_bytes": 15735029760,
+      "import_repeated": false,
+      "post_import_verifier_error": "CRI image tag was not observable immediately after import; exact fully qualified image verified later"
+    },
+    "source_unchanged_between_a95d589_and_b5a9775": true
+  },
+  "held_adoption": {
+    "operation_id": "882e7befb4b741068631cd62d350d70e",
+    "job": {
+      "kind": "Job",
+      "name": "compact-target-held-adoption-v1",
+      "uid": "d59a88f9-6eca-4dc3-b059-ddd57abcaf1c"
+    },
+    "receipt": {
+      "operation_id": "882e7befb4b741068631cd62d350d70e",
+      "owner_id": "owned-compact-c5t-adoption",
+      "identity": {
+        "artifact_backend": "s3",
+        "artifact_store_id": "compact-c5t-s3",
+        "deployment_schema": "replicas-v1",
+        "installation_id": "73545d7af3a9493485dde22d2d379270",
+        "runtime_fingerprint": "ae195a81b9851c2bd5effaddd29c5fb2616ce29ac8c060d7aa53614ffc6ae3a9",
+        "storage_receipt_digest": "sha256:e67ebe7eabc8b085eea541d761b33059c9c54e49d8dcfa6ae359f4bd8d2042cd",
+        "version": 1
+      },
+      "maintenance_epoch": 1,
+      "jobs_held": true,
+      "workloads_started": false,
+      "handoff_intents": 3,
+      "handoff_recipes": [
+        "diagnostic_frozen.v1",
+        "document_resume.v1",
+        "export.v1"
+      ],
+      "work": [
+        {
+          "id": "87a6b493ccd5518db3abfb21c70f9592",
+          "kind": "diagnostic_bundle",
+          "payload_version": 2,
+          "status": "queued",
+          "attempts": 0
+        },
+        {
+          "id": "36ccc29f35a4505599f051eab25f60fc",
+          "kind": "document",
+          "payload_version": 1,
+          "status": "queued",
+          "attempts": 0
+        },
+        {
+          "id": "127ab099fdca5a97a877d46f4a8c9bdf",
+          "kind": "export",
+          "payload_version": 1,
+          "status": "queued",
+          "attempts": 0
+        }
+      ],
+      "legacy_generation_state_absent": true,
+      "approval_not_executed": true,
+      "provider_probe_receipt": {
+        "version": 1,
+        "installation_id": "73545d7af3a9493485dde22d2d379270",
+        "namespace": "replica-test-c5t20261103",
+        "store_id": "compact-c5t-s3",
+        "backend": "s3",
+        "descriptor_sha256": "787c792dabf71b5db4a4c3152f38a74d81da2b04fa8b9a0091898f65c3a40574",
+        "selection_digest": "sha256:fab7bd055341f55898b78864b3aea54037b7256aa9d73090d8db67fe658263f1",
+        "checks": [
+          "conditional_put",
+          "cold_read",
+          "range_read",
+          "delete"
+        ],
+        "qualification": "basic-bootstrap-only"
+      },
+      "source_snapshot_sha256": "11d23c11469cf4472b107dae38600c61c161e30561f76994349187dc5248e360",
+      "handoff_plan_sha256": "4f5f4fd924877b3dc64f6c583bcf6c74aa388cf2274868f00ef5d0785976e4c6",
+      "retry_same_operation_verified": true,
+      "build_fingerprint": "272756ead9c815d2aca9ef671e4bfc8e4f0d99fd7ad85718b0d512f9dafac0a7"
+    },
+    "same_operation_retry": true,
+    "all_deployments_stopped_before_release": true,
+    "image_default_configuration_mismatch": {
+      "field": "archive_7zip_path",
+      "failed_probe": {
+        "kind": "Job",
+        "name": "compact-target-held-probe-v1",
+        "uid": "58e8e609-15f5-4ea3-bb94-a775975f5e30"
+      },
+      "diagnostic": {
+        "succeeded": 1,
+        "failed": 0,
+        "active": 0,
+        "receipts": [
+          {
+            "different_fields": [
+              "runtime_identity_file",
+              "archive_7zip_path"
+            ],
+            "errors": [
+              {
+                "location": [],
+                "type": "value_error",
+                "message": "Value error, Replica runtime identity does not match this configuration/build"
+              }
+            ]
+          }
+        ]
+      },
+      "audited_rebind": {
+        "succeeded": 1,
+        "failed": 0,
+        "active": 0,
+        "receipts": [
+          {
+            "operation_id": "882e7befb4b741068631cd62d350d70e",
+            "identity": {
+              "version": 1,
+              "deployment_schema": "replicas-v1",
+              "installation_id": "73545d7af3a9493485dde22d2d379270",
+              "artifact_backend": "s3",
+              "artifact_store_id": "compact-c5t-s3",
+              "storage_receipt_digest": "sha256:e67ebe7eabc8b085eea541d761b33059c9c54e49d8dcfa6ae359f4bd8d2042cd",
+              "runtime_fingerprint": "bef51dcf4c6dc2f227d174d993da5bc862c5a31510b956f5fadb15d3591c5ebd"
+            },
+            "maintenance_epoch": 1,
+            "jobs_held": true,
+            "work_pristine": true,
+            "retry_verified": true,
+            "changed_setting": "archive_7zip_path",
+            "archive_helper_present": true
+          }
+        ]
+      }
+    },
+    "initial_normal_runtime_probe": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "receipts": [
+        {
+          "maintenance_epoch": 1,
+          "normal_settings_identity_valid": true,
+          "runtime_fingerprint": "bef51dcf4c6dc2f227d174d993da5bc862c5a31510b956f5fadb15d3591c5ebd",
+          "build_fingerprint": "272756ead9c815d2aca9ef671e4bfc8e4f0d99fd7ad85718b0d512f9dafac0a7",
+          "normal_claim_denied": true,
+          "pristine_queued_work": 3,
+          "scoped_runtime_role": true
+        }
+      ]
+    },
+    "first_explicit_release": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "receipts": [
+        {
+          "operation_id": "882e7befb4b741068631cd62d350d70e",
+          "owner_id": "owned-compact-c5t-adoption",
+          "maintenance_epoch": 1,
+          "jobs_held": false,
+          "workloads_started": false,
+          "runtime_fingerprint": "bef51dcf4c6dc2f227d174d993da5bc862c5a31510b956f5fadb15d3591c5ebd",
+          "all_six_writers_verified_stopped": true
+        }
+      ]
+    }
+  },
+  "scoped_readiness_fix": {
+    "revision": "b5a97759472a0e2113ecf2e814ecb15e6b8cc98c",
+    "actual_causal_probe": {
+      "head_bucket": {
+        "status": 403,
+        "code": "403"
+      },
+      "list_objects_v2": {
+        "status": 200,
+        "objects": 1
+      }
+    },
+    "cause": "HEAD bucket cannot use prefix-conditioned ListBucket; limited prefix listing succeeds with the same credentials.",
+    "iam_grants_expanded": false,
+    "windows_runtime_and_artifact_tests": 23,
+    "windows_health_tests": 13,
+    "linux": {
+      "container_id": "cdcc38a5ba652dfcec52bf0cbad969d54edf7888bcd75e90e3e679f0fd4d3507",
+      "running": false,
+      "exit_code": 0,
+      "oom": false,
+      "source_unchanged": true,
+      "tests": 190,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "f73daf6f40daaff0bac023a740758ab1a434379373a6ccdc05897933b180e61a"
+    },
+    "operator_hold": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "receipts": [
+        {
+          "operation_id": "8a94d88d9b7948748d700c5b3790141c",
+          "owner_id": "owned-compact-readiness-fix",
+          "maintenance_epoch": 2,
+          "jobs_held": true,
+          "pristine_work_items": 3,
+          "unknown_provider_owners": 0,
+          "all_roles_stopped": true
+        }
+      ]
+    },
+    "audited_runtime_upgrade": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "receipts": [
+        {
+          "operation_id": "8a94d88d9b7948748d700c5b3790141c",
+          "identity": {
+            "version": 1,
+            "deployment_schema": "replicas-v1",
+            "installation_id": "73545d7af3a9493485dde22d2d379270",
+            "artifact_backend": "s3",
+            "artifact_store_id": "compact-c5t-s3",
+            "storage_receipt_digest": "sha256:e67ebe7eabc8b085eea541d761b33059c9c54e49d8dcfa6ae359f4bd8d2042cd",
+            "runtime_fingerprint": "36cd8583db5e7566741e9f6e796fac16bcd675b376e3f72c26c34049a75e3ac6"
+          },
+          "maintenance_epoch": 2,
+          "jobs_held": true,
+          "work_pristine": true,
+          "retry_verified": true,
+          "build_fingerprint": "8ebd0c1e6d846fccdd84d813373bd593add24e6bfefc6eb3489f482cdc745180"
+        }
+      ]
+    },
+    "normal_settings_held_probe": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "receipts": [
+        {
+          "maintenance_epoch": 2,
+          "normal_settings_identity_valid": true,
+          "runtime_fingerprint": "36cd8583db5e7566741e9f6e796fac16bcd675b376e3f72c26c34049a75e3ac6",
+          "build_fingerprint": "8ebd0c1e6d846fccdd84d813373bd593add24e6bfefc6eb3489f482cdc745180",
+          "normal_claim_denied": true,
+          "pristine_queued_work": 3,
+          "scoped_runtime_role": true
+        }
+      ]
+    },
+    "release": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "receipts": [
+        {
+          "operation_id": "8a94d88d9b7948748d700c5b3790141c",
+          "owner_id": "owned-compact-readiness-fix",
+          "maintenance_epoch": 2,
+          "jobs_held": false,
+          "workloads_started": false,
+          "runtime_fingerprint": "36cd8583db5e7566741e9f6e796fac16bcd675b376e3f72c26c34049a75e3ac6",
+          "all_six_writers_verified_stopped": true
+        }
+      ]
+    }
+  },
+  "application_acceptance": {
+    "runtime_identity_fingerprint": "36cd8583db5e7566741e9f6e796fac16bcd675b376e3f72c26c34049a75e3ac6",
+    "maintenance_epoch_during_run": 2,
+    "ready_topology": {
+      "expected_pods": 7,
+      "ready": 7,
+      "pods": [
+        {
+          "name": "api-6b556cdc48-4vs8t",
+          "uid": "27ff0ed6-2e4c-4115-a11d-e16ec4f5cff0",
+          "role": "api",
+          "phase": "Running",
+          "ready": true,
+          "restarts": 0,
+          "waiting": [
+            null
+          ],
+          "terminated": [],
+          "containers": [
+            {
+              "name": "api",
+              "image": "docker.io/library/okf-backend:replicas-b5a9775-prefix-0cdf2cf85579",
+              "image_id": "docker.io/library/import-2026-11-03@sha256:cf1d635b31d4357cd6e928b5ee012e7486315a80c7aa41c34bcee4dd59dc13c3"
+            }
+          ]
+        },
+        {
+          "name": "api-6b556cdc48-w2lfj",
+          "uid": "e57792a9-49f6-426e-886b-69a439d2ed6f",
+          "role": "api",
+          "phase": "Running",
+          "ready": true,
+          "restarts": 0,
+          "waiting": [
+            null
+          ],
+          "terminated": [],
+          "containers": [
+            {
+              "name": "api",
+              "image": "docker.io/library/okf-backend:replicas-b5a9775-prefix-0cdf2cf85579",
+              "image_id": "docker.io/library/import-2026-11-03@sha256:cf1d635b31d4357cd6e928b5ee012e7486315a80c7aa41c34bcee4dd59dc13c3"
+            }
+          ]
+        },
+        {
+          "name": "frontend-85d64bbc59-dgbj8",
+          "uid": "81dcdee6-e564-4178-aa16-878c8a97fc4c",
+          "role": "frontend",
+          "phase": "Running",
+          "ready": true,
+          "restarts": 0,
+          "waiting": [
+            null
+          ],
+          "terminated": [],
+          "containers": [
+            {
+              "name": "frontend",
+              "image": "docker.io/library/okf-frontend:replicas-a95d589-current-47c3fb550152",
+              "image_id": "docker.io/library/import-2026-11-03@sha256:eebf4d7ad177f43a8cef10eade6fb5ccc92ae8177bd4e22c9d497c908cdfe4c9"
+            }
+          ]
+        },
+        {
+          "name": "frontend-85d64bbc59-nxt57",
+          "uid": "8be50a0d-ebd9-4a10-b64f-a935478ac7b1",
+          "role": "frontend",
+          "phase": "Running",
+          "ready": true,
+          "restarts": 0,
+          "waiting": [
+            null
+          ],
+          "terminated": [],
+          "containers": [
+            {
+              "name": "frontend",
+              "image": "docker.io/library/okf-frontend:replicas-a95d589-current-47c3fb550152",
+              "image_id": "docker.io/library/import-2026-11-03@sha256:eebf4d7ad177f43a8cef10eade6fb5ccc92ae8177bd4e22c9d497c908cdfe4c9"
+            }
+          ]
+        },
+        {
+          "name": "model-stub-fdfbdc744-7k8kd",
+          "uid": "8e60376b-70dd-450a-9d5a-d2d58826e712",
+          "role": "model-stub",
+          "phase": "Running",
+          "ready": true,
+          "restarts": 0,
+          "waiting": [
+            null
+          ],
+          "terminated": [],
+          "containers": [
+            {
+              "name": "model-stub",
+              "image": "docker.io/library/okf-model-stub:r5-active-f1852a67f4bd",
+              "image_id": "docker.io/library/import-2026-11-01@sha256:138688c8f2aab7cee19efcff389a9df802f7ea744796af381317dfaba5ec29c4"
+            }
+          ]
+        },
+        {
+          "name": "worker-79bbb6dc7f-kv75z",
+          "uid": "8581a1b7-9b59-4efe-8dd9-7106b5c8937b",
+          "role": "worker",
+          "phase": "Running",
+          "ready": true,
+          "restarts": 0,
+          "waiting": [
+            null
+          ],
+          "terminated": [],
+          "containers": [
+            {
+              "name": "worker",
+              "image": "docker.io/library/okf-backend:replicas-b5a9775-prefix-0cdf2cf85579",
+              "image_id": "docker.io/library/import-2026-11-03@sha256:cf1d635b31d4357cd6e928b5ee012e7486315a80c7aa41c34bcee4dd59dc13c3"
+            }
+          ]
+        },
+        {
+          "name": "worker-79bbb6dc7f-rlbnp",
+          "uid": "b2aba161-01c0-4cff-be93-240e8cbb120a",
+          "role": "worker",
+          "phase": "Running",
+          "ready": true,
+          "restarts": 0,
+          "waiting": [
+            null
+          ],
+          "terminated": [],
+          "containers": [
+            {
+              "name": "worker",
+              "image": "docker.io/library/okf-backend:replicas-b5a9775-prefix-0cdf2cf85579",
+              "image_id": "docker.io/library/import-2026-11-03@sha256:cf1d635b31d4357cd6e928b5ee012e7486315a80c7aa41c34bcee4dd59dc13c3"
+            }
+          ]
+        }
+      ],
+      "deployments": [
+        {
+          "name": "api",
+          "desired": 2,
+          "ready": 2,
+          "available": 2
+        },
+        {
+          "name": "frontend",
+          "desired": 2,
+          "ready": 2,
+          "available": 2
+        },
+        {
+          "name": "model-stub",
+          "desired": 1,
+          "ready": 1,
+          "available": 1
+        },
+        {
+          "name": "worker",
+          "desired": 2,
+          "ready": 2,
+          "available": 2
+        }
+      ]
+    },
+    "shared_identity_verified_in_all_four_backend_processes": true,
+    "handoff": [
+      {
+        "id": "87a6b493ccd5518db3abfb21c70f9592",
+        "kind": "diagnostic_bundle",
+        "status": "succeeded",
+        "attempts": 1,
+        "owner_id": null,
+        "lease_until": null,
+        "error_code": null,
+        "maintenance_epoch": 2
+      },
+      {
+        "id": "127ab099fdca5a97a877d46f4a8c9bdf",
+        "kind": "export",
+        "status": "succeeded",
+        "attempts": 1,
+        "owner_id": null,
+        "lease_until": null,
+        "error_code": null,
+        "maintenance_epoch": 2
+      },
+      {
+        "id": "36ccc29f35a4505599f051eab25f60fc",
+        "kind": "document",
+        "status": "succeeded",
+        "attempts": 1,
+        "owner_id": null,
+        "lease_until": null,
+        "error_code": null,
+        "maintenance_epoch": 2
+      }
+    ],
+    "resumed_document_active_generation": [
+      {
+        "id": "ef19984968bc46d4a39cf98a0b23c0b0",
+        "doc_id": "c400000000000002",
+        "phase": "active",
+        "work_id": "36ccc29f35a4505599f051eab25f60fc",
+        "work_fence": 1
+      }
+    ],
+    "http": {
+      "baseline": {
+        "exit_code": 0,
+        "receipt": {
+          "new_session_shared_across_two_frontends_and_two_apis": true,
+          "original_source_cookie_available": false,
+          "legacy_download_sha256": "6973b39d4ac70e293ab43e8fb7b8936f7131661f6f1796337ec7ee3a65f34bb3",
+          "legacy_search_on_both_frontends": true,
+          "pinned_pod_uids": [
+            "81dcdee6-e564-4178-aa16-878c8a97fc4c",
+            "8be50a0d-ebd9-4a10-b64f-a935478ac7b1",
+            "27ff0ed6-2e4c-4115-a11d-e16ec4f5cff0",
+            "e57792a9-49f6-426e-886b-69a439d2ed6f"
+          ]
+        }
+      },
+      "legacy-results": {
+        "exit_code": 0,
+        "receipt": {
+          "resumed_document_done": true,
+          "resumed_original_sha256": "0d3489cf95dd5035762c25e654afc861a921eea9788f3dc7da8b0d1e64dc6a40",
+          "queued_export_done": true,
+          "export_zip_valid": true,
+          "export_sha256": "51806b261a9f123520c9572b6bc440e76a6d436c974c87ff88a86df3893b13d5",
+          "approval_still_awaiting_and_not_executed": true,
+          "frozen_bundle_download_verified": true,
+          "frozen_bundle_sha256": "ce38cd47b2d8b5e094a31042b6f1258c958dc0a659885dc6bc1a24a1b600ac1a",
+          "frozen_original_event_ids": [
+            "938cf31d-2c64-458f-97f1-027cd17c5e34"
+          ]
+        }
+      },
+      "upload": {
+        "exit_code": 0,
+        "receipt": {
+          "document_id": "4a8b679705034642",
+          "original_sha256": "9eadad5d6b8911ab094b4fbf733eca7d642b0167d36481e4d8373481fb4881dd",
+          "same_document_on_cross_frontend_idempotent_retry": true
+        }
+      },
+      "new-result": {
+        "exit_code": 0,
+        "receipt": {
+          "document_id": "4a8b679705034642",
+          "done_without_problem": true,
+          "original_sha256_matches": true,
+          "bm25_search_matches": true
+        }
+      }
+    },
+    "integrity": {
+      "exit_code": 0,
+      "receipt": {
+        "original_ten_s4_objects_cold_verified": true,
+        "original_events_verified": 13,
+        "every_parsed_event_field_and_instant_preserved": true,
+        "original_capture_expiry_preserved": true,
+        "legacy_generation_state_still_absent": true,
+        "accepted_checkpoint_content_sha256": "b5b5098b3b67044a20d5ee59be9a7ff860168b5a722f14b9f9ae1721683de4b0",
+        "approval_not_executed": true,
+        "runtime_fingerprint": "36cd8583db5e7566741e9f6e796fac16bcd675b376e3f72c26c34049a75e3ac6"
+      }
+    },
+    "original_source_cookie_available": false
+  },
+  "graceful_closure": {
+    "new_target_held": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "receipts": [
+        {
+          "operation_id": "df0069189805480d89b9e790a5f3168a",
+          "owner_id": "owned-compact-rehearsal-stop",
+          "maintenance_epoch": 3,
+          "jobs_held": true,
+          "running_work": 0,
+          "unknown_provider_owners": 0,
+          "active_diagnostic_captures": 0,
+          "all_roles_stopped": true,
+          "data_retained": true
+        }
+      ]
+    },
+    "all_seven_controllers_stopped": true,
+    "source_and_target_containers": 0,
+    "new_target_pvcs_retained": 4,
+    "source_pvcs_retained": 3,
+    "forwards_closed": {
+      "stopped_owned_forward_pids": [
+        3328175,
+        3328180,
+        3328193,
+        3328198
+      ],
+      "external_listeners_created": false
+    },
+    "old_training_topology_restoration": "capacity-recovered-and-source-verified",
+    "data_deleted": false,
+    "old_training_topology": {
+      "namespace": "replica-test-r4o2t20261102",
+      "replicas": {
+        "frontend": 2,
+        "api": 2,
+        "worker": 2
+      },
+      "canonical_tables_unchanged": 9,
+      "pvc_identity_preserved": true
+    }
+  },
+  "final_backend_ci": {
+    "revision": "ccfcf9e9082eb178c01d44272c8fbbfff9210bf7",
+    "status": "full-frozen-linux-unit-and-optional-integration-verified",
+    "exact_git_blob_files": 2429,
+    "container_id": "4d7c6254231a9b370b596be9f6d4fdd76adecc18eb743e2f0c4dc78214686061",
+    "running": false,
+    "exit_code": 0,
+    "oom": false,
+    "junit": {
+      "tests": 6652,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 221,
+      "sha256": "7191c85b70f499b8e14b6c7bf7395f4c617a2f87438990d2c9c0eb6d487cac4d"
+    },
+    "expected_case_count_matches": true,
+    "failed_cases": [],
+    "source_unchanged": true,
+    "case_ids_complete": true,
+    "case_ids_sha256": "5f275956f844c21746f8ba5e1958c703d257a3fe0966fe0e18da50e243972086",
+    "coverage_totals": {
+      "covered_lines": 38426,
+      "num_statements": 43828,
+      "percent_covered": 87.67454595235922,
+      "percent_covered_display": "88",
+      "missing_lines": 5402,
+      "excluded_lines": 58,
+      "percent_statements_covered": 87.67454595235922,
+      "percent_statements_covered_display": "88"
+    },
+    "verified": true
+  },
+  "final_whole_branch_review": {
+    "base": "94d88697cc4629c63ab12fbd4fb7350f14eec3f9",
+    "head": "b5a97759472a0e2113ecf2e814ecb15e6b8cc98c",
+    "verdict": "request-changes",
+    "critical": 0,
+    "important": 5,
+    "minor": 0,
+    "fix_pass": "verified-one-consolidated-pass-no-re-review",
+    "read_only": true,
+    "reviewers": 1,
+    "issues": [
+      "atomic-upload-audit",
+      "same-key-dedup-race",
+      "bounded-original-scratch",
+      "slow-original-lease-renewal",
+      "live-backup-writer-stop-proof"
+    ],
+    "fix_head": "ccfcf9e9082eb178c01d44272c8fbbfff9210bf7",
+    "verification_report": "2026-11-03-replica-final-review-fixes.json"
+  },
+  "prior_b5_backend_ci": {
+    "revision": "b5a97759472a0e2113ecf2e814ecb15e6b8cc98c",
+    "status": "stopped-superseded-by-final-review-fixes",
+    "handle": {
+      "container_id": "83f6592fca11bad8668171cc000d94cf898349d0de5ef607eb739979d072db31",
+      "name": "okf-full-ci-b5-ccaa5567fbde",
+      "source_files": 2422,
+      "expected_cases": 6631,
+      "revision": "b5a97759472a0e2113ecf2e814ecb15e6b8cc98c",
+      "memory_available_before": 3357810688,
+      "free_before": 15599157248,
+      "application_settings_env_overrides": false,
+      "logical_tmpfs_bytes": 4294967296,
+      "memory_limit_bytes": 2952790016
+    },
+    "exact_git_blob_files": 2422,
+    "source_manifest_sha256": "1a676a239baab80ab58b514ec937d486934c5fdb8cd9a39474ddb87e8d0dab86",
+    "focused_190_does_not_replace_full_ci": true,
+    "cancellation": {
+      "container_id": "83f6592fca11bad8668171cc000d94cf898349d0de5ef607eb739979d072db31",
+      "phase": "stopped-superseded-by-review-fixes",
+      "reason": "Final whole-branch review fix pass supersedes this source revision",
+      "started_at": "2026-11-03T10:48:17.639133392Z",
+      "exit_code": 137,
+      "oom": false,
+      "source_unchanged": true,
+      "full_ci_pass": false,
+      "all_outputs_retained_on_same_vm": true
+    },
+    "cpu_admission": {
+      "container_id": "83f6592fca11bad8668171cc000d94cf898349d0de5ef607eb739979d072db31",
+      "phase": "cpu-budget-updated-without-restart",
+      "before_cpus": 1,
+      "after_cpus": 2,
+      "vm_vcpus": 8,
+      "loadavg_before": 2.2099609375,
+      "memory_limit_unchanged": true,
+      "source_unchanged": true,
+      "container_restarted": false
+    }
+  },
+  "final_ci_capacity_closure": {
+    "operation_id": "1aad5b0bdd4a48cb9740f14f95abddda",
+    "namespace": "replica-test-r4o2t20261102",
+    "phase": "capacity-recovered-and-source-verified",
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "canonical_tables_unchanged": 9,
+    "pvc_identity_preserved": true
   }
 }

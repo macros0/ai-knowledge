@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "status": "authorized-real-nfs-csi-two-pod-adapter-contract-passed",
+  "observed_at": "2026-11-03T14:31:30.516839+00:00",
+  "operation_id": "c2e04101020a459797950f48dc6bc811",
+  "scope": "Owned single-VM/single-kind-node basic NFS platform and two independent Pod processes; not cross-node cache/failure-domain, application end-to-end, independent restore or production qualification",
+  "authorization": {
+    "question_id": "call_02e763be41114d3290d5ba3b9aefe8de",
+    "user_answer": "\u0420\u0430\u0437\u0440\u0435\u0448\u0430\u044e \u0443\u0447\u0435\u0431\u043d\u044b\u0439 NFS/CSI \u043f\u043e \u043f\u0430\u043a\u0435\u0442\u0443"
+  },
+  "namespace": "okf-replica-rwx-system",
+  "platform": {
+    "kubernetes": "v1.36.4",
+    "node": "okf-policy-control-plane",
+    "node_uid": "9020a1d9-843e-4947-8808-53477289b863",
+    "os": "Ubuntu24.04.5",
+    "kernel": "6.8.0-147-generic",
+    "physical_failure_domains": 1
+  },
+  "host": {
+    "nfs_version": "4.1",
+    "listen": "172.18.0.1:2049",
+    "allowed_client": "172.18.0.2",
+    "transport": "private Docker bridge only; sec=sys/root_squash; no production TLS/auth claim",
+    "bounded_regular_file_bytes": 1073741824,
+    "filesystem_bytes": 1020702720,
+    "filesystem": "ext4 on a new loopback regular file",
+    "rpcbind_network_services_disabled": true,
+    "quotas": "One1GiB backing filesystem shared by test PV directories; PVC requested capacity is not a per-PVC quota"
+  },
+  "packages": {
+    "nfs-common": {
+      "version": "1:2.6.4-3ubuntu5.1",
+      "bytes": 248148,
+      "sha256": "c1224e6d3eb7beaa55e765d7288b4f9715a343e11f7ccea9cc1eb0dc33cf82cf"
+    },
+    "nfs-kernel-server": {
+      "version": "1:2.6.4-3ubuntu5.1",
+      "bytes": 169308,
+      "sha256": "1f5167d38fc64be869ebe14e3fad60c63f43a1633c60cffe820bf5891ead2934"
+    },
+    "rpcbind": {
+      "version": "1.2.6-7ubuntu2",
+      "bytes": 46472,
+      "sha256": "5a02b06acb55b9d2806ee2e757b234bae5a090e875564b0bf46e676438ec42f3"
+    },
+    "libnfsidmap1": {
+      "version": "1:2.6.4-3ubuntu5.1",
+      "bytes": 48314,
+      "sha256": "947a27066f6dd49bccb1f80ef6db8dabb9de6671b5cb2ec2a8e5648a78133117"
+    },
+    "keyutils": {
+      "version": "1.6.3-3build1",
+      "bytes": 56766,
+      "sha256": "9882ac38c3d4b44c597183c95744a74049d9bdc77dc4498ef1484c3cde26f1c2"
+    }
+  },
+  "csi": {
+    "chart_version": "4.13.6",
+    "chart_sha256": "9d7e1054dcf63012e43e7093c6b45893c39cebebc59c60580c5b355a1f99f830",
+    "images": {
+      "nfs": {
+        "repository": "registry.k8s.io/sig-storage/nfsplugin",
+        "tag": "v4.13.6",
+        "digest": "sha256:40663419bac36836b8e4ef6929199e35920e28f6a74a46892e1c125ea5f0ce0b"
+      },
+      "csiProvisioner": {
+        "repository": "registry.k8s.io/sig-storage/csi-provisioner",
+        "tag": "v6.3.0",
+        "digest": "sha256:a4b0b1a37605b7b04a293e136edf7006ec1786a8eb3f4e5a945f81d667dcc371"
+      },
+      "csiResizer": {
+        "repository": "registry.k8s.io/sig-storage/csi-resizer",
+        "tag": "v2.2.1",
+        "digest": "sha256:ea1d25e23479000c7e8eeb92d827df66258df4e482ca054c5e7ce3fc0f5c41a5"
+      },
+      "livenessProbe": {
+        "repository": "registry.k8s.io/sig-storage/livenessprobe",
+        "tag": "v2.19.0",
+        "digest": "sha256:06da0d5b8908072f2e4522692aee8dc119fba7247a9658497e1153992cd777e9"
+      },
+      "nodeDriverRegistrar": {
+        "repository": "registry.k8s.io/sig-storage/csi-node-driver-registrar",
+        "tag": "v2.17.0",
+        "digest": "sha256:f9de845b170155199f2a2a3f9531cf13d78e31235e9db6b6582a8b0db0a50dad"
+      }
+    },
+    "driver": "okf-training-nfs.csi.k8s.io",
+    "storage_class": "okf-training-rwx-retain",
+    "reclaim_policy": "Retain",
+    "default_storageclass_changed": false,
+    "crds_created": 0,
+    "resources_created": 11,
+    "cluster_scoped_created": 6,
+    "execution": "Pinned official chart rendered and create-only applied with per-object UID journal; not an adopted Helm release",
+    "pods": [
+      {
+        "name": "okf-training-nfs-controller-6cc99b4f56-6s48c",
+        "uid": "0d3c5329-c4cb-4356-b8a6-9da5704b1aa1",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "reasons": []
+      },
+      {
+        "name": "okf-training-nfs-node-27z88",
+        "uid": "070192be-2b39-4652-80f1-e955f6c882a7",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "reasons": []
+      }
+    ]
+  },
+  "install_history": {
+    "initial": "offline apt --no-download refused local archives before any package installation; guard retained, image absent, dpkg audit clean",
+    "recovery": "Same operation verified old worker exit, source/guard/deb hashes and all five uninstalled package states; installed only those reviewed offline debs through dpkg",
+    "previous_sources_and_logs_retained": true,
+    "host_setup_final": "verified"
+  },
+  "runtime_probe_image": {
+    "revision": "ccfcf9e9082eb178c01d44272c8fbbfff9210bf7",
+    "docker_id": "sha256:82db855fcfb845676676a43fe7fab9a3eba08212f2944c6b03f1f4e68ca386ad",
+    "kind_id": "sha256:4d53e99f9ab8486741c0cd4396b2e117c70276191a627bab7ab588c9121f4e01",
+    "kind_repo_digests": [
+      "docker.io/library/import-2026-11-03@sha256:d76075d3b6ffa56894677d3819133ef9479e96922635360a691ba6656646b27c"
+    ],
+    "build_fingerprint": "29e462d6258e3a4317f5bf4a0d056d87383e4b060a17ed2409bf4b056177a90a",
+    "git_files_verified": 573,
+    "app_files_verified": 578
+  },
+  "contract": {
+    "status": "two-pod-real-nfs-adapter-contract-passed",
+    "mount_type": "nfs4",
+    "idempotency": true,
+    "conflicting_content_refused": true,
+    "cold_other_pod_read": true,
+    "range_read": true,
+    "concurrent_creators": 2,
+    "winners": 1,
+    "conflicts": 1,
+    "known_probe_objects_deleted": 2,
+    "production_or_ha_qualification": false,
+    "volume": {
+      "name": "pvc-393ed6a2-5825-47fc-93ca-d089ab1a3990",
+      "uid": "8926d3e9-2f2c-48bf-b9bc-58aa2c10eb91",
+      "driver": "okf-training-nfs.csi.k8s.io",
+      "reclaim_policy": "Retain"
+    },
+    "pods": [
+      {
+        "name": "rwx-contract-c2e04101020a-a",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "reasons": []
+      },
+      {
+        "name": "rwx-contract-c2e04101020a-b",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "reasons": []
+      }
+    ],
+    "probe_namespace_network": "Deny-all ingress/egress; NFS mount performed by CSI on node",
+    "pod_security": "UID/GID1000, non-root, read-only root, no SA token, all capabilities dropped",
+    "new_probe_objects": 2,
+    "fixture_payload_bytes": 16384,
+    "raw_fixture_data_exported": false,
+    "test_pvc_and_barrier_metadata": "retained; never deleted as part of object cleanup",
+    "probe_cleanup": {
+      "probe_pods_absent": true,
+      "live_probe_cri": 0,
+      "claim_retained": true,
+      "claim_uid": "393ed6a2-5825-47fc-93ca-d089ab1a3990"
+    }
+  },
+  "remaining": [
+    "current application2/2/2 upload-publish-search-download-export on RWX",
+    "storage-server loss/restart and ownership behavior",
+    "bounded full-filesystem application behavior",
+    "independent RWX provider restore",
+    "cross-node cache and failure-domain tests",
+    "external/mixed profile end-to-end"
+  ],
+  "certification": null,
+  "production_backup_schedule": "disabled"
+}

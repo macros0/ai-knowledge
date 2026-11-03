@@ -66,7 +66,7 @@ refusal is not completion of legacy queue migration.
   preserving approval decisions and immutable accepted inputs; unknown recipes
   remain held/refused. Verify interrupted handoff resumes without duplicate work
   or changing the original intent, and no work executes during adoption.
-- [ ] Exercise a populated legacy compact source and NULL/missing generations
+- [x] Exercise a populated legacy compact source and NULL/missing generations
   through actual schema/S4/handoff/held-adoption/provider verification/release in
   a disposable target, with independently verified backup and source-off proof.
   Search/download/new publication and queued work require functional evidence.
@@ -225,46 +225,46 @@ No new upload of an older source snapshot is implied by permission for 5f5c43d.
   verified the same PVCs/runtime and nine unchanged canonical tables. See
   [full Linux CI and image evidence](../reports/2026-11-03-replica-full-linux-backend-ci.json).
 
-- [ ] Reserve two fresh owned namespace identities, operation journals, volumes
+- [x] Reserve two fresh owned namespace identities, operation journals, volumes
   and scoped credentials. Prove capacity without touching foreign workloads.
   Restore any temporary capacity operation's original counts and verify its
   runtime/PVC/canonical data before starting a separate rehearsal operation.
-- [ ] Verify the old source image and official rpl04 schema. Populate only
+- [x] Verify the old source image and official rpl04 schema. Populate only
   synthetic accepted legacy files/SQL/Qdrant data. Include a completed legacy
   NULL-generation document, an interrupted accepted checkpoint, a pristine queued
   export, a stopped diagnostic capture with a pending protocol1 archive and an
   awaiting-approval job. Fixture creation must be explicit and recorded; never
   alter an installed source identity or running ownership to fit a test.
-- [ ] Establish a functional compact baseline (search and original download
+- [x] Establish a functional compact baseline (search and original download
   hashes), then stop every source writer physically. Record UID/spec/process/
   provider observations, not expiry-based declarations. Freeze the complete
   source inventory and accepted queued inputs after that stop.
-- [ ] Produce an independently encrypted PC backup before schema mutation.
+- [x] Produce an independently encrypted PC backup before schema mutation.
   Reuse the authenticated backup codec and native provider primitives, but do not
   fabricate a replica identity to pass `replica_backup.sql_source`: that recipe
   deliberately requires an installed rpl05 runtime. The compact recipe must bind
   its own original installation/schema/source inventory and be restored and
   verified before it can authorize conversion.
-- [ ] Restore that copy into the fresh target with application roles at zero
+- [x] Restore that copy into the fresh target with application roles at zero
   and the original source unavailable. Verify full SQL logical rows, original
   files, Qdrant data and diagnostic/control inputs before migration. Legacy FS
   metadata needs explicit nanosecond mtime preservation: queued exports bind
   `mtime_ns`, and baseline/capture retention must not be renewed by copying.
   A tar float timestamp alone is insufficient proof. Never overwrite the source.
-- [ ] Run the official Alembic chain from the actual restored schema to head;
+- [x] Run the official Alembic chain from the actual restored schema to head;
   no stamp/create_all workaround. Run S4 plan/copy/target read-back/cutover with
   the real independent backup, physical writer proof and frozen diagnostic
   inputs. Preserve NULL-generation originals and accepted checkpoint semantics.
-- [ ] Execute compact inspect/handoff/adopt against the actual target PostgreSQL
+- [x] Execute compact inspect/handoff/adopt against the actual target PostgreSQL
   and selected provider. Check held epoch1, pristine versioned queued WorkItems,
   preserved approvals/auth/reference/audit state, same-operation retry and zero
   execution before release. Publish only the matching common runtime identity.
-- [ ] Verify provider transport/permissions and the exact current image before
+- [x] Verify provider transport/permissions and the exact current image before
   explicit release. Start 2 frontend/2 API/2 worker instances; prove original
   search/download hashes, original diagnostic cutoff, queued export/resume,
   awaiting-approval nonexecution and one new publication. Compare generations
   before execution separately from legitimate queued-work changes afterwards.
-- [ ] Preserve source/backup/target evidence and restore intended topology.
+- [x] Preserve source/backup/target evidence and restore intended topology.
   Publish bounded observations and explicit scope; do not qualify RWX/CSI,
   external providers, physical HA or an issuer from this one managed/stub recipe.
 
@@ -273,3 +273,5 @@ inputs may use pytest failed-only retention on bounded tmpfs; failed inputs,
 JUnit and coverage stay on the VM. Raw CI payload export to the PC remains
 prohibited. Resource exhaustion or an unobserved terminal outcome fails the CI
 gate and must not be reported as a successful skip.
+
+2026-11-03 actual rehearsal: [bounded evidence](../reports/2026-11-03-replica-compact-independent-restore.json). Independent source-off restore, official schema/S4 actual exit23/resume, held atomic three-intent handoff/adoption/retry and2/2/2 functional acceptance passed. The accepted checkpoint text and original diagnostic cutoff/13 events/expiry survived; awaiting-approval remained unexecuted and a new DOCX was published/searchable/downloaded by SHA. Image-default7-Zip mismatch was reconciled by an audited held rebind. Actual prefix-scoped S3 readiness refusal led to b5a9775 RED/GREEN fix,36 Windows and190 Linux passes without skips, a verified new image and another held upgrade/release. The new target is gracefully stopped at held epoch3 with all four PVCs retained. The prior training installation has returned to2/2/2 with the same runtime/PVCs and nine unchanged canonical tables. The single final branch review found five Important issues; the consolidated RED/GREEN fix pass is complete. Full ccfcf9e CI executed6652 exact cases:6431 passes/221 explicit optional skips/zero failures/errors and87.67% coverage; all2429 Git files stayed unchanged. The exact573-file runtime was built and imported, and the separate final-CI capacity operation restored2/2/2 with the same runtime/PVCs and nine unchanged canonical tables. Cancelled/failed earlier runs retain their original outcomes. Current application/provider qualification and profile certification remain separate gates.

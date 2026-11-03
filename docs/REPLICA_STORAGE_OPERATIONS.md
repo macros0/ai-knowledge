@@ -3,8 +3,9 @@
 Implementation status, 2026-11-01: basic managed PostgreSQL/Qdrant/S3 templates and
 external/mixed application wiring are implemented. Production activation still
 requires the remaining O1 provider checks, O2 recovery and R5/O3 acceptance.
-Managed RWX has no selected platform recipe or installation permission yet; an
-existing verified RWX claim can be used by the application. Resilient is rejected.
+The separately admitted training RWX recipe now has a real NFS/CSI bootstrap and
+two-Pod adapter proof. An existing verified RWX claim can be used by the application;
+current RWX application/restore/cross-node gates remain open. Resilient is rejected.
 
 ## Selected basic recipes
 
@@ -496,3 +497,21 @@ also verified a real rpl04→rpl05 transition in a new target, new scoped identi
 source auth cleanup, explicit release and original/fresh functional checks.
 Compact/NULL-generation and other adoption/update recipes, key recovery, alert
 delivery and the other providers remain open. Production backup scheduling staysOFF.
+
+## NFS/RWX training bootstrap (2026-11-03)
+
+The user separately admitted an isolated NFS platform on VM103. Official CSI4.13.6
+and all five container images are pinned by digest; six cluster-scoped resources,
+a separate namespace and a nondefault Retain StorageClass were created with UID
+journals. NFSv4 is bound to the private kind bridge and exports only to the bound
+node. Its new ext4 regular-file filesystem is limited to1GiB shared across test PV
+directories. RPC bind/statd network services are masked; root_squash is enabled.
+
+The [actual two-Pod provider proof](superpowers/reports/2026-11-03-replica-nfs-rwx-bootstrap.json)
+passed immutable/idempotent creation, cross-Pod read/range, one-winner concurrent
+creation and deletion of its two known synthetic objects. Failed initial offline
+apt and successful same-operation dpkg recovery retain separate evidence. The
+current backend image matches the full ccfcf9e CI and573 copied Git files.
+RWX application/restore/full-storage/cross-node and external/mixed qualification
+remain open. The earlier key-recovery and local-alert gates have separate completed
+training reports; production scheduling staysOFF and certification staysnull.
