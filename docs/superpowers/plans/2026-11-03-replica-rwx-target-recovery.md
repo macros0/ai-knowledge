@@ -43,8 +43,8 @@ CLI adds `--rwx-source-binding` as a bounded projected non-secret file.
 - [x] Write RED cases for the five review focus items and the exact supported mount layout.
 - [x] Run focused tests; confirm failures are missing proof/support rather than fixture errors.
 - [x] Implement strict binding/mount observation and pre-probe/transactional proof, preserving S3 behavior.
-- [ ] Run focused GREEN plus restore/bootstrap/backup/maintenance contracts; native NFS mount proof.
-- [ ] Document CLI/operator boundary, run mandatory checks, scan public artifacts and commit only owned files.
+- [x] Run focused GREEN plus restore/bootstrap/backup/maintenance contracts; native NFS mount proof.
+- [x] Document CLI/operator boundary, run mandatory checks, scan public artifacts and commit only owned files (implementation cf74f8a; subsequent evidence update below).
 
 ### Task 2: Current Linux image and independent RWX-target rehearsal
 
@@ -55,11 +55,21 @@ receipt, recovery/storage runbooks and acceptance matrix.
 kept with backup b620bc6fc5284e6bbd2311e5acec427e. Reuse the fresh empty retained
 `rwxt-artifacts` claim after binding/PV/Pod/native-container guards are rechecked.
 
-- [ ] Transfer minimal secret-free patch to the already authorized VM; run appropriate native/full current CI and build exact image.
-- [ ] Import backup bytes only into fresh stores, verify all SQL/sequences/points/blobs before identity changes.
-- [ ] Adopt held identity with real mount proof, verify normal runtime refusal before explicit release.
-- [ ] Verify2/2/2 old/new session, search/download/export and once-only business tasks; original source claim stays unmounted.
-- [ ] Close owned resources under maintenance, retain all PVCs, restore any borrowed capacity; publish bounded evidence including failures.
+- [x] Transfer minimal secret-free patch to the already authorized VM; run appropriate native/full current CI and build exact image.
+- [x] Import backup bytes only into fresh stores, verify all SQL/sequences/points/blobs before identity changes.
+- [x] Adopt held identity with real mount proof, verify normal runtime refusal before explicit release.
+- [x] Verify2/2/2 old/new session, search/download/export and once-only business tasks; original source claim stays unmounted.
+- [x] Close owned resources under maintenance, retain all PVCs, restore any borrowed capacity; publish bounded evidence including failures.
+
+Completed [bounded current-image evidence](../reports/2026-11-03-replica-rwx-target-restore.json):
+full Linux6466 passes/221 identical optional skips/zero failures; fresh native
+81-table/28-sequence/four-point/11-blob import; held identity/explicit release;
+controlled exit23 before output on a resumed already-adopted SQL identity, then
+same-identity resume with109 unchanged catalog entries. Four HTTP endpoints and
+four API/worker processes passed old/new workflows and17 cold hashes. Target is
+off/held3, three PVCs retained, prior2/2/2 and nine tables restored. The same NFS
+server stayed up while the source claim was unmounted. Separate-kernel large
+writes/outages and broader profile certification are outside this completed plan.
 
 Self-review: both tasks retain the spec boundaries; Task1 owns all five refusal
 classes, Task2 supplies actual Linux/provider/current-image evidence. Source NFS

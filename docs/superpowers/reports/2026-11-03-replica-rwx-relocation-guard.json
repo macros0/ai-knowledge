@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "status": "candidate-physical-rwx-relocation-unit-and-native-proof",
+  "status": "physical-rwx-relocation-guard-with-completed-current-image-restore",
   "source_recipe": "authorized-nfs-csi-4.13.6-training-v1",
-  "scope": "Selected NFS/CSI training target only; full current Linux CI/image/RWX-target restore still pending",
+  "scope": "Selected authorized NFS/CSI training target; initial outside-image read-only proof below is historical. Full current Linux CI/image and completed RWX-target restore are recorded separately.",
   "implementation": [
     "Manifest-bound strict source coordinates; bounded regular JSON with duplicate-key refusal",
     "Actual canonical no-follow NFS mount/root observation; reject aliases, local/bind/stacked mounts and unsupported transport",
@@ -91,8 +91,26 @@
     "nfs_source_workloads_still_off": true,
     "borrowed_capacity": false
   },
-  "full_current_ci": false,
-  "rwx_target_restore_performed": false,
+  "full_current_ci": true,
+  "rwx_target_restore_performed": true,
   "certification": null,
-  "production_backup_schedule": "disabled"
+  "production_backup_schedule": "disabled",
+  "completed_restore_report": "2026-11-03-replica-rwx-target-restore.json",
+  "current_ci": {
+    "operation_id": "16185383212a473db815b418876c63f5",
+    "canonical_git_files_unchanged": 2439,
+    "passed": 6466,
+    "optional_skipped": 221,
+    "failed": 0,
+    "errors": 0,
+    "coverage_percent": 87.6827244413122,
+    "junit_sha256": "2af6b918c7012b6a9ccadb9411c815086b5abbbe28fac72f3faa7bcdc125c1f5",
+    "case_ids_sha256": "23861942f92771dc7a5362afac54d87fb395cb6f49f2702e9af4408f595dcd79",
+    "comparison": {
+      "all6652_previous_cases_retained": true,
+      "added_cases": 35,
+      "optional_skip_case_ids_exactly_unchanged": true
+    },
+    "container": "network-none, read-only, non-root, capabilities dropped, bounded CPU/memory/tmpfs"
+  }
 }

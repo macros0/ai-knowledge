@@ -282,7 +282,7 @@ P0: `assert mutations == []`; `assert required_skip_exit_code != 0`;
 
 03.11.2026 RWX: [текущий application run](../reports/2026-11-03-replica-rwx-application.json) прошёл2/2/2, загрузку/публикацию/поиск/скачивание/export, отдельный реальный ENOSPC507 с неизменным корпусом и повтором после освобождения места, нормальный NFS restart. Первый большой буферизованный client write завис в kernel reclaim/COMMIT и остаётся failed/unqualified; после контролируемого восстановления холодная проверка сохранила исходные данные. Финальные11 blob SHA/два audit/три WorkItems проверены на четырёх процессах. Target сохранён выключенным под maintenance epoch1; прежние реплики восстановлены. Independent RWX restore/large-write/outage/cross-node и остальные O1/O2/O3 gates остаются открытыми.
 
-03.11.2026 O2 RWX: [независимая format3 копия](../reports/2026-11-03-replica-rwx-independent-backup.json) сохранена и холодно проверена на отдельном ПК:13 encrypted objects,81 таблица/28 sequences, четыре полных вектора и11 blob. Ключ остаётся на ПК; physical source binding аутентифицирован manifest. Source app/storage остановлены под held1, прежние2/2/2/PVC/девять таблиц восстановлены. RWX restore ещё открыт: официальный rebind CLI пока S3-only, требуется строгая проверка физически отдельного RWX target вместо сравнения одинаковых `/artifacts` путей.
+03.11.2026 O2 RWX: [независимая format3 копия](../reports/2026-11-03-replica-rwx-independent-backup.json) сохранена и холодно проверена на отдельном ПК:13 encrypted objects,81 таблица/28 sequences, четыре полных вектора и11 blob. Ключ остаётся на ПК; physical source binding аутентифицирован manifest. Source app/storage остановлены под held1, прежние2/2/2/PVC/девять таблиц восстановлены. На этом backup-only этапе RWX restore оставался открыт, rebind был S3-only; последующая строгая physical proof и завершённая репетиция приведены ниже.
 
 03.11.2026 O2: [RWX-source→новая реальная S3-цель](../reports/2026-11-03-replica-rwx-source-s3-restore.json)
 восстановлена из независимой копии при физически выключенных source NFS/PG/Qdrant/app.
@@ -291,6 +291,16 @@ P0: `assert mutations == []`; `assert required_skip_exit_code != 0`;
 и2/2/2 прошли; четыре процесса проверили17 SHA, пустой scratch и отсутствие
 повторного выполнения старых задач. Target сохранён выключенным под held3; NFS
 и прежние2/2/2/runtime/PVC/девять таблиц восстановлены. Это закрывает выбранный
-RWX-source→S3-target рецепт; свежий RWX target по-прежнему требует строгой physical
-relocation-проверки. Failed large-write/outage/cross-node/customer gates открыты,
+RWX-source→S3-target рецепт; последующая проверка свежего RWX target приведена ниже. Failed large-write/outage/cross-node/customer gates открыты,
 production scheduleOFF, certificationnull.
+
+03.11.2026 O2: [независимый restore в свежую RWX-цель](../reports/2026-11-03-replica-rwx-target-restore.json)
+завершён на cf74f8a после полного Linux CI6466 passes/221 прежний optional skip.
+Manifest-bound source и фактический новый NFS export/inode проверены; до adoption
+совпали81 таблица/28 sequences, четыре точки и11 blobs. Held2/release, реальный
+exit23 после resumed SQL commit до output и повторный CLI с109 неизменными
+записями,2/2/2 old/new HTTP и четыре native17 SHA/scratch0/задачи однократно прошли.
+Target физически выключен/held3/три PVC сохранены, прежние2/2/2/runtime/PVC и
+девять таблиц восстановлены. Общий NFS-сервер работал, исходный claim не был
+смонтирован. Large-write/outage/cross-node/external/mixed и общие O1–O3 gates
+остаются открытыми; certificationnull, production scheduleOFF.

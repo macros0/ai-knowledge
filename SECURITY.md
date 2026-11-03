@@ -2929,9 +2929,10 @@ retain it with the encrypted archive for disjoint-target verification. Snapshot
 connections and owned tunnels closed before both source providers stopped; all
 PVCs remain, and prior capacity/runtime/nine canonical tables were restored.
 
-This copy does not authorize an identity guard bypass. The current rebind CLI
-remains S3-only; same `/artifacts` paths cannot establish a new RWX volume. Strict
-authenticated source and observed target binding must precede RWX restore/release.
+This copy does not authorize an identity guard bypass. At the backup-only checkpoint
+the rebind CLI was S3-only; selected RWX support is now described below. Same
+`/artifacts` paths cannot establish a new RWX volume. Strict authenticated source
+and observed target binding must precede RWX restore/release.
 The NFS server itself was available during export, and large-write/outage/cross-node
 qualification remains open. Production scheduleOFF, certificationnull. See the
 [backup-only evidence](docs/superpowers/reports/2026-11-03-replica-rwx-independent-backup.json).
@@ -2959,7 +2960,7 @@ previous failed large buffered NFS write remains unqualified. ScheduleOFF.
 
 ### Selected RWX target physical identity
 
-The [candidate guard](docs/superpowers/reports/2026-11-03-replica-rwx-relocation-guard.json)
+The [selected guard](docs/superpowers/reports/2026-11-03-replica-rwx-relocation-guard.json)
 requires authenticated source-binding coordinates and actual in-process NFS root
 observation before artifact writes. Local root strings, caller-supplied success
 flags and client statvfs filesystem IDs are not physical identity. The selected
@@ -2967,5 +2968,15 @@ source recipe/namespace/scope digest and actual target server/export/inode must
 agree with the narrow relocation policy; aliases and ambiguous mounts refuse.
 The stable target digest is bound into the restore receipt and must match on
 resume. Existing S3 behavior and owned transactional auth/epoch changes remain.
-Read-only native proof passed with no secrets, SQL or artifact writes. Full new
-CI/image/application recovery is pending; no provider certification is granted.
+The initial read-only native proof used mounted candidate code. Subsequent
+[current-image recovery](docs/superpowers/reports/2026-11-03-replica-rwx-target-restore.json)
+passed full Linux CI (6466 passes/221 unchanged optional skips), fresh store
+imports, scoped PG rights, held adoption and a real exit23/output-boundary resume.
+That crash followed an already successful adoption; it does not prove an initial
+stamp crash. Identity publication waited for unchanged109-entry catalog and
+same-identity resume. Normal held runtime refused startup/write/claim/artifact
+access; explicit release preceded functional2/2/2 and four native17-object cold
+checks. Final target is stopped/held3 with three PVCs retained; prior2/2/2 and nine
+canonical tables are restored. Source claim was unmounted while the same NFS
+server stayed up. Large-write/outage/cross-node gates and provider certification
+remain open; production scheduling stays off.

@@ -1051,13 +1051,14 @@ retained. The owned NFS service returned to its original filesystem/private
 listener/four threads; original source app/PG/Qdrant remain off under epoch1.
 Prior lab2/2/2, runtime/PVCs and nine canonical tables were restored. Original
 failed tunnel parents and corrected harness assertions remain in the receipt.
-Fresh RWX-target relocation/adoption is still unsupported by this CLI. The failed
+At this historical cross-provider checkpoint RWX-target adoption was unsupported;
+the subsequent selected RWX proof and completed recovery are described below. The failed
 large NFS write, prolonged outage/cross-node/provider gates and production
 qualification remain open; schedulingOFF, certificationnull.
 
 ## Selected RWX-target relocation guard
 
-The [candidate implementation evidence](superpowers/reports/2026-11-03-replica-rwx-relocation-guard.json)
+The [selected implementation evidence](superpowers/reports/2026-11-03-replica-rwx-relocation-guard.json)
 adds `--rwx-source-binding /run/restore/source-binding.json` to the existing
 restore command for a selected external NFS RWX target. The supplied BackupPlan
 must already be authenticated by the PC coordinator; the bounded non-secret
@@ -1073,7 +1074,25 @@ before/after the probe, inside adoption and on resume. Equal `/artifacts` settin
 are accepted only through this proof; transactional auth/fencing and the existing
 S3 descriptor rule remain. Other RWX recipes are unsupported.
 
-Unit/contracts and actual read-only Linux NFS observation passed. Full current
-Linux CI, an image containing the new module and the complete RWX-target restore
-are pending. The candidate observer used code mounted outside the prior saved
-image; it proves physical observation, not current application deployment.
+The initial observer used candidate code mounted outside the previous image.
+The subsequent [completed RWX-target recovery](superpowers/reports/2026-11-03-replica-rwx-target-restore.json)
+uses the actual cf74f8a image containing the new module, after full Linux CI:
+6466 passes,221 unchanged optional skips,2439 unchanged source files. All81
+tables/28 sequences, four full points and11 ready blobs matched the independent
+PC archive before adoption. New physical root inode8194 differs from source8193;
+the source claim remained unmounted, but their common NFS server stayed up.
+
+Official adoption revoked one session and held epoch2. A subsequent same-operation
+CLI invocation deliberately exited23 after its owned SQL commit and before
+identity output; it did not crash the first adoption. A fresh normal CLI returned
+the identical identity with all109 catalog entries unchanged and no repeated auth
+invalidation. Only then was the identity ConfigMap published. Normal held runtime
+refused startup/writes/claims/artifact access; explicit release preceded2/2/2.
+Old-cookie401, shared new session, old and new search/download/export and four
+native17-object cold checks passed. Old business work stayed succeeded once at
+epoch0; new work succeeded once at epoch2, with no original scratch left.
+
+Target is physically stopped/held3 with three PVCs retained; prior lab2/2/2,
+runtime/PVCs and nine canonical tables are restored. This selected recipe does
+not qualify Synology, another NFS server, large buffered writes, prolonged outages,
+cross-node recovery or physical HA. Production schedule remains off.

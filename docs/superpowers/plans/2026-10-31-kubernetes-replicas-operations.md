@@ -639,9 +639,9 @@ physical/SQL/point/blob guards remained stable, all native owners closed and
 source providers stopped under held1. Prior lab2/2/2/runtime/PVCs/nine tables were
 restored. Keep the authenticated non-secret adjacent source-binding metadata with
 the archive; keys never left the PC. See [backup receipt](../reports/2026-11-03-replica-rwx-independent-backup.json).
-Actual RWX restore/release remains open: the current rebind CLI is S3-only, and
-equal local root paths on distinct PVCs require an explicit strict relocation
-proof before support can be added. No descriptor bypass or provider relabeling.
+At this backup-only checkpoint RWX restore/release was open and rebind was
+S3-only. Subsequent strict selected RWX support and recovery are recorded below;
+equal local root paths alone never authorize relocation. No descriptor bypass.
 
 O2 cross-provider milestone (2026-11-03): [RWX-source→real S3 recovery](../reports/2026-11-03-replica-rwx-source-s3-restore.json)
 passed from the independent PC archive while source NFS/PG/Qdrant/app were
@@ -652,6 +652,18 @@ new shared session and new upload/export. Four native processes verified17 hashe
 empty scratch and no legacy job re-execution. Target is stopped/held3 with three
 PVCs retained, source NFS restored, prior2/2/2/PVC/runtime/nine tables unchanged.
 Original failed parents/harness assertions are preserved. This closes the selected
-RWX-source→S3-target recipe, while strict fresh RWX-target relocation, failed
-large writes, prolonged outage/cross-node/external/mixed and final certification
-gates remain open. No product changes afterccfcf9e; scheduleOFF/certificationnull.
+RWX-source→S3-target recipe at ccfcf9e. Subsequent selected RWX target support
+is recorded below. Failed large writes, prolonged outage/cross-node/external/mixed
+and final certification gates remain open; scheduleOFF/certificationnull.
+
+O2 selected RWX-target milestone (2026-11-03): [current-image recovery](../reports/2026-11-03-replica-rwx-target-restore.json)
+passed on cf74f8a after full Linux6466 passes/221 unchanged optional skips.
+Authenticated source/actual new NFS root proof guarded81 tables/28 sequences,
+four full points and11 blobs, held adoption and explicit release. An actual
+exit23 after a resumed SQL commit/before identity output recovered identical
+identity with109 unchanged catalog entries; first adoption had already succeeded.
+2/2/2 old/new HTTP and four native17-object cold checks passed. Target is now
+physically off/held3/three PVCs retained; prior2/2/2/runtime/PVCs/nine tables
+restored. Source claim stayed unmounted, common NFS server stayed up. Selected
+RWX restore is complete; large-write/outage/cross-node/customer and overall
+O1–O3 profile gates remain open. No certification or production schedule.

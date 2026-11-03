@@ -556,10 +556,10 @@ scope digest. The key stays in the protected PC vault. Application writers remai
 stopped under epoch1; native snapshot/tunnel owners closed, both source storage
 Pods stopped, PVCs retained, and prior2/2/2/runtime/PVCs/nine tables restored.
 
-This is a verified copy, not a completed RWX restore. The official identity rebind
-CLI currently accepts S3 only; equal `/artifacts` paths on two RWX PVCs cannot prove
-relocation. Strict authenticated physical-source/actual-target binding support is
-required before RWX adoption/release. Do not bypass the guard or relabel RWX as S3.
+At this backup-only checkpoint restore had not run and identity rebind accepted
+S3 only. Subsequent selected RWX target support and its recovery are recorded
+below. Equal `/artifacts` paths cannot prove relocation: authenticated physical
+source/actual target binding is required. Do not bypass the guard or relabel RWX as S3.
 NFS server unavailability, large-write and cross-node gates remain separate.
 
 ## RWX source-off restore into real S3 (2026-11-03)
@@ -578,6 +578,26 @@ Closure is verified: target roles/storage0, liveCRI0, held3, three PVCs retained
 source NFS restored to the same filesystem and172.18.0.1:2049/four threads; prior
 lab2/2/2/PVCs/runtime/nine tables unchanged. Source app/PG/Qdrant stay off. This
 qualifies only the bounded RWX-source→S3-target recovery recipe on the training
-node. A fresh RWX target still requires authenticated physical relocation support.
+node. A fresh RWX target requires the separate authenticated relocation proof below.
 Large-write, sustained outage, cross-node and customer provider qualification
 remain open, with production schedulingOFF.
+
+## Selected independent RWX-target recovery (2026-11-03)
+
+The [completed current-image rehearsal](superpowers/reports/2026-11-03-replica-rwx-target-restore.json)
+restored the PC archive into new PG/Qdrant and a disjoint NFS CSI claim/export/root.
+All81 tables/28 sequences, four full points and11 blobs matched before held
+identity adoption. The manifest-bound source and actual target mount were checked
+by the new cf74f8a image, with full Linux6466 passes/221 unchanged optional skips.
+The source claim stayed unmounted; the same admitted NFS server remained up.
+
+Scoped credentials, actual Pod-IP password denial, session revocation, normal
+held refusals and explicit release passed. A real controlled exit23 on a resumed
+SQL transaction before identity output was followed by identical-identity resume
+and109 unchanged catalog entries; the first adoption had already succeeded.
+Old/new HTTP workflows passed across two frontend/two API endpoints; four native
+API/worker processes checked17 cold hashes, empty original scratch and once-only
+business jobs. Closure held epoch3, stopped all target Pods/CRI, retained three
+PVCs and restored prior2/2/2/runtime/PVCs/nine tables without data mutations.
+Other NFS servers, the earlier failed large buffered write, prolonged outage,
+cross-node and physical failure domains remain unqualified. ScheduleOFF.
