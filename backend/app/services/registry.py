@@ -278,6 +278,7 @@ class DocumentRegistry:
         work_is_admin=False,
         initial_development=None,
         initial_processing_scope=None,
+        admission_audit=None,
     ) -> dict:
         from app.services.tag_registry import TagRegistry
 
@@ -333,6 +334,11 @@ class DocumentRegistry:
                 from app.services.work.admission import freeze_document_input, validate_document_scope
                 validate_document_scope(s, doc_id, initial_processing_scope, artifact_ref.sha256)
                 freeze_document_input(s, document_work_id, doc_id, initial_processing_scope)
+            if admission_audit is not None:
+                from app.services import audit
+                audit.record_in_session(s, action_type=audit.DOCUMENT_UPLOAD,
+                    target_type=audit.TARGET_DOCUMENT, target_id=doc_id,
+                    settings=settings, **admission_audit)
         return self.get(doc_id)
 
     def get(self, doc_id: str) -> dict | None:

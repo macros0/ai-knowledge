@@ -290,6 +290,13 @@ def upload_document(
             raise
         existing = file_hash_exists(file_hash)
         if existing is not None:
+            # Another replica may commit this exact receipt after our first
+            # lookup, but before this unlocked duplicate probe observes it.
+            with upload_admission_lock():
+                replay = _replay_upload(request)
+            if replay is not None:
+                _dest.unlink(missing_ok=True)
+                return replay
             _dest.unlink(missing_ok=True)
             return JSONResponse(
                 status_code=409,
@@ -321,11 +328,11 @@ def upload_document(
                             doc_id=doc_id,dest=_dest,size=size,file_hash=inventory.source_file_hash,
                             preview_markdown=None,preview_mail_fingerprint=None,trash_twin=trash_twin,
                             processing_inventory=inventory,processing_attempt=Path(scope_dir))
-                    if _registry.get(doc_id) is None:
+                    if (settings.okf_deployment_schema == "replicas-v1" and settings.app_role == "api") or _registry.get(doc_id) is None:
                         _dest.unlink(missing_ok=True)
                     return result
         except Exception as exc:
-            if _registry.get(doc_id) is None:
+            if (settings.okf_deployment_schema == "replicas-v1" and settings.app_role == "api") or _registry.get(doc_id) is None:
                 _dest.unlink(missing_ok=True)
             from docparser.attachment_inventory import InvalidRootDocument
             if isinstance(exc,InvalidRootDocument):
@@ -432,7 +439,7 @@ def upload_document(
                 processing_scope=processing_scope,
             )
     finally:
-        if _registry.get(doc_id) is None:
+        if (settings.okf_deployment_schema == "replicas-v1" and settings.app_role == "api") or _registry.get(doc_id) is None:
             _dest.unlink(missing_ok=True)
 
 
@@ -512,6 +519,22 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
                               'processing_limits':assessment_limits(get_settings()),
                               'processing_artifacts_dir':processing_attempt,
                               'processing_settings':get_settings()})
+    audit_value = {"filename": file.filename or "unknown", "size": size}
+    if bound_development_id is not None:
+        audit_value["development_id"] = bound_development_id
+    if trash_twin is not None:
+        audit_value["duplicate_in_trash"] = {
+            "id": trash_twin.get("id"), "filename": trash_twin.get("filename"),
+        }
+    if artifact_ref is not None:
+        from app.services.diagnostics.context import current_context
+        scope_create_options["admission_audit"] = {
+            "user_id": user.user_id, "username": user.username,
+            "new_value": audit_value, "ip_address": _client_ip(request),
+            "event_context": audit.AuditContext(actor_type="user",
+                outcome=audit.CATALOG[audit.DOCUMENT_UPLOAD].outcome,
+                request_id=current_context().request_id),
+        }
     try:
         doc = _registry.create(
             doc_id,
@@ -593,14 +616,15 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
             "id": trash_twin.get("id"),
             "filename": trash_twin.get("filename"),
         }
-    audit.record(
-        user,
-        audit.DOCUMENT_UPLOAD,
-        audit.TARGET_DOCUMENT,
-        target_id=doc_id,
-        new_value=audit_value,
-        ip_address=_client_ip(request),
-    )
+    if artifact_ref is None:
+        audit.record(
+            user,
+            audit.DOCUMENT_UPLOAD,
+            audit.TARGET_DOCUMENT,
+            target_id=doc_id,
+            new_value=audit_value,
+            ip_address=_client_ip(request),
+        )
     if trash_twin is not None:
         doc = dict(doc)
         doc["duplicate_in_trash"] = trash_twin

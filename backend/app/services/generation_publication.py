@@ -114,10 +114,19 @@ def _publish_prepared_document(settings, vector_store, doc_id, generation_id, *,
             from app.services.generation_artifacts import file_digest
             from app.services.generation_files import _reject_links
             document = session.get(Document, doc_id)
-            original = settings.uploads_dir / (doc_id + Path(document.filename).suffix.lower())
-            _reject_links(original)
-            if not original.is_file() or file_digest(original) != prepared["processing_scope"]["source_file_hash"]:
-                raise GenerationConflict("Original changed before publication")
+            from app.services.artifacts.repository import resolve_blob
+            original_ref = resolve_blob(session, owner_type="original", owner_id=doc_id,
+                generation_id=None, logical_name="original")
+            if original_ref is not None:
+                # The consumed bytes were verified during materialization. The
+                # immutable binding, not a per-pod copy, is publication input.
+                if original_ref.sha256 != prepared["processing_scope"]["source_file_hash"]:
+                    raise GenerationConflict("Original changed before publication")
+            else:
+                original = settings.uploads_dir / (doc_id + Path(document.filename).suffix.lower())
+                _reject_links(original)
+                if not original.is_file() or file_digest(original) != prepared["processing_scope"]["source_file_hash"]:
+                    raise GenerationConflict("Original changed before publication")
         if prepared.get("canonical_base_hash"):
             from app.services.canonical_repair import canonical_rows_digest
             from app.services.generation_store import GenerationConflict

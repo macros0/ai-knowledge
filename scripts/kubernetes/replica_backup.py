@@ -100,6 +100,47 @@ def validate_drained(items, config, nodes):
             raise ValueError("Writer or unreachable node remains")
 
 
+def fetch_stop_observations(lab):
+    """Read the bound kind node's actual runtime, not just its visible Pods."""
+    from replica_worker_loss import remote
+    lab.assert_namespace()
+    code = '''import json,subprocess,sys
+ns,uid=sys.argv[1:]
+k=['kubectl','--context','kind-okf-policy','-n',ns]
+def get(*args):return json.loads(subprocess.check_output(k+list(args),timeout=15))
+namespace=get('get','namespace',ns,'-o','json')
+assert namespace['metadata']['uid']==uid and namespace['metadata']['labels']['okf-purpose']=='replica-test'
+resources=subprocess.check_output(['kubectl','--context','kind-okf-policy','api-resources','--namespaced=true','--verbs=list','-o','name'],timeout=15).decode().splitlines()
+selected='deploy,sts,rs,ds,rc,pods,jobs,cronjobs,services,endpointslices,hpa'
+if any(r.startswith('verticalpodautoscalers.') for r in resources):selected+=',verticalpodautoscalers'
+items=get('get',selected,'-o','json')['items']+[namespace]
+nodes=get('get','nodes','-o','json')['items']
+node=json.loads(subprocess.check_output(['docker','inspect','okf-policy-control-plane'],timeout=10))[0]
+assert node['Config']['Labels']['io.x-k8s.kind.cluster']=='okf-policy' and node['State']['Running']
+containers=json.loads(subprocess.check_output(['docker','exec','okf-policy-control-plane','crictl','ps','-a','-o','json'],timeout=10))['containers']
+print(json.dumps({'items':items,'nodes':nodes,'containers':containers}))
+'''
+    result = remote(['python3', '-c', code, lab.config['namespace'], lab.namespace_uid])
+    return result['items'], result['nodes'], result['containers']
+
+
+def storage_process_bindings(items, config):
+    result = {}
+    expected = {config['storage_release'] + '-' + role + '-0' for role in ('postgres', 'qdrant', 'artifacts')}
+    for pod in [v for v in items if v.get('kind') == 'Pod' and v.get('metadata', {}).get('name') in expected]:
+        meta, status = pod['metadata'], pod.get('status', {})
+        ids = [v.get('containerID', '').removeprefix('containerd://') for v in status.get('containerStatuses', [])]
+        if (meta.get('deletionTimestamp') or not meta.get('uid') or status.get('phase') != 'Running'
+                or meta.get('labels', {}).get('app.kubernetes.io/instance') != config['storage_release']
+                or len(ids) != 1 or not re.fullmatch('[0-9a-f]{64}', ids[0])
+                or any(v.get('ready') is not True for v in status['containerStatuses'])):
+            raise ValueError('Bound storage process observation differs')
+        result[meta['name']] = {'uid': meta['uid'], 'container_ids': ids}
+    if set(result) != expected:
+        raise ValueError('Exact bound storage processes required')
+    return result
+
+
 def runtime_config_name(deployments):
     names = set()
     protected = {"MODEL_MODE", "LLM_BASE_URL", "EMBEDDING_PROVIDER", "AUTH_PROVIDER", "AUDIT_DB_ENABLED", "AUDIT_STDOUT_MODE"}
@@ -127,6 +168,8 @@ class Lab:
         if not re.fullmatch(r"[0-9a-f-]{36}", namespace_uid):
             raise ValueError("Recorded namespace UID required")
         self.config, self.namespace_uid = config, namespace_uid
+        self._backup_stop_binding = None
+        self.last_stop_observation = None
 
     def kubectl(self, *args, namespaced=True):
         c = self.config
@@ -155,10 +198,79 @@ class Lab:
         return json.loads(self.kubectl("get", "deploy,sts,pods,jobs,cronjobs", "-o", "json"))["items"]
 
     def drained(self):
+        if self._backup_stop_binding is not None:
+            from test_scripts.replica_provider_stop import (
+                stopped_cri_facts,
+                stopped_facts,
+            )
+            items, nodes, containers = fetch_stop_observations(self)
+            items = self.filter_stop_inventory(items, nodes)
+            value = {**self.config, 'namespace_uid': self.namespace_uid}
+            facts = stopped_facts(items, nodes, value, self._backup_stop_binding)
+            cri = stopped_cri_facts(containers, value, self._backup_stop_binding)
+            storage = storage_process_bindings(items, self.config)
+            if storage != self._backup_stop_binding['storage_pods']:
+                raise ValueError('Bound storage processes changed')
+            allowed = {v['uid']: (name, set(v['container_ids'])) for name, v in storage.items()}
+            observed = set()
+            for container in containers:
+                if container.get('state') != 'CONTAINER_RUNNING':
+                    continue
+                labels = container.get('labels', {})
+                if labels.get('io.kubernetes.pod.namespace') != self.config['namespace']:
+                    continue
+                uid = labels.get('io.kubernetes.pod.uid')
+                if (uid not in allowed or labels.get('io.kubernetes.pod.name') != allowed[uid][0]
+                        or container.get('id') not in allowed[uid][1]):
+                    raise ValueError('Unknown namespace process remains')
+                observed.add(container['id'])
+            if observed != {identity for _, identities in allowed.values() for identity in identities}:
+                raise ValueError('Incomplete node process observation')
+            self.last_stop_observation = {**cri, 'storage_processes': len(observed),
+                'physical_observation_sha256': digest({'kubernetes': facts, 'storage': storage, 'cri': sorted(observed)}),
+                'observed_at': datetime.now(timezone.utc).isoformat()}
+            return self.last_stop_observation
         nodes = json.loads(self.kubectl("get", "nodes", "-o", "json", namespaced=False))["items"]
         ready = {n["metadata"]["name"]: any(c["type"] == "Ready" and c["status"] == "True"
             for c in n.get("status", {}).get("conditions", [])) for n in nodes}
         validate_drained(self.inventory(), self.config, ready)
+
+    def filter_stop_inventory(self, items, nodes):
+        return items
+
+    def bind_stop_observation(self):
+        """Capture writer/node identities while those writers are still visible."""
+        if self._backup_stop_binding is not None:
+            raise ValueError('Backup process identities are already bound')
+        items, nodes, _containers = fetch_stop_observations(self)
+        items = self.filter_stop_inventory(items, nodes)
+        if (len(nodes) != 1 or nodes[0]['metadata']['name'] != 'okf-policy-control-plane'
+                or not nodes[0]['metadata'].get('uid') or nodes[0]['metadata'].get('deletionTimestamp')
+                or not any(c.get('type') == 'Ready' and c.get('status') == 'True' for c in nodes[0].get('status', {}).get('conditions', []))):
+            raise ValueError('Exact healthy owned kind node required')
+        deployments = {v['metadata']['name']: v for v in items if v.get('kind') == 'Deployment'}
+        if set(deployments) != {'api', 'worker', 'frontend', 'model-stub'} or any(not v['metadata'].get('uid') for v in deployments.values()):
+            raise ValueError('Exact source writer controllers required')
+        writers, providers = [], []
+        for role in ('api', 'worker', 'frontend', 'model-stub'):
+            selected = [v for v in items if v.get('kind') == 'Pod' and v.get('metadata', {}).get('labels', {}).get('okf-role') == role]
+            expected = 1 if role == 'model-stub' else 2
+            if (len(selected) != expected or deployments[role]['spec']['replicas'] != expected
+                    or any(not v['metadata'].get('uid') or v['metadata'].get('deletionTimestamp')
+                        or v['metadata']['labels'].get('app.kubernetes.io/instance') != self.config['application_release']
+                        or v.get('spec', {}).get('nodeName') != 'okf-policy-control-plane'
+                        or v.get('status', {}).get('phase') != 'Running' or not v.get('status', {}).get('containerStatuses')
+                        or any(c.get('ready') is not True for c in v['status']['containerStatuses']) for v in selected)):
+                raise ValueError('Original source writer Pod bindings required')
+            (providers if role == 'model-stub' else writers).extend(v['metadata']['uid'] for v in selected)
+        services = [v for v in items if v.get('kind') == 'Service' and v['metadata'].get('name') == 'model-stub']
+        if len(services) != 1 or not services[0]['metadata'].get('uid'):
+            raise ValueError('Original provider service binding required')
+        self._backup_stop_binding = {'nodes': {nodes[0]['metadata']['name']: nodes[0]['metadata']['uid']},
+            'deployments': {name: v['metadata']['uid'] for name, v in deployments.items()},
+            'writer_pod_uids': writers, 'provider_pod_uid': providers[0],
+            'service_uid': services[0]['metadata']['uid'], 'service_selector': services[0]['spec']['selector'],
+            'storage_pods': storage_process_bindings(items, self.config)}
 
     def scale(self, role, before, after):
         self.assert_namespace()
@@ -321,6 +433,7 @@ print(json.dumps({'fingerprint':identity.fingerprint,'audit_db_enabled':s.audit_
         raise ValueError("Actual backup runtime configuration differs")
     audit_settings = SimpleNamespace(okf_deployment_schema="replicas-v1", app_role="api",
         audit_db_enabled=actual["audit_db_enabled"], audit_stdout_mode=actual["audit_stdout_mode"])
+    lab.bind_stop_observation()
     engine, s3, q = connections(config)
     operation = uuid4().hex
     started = datetime.now(timezone.utc)
@@ -413,6 +526,7 @@ print(json.dumps({'fingerprint':identity.fingerprint,'audit_db_enabled':s.audit_
                         result["Body"].close()
                 writer.finish(now=frozen.scalar(text("SELECT clock_timestamp()")))
             cold = verify_backup(archive, key)
+        lab.drained()  # Cold qualification must not hide a surviving node process.
         with op.transaction() as session:
             leave_maintenance(session, operation, writer_receipts={r: "stopped" for r in REQUIRED_WRITERS})
     for role in ("model-stub", "api", "worker", "frontend"):
@@ -421,6 +535,7 @@ print(json.dumps({'fingerprint':identity.fingerprint,'audit_db_enabled':s.audit_
         "archive": str(Path(archive).absolute()), "namespace": config["namespace"], "source_epoch": epoch,
         "runtime_configmap": runtime_name, "runtime_fingerprint": actual["fingerprint"],
         "consistent_at": consistent.isoformat(), "counts": counts, "encrypted_objects": len(cold.objects),
+        "physical_stop_observation": lab.last_stop_observation,
         "plaintext_bytes": sum(o.size for o in cold.objects.values()), "production_schedule": "disabled", "restore_verified": False}
     Path(report).write_text(json.dumps(public, indent=2) + "\n")
     print(json.dumps(public), flush=True)

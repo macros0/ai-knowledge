@@ -171,6 +171,12 @@ class CaLab(UpgradeLab):
         return {n["metadata"]["name"]: any(c["type"] == "Ready" and c["status"] == "True"
             for c in n.get("status", {}).get("conditions", [])) for n in nodes}
 
+    def filter_stop_inventory(self, items, nodes):
+        records = (self.operation.journal or {}).get("retired_diagnostics", [])
+        ready = {n['metadata']['name']: any(c.get('type') == 'Ready' and c.get('status') == 'True'
+            for c in n.get('status', {}).get('conditions', [])) for n in nodes}
+        return filter_retired_diagnostics(items, records, ready) if records else items
+
     def inventory(self):
         items = super().inventory()
         records = (self.operation.journal or {}).get("retired_diagnostics", [])

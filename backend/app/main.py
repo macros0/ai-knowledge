@@ -407,6 +407,8 @@ def create_app() -> FastAPI:
         raise ValueError("The worker role uses app.worker, without a public HTTP application")
     get_store().ensure()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    from app.services.artifacts.original_scope import OriginalScratchMiddleware
+    app.add_middleware(OriginalScratchMiddleware)
     app.add_middleware(CatchAllErrorsMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CsrfMiddleware)

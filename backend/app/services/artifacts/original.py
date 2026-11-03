@@ -16,8 +16,43 @@ from .repository import resolve_blob
 from .leased import LeasedBlobStore, TransactionLeasedBlobStore
 
 
+def _scoped_original(settings, doc_id, legacy):
+    from .original_scope import current_original_scope
+    scope = current_original_scope()
+    if scope is None:
+        raise ValueError("Distributed originals require a request or work scratch scope")
+    parent = current_session()
+    if parent is not None:
+        lock_generation_read(parent, [doc_id])
+        doc = parent.get(Document, doc_id)
+        if doc is None or doc.deleted_at is not None:
+            raise BlobConflict("Original document missing or deleted")
+        ref = resolve_blob(parent, owner_type="original", owner_id=doc_id, generation_id=None, logical_name="original")
+    else:
+        # Leaving the context, not merely committing it, is essential: work
+        # scopes otherwise reuse this Session for lease writes via SAVEPOINT.
+        with session_scope() as session:
+            lock_generation_read(session, [doc_id])
+            doc = session.get(Document, doc_id)
+            if doc is None or doc.deleted_at is not None:
+                raise BlobConflict("Original document missing or deleted")
+            ref = resolve_blob(session, owner_type="original", owner_id=doc_id, generation_id=None, logical_name="original")
+    if ref is None:
+        return legacy
+    key = (str(settings.uploads_dir.absolute()), doc_id, ref.store_id, ref.object_id, ref.sha256)
+    if key not in scope.paths:
+        from . import get_blob_store
+        store = get_blob_store(settings)
+        leased = TransactionLeasedBlobStore(store, parent) if parent is not None else LeasedBlobStore(store)
+        root = settings.artifact_scratch_root or settings.data_dir / "artifact-scratch"
+        scope.paths[key] = scope.stack.enter_context(materialize(ref, store=leased, scratch_root=root))
+    return scope.paths[key]
+
+
 def original_path(settings, doc_id, filename, *, legacy_path=None):
     legacy = Path(legacy_path) if legacy_path is not None else settings.uploads_dir / f"{doc_id}{Path(filename).suffix.lower()}"
+    if settings.okf_deployment_schema == "replicas-v1":
+        return _scoped_original(settings, doc_id, legacy)
     parent = current_session()
     if parent is not None:
         lock_generation_read(parent, [doc_id])

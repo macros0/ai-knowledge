@@ -1,10 +1,10 @@
 """Actual SQL locks/JSON/head migrations in an explicitly disposable database."""
 from pathlib import Path
-from types import SimpleNamespace
 
 from sqlalchemy import text
 
 from app.db.session import session_scope, get_engine
+from app.config import get_settings
 from tests.test_portable_source_cache import portable_cache as portable_cache
 from tests.test_processing_scope_change_end_to_end import source_environment as source_environment
 from tests.test_portable_job_files import portable_exports as portable_exports
@@ -66,7 +66,8 @@ def test_postgres_consumer_migrations_preserve_legacy_rows(orphan, monkeypatch):
     assert schema.startswith("artifact_") and len(schema) == 41
     monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema} -clock_timeout=2000 -cstatement_timeout=10000")
     url = get_engine().url.set(query={}).render_as_string(hide_password=False)
-    monkeypatch.setattr("app.config.get_settings", lambda: SimpleNamespace(db_url=url))
+    alembic_settings = get_settings().model_copy(update={"database_url": url})
+    monkeypatch.setattr("app.config.get_settings", lambda: alembic_settings)
     root = Path(__file__).resolve().parents[2]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))

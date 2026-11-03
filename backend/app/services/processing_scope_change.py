@@ -6,6 +6,8 @@ from copy import deepcopy
 import hashlib
 import json
 
+from app.services.artifacts.original_scope import scoped_originals
+
 SCOPE_CHANGE_ANALYSIS_VERSION = 2
 
 
@@ -330,6 +332,7 @@ def analyze_scope_change(base: ScopeBaseSnapshot, selection: dict) -> ScopeChang
     return result
 
 
+@scoped_originals
 def load_scope_base(doc_id: str, *, session=None) -> ScopeBaseSnapshot:
     """Read canonical state and verified file caches; no parsing/model calls."""
     from sqlalchemy import select

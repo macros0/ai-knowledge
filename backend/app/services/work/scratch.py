@@ -16,6 +16,7 @@ from uuid import uuid4
 logger = logging.getLogger(__name__)
 _NAME = re.compile(r"[0-9a-f]{32}\Z")
 _MARKER = ".export-attempt-v1"
+_ARTIFACT_MARKER = ".artifact-attempt-v1"
 
 
 def _linked(path):
@@ -99,16 +100,14 @@ def export_attempt(settings):
             logger.warning("Export scratch cleanup deferred")
 
 
-def clean_export_attempts(settings, *, after=None, limit=100):
-    """Bounded local scan; a returned cursor continues on the next worker tick."""
-    root = _root(settings)
+def _clean_attempts(root, marker_name, *, after=None, limit=100):
     if not root.is_dir():
         return None
     names = sorted(path.name for path in root.iterdir()
         if _NAME.fullmatch(path.name) and (after is None or path.name > after))[:limit]
     for name in names:
         attempt = root / name
-        marker_path = attempt / _MARKER
+        marker_path = attempt / marker_name
         try:
             if _linked(attempt) or _linked(marker_path) or not marker_path.is_file() or marker_path.stat().st_size > 2048:
                 continue
@@ -127,3 +126,36 @@ def clean_export_attempts(settings, *, after=None, limit=100):
             # or public receipts depend on successful local scratch deletion.
             continue
     return names[-1] if len(names) == limit else None
+
+
+def clean_export_attempts(settings, *, after=None, limit=100):
+    """Bounded local scan; a returned cursor continues on the next worker tick."""
+    return _clean_attempts(_root(settings), _MARKER, after=after, limit=limit)
+
+
+@contextmanager
+def artifact_attempt(root):
+    """One materialization; kernel ownership keeps other live readers safe."""
+    root = Path(root)
+    if _linked(root):
+        raise ValueError("Artifact scratch cannot be a link")
+    root.mkdir(parents=True, exist_ok=True)
+    _clean_attempts(root, _ARTIFACT_MARKER)
+    attempt = root / uuid4().hex
+    attempt.mkdir()
+    try:
+        with (attempt / _ARTIFACT_MARKER).open("x+b") as marker:
+            if not _lock(marker):
+                raise OSError("Cannot acquire artifact scratch lock")
+            try:
+                marker.write(json.dumps({"version": 1, "directory": attempt.name,
+                    "host": socket.gethostname()}).encode("utf-8"))
+                marker.flush()
+                yield attempt
+            finally:
+                _unlock(marker)
+    finally:
+        try:
+            _remove(root, attempt)
+        except OSError:
+            logger.warning("Artifact scratch cleanup deferred")

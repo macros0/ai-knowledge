@@ -723,7 +723,7 @@ class ExportQueue:
                         raise ExportSourceChangedError(doc_id)
                 except (OSError, ValueError) as exc:
                     raise ExportSourceChangedError(doc_id) from exc
-            if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
+            if path.is_symlink() or not path.is_file() or (snapshot_ref is None and not path.resolve().is_relative_to(root)):
                 raise ExportSourceChangedError(doc_id)
             documents[doc_id] = ExportDocument(
                 doc_id=doc_id,
@@ -1141,8 +1141,12 @@ def _snapshot_sources(doc_ids: list[str], settings) -> list[ExportDocument]:
         if settings.artifact_uploads_enabled and ref is None:
             raise ExportAdmissionError("Исходник ещё не перенесён в хранилище", code=codes.BULK_EXPORT_SOURCE_CONFLICT)
         if ref is not None:
-            from app.services.artifacts.original import original_path
-            original_path(settings, doc_id, record["filename"])
+            # Admission freezes the immutable ref; it needs neither a complete
+            # download nor a private cached original. The worker owns its copy.
+            documents.append(ExportDocument(doc_id=doc_id, filename=record["filename"],
+                path=settings.uploads_dir / f"{doc_id}{Path(record['filename']).suffix.lower()}",
+                size_bytes=ref.size, mtime_ns=0, source_blob=vars(ref)))
+            continue
         matches = sorted(settings.uploads_dir.glob(f"{doc_id}.*"))
         if len(matches) != 1:
             raise ExportAdmissionError("Источник экспорта неоднозначен или отсутствует", code=codes.BULK_EXPORT_SOURCE_CONFLICT)

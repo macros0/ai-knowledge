@@ -2816,3 +2816,43 @@ principal and prevented API/worker readiness. The probe now lists at most one
 object under the configured installation prefix. Empty prefixes remain valid
 when the deployment intentionally owns the whole bucket. An actual access denial
 or provider error still fails readiness; no bucket-wide grant is added.
+
+### Atomic upload admission audit and replay
+
+2026-11-03: a shared-store upload could commit its document, receipt and work
+before its upload audit. API loss in that interval permanently lost the event
+because receipt replay returned early. Shared-original admission now records
+the upload audit/outbox in that same SQL transaction; audit failure rolls back
+admission and replay never duplicates the event. The legacy local flow retains
+its existing audit path.
+
+A concurrent same-key request can also observe the committed hash after its
+initial receipt miss. Before returning an exact-duplicate response, it now
+rechecks the actor-bound receipt under the admission lock. Changed inputs still
+conflict and a deleted document cannot be revived through replay.
+
+### Bounded replica original scratch and independent read leases
+
+2026-11-03: replicas previously retained every materialized original in the
+pod uploads directory. Replica requests now own private materializations through
+the complete response, including streaming; worker attempts own them through
+the attempt. Nested consumers share that lifetime and parallel readers retain
+separate locked directories. Cleanup reclaims only recognized, unlocked local
+attempts and preserves unknown paths. Legacy combined originals remain durable.
+Export admission records the canonical binding without downloading the source.
+
+The initial metadata session ends before a replica read starts provider I/O.
+Its object lease and work heartbeat can therefore commit independently while
+the provider is slow. Explicit caller-owned transactions retain their existing
+transaction-bound lease behavior. Publication checks the accepted canonical
+original hash rather than relying on a retained pod-local original.
+
+### Physical writer-stop observation for current-runtime lab backups
+
+2026-11-03: the current-runtime owned-kind backup coordinator now binds writer,
+provider, controller, storage-process and node identities before stopping roles.
+Every stopped guard refreshes Kubernetes and node CRI observations, rejects
+retired or unknown live processes, changed nodes or incomplete storage-process
+observations, and repeats the guard after cold archive verification. Uncertainty
+keeps maintenance held. This single-node training recipe is not a production
+failure-domain or backup-schedule qualification.

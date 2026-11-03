@@ -3,11 +3,11 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from app.db.session import session_scope
+from app.config import get_settings
 from app.services.artifacts.contract import BlobConflict
 from app.services.artifacts.lifecycle import claim_delete, collect_blob
 from app.services.artifacts.repository import attach_blob
@@ -85,7 +85,8 @@ def test_actual_postgres_lifecycle_migration_preserves_bound_object(orphan, monk
     monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema} -clock_timeout=2000 -cstatement_timeout=10000")
     # Keep Alembic/configparser free of percent-encoded libpq options.
     url = get_engine().url.set(query={}).render_as_string(hide_password=False)
-    monkeypatch.setattr("app.config.get_settings", lambda: SimpleNamespace(db_url=url))
+    alembic_settings = get_settings().model_copy(update={"database_url": url})
+    monkeypatch.setattr("app.config.get_settings", lambda: alembic_settings)
     root = Path(__file__).resolve().parents[2]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
@@ -129,7 +130,8 @@ def test_postgres_staging_marker_migration_preserves_legacy_and_refuses_portable
     assert schema.startswith("artifact_") and len(schema) == 41
     monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema} -clock_timeout=2000 -cstatement_timeout=10000")
     url = get_engine().url.set(query={}).render_as_string(hide_password=False)
-    monkeypatch.setattr("app.config.get_settings", lambda: SimpleNamespace(db_url=url))
+    alembic_settings = get_settings().model_copy(update={"database_url": url})
+    monkeypatch.setattr("app.config.get_settings", lambda: alembic_settings)
     root = Path(__file__).resolve().parents[2]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
@@ -167,7 +169,8 @@ def test_postgres_publication_marker_upgrade_preserves_legacy_and_sealed_rows(or
     assert schema.startswith("artifact_") and len(schema) == 41
     monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema} -clock_timeout=2000 -cstatement_timeout=10000")
     url = get_engine().url.set(query={}).render_as_string(hide_password=False)
-    monkeypatch.setattr("app.config.get_settings", lambda: SimpleNamespace(db_url=url))
+    alembic_settings = get_settings().model_copy(update={"database_url": url})
+    monkeypatch.setattr("app.config.get_settings", lambda: alembic_settings)
     root = Path(__file__).resolve().parents[2]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))

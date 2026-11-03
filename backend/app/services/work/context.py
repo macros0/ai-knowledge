@@ -16,9 +16,11 @@ def current_claim():
 
 @contextmanager
 def work_execution(work):
+    from app.services.artifacts.original_scope import original_scope
     token = _claim.set(work)
     try:
-        yield
+        with original_scope():
+            yield
     finally:
         _claim.reset(token)
 

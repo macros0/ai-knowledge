@@ -45,6 +45,7 @@ from app.services import gen_quality
 from app.services.generation_files import generation_paths, merge_legacy_backfill_files, prepare_generation_paths
 from app.services.generation_artifacts import artifact_manifest
 from app.services.artifacts.original import original_path
+from app.services.artifacts.original_scope import scoped_originals
 from app.services.table_quality import bind_table_reports, has_content_omission, reports_from_chunks, write_table_quality_report
 from app.services.generation_publication import _merge_tags, publish_prepared_document
 from app.services.generation_store import (
@@ -266,6 +267,7 @@ class Pipeline:
         self._start(doc_id, str(filepath), filename, user_tags or [], resume=False, is_admin=is_admin,
                     processing_scope=processing_scope,scope_request_id=scope_request_id)
 
+    @scoped_originals
     def resume(self, doc_id: str, *, is_admin: bool = False) -> None:
         from app.services.work.admission import durable_documents, enqueue_existing_document
         if durable_documents(self.settings):
@@ -303,6 +305,7 @@ class Pipeline:
         if task and not task.done():
             raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
 
+    @scoped_originals
     def regenerate(self, doc_id: str, *, is_admin: bool = False, processing_scope: dict | None = None,
                    scope_request_id: str | None = None) -> None:
         """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
@@ -712,6 +715,7 @@ class Pipeline:
             except Exception:
                 pass
 
+    @scoped_originals
     def _process(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
         *, fresh_table_cache: bool = False,processing_scope: dict | None = None,
@@ -1761,6 +1765,7 @@ class Pipeline:
                 del outcomes[key]
             outcomes[doc_id] = (now + _INTERACTIVE_BACKFILL_RETRY_SECONDS, code, message)
 
+    @scoped_originals
     def _backfill_chunks(self, doc_id: str) -> None:
         """Строит чанки из исходного файла и пишет их в document_chunks (без LLM).
 

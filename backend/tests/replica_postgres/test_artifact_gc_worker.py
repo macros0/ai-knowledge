@@ -4,7 +4,7 @@ from datetime import timedelta
 import io
 from pathlib import Path
 import threading
-from types import SimpleNamespace
+from app.config import get_settings
 
 import pytest
 from sqlalchemy import text
@@ -87,7 +87,9 @@ def test_postgres_gc_migration_preserves_bound_objects(tmp_path, monkeypatch):
         session.execute(text("DROP INDEX ix_artifact_source_caches_object_id"))
     assert schema.startswith("artifact_") and len(schema) == 41
     monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema} -clock_timeout=2000 -cstatement_timeout=10000")
-    monkeypatch.setattr("app.config.get_settings", lambda: SimpleNamespace(db_url=get_engine().url.set(query={}).render_as_string(hide_password=False)))
+    alembic_settings = get_settings().model_copy(update={
+        "database_url": get_engine().url.set(query={}).render_as_string(hide_password=False)})
+    monkeypatch.setattr("app.config.get_settings", lambda: alembic_settings)
     root = Path(__file__).resolve().parents[2]
     alembic = Config(str(root / "alembic.ini"))
     alembic.set_main_option("script_location", str(root / "alembic"))
