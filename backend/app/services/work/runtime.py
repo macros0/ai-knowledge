@@ -147,6 +147,7 @@ def build_handlers():
     registry.register("trash_sweep", 1, sweep_trash)
     registry.register("scope_change", 1, run_scope_job)
     registry.register("diagnostic_bundle", 1, diagnostic_bundle)
+    registry.register("diagnostic_bundle", 2, diagnostic_bundle)
     registry.register("index_backfill", 1, backfill_index)
     registry.register("index_backfill_sweep", 1, sweep_indexes)
     registry.register("reference_translation", 1, run_reference_translation)

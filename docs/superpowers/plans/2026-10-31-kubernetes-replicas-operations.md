@@ -185,6 +185,18 @@ owned legacy operations remain explicit reconciliation gates, and populated
 source-off Kubernetes/provider/restore/release acceptance is still required.
 See [handoff evidence](../reports/2026-11-03-replica-compact-handoff.json).
 
+O2 legacy diagnostic follow-up (2026-11-03): S4 now imports the complete retained
+canonical journal with original expiry and freezes eligible pending bundles at
+their accepted cutoff. Optional explicit frontend history is included without
+recollection. Held handoff emits frozen Work2; ready/audit/success share an owned
+transaction. Native PostgreSQL proves real diagnostic writer exclusion, rollback,
+same-plan retry, cold execution, lost-owner fencing and subsequent store transfer.
+See [journal/input evidence](../reports/2026-11-03-replica-legacy-diagnostics.json)
+and [procedure](../../KUBERNETES_REPLICAS_RECOVERY.md#retained-compact-diagnostic-journal).
+This completes that software prerequisite for Task3, not its actual populated
+source-off Kubernetes/provider/independent-restore/release rehearsal. No profile
+certification or production schedule is enabled.
+
 O2 schema-adoption SQL foundation (2026-11-02): the specific populated
 rpl04-to-rpl05 transition now has an owned offline adoption step. It claims only
 the exact migration-created fence, checks original identity/storage and explicit

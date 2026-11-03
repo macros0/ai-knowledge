@@ -123,10 +123,10 @@ after acknowledged commit can resume with the exact same source/plan/settings.
   bounded/duplicate-key inputs and no-execution/no-release assertions.
 - [x] Native PostgreSQL atomic rollback/locking/retry with populated S4 fixture;
   relevant existing queue/scope/translation/migration regressions; project check.
-- [ ] Complete legacy local diagnostic journal/input migration before allowing
+- [x] Complete legacy local diagnostic journal/input migration before allowing
   protocol1 pending bundles. S4 migrates ready archives, not recorder FS history;
   a request/cutoff alone cannot prove that history reached the shared SQL store.
-  The current handoff refuses protocol1; this required migration stays open.
+  Task3a.1 below adds that verified conversion; unconverted protocol1 still refuses.
 - [x] Update SECURITY/procedure/evidence with exact scope; retain actual
   source-off Kubernetes/provider/restore/release acceptance as Task3b; commit.
 
@@ -139,5 +139,65 @@ The isolated cluster shut down normally after its initial30s stop-observation
 timeout; the same postmaster completed its47.925s checkpoint, disappeared and
 removed its PID file. Stop was observed, not repeated. Data/logs are retained.
 See [bounded public evidence](../reports/2026-11-03-replica-compact-handoff.json).
-The required legacy local diagnostic journal migration remains open above;
-this is progress toward Task3, not completion of all legacy variants or O2.
+The subsequent journal/input migration is recorded below. This SQL handoff
+milestone alone does not establish that conversion or complete Task3/O2.
+
+### Task 3a.1: Legacy diagnostic journal and pending bundle inputs
+
+Implementation decision (2026-11-03): extend the existing verified S4 copy and
+atomic cutover. A separate unfenced importer would duplicate ownership/source
+comparison and backup logic. Merely setting artifact_version2 or importing live
+segments with fresh timestamps would lose pending-request cutoff/TTL semantics.
+Use S4's private plan, source inventory, target read-back and one cutover instead.
+
+**Files:** create `app/services/artifacts/diagnostic_migration.py` for read-only
+legacy inventory/SQL import; `app/services/diagnostics/frozen_bundle.py` for the
+version2 durable completion contract; modify S4 compiler/coordinator, diagnostic
+queue/runtime registry and compact handoff. Add isolated unit/native tests and
+update the existing security/procedure/evidence documentation.
+
+1. Inspect backend local event/control/expiry files and an optional explicitly
+   selected frontend spool. Canonical bounded regular files only; no links,
+   truncated/changed input or unknown paths/protocols. Record the complete input
+   inventory and relevant diagnostic SQL revision in the private S4 plan. Active
+   captures/unreconciled stop journals must be stopped/reconciled with existing
+   audited source recovery before planning; expiry alone grants no takeover.
+2. Preserve every retained event byte in bounded immutable SQL segments at
+   cutover, retaining source times/expiry and honest unknown recorder coverage.
+   No TTL refresh, pruning or silent sampling. Raw source blobs participate in
+   the existing S4 target-copy verification and backup source digest. Extra or
+   changed files/SQL after planning prevent completion.
+3. Prepare each eligible queued local diagnostic bundle from the old retained
+   inputs and its original request/cutoff, using existing safe supervised snapshot
+   and fixed-entry ZIP builder. Preserve partial/gap metadata. The prepared bytes
+   are frozen input, not a ready/downloadable job: keep its original status,
+   owner, approval and request. Copy/verify them with S4 and bind a strict receipt
+   under a separate frozen-input logical name; flip storage protocol only in the
+   atomic verified cutover. No queue handler/model call or work admission occurs.
+4. Add diagnostic_bundle payload version2 for frozen inputs. The matching new
+   worker checks the exact receipt/binding and complete archive SHA/size under
+   ownership, then publishes the ready binding/audit/Work success atomically.
+   It must never fall back to collecting current events. Existing version1 stays
+   compatible; compact handoff emits version2 only for a verified frozen receipt.
+5. Migrate an existing frozen binding/receipt and pending work digest consistently
+   on later supported S4 transfers. Retain original source files. Source-off cold
+   worker execution must prove the original before-cutoff events survive and
+   after-cutoff events stay excluded. Unknown/owned operations stay refused.
+
+- [x] RED old local journal/queued bundle remains nonportable; implement S4
+  inventory/target-copy/atomic SQL conversion and GREEN source-change/rollback tests.
+- [x] RED missing version2 worker/handoff, then GREEN cold-source execution,
+  immutable input validation, old version compatibility and lost-owner refusal.
+- [x] Native PostgreSQL real Alembic/copy/cutover/held handoff/release/work proof;
+  relevant S4/diagnostic/queue regressions, project check, private-value/link/hash scan.
+- [x] Update SECURITY/runbook/evidence and commit owned files. Actual populated
+  source-off Kubernetes/provider/independent restore acceptance remains Task3b.
+
+Verification:174 distinct Windows cases passed (22 new migration/worker cases
+and152 existing S4/diagnostic/compact regressions);6 native PostgreSQL cases passed
+with the real Alembic chain. The PostgreSQL suite includes actual conflicting
+diagnostic UPDATE/55P03, complete SQL rollback/same-plan retry, cold backend and
+frontend input, stale-worker fencing and second-store migration. Project checks
+passed with audit0/frontend756 passes plus1 existing skip/Ruff. The owned private
+PostgreSQL cluster stopped normally; source data/logs remain retained. See
+[bounded evidence](../reports/2026-11-03-replica-legacy-diagnostics.json).

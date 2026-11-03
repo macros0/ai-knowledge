@@ -45,7 +45,7 @@ def test_bundle_admission_is_durable_without_local_queue(durable_bundle):
 
 def test_bundle_handler_is_registered():
     from app.services.work.runtime import build_handlers
-    assert build_handlers().supported["diagnostic_bundle"] == {1}
+    assert build_handlers().supported["diagnostic_bundle"] == {1, 2}
 
 
 def test_bundle_builder_is_serialized_across_claims(durable_bundle):

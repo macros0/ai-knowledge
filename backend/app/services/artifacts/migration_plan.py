@@ -58,6 +58,8 @@ class Compiler:
     def track(self, kind, path, *, expected=None):
         roots = {"uploads": self.settings.uploads_dir, "okf": self.settings.okf_dir, "staging": self.settings.staging_dir,
                  "diagnostics": self.settings.diagnostics_dir, "exports": self.settings.exports_dir}
+        roots.update(diagnostic_legacy_backend=self.task.legacy_diagnostics_root,
+            diagnostic_legacy_frontend=self.task.legacy_frontend_root)
         path, root = Path(path).absolute(), roots[kind].absolute()
         _reject_links(path)
         relative = path.relative_to(root).as_posix()
@@ -419,12 +421,35 @@ class Compiler:
                 result["artifact_version"] = 2
                 self.update(models.Job, {"id": job.id}, result=result)
         for row in session.scalars(select(models.DiagnosticBundle)):
+            if isinstance(row.manifest,dict) and 'frozen_bundle' in row.manifest:
+                self._frozen_diagnostic(session,row)
+                continue
             if row.status == "ready" and row.artifact_version == 1:
                 ref = self.file("diagnostics", self.settings.diagnostics_dir / "bundles" / (row.id + ".zip"), expected=row.sha256)
                 if ref.size != row.size_bytes:
                     raise ValueError("Diagnostic archive size changed")
                 self.bind("diagnostic_bundle", row.id, None, "bundle.zip", ref)
                 self.update(models.DiagnosticBundle, {"id": row.id}, artifact_version=2)
+
+    def _frozen_diagnostic(self,session,row):
+        from app.services.diagnostics.frozen_bundle import frozen_receipt, frozen_spec
+        from app.services.work.store import _spec
+        if row.status!='queued':raise ValueError('Reconcile attempted frozen diagnostic work before migration')
+        receipt=frozen_receipt(session,row,self.settings)
+        expected=frozen_spec(session,row,self.settings)
+        receipt['ref']=asdict(self.blob(receipt['ref']['object_id']))
+        self.update(models.DiagnosticBundle,{'id':row.id},manifest={'frozen_bundle':receipt})
+        from sqlalchemy import and_, or_
+        matches=list(session.scalars(select(models.WorkItem).where(or_(
+            models.WorkItem.dedupe_key==expected.dedupe_key,
+            and_(models.WorkItem.kind=='diagnostic_bundle',models.WorkItem.payload_json['bundle_id'].as_string()==row.id))).limit(2)))
+        if len(matches)>1:raise ValueError('Ambiguous frozen diagnostic work')
+        for work in matches:
+            if (_spec(work)!=expected or work.status!='queued' or work.owner_id is not None or work.lease_until is not None
+                    or work.attempts!=0 or work.fence!=0 or work.cancel_requested or work.finished_at is not None
+                    or session.get(models.WorkProgress,work.id) is not None):
+                raise ValueError('Reconcile attempted frozen diagnostic work before migration')
+            self.update(models.WorkItem,{'id':work.id},payload_json={**expected.payload,'input_hash':canonical_hash(receipt)})
 
     def build(self, session):
         self.session = session
@@ -497,22 +522,34 @@ class Compiler:
         self._reviews(session)
         self._staging(session)
         self._jobs(session)
+        from .diagnostic_migration import compile_diagnostics
+        diagnostics=compile_diagnostics(self,session)
         objects = list(self.objects.values())
         return {"id": self.id, "objects": objects, "bindings": list(self.bindings.values()),
                 "source_files": list(self.source_files.values()), "source_blobs": list(self.source_blobs.values()),
                 "updates": list(self.updates.values()), "inserts": self.inserts, "checkpoints": self.checkpoints, "heads": self.heads,
+                **({'diagnostics':diagnostics} if diagnostics is not None else {}),
                 "counts": {"documents": len(documents), "generations": len(generations), "objects": len(objects),
                            "bytes": sum(item["ref"]["size"] for item in objects), "bindings": len(self.bindings)}}
 
 
-def apply_plan(session, plan):
+def apply_plan(session, plan, *, diagnostic_store=None, diagnostic_limits=None):
     refs = {item["ref"]["object_id"]: BlobRef(**item["ref"]) for item in plan["objects"]}
     for object_id, ref in refs.items():
         row = session.get(models.ArtifactObject, object_id)
         if row is None or row.state != "ready" or _ref(row) != ref:
             raise ValueError("Target object metadata changed before cutover")
     for item in plan["inserts"]:
-        session.execute(Base.metadata.tables[item["table"]].insert().values(**item["values"]))
+        from datetime import datetime
+        from sqlalchemy import DateTime
+        table=Base.metadata.tables[item['table']]
+        values={name:datetime.fromisoformat(value) if isinstance(table.c[name].type,DateTime) and isinstance(value,str)
+            else value for name,value in item['values'].items()}
+        session.execute(table.insert().values(**values))
+    if plan.get('diagnostics'):
+        from .diagnostic_migration import apply_diagnostics
+        if diagnostic_store is None or diagnostic_limits is None:raise ValueError('Verified diagnostic import context required')
+        apply_diagnostics(session,plan['diagnostics'],diagnostic_store,diagnostic_limits)
     session.execute(delete(models.ArtifactBinding).where(models.ArtifactBinding.owner_type != "migration"))
     session.execute(delete(models.CheckpointBinding))
     session.execute(delete(models.SourceCacheHead))

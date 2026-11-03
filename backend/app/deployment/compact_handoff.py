@@ -33,7 +33,7 @@ Hex32=Annotated[str,Field(pattern=r'^[0-9a-f]{32}$')]
 class HandoffEntry(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True,frozen=True,hide_input_in_errors=True)
     recipe: Literal['bulk.v1','export.v1','reference_translation.v1','glossary_translation.v1',
-        'diagnostic_bundle.v1','document_resume.v1','scope_change.v1']
+        'diagnostic_bundle.v1','diagnostic_frozen.v1','document_resume.v1','scope_change.v1']
     source_id: Annotated[str,Field(pattern=r'^[A-Za-z0-9-]{1,64}$')]
     input_sha256: Digest
     work_id: Hex32
@@ -258,7 +258,10 @@ def _collect(session,settings,source=None,*,excluded=(),allow_orphans=True):
                 or not bundle.request.get('session_id') and not all(bundle.request.get(key) for key in ('from_utc','to_utc'))):
             raise MaintenanceRefused('Started or incomplete diagnostic intent requires reconciliation')
         UUID(bundle.id);BundleRequest.model_validate(bundle.request)
-        add('diagnostic_bundle.v1',bundle,WorkSpec('diagnostic_bundle',1,{'bundle_id':bundle.id},f'diagnostic-bundle/{bundle.id}'))
+        if isinstance(bundle.manifest,dict) and 'frozen_bundle' in bundle.manifest:
+            from app.services.diagnostics.frozen_bundle import frozen_spec
+            add('diagnostic_frozen.v1',bundle,frozen_spec(session,bundle,settings))
+        else:add('diagnostic_bundle.v1',bundle,WorkSpec('diagnostic_bundle',1,{'bundle_id':bundle.id},f'diagnostic-bundle/{bundle.id}'))
     scoped=set()
     for row in session.scalars(select(DocumentScopeChange).where(
             DocumentScopeChange.state.not_in(['preview','published','failed','canceled'])).order_by(DocumentScopeChange.id)):

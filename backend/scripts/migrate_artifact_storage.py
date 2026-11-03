@@ -20,6 +20,8 @@ def main(argv=None, *, settings=None, stores=None):
     parser.add_argument("--private-config", type=Path, help="Private JSON credentials keyed by store ID; never copied into inventory")
     parser.add_argument("--runtime-env-file", type=Path, help="Explicit source runtime env, required for a production plan")
     parser.add_argument("--show-installation", action="store_true")
+    parser.add_argument('--legacy-diagnostics-root',type=Path,help='Explicit retained backend journal root; defaults to source diagnostics_dir')
+    parser.add_argument('--legacy-frontend-root',type=Path,help='Optional explicit stopped legacy frontend spool')
     args = parser.parse_args(argv)
     from app.services.work.cli import require_single_process_writer
     if args.phase != "plan" and not args.apply:
@@ -43,7 +45,8 @@ def main(argv=None, *, settings=None, stores=None):
             print(json.dumps({"installation_id": installation_id()}))
             return 0
         task = StorageMigration(settings, _read(args.source_manifest), _read(args.target_manifest), args.plan,
-                                stores=stores, credentials=_read(args.private_config) if args.private_config else None)
+                                stores=stores, credentials=_read(args.private_config) if args.private_config else None,
+                                legacy_diagnostics_root=args.legacy_diagnostics_root,legacy_frontend_root=args.legacy_frontend_root)
         if args.phase == "plan":
             plan = task.plan()
             result = {"phase": "plan", "migration_id": plan["id"], "source_revision": plan["source_revision"],

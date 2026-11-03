@@ -192,6 +192,9 @@ class DiagnosticBundleQueue:
 
     def _execute_work_owned(self, work):
         from app.config import get_settings
+        if work.spec.payload_version==2:
+            from .frozen_bundle import complete_frozen_bundle
+            return complete_frozen_bundle(work,get_settings())
         from app.services.artifacts.contract import BlobUnavailable
         from app.services.artifacts.job_files import lock_job, bind_file
         from app.services.work.context import coordinator_session, work_execution
@@ -206,6 +209,8 @@ class DiagnosticBundleQueue:
             row = lock_job(db, DiagnosticBundle, bundle_id)
             if row is None or row.status not in {"queued", "building"}:
                 raise BundleQueueError("diagnostic_bundle_not_ready")
+            if isinstance(row.manifest,dict) and 'frozen_bundle' in row.manifest:
+                raise ValueError('Frozen diagnostic input requires its versioned work recipe')
             other = db.scalar(select(DiagnosticBundle.id).where(
                 DiagnosticBundle.id != bundle_id, DiagnosticBundle.status == "building").limit(1))
             if other is not None:

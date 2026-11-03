@@ -1,9 +1,10 @@
 """Explicit offline transfer; immutable copy receipts precede atomic selection."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import asdict
 import hashlib
 import json
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -69,7 +70,8 @@ def _digest(path):
 
 
 class StorageMigration:
-    def __init__(self, settings, source_manifest, target_manifest, plan_path, *, stores=None, credentials=None):
+    def __init__(self, settings, source_manifest, target_manifest, plan_path, *, stores=None, credentials=None,
+                 legacy_diagnostics_root=None, legacy_frontend_root=None):
         self.runtime_settings = settings
         self.settings = settings.model_copy(deep=True)
         self.source = deepcopy(source_manifest)
@@ -77,6 +79,9 @@ class StorageMigration:
         self.path = Path(plan_path).absolute()
         _reject_links(self.path)
         self.stores, self.credentials = stores or {}, credentials or {}
+        self.legacy_diagnostics_root_explicit=legacy_diagnostics_root is not None
+        self.legacy_diagnostics_root=Path(os.path.abspath(legacy_diagnostics_root or settings.diagnostics_dir))
+        self.legacy_frontend_root=Path(os.path.abspath(legacy_frontend_root)) if legacy_frontend_root is not None else None
 
     def _normalize(self, manifest):
         if set(manifest) != {"version", "installation_id", "store"} or type(manifest["version"]) is not int or manifest["version"] != 1:
@@ -119,6 +124,15 @@ class StorageMigration:
         roots += [Path(item["root"]) for item in (source, target) if "root" in item]
         if any(self.path.is_relative_to(root) for root in roots):
             raise ValueError("Transfer plan/work directory must be outside runtime source/target roots")
+        for legacy in (self.legacy_diagnostics_root,self.legacy_frontend_root):
+            if legacy is None:continue
+            _reject_links(legacy)
+            if self.path.parent.is_relative_to(legacy) or legacy.is_relative_to(self.path.parent):
+                raise ValueError('Legacy diagnostic root overlaps transfer work directory')
+            if target['backend'] in {'local','rwx'}:
+                target_root=Path(target['root'])
+                if target_root.is_relative_to(legacy) or legacy.is_relative_to(target_root):
+                    raise ValueError('Legacy diagnostic root overlaps target artifact root')
         if target["backend"] in {"local", "rwx"}:
             root = Path(target["root"])
             with migration_access(), session_scope() as session:
@@ -142,6 +156,10 @@ class StorageMigration:
                 if (plan.get("installation_id") != identity or plan.get("source") != source or plan.get("target") != target
                         or canonical_hash({k: v for k, v in plan.items() if k != "plan_hash"}) != plan.get("plan_hash")):
                     raise ValueError("Migration plan changed")
+                if plan.get('diagnostics') and plan['diagnostics'].get('mode')!='shared-sql':
+                    if (plan['diagnostics']['backend_root']!=str(self.legacy_diagnostics_root)
+                            or plan['diagnostics']['frontend_root']!=(str(self.legacy_frontend_root) if self.legacy_frontend_root else None)):
+                        raise ValueError('Explicit legacy diagnostic roots changed')
                 return plan
             with session_scope() as session:
                 control = session.get(models.ArtifactStorageControl, 1)
@@ -154,7 +172,10 @@ class StorageMigration:
                 if revision != source_revision(session):
                     raise ValueError("Source changed while planning")
             plan.update(version=1, installation_id=identity, source=source, target=target, source_sql_revision=revision)
-            plan["source_revision"] = canonical_hash({"sql": revision, "files": plan["source_files"], "blobs": plan["source_blobs"]})
+            source_snapshot={"sql": revision, "files": plan["source_files"], "blobs": plan["source_blobs"]}
+            if plan.get('diagnostics'):
+                source_snapshot['diagnostic_sql']=plan['diagnostics']['sql_revision']
+            plan["source_revision"] = canonical_hash(source_snapshot)
             plan["plan_hash"] = canonical_hash(plan)
             self.path.parent.mkdir(parents=True, exist_ok=True)
             _write_canonical(self.path, plan)
@@ -173,6 +194,7 @@ class StorageMigration:
                 or {item.get("role") for item in proof["files"]} != {"database", "artifacts"}):
             raise ValueError("Backup evidence does not match source revision")
         roots = [self.settings.data_dir.absolute(), self.settings.diagnostics_dir.absolute()]
+        roots += [root for root in (self.legacy_diagnostics_root,self.legacy_frontend_root) if root is not None]
         roots += [Path(d["root"]) for d in (plan["source"], plan["target"]) if "root" in d]
         for item in proof["files"]:
             file = Path(item["path"]).absolute()
@@ -221,13 +243,25 @@ class StorageMigration:
         with migration_access(), FileLock(str(lock), timeout=0):
             plan = self.plan()
             proof = self._backup(plan, backup)
-            yield plan, self._admit(plan, proof)
+            with session_scope() as session:
+                receipt=session.get(models.ArtifactStorageMigration,plan['id'])
+                committed=receipt is not None and receipt.status=='cutover'
+            from .diagnostic_migration import writer_guard
+            guard=(writer_guard(self.legacy_diagnostics_root)
+                if not committed and plan.get('diagnostics',{}).get('mode')=='legacy' else nullcontext())
+            with guard:
+                yield plan, self._admit(plan, proof)
 
     def _assert_source(self, session, plan, *, full=True):
         control = self._lock(session, plan)
         if (control.maintenance_token != plan["id"] or control.active_store_id != plan["source"]["store_id"]
                 or full and source_revision(session) != plan["source_sql_revision"]):
             raise ValueError("Source changed since migration plan")
+        if full and plan.get('diagnostics'):
+            from .diagnostic_migration import diagnostic_revision, assert_inventory
+            if diagnostic_revision(session)!=plan['diagnostics']['sql_revision']:
+                raise ValueError('Diagnostic SQL changed since migration plan')
+            assert_inventory(plan['diagnostics'],self.settings.diagnostics_limits())
 
     def _open_source(self, item):
         source = item["source"]
@@ -236,6 +270,8 @@ class StorageMigration:
         roots = {"uploads": self.settings.uploads_dir, "okf": self.settings.okf_dir,
                  "staging": self.settings.staging_dir, "diagnostics": self.settings.diagnostics_dir,
                  "exports": self.settings.exports_dir, "generated": self.path.parent}
+        roots.update(diagnostic_legacy_backend=self.legacy_diagnostics_root,
+            diagnostic_legacy_frontend=self.legacy_frontend_root)
         root = roots[source["kind"]].absolute()
         path = root / source["path"]
         if not path.absolute().is_relative_to(root) or Path(source["path"]).is_absolute() or ".." in Path(source["path"]).parts:
@@ -347,9 +383,16 @@ class StorageMigration:
                 control = self._lock(session, plan)
                 if session.get_bind().dialect.name == "postgresql":
                     from sqlalchemy import text
-                    session.execute(text("LOCK TABLE " + ",".join('"' + name + '"' for name in CORPUS) + " IN SHARE ROW EXCLUSIVE MODE"))
+                    tables=list(CORPUS)
+                    if plan.get('diagnostics'):
+                        from .diagnostic_migration import TABLES
+                        tables.extend(TABLES)
+                    session.execute(text("LOCK TABLE " + ",".join('"' + name + '"' for name in tables) + " IN SHARE ROW EXCLUSIVE MODE"))
                 self._assert_source(session, plan)
-                apply_plan(session, plan)
+                apply_plan(session, plan,diagnostic_store=self.store(plan['target']),diagnostic_limits=self.settings.diagnostics_limits())
+                if plan.get('diagnostics'):
+                    from .diagnostic_migration import assert_inventory
+                    assert_inventory(plan['diagnostics'],self.settings.diagnostics_limits())
                 receipt = session.get(models.ArtifactStorageMigration, plan["id"])
                 if receipt.status != "verified" or receipt.verified_hash != plan["plan_hash"]:
                     raise ValueError("Unverified target cannot become active")

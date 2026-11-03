@@ -2768,8 +2768,42 @@ cannot escape adoption checks merely by living outside public Job status filters
 Queued work for an awaiting-approval job is explicitly refused. Progress without
 an accepted portable checkpoint is not silently regenerated. Shared protocol2
 diagnostic requests can retain their existing request/cutoff; legacy protocol1
-requests are refused until a separate migration verifies their local recorder
-journal/input history. S4 ready-archive copying does not establish that migration.
-This remaining legacy migration and actual source-off Kubernetes/provider/release
-acceptance are still required; the SQL handoff does not execute jobs or qualify
-the platform.
+requests require the verified S4 journal/input conversion. Ready-archive copying
+alone does not establish that conversion. Actual source-off Kubernetes/provider/
+release acceptance remains required; SQL handoff does not qualify the platform.
+
+### Offline legacy diagnostic conversion
+
+2026-11-03: pending legacy requests could retain source-disk dependencies after
+ordinary artifact migration. S4 now verifies/imports their journal and freezes
+the accepted input; diagnostic SQL enters the backup digest and cutover locks.
+This prevents silent history loss or recollection from a later time window.
+
+S4 inventories all selected retained backend/frontend events and control records,
+hashes diagnostic SQL into the backup source revision, and rechecks the complete
+inventory before atomic cutover. It holds an existing backend OS writer lock
+without creating/changing source files. Unknown/live frontend markers, active SQL
+captures, active/unknown control projections, unreconciled deferred audit records,
+links, changed or truncated input refuse conversion. Physical source stops remain
+an independent trusted operator obligation; lease expiry is not authority.
+PostgreSQL locks diagnostic tables together with corpus tables at cutover.
+
+Raw source hashes are verified in the target before SQL immutable segments are
+inserted, preserving source expiry rather than renewing retention. Backend
+canonical bytes are required; frontend normalization must preserve every parsed
+field/value. Source files remain retained. Missing coverage/counters are explicit
+unknowns. Private transfer state contains sensitive source/history data and must
+receive the same protection as the corpus. Preparation uses bounded extra scratch
+capacity without widening runtime capture or archive limits.
+
+Queued legacy bundle requests keep their original request/cutoff. The existing
+supervised bounded snapshot and fixed seven-entry ZIP builder freezes accepted
+input; S4 binds it under `frozen-input.zip` and updates a strict receipt/protocol
+in the same cutover. It does not mark ready or enqueue/execute work. Held compact
+handoff admits only verified `diagnostic_frozen.v1` receipts as Work version2.
+The worker verifies SHA/size/ZIP inventory/manifest under a current claim, then
+commits ready binding/audit/Work success atomically; stale claims cannot publish.
+Version1 cannot recollect a frozen request. Subsequent S4 transfers update the
+receipt and matching pristine queued Work digest atomically, refusing attempted,
+owned, cancelled or ambiguous work. No missing journal is silently replaced by
+new observations. See [bounded evidence](docs/superpowers/reports/2026-11-03-replica-legacy-diagnostics.json).

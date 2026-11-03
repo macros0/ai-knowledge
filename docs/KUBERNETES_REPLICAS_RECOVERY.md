@@ -184,10 +184,8 @@ and copies its accepted policy into DocumentWorkInput. Draft or unconfirmed
 reviews, missing policies, retired owners and progress without a recoverable
 checkpoint refuse; the command does not invent a new regenerate request.
 
-Legacy protocol1 diagnostic requests still depend on recorder files. Ready bundle
-archive copying does not move that history to shared SQL. Such requests therefore
-remain refused until the separate legacy journal/input migration is implemented
-and verified. A protocol2 fixture is not evidence for this outstanding case.
+Legacy protocol1 diagnostic requests require the S4 journal/input conversion
+described below. Ready-archive copying alone does not satisfy that requirement.
 
 Apply reproduces the entire plan under the retained table locks. It adds only
 WorkItems/frozen inputs, then commits them together with identity, held epoch1
@@ -197,6 +195,57 @@ execution or provider-qualification receipt. After acknowledged commit but faile
 identity publication, retry with the same source, plan, operation, owner and
 runtime. Every new row must still be pristine with the original admission time;
 changed/missing work or frozen input refuses and leaves the hold intact.
+
+### Retained compact diagnostic journal
+
+Before the S4 plan, stop the compact backend and frontend physically and reconcile
+active/starting captures or unapplied deferred stop records through the existing
+audited source recovery. An elapsed capture/heartbeat lease is not a stop receipt.
+The importer refuses an active or unknown capture projection and a frontend
+writer marker; it does not clear those records. Preserve the source directories.
+
+Use the same explicit roots for every phase of `migrate_artifact_storage.py`:
+`--legacy-diagnostics-root <retained-backend-root>` defaults to the source runtime's
+`diagnostics_dir`; `--legacy-frontend-root <retained-frontend-spool>` is optional.
+An omitted frontend spool produces an explicit coverage gap. Neither root may
+overlap the private transfer directory or target store. Keep backup files outside
+all source and target directories; protect the transfer directory as corpus data.
+The runtime preview still requires non-production combined settings and the
+existing independent backup/writer evidence before mutation.
+
+S4 records the complete selected file inventory and diagnostic SQL revision. The
+backup source digest includes that SQL revision. Existing backend writer locks
+are held throughout each operation; no source file is created, pruned or changed.
+Do not replace/remove a lock file or resume a source writer during this procedure.
+Extra/changed files or SQL prevent cutover. PostgreSQL cutover also locks the
+diagnostic tables against concurrent writers.
+
+Verified raw event blobs become bounded immutable SQL segments at the same atomic
+cutover, retaining original modification/expiry times and unknown recorder
+counters. Backend events must be canonical; frontend JSON may be canonicalized
+only when parsing proves that every field/value is unchanged. Unknown formats,
+links, oversized or truncated events refuse the whole conversion. Missing source
+history is not reconstructed from current events.
+
+Eligible queued protocol1 bundles use their original request and cutoff to
+prepare a bounded fixed-entry ZIP. S4 copies/verifies it as `frozen-input.zip` and
+sets a versioned receipt/protocol2 in that same transaction. The request remains
+queued. Held adoption uses `diagnostic_frozen.v1`, creating Work payload version2;
+only the owned worker after explicit release may verify the archive and publish
+ready/audit/success together. It never recollects a current journal. Later S4
+transfers rebind this receipt and pristine queued Work digest together; attempted,
+owned or ambiguous work requires reconciliation.
+
+The private preparation spool has a bounded backend budget of
+`backend_bytes + total_bytes + bundle_bytes`, plus `frontend_bytes`; normal source,
+prepared-input and ZIP limits remain separate. Ensure that capacity and the
+configured free-space reserve before planning. Exceeding a bound refuses the
+operation rather than sampling history. Retain interrupted transfer state for
+inspection/resume; source files and backups are never deleted by this conversion.
+
+See [journal conversion evidence](superpowers/reports/2026-11-03-replica-legacy-diagnostics.json).
+This software/native PostgreSQL proof does not complete the populated source-off
+Kubernetes/provider/independent-restore rehearsal.
 
 ## Encrypted archive contract
 
