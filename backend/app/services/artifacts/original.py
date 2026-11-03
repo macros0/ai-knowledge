@@ -51,7 +51,7 @@ def _scoped_original(settings, doc_id, legacy):
 
 def original_path(settings, doc_id, filename, *, legacy_path=None):
     legacy = Path(legacy_path) if legacy_path is not None else settings.uploads_dir / f"{doc_id}{Path(filename).suffix.lower()}"
-    if settings.okf_deployment_schema == "replicas-v1":
+    if getattr(settings, "okf_deployment_schema", None) == "replicas-v1":
         return _scoped_original(settings, doc_id, legacy)
     parent = current_session()
     if parent is not None:

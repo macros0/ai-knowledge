@@ -2842,6 +2842,8 @@ attempts and preserves unknown paths. Legacy combined originals remain durable.
 Export admission records the canonical binding without downloading the source.
 Direct processing-admission service calls also own a scratch scope, including
 confirmation and regeneration preparation without an HTTP request.
+Only an explicit replicas-v1 schema selects distributed scratch behavior;
+legacy callers with reduced settings retain the prior local-original path.
 
 The initial metadata session ends before a replica read starts provider I/O.
 Its object lease and work heartbeat can therefore commit independently while
