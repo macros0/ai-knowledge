@@ -200,5 +200,6 @@
     "async_checkbox": true,
     "applied_state_independently_verified": false,
     "consequence": "No power-loss durability claim; request synchronous export for preservation tests"
-  }
+  },
+  "subsequent_evidence": "2026-11-03-replica-synology-userquota-csi.json; correct UID1031/GID100 quota failure/retry and two-Pod CSI contract subsequently passed; original UID1000 probe and open-gate checkpoint below remain historical"
 }

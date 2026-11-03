@@ -627,3 +627,15 @@ The supplied NFS rule screenshot selects no squash mapping and asynchronous
 writes. Its applied state was not read from DSM. Use a synchronous export for
 subsequent preservation tests; the existing write/read proof does not establish
 power-loss durability. See the report’s upstream Synology references.
+
+The subsequent [correct-user/CSI run](superpowers/reports/2026-11-03-replica-synology-userquota-csi.json)
+resolved `Vitaly` as UID1031/GID100 from the user's DSM task output. With matching
+NFS client credentials, the bounded native write reached StorageFullError;
+baseline integrity and same-object-ID retry after cleanup passed. A new
+nondefault Retain class reused the admitted CSI4.13.6 driver and created one
+fresh NAS claim. Two independent restricted Pods ran as1031:100, proved the same
+actual NFSv4.0 root and passed256MiB write, cold SHA, range and conflict checks.
+Only own test objects were removed. Both Jobs succeeded and all live containers/
+target mounts are gone; namespace/class/empty PVC/PV are retained for further
+selected runtime checks. The quota covers the NAS user on volume1, not each PVC.
+Application/backup/restore/outage/cross-node and power-loss acceptance are open.

@@ -3007,3 +3007,16 @@ not switch AUTH_SYS credentials for UID1000 clients. The shown rule selects no
 squash mapping and asynchronous writes; its applied DSM state is not independently
 read. No power-loss durability is claimed. Separate VM provisioning is deferred;
 next tests wait for the dedicated NAS UID/GID and quota, without NAS passwords.
+
+Subsequent [correct-principal and CSI evidence](docs/superpowers/reports/2026-11-03-replica-synology-userquota-csi.json)
+uses user-confirmed `Vitaly` UID1031/GID100. The bounded native write produced an
+actual StorageFullError, preserved its baseline and retried the failed object ID
+after temporary cleanup. Existing CSI4.13.6 then provisioned a new retained NAS
+claim through a separate nondefault StorageClass; no driver/operator or storage
+node configuration changed. Two non-root Pod processes checked actual NFSv4.0
+mounts,256MiB write/cold SHA/range/conflict refusal and own-file cleanup. Jobs are
+Succeeded, live CRI and target NFS mounts zero; empty PVC/PV/namespace/class are
+retained. The512Mi PVC request is not a quota: capacity is limited by the NAS
+user's quota over volume1. Existing NAS files and the user-created identity output
+remain. This closes these component gates only; ordinary application, backup,
+restore, sustained outage/cross-node and synchronous durability remain separate.

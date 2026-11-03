@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "status": "synology-user-quota-and-two-pod-csi-component-verified-closed",
+  "scope": "Selected remote Synology NFSv4.0 through the existing admitted CSI4.13.6 and two same-node Pod processes. Native dedicated-user quota verified separately. This is not full application/backup/restore/outage/cross-node or power-loss qualification.",
+  "server": "10.10.1.5",
+  "export": "/volume1/Vitaliy",
+  "principal": {
+    "name": "Vitaly",
+    "client_uid": 1031,
+    "client_gid": 100,
+    "identity_source": "user-executed DSM task id Vitaly, exact non-secret output over SMB",
+    "password_used": false
+  },
+  "quota": {
+    "configured_limit_ui": "1 GB on volume1",
+    "native_operation_id": "3311ce9771414a0091e22c1ee96522e4",
+    "receipt": {
+      "operation_id": "3311ce9771414a0091e22c1ee96522e4",
+      "mode": "quota",
+      "uid": 1031,
+      "observed_server_uid": 65534,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-rwx-native-3311ce9771414a0091e22c1ee96522e4",
+      "mount_root": "/",
+      "directory_inode": 15944,
+      "storage_full_observed": true,
+      "cap_reached_without_storage_full": false,
+      "max_input_bytes": 1074790400,
+      "source_bytes_consumed": 1074790400,
+      "elapsed_seconds": 46.77664475108031,
+      "baseline_intact": true,
+      "retry_same_object_id_verified": true,
+      "temporary_files": 0,
+      "own_directory_empty": true,
+      "other_share_files_touched": 0
+    },
+    "closure": {
+      "own_directory_removed": true,
+      "unmounted": true,
+      "live_containers": 0
+    },
+    "source_bytes_consumed_not_actual_stored_quota_bytes": true
+  },
+  "kubernetes": {
+    "operation_id": "d45e834f27cd4f94b87422f41c8c2768",
+    "namespace": "replica-test-syn20261103",
+    "namespace_uid": "96f11efe-fb07-4e0f-b0db-70caf8b85df8",
+    "driver_uid": "e47108fa-6e7e-4e1f-b6a4-036e78ed6c41",
+    "existing_driver_reused": true,
+    "new_operator": false,
+    "storage_nodes_modified": false,
+    "new_nondefault_storageclass": "okf-training-synology-v4-retain",
+    "binding": {
+      "pvc_uid": "ada130f1-bcf3-49d9-9f53-e28e81fba2a9",
+      "pv_name": "pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9",
+      "pv_uid": "26de7f7f-3a10-4029-b079-ae7cbc5f4f5e",
+      "csi": {
+        "driver": "okf-training-nfs.csi.k8s.io",
+        "volumeAttributes": {
+          "csi.storage.k8s.io/pv/name": "pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9",
+          "csi.storage.k8s.io/pvc/name": "artifacts",
+          "csi.storage.k8s.io/pvc/namespace": "replica-test-syn20261103",
+          "mountPermissions": "0770",
+          "onDelete": "retain",
+          "server": "10.10.1.5",
+          "share": "/volume1/Vitaliy",
+          "storage.kubernetes.io/csiProvisionerIdentity": "1793713974150-3326-okf-training-nfs.csi.k8s.io",
+          "subDir": "okf-syn-replica-test-syn20261103-artifacts-pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9"
+        },
+        "volumeHandle": "10.10.1.5#volume1/Vitaliy#okf-syn-replica-test-syn20261103-artifacts-pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9#pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9#retain"
+      },
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-syn20261103-artifacts-pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9"
+    },
+    "mounts": [
+      {
+        "role": "writer",
+        "pod_uid": "8fd7c3d3-bc4e-4c8b-8f88-5d77fd868c4b",
+        "uid": 1031,
+        "gid": 100,
+        "directory_inode": 15944,
+        "server_uid": 0,
+        "server_gid": 100,
+        "mode": "0o2770",
+        "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-syn20261103-artifacts-pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9",
+        "nfs_version": "4.0",
+        "mount_root": "/",
+        "empty": true
+      },
+      {
+        "role": "reader",
+        "pod_uid": "6cd22439-520c-4fb4-8619-16608887d69b",
+        "uid": 1031,
+        "gid": 100,
+        "directory_inode": 15944,
+        "server_uid": 0,
+        "server_gid": 100,
+        "mode": "0o2770",
+        "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-syn20261103-artifacts-pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9",
+        "nfs_version": "4.0",
+        "mount_root": "/",
+        "empty": true
+      }
+    ],
+    "pods": {
+      "reader": {
+        "name": "nas-reader-6dv22",
+        "uid": "6cd22439-520c-4fb4-8619-16608887d69b",
+        "container_id": "5b49a33531148f27d3c27c54d3e77873af70bbe87333fdb8938209ac0cbdf134"
+      },
+      "writer": {
+        "name": "nas-writer-8bxgv",
+        "uid": "8fd7c3d3-bc4e-4c8b-8f88-5d77fd868c4b",
+        "container_id": "ab0a6b64659a1ddc7f0833a20383498d1ba3cfcea97e69c6c390042040863575"
+      }
+    },
+    "write": {
+      "operation_id": "d45e834f27cd4f94b87422f41c8c2768",
+      "mode": "write",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-syn20261103-artifacts-pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9",
+      "mount_root": "/",
+      "directory_inode": 15944,
+      "ref": {
+        "object_id": "25617d42bd764c56b11a59f1a4377a36",
+        "key": "objects/25617d42bd764c56b11a59f1a4377a36",
+        "sha256": "8e326a88204b42ba89cc5f189e6c02db501c1766fd1f377ef7cf44eff2b182d1",
+        "size": 268435456,
+        "media_type": "application/octet-stream",
+        "store_id": "synology-d45e834f27cd4f94b87422f41c8c2768"
+      },
+      "write_seconds": 15.426920980098657,
+      "adapter_put_fsync_and_atomic_publish": true,
+      "temporary_files": 0
+    },
+    "read": {
+      "operation_id": "d45e834f27cd4f94b87422f41c8c2768",
+      "mode": "read",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-syn20261103-artifacts-pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9",
+      "mount_root": "/",
+      "directory_inode": 15944,
+      "cold_bytes": 268435456,
+      "cold_sha256": "8e326a88204b42ba89cc5f189e6c02db501c1766fd1f377ef7cf44eff2b182d1",
+      "read_seconds": 57.91916064103134,
+      "range_verified": true,
+      "conflicting_put_refused": true,
+      "temporary_files": 0
+    },
+    "cleanup": {
+      "operation_id": "d45e834f27cd4f94b87422f41c8c2768",
+      "mode": "cleanup",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-syn20261103-artifacts-pvc-ada130f1-bcf3-49d9-9f53-e28e81fba2a9",
+      "mount_root": "/",
+      "directory_inode": 15944,
+      "own_object_deleted": true,
+      "own_directory_empty": true,
+      "other_share_files_touched": 0
+    },
+    "closure": {
+      "succeeded_pods": 2,
+      "live_cri": 0,
+      "target_nfs_mounts": 0,
+      "pvc_retained": true,
+      "pv_reclaim": "Retain",
+      "namespace_and_nondefault_storageclass_retained": true,
+      "other_nas_files_touched": 0
+    },
+    "kind_image_id": "sha256:81b01acb5f1169a9358b4aaa4d024be6b45a1d77548c412b4b6b5a616eaf4766",
+    "image": "okf-backend:replicas-cf74f8a-rwxt-16185383212a"
+  },
+  "preserved_refusals": [
+    {
+      "reason": "SSH command argv split before Python program execution",
+      "absence_proof": {
+        "no_remote_journal": true,
+        "new_namespace_absent": true,
+        "new_storageclass_absent": true
+      }
+    },
+    {
+      "reason": "PVC binder added only spec.volumeName; initial read-only spec guard refused, corrected to allow exactly this field then pinned PV UID/claimRef/CSI before artifact writes",
+      "resource_recreation": false
+    }
+  ],
+  "existing_nas_files_touched": 0,
+  "native_user_identity_file": "retained; created by user DSM task, not removed",
+  "async_nfs_export_applied_state": "user screenshot shows async checked; synchronous state not independently confirmed, no preservation/power-loss claim",
+  "per_pvc_quota": false,
+  "quota_scope": "NAS user Vitaly on volume1; PVC512Mi request is not a quota",
+  "application_end_to_end": false,
+  "certification": null,
+  "production_backup_schedule": "disabled"
+}
