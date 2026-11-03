@@ -58,7 +58,8 @@ def operator_database_url(settings, path):
         raise ValueError("Operator database file does not match the verified application target") from None
 
 
-def rebind_target(session, settings, plan, *, installation_id, operation_id, selection_digest):
+def rebind_target(session, settings, plan, *, installation_id, operation_id, selection_digest,
+                  rwx_source_binding=None, rwx_target_sha256=None):
     from app.db.models import (
         ArtifactStorageControl,
         AuthSession,
@@ -76,12 +77,21 @@ def rebind_target(session, settings, plan, *, installation_id, operation_id, sel
 
     op = _require_operator(session, operation_id)
     if (not re.fullmatch(r"[0-9a-f]{32}", installation_id) or installation_id == plan.source.installation_id
-            or settings.deployment_namespace == plan.source.namespace or settings.artifact_backend != "s3"
+            or settings.deployment_namespace == plan.source.namespace or settings.artifact_backend not in {"s3", "rwx"}
             or plan.schema_revision != SCHEMA_REVISION or plan.source.epoch >= 2**63 - 1):
         raise ValueError("New supported recovery identity required")
     if session.execute(text("SELECT version_num FROM alembic_version")).scalars().all() != [SCHEMA_REVISION]:
         raise ValueError("Restored schema differs")
     receipt = _receipt(settings, installation_id, selection_digest)
+    if settings.artifact_backend == "rwx":
+        from app.deployment.rwx_restore import verify_rwx_relocation
+        proof = verify_rwx_relocation(settings, plan, rwx_source_binding)
+        target_digest = sha256(canonical(proof)).hexdigest()
+        if rwx_target_sha256 is not None and target_digest != rwx_target_sha256:
+            raise ValueError("RWX target differs from the verified artifact probe")
+        receipt = {**receipt, "rwx_target_sha256": target_digest}
+    elif rwx_source_binding is not None or rwx_target_sha256 is not None:
+        raise ValueError("RWX source proof supplied for a different target backend")
     document = identity_document(settings, installation_id=installation_id,
         storage_receipt_digest="sha256:" + sha256(canonical(receipt)).hexdigest())
     identity = session.get(ReplicaRuntimeIdentity, 1, with_for_update=True)
@@ -105,7 +115,8 @@ def rebind_target(session, settings, plan, *, installation_id, operation_id, sel
             or state.operation_kind != "backup" or state.epoch != plan.source.epoch
             or control.installation_id != plan.source.installation_id or control.maintenance_token != plan.backup_id
             or control.active_store_id != settings.artifact_store_id or control.migration_id is not None
-            or control.active_descriptor == descriptor(settings) or control.readonly_roots):
+            or (control.active_descriptor == descriptor(settings)) != (settings.artifact_backend == "rwx")
+            or control.readonly_roots):
         raise ValueError("Restored source identity or storage differs")
     validate_outbox_contract(session.connection())
     invalidated = session.execute(text("DELETE FROM auth_sessions")).rowcount
@@ -133,6 +144,8 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--backup-plan", type=Path, required=True)
     parser.add_argument("--operation-id", required=True)
+    parser.add_argument("--rwx-source-binding", type=Path,
+        help="Manifest-bound selected NFS source coordinates, required only for an RWX target")
     parser.add_argument("--operator-db-file", type=Path,
         help="Separate read-only projected operator credential for the same verified PostgreSQL target")
     args = parser.parse_args()
@@ -153,15 +166,32 @@ def main():
         plan = BackupPlan.model_validate_json(args.backup_plan.read_bytes())
         if (settings.deployment_namespace != selection.namespace or not settings.deployment_namespace.startswith("replica-test-")
                 or settings.deployment_namespace == plan.source.namespace or selection.installation_id == plan.source.installation_id
-                or settings.artifact_backend != "s3"):
+                or settings.artifact_backend not in {"s3", "rwx"}):
             raise ValueError("Explicit isolated recovery target required")
+        rwx_binding, rwx_proof = None, None
+        if settings.artifact_backend == "rwx":
+            from app.deployment.rwx_restore import (
+                read_source_binding,
+                verify_rwx_relocation,
+            )
+            if args.rwx_source_binding is None:
+                raise ValueError("Authenticated RWX source binding required")
+            rwx_binding = read_source_binding(args.rwx_source_binding)
+            rwx_proof = verify_rwx_relocation(settings, plan, rwx_binding)
+        elif args.rwx_source_binding is not None:
+            raise ValueError("RWX proof supplied for an S3 target")
         configure_database(operator_database_url(settings, args.operator_db_file))
         selection_digest = "sha256:" + sha256(canonical(selection.model_dump())).hexdigest()
         with MaintenanceOperator(get_engine(), operation_id=args.operation_id, owner_id="owned-lab-restore", settings=settings) as op:
+            if rwx_proof is not None and verify_rwx_relocation(settings, plan, rwx_binding) != rwx_proof:
+                raise ValueError("RWX target changed before its artifact probe")
             probe_artifacts(settings, installation_id=selection.installation_id, selection_digest=selection_digest)
+            if rwx_proof is not None and verify_rwx_relocation(settings, plan, rwx_binding) != rwx_proof:
+                raise ValueError("RWX target changed during its artifact probe")
             with op.transaction() as session:
                 document, counts = rebind_target(session, settings, plan, installation_id=selection.installation_id,
-                    operation_id=args.operation_id, selection_digest=selection_digest)
+                    operation_id=args.operation_id, selection_digest=selection_digest, rwx_source_binding=rwx_binding,
+                    rwx_target_sha256=sha256(canonical(rwx_proof)).hexdigest() if rwx_proof is not None else None)
             write_identity(settings.runtime_identity_file, document)
         print("REPLICA_RESTORE_IDENTITY:" + json.dumps({"identity": document, "counts": counts,
             "operation_id": args.operation_id, "jobs_held": True, "production_schedule": "disabled"}, sort_keys=True), flush=True)

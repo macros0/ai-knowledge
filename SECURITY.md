@@ -2956,3 +2956,16 @@ parents remain recorded, alongside successful corrected checks. Cleanup retained
 all data/PVCs, held the target at epoch3, restored NFS and prior lab capacity.
 This proves no fresh RWX-target relocation, physical HA or certification; the
 previous failed large buffered NFS write remains unqualified. ScheduleOFF.
+
+### Selected RWX target physical identity
+
+The [candidate guard](docs/superpowers/reports/2026-11-03-replica-rwx-relocation-guard.json)
+requires authenticated source-binding coordinates and actual in-process NFS root
+observation before artifact writes. Local root strings, caller-supplied success
+flags and client statvfs filesystem IDs are not physical identity. The selected
+source recipe/namespace/scope digest and actual target server/export/inode must
+agree with the narrow relocation policy; aliases and ambiguous mounts refuse.
+The stable target digest is bound into the restore receipt and must match on
+resume. Existing S3 behavior and owned transactional auth/epoch changes remain.
+Read-only native proof passed with no secrets, SQL or artifact writes. Full new
+CI/image/application recovery is pending; no provider certification is granted.

@@ -96,3 +96,86 @@ def test_uncertain_provider_owner_blocks_rebind_and_auth_cleanup(tmp_path):
     with get_engine().connect() as connection:
         assert connection.scalar(select(AuthSession.id)) == "old-session"
         assert connection.scalar(select(ReplicaRuntimeIdentity.installation_id)) == plan.source.installation_id
+
+
+def prepare_rwx(tmp_path, monkeypatch):
+    from app.deployment import rwx_restore
+    from app.services.artifacts.control import descriptor
+    from tests.test_replica_rwx_restore import fixture_binding
+    settings, plan = prepare(tmp_path)
+    settings.artifact_backend, settings.artifact_provider = "rwx", "external"
+    settings.artifact_root = tmp_path / "artifacts"
+    settings.artifact_root.mkdir()
+    bound, source = fixture_binding()
+    plan = plan.model_copy(update={"storage": bound.storage})
+    with get_engine().begin() as connection:
+        connection.execute(ArtifactStorageControl.__table__.update().values(active_descriptor=descriptor(settings)))
+    proof = dict(source_scope_sha256=bound.storage[2].scope_sha256, namespace=settings.deployment_namespace,
+        nfs_source="172.18.0.1:/fresh-target", inode=8194, uid=1000, gid=1000, mode=0o770)
+    monkeypatch.setattr(rwx_restore, "verify_rwx_relocation", lambda *args: dict(proof))
+    return settings, plan, source, proof
+
+
+def test_verified_rwx_same_local_descriptor_adopts_and_resumes(tmp_path, monkeypatch):
+    tool = load()
+    settings, plan, source, _ = prepare_rwx(tmp_path, monkeypatch)
+    operation = uuid4().hex
+    with MaintenanceOperator(get_engine(), operation_id=operation, owner_id="restore-test", settings=settings, allow_sqlite=True) as op:
+        with op.transaction() as session:
+            first, counts = tool.rebind_target(session, settings, plan, installation_id="5" * 32,
+                operation_id=operation, selection_digest="sha256:" + "7" * 64, rwx_source_binding=source)
+        with op.transaction() as session:
+            resumed, repeated = tool.rebind_target(session, settings, plan, installation_id="5" * 32,
+                operation_id=operation, selection_digest="sha256:" + "7" * 64, rwx_source_binding=source)
+            assert session.get(MaintenanceState, 1).enabled
+    assert first == resumed and first["artifact_backend"] == "rwx"
+    assert counts["invalidated_sessions"] == 1 and repeated["invalidated_sessions"] == 0
+
+
+def test_rwx_resume_refuses_changed_physical_target_even_with_same_settings(tmp_path, monkeypatch):
+    tool = load()
+    settings, plan, source, proof = prepare_rwx(tmp_path, monkeypatch)
+    operation = uuid4().hex
+    with MaintenanceOperator(get_engine(), operation_id=operation, owner_id="restore-test", settings=settings, allow_sqlite=True) as op:
+        with op.transaction() as session:
+            first, _ = tool.rebind_target(session, settings, plan, installation_id="5" * 32,
+                operation_id=operation, selection_digest="sha256:" + "7" * 64, rwx_source_binding=source)
+        proof["inode"] += 1
+        with pytest.raises(ValueError), op.transaction() as session:
+            tool.rebind_target(session, settings, plan, installation_id="5" * 32,
+                operation_id=operation, selection_digest="sha256:" + "7" * 64, rwx_source_binding=source)
+        with op.transaction() as session:
+            assert session.get(ReplicaRuntimeIdentity, 1).storage_receipt_digest == first["storage_receipt_digest"]
+            state = session.get(MaintenanceState, 1)
+            assert state.enabled and state.epoch == plan.source.epoch + 1
+
+
+def test_rwx_bad_proof_preserves_source_auth_and_identity(tmp_path, monkeypatch):
+    from app.deployment import rwx_restore
+    tool = load()
+    settings, plan, source, _ = prepare_rwx(tmp_path, monkeypatch)
+    def refuse(*args):
+        raise ValueError("Unproven NFS relocation")
+    monkeypatch.setattr(rwx_restore, "verify_rwx_relocation", refuse)
+    operation = uuid4().hex
+    with MaintenanceOperator(get_engine(), operation_id=operation, owner_id="restore-test", settings=settings, allow_sqlite=True) as op:
+        with pytest.raises(ValueError), op.transaction() as session:
+            tool.rebind_target(session, settings, plan, installation_id="5" * 32,
+                operation_id=operation, selection_digest="sha256:" + "7" * 64, rwx_source_binding=source)
+    with get_engine().connect() as connection:
+        assert connection.scalar(select(AuthSession.id)) == "old-session"
+        assert connection.scalar(select(ReplicaRuntimeIdentity.installation_id)) == plan.source.installation_id
+
+
+def test_rwx_mount_change_inside_adoption_refuses_probed_digest(tmp_path, monkeypatch):
+    tool = load()
+    settings, plan, source, _ = prepare_rwx(tmp_path, monkeypatch)
+    operation = uuid4().hex
+    with MaintenanceOperator(get_engine(), operation_id=operation, owner_id="restore-test", settings=settings, allow_sqlite=True) as op:
+        with pytest.raises(ValueError), op.transaction() as session:
+            tool.rebind_target(session, settings, plan, installation_id="5" * 32,
+                operation_id=operation, selection_digest="sha256:" + "7" * 64,
+                rwx_source_binding=source, rwx_target_sha256="0" * 64)
+    with get_engine().connect() as connection:
+        assert connection.scalar(select(AuthSession.id)) == "old-session"
+        assert connection.scalar(select(ReplicaRuntimeIdentity.installation_id)) == plan.source.installation_id

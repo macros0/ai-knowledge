@@ -1054,3 +1054,26 @@ failed tunnel parents and corrected harness assertions remain in the receipt.
 Fresh RWX-target relocation/adoption is still unsupported by this CLI. The failed
 large NFS write, prolonged outage/cross-node/provider gates and production
 qualification remain open; schedulingOFF, certificationnull.
+
+## Selected RWX-target relocation guard
+
+The [candidate implementation evidence](superpowers/reports/2026-11-03-replica-rwx-relocation-guard.json)
+adds `--rwx-source-binding /run/restore/source-binding.json` to the existing
+restore command for a selected external NFS RWX target. The supplied BackupPlan
+must already be authenticated by the PC coordinator; the bounded non-secret
+binding file must match its artifact scope digest and source namespace/recipe.
+Projected files may use Kubernetes symlinks, but must resolve to bounded regular
+JSON with unique keys. The master archive key remains on the PC.
+
+Before any artifact probe writes, the operator verifies an actual NFSv4.1 mount
+on the same authenticated numeric server, with a different namespace/CSI export
+and root inode. Local/aliased/stacked/bind mounts and unsupported options refuse.
+The stable target digest enters the identity storage receipt and is rechecked
+before/after the probe, inside adoption and on resume. Equal `/artifacts` settings
+are accepted only through this proof; transactional auth/fencing and the existing
+S3 descriptor rule remain. Other RWX recipes are unsupported.
+
+Unit/contracts and actual read-only Linux NFS observation passed. Full current
+Linux CI, an image containing the new module and the complete RWX-target restore
+are pending. The candidate observer used code mounted outside the prior saved
+image; it proves physical observation, not current application deployment.
