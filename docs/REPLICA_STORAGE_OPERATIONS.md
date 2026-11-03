@@ -639,3 +639,34 @@ Only own test objects were removed. Both Jobs succeeded and all live containers/
 target mounts are gone; namespace/class/empty PVC/PV are retained for further
 selected runtime checks. The quota covers the NAS user on volume1, not each PVC.
 Application/backup/restore/outage/cross-node and power-loss acceptance are open.
+
+
+## Selected Synology mixed runtime (2026-11-04)
+
+The [completed bounded rehearsal](superpowers/reports/2026-11-04-replica-synology-mixed-runtime.json)
+uses managed PostgreSQL17/Qdrant and the external DS211 DSM6.2.4-25556 Update8
+(user-confirmed inventory; asynchronous export disabled by the user), NFSv4.0 and
+the existing CSI4.13.6. Client UID1031/GID100 belongs to this training installation;
+resolve the actual account identifiers separately for another NAS. Its user quota
+on volume1 is1GiB; the PVC request is not a per-directory quota.
+
+On this NAS, ACCESS reports no root write permission while `objects` and `tmp`
+remain writable. Runtime readiness now checks root read/traverse and both actual
+mutation directories. All four API/worker processes reported this exact condition
+with successful readiness, cold blob SHA and ordinary HTTP operations. The change
+passed6472 Linux tests with221 identical optional skips; all6687 previous case IDs
+were retained and six regression cases added. No ACL relaxation was required.
+
+Two frontend/API/worker replicas passed shared sessions, idempotent upload, search,
+download and export. Bounded actual EDQUOT produced HTTP507/storage_full without
+changing logical tables or existing reads; after exact-inode filler removal the
+same idempotency key completed. Four processes verified all11 resulting objects
+and one execution per document/export job. All trial roles/providers are stopped
+under held epoch1, with three PVCs retained and owned forwards/mounts gone. The old
+2/2/2 deployment, all borrowed providers,109 PG catalog entries, full Qdrant points,
+nine canonical tables and eight live-bound S3 blob hashes were restored/checked.
+
+The earlier failed cf74 trial remains recorded and retained separately. NAS-source
+independent backup/recovery, prolonged outage and cross-node gates remain open.
+This bounded recipe does not certify physical failure or power-loss durability;
+models/auth are stub/simulation. Production schedule remains off; certification null.

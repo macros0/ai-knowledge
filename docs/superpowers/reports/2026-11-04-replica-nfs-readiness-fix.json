@@ -225,5 +225,6 @@
   "current_fixed_image": false,
   "fixed_native_mixed_runtime": false,
   "certification": null,
-  "production_backup_schedule": "disabled"
+  "production_backup_schedule": "disabled",
+  "subsequent_validation_report": "2026-11-04-replica-synology-mixed-runtime.json"
 }

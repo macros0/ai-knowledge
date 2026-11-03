@@ -667,3 +667,15 @@ physically off/held3/three PVCs retained; prior2/2/2/runtime/PVCs/nine tables
 restored. Source claim stayed unmounted, common NFS server stayed up. Selected
 RWX restore is complete; large-write/outage/cross-node/customer and overall
 O1–O3 profile gates remain open. No certification or production schedule.
+
+O1 selected Synology mixed milestone (2026-11-04): [current96931 rehearsal](../reports/2026-11-04-replica-synology-mixed-runtime.json)
+passed6472 Linux cases/221 identical optional skips and actual2/2/2 on managedPG/Q
+plus external DS211 NFSv4.0/CSI4.13.6. Four processes proved working child-directory
+ACCESS/readiness despite root W_OK=false; scoped SQL81tables/10denials/TLS-SCRAM,
+shared sessions/upload/search/download/export and real user EDQUOT507/same-key
+recovery passed. All11 new blobs cold-verified; trial stopped/held1/threePVCs
+retained/owned forwards and NFS mounts gone. All borrowed old services/2/2/2,
+109 PG catalog entries, full Q points, nine canonical tables and eight live-bound
+S3 hashes were returned/verified. Initialcf74 failure remains retained separately.
+NAS independent backup/recovery, prolonged outage/cross-node/real-model/IdP and
+overall qualification remain open; no certification or production schedule.
