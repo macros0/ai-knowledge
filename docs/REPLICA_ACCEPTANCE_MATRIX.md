@@ -14,7 +14,7 @@
 | Runtime R5 | Общий текущий22-stage run прошёл без failures/required skips;80 прежних документов сохранены, финальные2 frontend +2 API +2 workers проверены | Другие providers, реальные модели/IdP и физические домены отказа требуют собственных gates |
 | Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, смена CA, CNI и отдельный S3 ENOSPC contract проверены | RWX, external/mixed end-to-end; заполнение storage через приложение; независимые failure domains |
 | Recovery O2 | Независимая20-document копия восстановлена при выключенном источнике; отдельно старая rpl04 копия прошла фактический rpl05 replacement recovery с новой identity, отзывом сессий и функциональной проверкой2/2/2. Проверены cold-check, журнал попыток, учебное восстановление ключа и доставка локальных alerts | Оставшиеся adoption/update и provider recipes; production key custody/monitoring не квалифицированы |
-| Release O3 | Обязательные project checks и профильные Windows/Linux cohorts; свежие557 parser passes и standalone frontend build; policy validator, проверка подписанных файлов и read-only режим runner реализованы. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Полный backend CI итоговой версии, реальные доверенные evidence producers, общая fault/profile matrix, завершение runbooks и свежее ревью всей ветки |
+| Release O3 | Обязательные project checks и профильные Windows/Linux cohorts;557 parser passes и standalone frontend build; полный Linux backend CI кода5f5c43d:6390 passed/220 optional skips/87,62% coverage; policy validator, проверка подписанных файлов и read-only режим runner реализованы. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Повтор CI при последующих изменениях кода, реальные доверенные evidence producers, общая fault/profile matrix, завершение runbooks и свежее ревью всей ветки |
 
 ## Доказательства учебного профиля
 
@@ -35,6 +35,7 @@
 | Небольшая нагрузка | [Scoped load diagnostic](superpowers/reports/2026-11-02-replica-scoped-load-diagnostic.json): одна небольшая synthetic trial с1/2 workers; не оценка production throughput или линейного ускорения |
 | CI и свободный диск | [Lab CI capacity recovery](superpowers/reports/2026-11-02-replica-lab-ci-capacity-recovery.json): неуспешный ENOSPC CI сохранён; raw temporary artifacts проверены и скопированы на ПК до удаления только собственных временных деревьев |
 | Полный baseline CI | [Backend CI](superpowers/reports/2026-11-02-replica-baseline-backend-ci.json): снимок e3c7025,5910 passed/183 skipped/0 failures, точные case IDs обоих shard; не полный CI последующих изменений |
+| Полный CI текущего backend и runtime-образ | [Linux CI/image](superpowers/reports/2026-11-03-replica-full-linux-backend-ci.json):5f5c43d,6390 passes/220 explicit skips/0 failures/errors,6610 exact case IDs,87,62% coverage при85%; новый образ с572 проверенными файлами.203 PostgreSQL opt-in,12 platform и5 real ENOSPC opt-in требуют отдельных сред; образ ещё не развёрнут для compact-приёмки |
 | Принятие schema-fence | [Schema adoption](superpowers/reports/2026-11-02-replica-schema-adoption.json): реальная SQL-миграция непустой PostgreSQL rpl04→rpl05 и принятие maintenance с аудитом; полный Kubernetes update/adoption существующего корпуса остаётся отдельной проверкой |
 | Операторский CLI обновления | [Schema upgrade CLI](superpowers/reports/2026-11-02-replica-schema-upgrade-cli.json): отдельный SQL credential при scoped Settings и повтор после SQL commit/ошибки identity-файла; проверка SQL на изолированном PostgreSQL не заменяет Kubernetes rollout |
 | Протокол копии rpl04 | [Predecessor protocol](superpowers/reports/2026-11-02-replica-predecessor-protocol.json): отдельный epoch0/S4-fence, неизменность старого формата, атомарный переход к rpl05 и SQL-восстановление; provider-copy/source-off recovery ещё не проверены |
@@ -67,4 +68,5 @@ PVC/CSI, домены отказа и backup destination входят в док�
 [Linux cohort](superpowers/reports/2026-11-02-replica-evidence-alerts-linux.json)
 прошёл295 notification/verifier/policy/runner cases без пропусков. FIFO и symlink
 фактически проверены; все2395 входных файлов остались неизменными, реплики и
-данные восстановлены. Полный backend CI итоговой версии остаётся открытым.
+данные восстановлены. Полный backend CI кода5f5c43d подтверждён отдельным
+отчётом; provider/profile приёмка и финальное ревью остаются открытыми.

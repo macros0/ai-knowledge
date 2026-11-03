@@ -62,7 +62,7 @@ queued/running public Jobs and processing/queued documents without durable work
 are deliberately refused, rather than silently stranded after activation. This
 refusal is not completion of legacy queue migration.
 
-- [ ] Add explicit versioned recipes for legacy public queues/document intents,
+- [x] Add explicit versioned recipes for legacy public queues/document intents,
   preserving approval decisions and immutable accepted inputs; unknown recipes
   remain held/refused. Verify interrupted handoff resumes without duplicate work
   or changing the original intent, and no work executes during adoption.
@@ -201,3 +201,75 @@ frontend input, stale-worker fencing and second-store migration. Project checks
 passed with audit0/frontend756 passes plus1 existing skip/Ruff. The owned private
 PostgreSQL cluster stopped normally; source data/logs remain retained. See
 [bounded evidence](../reports/2026-11-03-replica-legacy-diagnostics.json).
+
+### Task 3b: Populated compact source-off rehearsal
+
+Operational decision: create a new synthetic compact source and a separate new
+recovery target. Do not repurpose the retained source7/target8 installations as a
+compact source: they already have replica identities. The predecessor's recorded
+`21f5a6d` image predates rpl05 and is a candidate for the real rpl04 compact source;
+its availability, image digest and actual schema/code must first be verified.
+No new upload of an older source snapshot is implied by permission for 5f5c43d.
+
+- [x] Complete full current backend CI (all collected nodes, no fail-fast),
+  combined coverage gate and source-byte comparison. Keep real/native/provider
+  checks distinct from optional unit-suite platform/provider skips. Build the
+  current runtime from the exact approved source only after those results.
+
+  Verified `5f5c43d`:6610 exact collected/executed node IDs,6390 passes,
+  220 explicit skips (203 PostgreSQL opt-in,12 platform,5 real ENOSPC opt-in),
+  zero failures/errors and87.62% coverage against85%. All2418 Git source files
+  remained unchanged. The new runtime image was built from canonical Git bytes;
+  its572 copied files, real rpl05 Alembic head and build fingerprint were checked.
+  The temporary CI capacity operation has restored the prior2/2/2 roles and
+  verified the same PVCs/runtime and nine unchanged canonical tables. See
+  [full Linux CI and image evidence](../reports/2026-11-03-replica-full-linux-backend-ci.json).
+
+- [ ] Reserve two fresh owned namespace identities, operation journals, volumes
+  and scoped credentials. Prove capacity without touching foreign workloads.
+  Restore any temporary capacity operation's original counts and verify its
+  runtime/PVC/canonical data before starting a separate rehearsal operation.
+- [ ] Verify the old source image and official rpl04 schema. Populate only
+  synthetic accepted legacy files/SQL/Qdrant data. Include a completed legacy
+  NULL-generation document, an interrupted accepted checkpoint, a pristine queued
+  export, a stopped diagnostic capture with a pending protocol1 archive and an
+  awaiting-approval job. Fixture creation must be explicit and recorded; never
+  alter an installed source identity or running ownership to fit a test.
+- [ ] Establish a functional compact baseline (search and original download
+  hashes), then stop every source writer physically. Record UID/spec/process/
+  provider observations, not expiry-based declarations. Freeze the complete
+  source inventory and accepted queued inputs after that stop.
+- [ ] Produce an independently encrypted PC backup before schema mutation.
+  Reuse the authenticated backup codec and native provider primitives, but do not
+  fabricate a replica identity to pass `replica_backup.sql_source`: that recipe
+  deliberately requires an installed rpl05 runtime. The compact recipe must bind
+  its own original installation/schema/source inventory and be restored and
+  verified before it can authorize conversion.
+- [ ] Restore that copy into the fresh target with application roles at zero
+  and the original source unavailable. Verify full SQL logical rows, original
+  files, Qdrant data and diagnostic/control inputs before migration. Legacy FS
+  metadata needs explicit nanosecond mtime preservation: queued exports bind
+  `mtime_ns`, and baseline/capture retention must not be renewed by copying.
+  A tar float timestamp alone is insufficient proof. Never overwrite the source.
+- [ ] Run the official Alembic chain from the actual restored schema to head;
+  no stamp/create_all workaround. Run S4 plan/copy/target read-back/cutover with
+  the real independent backup, physical writer proof and frozen diagnostic
+  inputs. Preserve NULL-generation originals and accepted checkpoint semantics.
+- [ ] Execute compact inspect/handoff/adopt against the actual target PostgreSQL
+  and selected provider. Check held epoch1, pristine versioned queued WorkItems,
+  preserved approvals/auth/reference/audit state, same-operation retry and zero
+  execution before release. Publish only the matching common runtime identity.
+- [ ] Verify provider transport/permissions and the exact current image before
+  explicit release. Start 2 frontend/2 API/2 worker instances; prove original
+  search/download hashes, original diagnostic cutoff, queued export/resume,
+  awaiting-approval nonexecution and one new publication. Compare generations
+  before execution separately from legitimate queued-work changes afterwards.
+- [ ] Preserve source/backup/target evidence and restore intended topology.
+  Publish bounded observations and explicit scope; do not qualify RWX/CSI,
+  external providers, physical HA or an issuer from this one managed/stub recipe.
+
+The Linux CI operation is separate from this rehearsal. Passed temporary unit
+inputs may use pytest failed-only retention on bounded tmpfs; failed inputs,
+JUnit and coverage stay on the VM. Raw CI payload export to the PC remains
+prohibited. Resource exhaustion or an unobserved terminal outcome fails the CI
+gate and must not be reported as a successful skip.

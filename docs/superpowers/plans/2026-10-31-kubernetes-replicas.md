@@ -61,11 +61,15 @@ certification=null. Чистая policy проверена47 тестами. П�
 issuers/producers ещё не подключены.
 [Policy validation](../reports/2026-11-02-replica-certification-policy.json).
 
-Полный backend CI итоговой версии ещё не подтверждён. Прогон базы `e3c7025`
-завершён:6093 случая,5910 passed,183 skipped,0 failures/errors; оба shard имеют
-точное совпадение собранных и выполненных case IDs. Последующие исправления
-snapshot/capacity/scoped restore проверены собственными Windows/Linux cohorts.
-Это не заменяет полный CI финальной версии.
+Полный Linux backend CI текущего кода `5f5c43d` подтверждён:6610 точных case IDs,
+6390 passed,220 skipped,0 failures/errors,87,62% покрытия при пороге85%.
+Пропуски:203 opt-in PostgreSQL,12 для других ОС,5 real ENOSPC opt-in; отдельные
+нативные/provider испытания остаются самостоятельными gates. Собран новый runtime
+из точных Git-байтов и проверены572 файла образа, Alembic head и fingerprint.
+[Текущий CI и образ](../reports/2026-11-03-replica-full-linux-backend-ci.json).
+Этот результат относится к указанной revision; последующие изменения кода требуют
+соответствующей повторной проверки. Прогон базы `e3c7025` сохранён отдельно:
+6093 случая,5910 passed,183 skipped,0 failures/errors, точные case IDs обоих shard.
 [Baseline CI](../reports/2026-11-02-replica-baseline-backend-ci.json).
 Предыдущий ENOSPC-прогон сохранён как неуспешный;
 [восстановление ёмкости CI](../reports/2026-11-02-replica-lab-ci-capacity-recovery.json).
