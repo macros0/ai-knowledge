@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "status": "independent-compact-restore-verified-s4-adoption-incomplete",
-  "observed_at": "2026-11-03T08:29:00.732600+00:00",
-  "scope": "Synthetic compact local-files rpl04 source; independent encrypted PC backup; all source providers physically off; separate Kubernetes restore and official rpl05 upgrade. S4 planning found a real recorder-counter compatibility defect; local fix is not yet running in the cluster.",
+  "observed_at": "2026-11-03T08:57:58.208599+00:00",
+  "scope": "Synthetic compact rpl04 independent source-off restore and official rpl05 upgrade verified. Live S4 planning progressed after the recorder checkpoint fix and found UTC timestamp spelling incompatibility in actual Node frontend events; its local fix is verified, live cutover/adoption remain incomplete.",
   "operation_id": "d085c9ee969a42e3a42ae6ea6e731c33",
   "backup_id": "61b33d604f9648e097b6ab30ef57b2c3",
   "installation_id": "73545d7af3a9493485dde22d2d379270",
@@ -252,8 +252,9 @@
       "frontend_failed": 0,
       "ruff": true
     },
-    "linux_fix_ci_performed": false,
-    "new_runtime_image_built": false
+    "linux_fix_ci_performed": true,
+    "new_runtime_image_built": true,
+    "revision": "3b1d176d0b204e90b5173e62ea32c26f1c257521"
   },
   "limits": [
     "All data are synthetic; one physical kind node.",
@@ -261,5 +262,161 @@
     "Provisioner-owned PVC mount root metadata is excluded; all 16 files and 20 application directories match including nanosecond mtime.",
     "Source-off S4 interruption/resume, compact handoff, held adoption and 2/2/2 application acceptance remain open.",
     "The earlier full Linux backend CI covers 5f5c43d, not this new fix. All seven profile certifications remain null."
-  ]
+  ],
+  "counter_fix_linux_ci": {
+    "first_attempt": {
+      "container_id": "8d9974f48e04dcbe43c0d1a2c7d800467a3a92710b6459f50e9bd8e1a8a2d649",
+      "running": false,
+      "exit_code": 1,
+      "oom": false,
+      "source_unchanged": true,
+      "tests": 147,
+      "failures": 7,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "9d85068e06bf884164c35faca4de7a61da5d44ebd7a62e642e3aac5e0ae8b0d6"
+    },
+    "first_attempt_failure_cause": "1GiB test tmpfs was smaller than unchanged application free-space reserves; six diagnostic and one export reserve refusals",
+    "repeated_attempt": {
+      "container_id": "edde0a6aee925373194c3b7bc93bbfa342e567242a7a4cfcf7563f0bcbb3a4ce",
+      "running": false,
+      "exit_code": 0,
+      "oom": false,
+      "source_unchanged": true,
+      "tests": 147,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "eadf6cbc009c53c27e11e4aff5708535a88bf5c0ae34c47cbb2a911aa2d3a4a9"
+    },
+    "source_files": 2418,
+    "source_files_changed": 2,
+    "app_settings_or_thresholds_overridden": false,
+    "logical_test_filesystem_bytes": 4294967296,
+    "raw_ci_payload_retained_on_vm": true
+  },
+  "counter_fix_runtime": {
+    "operation_id": "93c01bdb812c4a788f4cd70177f523f2",
+    "build_exit": 0,
+    "tag": "okf-backend:replicas-3b1d176-counters-93c01bdb812c",
+    "image_id": "sha256:3b305f28c86dadfb93efd4a28110fc08773efb287f6bb9bae27ff1594f609586",
+    "build_fingerprint": "f05c433dc686f41ea9fc58be76dff5f5a9f3867d19455ce55eda2b0c58aec6ba",
+    "source_identity": "bc3be4c31436a9f57a32f6cb5892254e50ae830b99eb003f2a4d91a36987cadf",
+    "git_source_files": 572,
+    "all_app_files": 577,
+    "only_runtime_file_changed": [
+      "app/services/artifacts/diagnostic_migration.py"
+    ],
+    "packages_exact": true,
+    "package_count": 117,
+    "schema_revision": "rpl05_maintenance_epoch",
+    "cached_prefix_layers": 28,
+    "total_layers": 29,
+    "free_bytes": 16315121664
+  },
+  "counter_fix_import": {
+    "operation_id": "358e7ae7f304497d858250bd4854b4f1",
+    "producer_exit": 0,
+    "consumer_exit": 0,
+    "kind_image_id": "sha256:48a24d0e5b3f09cd63412534625c066cbe6a5409b97856a078581d3b1e5f7b78",
+    "kind_repo_digests": [
+      "docker.io/library/import-2026-11-03@sha256:a9bb298c3ef1c9b32bedddb28861b3b8050c936107e4419c9939d2a1d60d6afe"
+    ],
+    "rootfs_exact": true,
+    "free_bytes": 16305627136
+  },
+  "s4_plan_after_counter_fix": {
+    "job": {
+      "kind": "Job",
+      "name": "compact-target-s4-plan-v2",
+      "uid": "f0da573b-783c-4edb-8d07-6e1af4bbad79"
+    },
+    "terminal": {
+      "succeeded": 0,
+      "failed": 1,
+      "active": 0,
+      "receipt": {
+        "stage": "real-s4-plan-with-stopped-recorder-checkpoint",
+        "error_type": "ValueError",
+        "frames": [
+          {
+            "file": "plan.py",
+            "line": 77,
+            "function": "<module>"
+          },
+          {
+            "file": "migration.py",
+            "line": 171,
+            "function": "plan"
+          },
+          {
+            "file": "migration_plan.py",
+            "line": 526,
+            "function": "build"
+          },
+          {
+            "file": "diagnostic_migration.py",
+            "line": 285,
+            "function": "compile_diagnostics"
+          },
+          {
+            "file": "diagnostic_migration.py",
+            "line": 336,
+            "function": "_compile_diagnostics"
+          },
+          {
+            "file": "diagnostic_migration.py",
+            "line": 217,
+            "function": "_chunks"
+          }
+        ]
+      }
+    },
+    "existing_provider_setup_recreated": false,
+    "native_scoped_preflight_assertions_passed": {
+      "sql_denials": 6,
+      "s3_denials": 2,
+      "actual_iam_policy_and_role_identity_verified": true
+    },
+    "copy_started": false,
+    "cutover": false
+  },
+  "frontend_utc_fix": {
+    "reason": "Actual frontend Date.toISOString events use Z; strict comparison rejected equivalent +00:00 normalization.",
+    "source_sha256": {
+      "backend/app/services/artifacts/diagnostic_migration.py": "ac327b7b8cdf39fc01667272dee2ec72ec48b028d0f56c74c518bca5d8295bdb",
+      "backend/tests/test_artifact_legacy_diagnostics.py": "bda0fd0cef8b50613ae9713596ea2856fbc88577d0d3750a9ccb0a4d8cc9cc63",
+      "backend/tests/test_legacy_diagnostic_handoff.py": "6fa37d1c6c4e76ac2e2b60b01b1cbb3cac568b4e1b0bfe456edc9e4145a5dfb5"
+    },
+    "red": {
+      "tests": 4,
+      "failed": 4
+    },
+    "focused_windows": {
+      "tests": 154,
+      "passed": 154,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "regression": {
+      "tests": 8,
+      "passed": 8
+    },
+    "actual_independent_archive": {
+      "journal_files": 3,
+      "events": 13,
+      "exact_event_ids_and_instants_preserved": true,
+      "source_bytes_unchanged": true
+    },
+    "project_checks": {
+      "passed": true,
+      "npm_audit_vulnerabilities": 0,
+      "frontend_passed": 756,
+      "frontend_skipped": 1,
+      "ruff": true
+    },
+    "linux_performed": false,
+    "new_image_built": false
+  }
 }

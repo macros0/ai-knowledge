@@ -108,7 +108,7 @@ def test_explicit_frontend_spool_survives_source_off_without_recollection(legacy
     from tests.test_internal_diagnostics import event
     from app.services.artifacts.migration import StorageMigration
     root=legacy['root']/'frontend-spool';directory=root/'events/baseline';directory.mkdir(parents=True)
-    value=event();value['timestamp_utc']=(legacy['cutoff']-timedelta(seconds=1)).isoformat()
+    value=event();value['timestamp_utc']=(legacy['cutoff']-timedelta(seconds=1)).isoformat(timespec='milliseconds').replace('+00:00','Z')
     path=directory/('1234567890123_'+str(uuid4())+'.jsonl')
     raw=(json.dumps(dict(reversed(list(value.items()))))+'\n').encode();path.write_bytes(raw)
     legacy['expected_ids'].add(value['event_id']);legacy['frontend_root']=root

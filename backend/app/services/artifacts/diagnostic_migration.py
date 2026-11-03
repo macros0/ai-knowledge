@@ -206,13 +206,24 @@ def _expiry(meta,item,limits):
     return datetime.fromtimestamp(item['mtime_ns']/1e9+ttl,timezone.utc).isoformat()
 
 
+def _frontend_values(event):
+    """Node's ISO UTC spelling may differ; never round submicrosecond input."""
+    result=dict(event)
+    for key in ('timestamp_utc','first_timestamp_utc','last_timestamp_utc','window_start_utc','window_end_utc'):
+        value=result.get(key)
+        if isinstance(value,str) and re.fullmatch(
+                r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)',value):
+            result[key]=datetime.fromisoformat(value).astimezone(timezone.utc).isoformat()
+    return result
+
+
 def _chunks(data,role,stream,limit):
     pending=bytearray();component=None;stamps=[]
     for line in data.splitlines(keepends=True):
         if not line.endswith(b'\n') or len(line)>MAX_EVENT_BYTES:raise ValueError('Truncated or oversized legacy diagnostic event')
         event=_json(line)
         canonical=encode_event(event)
-        if ((role=='backend' and canonical!=line or role=='frontend' and _json(canonical)!=event)
+        if ((role=='backend' and canonical!=line or role=='frontend' and _json(canonical)!=_frontend_values(event))
                 or event.get('diagnostic_session_id','baseline')!=stream):
             raise ValueError('Noncanonical or foreign legacy diagnostic event')
         group='frontend' if event['component']=='frontend' else 'backend'

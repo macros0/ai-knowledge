@@ -112,6 +112,33 @@ def test_changed_recorder_counter_checkpoint_invalidates_the_retained_s4_plan(le
         assert session.get(DiagnosticBundle,legacy['bundle_id']).artifact_version==1
 
 
+@pytest.mark.parametrize('timestamp',[
+    '2026-11-03T06:13:17Z','2026-11-03T06:13:17.123Z',
+    '2026-11-03T06:13:17.123456Z','2026-11-03T06:13:17.123+00:00',
+])
+def test_frontend_wire_utc_spelling_keeps_exact_instant_and_other_fields(timestamp):
+    from app.services.artifacts.diagnostic_migration import _chunks
+    from tests.test_internal_diagnostics import event
+    value=event();value['timestamp_utc']=timestamp
+    raw=(json.dumps(dict(reversed(list(value.items()))))+'\n').encode()
+    chunks=list(_chunks(raw,'frontend','baseline',65536))
+    assert len(chunks)==1 and chunks[0][1]=='frontend'
+    parsed=json.loads(chunks[0][0])
+    assert datetime.fromisoformat(parsed['timestamp_utc'])==datetime.fromisoformat(timestamp)
+    assert {key:v for key,v in parsed.items() if key!='timestamp_utc'}=={key:v for key,v in value.items() if key!='timestamp_utc'}
+
+
+@pytest.mark.parametrize('fault',['submicrosecond','non-utc','unknown-field'])
+def test_frontend_time_normalization_refuses_loss_or_unknown_protocol(fault):
+    from app.services.artifacts.diagnostic_migration import _chunks
+    from tests.test_internal_diagnostics import event
+    value=event()
+    if fault=='submicrosecond':value['timestamp_utc']='2026-11-03T06:13:17.123456789Z'
+    elif fault=='non-utc':value['timestamp_utc']='2026-11-03T06:13:17.123+01:00'
+    else:value['unknown_sensitive_field']='must-not-be-imported'
+    with pytest.raises(ValueError):list(_chunks((json.dumps(value)+'\n').encode(),'frontend','baseline',65536))
+
+
 def test_s4_transfers_all_retained_journal_bytes_and_freezes_pending_request(legacy):
     settings,_,task=migrate(legacy)
     with migration_access(),session_scope() as session:

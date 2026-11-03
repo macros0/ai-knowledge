@@ -230,7 +230,10 @@ removing it to pass planning would discard evidence.
 Verified raw event blobs become bounded immutable SQL segments at the same atomic
 cutover, retaining original modification/expiry times and unknown recorder
 counters. Backend events must be canonical; frontend JSON may be canonicalized
-only when parsing proves that every field/value is unchanged. Unknown formats,
+only when every field/value is unchanged, except exact UTC timestamp spelling
+normalization (`Z` and `+00:00`, at most six fractional digits). No rounding,
+timezone shift or unknown field is accepted. Original source bytes remain pinned.
+Unknown formats,
 links, oversized or truncated events refuse the whole conversion. Missing source
 history is not reconstructed from current events.
 
