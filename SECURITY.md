@@ -2910,3 +2910,28 @@ old capacity counts/runtime/PVCs and nine canonical tables were restored. This
 adds bounded training evidence only; independent RWX restore, large-write/outage
 and cross-node/provider certification remain open, production scheduleOFF. See
 [RWX application evidence](docs/superpowers/reports/2026-11-03-replica-rwx-application.json).
+
+### Independent RWX backup custody and restore boundary
+
+2026-11-03: source application writers stayed stopped under the existing audited
+epoch1 while native PG17/Qdrant exporters and server-native read-only NFS reads
+produced13 encrypted format3 objects on the separately authorized PC. Exact
+node/controller/PVC/PV/provider Pod/native-container bindings and unknown-process
+refusal were rechecked per entry and after cold authentication; all81 public-table
+hashes/28 sequences, four complete points and11 blob hashes stayed unchanged.
+Native TLS verified real service hostnames over pinned loopback transports; keys
+and passwords never entered argv or the VM backup material. The backup key stays
+in the protected PC vault; no plaintext document payload enters the archive.
+
+The adjacent non-secret physical source-binding JSON is a required part of this
+backup set. Its digest is authenticated by the manifest's artifact storage scope;
+retain it with the encrypted archive for disjoint-target verification. Snapshot
+connections and owned tunnels closed before both source providers stopped; all
+PVCs remain, and prior capacity/runtime/nine canonical tables were restored.
+
+This copy does not authorize an identity guard bypass. The current rebind CLI
+remains S3-only; same `/artifacts` paths cannot establish a new RWX volume. Strict
+authenticated source and observed target binding must precede RWX restore/release.
+The NFS server itself was available during export, and large-write/outage/cross-node
+qualification remains open. Production scheduleOFF, certificationnull. See the
+[backup-only evidence](docs/superpowers/reports/2026-11-03-replica-rwx-independent-backup.json).

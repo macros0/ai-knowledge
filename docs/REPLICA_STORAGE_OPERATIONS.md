@@ -544,3 +544,20 @@ VM reboot, forced unmount, forced Pod deletion or foreign service stop was used.
 The successful separate server-local ENOSPC test does not qualify large NFS writes.
 Independent RWX recovery, sustained/outage/cross-node tests remain open. Production
 scheduling staysOFF and no profile receives certification from these receipts.
+
+The subsequent [independent RWX copy](superpowers/reports/2026-11-03-replica-rwx-independent-backup.json)
+contains a native PG17 exported-snapshot dump, a native Qdrant snapshot and all11
+ready blobs, encrypted as13 format3 objects on the separately authorized PC. All
+objects were cold reopened, decrypted and authenticated;81 tables/28 sequences,
+four full vectors and accepted blob hashes were bound to the frozen source. The
+non-secret adjacent `source-binding-<backup_id>.json` must accompany the archive:
+its NFS/PVC/PV coordinates are authenticated by the manifest's artifact storage
+scope digest. The key stays in the protected PC vault. Application writers remained
+stopped under epoch1; native snapshot/tunnel owners closed, both source storage
+Pods stopped, PVCs retained, and prior2/2/2/runtime/PVCs/nine tables restored.
+
+This is a verified copy, not a completed RWX restore. The official identity rebind
+CLI currently accepts S3 only; equal `/artifacts` paths on two RWX PVCs cannot prove
+relocation. Strict authenticated physical-source/actual-target binding support is
+required before RWX adoption/release. Do not bypass the guard or relabel RWX as S3.
+NFS server unavailability, large-write and cross-node gates remain separate.

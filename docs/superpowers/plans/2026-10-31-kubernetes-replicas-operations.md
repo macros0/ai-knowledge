@@ -631,3 +631,14 @@ under maintenance epoch1 with three retained PVCs; earlier lab2/2/2 restored. Se
 [RWX application receipt](../reports/2026-11-03-replica-rwx-application.json). Independent
 RWX restore, prolonged outage, cross-node and real external/mixed services remain
 open. This narrows O1; it does not complete it or grant certification.
+
+O2 RWX backup milestone (2026-11-03): the existing generic format3 protocol copied
+native PG17, native Qdrant and11 accepted NFS blobs into13 encrypted objects on
+the user-declared independent PC. Cold decryption/authentication passed, source
+physical/SQL/point/blob guards remained stable, all native owners closed and
+source providers stopped under held1. Prior lab2/2/2/runtime/PVCs/nine tables were
+restored. Keep the authenticated non-secret adjacent source-binding metadata with
+the archive; keys never left the PC. See [backup receipt](../reports/2026-11-03-replica-rwx-independent-backup.json).
+Actual RWX restore/release remains open: the current rebind CLI is S3-only, and
+equal local root paths on distinct PVCs require an explicit strict relocation
+proof before support can be added. No descriptor bypass or provider relabeling.

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "status": "independent-rwx-backup-cold-verified-restore-pending",
+  "observed_at": "2026-11-03T15:50:41.473500+00:00",
+  "operation_id": "7086b57be43241119891010e1b2f28f9",
+  "backup": {
+    "status": "independent-rwx-backup-authenticated-cold-verified",
+    "backup_id": "b620bc6fc5284e6bbd2311e5acec427e",
+    "format": 3,
+    "manifest_sha256": "ca29b51d4afe6cdd0e4bc9979ebfdd5a8399998f55cc37eb6e7e885b219b74ba",
+    "encrypted_objects": 13,
+    "plaintext_bytes": 1190017,
+    "counts": {
+      "documents": 2,
+      "concepts": 2,
+      "chunks": 2,
+      "blobs": 11,
+      "work_items": 163,
+      "audit_events": 19
+    },
+    "postgres_tables": 81,
+    "postgres_sequences": 28,
+    "qdrant_points": 4,
+    "native_catalog_sha256": "3b92f0c119aab6c77c385dbb4a273667016eefb4e8748f47a6d5092e2e5746d9",
+    "qdrant_points_sha256": "adc1bea49085157aebe0a8eb1e2950cc2153a56b92ddc1c047f8cdce73e20c59",
+    "source_binding_sha256": "9140263c59fc11f13acb85c05c85ee827c32199380b08d8589a10eea72b902f3",
+    "blobs_sha_verified": 11,
+    "source_application_writers": 0,
+    "source_still_held_epoch": 1,
+    "destination_independence": "user-declared separate PC",
+    "source_binding_file_required": true,
+    "key_transferred_to_vm": false,
+    "source_server_unavailable": false,
+    "restore_performed": false,
+    "production_schedule": "disabled"
+  },
+  "source_namespace": "replica-test-rwx20261103",
+  "source_namespace_uid": "e723d1a6-f1e1-44cd-8c16-adf9ca9ba92e",
+  "installation_id": "fb3f7e70554842248e9105953a083f2e",
+  "runtime_fingerprint": "7db0c4e4d6720e85f2fc55779f31f22797e8be655ddcaeab0c8836835fd4b235",
+  "scope": "Synthetic selected NFS4.1/CSI4.13.6, PG17 and Qdrant1.19 on one VM/kind node; backup destination is the separately user-confirmed PC, not production/provider certification.",
+  "source_application_report": "2026-11-03-replica-rwx-application.json",
+  "encrypted_payload": {
+    "native_postgres_dump": true,
+    "exported_read_only_snapshot": true,
+    "postgres_tables": 81,
+    "postgres_sequences": 28,
+    "native_qdrant_snapshot": true,
+    "complete_points_with_vectors_and_payloads": 4,
+    "ready_rwx_blobs": 11,
+    "expected_blob_sizes_and_sha256_checked": true,
+    "all13_objects_cold_reopened_decrypted_and_authenticated": true
+  },
+  "verification_digest_semantics": {
+    "postgres": "canonical complete public table row hashes and all sequence states",
+    "qdrant": "canonical complete scroll with full vectors/payloads sorted by ID",
+    "artifacts": "canonical complete ready BlobRef catalog",
+    "physical_scope": "exact source CSI/PVC/PV/node and NFS server filesystem/directory coordinates"
+  },
+  "source_binding": {
+    "version": 1,
+    "recipe": "authorized-nfs-csi-4.13.6-training-v1",
+    "namespace": "replica-test-rwx20261103",
+    "namespace_uid": "e723d1a6-f1e1-44cd-8c16-adf9ca9ba92e",
+    "node_uid": "9020a1d9-843e-4947-8808-53477289b863",
+    "claim_uid": "aefc7699-35fc-4484-8186-b4b5caac4ee3",
+    "pv_uid": "a18fa734-057d-4430-a940-cbe9b8770119",
+    "driver": "okf-training-nfs.csi.k8s.io",
+    "volume_handle": "172.18.0.1##okf-replica-test-rwx20261103-rwx-artifacts-pvc-aefc7699-35fc-4484-8186-b4b5caac4ee3#pvc-aefc7699-35fc-4484-8186-b4b5caac4ee3#retain",
+    "server": "172.18.0.1",
+    "share": "/",
+    "subdir": "okf-replica-test-rwx20261103-rwx-artifacts-pvc-aefc7699-35fc-4484-8186-b4b5caac4ee3",
+    "nfs_source": "172.18.0.1:/okf-replica-test-rwx20261103-rwx-artifacts-pvc-aefc7699-35fc-4484-8186-b4b5caac4ee3",
+    "server_filesystem_id": 7489247591754693893,
+    "server_directory_inode": 8193,
+    "server_directory_device": 1792,
+    "server_directory_uid": 1000,
+    "server_directory_gid": 1000,
+    "server_directory_mode": 1528,
+    "sha256": "9140263c59fc11f13acb85c05c85ee827c32199380b08d8589a10eea72b902f3",
+    "custody": "Required adjacent source-binding-<backup_id>.json on the independent PC; non-secret coordinates only, authenticated by manifest.storage.artifacts.scope_sha256. Retain it with the archive."
+  },
+  "source_guard": {
+    "physical_each_entry_and_after_cold_verification": true,
+    "exact_node_uid": true,
+    "all_application_roles_zero": true,
+    "no_unknown_or_retired_live_cri_containers": true,
+    "exact_provider_pod_and_native_container_ids": true,
+    "retained_pvc_pv_bindings": true,
+    "held_epoch": 1,
+    "exact_operation_and_owner": true,
+    "running_work_and_provider_chat_capture_owners": 0,
+    "full_sql_catalog_and_sequences_unchanged": true,
+    "all_points_and_all11_blob_hashes_unchanged": true
+  },
+  "native_transport": {
+    "postgres": "verify-full, real service hostname, pinned127.0.0.1 hostaddr inside provider; no password argv",
+    "qdrant": "strict CA/service-hostname validation over PC/VM127.0.0.1 tunnels pinned to the exact source Pod UID",
+    "filesystem": "source server-native read with O_NOFOLLOW/O_NOATIME and exact regular-file inode/size/mtime/UID"
+  },
+  "destination": {
+    "independence": "user-declared physically separate training PC",
+    "key": "existing protected local training vault; never transferred to VM",
+    "source_binding_file_required": true,
+    "production_schedule": "disabled"
+  },
+  "preflight_history": {
+    "first_provider_start": "Refused at <1GiB available memory before any remote directory/scale; absence freshly proved, refusal retained",
+    "second_provider_start": "After fresh owned capacity operation; source PG/Qdrant only0\u21921 under existing held1",
+    "inventory_helper": "Nested json_agg newlines initially refused read-only decoding; compact top JSONB corrected before file reads/export"
+  },
+  "closure": {
+    "source_provider_stop": {
+      "namespace_uid": "e723d1a6-f1e1-44cd-8c16-adf9ca9ba92e",
+      "node_uid": "9020a1d9-843e-4947-8808-53477289b863",
+      "app_writers": 0,
+      "storage_providers": 0,
+      "unknown_live_containers": 0,
+      "observed_at": "2026-11-03T15:47:48.286159+00:00"
+    },
+    "source_application_and_storage_counts_zero": true,
+    "retained_source_pvcs": 3,
+    "maintenance_held_epoch": 1,
+    "snapshot_owner_connections": 0,
+    "owned_loopback_tunnel_closed": true,
+    "prior_target": "replica-test-r4o2t20261102",
+    "capacity_operation": "1288981469934fc78f6f78589be424e5",
+    "prior_roles_restored": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "prior_runtime_pvcs_unchanged": true,
+    "prior_canonical_tables_unchanged": 9,
+    "data_deleted": false
+  },
+  "remaining": [
+    "Actual independent RWX restore into disjoint stores with unavailable source claim",
+    "Strict RWX identity relocation support: current official rebind CLI remains S3-only; do not weaken descriptor checks",
+    "Large buffered NFS writes, prolonged server outage and cross-node/failure-domain qualification",
+    "Customer external/mixed endpoints and trusted certification evidence"
+  ],
+  "restored": false,
+  "profile_qualified": false,
+  "certification": null,
+  "production_backup_schedule": "disabled"
+}

@@ -1012,3 +1012,12 @@ current-image2/2/2, bounded application ENOSPC/retry and normal server restart. 
 also retains the failed large buffered-write injection and its physical recovery.
 Independent RWX restore, large-write/outage and cross-node proof remain required. Its shared1GiB backing filesystem provides the test limit;
 individual PVC requests are not quotas. Production backup scheduling remainsOFF.
+
+[RWX independent backup](superpowers/reports/2026-11-03-replica-rwx-independent-backup.json)
+subsequently cold-verified13 encrypted objects on the independent PC: native PG17
+(81 tables/28 sequences), Qdrant (four complete points), and11 ready blobs. Retain
+the authenticated adjacent source-binding metadata with the archive and keep the
+key on the PC. Source app/storage are stopped under epoch1, with three retained
+PVCs and earlier lab2/2/2 restored. Actual RWX restoration is still pending: the
+current identity rebind CLI is S3-only and same local mount paths do not establish
+separate RWX storage. A strict physical relocation proof is required first.
