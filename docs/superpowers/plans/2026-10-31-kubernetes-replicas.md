@@ -41,7 +41,7 @@ partition/возврат устаревшего процесса и нагруз
 
 Открыты три крупных блока, частично выполненные:
 
-- **O1:** RWX application/restore/cross-node после проверенного NFS/CSI bootstrap,
+- **O1:** RWX independent restore/large-write/cross-node после NFS/CSI и application/ENOSPC/restart проверок,
   external/mixed end-to-end, заполнение хранилищ на уровне приложения
   и квалификация инфраструктуры/failure domains выбранных профилей.
 - **O2:** оставшиеся adoption/update recipes; compact/NULL-generation source-off рецепт проверен,
@@ -279,3 +279,5 @@ P0: `assert mutations == []`; `assert required_skip_exit_code != 0`;
 опасные профили проверять через `pytest.raises(ReplicaProfileError)`.
 
 03.11.2026: завершена [compact source-off репетиция](../reports/2026-11-03-replica-compact-independent-restore.json): независимое восстановление/S4 crash-resume/held handoff/adoption и функциональные2/2/2, accepted checkpoint, экспорт/frozen bundle, невыполнение approval и новая публикация на b5a9775. Затем закрыт [единый проход пяти замечаний](../reports/2026-11-03-replica-final-review-fixes.json): ccfcf9e full Linux6431 passes/221 explicit optional skips/0fail/87,67% coverage, неизменные2429 Git-файлов. Новый точный runtime собран и импортирован. Новая отдельная CI capacity-операция вернула прежние2/2/2 с теми же runtime/PVC и девятью неизменными каноническими таблицами. Compact target остаётся остановлен под held epoch3; PVC/backup сохранены. Отдельно разрешённый [NFS/CSI bootstrap](../reports/2026-11-03-replica-nfs-rwx-bootstrap.json) прошёл двух-Pod adapter contract; RWX application/restore/cross-node и остальные O1/O2/O3 gates остаются открытыми, certifications=null.
+
+03.11.2026 RWX: [текущий application run](../reports/2026-11-03-replica-rwx-application.json) прошёл2/2/2, загрузку/публикацию/поиск/скачивание/export, отдельный реальный ENOSPC507 с неизменным корпусом и повтором после освобождения места, нормальный NFS restart. Первый большой буферизованный client write завис в kernel reclaim/COMMIT и остаётся failed/unqualified; после контролируемого восстановления холодная проверка сохранила исходные данные. Финальные11 blob SHA/два audit/три WorkItems проверены на четырёх процессах. Target сохранён выключенным под maintenance epoch1; прежние реплики восстановлены. Independent RWX restore/large-write/outage/cross-node и остальные O1/O2/O3 gates остаются открытыми.

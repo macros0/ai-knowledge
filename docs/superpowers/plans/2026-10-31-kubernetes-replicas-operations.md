@@ -619,3 +619,15 @@ O2: `assert partial_manifest.status == "incomplete"`; `assert restored_executed_
 `assert alert_fired` при возрасте `86401` секунд.
 O3: `assert report.skipped_required == 0` для PASS; `assert certification is None`
 при failed restore; `assert previous_fingerprint != changed_provider_fingerprint`.
+
+O1 RWX follow-up (2026-11-03): separately authorized private NFS/CSI bootstrap and
+current-image application2/2/2 passed scoped bootstrap, cross-instance sessions,
+upload/publication/search/download/export, server-local bounded ENOSPC507/retry,
+and normal server restart. Four native processes verified all11 objects and empty
+original scratch. An initial large buffered NFS write stalled in same-kernel
+reclaim/COMMIT; its physical recovery and cold hash preservation are recorded,
+and the large-write gate remains unqualified. All new roles/storage are stopped
+under maintenance epoch1 with three retained PVCs; earlier lab2/2/2 restored. See
+[RWX application receipt](../reports/2026-11-03-replica-rwx-application.json). Independent
+RWX restore, prolonged outage, cross-node and real external/mixed services remain
+open. This narrows O1; it does not complete it or grant certification.

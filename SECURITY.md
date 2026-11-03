@@ -2884,3 +2884,29 @@ and deletion of only their two known synthetic objects. Application lifecycle,
 server-loss/full-storage, independent restore and cross-node gates remain open;
 no certification or production backup schedule is enabled. See the
 [bounded NFS evidence](docs/superpowers/reports/2026-11-03-replica-nfs-rwx-bootstrap.json).
+
+### RWX application fault boundaries and physical recovery
+
+2026-11-03: a separate synthetic namespace uses fresh scoped PostgreSQL credentials,
+TLS and a new platform-owned NFS claim. No administrative DB Secret enters app
+env; simulated auth/model inputs stay in the lab. Actual ENOSPC returned507 before
+any partial document/receipt/work/binding admission. Existing blob SHA and business
+tables were unchanged; exact-inode filler cleanup allowed the same-key retry.
+Normal NFS restart preserved sessions, documents and export across both frontends
+and APIs; four processes verified all11 blob hashes and empty original scratch.
+
+The earlier large buffered client write stalled before ENOSPC in kernel NFS
+reclaim/COMMIT paths. Its failure remains unqualified: only the exact source-hash/
+PID-start/fd-bound filler received SIGKILL, and exit was proved after temporarily
+increasing this server's threads4→8. The test roles drained physically before
+cleanup; the known inode alone was removed and threads restored8→4 without changing
+persistent config. No VM reboot, forced unmount/Pod deletion, unknown process kill
+or foreign workload change was used. Fresh cold verification preserved six blob
+hashes and six canonical business tables. The separate successful server-local
+preallocation ENOSPC test does not erase this large-write limitation.
+
+The new app/storage are stopped with retained PVCs and audited maintenance epoch1;
+old capacity counts/runtime/PVCs and nine canonical tables were restored. This
+adds bounded training evidence only; independent RWX restore, large-write/outage
+and cross-node/provider certification remain open, production scheduleOFF. See
+[RWX application evidence](docs/superpowers/reports/2026-11-03-replica-rwx-application.json).

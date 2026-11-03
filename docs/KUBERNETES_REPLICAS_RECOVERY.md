@@ -1006,7 +1006,9 @@ the previous2/2/2 runtime/PVCs and verified nine unchanged canonical tables.
 The compact functional source-off rehearsal remains bound to its b5a9775 image.
 
 The separately authorized [NFS/CSI platform](superpowers/reports/2026-11-03-replica-nfs-rwx-bootstrap.json)
-has a real private NFSv4 mount and successful two-Pod adapter checks. RWX application
-lifecycle, server-loss/full-storage, independent provider restore and cross-node
-proof remain required. Its shared1GiB backing filesystem provides the test limit;
+has a real private NFSv4 mount and successful two-Pod adapter checks. The subsequent
+[application receipt](superpowers/reports/2026-11-03-replica-rwx-application.json) verifies
+current-image2/2/2, bounded application ENOSPC/retry and normal server restart. It
+also retains the failed large buffered-write injection and its physical recovery.
+Independent RWX restore, large-write/outage and cross-node proof remain required. Its shared1GiB backing filesystem provides the test limit;
 individual PVC requests are not quotas. Production backup scheduling remainsOFF.

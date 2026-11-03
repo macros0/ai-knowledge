@@ -1,0 +1,417 @@
+{
+  "schema_version": 1,
+  "status": "bounded-rwx-application-enospc-and-restart-verified-with-recorded-large-write-failure",
+  "observed_at": "2026-11-03T15:14:46.515567+00:00",
+  "operation_id": "07f5ec199c9c4e81be7d164a037a9da8",
+  "namespace": "replica-test-rwx20261103",
+  "namespace_uid": "e723d1a6-f1e1-44cd-8c16-adf9ca9ba92e",
+  "installation_id": "fb3f7e70554842248e9105953a083f2e",
+  "scope": "Owned synthetic single-kind-node/one-VM training; fake embeddings, model stub and simulated authentication. Managed PG/Qdrant with separately owned external platform RWX; not customer external/mixed qualification.",
+  "qualification": "bounded-application-checks-only",
+  "profile_qualified": false,
+  "certification": null,
+  "production_backup_schedule": "disabled",
+  "runtime": {
+    "revision": "ccfcf9e9082eb178c01d44272c8fbbfff9210bf7",
+    "tag": "okf-backend:replicas-ccfcf9e-review-3e0d390d6e27",
+    "docker_id": "sha256:82db855fcfb845676676a43fe7fab9a3eba08212f2944c6b03f1f4e68ca386ad",
+    "kind_id": "sha256:4d53e99f9ab8486741c0cd4396b2e117c70276191a627bab7ab588c9121f4e01",
+    "build_fingerprint": "29e462d6258e3a4317f5bf4a0d056d87383e4b060a17ed2409bf4b056177a90a",
+    "copied_git_files_verified": 573,
+    "app_files_verified": 578,
+    "source_full_linux_ci": "ccfcf9e:6431 passed/221 explicit optional skips/0 failures/87.67% coverage",
+    "frontend": "okf-frontend:replicas-a95d589-current-47c3fb550152",
+    "common_fingerprint": "7db0c4e4d6720e85f2fc55779f31f22797e8be655ddcaeab0c8836835fd4b235"
+  },
+  "ownership": {
+    "postgres": "managed",
+    "qdrant": "managed",
+    "artifacts": "external"
+  },
+  "platform_reference": "2026-11-03-replica-nfs-rwx-bootstrap.json",
+  "platform_operation": "c2e04101020a459797950f48dc6bc811",
+  "startup": {
+    "helm_lint_and_current_chart_render": true,
+    "new_namespace_resources_created": 33,
+    "fresh_postgres_role": "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION; owns only new training database",
+    "admin_secret_in_application": false,
+    "new_tls_and_credentials": true,
+    "official_migrate_bootstrap": true,
+    "bootstrap_job_uid": "49adb777-78f1-41c6-a428-383c56a0dde3",
+    "initial_ready_pods": [
+      {
+        "name": "api-64dc8f6bd8-lxfmg",
+        "uid": "7eba996d-b170-4ff6-8f4f-8ccc4fa5edbf",
+        "role": "api",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      },
+      {
+        "name": "api-64dc8f6bd8-vpblk",
+        "uid": "79b1daab-3855-4ac5-a05c-48885cae0741",
+        "role": "api",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      },
+      {
+        "name": "frontend-6f5fb965bf-2tsnc",
+        "uid": "3b9a2c3c-8abc-4b0f-aed6-2ff66032f65c",
+        "role": "frontend",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      },
+      {
+        "name": "frontend-6f5fb965bf-cd822",
+        "uid": "4eadfdde-4a13-4f46-8d65-8e686fb73a7a",
+        "role": "frontend",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      },
+      {
+        "name": "model-stub-7cc8846948-2zmjs",
+        "uid": "26e87254-08f3-466e-a705-0c88248ab1c7",
+        "role": "model-stub",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      },
+      {
+        "name": "rwx-storage-postgres-0",
+        "uid": "ea4efd5d-b9ac-446b-aefe-52586e2ab9f4",
+        "role": "postgres",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      },
+      {
+        "name": "rwx-storage-qdrant-0",
+        "uid": "f314d9fb-07dd-476a-8be6-045cf309437c",
+        "role": "qdrant",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      },
+      {
+        "name": "worker-864cb5d7bd-6w8rx",
+        "uid": "498103d0-309e-458f-8847-e1219c68da0a",
+        "role": "worker",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      },
+      {
+        "name": "worker-864cb5d7bd-vxpmx",
+        "uid": "4b2339f1-b5a4-474a-ad33-9d361175142b",
+        "role": "worker",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0
+      }
+    ],
+    "retained_claims": [
+      {
+        "name": "rwx-artifacts",
+        "uid": "aefc7699-35fc-4484-8186-b4b5caac4ee3",
+        "phase": "Bound",
+        "volume": "pvc-aefc7699-35fc-4484-8186-b4b5caac4ee3",
+        "volume_uid": "a18fa734-057d-4430-a940-cbe9b8770119"
+      },
+      {
+        "name": "rwx-postgres",
+        "uid": "17b61955-77be-48c7-ba46-817d0ff07f9e",
+        "phase": "Bound",
+        "volume": "pvc-17b61955-77be-48c7-ba46-817d0ff07f9e",
+        "volume_uid": "2873f235-f711-428c-bcf6-212a98b67643"
+      },
+      {
+        "name": "rwx-qdrant",
+        "uid": "87fecb76-dd79-47c9-84a1-873ab436175f",
+        "phase": "Bound",
+        "volume": "pvc-87fecb76-dd79-47c9-84a1-873ab436175f",
+        "volume_uid": "0855929c-2ccd-4402-bc8f-ce039a8aabd2"
+      }
+    ]
+  },
+  "initial_http": {
+    "baseline": {
+      "new_session_shared_across_two_frontends_and_two_apis": true,
+      "pinned_pod_uids": [
+        "3b9a2c3c-8abc-4b0f-aed6-2ff66032f65c",
+        "4eadfdde-4a13-4f46-8d65-8e686fb73a7a",
+        "7eba996d-b170-4ff6-8f4f-8ccc4fa5edbf",
+        "79b1daab-3855-4ac5-a05c-48885cae0741"
+      ]
+    },
+    "upload": {
+      "document_id": "a7e9bc127e784797",
+      "original_sha256": "9eadad5d6b8911ab094b4fbf733eca7d642b0167d36481e4d8373481fb4881dd",
+      "same_document_on_cross_frontend_idempotent_retry": true
+    },
+    "new-result": {
+      "document_id": "a7e9bc127e784797",
+      "done_without_problem": true,
+      "original_sha256_matches_all_four_endpoints": true,
+      "bm25_search_matches_all_four_endpoints": true
+    },
+    "export": {
+      "job_id": 1
+    },
+    "export-result": {
+      "job_id": 1,
+      "completed": true,
+      "export_sha256": "71e0a58051dc7f6c36287d9802664829d7e60b5bdaddd617134b935a04b556c2",
+      "original_member_sha256_verified": true,
+      "all_four_endpoints": true
+    }
+  },
+  "after_pod_replacement": {
+    "recovery-session": {
+      "pre_stall_session_survived_pod_replacement_all_four_endpoints": true
+    },
+    "new-result": {
+      "document_id": "a7e9bc127e784797",
+      "done_without_problem": true,
+      "original_sha256_matches_all_four_endpoints": true,
+      "bm25_search_matches_all_four_endpoints": true
+    },
+    "export-result": {
+      "job_id": 1,
+      "completed": true,
+      "export_sha256": "71e0a58051dc7f6c36287d9802664829d7e60b5bdaddd617134b935a04b556c2",
+      "original_member_sha256_verified": true,
+      "all_four_endpoints": true
+    }
+  },
+  "native_verification": {
+    "processes": 4,
+    "real_mount_type": "nfs4",
+    "ready_blob_sha_verified_per_process": 11,
+    "original_scratch_files_per_process": 0,
+    "documents": 2,
+    "upload_receipts": 2,
+    "upload_audits": 2,
+    "business_work": [
+      {
+        "kind": "document",
+        "status": "succeeded",
+        "attempts": 1,
+        "maintenance_epoch": 0,
+        "owner_id": null
+      },
+      {
+        "kind": "document",
+        "status": "succeeded",
+        "attempts": 1,
+        "maintenance_epoch": 0,
+        "owner_id": null
+      },
+      {
+        "kind": "export",
+        "status": "succeeded",
+        "attempts": 1,
+        "maintenance_epoch": 0,
+        "owner_id": null
+      }
+    ],
+    "final_logical_hashes": {
+      "documents": {
+        "count": 2,
+        "sha256": "ec064a1a4bd642fc3ba0ed37bc5967d43ed413f99a743a24b7b14a54da162112"
+      },
+      "document_generations": {
+        "count": 2,
+        "sha256": "50fc2c4a3e3e988464682120117757e39199d350bd4ed71505a3631f7fae24be"
+      },
+      "artifact_objects": {
+        "count": 11,
+        "sha256": "e1b52a03a198be40da7d49b46070e0f87eb5d88970985c4835f4d87c184be907"
+      },
+      "artifact_bindings": {
+        "count": 5,
+        "sha256": "c545d3e782483400c4668e4412f3812a8121f04c964e1927606fb9a9f3cc58dd"
+      },
+      "upload_receipts": {
+        "count": 2,
+        "sha256": "dc5a0446a929fe00f988db356fe31bf129f978f1c99dff023286f336a85cea1e"
+      },
+      "work_items": {
+        "count": 3,
+        "sha256": "76cd4784054e81fd03fc029e02e609cecb813e29e31a0e8bb561ceb3af02bd04"
+      }
+    },
+    "canonical_business_tables_unchanged_after_refused_upload": true,
+    "periodic_maintenance_work_excluded_from_business_comparison": true
+  },
+  "bounded_enospc": {
+    "method": "server-local ordinary UID1000 posix_fallocate; no NFS large buffered write",
+    "filler": {
+      "operation_id": "07f5ec199c9c4e81be7d164a037a9da8",
+      "phase": "filled",
+      "path": ".owned-preallocated-enospc-07f5ec199c9c4e81be7d164a037a9da8",
+      "method": "ordinary UID1000 server-local posix_fallocate",
+      "inode": 26,
+      "device": 1792,
+      "uid": 1000,
+      "allocated_bytes": 950149120,
+      "file_size": 950145024,
+      "available_bytes": 0,
+      "native_errno": 28
+    },
+    "http": {
+      "request": {
+        "exit_code": 0,
+        "receipt": {
+          "http_status": 507,
+          "error_code": "storage_full",
+          "existing_original_readable_all_four_endpoints": true
+        }
+      },
+      "retry": {
+        "exit_code": 0,
+        "receipt": {
+          "document_id": "e23c839274264c47",
+          "original_sha256": "9f100a578a310de1c4e8a216ebb4ee544c79d9edc61941ef1ac0a76a3aff99ad",
+          "same_idempotency_key_after_refusal": true
+        }
+      },
+      "result": {
+        "exit_code": 0,
+        "receipt": {
+          "document_id": "e23c839274264c47",
+          "done_without_problem": true,
+          "download_sha_and_search_all_four_endpoints": true
+        }
+      }
+    },
+    "cleanup": {
+      "operation_id": "07f5ec199c9c4e81be7d164a037a9da8",
+      "phase": "space-recovered",
+      "filler_removed_by_exact_inode": true,
+      "free_bytes": 950149120
+    },
+    "known_inode_only": true
+  },
+  "failed_large_buffered_write": {
+    "status": "failed-not-qualified",
+    "enospc_reached": false,
+    "http_upload_attempted": false,
+    "observed_client_progress_bytes": 54525952,
+    "server_available_bytes_at_stall": 898482176,
+    "observed": "All four NFSd threads blocked: ext4 buffered write and nfs_release_folio/wait_on_commit; client balance_dirty_pages then folio_wait_bit_common.",
+    "inference": "Consistent with a same-kernel NFS loopback reclaim/COMMIT cycle; no exact kernel bug or CVE identification claimed.",
+    "process_exit_physically_verified": true,
+    "temporary_threads": {
+      "before": 4,
+      "recovery": 8,
+      "restored": 4,
+      "persistent_config_changed": false
+    },
+    "cleanup": {
+      "operation_id": "07f5ec199c9c4e81be7d164a037a9da8",
+      "phase": "filler-removed-original-thread-count-restored",
+      "inode": 26,
+      "device": 1792,
+      "bytes": 485941248,
+      "nfs_threads": 4,
+      "free_bytes": 950149120
+    },
+    "vm_reboot": false,
+    "forced_unmount": false,
+    "force_pod_delete": false,
+    "foreign_workloads_changed": false,
+    "physical_failures_and_original_logs_retained": true,
+    "related_kernel_primary_source": "https://kernel.googlesource.com/pub/scm/linux/kernel/git/stable/stable-queue/+/560e625cc9830156dfb10f2ace061acea72e4ca1/releases/6.12.67/nfs-fix-a-deadlock-involving-nfs_release_folio.patch",
+    "thread_control_documentation": "https://cdn.kernel.org/doc/html/latest/admin-guide/nfs/nfsd-admin-interfaces.html"
+  },
+  "recovery_verify": {
+    "cold_new_mount_and_all_six_preexisting_blob_hashes": true,
+    "six_business_table_hashes_match_baseline": true,
+    "initial_helper_job": {
+      "uid": "42522719-9cbb-4b6d-943d-96c43453a1a9",
+      "status": "Failed",
+      "cause": "Test helper file execution omitted /app import path; failed before app access; evidence retained"
+    },
+    "corrected_job": {
+      "uid": "498e7fc6-6d7e-4d27-a782-bba14a25a12f",
+      "status": "Succeeded",
+      "product_code_changed": false
+    }
+  },
+  "normal_server_restart": {
+    "operation_id": "07f5ec199c9c4e81be7d164a037a9da8",
+    "phase": "service-restarted-same-mount-private-listener",
+    "old_threads": [
+      {
+        "pid": 3595108,
+        "start": "59798538"
+      },
+      {
+        "pid": 3698723,
+        "start": "60181819"
+      },
+      {
+        "pid": 3698725,
+        "start": "60181819"
+      },
+      {
+        "pid": 3698726,
+        "start": "60181819"
+      }
+    ],
+    "old_invocation": "2510b5ee22d64fc2b13474566655283d",
+    "mount_device": 1792,
+    "mount_inode": 2,
+    "new_invocation": "49094d3c2529448f973f4f769064541d",
+    "old_threads_absent": true,
+    "threads": 4,
+    "source_pvc_or_objects_changed": false,
+    "functional_receipt": {
+      "pre_stall_session_survived_server_restart": true,
+      "both_documents_done": true,
+      "original_sha256_matches": true,
+      "prior_export_zip_sha256_matches": true,
+      "all_four_endpoints": true
+    }
+  },
+  "closure": {
+    "maintenance": {
+      "operation_id": "b620bc6fc5284e6bbd2311e5acec427e",
+      "owner_id": "owned-rwx-rehearsal-stop",
+      "epoch": 1,
+      "held": true,
+      "running_work": 0,
+      "provider_owners": 0,
+      "active_captures": 0
+    },
+    "application_and_storage_controllers_zero": 6,
+    "physical_stop": {
+      "remaining_pods": 0,
+      "live_containers": 0,
+      "all_storage_stopped": true,
+      "claims_retained": true
+    },
+    "retained_pvcs": 3,
+    "pod_forwards_closed": true,
+    "old_target": "replica-test-r4o2t20261102",
+    "old_capacity_operation": "ca36225e40f24bbfb015394fc9741dde",
+    "old_target_restored_replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "old_runtime_pvc_unchanged": true,
+    "old_canonical_tables_unchanged": 9,
+    "data_deleted": false
+  },
+  "remaining": [
+    "Independent RWX backup/source-off restore",
+    "Large buffered NFS writes and sustained memory-pressure qualification",
+    "Prolonged server outage/uncertain ownership and recovery",
+    "Cross-node cache/failure-domain qualification",
+    "Actual customer external/mixed services and trusted provider evidence"
+  ]
+}

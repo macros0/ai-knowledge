@@ -1,11 +1,11 @@
 # Replica storage packages and bootstrap
 
-Implementation status, 2026-11-01: basic managed PostgreSQL/Qdrant/S3 templates and
+Implementation status, 2026-11-03: basic managed PostgreSQL/Qdrant/S3 templates and
 external/mixed application wiring are implemented. Production activation still
 requires the remaining O1 provider checks, O2 recovery and R5/O3 acceptance.
 The separately admitted training RWX recipe now has a real NFS/CSI bootstrap and
 two-Pod adapter proof. An existing verified RWX claim can be used by the application;
-current RWX application/restore/cross-node gates remain open. Resilient is rejected.
+bounded RWX application/ENOSPC/restart checks passed; independent restore, large-write and cross-node gates remain open. Resilient is rejected.
 
 ## Selected basic recipes
 
@@ -515,3 +515,32 @@ current backend image matches the full ccfcf9e CI and573 copied Git files.
 RWX application/restore/full-storage/cross-node and external/mixed qualification
 remain open. The earlier key-recovery and local-alert gates have separate completed
 training reports; production scheduling staysOFF and certification staysnull.
+
+## RWX application and bounded faults (2026-11-03)
+
+The [actual current-image application receipt](superpowers/reports/2026-11-03-replica-rwx-application.json)
+uses a fresh namespace/database/credentials/TLS and a new CSI claim. PostgreSQL and
+Qdrant belong to the application infrastructure release; RWX belongs to the separate
+platform lifecycle (`artifacts.provider=external`). This exercises that ownership
+combination on our own lab; it is not customer external-service qualification.
+Two frontends/APIs/workers passed shared sessions, cross-frontend upload idempotency,
+publication/search/download and worker export. Server-local ordinary-UID allocation
+filled the bounded filesystem: actual HTTP507/storage_full retained all earlier
+objects and six business tables. Exact-inode cleanup and the same-key retry then
+published the second document. Normal NFS restart retained both documents, the
+old authenticated session and the export on all four HTTP endpoints. Four native
+processes verified all11 blob hashes, two upload audits and three business WorkItems
+completed once; scoped original scratch was empty. The target is stopped under
+maintenance epoch1 with all three PVCs retained; earlier lab replicas were restored.
+
+A separate initial large buffered NFS client write did **not** pass. At roughly54MiB
+progress, all four NFSd threads waited in ext4 write/reclaim/COMMIT paths while the
+filesystem still had free blocks. This is consistent with a same-kernel loopback
+reclaim cycle, not a proven specific kernel bug. The exact filler was killed, the
+new roles drained, four temporary server threads allowed COMMIT to finish, and the
+known filler was removed only after process exit. The original four threads and
+configuration were restored; cold verification preserved all earlier hashes. No
+VM reboot, forced unmount, forced Pod deletion or foreign service stop was used.
+The successful separate server-local ENOSPC test does not qualify large NFS writes.
+Independent RWX recovery, sustained/outage/cross-node tests remain open. Production
+scheduling staysOFF and no profile receives certification from these receipts.
