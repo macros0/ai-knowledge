@@ -22,6 +22,7 @@ from app.services.processing_scope import (
     append_scope_audit,
 )
 from app.services.registry import get_registry
+from app.services.artifacts.original_scope import scoped_originals
 from app.services.parser_supervisor import inspect_attachments_supervised, parse_document_supervised
 from docparser import ParseContext, parse_document, blocks_to_markdown
 from docparser.attachment_inventory import inspect_attachment_inventory
@@ -71,6 +72,7 @@ def _utc(value):
     return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 
 
+@scoped_originals
 def confirm_processing_scope(
     doc_id, review_id, revision, request_id, *, actor, is_admin=False, similarity_token=None,
     edit_owner_id=None, edit_token=None
@@ -286,6 +288,7 @@ def confirm_processing_scope(
         raise
 
 
+@scoped_originals
 def prepare_regeneration_scope(doc_id, settings):
     """Return (immutable scope, requires user action) without occupying a worker."""
     from app.services.processing_scope import scope_for_generation, create_review

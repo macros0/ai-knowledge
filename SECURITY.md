@@ -2840,6 +2840,8 @@ the attempt. Nested consumers share that lifetime and parallel readers retain
 separate locked directories. Cleanup reclaims only recognized, unlocked local
 attempts and preserves unknown paths. Legacy combined originals remain durable.
 Export admission records the canonical binding without downloading the source.
+Direct processing-admission service calls also own a scratch scope, including
+confirmation and regeneration preparation without an HTTP request.
 
 The initial metadata session ends before a replica read starts provider I/O.
 Its object lease and work heartbeat can therefore commit independently while
