@@ -2807,3 +2807,12 @@ Version1 cannot recollect a frozen request. Subsequent S4 transfers update the
 receipt and matching pristine queued Work digest atomically, refusing attempted,
 owned, cancelled or ambiguous work. No missing journal is silently replaced by
 new observations. See [bounded evidence](docs/superpowers/reports/2026-11-03-replica-legacy-diagnostics.json).
+
+### Prefix-scoped artifact readiness
+
+2026-11-03: runtime readiness used HEAD bucket, which requires ListBucket
+without a prefix condition. This falsely rejected a correctly scoped runtime
+principal and prevented API/worker readiness. The probe now lists at most one
+object under the configured installation prefix. Empty prefixes remain valid
+when the deployment intentionally owns the whole bucket. An actual access denial
+or provider error still fails readiness; no bucket-wide grant is added.

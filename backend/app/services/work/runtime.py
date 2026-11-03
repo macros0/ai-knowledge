@@ -177,7 +177,9 @@ def probe_artifacts(settings):
     from app.services.artifacts import get_blob_store
     store = get_blob_store(settings)
     if settings.artifact_backend == "s3":
-        store.client.head_bucket(Bucket=store.bucket)
+        # Prefix-scoped ListBucket grants intentionally do not authorize HEAD
+        # bucket, whose request has no prefix. Keep readiness within our scope.
+        store.client.list_objects_v2(Bucket=store.bucket, Prefix=store.prefix, MaxKeys=1)
     elif not store.root.is_dir() or not os.access(store.root, os.R_OK | os.W_OK | os.X_OK):
         return False
     return True
