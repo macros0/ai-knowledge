@@ -204,6 +204,11 @@
           "path": "docs/superpowers/reports/2026-11-04-replica-crossnode-vm103.json",
           "sha256": "c7b9f3fbe587502b1b625735a74e8486f89ea2ad5b592c0b21e28bcb33d2ee67",
           "scope": "Managed PG17/Qdrant plus external DS211/NFS4.0: actual two logical kind nodes on VM103,256MiB RWX/network and automatic before-provider worker takeover; initial failed/assisted trial retained; all closed/capacity returned; one physical domain/stub model, no certification"
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-04-replica-s3-application-full.json",
+          "sha256": "2d844b333f5fd4c4bc46f8fc410f070b9331531a1b2933d4c6eb2347fb9b74df",
+          "scope": "Managed PG17/Qdrant plus external ephemeral RustFS1.0.4: actual bounded128Mi tmpfs ENOSPC during accepted regeneration, HTTP503 refusal/old publication preserved,75s independent cleanup and same-work attempt3/fence3 success;16cold SHA/four processes/2docs5business effects; all closed/capacity returned. One VM/stub/simulated auth; no quota/durability/profile certification."
         }
       ]
     },

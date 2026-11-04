@@ -3074,3 +3074,15 @@ normal retry/publication without bypassing work ownership or publication fences.
 The separate application storage-full rehearsal fills only its own128MiB memory
 S3 fixture with synthetic data and an independently scheduled own-file cleanup.
 Its result cannot qualify provider durability, physical HA or production quotas.
+
+The [application rehearsal](docs/superpowers/reports/2026-11-04-replica-s3-application-full.json)
+now confirms actual bounded ENOSPC, HTTP503 refusal without a document receipt,
+old publication integrity and independent own-file removal at75.08s. The same
+accepted work completed automatically on attempt3/fence3; two earlier generations
+are abandoned. No live queue/lease/slot/clock edits. Both capacity loans returned
+to original runtime/PVC/nine-table hashes. New writers/storage are off held3,
+two PVCs retained, all16 ready synthetic blobs rehashed on the independent PC.
+An initial escrow attempt correctly hit the runtime factory maintenance fence;
+its Failed Job remains. The successful offline reader retained the exact operator
+advisory lock, verified identity/store/epoch and used scoped S3 read calls. Runtime
+guards were unchanged. This blob-only escrow is not coordinated backup evidence.

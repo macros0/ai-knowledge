@@ -1,6 +1,6 @@
 # Replica storage packages and bootstrap
 
-Implementation status, 2026-11-03: basic managed PostgreSQL/Qdrant/S3 templates and
+Implementation status, 2026-11-04: basic managed PostgreSQL/Qdrant/S3 templates and
 external/mixed application wiring are implemented. Production activation still
 requires the remaining O1 provider checks, O2 recovery and R5/O3 acceptance.
 The separately admitted training RWX recipe now has a real NFS/CSI bootstrap and
@@ -8,6 +8,25 @@ two-Pod adapter proof. An existing verified RWX claim can be used by the applica
 bounded RWX application/ENOSPC/restart checks passed; independent restore, large-write and cross-node gates remain open. Resilient is rejected.
 
 ## Selected basic recipes
+
+The [application S3 full rehearsal](superpowers/reports/2026-11-04-replica-s3-application-full.json)
+now tests the real API/worker path on65d6ee2 with an explicitly ephemeral128Mi
+fixture. An unavailable artifact store returns503/artifact_unavailable at upload;
+do not infer quota507 from opaque provider500. Typed BlobUnavailable permits
+bounded retry of the same accepted work under a fresh fence. Missing/corrupt/
+conflicting blobs and lost read leases still require reconciliation. During the
+rehearsal old original/search/ZIP remained available; after75s independent space
+recovery the same regeneration succeeded on attempt3/fence3. The known503 upload
+was retried with its original key and created one document/work/audit. Uncertain
+HTTP outcomes still require receipt/work inspection before replay.
+
+Four processes verified all16 ready SHA and exact business effects; the fixture
+is off/held3 with2PG/Q claims retained. Ready synthetic blobs were copied and
+rehashed on the independent PC before stopping memory S3. This copy has no PG/Q
+snapshots and is not coordinated backup/restore evidence. Both borrowed old
+2/2/2 sets and their runtime/PVC/nine-table hashes were restored. PG/Q exhaustion,
+production capacity/quota and other providers remain separate gates; certification
+and production schedule are unchanged.
 
 The infrastructure chart is `deploy/helm/ai-knowledge-storage`. All components
 default to external and create no storage resources. Managed components have one

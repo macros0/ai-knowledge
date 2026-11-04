@@ -10,7 +10,7 @@
 
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
-Статус 03.11.2026: реализация продолжается в `codex/kubernetes-replicas`.
+Статус 04.11.2026: реализация продолжается в `codex/kubernetes-replicas`.
 P0/P1, frontend split, local/RWX/S3 adapters, перенос файловых потребителей,
 поиск orphan-объектов/безопасный GC и verified/resumable offline-миграция корпуса
 реализованы. Миграция не удаляет исходник и не требует реиндексации;
@@ -23,8 +23,11 @@ Runtime ledger/fencing/публикация, API/worker lifecycle и общая 
 PostgreSQL partition с возвращением старого процесса и небольшая нагрузка.
 Проверены независимая копия на отдельном ПК и восстановление в новый target,
 ограниченные credentials, согласованная смена CA и заполнение отдельного
-ограниченного S3 filesystem. Последнее подтверждает контракт S3-компонента,
-а не весь путь публикации приложения при заполнении production-диска.
+ограниченного S3 filesystem. Дополнительный
+[application-full прогон](../reports/2026-11-04-replica-s3-application-full.json)
+на65d6ee2 подтвердил путь приложения:503 без приёма загрузки, старое поколение
+сохранено и та же работа автоматически завершена на попытке3/fence3 после75с
+освобождения собственного128Mi tmpfs. Это не проверка production-диска или PG/Q.
 Подробные измерения, версии и ограничения сохранены в связанных runtime/operations
 планах и `docs/superpowers/reports/2026-11-01-replica-*.json`/`2026-11-02-*.json`.
 
@@ -43,7 +46,8 @@ partition/возврат устаревшего процесса и нагруз
 
 - **O1:** RWX independent restore, Synology256MiB write/read,150с application outage
   и логический перенос между двумя узлами VM103 уже проверены;
-  остаются остальные external/mixed profiles, application full-storage cases
+  bounded S3 application full-storage case также закрыт; остаются остальные
+  external/mixed profiles и другие component-specific full-storage cases
   и квалификация физической инфраструктуры/failure domains.
   [Двухузловой результат](../reports/2026-11-04-replica-crossnode-vm103.json) сохраняет
   первый неуспешный автоподхват и отдельный успешный повтор после исправлений DNS/PG.

@@ -405,6 +405,26 @@ production monitoring/physical key escrow or strict RPO. Production scheduleOFF.
 
 ## Task O3: fault matrix, release gates и документация
 
+O1/O3 bounded S3 application full milestone,2026-11-04:
+[actual ENOSPC and automatic retry](../reports/2026-11-04-replica-s3-application-full.json)
+uses managed PG/Q plus external ephemeral RustFS128Mi. Pre-fault verification
+found BlobUnavailable misclassified as internal_error;65d6ee2 corrects typed
+transient classification while retaining integrity/missing/lease/conflict guards.
+100 focused tests and full Linux6489pass/221sameoptionalSKIP/0fail/87.70% passed.
+One accepted regeneration preserves the old publication while full; API rejects
+a2119201-byte upload with503/artifact_unavailable and no receipt/business effect.
+Independent own-file cleanup75.0757s; same work succeeds attempt3/fence3 by140.516s,
+no queue/lease/slot/clock edits. Known503 upload retries with its same key once.
+Four routes/4native processes verify16cold SHA,2docs/5businesswork/2receipt/audit,
+scratch0 and both originals in the new ZIP. New namespace held3/all native0,
+2PVCs retained;16synthetic blobs4268486bytes independently copied/rehashed on PC.
+This is not format3 backup. Initial ordinary-factory maintenance refusal retained;
+offline copy uses the exact operator lock/identity/store/epoch and scoped reads.
+Both old r4o2t/r5o2u loans returned2/2/2/runtime/PVC/nine-table hashes; prior NAS/S3
+sources and logical crossnode nodes stay off, foreign OpenSearch stays running.
+No production quota/PG-Q exhaustion/provider/physical-domain certification.
+Other external/mixed/adoption/profile gates remain open, production scheduleOFF.
+
 O3 artifact-CI milestone,2026-11-02: fresh full doc-parser557/557 tests with0 skips
 and frontend production standalone build19 routes passed in isolated network-none,
 read-only non-root containers.97 parser and366 frontend files match the frozen

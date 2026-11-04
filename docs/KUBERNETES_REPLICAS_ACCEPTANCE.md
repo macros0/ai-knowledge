@@ -1,6 +1,6 @@
 # Приёмка профилей Kubernetes replicas
 
-Статус на02.11.2026: общая приёмка **не завершена**, certified-профилей нет.
+Статус на04.11.2026: общая приёмка **не завершена**, certified-профилей нет.
 [Матрица JSON](../deploy/kubernetes/replicas/support-matrix.json) хранит семь
 предусмотренных вариантов: compact/local, frontend split, managed/RWX,
 managed/S3, all-external, mixed и resilient. Поле `tested` означает наличие
