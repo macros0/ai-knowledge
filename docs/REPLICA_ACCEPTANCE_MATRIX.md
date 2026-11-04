@@ -7,6 +7,7 @@
 
 | Область | Подтверждённый результат | Незакрытая проверка |
 |---|---|---|
+| All-external S3 runtime и независимый restore | [Закрытая репетиция](superpowers/reports/2026-11-04-replica-all-external-runtime-recovery.json): три внешних для app namespace TLS/scoped provider,2/2/2, ноль storage/PVC/root credentials в app. Независимая format3 копия и source-off restore:81 таблица/28 sequences/2 full vectors/6 blobs; held adoption,172 work rows неизменны, старые/new HTTP и4 процесса12 SHA. Source/target off held1/held3,6 PVC сохранены, обе прежние2/2/2/runtime/PVC/9 tables восстановлены | Отдельный учебный provider namespace на той же VM; конкретные customer providers, другие варианты, реальные model/IdP и полная qualification остаются открытыми |
 | Основание P0/P1 | Контракты профилей, инвентарь writers, явная namespace/installation identity и изоляция тестовых входов реализованы | Входы и полномочия инфраструктуры заказчика |
 | Frontend F1/F2 | Разделение frontend/backend, общая сессия и доступ к API проверены на двух frontend; прямой доступ frontend к storage запрещён CNI | Customer Gateway/SSO и реальные IdP endpoints |
 | Файлы S1–S4 | Local/RWX/S3 adapters, перенос потребителей, GC и возобновляемая offline-миграция с проверкой целостности реализованы; [runbook](ARTIFACT_STORAGE_MIGRATION.md) | Квалификация конкретного RWX/CSI/provider; миграция рабочего корпуса выполняется только после проверенного backup |

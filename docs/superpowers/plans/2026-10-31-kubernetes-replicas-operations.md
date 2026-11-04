@@ -751,3 +751,18 @@ sources frozen, all capacity loans returned and old2/2/2/runtime/PVC/nine tables
 plus full provider data rechecked. The selected150s application case is complete;
 cross-node/physical domains, NAS-target relocation, longer interruptions and
 remaining customer/profile gates stay open. ScheduleOFF/certificationnull.
+
+O1/O2 selected all-external S3 milestone (2026-11-04):
+[closed runtime and recovery](../reports/2026-11-04-replica-all-external-runtime-recovery.json)
+uses actual2/2/2 and three TLS/scoped providers in a separate owned namespace; app
+has no storage workload/PVC/root credentials. Frontend/credential/TLS controls
+and independent encrypted format3 backup passed. Fresh-target source denials
+were proved against live source positive controls before all source providers
+stopped. Actual restore matched81 tables/28 sequences/two full points/six blobs;
+official held adoption invalidated one session and kept172 work rows unchanged
+before explicit release. Old/new HTTP and four native12-object SHA checks passed.
+Source/target off held1/held3, six PVCs retained, both capacity loans returned with
+original2/2/2/runtime/PVC/nine-table hashes. Current65d6ee2 product was unchanged;
+its prior6710-case Linux CI applies to those exact image bytes. Customer-specific
+external providers, other selected variants, physical domains, real model/IdP and
+complete O1/O2/O3 profile qualification remain open; scheduleOFF/certificationnull.

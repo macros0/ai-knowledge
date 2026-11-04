@@ -174,13 +174,21 @@
         "artifacts": "external"
       },
       "remaining_gates": [
-        "real-external-three-component-end-to-end",
-        "native-scoped-access-and-tls",
-        "external-provider-independent-restore",
-        "final-version-ci"
+        "customer-specific-three-external-component-ownership-and-provider-fault-qualification",
+        "other-external-rwx-selected-recipes",
+        "real-model-gateway-idp-and-trusted-evidence-producers",
+        "complete-current-release-profile-evidence"
       ],
       "certification": null,
-      "qualification_complete": false
+      "qualification_complete": false,
+      "evidence": [
+        {
+          "path": "docs/superpowers/reports/2026-11-04-replica-all-external-runtime-recovery.json",
+          "sha256": "c488bddeb0cb41c90fb653ca635f3922281484a25465c724679be48428d299e3",
+          "scope": "Selected all-external S3 contract: real2/2/2 with three TLS/scoped providers outside app namespace; encrypted PC backup and source-physically-off restore into disjoint managed target;81tables28seq/2vectors6blobs, held adoption/session revoke/release/old-new HTTP/4processes12coldSHA; both loans returned. Owned fixture/one VM/stub/simulated auth, not customer/profile/physical certification."
+        }
+      ],
+      "selected_s3_fixture_status": "tested"
     },
     {
       "id": "distributed-mixed",

@@ -819,3 +819,24 @@ service resolution from the surviving worker and the exact provider/claim
 identities. A recovered node or an operator-terminated dead database backend
 does not establish automatic worker takeover. Preserve unsuccessful trials and
 repeat with a new document/work ID after the dependency changes.
+
+## Selected all-external S3 runtime and recovery
+
+The [closed rehearsal](superpowers/reports/2026-11-04-replica-all-external-runtime-recovery.json)
+proves application2/2/2 with all three provider ownership fields external and zero
+storage workload/PVC/root credential in the app namespace. A separately managed
+training namespace supplied pinned PG17/Qdrant1.19/RustFS1.0.4 with dedicated
+retained512Mi claims, scoped accounts and TLS. Frontend denials, wrong hostnames
+and wrong credentials were checked against positive controls. This is an actual
+service/lifecycle contract fixture, not qualification of customer infrastructure.
+
+The independent format3 PC copy contains81 tables/28 sequences/two full vectors
+and six accepted blobs. Fresh-target egress must not inherit source allowlists:
+prove target source-denials with live-source positive controls, then physically
+stop source providers before importing data. Fresh managed PG/Q/S3 passed exact
+pre-adoption comparison, held2 checks, old-session invalidation and explicit
+release. Old data/search/ZIP plus a new upload/export worked across four routes;
+four processes checked12 hashes and unchanged old work IDs/fences. Final source
+held1 and target held3 are off, six PVCs/copy retained, both earlier capacity loans
+restored with original runtime/PVC/nine-table hashes. Profile/customer/provider
+failure qualification remains open; production schedule remains disabled.

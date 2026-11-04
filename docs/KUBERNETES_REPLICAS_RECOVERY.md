@@ -1096,3 +1096,23 @@ Target is physically stopped/held3 with three PVCs retained; prior lab2/2/2,
 runtime/PVCs and nine canonical tables are restored. This selected recipe does
 not qualify Synology, another NFS server, large buffered writes, prolonged outages,
 cross-node recovery or physical HA. Production schedule remains off.
+
+## All-external S3 source recovery rehearsal
+
+The [selected external-service rehearsal](superpowers/reports/2026-11-04-replica-all-external-runtime-recovery.json)
+restored the independent encrypted PC archive while all source application and
+provider containers were physically off. All81 tables/28 sequences/two full
+vector points/six S3 objects matched before adoption. Operator credentials were
+confined to offline jobs; the runtime uses new scoped accounts and CA. Official
+identity adoption revoked one old session and kept all172 imported work rows
+unexecuted under held2. Explicit release preceded2/2/2 application startup. Old
+search/download/ZIP, old-cookie401, new shared session/upload/export and four
+process12-object cold SHA checks passed. Target/source are off held3/held1; six
+claims and the independent archive remain, both temporary capacity loans returned.
+
+For this recipe, clear inherited source egress on the fresh target, prove source
+TCP denial from each target execution role with live positive controls, then
+stop source providers. Partial scale-down or a local boolean is not source-off
+proof: exact namespace/Pod/CRI checks guard every import and adoption action.
+The providers here are a separately owned training fixture on the same VM; this
+is no customer provider or physical failure qualification.

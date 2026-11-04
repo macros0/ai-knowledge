@@ -3086,3 +3086,29 @@ An initial escrow attempt correctly hit the runtime factory maintenance fence;
 its Failed Job remains. The successful offline reader retained the exact operator
 advisory lock, verified identity/store/epoch and used scoped S3 read calls. Runtime
 guards were unchanged. This blob-only escrow is not coordinated backup evidence.
+
+### All-external service contract and independent recovery (2026-11-04)
+
+The [bounded rehearsal](docs/superpowers/reports/2026-11-04-replica-all-external-runtime-recovery.json)
+uses no storage workload/PVC/root credential in its application namespace. Three
+separate provider services have explicit cross-namespace role policies, scoped
+SQL/S3 accounts and verified TLS. Wrong hostname/credentials and frontend access
+are rejected with positive controls. The external fixture is independently owned
+for this test; it does not establish customer permission or physical independence.
+
+Before recovery, inherited source egress was removed from the fresh managed target.
+API/worker/bootstrap probes denied all three live source endpoints while reaching
+their own providers; source host TCP controls succeeded before/after. All source
+writers and providers were then physically stopped. Frozen namespace/spec/Pod/CRI
+guards require source-off before every import/adoption/runtime step. The format3
+archive and master key stay on the independent PC; only authenticated native
+restore bytes are streamed. All81 tables/28 sequences/two full vectors/six blobs
+matched before official identity adoption. The old session was revoked;172 work
+rows remained unchanged before explicit release. Runtime has no operator secrets.
+Four ordinary processes verified12 cold hashes, no scratch and no old work replay.
+
+Source/target are now physically off under held1/held3 with six PVCs retained;
+all owned forwards are closed and both earlier2/2/2 runtime/PVC/nine-table loans
+returned. A sampled CRI/Pod termination race refused closure before the next patch;
+only verified remaining intents were resumed. No runtime guard, queue/lease/slot
+or data edits bypassed it. Production scheduleOFF/certificationnull remain.
