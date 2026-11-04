@@ -318,3 +318,12 @@ held2/release/old-cookie401/старый и новый HTTP-корпус/экс�
 три PVC оставлены; прежние2/2/2/runtime/PVC/девять таблиц восстановлены.
 Длительные outage/cross-node, NAS-target relocation и остальные customer/provider
 gates открыты; итоговые O1–O3 не объявлены завершёнными, production scheduleOFF.
+
+04.11.2026: отдельный [NAS component outage](../reports/2026-11-04-replica-synology-bounded-outage.json)
+проверил150с node→NAS2049 block, native DROP и ожидающие read/write через136,6с,
+естественное истечение timed set и cold SHA после чтения182,9с/записи183,1с в том
+же процессе. Первый delayed-control прогон и import-only failed Job сохранены.
+Оба прогона закрыты, временные nft-таблицы/свои два файла удалены, CRI/mount0,
+PVC и три Job оставлены. Прежние2/2/2/runtime/PVC/девять таблиц восстановлены.
+Полный application/worker recovery при NAS outage и физические отказы остаются
+отдельными O1/O3 gates, production scheduleOFF/certificationnull.

@@ -704,3 +704,14 @@ is off/held3/three PVCs retained; prior2/2/2/runtime/PVC/nine tables restored. T
 closes this selected NAS-source→S3 recovery recipe, not NAS-target relocation,
 prolonged outage/cross-node/physical domains or complete customer qualification.
 Production scheduleOFF/certificationnull.
+
+O1/O3 selected NAS component outage milestone (2026-11-04): [bounded150s recovery](../reports/2026-11-04-replica-synology-bounded-outage.json)
+passed actual DROP/in-flight I/O observations through136.6s, natural element
+expiry before152.7s and same-process read182.9s/write183.1s with both1MiB SHA
+matches. The NAS stayed reachable from the VM; only the approved kind-node TCP
+endpoint was blocked. Own table/objects/empty directories were removed; one PVC
+and all three Jobs retained, CRI/mount0, original OUTPUT unchanged. A delayed
+first trial and import-only failure are preserved separately. A new worker2→1
+memory loan was fully returned with old2/2/2/runtime/PVC/nine tables unchanged.
+This closes only a component outage case, not full application/worker recovery
+through a prolonged NAS outage or physical failure qualification. ScheduleOFF.

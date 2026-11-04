@@ -723,3 +723,30 @@ The target is stopped under held3 with three PVCs retained. Earlier2/2/2,
 runtime/PVC bindings and nine canonical tables were restored. Production schedule
 is off; NAS-target relocation, prolonged outage, cross-node/physical failure and
 real customer model/IdP acceptance remain separate gates.
+
+## Bounded Synology network/I/O recovery (2026-11-04)
+
+The [component drill](superpowers/reports/2026-11-04-replica-synology-bounded-outage.json)
+passed on the current96931d1 image and a separate retained128Mi NAS claim. One
+kernel-timed150-second nft element blocked only node-to-NAS TCP2049. Actual DROP
+counters and in-flight read/write were observed through136.6s; the element was
+absent at152.7s without renewal. The same process completed its old cold read
+in182.9s and new fsynced/cold write in183.1s, with both1MiB hashes matching. Host
+TCP positive controls kept succeeding; no NAS configuration or VM-host firewall
+was changed. Exact table handle/spec were checked before removing only that table.
+
+An import-only failed Job and the first delayed-control trial remain retained.
+That first trial had150s of network blocking but started I/O120s late because the
+nft1.1.3 JSON observer expected milliseconds rather than seconds. It was fully
+closed before a fresh confirmed trial; no uncertain apply or timeout renewal.
+The unchanged probe ConfigMap used an /app launch wrapper. Three Jobs are retained
+(one failed before I/O, two successful); only the two owned blobs and their empty
+directories were removed, all CRI/mounts are gone and the PVC remains.
+
+The original1GiB memory floor initially refused before any resource creation. A
+new temporary worker2→1 loan made room; frontend/API stayed2 and the old2/2/2,
+runtime/PVC bindings and nine canonical tables were restored afterward. Original
+NAS source and S3 restore target stayed off. This closes a bounded component
+network/I/O recovery check; full application publication/worker recovery during
+a prolonged NAS outage, physical node loss and power-loss durability remain open.
+Production backup schedule is off; no profile certificate is issued.
