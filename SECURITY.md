@@ -3061,3 +3061,16 @@ An unavailable or unwritable object/temp directory still refuses readiness. The
 probe creates no test objects and does not broaden filesystem permissions. S3
 retains its bounded prefix-scoped list probe. This change grants no provider or
 power-loss certification and does not change runtime/maintenance identity guards.
+
+### Recoverable artifact failures (2026-11-04)
+
+Typed `BlobUnavailable` now maps to dependency/processing unavailability so the
+durable worker can retry the same accepted work with a fresh fence. Missing,
+corrupt, conflicting objects and lost read leases remain terminal reconciliation
+errors, including when their chained cause is transient. Provider error strings
+do not determine this classification; opaque S3 HTTP500 is not reported as507.
+The worker regression preserves the old publication during failure and proves
+normal retry/publication without bypassing work ownership or publication fences.
+The separate application storage-full rehearsal fills only its own128MiB memory
+S3 fixture with synthetic data and an independently scheduled own-file cleanup.
+Its result cannot qualify provider durability, physical HA or production quotas.

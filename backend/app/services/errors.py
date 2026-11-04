@@ -23,6 +23,9 @@ def public_error_code(exc: Exception) -> str:
     import httpx
     import litellm
 
+    from app.services.artifacts.contract import (
+        BlobConflict, BlobIntegrityError, BlobLeaseLost, BlobNotFound, BlobUnavailable,
+    )
     from app.services.parser_supervisor import (
         ParserBusyError, ParserIsolationError, ParserMemoryLimitError,
         ParserTimeoutError, ParserWorkerError,
@@ -44,6 +47,12 @@ def public_error_code(exc: Exception) -> str:
             return codes.PARSER_FAILED
         if isinstance(current, DomainError):
             return current.code
+        # A missing/corrupt object or retired read lease needs reconciliation;
+        # a transport cause must not turn those failures into automatic retries.
+        if isinstance(current, (BlobNotFound, BlobLeaseLost, BlobIntegrityError, BlobConflict)):
+            return codes.INTERNAL_ERROR
+        if isinstance(current, BlobUnavailable):
+            return codes.DEPENDENCY_UNAVAILABLE
         if isinstance(current, litellm.ContextWindowExceededError):
             return codes.GENERATION_CONTEXT_EXCEEDED
         if isinstance(current, (TimeoutError, httpx.TimeoutException)):

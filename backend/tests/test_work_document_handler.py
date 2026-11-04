@@ -289,3 +289,56 @@ def test_cold_xlsx_resume_preserves_rows_and_accepted_concepts(pipeline_env, tmp
         assert sorted(row.content for row in concepts) == sorted(content for _, content in accepted)
         assert all(ref["generation_id"] == active for row in concepts for ref in row.table_refs)
     assert [(concept.id, concept.content) for concept in StagingStore(doc_id).concepts()] == accepted
+
+
+def test_unavailable_original_requeues_same_work_and_preserves_old_publication(pipeline_env, tmp_path, monkeypatch):
+    from datetime import timedelta
+    from threading import Event
+    from app.db.models import OkfConcept
+    from app.services.artifacts import original as originals
+    from app.services.artifacts.contract import BlobUnavailable
+    from app.services.work.handlers import HandlerRegistry
+    from app.services.work.store import _now
+    from app.services.work.worker import Worker
+
+    pipeline, _, _ = pipeline_env
+    ref = durable_original(pipeline_env, tmp_path)
+    monkeypatch.setattr("app.services.pipeline.get_pipeline", lambda: pipeline)
+    registry = HandlerRegistry()
+    registry.register("document", 1, run_document_job)
+    pipeline.settings.work_retry_backoff_seconds = (1, 1, 1)
+    runner = Worker(pipeline.settings, registry=registry, owner_id="storage-retry-worker")
+    with session_scope() as session:
+        old_active = session.get(DocumentGenerationState, DOC_ID).active_generation_id
+        old_concepts = [(v.slug, v.content) for v in session.query(OkfConcept).filter_by(doc_id=DOC_ID).order_by(OkfConcept.slug)]
+        work_id = enqueue(session, WorkSpec("document", 1, {"action": "regenerate", "doc_id": DOC_ID,
+            "source_file_hash": ref.sha256}, "unavailable-original", DOC_ID))
+    original_path = originals.original_path
+    calls = []
+    def temporary_failure(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == 1:
+            raise BlobUnavailable("S3 returned an opaque temporary server failure")
+        return original_path(*args, **kwargs)
+    monkeypatch.setattr(originals, "original_path", temporary_failure)
+
+    assert runner.run_once(Event())
+    with session_scope() as session:
+        work = session.get(WorkItem, work_id)
+        assert (work.status, work.attempts, work.fence, work.owner_id) == ("queued", 1, 1, None)
+        assert work.error_code == "storage_unavailable"
+        assert session.get(DocumentGenerationState, DOC_ID).active_generation_id == old_active
+        assert [(v.slug, v.content) for v in session.query(OkfConcept).filter_by(doc_id=DOC_ID).order_by(OkfConcept.slug)] == old_concepts
+        # Advance retry eligibility only in this isolated SQLite test database.
+        work.available_at = _now(session) - timedelta(seconds=1)
+    assert pipeline.registry.get(DOC_ID)["error_code"] == "processing_unavailable"
+
+    assert runner.run_once(Event())
+    with session_scope() as session:
+        work = session.get(WorkItem, work_id)
+        assert (work.status, work.attempts, work.fence, work.owner_id) == ("succeeded", 2, 2, None)
+        active = session.get(DocumentGenerationState, DOC_ID).active_generation_id
+        assert active != old_active
+        assert session.get(DocumentGeneration, active).work_id == work_id
+        assert session.get(DocumentGeneration, old_active).phase == "retired"
+    assert pipeline.registry.get(DOC_ID)["status"] == "done"
