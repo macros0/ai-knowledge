@@ -1,6 +1,6 @@
 # Приёмка профилей Kubernetes replicas
 
-Статус на04.11.2026: общая приёмка **не завершена**, certified-профилей нет.
+Статус на05.11.2026: общая приёмка **не завершена**, certified-профилей нет.
 [Матрица JSON](../deploy/kubernetes/replicas/support-matrix.json) хранит семь
 предусмотренных вариантов: compact/local, frontend split, managed/RWX,
 managed/S3, all-external, mixed и resilient. Поле `tested` означает наличие
@@ -10,7 +10,7 @@ managed/S3, all-external, mixed и resilient. Поле `tested` означает
 ## Frontend-split: допуск живого стенда
 
 Для явного `deployment_mode: frontend-split` общий runner с `--suite frontend
---live` проверяет только topology: две frontend и один combined backend, точный
+--live` по умолчанию проверяет только topology: две frontend и один combined backend, точный
 namespace UID/installation label, controller ownership, Service endpoints,
 native image IDs, отсутствие frontend PVC/hostPath/дополнительных credentials.
 Manifest дополнительно задаёт `namespace_uid`, `runtime_secret` и
@@ -18,11 +18,23 @@ Manifest дополнительно задаёт `namespace_uid`, `runtime_secre
 IDs выбирает оператор из проверенных image receipts. Namespace должен иметь
 `okf-installation-id`, совпадающий с `installation_id` manifest.
 
-Этот probe ничего не загружает и не удаляет. Functional producers, streaming,
-frontend loss и Gateway/SSO остаются pending в общем runner. Отдельная
-[закрытая native-репетиция](superpowers/reports/2026-11-04-replica-frontend-split.json)
-подтвердила выбранные simulation/session/upload/NDJSON/active frontend loss
-случаи; она не подменяет эти pending checks и не подписывается задним числом.
+Этот probe ничего не загружает и не удаляет. Явный staged-режим общего runner
+использует `--frontend-stage`, защищённый `--frontend-journal` и
+`--apply-frontend` для нового действия. При неопределённом ответе используется
+`--observe-frontend` с тем же журналом и этапом: POST/DELETE не повторяется.
+[Контракт и все 12 этапов](superpowers/plans/2026-11-04-frontend-functional-runner.md)
+ограничены свежим basic simulation/local fixture с точными namespace UID,
+installation, native image IDs и проверенными собственными TLS providers.
+Cookies остаются в защищённом каталоге VM. Приём чужих passed receipts запрещён.
+
+[Новый прогон через общий runner](superpowers/reports/2026-11-05-frontend-native-acceptance.json)
+прошёл все 12 этапов, включая два NDJSON потока, один model-gated UID DELETE,
+замену Pod, SHA/поиск/ZIP и отзыв сессии. `selected_frontend_case_passed=true`,
+но общая qualification остаётся false: `frontend.production_csrf` и
+`frontend.gateway_sso` pending. Ненулевой код CLI в этом случае означает
+незавершённую qualification; проверяйте результат выбранного этапа отдельно.
+Прежняя [отдельная репетиция](superpowers/reports/2026-11-04-replica-frontend-split.json)
+сохранена неизменной; её отчёт не подменяет новый терминальный native proof.
 Simulation исключён из production CSRF guard, поэтому его успех не закрывает
 CSRF/SSO gate. На distributed topology общий `--suite all` не запускает
 combined-backend frontend-split probe.

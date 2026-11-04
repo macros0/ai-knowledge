@@ -24,10 +24,20 @@ PG/Q/model отказов с TLS/model controls backend. Сессия, один 
 survivor/replacement/backend сохранили сессию и данные, вызов модели не повторился.
 Logout отозвал старую cookie на трёх маршрутах. Стенд выключен,3 PVC сохранены;
 обе capacity loans возвращены с исходными2/2/2/runtime/PVC/9 таблицами.
-Новый общий frontend probe пока проверяет inventory/ownership/builds, а его
-functional producers остаются pending. Полный текущий focused cohort:134 pass,
+На момент этой репетиции общий frontend probe проверял inventory/ownership/builds,
+а functional producers оставались pending. Её focused cohort:134 pass,
 0 skip. Реальный Gateway/SSO/CSRF не проверен: simulation исключён из production
 CSRF middleware. Первые ошибки входов/dry-run сохранены в отчёте отдельно.
+
+05.11.2026: [свежий общий native runner](../reports/2026-11-05-frontend-native-acceptance.json)
+прошёл все 12 этапов на e42007a: shared session/upload/publication/export, два
+NDJSON потока, model-gated UID loss, replacement, logout и холодная проверка.
+Действия записаны до RPC; readiness наблюдалась с исходными intents, без повтора
+POST/DELETE. Пять процессов закрыты, fixture выключен/3 PVC сохранены; CI и обе
+live capacity loans возвращены с проверкой 2/2/2/runtime/PVC/9 таблиц. Полный Linux
+CI:6638 passed/221 прежний optional skip/0 errors/failures, coverage87,70%.
+Это закрывает выбранный functional producer, сохраняя реальные CSRF/Gateway/SSO
+и полную F2/profile qualification открытыми.
 
 ## Global Constraints
 

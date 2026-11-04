@@ -766,3 +766,17 @@ original2/2/2/runtime/PVC/nine-table hashes. Current65d6ee2 product was unchange
 its prior6710-case Linux CI applies to those exact image bytes. Customer-specific
 external providers, other selected variants, physical domains, real model/IdP and
 complete O1/O2/O3 profile qualification remain open; scheduleOFF/certificationnull.
+
+O3 common frontend producer milestone (2026-11-05):
+[fresh 12-stage case](../reports/2026-11-05-frontend-native-acceptance.json)
+ran the actual common runner on e42007a with bound parent/native intents. Two
+unbuffered NDJSON streams and one model-active UID-preconditioned frontend loss
+passed; interruption did not replay generation. Replacement/session/original/
+search/ZIP/logout/cold SHA/quiescence passed, five owned handles closed. Readiness
+polling retained the same intents, including an unsuccessful loss observation.
+All fixture controllers/native containers are off, three claims retained; the CI
+loan and both live loans returned with original 2/2/2/runtime/PVC/nine tables.
+Full immutable-source Linux CI:6859 cases=6638 pass+221 unchanged optional skips,
+0 failures/errors, coverage87.70%; required Linux pidfd passed. This completes
+the selected basic simulation producer, not real CSRF/Gateway/SSO, trusted signed
+release production or other provider/profile gates. ScheduleOFF/certificationnull.

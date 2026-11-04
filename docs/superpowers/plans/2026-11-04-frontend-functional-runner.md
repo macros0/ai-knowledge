@@ -55,7 +55,7 @@ Gateway/IdP/production CSRF. Default frontend probe remains read-only.
 - [x] Integrate explicit frontend stage/journal/apply flags into common runner;
   retain read-only defaults, reject offline/live mixing, leave real CSRF and
   Gateway/SSO pending. Never promote separate reports into terminal native proof.
-- [ ] Run Windows and Linux checks, then a fresh native staged case on the
+- [x] Run Windows and Linux checks, then a fresh native staged case on the
   existing lab with fresh namespace/claims/keys. Return every capacity loan and
   verify original runtime/PVC/nine-table hashes; publish exact bounded evidence,
   update SECURITY/runbooks and run project checks before committing.
@@ -68,8 +68,22 @@ skipped. The real VM103 pidfd smoke terminated only its own Python helper and
 left none running. A real fixed-capsule/common-runner negative admission smoke
 refused an absent test namespace, retained matching parent/native intents and
 created no forwards or cookies. No application request or Pod mutation was made
-by either smoke. Full current-source Linux CI and the fresh positive staged live
-case remain unchecked above. Previous component and F2 reports stay frozen.
+by either smoke. Previous component and F2 reports stay frozen.
+
+05.11.2026: [fresh common-runner acceptance](../reports/2026-11-05-frontend-native-acceptance.json)
+completed all 12 stages on e42007a. Actual immutable-source Linux CI collected
+6859 cases: 6638 passed, 221 unchanged optional skips, zero failures/errors,
+87.70% coverage; the required Linux pidfd test passed. Both complete NDJSON
+streams delivered their first frame in 0.074s and completed after about 8.1s.
+One UID-preconditioned frontend deletion at model-active=1 interrupted the loss
+stream; no model replay occurred. Replacement, shared session, original/search/
+ZIP and logout checks passed. Publish and loss observers kept their same durable
+intents while readiness converged; the transient unsuccessful loss observation
+is retained. Final cold SHA/quiescence passed and all five native handles closed.
+All fixture controllers and native containers are off, three PVCs retained.
+The CI loan and both live-case loans were returned with original 2/2/2, runtime,
+PVC and nine-table hashes verified. Real CSRF/Gateway/SSO and signed qualification
+remain separate gates; certification is null and production scheduling is off.
 
 The explicit stage sequence is `preflight`, `session`, `upload`, `publish`,
 `export`, `export-observe`, `stream`, `loss`, `loss-observe`, `replacement`,

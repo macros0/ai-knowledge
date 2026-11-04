@@ -10,7 +10,7 @@
 
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
-Статус 04.11.2026: реализация продолжается в `codex/kubernetes-replicas`.
+Статус 05.11.2026: реализация продолжается в `codex/kubernetes-replicas`.
 P0/P1, frontend split, local/RWX/S3 adapters, перенос файловых потребителей,
 поиск orphan-объектов/безопасный GC и verified/resumable offline-миграция корпуса
 реализованы. Миграция не удаляет исходник и не требует реиндексации;
@@ -33,6 +33,17 @@ PostgreSQL partition с возвращением старого процесса
 
 Сводные результаты и границы доказательств:
 [матрица приёмки](../../REPLICA_ACCEPTANCE_MATRIX.md).
+
+[Общий frontend native runner](../reports/2026-11-05-frontend-native-acceptance.json)
+на e42007a прошёл все 12 этапов свежего basic frontend-split fixture, включая
+model-active UID loss без автоматического повтора генерации. Сессия, оригинал,
+поиск и ZIP пережили replacement; logout, cold SHA и закрытие пяти процессов
+проверены. Новый fixture выключен, три PVC сохранены; все три capacity loans
+возвращены с исходными 2/2/2/runtime/PVC/9 таблицами. Полный текущий Linux CI:
+6859 cases,6638 passed,221 неизменный optional skip,0 failures/errors,87,70%
+coverage; Windows focused170 passed/1 Linux-only skip. Default frontend probe
+остаётся read-only. Реальные CSRF/Gateway/SSO и доверенный release bundle
+остаются открытыми; certification=null, production scheduleOFF.
 
 Связанный runtime-прогон R5 учебного managed-S3 профиля завершён:22/22 этапа,
 0 failures,0 required skips,80 прежних документов сохранены, maintenance

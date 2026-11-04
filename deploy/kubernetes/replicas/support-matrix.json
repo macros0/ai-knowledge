@@ -41,7 +41,6 @@
       },
       "remaining_gates": [
         "gateway-sso-production-csrf-acceptance",
-        "common-frontend-functional-producer-integration",
         "current-full-release-evidence"
       ],
       "certification": null,
@@ -51,9 +50,15 @@
           "path": "docs/superpowers/reports/2026-11-04-replica-frontend-split.json",
           "sha256": "f565d565f25e6fc08f88883a7293c2628ead3cc5cbba7aadb29d20314480b099",
           "scope": "Selected2frontend/1combined backend: split-only CNI boundaries, six actual storage/model denials with backend controls; shared session/upload/search/download/ZIP/NDJSON, active UID-precondition frontend loss after first frame/model-active, survivor+replacement and no automatic model retry; logout401 all3. Fixture off/3PVC retained/both loans restored. Simulation, one VM, no customer Gateway/CSRF/IdP or full profile certificate."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json",
+          "sha256": "92ace2fb1b0b728d552a07e5acee9b2d63833fac9a400248356bcd9e44ba3e25",
+          "scope": "Fresh common-runner basic simulation/local case on e42007a: all12 native stages passed, bounded one-shot actions, active UID loss without model replay, replacement/session/SHA/search/ZIP/logout/cold check, five handles closed. Fixture off/3PVC retained; all3 capacity loans returned. Full Linux6859=6638pass+221unchanged optional skips; no Gateway/SSO/production CSRF or signed profile qualification."
         }
       ],
-      "selected_simulation_fixture_status": "tested"
+      "selected_simulation_fixture_status": "tested",
+      "selected_common_frontend_producer_status": "tested"
     },
     {
       "id": "distributed-managed-rwx",
