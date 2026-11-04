@@ -747,6 +747,35 @@ The original1GiB memory floor initially refused before any resource creation. A
 new temporary worker2→1 loan made room; frontend/API stayed2 and the old2/2/2,
 runtime/PVC bindings and nine canonical tables were restored afterward. Original
 NAS source and S3 restore target stayed off. This closes a bounded component
-network/I/O recovery check; full application publication/worker recovery during
-a prolonged NAS outage, physical node loss and power-loss durability remain open.
+network/I/O recovery check. The full application case is recorded below; physical
+node loss, longer outages and power-loss durability remain open.
 Production backup schedule is off; no profile certificate is issued.
+
+## Selected Synology active-worker outage (2026-11-04)
+
+The [full application drill](superpowers/reports/2026-11-04-replica-synology-application-outage.json)
+used the unchanged96931d1 backend, two frontend/API/worker replicas, managed PG/Q
+and the owned DS211 NFSv4.0 claim. Before the approved150s node-to-NAS fault, native
+SQL proved the new document's worker owned its first attempt and the delayed
+synthetic model was active. Positive DROP counters and pending publication were
+observed through136.5s. API liveness stayed200, readiness timed out during the
+outage and all six application Pods kept their UIDs with zero restarts.
+
+After natural kernel expiry, completion was observed by194.2s, including polling
+and sequential RPC delays. The same candidate became the active generation with
+problem=null and the same work ID succeeded on attempt1, releasing its owner.
+Previous generation/concept hashes stayed unchanged. All four HTTP routes passed
+the original session, both documents' SHA/search, old ZIP integrity, same-key
+retry returning the same document and a fresh export. Four native API/worker
+processes verified12 cold object hashes, empty scratch and two upload audits.
+The model fixture alone was rebuilt from the current immutable CI source; no
+application code, dependencies or real model service changed.
+
+The exact owned nft table was removed, original OUTPUT rules preserved, forwards
+closed, and the new app plus PG/Q stopped under held epoch1 with three PVCs
+retained. The original NAS/S3 sources stayed frozen and unmounted. All temporary
+capacity loans were returned; original2/2/2, runtime/PVC identity, nine canonical
+tables, PG catalog, Qdrant data and eight S3 hashes were rechecked. This closes
+the selected150s application/worker outage case. Cross-node, independent physical
+domains, longer interruptions and customer profile qualification remain open;
+this observed interval is not an RTO SLA. Production schedule remains off.

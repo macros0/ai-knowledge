@@ -713,5 +713,21 @@ endpoint was blocked. Own table/objects/empty directories were removed; one PVC
 and all three Jobs retained, CRI/mount0, original OUTPUT unchanged. A delayed
 first trial and import-only failure are preserved separately. A new worker2→1
 memory loan was fully returned with old2/2/2/runtime/PVC/nine tables unchanged.
-This closes only a component outage case, not full application/worker recovery
-through a prolonged NAS outage or physical failure qualification. ScheduleOFF.
+This closes a component outage case; full application evidence follows below.
+Longer interruptions and physical failure qualification remain open. ScheduleOFF.
+
+O1/O3 selected NAS application outage milestone (2026-11-04):
+[active-worker150s recovery](../reports/2026-11-04-replica-synology-application-outage.json)
+armed only after native owned running attempt1/model-active proof. Actual DROP,
+pending publication through136.5s, liveness200/readiness timeout and zero Pod
+restarts were observed. Natural expiry led to completion observed by194.2s;
+the same work/attempt1 and candidate generation published cleanly. Old concepts,
+session, both original SHA/search, previous ZIP, same-key retry and fresh export
+passed on four HTTP routes; four native processes verified12 cold hashes,
+scratch0/two upload audits. No application source/dependency changes; the delayed
+model fixture came from the unchanged immutable CI source. Own nft/forwards are
+closed, new app/storage off under held1 with three PVCs retained, original NAS/S3
+sources frozen, all capacity loans returned and old2/2/2/runtime/PVC/nine tables
+plus full provider data rechecked. The selected150s application case is complete;
+cross-node/physical domains, NAS-target relocation, longer interruptions and
+remaining customer/profile gates stay open. ScheduleOFF/certificationnull.

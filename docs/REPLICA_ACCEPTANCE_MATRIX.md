@@ -66,7 +66,19 @@ PG/Q, отсутствием NFS mount и фактическим TCP-отказ�
 native DROP и ожидающими read/write на136,6с. Тот же процесс завершил чтение182,9с
 и запись183,1с с двумя совпавшими1MiB SHA. Первые ошибки harness сохранены;
 подтверждённый прогон полностью закрыт, прежние2/2/2/runtime/PVC/девять таблиц
-возвращены. Полный application outage и физические отказы этим не квалифицированы.
+возвращены. Это компонентное доказательство; следующий application-прогон описан ниже.
+
+[Полный application/worker outage](superpowers/reports/2026-11-04-replica-synology-application-outage.json)
+проверил тот же150с node→NAS2049 block после подтверждения принятой задачи,
+владельца attempt1 и активного model stub. Публикация ожидала восстановления,
+старое поколение и концепты сохранились; liveness200, readiness timeout и ноль
+рестартов. Завершение наблюдалось к194,2с: прежняя задача/attempt1, тот же candidate
+стал active, problem=null. Все четыре HTTP-маршрута проверили сессию, оба SHA/поиск,
+старый ZIP, idempotent retry и новый экспорт; четыре native-процесса —12 cold SHA,
+scratch0 и две upload audit. Новый стенд выключен/held1/три PVC сохранены, nft и
+forwards закрыты; прежние2/2/2/runtime/PVC/девять таблиц и все capacity loans
+восстановлены. Это закрывает выбранный150с application case; межузловые,
+физические и остальные profile gates остаются открыты, certificationnull.
 
 ## Условия окончательной приёмки
 

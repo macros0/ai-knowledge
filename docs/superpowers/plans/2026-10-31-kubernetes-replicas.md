@@ -325,5 +325,19 @@ gates открыты; итоговые O1–O3 не объявлены заве�
 же процессе. Первый delayed-control прогон и import-only failed Job сохранены.
 Оба прогона закрыты, временные nft-таблицы/свои два файла удалены, CRI/mount0,
 PVC и три Job оставлены. Прежние2/2/2/runtime/PVC/девять таблиц восстановлены.
-Полный application/worker recovery при NAS outage и физические отказы остаются
-отдельными O1/O3 gates, production scheduleOFF/certificationnull.
+Это компонентный результат; полный application/worker case закрыт следующим
+прогоном, физические отказы остаются отдельным gate. ScheduleOFF/certificationnull.
+
+04.11.2026: [полный NAS application outage](../reports/2026-11-04-replica-synology-application-outage.json)
+на текущем96931d1 подтвердил принятую/принадлежащую worker задачу и активную
+модель-заглушку до150с node→NAS block. Публикация ожидала, liveness200/readiness
+timeout, старые концепты неизменны и рестартов0. К194,2с наблюдалось чистое
+завершение той же задачи/attempt1 с публикацией того же candidate. Сессия,
+старый/новый SHA и поиск, прежний ZIP, same-key retry и новый экспорт прошли
+четыре HTTP-маршрута;12 cold SHA/scratch0 проверены четырьмя процессами.
+Новый стенд выключен под held1/три PVC сохранены, nft/forwards закрыты, все loans
+возвращены, прежние2/2/2/runtime/PVC/девять таблиц и provider data сверены.
+Выбранный150с application gate закрыт; межузловые/физические, более длительные
+отказы и полная квалификация профилей остаются открытыми. Пользователь выбрал
+VM103 для следующего двухузлового учебного стенда; его platform-пакет готовится
+отдельно, текущий кластер не изменён. Production scheduleOFF/certificationnull.
