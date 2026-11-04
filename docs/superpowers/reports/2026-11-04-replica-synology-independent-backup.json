@@ -180,6 +180,8 @@
   "destination": "user-declared physically independent training PC; encrypted format3 archive and authenticated adjacent source binding",
   "master_key_transferred": false,
   "restore_performed": false,
+  "restore_scope": "Historical backup-only checkpoint; subsequent independent S3 recovery is recorded separately",
+  "subsequent_restore_report": "2026-11-04-replica-synology-source-s3-restore.json",
   "nas_server_stopped": false,
   "server_filesystem_identity_claimed": false,
   "remaining_gates": [

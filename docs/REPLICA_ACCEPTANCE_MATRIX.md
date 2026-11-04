@@ -1,6 +1,6 @@
 # Матрица приёмки реплик и хранилищ
 
-Состояние доказательств на03.11.2026. План реализации:
+Состояние доказательств на04.11.2026. План реализации:
 [Kubernetes replicas and storage](superpowers/plans/2026-10-31-kubernetes-replicas.md).
 Зелёный отдельный тест или старый отказной прогон не заменяет приёмку всей
 текущей версии и выбранного профиля. Ни один профиль пока не объявлен resilient.
@@ -12,9 +12,9 @@
 | Файлы S1–S4 | Local/RWX/S3 adapters, перенос потребителей, GC и возобновляемая offline-миграция с проверкой целостности реализованы; [runbook](ARTIFACT_STORAGE_MIGRATION.md) | Квалификация конкретного RWX/CSI/provider; миграция рабочего корпуса выполняется только после проверенного backup |
 | Runtime R1–R4 | PostgreSQL ownership/fencing, роли API/worker и координация реализованы; cancel/delete, worker-loss и partition прошли в общем текущем запуске | Дополнительные внешние providers и полная release matrix |
 | Runtime R5 | Общий текущий22-stage run прошёл без failures/required skips;80 прежних документов сохранены, финальные2 frontend +2 API +2 workers проверены | Другие providers, реальные модели/IdP и физические домены отказа требуют собственных gates |
-| Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, смена CA, CNI и отдельный S3 ENOSPC contract проверены; NFS/CSI bootstrap, двух-Pod contract, RWX application/ENOSPC/restart и выбранный fresh RWX-target restore прошли | Большая буферизованная NFS-запись/длительный outage/cross-node, external/mixed end-to-end, остальные provider contracts; независимые failure domains |
-| Recovery O2 | Независимая20-document копия восстановлена при выключенном источнике; отдельно старая rpl04 копия прошла фактический rpl05 replacement recovery с новой identity, отзывом сессий и функциональной проверкой2/2/2. Отдельно завершена compact source-off миграция с held handoff и функциональной2/2/2 проверкой. Проверены cold-check, журнал попыток, учебное восстановление ключа и доставка локальных alerts | Оставшиеся adoption/update и provider recipes; production key custody/monitoring не квалифицированы |
-| Release O3 | Обязательные project checks и профильные Windows/Linux cohorts;557 parser passes и standalone frontend build; полный Linux backend CI кодаcf74f8a:6466 passed/221 прежний optional skip/87,68% coverage; финальное ревью и пять исправлений проверены; policy validator, проверка подписанных файлов и read-only режим runner реализованы. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Повтор CI при последующих изменениях кода, реальные доверенные evidence producers, общая fault/profile matrix и завершение runbooks |
+| Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, смена CA и CNI; NFS/CSI, RWX application/ENOSPC/restart и fresh RWX-target restore проверены. Отдельный mixed DS211 NFSv4.0/CSI4.13.6 + managed PG/Q прошёл2/2/2, пользовательскую EDQUOT507 и повтор после освобождения места | Исходная большая запись в одном Linux-ядре остаётся failed; длительный outage/cross-node, остальные external provider contracts и независимые failure domains открыты |
+| Recovery O2 | Независимые current-copy, rpl04→rpl05 replacement, compact held-handoff и selected RWX-target recovery прошли. Корпус внешнего NAS отдельно скопирован на ПК и восстановлен в новый S3 target; прежние данные/новая публикация/2/2/2 проверены при остановленном источнике и запрещённом из target доступе к NAS. Проверены cold-check, журнал попыток, учебное восстановление ключа и локальные alerts | NAS-target relocation вне строгого NFSv4.1 рецепта, остальные provider recipes; production key custody/monitoring не квалифицированы |
+| Release O3 | Обязательные project checks и профильные Windows/Linux cohorts;557 parser passes и standalone frontend build; полный Linux backend CI текущего96931d1:6472 passed/221 прежний optional skip/87,68% coverage, шесть новых readiness regressions. Финальное ревью и пять исправлений проверены; policy validator, подписанные файлы и read-only runner реализованы. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Повтор CI при последующих изменениях кода, реальные доверенные evidence producers, общая fault/profile matrix и завершение runbooks |
 
 ## Доказательства учебного профиля
 
@@ -54,6 +54,12 @@
 | Восстановление с обновлением схемы | [Predecessor schema recovery](superpowers/reports/2026-11-02-replica-predecessor-schema-recovery.json): фактический rpl04→rpl05 в новом target, новая identity/scoped SQL/S3, отзыв2 сессий, held epoch1→2 и явный release.9 таблиц/369 заданий/10 SHA/4 vectors проверены до старта;2/2/2 Ready без рестартов,2 прежних search/download SHA и2 новых документа,7 smoke checks. Не подтверждает in-place update старого namespace, compact/NULL-generation, остальные providers или полную R5 приёмку нового образа |
 | Parser/frontend итоговых источников | [Artifact CI](superpowers/reports/2026-11-02-replica-current-artifact-ci.json):557 parser tests/0 skips, новая frontend production build/19 routes, правильный health rewrite/revision stamp, network-none/read-only/non-root. Оба дерева97+366 файлов совпадают с записанной текущей revision; это не полный backend CI |
 | Учебное восстановление ключа | [Key recovery](superpowers/reports/2026-11-02-replica-backup-key-recovery.json): отдельный защищённый каталог на ПК, исходный ключ сохранён; новый процесс с отказом чтения исходного key directory расшифровал все12 объектов настоящей копии и отклонил неверный ключ. Это не OS sandbox, отдельный физический escrow или повтор полного provider restore |
+
+Отдельные результаты04.11: [mixed NAS runtime](superpowers/reports/2026-11-04-replica-synology-mixed-runtime.json),
+[независимая копия NAS](superpowers/reports/2026-11-04-replica-synology-independent-backup.json),
+[восстановление NAS→S3](superpowers/reports/2026-11-04-replica-synology-source-s3-restore.json).
+NAS оставался включён; недоступность исходника доказана остановкой его приложения,
+PG/Q, отсутствием NFS mount и фактическим TCP-отказом из четырёх target-процессов.
 
 ## Условия окончательной приёмки
 

@@ -648,7 +648,8 @@ uses managed PostgreSQL17/Qdrant and the external DS211 DSM6.2.4-25556 Update8
 (user-confirmed inventory; asynchronous export disabled by the user), NFSv4.0 and
 the existing CSI4.13.6. Client UID1031/GID100 belongs to this training installation;
 resolve the actual account identifiers separately for another NAS. Its user quota
-on volume1 is1GiB; the PVC request is not a per-directory quota.
+on volume1 was entered as1 GB in DSM; the exact byte boundary was not queried.
+The PVC request is not a per-directory quota.
 
 On this NAS, ACCESS reports no root write permission while `objects` and `tmp`
 remain writable. Runtime readiness now checks root read/traverse and both actual
@@ -666,8 +667,9 @@ under held epoch1, with three PVCs retained and owned forwards/mounts gone. The 
 2/2/2 deployment, all borrowed providers,109 PG catalog entries, full Qdrant points,
 nine canonical tables and eight live-bound S3 blob hashes were restored/checked.
 
-The earlier failed cf74 trial remains recorded and retained separately. NAS-source
-independent backup/recovery, prolonged outage and cross-node gates remain open.
+The earlier failed cf74 trial remains recorded and retained separately. Subsequent
+NAS-source backup and S3 recovery are recorded below. Prolonged outage and
+cross-node gates remain open.
 This bounded recipe does not certify physical failure or power-loss durability;
 models/auth are stub/simulation. Production schedule remains off; certification null.
 
@@ -693,5 +695,31 @@ All native handles and the reader are closed; source app/PG/Q are off under held
 the source claim is unmounted, and three PVCs plus the completed reader/code objects
 remain retained. The borrowed worker returned1→2, with old2/2/2, runtime/PVC and
 nine canonical tables verified. NAS service stayed up. This is a backup checkpoint;
-independent restore has not yet been performed for this NAS source. The existing
-strict NFSv4.1 target-relocation guard is unchanged. Production schedule stays off.
+the subsequent independent S3 recovery is recorded below. The existing strict
+NFSv4.1 target-relocation guard is unchanged. Production schedule stays off.
+
+## Independent NAS-source recovery into S3 (2026-11-04)
+
+The [completed recovery](superpowers/reports/2026-11-04-replica-synology-source-s3-restore.json)
+used only the independent PC archive and fresh PostgreSQL17/Qdrant/RustFS with
+three disjoint512Mi PVCs. Before identity adoption, all81 tables/28 sequences,
+four full vector points and11 cold blob hashes matched. New scoped SQL/S3
+principals passed10/9 denials; the unchanged official restore CLI revoked the old
+session and kept jobs held. Normal Settings refused startup/write/claim/artifact
+runtime before explicit release. No master key left the PC.
+
+Source app/PG/Q stayed off, with no live CRI or source NFS mount. The NAS server
+stayed up: a host TCP positive control succeeded, while all four ordinary target
+API/worker processes failed to connect to its2049 endpoint. Target applications
+had no NFS volumes. This proves source isolation from those processes, not a
+physical NAS shutdown.
+
+After release,2/2/2 verified both old documents/search/download/export, old-cookie
+401, a new shared session and a new upload/export. The first new fixture was a
+near-duplicate and correctly received409 without admission; it is retained. A
+different fixture used a new key without relaxing duplicate detection. Four
+processes cold-verified17 hashes, empty scratch and no legacy business-work replay.
+The target is stopped under held3 with three PVCs retained. Earlier2/2/2,
+runtime/PVC bindings and nine canonical tables were restored. Production schedule
+is off; NAS-target relocation, prolonged outage, cross-node/physical failure and
+real customer model/IdP acceptance remain separate gates.

@@ -109,9 +109,12 @@ backup error/age alerts: [key recovery](superpowers/reports/2026-11-02-replica-b
 [notification drill](superpowers/reports/2026-11-02-replica-local-backup-alerts.json).
 Production key custody/monitoring этим не квалифицируются.
 
-Открыты фактические RWX/external/mixed проверки, application publication при
-заполнении storage, остальные adoption/recovery recipes, полный итоговый backend CI,
-подключение реальных доверенных evidence producers и свежее ревью всей ветки. Для resilient дополнительно обязательны
+Выбранные RWX и mixed NAS application/full-storage/retry проверки завершены;
+NAS-source→S3 recovery и текущий96931d1 backend CI подтверждены в
+[сводной матрице](REPLICA_ACCEPTANCE_MATRIX.md). Это отдельные результаты,
+а не один полный прогон всех профилей. Открыты остальные external provider и
+NAS-target relocation recipes, длительные outages, подключение реальных моделей,
+IdP/Gateway и доверенных evidence producers. Для resilient дополнительно обязательны
 независимые физические домены, выбранные storage recipes и реальные испытания
 потери узла/хранилища. Production backup schedule остаётся выключенным по
 решению пользователя; его включение не является автоматическим итогом CI.

@@ -1,0 +1,734 @@
+{
+  "schema_version": 1,
+  "status": "independent-synology-source-to-real-s3-recovery-verified-closed",
+  "observed_at": "2026-11-04T00:38:49.298420+00:00",
+  "operation_id": "9d897b8c2bcd440ea1fa9614ae8ba3fe",
+  "source_namespace": "replica-test-synr20261104",
+  "source_namespace_uid": "2b02a536-f2c2-4f50-a79d-319bf6a7e545",
+  "target_namespace": "replica-test-syns20261104",
+  "target_namespace_uid": "1f8bb3cc-d8da-4af4-9107-c96442a4ff0b",
+  "scope": "Bounded synthetic external NAS corpus recovered from the independent PC into fresh managed PG17/Qdrant/RustFS on the same one-node VM/kind; no resilient or production certification.",
+  "source_provider": {
+    "model": "Synology DS211",
+    "dsm": "6.2.4-25556 Update 8",
+    "nfs_protocol": "4.0 observed",
+    "async_export_disabled": "user-confirmed; not queried over NAS administrator API",
+    "uid": 1031,
+    "gid": 100,
+    "quota": "DSM user-volume1 limit entered as 1 GB; not a per-PVC quota"
+  },
+  "source_backend": "rwx",
+  "target_backend": "s3",
+  "backup": {
+    "backup_id": "d90b9d5f09464b54b142d0a0427325b6",
+    "manifest_sha256": "30a4855b5b2112d6e29aaa59467fa5acbb6a08426bbda6c1224cb7d066da9027",
+    "encrypted_objects": 13,
+    "plaintext_bytes": 1171590,
+    "custody": "user-declared independent PC; authenticated adjacent read-only client provenance retained",
+    "master_key_transferred_to_vm": false
+  },
+  "runtime": {
+    "product_commit": "96931d1cfa05dc7f3e685305016f792ad7a9ce50",
+    "image": "okf-backend:replicas-96931d1-synr-2cbebc13dedf",
+    "kind_image_id": "sha256:56c858bbebf1768827709a14b0029df4d6d851ddafe7d2daa2289588f05f4a37",
+    "identity": {
+      "artifact_backend": "s3",
+      "artifact_store_id": "synr-5f4f1a2106b340c2",
+      "deployment_schema": "replicas-v1",
+      "installation_id": "81229cdbfa264e97bdb80e5cb84fdd94",
+      "runtime_fingerprint": "76b82b6fdb6ee1d0ba1683299b5032a6917d79f8db2ca38846fcfcc82557042b",
+      "storage_receipt_digest": "sha256:d6d2daff3d53ce25f18ff6eebd43dc84fa695a4cd7c418a015398f4a6e36ea4e",
+      "version": 1
+    },
+    "full_ci": "6472 passed / 221 identical optional skips / 0 failures; 6693 total on immutable current product source",
+    "logical_store_id_preserved": true,
+    "official_restore_cli_unchanged": true
+  },
+  "source_isolation": {
+    "source_namespace_off": true,
+    "source_live_cri": 0,
+    "source_claim_unmounted": true,
+    "source_nas_host_tcp_positive_control": true,
+    "source_server_stopped": false,
+    "target_application_counts_zero": true,
+    "target_application_nfs_volumes": 0,
+    "disjoint_target_claims": 3,
+    "guard_each_stage": "Frozen source UID/spec, completed reader Job/ConfigMap, CSI/SC/PVC/PV and actual zero CRI/NFS mount; target image/controllers/providers pinned",
+    "nas_server": "Stayed up and was not controlled by this operation",
+    "target_process_tcp_denials": 4,
+    "no_source_payload_reads_during_recovery": true
+  },
+  "imported": {
+    "postgres": {
+      "phase": "verified",
+      "entry_id": "3391ad5cf3484f1d9b7135021fb3145c",
+      "exit_code": 0,
+      "plaintext_sha256": "ea5d36cd0105a944403ca1b92623fd0f56912036ef498d2562b61452e81910ae",
+      "catalog_sha256": "c09b2b028d2e530a77d47a247eb8aa21563d203247b077a418bdff848ed5bd9a",
+      "tables": 81,
+      "sequences": 28,
+      "control": {
+        "held": true,
+        "epoch": 1,
+        "backend": "rwx",
+        "identity": "cf6444f6b99944438c4ed295292c0dbe",
+        "operation": "d90b9d5f09464b54b142d0a0427325b6",
+        "work_items": 112,
+        "auth_sessions": 1
+      }
+    },
+    "qdrant": {
+      "points": 4,
+      "points_sha256": "2536719db229f1aedf7a967920d5e12d5c5edfda982da099a6685ecb9b3ce6f9",
+      "native_snapshot": true
+    },
+    "artifacts": [
+      {
+        "object_id": "5beb34b2b1064bf1ae40ff33b00ef6dc",
+        "sha256": "376618cb3fbf66fb7466fcdfa126ef95317f0af21b92f7082f4fa66daae0577b",
+        "size": 1047
+      },
+      {
+        "object_id": "67d9ea6645d04df19b45dce1a50da366",
+        "sha256": "48bffb83bce5692da63106832900b2f80d91831c3f4d7e61ce80b49e6e8fd23a",
+        "size": 1001
+      },
+      {
+        "object_id": "7713e4e3eb4a4ef3b6ff981b98dbcbf5",
+        "sha256": "c110dba639294c2f0ede7f23b87b79fa417c4e550c081b4328403f2da9c47f01",
+        "size": 557
+      },
+      {
+        "object_id": "7cf7d4f34be34464b242c4b8e3d2995f",
+        "sha256": "2bf2471d069db8b0d292bc7c0be029091e90e480875bff1758aebe27afdfc929",
+        "size": 1393
+      },
+      {
+        "object_id": "8316dbd0ca9045a591964ff3d1372774",
+        "sha256": "4245954e8097cbdad8d190e739b2d9eec916bb9cb06f0fa1a7eea801aeb80bc3",
+        "size": 6498
+      },
+      {
+        "object_id": "86d1a52b9b3f47eabd337473aa78a170",
+        "sha256": "973d6d8c48f5402f432ce4dc0d6a470d4a91053e11f83ad28d34ef2e14096508",
+        "size": 1110
+      },
+      {
+        "object_id": "bad5cad0574f4e999c900c3be001dc0d",
+        "sha256": "e1c369d80098157380563c1f6a9c83cee170e7a67ec2cf76efa7552b1dd7b33d",
+        "size": 6569
+      },
+      {
+        "object_id": "c9ed6d45f2034a9f958fcd17d9e92a5e",
+        "sha256": "dd7dabb30725f3c5be9ce09549a3a72255d590fc55313592e66d3e594bfbf665",
+        "size": 644
+      },
+      {
+        "object_id": "dcb18e1bf9d944a092ffc7411cd72391",
+        "sha256": "0817433797e7458c1432ac153f4b26a46df42120892134ae1d26536722aab4f3",
+        "size": 575
+      },
+      {
+        "object_id": "e02888e6770340f79db2de99c5f35f42",
+        "sha256": "5a91ef4aec9d63fade4a3a564ce8e448db0cf904efcb3b023686290f4e488962",
+        "size": 1041
+      },
+      {
+        "object_id": "e40e78f3f07d4201aa7e0433ba50824a",
+        "sha256": "794ca5db10c5caa6ce560b523c7719fe46c7cdafcc3e985dfae0cf0317fc104b",
+        "size": 626
+      }
+    ],
+    "disjoint_claims": [
+      {
+        "name": "syns-artifacts",
+        "uid": "39cbf4db-3fe0-4bd1-b7c3-56c0f0555f05",
+        "phase": "Bound",
+        "volume": "pvc-39cbf4db-3fe0-4bd1-b7c3-56c0f0555f05",
+        "volume_uid": "e1337692-540e-4618-bd3d-75b6fd64d672"
+      },
+      {
+        "name": "syns-postgres",
+        "uid": "da90d380-c96a-4954-afd4-95528ee8fb3f",
+        "phase": "Bound",
+        "volume": "pvc-da90d380-c96a-4954-afd4-95528ee8fb3f",
+        "volume_uid": "f0ff49ab-0490-43c8-967b-bd33aeb4615f"
+      },
+      {
+        "name": "syns-qdrant",
+        "uid": "1f020acb-5076-43eb-82ac-4b8be32e5850",
+        "phase": "Bound",
+        "volume": "pvc-1f020acb-5076-43eb-82ac-4b8be32e5850",
+        "volume_uid": "8dfeb7dd-f7d9-4626-ba0e-d5b4a11beaf0"
+      }
+    ],
+    "postgres_single_transaction": true,
+    "all81_tables28_sequences_exact_before_identity": true,
+    "all4_full_vectors_exact": true,
+    "eleven_cold_sha_and_sizes_exact": true,
+    "conditional_create_only_s3": true,
+    "original_work_items": 112,
+    "original_business_work_never_reexecuted": 3
+  },
+  "permissions": {
+    "pg": {
+      "ok": true,
+      "allowed": [
+        "business_crud_rollback",
+        "row_lock_replica_maintenance_state",
+        "row_lock_artifact_storage_control",
+        "row_lock_replica_runtime_identity"
+      ],
+      "denied": [
+        "maintenance_epoch",
+        "runtime_fingerprint",
+        "storage_control",
+        "audit_update",
+        "audit_delete",
+        "migration_head",
+        "operator_password_catalog",
+        "public_ddl",
+        "temporary_ddl",
+        "truncate"
+      ],
+      "wrong_password_denied": true,
+      "authentication": {
+        "route": "actual-pod-ip-scram",
+        "results": [
+          {
+            "exit": 0,
+            "correct_user_tls": true,
+            "password_denied": false
+          },
+          {
+            "exit": 2,
+            "correct_user_tls": false,
+            "password_denied": true
+          },
+          {
+            "exit": 0,
+            "correct_user_tls": true,
+            "password_denied": false
+          }
+        ]
+      }
+    },
+    "s3": {
+      "allowed": [
+        "dedicated_bucket_head_list",
+        "prefix_conditional_put",
+        "prefix_cold_range_read",
+        "prefix_delete",
+        "multipart_complete_conditional",
+        "multipart_abort"
+      ],
+      "denied": [
+        "foreign_prefix_read",
+        "foreign_prefix_write",
+        "foreign_prefix_delete",
+        "foreign_bucket_read",
+        "foreign_bucket_write",
+        "foreign_bucket_delete",
+        "foreign_bucket_list",
+        "iam_admin_list",
+        "wrong_secret"
+      ],
+      "tls_verified": true,
+      "bucket_listing_scope": "dedicated-installation-bucket",
+      "bucket_discovery": {
+        "mode": "filtered",
+        "visible_bucket_count": 1
+      }
+    },
+    "runtime_operator_secrets_separate": true,
+    "application_has_no_admin_credentials": true
+  },
+  "adoption": {
+    "identity_job_uid": "e2e3d6bc-1994-4923-af0b-9884f56dc90a",
+    "counts": {
+      "held_audit_events": 0,
+      "invalidated_oidc_flows": 0,
+      "invalidated_sessions": 1
+    },
+    "normal_held_proof": {
+      "uid": "44e23a67-6ed3-4bd9-8852-559f11d06d17",
+      "active": 0,
+      "succeeded": 1,
+      "failed": 0,
+      "receipts": [
+        {
+          "fingerprint": "76b82b6fdb6ee1d0ba1683299b5032a6917d79f8db2ca38846fcfcc82557042b",
+          "epoch": 2,
+          "held": true,
+          "normal_settings": true,
+          "application_principal": true,
+          "startup_denied": true,
+          "denied": [
+            "write",
+            "claim",
+            "artifact_runtime"
+          ],
+          "ready_blob_refs": 11,
+          "work_items": 112,
+          "owners": 0,
+          "auth_sessions": 0
+        }
+      ],
+      "error_types": []
+    },
+    "pre_release_catalog": {
+      "changed_only": [
+        "artifact_storage_control",
+        "audit_log",
+        "auth_sessions",
+        "replica_maintenance_state",
+        "replica_runtime_identity",
+        "audit_log_id_seq"
+      ],
+      "work_items": {
+        "kind": "table",
+        "name": "work_items",
+        "rows": 112,
+        "sha256": "bd1dbd86625e4e7f65ba6eaa9df92c2095a7dd9c05386aa61224ba2a28a8bba8"
+      },
+      "tables": 81,
+      "sequences": 28
+    },
+    "explicit_release": {
+      "uid": "5b3982ef-ebba-4965-b9eb-6f63f7ab677a",
+      "active": 0,
+      "succeeded": 1,
+      "failed": 0,
+      "receipts": [
+        {
+          "epoch": 2,
+          "released": true,
+          "application_replicas_before_release": 0,
+          "source_namespace_off": true
+        }
+      ],
+      "error_types": []
+    },
+    "application_start_automatic": false
+  },
+  "http": {
+    "old-session": {
+      "actual_old_source_cookie_rejected_401_all_four": true
+    },
+    "baseline": {
+      "new_session_shared_across_two_frontends_and_two_apis": true,
+      "pinned_pod_uids": [
+        "213b0055-14a9-401f-89ee-6a5d6b676ef9",
+        "d8cb5e8b-03f9-4a12-8598-1368f302b5c2",
+        "87a8419e-1491-43a0-9bfa-9bd764ab5b08",
+        "248c28af-7079-4f26-9bac-4942d498abd4"
+      ]
+    },
+    "source-documents": {
+      "documents": 2,
+      "original_sha256_all_four": true,
+      "bm25_search_all_four": true,
+      "prior_export_sha256_and_docx_member_all_four": true,
+      "source_namespace_off_and_unmounted": true
+    },
+    "upload": {
+      "document_id": "e61545645bc04129",
+      "original_sha256": "077ed9e92656b40d6f83e0c5e3c38f35f41bbd4cbcf1f720b52e2d8d7a58c143",
+      "same_document_on_cross_frontend_idempotent_retry": true
+    },
+    "new-result": {
+      "document_id": "e61545645bc04129",
+      "done_without_problem": true,
+      "original_sha256_matches_all_four_endpoints": true,
+      "bm25_search_matches_all_four_endpoints": true
+    },
+    "export": {
+      "job_id": 2
+    },
+    "export-result": {
+      "job_id": 2,
+      "completed": true,
+      "export_sha256": "6b1c5fe0f092defec3eaa96ce48b1cd1d1616c04ac893c8ae898703066e0b883",
+      "original_member_sha256_verified": true,
+      "all_four_endpoints": true
+    }
+  },
+  "native_processes": [
+    {
+      "pod_uid": "87a8419e-1491-43a0-9bfa-9bd764ab5b08",
+      "fingerprint": "76b82b6fdb6ee1d0ba1683299b5032a6917d79f8db2ca38846fcfcc82557042b",
+      "role": "api",
+      "backend": "s3",
+      "cold_objects": 17,
+      "scratch_files": 0,
+      "legacy_business_work": [
+        {
+          "id": "21f8ad05b74748bda64867730a29f17d",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "6a91ce484aee4cd5b9991679b541e57e",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "e067651e4fe9487fa1dcea21314353cd",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ],
+      "new_business_work": [
+        {
+          "id": "d68bf92109614d94b04dc396c087f2d5",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        },
+        {
+          "id": "f133b34e6b7f4f46ba75ab85986cd24f",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        }
+      ],
+      "upload_audits": 3,
+      "documents": 3,
+      "maintenance_epoch": 2,
+      "application_principal": true,
+      "tls": true,
+      "source_nfs_tcp_denied": true,
+      "source_nfs_volumes": 0
+    },
+    {
+      "pod_uid": "248c28af-7079-4f26-9bac-4942d498abd4",
+      "fingerprint": "76b82b6fdb6ee1d0ba1683299b5032a6917d79f8db2ca38846fcfcc82557042b",
+      "role": "api",
+      "backend": "s3",
+      "cold_objects": 17,
+      "scratch_files": 0,
+      "legacy_business_work": [
+        {
+          "id": "21f8ad05b74748bda64867730a29f17d",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "6a91ce484aee4cd5b9991679b541e57e",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "e067651e4fe9487fa1dcea21314353cd",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ],
+      "new_business_work": [
+        {
+          "id": "d68bf92109614d94b04dc396c087f2d5",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        },
+        {
+          "id": "f133b34e6b7f4f46ba75ab85986cd24f",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        }
+      ],
+      "upload_audits": 3,
+      "documents": 3,
+      "maintenance_epoch": 2,
+      "application_principal": true,
+      "tls": true,
+      "source_nfs_tcp_denied": true,
+      "source_nfs_volumes": 0
+    },
+    {
+      "pod_uid": "aac1ddde-7027-4ddd-80ce-2948460a2180",
+      "fingerprint": "76b82b6fdb6ee1d0ba1683299b5032a6917d79f8db2ca38846fcfcc82557042b",
+      "role": "worker",
+      "backend": "s3",
+      "cold_objects": 17,
+      "scratch_files": 0,
+      "legacy_business_work": [
+        {
+          "id": "21f8ad05b74748bda64867730a29f17d",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "6a91ce484aee4cd5b9991679b541e57e",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "e067651e4fe9487fa1dcea21314353cd",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ],
+      "new_business_work": [
+        {
+          "id": "d68bf92109614d94b04dc396c087f2d5",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        },
+        {
+          "id": "f133b34e6b7f4f46ba75ab85986cd24f",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        }
+      ],
+      "upload_audits": 3,
+      "documents": 3,
+      "maintenance_epoch": 2,
+      "application_principal": true,
+      "tls": true,
+      "source_nfs_tcp_denied": true,
+      "source_nfs_volumes": 0
+    },
+    {
+      "pod_uid": "edd5bac7-b660-4f4a-83f9-aa184988450b",
+      "fingerprint": "76b82b6fdb6ee1d0ba1683299b5032a6917d79f8db2ca38846fcfcc82557042b",
+      "role": "worker",
+      "backend": "s3",
+      "cold_objects": 17,
+      "scratch_files": 0,
+      "legacy_business_work": [
+        {
+          "id": "21f8ad05b74748bda64867730a29f17d",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "6a91ce484aee4cd5b9991679b541e57e",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "e067651e4fe9487fa1dcea21314353cd",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ],
+      "new_business_work": [
+        {
+          "id": "d68bf92109614d94b04dc396c087f2d5",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        },
+        {
+          "id": "f133b34e6b7f4f46ba75ab85986cd24f",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        }
+      ],
+      "upload_audits": 3,
+      "documents": 3,
+      "maintenance_epoch": 2,
+      "application_principal": true,
+      "tls": true,
+      "source_nfs_tcp_denied": true,
+      "source_nfs_volumes": 0
+    }
+  ],
+  "measured_intervals": {
+    "namespace_created_at": "2026-11-04T00:14:26+00:00",
+    "old_corpus_http_verified_at": "2026-11-04T00:29:01.838942+00:00",
+    "new_export_verified_at": "2026-11-04T00:33:07.797056+00:00",
+    "namespace_to_verified_old_corpus_seconds": 875.839,
+    "namespace_to_verified_new_export_seconds": 1121.797,
+    "clock": "Kubernetes creationTimestamp and receipt file mtimes on the same lab VM",
+    "includes": "Storage startup/import/credential provisioning/held identity/release/application start and harness delays; first timing ends before rejected new near-duplicate fixture",
+    "backup_consistent_at": "2026-11-03T23:40:39.142090+00:00",
+    "backup_age_at_namespace_creation_seconds": 2026.858,
+    "scope": "Observed bounded lab wall-clock drill intervals; not a production RTO or guaranteed RPO. No accepted source writes occurred after the held fence."
+  },
+  "budget": {
+    "pvc_bytes": 1610612736,
+    "scratch_bytes": 536870912,
+    "backup_payload_bytes": 1171590,
+    "source_measured_used_bytes": {
+      "syn-postgres": 70725632,
+      "syn-qdrant": 2928640
+    },
+    "profile": "bounded 512Mi per managed component; measured PG70.7MB/Q2.93MB; unchanged10percent+sumscratch disk floor",
+    "vm_free_bytes_before_create": 13476528128,
+    "vm_free_floor_fraction": 0.1,
+    "cache_prune_or_old_scratch_deletion": false,
+    "production_defaults_changed": false
+  },
+  "harness_observation": {
+    "startup_pending_container": "Initial Ready=false/CID=null observation refused by the next immutable binding guard before import; startup-only transition fixed with 1 RED assertion then 6 GREEN checks, no service restart or import replay",
+    "import_closure": {
+      "phase": "verified",
+      "attempts": [
+        {
+          "attempt_id": "bdfec11cbae3421cb7bc4e35b7354fc3",
+          "closed": true,
+          "exact_forward_processes": 3
+        },
+        {
+          "attempt_id": "b415dff7b87243a2a7a954eb43ad9ea0",
+          "closed": true,
+          "exact_forward_processes": 3
+        },
+        {
+          "attempt_id": "927c3ec5ac084aaead5ded013c03deba",
+          "closed": true,
+          "exact_forward_processes": 3
+        }
+      ],
+      "remote_owned_forwards_live": 0,
+      "provider_ports_free": true,
+      "pc_provider_ports_free": true,
+      "previous_parent_failures_preserved": false,
+      "data_import_replayed": false
+    },
+    "data_import_replayed": false,
+    "rejected_near_duplicate": {
+      "http_status": 409,
+      "no_document_admitted": true,
+      "native_documents": 2,
+      "native_upload_receipts": 2,
+      "native_business_work": 3,
+      "native_upload_audits": 2,
+      "diagnostic": {
+        "readonly_duplicates": {
+          "level2": [],
+          "level3": [
+            {
+              "document_id": "e3353f80040d498e",
+              "jaccard": 0.7891
+            }
+          ]
+        }
+      },
+      "original_intent_preserved": true,
+      "explanation": "Renaming Vela to Deneb did not sufficiently change synthetic content; read-only actual duplicate probe confirms a source match. A distinct new fixture and new idempotency key will be used without bypassing duplicate detection.",
+      "observation": {
+        "exit_code": 1,
+        "error_types": [
+          "urllib.error.HTTPError"
+        ]
+      }
+    },
+    "new_fixture": {
+      "script": "functional-v2.py",
+      "sha256": "7035d472e2fdf8fcf28c367227553cad678da642403c36c64b157383647b7711",
+      "previous_script_and_intent_preserved": true,
+      "new_idempotency_key": true,
+      "duplicate_detection_unchanged": true
+    }
+  },
+  "closure": {
+    "target": {
+      "nonterminal_pods": 0,
+      "live_cri": 0,
+      "retained_bound_pvcs": 3,
+      "source_application_and_storage_off": true,
+      "source_nas_service": "external NAS not controlled by this operation"
+    },
+    "held_epoch": 3,
+    "operation": "f177991042124d6aa49b8559b32a8b2a",
+    "job": {
+      "uid": "22e617ff-7c3e-405c-8587-4aed3e32541c",
+      "active": 0,
+      "succeeded": 1,
+      "failed": 0,
+      "receipts": [
+        {
+          "operation_id": "f177991042124d6aa49b8559b32a8b2a",
+          "owner": "owned-syns-rehearsal-stop",
+          "held": true,
+          "epoch": 3,
+          "running_work": 0,
+          "provider_owners": 0,
+          "chat_and_capture_owners": 0
+        }
+      ],
+      "error_types": []
+    },
+    "owned_http_forwards_live": 0,
+    "prior_namespace": "replica-test-r4o2t20261102",
+    "capacity_operation": "2cf6039a873f4cc08e6c2c9e94ee1ac5",
+    "prior_roles_restored": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "prior_runtime_and_pvcs_unchanged": true,
+    "prior_canonical_tables_unchanged": 9,
+    "source_claims_retained": 3,
+    "data_deleted": false
+  },
+  "remaining": [
+    "Prolonged provider outage and cross-node/physical failure domains",
+    "Real customer models, IdP/Gateway and exact external provider releases",
+    "Independent NAS target relocation remains outside the selected strict NFSv4.1 target recipe",
+    "Production key custody/monitoring if deployed and overall profile qualification; production schedule intentionally remains off"
+  ],
+  "restored": true,
+  "profile_qualified": false,
+  "certification": null,
+  "production_backup_schedule": "disabled"
+}

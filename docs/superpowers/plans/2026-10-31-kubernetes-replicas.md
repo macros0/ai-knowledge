@@ -304,3 +304,17 @@ Target физически выключен/held3/три PVC сохранены, 
 девять таблиц восстановлены. Общий NFS-сервер работал, исходный claim не был
 смонтирован. Large-write/outage/cross-node/external/mixed и общие O1–O3 gates
 остаются открытыми; certificationnull, production scheduleOFF.
+
+04.11.2026: [mixed Synology runtime](../reports/2026-11-04-replica-synology-mixed-runtime.json)
+прошёл2/2/2 с DS211 DSM6.2.4/NFSv4.0/CSI4.13.6 и managed PG/Q, реальную
+пользовательскую EDQUOT507, сохранение старых чтений и retry. Текущий96931d1
+прошёл6472 Linux tests/221 неизменный optional skip, включая шесть readiness
+regressions. [Независимая NAS-копия](../reports/2026-11-04-replica-synology-independent-backup.json)
+на ПК и [NAS-source→S3 restore](../reports/2026-11-04-replica-synology-source-s3-restore.json)
+проверили81 таблицу/28 sequences/четыре полные точки/11 blobs до adoption;
+held2/release/old-cookie401/старый и новый HTTP-корпус/экспорты прошли2/2/2.
+Четыре процесса проверили17 SHA/scratch0/отсутствие replay старых работ и
+недоступность NAS2049 при включённом NAS. Target сохранён выключенным/held3,
+три PVC оставлены; прежние2/2/2/runtime/PVC/девять таблиц восстановлены.
+Длительные outage/cross-node, NAS-target relocation и остальные customer/provider
+gates открыты; итоговые O1–O3 не объявлены завершёнными, production scheduleOFF.

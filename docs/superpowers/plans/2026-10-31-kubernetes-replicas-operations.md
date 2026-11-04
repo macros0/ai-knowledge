@@ -687,4 +687,20 @@ Q4fullpoints and11 NAS blobs. UID1031/G100 reader had actual NFSv4.0 RO/noSecret
 header failure left no archive/sidecar; closed owners were proved and the existing
 Qsnapshot reused without another POST. Source is physically off/held1/unmounted,
 completed reader retained, old2/2/2/runtime/PVC/nine tables restored. NAS server
-stayed up. NAS-source independent recovery remains open; no4.0 target-guard bypass.
+stayed up. At this backup checkpoint NAS-source recovery remained open; the
+subsequent S3 recovery is recorded below. No4.0 target-guard bypass.
+
+O2 NAS-source recovery milestone (2026-11-04): [independent S3 target](../reports/2026-11-04-replica-synology-source-s3-restore.json)
+recovered81 tables/28 sequences, four full vector points and11 blobs from the PC
+archive into three disjoint512Mi claims. Source app/PG/Q stayed physically off and
+the source NFS claim unmounted. NAS remained up with a host TCP positive control;
+all four ordinary target API/worker processes proved2049 denied and no NFS volumes.
+Scoped SQL/S3 rights, official held identity adoption, normal held startup refusals
+and explicit release passed.2/2/2 old-cookie401/old search-download-export/new
+shared session/new upload-export passed;17 cold hashes/scratch0 and three old
+business jobs never replayed. A rejected near-duplicate fixture was retained and
+replaced with different content/new key, without bypassing deduplication. Target
+is off/held3/three PVCs retained; prior2/2/2/runtime/PVC/nine tables restored. This
+closes this selected NAS-source→S3 recovery recipe, not NAS-target relocation,
+prolonged outage/cross-node/physical domains or complete customer qualification.
+Production scheduleOFF/certificationnull.
