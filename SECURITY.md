@@ -3152,3 +3152,25 @@ cookie-bearing body or raw provider exception. Linked/aliased journals, uncertai
 writes, stale concurrent writers and reordered histories are refused. This
 journal foundation is not yet an executable functional frontend producer and
 cannot supply signed qualification or close the pending CSRF/Gateway/IdP gates.
+
+Its native HTTP component now uses three distinct loopback routes supplied by
+the future ownership-checking coordinator. It disables proxy discovery and
+redirects, bounds response/NDJSON sizes and checks early delivery before the
+delayed result. Login/upload/export/stream/logout each write an exclusive native
+intent before a request; an accepted upload is separate from terminal proof of
+visibility through the other frontend. Cookies remain in owner-private native
+files; receipts contain only fixed observations and content digests. Linked or
+aliased cookie/receipt files are refused. Legacy compact uploads do not claim
+idempotency. Real HTTP fixture tests verify cross-route sessions, original/ZIP
+hashes and server-side logout; they do not prove Kubernetes ownership, active
+frontend loss, real Gateway/IdP or production CSRF. Native coordinator/CLI wiring
+and a new live acceptance run are still required.
+
+[Component CI evidence](docs/superpowers/reports/2026-11-04-frontend-runner-protocol-ci.json)
+records 74 Windows checks and 42 focused Linux checks. The first Linux attempt
+failed before tests because default DATA_DIR pointed into read-only source; the
+second used the same source with explicit ephemeral data paths and passed.
+Both attempts remain retained. The sole temporary six-replica capacity loan was
+returned; original2/2/2/runtime/PVC/nine-table checks and foreign-service checks
+passed. This is component evidence against the stated frozen application base,
+not current full-release CI or another live F2 acceptance result.

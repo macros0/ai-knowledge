@@ -42,6 +42,15 @@ Gateway/IdP/production CSRF. Default frontend probe remains read-only.
   exact-Pod forwards, one session/upload/export, SHA/search, bounded NDJSON,
   model-gated UID loss and read-only completion, session/logout and owned-handle
   closure. Keep cookies off parent stdout/journal; pin native process identities.
+  HTTP component checkpoint: 14 real loopback tests cover shared simulation
+  sessions, exclusive mutation intents, accepted-vs-visible upload receipts,
+  publication/export polling, original/ZIP hashes, NDJSON delivery, logout and
+  refusal of redirects/non-loopback/aliased-cookie inputs. Native ownership,
+  process management, loss coordination and transport remain unfinished.
+  [Component CI](../reports/2026-11-04-frontend-runner-protocol-ci.json): Windows
+  60 journal/admission +14 HTTP tests; Linux 42 protocol tests, no skips. The
+  same immutable source passed after correcting DATA_DIR/DIAGNOSTICS_DIR in the
+  read-only CI harness. Its one temporary capacity loan was returned and verified.
 - [ ] Integrate explicit frontend stage/journal/apply flags into common runner;
   retain read-only defaults, reject offline/live mixing, leave real CSRF and
   Gateway/SSO pending. Never promote separate reports into terminal native proof.
