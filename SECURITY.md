@@ -2981,12 +2981,14 @@ canonical tables are restored. Source claim was unmounted while the same NFS
 server stayed up. Large-write/outage/cross-node gates and provider certification
 remain open; production scheduling stays off.
 
-### Prepared VM103 cross-node platform boundary (2026-11-04)
+### Admitted VM103 cross-node platform boundary (2026-11-04)
 
 The user selected a logical two-node rehearsal on VM103. The
 [reviewed plan](docs/superpowers/plans/2026-11-04-replica-crossnode-vm103.md)
-is prepared, not applied: root disk100→130GiB growth and an independent kind
-cluster require explicit new platform admission. It pins node/Cilium/CSI images,
+was explicitly admitted by the user in `call_dd93b9225d464094a786a12d8deb4473`.
+Root disk100→130GiB/ext4 growth and the independent two-node kind cluster
+were applied once with GPT backups on the separate PC and exact UUID/geometry
+checks. It pins node/Cilium/CSI images,
 43 rendered objects including10 explicit Cilium CRDs, a nondefault Retain NAS
 class, loopback-only API and an independent owner-only kubeconfig. Hubble and
 automatic CRD creation are disabled; final manifests contain no Secrets. The
@@ -2995,6 +2997,19 @@ mutation scope. Only fresh synthetic app credentials/data may enter the cluster.
 Logical worker-loss testing must bind exact new node/native ownership and keep
 PG/Q on the surviving control-plane. This topology does not establish physical
 failure-domain resilience; production backup schedule remains off.
+
+The first logical worker-loss attempt exposed co-located DNS replicas and a
+dead TCP client retaining PostgreSQL transaction locks after lease expiry.
+That trial is retained as an automatic takeover failure; terminating one exactly
+identified backend of an absent owned Pod provided assisted recovery only.
+The new cluster DNS Deployment now requires separate node placement; managed
+PostgreSQL uses server TCP keepalive30/10/3 and user timeout60000ms. The change
+does not acknowledge uncertain provider calls or clear capacity slots.
+The separate repeat proved automatic completion by210.36s while the original
+worker stayed off until240s: same accepted work, attempt2/fence2, no manual
+backend termination or lease/slot edits. Four routes and four cold native
+processes verified the corpus after return. Fresh work IDs and failed evidence
+are preserved in the [bounded report](docs/superpowers/reports/2026-11-04-replica-crossnode-vm103.json).
 
 ### Remote Synology native component boundary (2026-11-03)
 

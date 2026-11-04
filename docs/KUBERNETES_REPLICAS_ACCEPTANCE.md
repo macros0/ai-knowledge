@@ -123,3 +123,16 @@ IdP/Gateway и доверенных evidence producers. Для resilient доп�
 [recovery runbook](KUBERNETES_REPLICAS_RECOVERY.md),
 [операции с хранилищами](REPLICA_STORAGE_OPERATIONS.md),
 [сводная матрица](REPLICA_ACCEPTANCE_MATRIX.md).
+
+
+Cross-node VM103 evidence04.11 is recorded in the
+[bounded rehearsal report](superpowers/reports/2026-11-04-replica-crossnode-vm103.json).
+The successful repeat finished accepted document work on control-plane while
+the original logical worker was still off. A preceding failure exposed DNS
+co-location and a dead PostgreSQL TCP transaction; retain that unsuccessful
+result and require distributed DNS plus verified server dead-client detection
+before a comparable run. Managed chart fix `ccc2678` changes only future
+PostgreSQL workload args; existing installations need their own planned rollout.
+This is before-provider-admission worker loss, on one VM/kernel, with a model
+stub. It supplies no physical-domain, active-provider-loss, real IdP/Gateway
+or production certification. Production backup schedule remains OFF.

@@ -198,7 +198,14 @@
         "final-version-ci"
       ],
       "certification": null,
-      "qualification_complete": false
+      "qualification_complete": false,
+      "evidence": [
+        {
+          "path": "docs/superpowers/reports/2026-11-04-replica-crossnode-vm103.json",
+          "sha256": "dcbbb1ab02bcfd89d985674c29e69e43f5d6121f76139a374bcae0498a2cf8da",
+          "scope": "Managed PG17/Qdrant plus external DS211/NFS4.0: actual two logical kind nodes on VM103,256MiB RWX/network and automatic before-provider worker takeover; initial failed/assisted trial retained; all closed/capacity returned; one physical domain/stub model, no certification"
+        }
+      ]
     },
     {
       "id": "distributed-resilient",

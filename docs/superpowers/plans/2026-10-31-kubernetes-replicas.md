@@ -41,9 +41,12 @@ partition/возврат устаревшего процесса и нагруз
 
 Открыты три крупных блока, частично выполненные:
 
-- **O1:** RWX independent restore/large-write/cross-node после NFS/CSI и application/ENOSPC/restart проверок,
-  external/mixed end-to-end, заполнение хранилищ на уровне приложения
-  и квалификация инфраструктуры/failure domains выбранных профилей.
+- **O1:** RWX independent restore, Synology256MiB write/read,150с application outage
+  и логический перенос между двумя узлами VM103 уже проверены;
+  остаются остальные external/mixed profiles, application full-storage cases
+  и квалификация физической инфраструктуры/failure domains.
+  [Двухузловой результат](../reports/2026-11-04-replica-crossnode-vm103.json) сохраняет
+  первый неуспешный автоподхват и отдельный успешный повтор после исправлений DNS/PG.
 - **O2:** оставшиеся adoption/update recipes; compact/NULL-generation source-off рецепт проверен,
   и остальные profile-specific backup/restore recipes. Восстановление ключа из
   отдельного защищённого каталога и доставка alerts локальному приёмнику на ПК
