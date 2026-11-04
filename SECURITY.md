@@ -3142,3 +3142,13 @@ either case. The common frontend runner currently verifies only explicit split
 inventory/namespace/owner/native-image bindings and keeps functional producers
 pending. Simulation intentionally bypasses production CSRF; real CSRF/Gateway/
 IdP qualification remains open. No authentication or CSRF guard was weakened.
+
+The staged frontend journal now gives each native action a distinct durable
+intent bound to the runner recipe, selected inputs and installation. A lost
+response allows only observation of that same intent; explicit apply cannot
+resubmit it. Completion requires the exact execution/stage/intent/code/binding
+tuple from the native adapter. The parent retains a receipt digest, never its
+cookie-bearing body or raw provider exception. Linked/aliased journals, uncertain
+writes, stale concurrent writers and reordered histories are refused. This
+journal foundation is not yet an executable functional frontend producer and
+cannot supply signed qualification or close the pending CSRF/Gateway/IdP gates.
