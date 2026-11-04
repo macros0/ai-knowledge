@@ -2981,6 +2981,21 @@ canonical tables are restored. Source claim was unmounted while the same NFS
 server stayed up. Large-write/outage/cross-node gates and provider certification
 remain open; production scheduling stays off.
 
+### Prepared VM103 cross-node platform boundary (2026-11-04)
+
+The user selected a logical two-node rehearsal on VM103. The
+[reviewed plan](docs/superpowers/plans/2026-11-04-replica-crossnode-vm103.md)
+is prepared, not applied: root disk100→130GiB growth and an independent kind
+cluster require explicit new platform admission. It pins node/Cilium/CSI images,
+43 rendered objects including10 explicit Cilium CRDs, a nondefault Retain NAS
+class, loopback-only API and an independent owner-only kubeconfig. Hubble and
+automatic CRD creation are disabled; final manifests contain no Secrets. The
+existing clusters, customer NAS configuration and old claims are outside the
+mutation scope. Only fresh synthetic app credentials/data may enter the cluster.
+Logical worker-loss testing must bind exact new node/native ownership and keep
+PG/Q on the surviving control-plane. This topology does not establish physical
+failure-domain resilience; production backup schedule remains off.
+
 ### Remote Synology native component boundary (2026-11-03)
 
 The user supplied `10.10.1.5:/volume1/Vitaliy`, enabled its NFS access and allowed
