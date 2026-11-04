@@ -45,6 +45,15 @@ coverage; Windows focused170 passed/1 Linux-only skip. Default frontend probe
 остаётся read-only. Реальные CSRF/Gateway/SSO и доверенный release bundle
 остаются открытыми; certification=null, production scheduleOFF.
 
+Следующий [Gateway prerequisite](../reports/2026-11-05-replica-gateway-platform.json)
+установлен по отдельному допуску:18 CRD и pinned kgateway controller проверены,
+controller выключен и память возвращена. Новый
+[OIDC wire-компонент](../reports/2026-11-05-frontend-oidc-http-ci.json) прошёл99/99
+одинаковых Windows/Linux cases без skips/errors/failures; источник не изменился,
+его отдельный CI loan также возвращён с2/2/2/runtime/PVC/9 таблицами. Реальная
+OIDC/Gateway приёмка требует native/common-runner интеграции и свежего fixture;
+ни этот компонент, ни platform admission не подменяют её.
+
 Связанный runtime-прогон R5 учебного managed-S3 профиля завершён:22/22 этапа,
 0 failures,0 required skips,80 прежних документов сохранены, maintenance
 epoch15→16→17 с двумя проверенными восстановительными операциями. Выполнены

@@ -39,6 +39,17 @@ CI:6638 passed/221 прежний optional skip/0 errors/failures, coverage87,70
 Это закрывает выбранный functional producer, сохраняя реальные CSRF/Gateway/SSO
 и полную F2/profile qualification открытыми.
 
+Следующий F2 prerequisite теперь [допущен и закрыт](../reports/2026-11-05-replica-gateway-platform.json):
+пользователь отдельно разрешил Gateway API1.6.2/kgateway2.4.5.18 CRD Established,
+controller Ready на pinned image/non-root1000/read-only/caps0, GatewayClass Accepted;
+controller затем выключен, capacity loan возвращён. Созданный им OAuth2 HMAC
+Secret сохранён в его namespace, значения не включены в публичный отчёт.
+[Отдельный OIDC HTTP-компонент](../reports/2026-11-05-frontend-oidc-http-ci.json)
+прошёл99/99 одинаковых Windows/Linux cases с wire double и настоящим TLS.
+Native/common-runner интеграция и свежий real-Keycloak/Gateway функциональный
+прогон ещё не выполнены. Simulation guard, production gates и certification
+не ослаблены; повторный platform-допуск для уже разрешённого пакета не нужен.
+
 ## Global Constraints
 
 Все ограничения и правила тестов [основного плана](2026-10-31-kubernetes-replicas.md)

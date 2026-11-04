@@ -3210,7 +3210,48 @@ Linux-only pidfd check skipped on Windows. A separate real VM103 kernel check
 refused a wrong process identity and terminated only its own Python helper;
 that helper is gone. A real common-runner SSH/RPC negative admission check
 refused an absent owned namespace with exact capsule/intent bindings and no
-forward/cookie files or application requests. These checks do not replace the
-pending full current-source Linux CI and fresh staged live rehearsal. A completed
+forward/cookie files or application requests. The subsequent
+[e42007a native rehearsal](docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json)
+completed all 12 stages; its full Linux CI had 6638 passes and 221 unchanged
+optional skips. These observations apply to that source/capsule and selected
+simulation fixture. A completed
 selected simulation keeps real production-CSRF and Gateway/IdP checks pending;
 it does not produce a signed qualification or deployment authorization.
+
+### Separate owned OIDC HTTP component (2026-11-05)
+
+`replica_frontend_oidc_http.py` supplies bounded HTTPS wire actions for the next
+F2 producer; it is not yet part of the live native capsule or common runner.
+It accepts only the paired knowledge/identity names of one explicit `okf-*`
+cluster-local lab namespace, connected to one explicit loopback port. Logical
+hostname/SNI and private CA verification remain enabled; no ambient proxy or
+default-root lookup selects a destination. An independent empty trust store
+must reject the reachable peer before HTTP. Response bodies and transitions are
+bounded. Authorization client/realm/redirect URI, state/issuer and credential
+form destination are checked before the next request. There is no automatic
+redirect handling, external form action, credential POST retry or IdP discovery
+to an arbitrary URL in this component. Backend Authlib still validates the
+actual authorization code/token; this wire client does not replace it.
+
+Private one-shot login/CSRF/logout intents precede their HTTP actions. Cookies
+are retained only in the existing owner-private file primitive; they and
+passwords/codes/id-token hints are excluded from returned receipts. A completed
+receipt can be reopened without another HTTP action. Ambiguous transport is
+not permission to replay login or logout. The caller must separately admit the
+namespace, controller, forward process, exact images/config and synthetic
+credentials before invoking this component. Those checks are not inferred from
+the hostname pattern. Production CSRF checks require an actual `mode=sso`
+identity, a secure HttpOnly session, exact `csrf_failed` denials with a surviving
+authenticated session, and valid-token logout revoking the old application and
+IdP sessions. Loopback TLS wire tests are component evidence only; they do not
+claim real Keycloak/Gateway acceptance or issue trust/certification.
+
+The separately approved [Gateway prerequisite](docs/superpowers/reports/2026-11-05-replica-gateway-platform.json)
+installed only the pinned training Gateway API/kgateway package. Its official
+ClusterRole can read Secrets and manage workloads cluster-wide. The discovery
+namespace selector is not an RBAC authorization boundary. The controller's
+own namespace also contains its automatically generated OAuth2 HMAC Secret;
+public evidence includes only its metadata. The admitted controller was tested
+non-root with a read-only root and no effective capabilities, then scaled to
+zero and its capacity loan returned. Retained CRDs/RBAC/admission policy are not
+deleted automatically. This prerequisite does not close real CSRF/SSO gates.

@@ -1,0 +1,378 @@
+{
+  "schema_version": 1,
+  "status": "approved-gateway-platform-admission-verified-controller-stopped-capacity-restored",
+  "observed_at": "2026-11-04T22:26:36.047987+00:00",
+  "operation_id": "3ba986b1049746b5b3aa152348a7898c",
+  "scope": "Only the approved Gateway platform prerequisite on VM103 kind-okf-policy; no new application, IdP, Envoy proxy, TLS realm or real CSRF/SSO acceptance was run by this operation.",
+  "approved_proposal_sha256": "4f4b16953046c137dfec3eb77575e38e99d09a95ecf3527a96f3bbfd2c2743f4",
+  "manifest_sha256": "a78843d60607cb774350066e497139b9129ff396cf1b1f6c632834070ef686e4",
+  "authority": "Explicit user reply call_82d8a1bc9bdb447c8f4f2d748cadd267: Разрешаю учебный Gateway-пакет",
+  "versions": {
+    "kubernetes": "1.36.4",
+    "gateway_api": "1.6.2",
+    "kgateway": "2.4.5"
+  },
+  "namespace": "okf-f2-gateway-system",
+  "namespace_uid": "26e5c2d8-f8b8-4b89-92f4-bbcc71bc6350",
+  "object_count": 27,
+  "cluster_scoped_count_including_namespace": 24,
+  "inputs": [
+    {
+      "name": "gateway-api-v1.6.2.yaml",
+      "sha256": "faede450fa178126aba41337737b97d351ebe87d93c910237ce1e072d1ca40d9",
+      "bytes": 1171165
+    },
+    {
+      "name": "kgateway-crds-v2.4.5.tgz",
+      "sha256": "bf10c2b5190ec91eb9821db05773a1e80f43cff6ed2006522ff395944871cced",
+      "bytes": 213812
+    },
+    {
+      "name": "kgateway-v2.4.5.tgz",
+      "sha256": "502c0e55bbaebac165ceec156e2b12d9bd3399e3fab3c784c79663bde935ac3f",
+      "bytes": 8960
+    },
+    {
+      "name": "controller-values.json",
+      "bytes": 982,
+      "sha256": "25fb0cca1e94b0c9861dc62f4453b57710c444569b00f332b854946465fa5448"
+    },
+    {
+      "name": "platform-objects.json",
+      "bytes": 2955011,
+      "sha256": "a78843d60607cb774350066e497139b9129ff396cf1b1f6c632834070ef686e4"
+    },
+    {
+      "name": "gatewayparameters-schema.json",
+      "bytes": 288022,
+      "sha256": "56e109255a2c62c9f56830bf8c43bb7bbbcd729c9afd2889778f4998ab96c5af"
+    }
+  ],
+  "images": {
+    "kgateway": {
+      "reference": "cr.kgateway.dev/kgateway-dev/kgateway:v2.4.5",
+      "digest": "sha256:578fc597afd631e78c4ca22849b18820d6461a6c0a3812680726cfdfd46a14a1",
+      "platform": "linux/amd64"
+    },
+    "envoy-wrapper": {
+      "reference": "cr.kgateway.dev/kgateway-dev/envoy-wrapper:v2.4.5",
+      "digest": "sha256:ff0cf47eaa6fe4bad98598d48502496cafc00d6714f1d48f4160ecd03ca41e7a",
+      "platform": "linux/amd64"
+    }
+  },
+  "controller_admission_observation": {
+    "deployment_uid": "cf494f7f-79e5-4c9e-a294-5052b3a39875",
+    "pod_name": "okf-f2-kgateway-867fd5dcb6-ddp87",
+    "pod_uid": "b65e0036-a572-4fc1-99e4-a64e95b2c4e4",
+    "container_id": "79c9722f85308bd6c11db25520c8169675c32f951c19f8ef2265f1d897926c33",
+    "image_id": "cr.kgateway.dev/kgateway-dev/kgateway@sha256:578fc597afd631e78c4ca22849b18820d6461a6c0a3812680726cfdfd46a14a1",
+    "image": "cr.kgateway.dev/kgateway-dev/kgateway:v2.4.5@sha256:578fc597afd631e78c4ca22849b18820d6461a6c0a3812680726cfdfd46a14a1",
+    "ready": true,
+    "restarts": 0,
+    "uid": 1000,
+    "readonly_root": true,
+    "effective_capabilities": []
+  },
+  "image_pull": {
+    "image_id": "sha256:5aaf09cdfca3c0232d3762059c642c7a0f61bc35b37020bbacb01b51c02e459b",
+    "exact_registry_manifest": "sha256:578fc597afd631e78c4ca22849b18820d6461a6c0a3812680726cfdfd46a14a1",
+    "adopted_without_repull": true,
+    "initial_receipt_failure": "CRI repoDigests canonically omits the tag; successful immutable pull adopted after read-only canonical repo@digest verification"
+  },
+  "install_observation": {
+    "completed_objects": [
+      {
+        "kind": "Namespace",
+        "name": "okf-f2-gateway-system",
+        "namespace": null,
+        "uid": "26e5c2d8-f8b8-4b89-92f4-bbcc71bc6350",
+        "object_sha256": "66f08ec35d329c9a68e024741bd2641ab35d40ca781a772d15b194131411528b"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "backendtlspolicies.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "36b78067-ad29-4069-a26b-f3c947dfc892",
+        "object_sha256": "c5c864594e02451f4debf7d0a7254492eaad0aec430687ff1902957f2e2b8034"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "gatewayclasses.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "9ad66059-2c67-4522-bae0-9ff504416baa",
+        "object_sha256": "f403b760277125e9582c1b446b1c97a0a2817479ab6d471cd89d76885c98f855"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "gateways.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "1faa3ea0-f1bb-4318-beca-2192df446ecc",
+        "object_sha256": "775d3459170a8ce2006d55be58cdbf4e46248138e5fed7262eb56a34df17a6d4"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "grpcroutes.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "9314f88a-0b13-4594-905d-ee206683062a",
+        "object_sha256": "b692730922cd28f05e12586f58ca60901fc23d936e1faafa41fec8d6ab5c99ee"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "httproutes.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "b72ce0d3-a4ef-4f56-8508-e64dae6053b8",
+        "object_sha256": "a8f7f9ebae29c079282dc617173af7bda251fe160732fc35c1dca1d61e73c390"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "listenersets.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "9f06dc87-691c-4835-b73f-8456fa12296c",
+        "object_sha256": "2007b9e755c1ede010763fb55451231ff9cbece5079a2a7d68c58437c4c8ab8c"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "referencegrants.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "8c82183a-fc21-4a04-a0dd-59bba65e7d40",
+        "object_sha256": "6fd7ab171ebf099d87e7c66dbf40251578756f214e2041dd6c859cb5d11ab0be"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "tcproutes.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "fca81aa4-8cf8-4033-917d-88d63826222e",
+        "object_sha256": "8754d7a3a4f2051a3431ee590178f37c497f837e3230f00ff74657b2c8407ec1"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "tlsroutes.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "2e937cb3-e822-4402-8da7-70760c807a62",
+        "object_sha256": "a8acd39e792691c1c7fcdb137d904a0ec66a13ff824f2c9a980620b5caf3a7a5"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "udproutes.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "cddc6d5e-a29a-4499-9bb7-dafb45f6a98f",
+        "object_sha256": "3a239691c87933eff340d3c0fa0f6fb7bde09c8bca823fc13e69a37751e2c23f"
+      },
+      {
+        "kind": "ValidatingAdmissionPolicy",
+        "name": "safe-upgrades.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "095fcb6e-68b3-4e72-8bc1-eee74e4ce3af",
+        "object_sha256": "fe497702cd680bd63aefe2aeaf9fb7c206389aeeb97a894800744f744ed0e259"
+      },
+      {
+        "kind": "ValidatingAdmissionPolicyBinding",
+        "name": "safe-upgrades.gateway.networking.k8s.io",
+        "namespace": null,
+        "uid": "6b604344-bac5-48e7-91fa-edccf19ce957",
+        "object_sha256": "2e38118f02e803e77cca797d0e24de19ff7bf3dda800c8eec8ea496bfe4b4d57"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "backendconfigpolicies.gateway.kgateway.dev",
+        "namespace": null,
+        "uid": "723cd223-8e11-4210-bfbf-39b393c7d0fd",
+        "object_sha256": "56aaeeb637a9d18cdc9e5938d35171ba28703274787ea7e46ddd14ffa2819aab"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "backends.gateway.kgateway.dev",
+        "namespace": null,
+        "uid": "474a1fbb-fc92-4e4a-bb33-d0817a38a1e3",
+        "object_sha256": "ba2694ee0d47d51803e552a02cd1553fc2767314cba921e19e82a423b63089b1"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "directresponses.gateway.kgateway.dev",
+        "namespace": null,
+        "uid": "59c5134b-b32f-4fff-ac4c-1b3b979b21c4",
+        "object_sha256": "a5090a2fb1db54a24d45f9576a9edf6bd78a8728eb8938b516a5ba51b88a9567"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "gatewayextensions.gateway.kgateway.dev",
+        "namespace": null,
+        "uid": "f717aa1c-4faa-4228-b5be-394630ceb06f",
+        "object_sha256": "6e8ce6f5d3286c87e6e01e6942963d633984ec56b85806bed03b224720e19c6c"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "gatewayparameters.gateway.kgateway.dev",
+        "namespace": null,
+        "uid": "36d8265e-8191-47eb-90bd-9f58573ca2da",
+        "object_sha256": "8b8af3364d8abbd551a50e96ead70925100a5959893c2563ef060dd27abd86eb"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "httplistenerpolicies.gateway.kgateway.dev",
+        "namespace": null,
+        "uid": "48dcdcf4-1583-4f71-b857-ee35ce77b7e3",
+        "object_sha256": "bd04f0969c01f5ca636d49d8943c9d8993a3ba8d4f76489245a1d09033a55e39"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "listenerpolicies.gateway.kgateway.dev",
+        "namespace": null,
+        "uid": "d9402e5d-2b0f-49a9-a14a-6b03d9afa18f",
+        "object_sha256": "c206b3539775caefd7c3da0b950bfa8a92597cacc12ce52e2206e678347c95e1"
+      },
+      {
+        "kind": "CustomResourceDefinition",
+        "name": "trafficpolicies.gateway.kgateway.dev",
+        "namespace": null,
+        "uid": "d27bfd8b-d82b-4b9f-a72f-957bb6c1d702",
+        "object_sha256": "511b22d0351f27f9c1cd4ee2d8661ccd59a49d754333384033ab79c3cf38d027"
+      },
+      {
+        "kind": "ServiceAccount",
+        "name": "okf-f2-kgateway",
+        "namespace": "okf-f2-gateway-system",
+        "uid": "ecfc1a68-79eb-4e9f-9ff1-9bd16e431b33",
+        "object_sha256": "982d02425d41a77e8fe3708f63f9b9eba882f25a9053d588bb24f236968ebaa1"
+      },
+      {
+        "kind": "ClusterRole",
+        "name": "kgateway-okf-f2-gateway-system",
+        "namespace": null,
+        "uid": "af9873f2-8388-4110-8a33-98386e6ac3b1",
+        "object_sha256": "7d35a010532cb8b4506bec59a4886e92cb19215964f095bcf61c0b2472111266"
+      },
+      {
+        "kind": "ClusterRoleBinding",
+        "name": "kgateway-role-okf-f2-gateway-system",
+        "namespace": null,
+        "uid": "95df3d0d-40e0-47c4-b9a6-f990f41b35d8",
+        "object_sha256": "c0837ee73e2a0cf501b5a97d88c45b5c22ef04c6bc5d29a7a84c3f03f7655e74"
+      },
+      {
+        "kind": "Service",
+        "name": "okf-f2-kgateway",
+        "namespace": "okf-f2-gateway-system",
+        "uid": "a3837749-17fd-445e-b036-d36227c71a9d",
+        "object_sha256": "d4834abc3113c824456810abf34e2d13f5ebcbe5faee95c2bf73bea3b37fa934"
+      },
+      {
+        "kind": "GatewayClass",
+        "name": "kgateway",
+        "namespace": null,
+        "uid": "29d93b79-d8f1-4c91-9c02-8a5b9867ea5d",
+        "object_sha256": "bfccbbd3882d49ded1eb822be749c6d4e514a9c98e2bb3c2efb40f7ebdc99913"
+      },
+      {
+        "kind": "Deployment",
+        "name": "okf-f2-kgateway",
+        "namespace": "okf-f2-gateway-system",
+        "uid": "cf494f7f-79e5-4c9e-a294-5052b3a39875",
+        "object_sha256": "e75fad7f2a60454fd252b1dcf225c9787461521ddb57282207ad12e1e85de650"
+      }
+    ],
+    "established_crds": [
+      "backendtlspolicies.gateway.networking.k8s.io",
+      "gatewayclasses.gateway.networking.k8s.io",
+      "gateways.gateway.networking.k8s.io",
+      "grpcroutes.gateway.networking.k8s.io",
+      "httproutes.gateway.networking.k8s.io",
+      "listenersets.gateway.networking.k8s.io",
+      "referencegrants.gateway.networking.k8s.io",
+      "tcproutes.gateway.networking.k8s.io",
+      "tlsroutes.gateway.networking.k8s.io",
+      "udproutes.gateway.networking.k8s.io",
+      "backendconfigpolicies.gateway.kgateway.dev",
+      "backends.gateway.kgateway.dev",
+      "directresponses.gateway.kgateway.dev",
+      "gatewayextensions.gateway.kgateway.dev",
+      "gatewayparameters.gateway.kgateway.dev",
+      "httplistenerpolicies.gateway.kgateway.dev",
+      "listenerpolicies.gateway.kgateway.dev",
+      "trafficpolicies.gateway.kgateway.dev"
+    ],
+    "gatewayclass_accepted_while_controller_running": true,
+    "retained_receipt_refusal": "Only startupProbe.initialDelaySeconds=0 was omitted by API json omitempty. Exact default omission verified, same native intent and Deployment UID adopted without another apply.",
+    "observed_intents": [
+      {
+        "observed_intent": {
+          "kind": "Deployment",
+          "name": "okf-f2-kgateway",
+          "namespace": "okf-f2-gateway-system",
+          "object_sha256": "e75fad7f2a60454fd252b1dcf225c9787461521ddb57282207ad12e1e85de650",
+          "started_at": "2026-11-04T22:15:55.910588+00:00"
+        },
+        "uid": "cf494f7f-79e5-4c9e-a294-5052b3a39875"
+      },
+      {
+        "controller_verified": {
+          "deployment_uid": "cf494f7f-79e5-4c9e-a294-5052b3a39875",
+          "pod_name": "okf-f2-kgateway-867fd5dcb6-ddp87",
+          "pod_uid": "b65e0036-a572-4fc1-99e4-a64e95b2c4e4",
+          "container_id": "79c9722f85308bd6c11db25520c8169675c32f951c19f8ef2265f1d897926c33",
+          "image_id": "cr.kgateway.dev/kgateway-dev/kgateway@sha256:578fc597afd631e78c4ca22849b18820d6461a6c0a3812680726cfdfd46a14a1",
+          "image": "cr.kgateway.dev/kgateway-dev/kgateway:v2.4.5@sha256:578fc597afd631e78c4ca22849b18820d6461a6c0a3812680726cfdfd46a14a1",
+          "ready": true,
+          "restarts": 0,
+          "uid": 1000,
+          "readonly_root": true,
+          "effective_capabilities": []
+        }
+      }
+    ]
+  },
+  "closure": {
+    "phase": "controller-stopped",
+    "active": null,
+    "generated_secret_metadata": {
+      "name": "oauth2-hmac-secret",
+      "uid": "d6af1b9b-ff60-46a4-8408-5f671b7619a1",
+      "created": "2026-11-04T22:15:58Z",
+      "manager": "kgateway",
+      "contents_selected": false
+    },
+    "nonterminal_pods": 0,
+    "native_containers": 0,
+    "other_namespace_objects": {
+      "daemonsets": 0,
+      "statefulsets": 0,
+      "jobs": 0,
+      "cronjobs": 0,
+      "gateways": 0,
+      "httproutes": 0,
+      "listenersets": 0,
+      "pvc": 0
+    },
+    "controller_desired": 0,
+    "node_uid": "9020a1d9-843e-4947-8808-53477289b863",
+    "foreign_opensearch_running": true,
+    "crossnode_both_off": true,
+    "old_kube_off": true,
+    "free_disk_bytes": 35281399808
+  },
+  "capacity_loan": {
+    "operation_id": "c0e47b8a292447799bd5bfdde3b020c2",
+    "namespace": "replica-test-r5o2u20261102",
+    "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+    "status": "capacity-recovered-and-source-verified",
+    "restored_replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "runtime_fingerprint": "529fdd8f27a9051d27f42753bbc8660e67a24b391c81a7a3ad9a539c6bdd26a7",
+    "pvc_bindings_unchanged": true,
+    "canonical_tables_unchanged": 9,
+    "data_mutations": 0
+  },
+  "permissions": "The approved official ClusterRole can read Secrets and manage workloads cluster-wide. Discovery uses okf-f2-gateway=true, which is not an RBAC authorization boundary. Controller generated one own-namespace oauth2-hmac-secret; only its metadata is transported here, never its contents.",
+  "limits": [
+    "Controller admission is not a Gateway data-plane, HTTPS, OIDC or CSRF pass.",
+    "The pre-existing model/application/provider bindings and historical evidence remain separate.",
+    "CRDs, safe-upgrade admission policy, RBAC, GatewayClass and namespace are retained. Only new controller is scaled to zero; no automatic CRD removal or rollback.",
+    "The separate OIDC HTTP component is under development and not part of this admitted platform image."
+  ],
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled"
+}

@@ -39,6 +39,20 @@ Simulation исключён из production CSRF guard, поэтому его у
 CSRF/SSO gate. На distributed topology общий `--suite all` не запускает
 combined-backend frontend-split probe.
 
+Gateway prerequisite теперь [фактически установлен и проверен](superpowers/reports/2026-11-05-replica-gateway-platform.json)
+по отдельному допуску пользователя: Gateway API1.6.2/kgateway2.4.5,18 established
+CRD, non-root controller/точный image/Accepted GatewayClass. Controller выключен,
+capacity loan возвращён; CRD/RBAC/admission policy сохранены. Controller создал
+свой namespace OAuth2 HMAC Secret; в отчёте только метаданные. ClusterRole имеет
+широкие права, discovery selector не является RBAC-границей.
+
+Отдельный [OIDC HTTP-компонент](superpowers/reports/2026-11-05-frontend-oidc-http-ci.json)
+прошёл99/99 одинаковых Windows/Linux cases с настоящим loopback TLS и HTTP wire
+double. Он проверяет bounded transitions/state/issuer/client, secure cookies,
+CSRF и logout/unknown-ACK без повтора. Пока компонент не включён в native capsule/
+общий runner и не выполнил реальный Keycloak/Gateway сценарий; pending checks
+`frontend.production_csrf` и `frontend.gateway_sso` сохраняются.
+
 ## Привязка доказательств
 
 Для проверенного учебного managed/S3 варианта сохранены точные topology,

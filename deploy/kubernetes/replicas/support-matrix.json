@@ -63,11 +63,23 @@
           "path": "docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json",
           "sha256": "92ace2fb1b0b728d552a07e5acee9b2d63833fac9a400248356bcd9e44ba3e25",
           "scope": "Fresh common-runner basic simulation/local case on e42007a: all12 native stages passed, bounded one-shot actions, active UID loss without model replay, replacement/session/SHA/search/ZIP/logout/cold check, five handles closed. Fixture off/3PVC retained; all3 capacity loans returned. Full Linux6859=6638pass+221unchanged optional skips; no Gateway/SSO/production CSRF or signed profile qualification."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-05-replica-gateway-platform.json",
+          "sha256": "fad55fbdd09d6065c99b5a00a29492d782c332dfa8b3941d7024d738ad4eab8c",
+          "scope": "Approved prerequisite only:27 explicit objects/18CRDEstablished; pinned kgateway controller non-root1000/read-only/caps0/0restart and Accepted GatewayClass, then controller stopped and loan returned. No actual Gateway data plane or OIDC/CSRF acceptance."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-05-frontend-oidc-http-ci.json",
+          "sha256": "d60d2e6a73776310615ef74a624631dbde0fd0cecf56a511b2d18435eba74966",
+          "scope": "Separate bounded TLS/OIDC wire component:99 identical Windows/Linux cases,0skips/errors/failures,source2477unchanged and CI loan returned. Not yet native/common-runner wired; no real Keycloak/Gateway claim."
         }
       ],
       "selected_simulation_fixture_status": "tested",
       "selected_common_frontend_producer_status": "tested",
-      "evidence_scope": "Selected basic simulation/local recipe only; real CSRF/Gateway/SSO and full profile qualification remain open."
+      "evidence_scope": "Selected basic simulation/local recipe only; real CSRF/Gateway/SSO and full profile qualification remain open.",
+      "selected_gateway_prerequisite_status": "admitted-controller-stopped",
+      "selected_oidc_http_component_status": "tested-not-native-integrated"
     },
     {
       "id": "distributed-managed-rwx",
