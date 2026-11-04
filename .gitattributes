@@ -9,3 +9,6 @@ tests/artifacts/diagnostics/merged-release-20261001/**/*.json -text
 
 # Generated PDF guides contain binary streams and must not be normalized as text.
 *.pdf binary
+
+# Keep this hashed rehearsal receipt byte-identical on Windows and Linux.
+docs/superpowers/reports/2026-11-04-replica-crossnode-vm103.json text eol=lf
