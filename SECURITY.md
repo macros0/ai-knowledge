@@ -3138,9 +3138,9 @@ The first harness Settings overlay failed before SQL tables existed. An early
 query-only raw-DELETE dry-run unexpectedly deleted an idle frontend; it is
 preserved separately and is not the later active-stream result. Subsequent
 DELETE used explicit body UID preconditions. No data/lease/slot edit recovered
-either case. The common frontend runner currently verifies only explicit split
-inventory/namespace/owner/native-image bindings and keeps functional producers
-pending. Simulation intentionally bypasses production CSRF; real CSRF/Gateway/
+either case. At that rehearsal checkpoint, the common frontend runner verified
+explicit split inventory/namespace/owner/native-image bindings while functional
+producers remained pending. Simulation intentionally bypasses production CSRF; real CSRF/Gateway/
 IdP qualification remains open. No authentication or CSRF guard was weakened.
 
 The staged frontend journal now gives each native action a distinct durable
@@ -3150,11 +3150,11 @@ resubmit it. Completion requires the exact execution/stage/intent/code/binding
 tuple from the native adapter. The parent retains a receipt digest, never its
 cookie-bearing body or raw provider exception. Linked/aliased journals, uncertain
 writes, stale concurrent writers and reordered histories are refused. This
-journal foundation is not yet an executable functional frontend producer and
-cannot supply signed qualification or close the pending CSRF/Gateway/IdP gates.
+journal foundation supplied the protocol for the native producer described below.
+It cannot supply signed qualification or close the pending CSRF/Gateway/IdP gates.
 
 Its native HTTP component now uses three distinct loopback routes supplied by
-the future ownership-checking coordinator. It disables proxy discovery and
+the ownership-checking coordinator. It disables proxy discovery and
 redirects, bounds response/NDJSON sizes and checks early delivery before the
 delayed result. Login/upload/export/stream/logout each write an exclusive native
 intent before a request; an accepted upload is separate from terminal proof of
@@ -3163,8 +3163,8 @@ files; receipts contain only fixed observations and content digests. Linked or
 aliased cookie/receipt files are refused. Legacy compact uploads do not claim
 idempotency. Real HTTP fixture tests verify cross-route sessions, original/ZIP
 hashes and server-side logout; they do not prove Kubernetes ownership, active
-frontend loss, real Gateway/IdP or production CSRF. Native coordinator/CLI wiring
-and a new live acceptance run are still required.
+frontend loss, real Gateway/IdP or production CSRF. The native implementation is
+described below; a new live acceptance run is still required.
 
 [Component CI evidence](docs/superpowers/reports/2026-11-04-frontend-runner-protocol-ci.json)
 records 74 Windows checks and 42 focused Linux checks. The first Linux attempt
@@ -3174,3 +3174,43 @@ Both attempts remain retained. The sole temporary six-replica capacity loan was
 returned; original2/2/2/runtime/PVC/nine-table checks and foreign-service checks
 passed. This is component evidence against the stated frozen application base,
 not current full-release CI or another live F2 acceptance result.
+
+### Owned native frontend stages (implementation, 2026-11-04)
+
+The common runner now accepts explicit frontend stage/journal/apply/observe
+flags for the selected basic `owned-simulation-local-v1` recipe. Its default frontend
+probe stays read-only. Native execution binds namespace purpose/run/UID and
+installation labels, Pod/ReplicaSet/Deployment ownership and native image IDs,
+configuration/Secret digests, PVC/PV UIDs and node UIDs. Backend preflight requires
+an empty disposable database, empty corpus directories/vector collection, PostgreSQL/Qdrant Services
+selecting owned StatefulSet Pods, scoped
+non-superuser PostgreSQL over verified TLS, simulation auth, fake embeddings,
+local artifacts and an idle owned model stub. A fixed source capsule reaches
+the Linux coordinator through pinned SSH; runtime DSNs and keys are excluded
+from that transport. The full parent manifest is bound by digest; the native
+payload contains only the required nonsecret fields. Private native files have exclusive intents and terminal
+receipts, a per-execution flock and code/input/capsule bindings.
+
+The coordinator creates three exact-Pod loopback forwards and retains PID,
+start-time, argv and UID identities. Closure uses pidfd signalling without a
+PID-only fallback. The single frontend deletion requires a delivered sources
+frame and one active model call, rechecks both signals and the client process
+identity immediately before DELETE, and puts the victim UID precondition in the
+DeleteOptions body. No query-only dry-run is used. The subsequent stages require
+client EOF without a result, no automatic model repeat, a surviving backend and
+frontend, a ready replacement, unchanged session/original/search/ZIP access and
+server-side logout. Final closure checks native original SHA and SQL/model
+quiescence before and after stopping only the retained owned handles. These
+fault/control probes use read-only SQL. Normal business API writes follow the
+application's own behavior; node settings, clocks and firewall rules stay
+unchanged. Unknown native actions are observed under the same intent.
+
+Current implementation verification: 170 Windows tests passed, with one
+Linux-only pidfd check skipped on Windows. A separate real VM103 kernel check
+refused a wrong process identity and terminated only its own Python helper;
+that helper is gone. A real common-runner SSH/RPC negative admission check
+refused an absent owned namespace with exact capsule/intent bindings and no
+forward/cookie files or application requests. These checks do not replace the
+pending full current-source Linux CI and fresh staged live rehearsal. A completed
+selected simulation keeps real production-CSRF and Gateway/IdP checks pending;
+it does not produce a signed qualification or deployment authorization.

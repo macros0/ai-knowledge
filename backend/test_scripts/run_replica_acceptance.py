@@ -14,11 +14,14 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_scripts.replica_runtime_acceptance import probe_runtime
 from test_scripts.replica_frontend_acceptance import probe_frontend
+from test_scripts.replica_frontend_adapter import execute_frontend
+from test_scripts.replica_frontend_native import STAGES as FRONTEND_STAGES
 from test_scripts.replica_runtime_plan import REQUIRED_CHECKS, STAGES
 
 RUNNER_SHA256 = sha256(b"".join((Path(__file__).parent / name).read_bytes()
     for name in ("run_replica_acceptance.py", "replica_runtime_acceptance.py", "replica_runtime_faults.py",
-                 "replica_frontend_acceptance.py"))).hexdigest()
+                 "replica_frontend_acceptance.py", "replica_frontend_adapter.py", "replica_frontend_native.py",
+                 "replica_frontend_process.py", "replica_frontend_http.py", "replica_frontend_run.py"))).hexdigest()
 
 SUITES = ("contracts", "frontend", "storage", "runtime", "operations", "all")
 
@@ -63,7 +66,8 @@ def execute_owned_runtime(manifest, journal, stage, *, apply=False, resume=False
 
 
 def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known_hosts=None, idle_faults=False, active_faults=False,
-                 owned_stage=None, owned_journal=None, apply_owned=False, resume_owned=False) -> dict:
+                 owned_stage=None, owned_journal=None, apply_owned=False, resume_owned=False,
+                 frontend_stage=None, frontend_journal=None, apply_frontend=False, observe_frontend=False) -> dict:
     """Allowlist output; never include raw inputs or arbitrary exceptions."""
     valid = True
     try:
@@ -75,7 +79,31 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
     # Syntactic validation is not a live namespace/PVC/provider probe.
     checks.extend({"name": name, "status": "pending", "reason": "live_probe_not_implemented"}
                   for name in requested)
-    if (valid and live and "frontend" in requested
+    frontend = None
+    selected_frontend = any((frontend_stage,frontend_journal,apply_frontend,observe_frontend))
+    if selected_frontend and (not live or suite!='frontend' or frontend_stage is None or frontend_journal is None
+            or any((owned_stage,owned_journal,apply_owned,resume_owned,idle_faults,active_faults))
+            or (apply_frontend and observe_frontend)):
+        raise ValueError('Frontend stages require exclusive explicit live frontend mode and a journal')
+    if valid and selected_frontend:
+        checks = [check for check in checks if check['name']!='frontend']
+        try:
+            frontend = execute_frontend(manifest,frontend_journal,frontend_stage,apply=apply_frontend,
+                observe=observe_frontend,ssh_host=ssh_host,known_hosts=known_hosts)
+            rows = frontend['checks'];names = [row.get('name') for row in rows]
+            if (len(names)!=len(FRONTEND_STAGES) or set(names)!={'frontend.'+s for s in FRONTEND_STAGES}
+                    or any(row.get('status') not in {'passed','pending','failed'} for row in rows)
+                    or type(frontend.get('selected_case_passed')) is not bool
+                    or (frontend['selected_case_passed'] and any(row['status']!='passed' for row in rows))):
+                raise ValueError('Full native frontend stage set required')
+            checks.extend({k:v for k,v in row.items() if k in {'name','status','evidence_sha256'}} for row in rows)
+        except Exception:
+            frontend = None
+            checks.append({'name':'frontend.owned_stage','status':'failed','reason':'owned_frontend_refused_or_interrupted'})
+            checks.append({'name':'frontend.current_run','status':'pending','reason':'observe_same_native_intent'})
+        checks.extend({'name':'frontend.'+name,'status':'pending','reason':'real_provider_not_observed'}
+                      for name in ('production_csrf','gateway_sso'))
+    elif (valid and live and "frontend" in requested
             and (suite == "frontend" or manifest.get('deployment_mode') == 'frontend-split')):
         checks = [check for check in checks if check["name"] != "frontend"]
         checks.extend(probe_frontend(manifest, ssh_host=ssh_host, known_hosts=known_hosts))
@@ -120,6 +148,9 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
         "checks": checks, "passed": passed, "failed": sum(c["status"] == "failed" for c in checks),
         "skipped_required": sum(c["status"] == "pending" for c in checks), "durations": {},
         "recovery_point_age_seconds": owned.get("recovery_point_age_seconds") if owned else None,
+        **({'selected_frontend_case_passed':frontend is not None and frontend['selected_case_passed'],
+            **({'owned_frontend_execution_id':frontend['execution_id'],
+                'frontend_recipe_sha256':frontend['runner_sha256']} if frontend else {})} if selected_frontend else {}),
         **({"owned_runtime_execution_id": owned["execution_id"], "owned_runtime_recipe_sha256": owned.get("runner_sha256"),
             "durations": owned["durations"]} if owned else {}),
     }
@@ -161,6 +192,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runtime-journal", type=Path)
     parser.add_argument("--apply-owned-runtime", action="store_true", help="Explicitly authorize this owned mutating stage")
     parser.add_argument("--resume-owned-stage", action="store_true", help="Resume only a recognized existing child phase")
+    parser.add_argument('--frontend-stage',choices=FRONTEND_STAGES,help='One owned simulation stage; production qualification stays pending')
+    parser.add_argument('--frontend-journal',type=Path)
+    parser.add_argument('--apply-frontend',action='store_true',help='Explicitly apply this new native frontend stage')
+    parser.add_argument('--observe-frontend',action='store_true',help='Only observe an existing frontend intent; never resubmit it')
     parser.add_argument('--qualification-bundle', type=Path, help='Offline signed harness receipt bundle')
     parser.add_argument('--qualification-binding', type=Path, help='Independently selected expected public binding')
     parser.add_argument('--qualification-trust', type=Path, help='Independently selected trusted public issuers')
@@ -172,7 +207,8 @@ def main(argv: list[str] | None = None) -> int:
         offline = any(value is not None for value in qualification_inputs)
         if offline and (not all(value is not None for value in qualification_inputs) or args.suite != 'all'
                 or any((args.live,args.ssh_host,args.known_hosts,args.idle_faults,args.active_faults,
-                    args.owned_runtime_stage,args.runtime_journal,args.apply_owned_runtime,args.resume_owned_stage))):
+                    args.owned_runtime_stage,args.runtime_journal,args.apply_owned_runtime,args.resume_owned_stage,
+                    args.frontend_stage,args.frontend_journal,args.apply_frontend,args.observe_frontend))):
             raise ValueError('Complete offline-only qualification inputs required')
         if offline:
             from test_scripts.replica_evidence import read_public_json
@@ -187,6 +223,12 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("Object required")
         if (args.idle_faults or args.active_faults) and not args.live:
             raise ValueError("Fault probes require explicit live execution")
+        if any((args.frontend_stage,args.frontend_journal,args.apply_frontend,args.observe_frontend)):
+            if (not args.live or args.suite!='frontend' or args.frontend_stage is None or args.frontend_journal is None
+                    or any((args.owned_runtime_stage,args.runtime_journal,args.apply_owned_runtime,args.resume_owned_stage,
+                            args.idle_faults,args.active_faults)) or (args.apply_frontend and args.observe_frontend)
+                    or args.manifest.absolute()==args.frontend_journal.absolute()):
+                raise ValueError('Exclusive live frontend stage and separate protected journal required')
         if offline:
             report = build_qualification_report(value,bundle_path=args.qualification_bundle,
                 binding_path=args.qualification_binding,trust_path=args.qualification_trust,evidence_root=args.qualification_root)
@@ -194,7 +236,9 @@ def main(argv: list[str] | None = None) -> int:
             report = build_report(value, args.suite, live=args.live, ssh_host=args.ssh_host,
                 known_hosts=args.known_hosts, idle_faults=args.idle_faults, active_faults=args.active_faults,
                 owned_stage=args.owned_runtime_stage, owned_journal=args.runtime_journal,
-                apply_owned=args.apply_owned_runtime, resume_owned=args.resume_owned_stage)
+                apply_owned=args.apply_owned_runtime, resume_owned=args.resume_owned_stage,
+                frontend_stage=args.frontend_stage,frontend_journal=args.frontend_journal,
+                apply_frontend=args.apply_frontend,observe_frontend=args.observe_frontend)
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         report = {"suite": args.suite, "passed": False, "failed": 1,
                   "checks": [{"name": "manifest", "status": "failed"}], "skipped_required": 1}
