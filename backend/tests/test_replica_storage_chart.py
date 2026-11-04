@@ -87,3 +87,19 @@ def test_runtime_resolves_external_tls():
     settings.db_url = "postgresql+psycopg://app:CANARY@customer-db:5432/knowledge?sslmode=require"
     with pytest.raises(ValueError, match="TLS"):
         validate_replica_endpoints(settings)
+
+@pytest.mark.parametrize("tls", [False, True])
+def test_managed_postgres_bounds_dead_client_detection_without_timing_out_transactions(tls):
+    extra = ["postgres.tlsSecret=test-tls"] if tls else []
+    documents = storage(*managed("postgres"), *extra)
+    pg = next(v for v in documents if v["kind"] == "StatefulSet")
+    args = pg["spec"]["template"]["spec"]["containers"][0].get("args", [])
+    assert len(args) % 2 == 0 and all(args[i] == "-c" for i in range(0, len(args), 2))
+    settings = dict(v.split("=", 1) for v in args[1::2])
+    assert {key: settings.get(key) for key in (
+        "tcp_keepalives_idle", "tcp_keepalives_interval", "tcp_keepalives_count", "tcp_user_timeout"
+    )} == dict(tcp_keepalives_idle="30", tcp_keepalives_interval="10",
+               tcp_keepalives_count="3", tcp_user_timeout="60000")
+    assert not {"statement_timeout", "idle_in_transaction_session_timeout"} & settings.keys()
+    if tls:
+        assert settings["ssl"] == "on" and settings["ssl_key_file"] == "/run/tls/tls.key"

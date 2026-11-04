@@ -42,8 +42,24 @@ spec:
             - {name: grpc, containerPort: 6334}
           {{- end }}
           {{- if eq $name "postgres" }}
+          # Detect vanished TCP clients so their transactions cannot retain
+          # work locks indefinitely after a worker node disappears.
+          args:
+            - -c
+            - tcp_keepalives_idle=30
+            - -c
+            - tcp_keepalives_interval=10
+            - -c
+            - tcp_keepalives_count=3
+            - -c
+            - tcp_user_timeout=60000
           {{- if $component.tlsSecret }}
-          args: [-c, ssl=on, -c, ssl_cert_file=/run/tls/tls.crt, -c, ssl_key_file=/run/tls/tls.key]
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/run/tls/tls.crt
+            - -c
+            - ssl_key_file=/run/tls/tls.key
           {{- end }}
           env:
             - {name: PGDATA, value: /data/pgdata}

@@ -779,3 +779,24 @@ tables, PG catalog, Qdrant data and eight S3 hashes were rechecked. This closes
 the selected150s application/worker outage case. Cross-node, independent physical
 domains, longer interruptions and customer profile qualification remain open;
 this observed interval is not an RTO SLA. Production schedule remains off.
+
+## Worker-node loss: DNS and dead PostgreSQL clients
+
+Worker lease expiry cannot release SQL row locks held by a server backend whose
+TCP client disappeared. The managed PostgreSQL chart therefore sets server-side
+`tcp_keepalives_idle=30`, `tcp_keepalives_interval=10`, `tcp_keepalives_count=3`
+and `tcp_user_timeout=60000` (milliseconds). These settings detect dead TCP
+peers; they do not impose a statement or idle-transaction execution deadline.
+They are Linux PostgreSQL recipe settings, not an application RTO guarantee.
+Existing installations need a planned storage workload rollout to receive the
+new command-line settings. External PostgreSQL owners must provide equivalent
+bounded dead-client detection and verify the actual session values and failure
+behavior. See [PostgreSQL TCP settings](https://www.postgresql.org/docs/17/runtime-config-connection.html#RUNTIME-CONFIG-CONNECTION-TCP).
+
+A node-loss rehearsal must also verify that DNS replicas run in different
+eligible node domains before the fault. Two DNS replicas scheduled together do
+not preserve name resolution when that node is lost. Check actual placement,
+service resolution from the surviving worker and the exact provider/claim
+identities. A recovered node or an operator-terminated dead database backend
+does not establish automatic worker takeover. Preserve unsuccessful trials and
+repeat with a new document/work ID after the dependency changes.
