@@ -4,9 +4,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import importlib
 import importlib.util
 import json
+from io import BytesIO
 import ssl
 from threading import Thread
 from urllib.parse import parse_qs, urlencode, urlsplit
+from zipfile import ZipFile
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -42,7 +44,8 @@ def certificate(directory, hosts):
 @pytest.fixture
 def gateway(tmp_path):
     cert, private = certificate(tmp_path, [urlsplit(APP).hostname, urlsplit(IDP).hostname])
-    state = dict(mode='normal', session=False, idp=False, calls=[], credential_posts=0, callbacks=0, logout_posts=0)
+    state = dict(mode='normal', session=False, idp=False, calls=[], credential_posts=0, callbacks=0, logout_posts=0,
+        business_calls=[], raw=None, stream_posts=0)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
@@ -59,7 +62,39 @@ def gateway(tmp_path):
             cookie = self.headers.get('Cookie', '')
             signed_in = state['session'] and 'session=private-session' in cookie
             app = host == urlsplit(APP).hostname
-            if app and path == '/api/auth/me':
+            business = path.startswith(('/api/documents/', '/api/jobs/')) or path in ['/api/documents','/api/search','/api/chat/stream']
+            if app and business:
+                state['business_calls'].append(dict(path=path,slot=self.headers.get('X-Okf-Probe-Slot'),
+                    csrf=self.headers.get('X-CSRF-Token'),signed_in=signed_in))
+            if app and business and not signed_in:status=401
+            elif app and business and self.command=='POST' and self.headers.get('X-CSRF-Token')!='private-csrf':
+                status=403;value={'code':'csrf_failed'}
+            elif app and path == '/api/documents' and self.command=='POST':
+                state['raw']=body.split(b'\r\n\r\n',1)[1].rsplit(b'\r\n--',1)[0];value={'id':'a'*16}
+            elif app and path == '/api/documents/bulk-export':value={'id':7}
+            elif app and path == '/api/documents/'+'a'*16:value={'id':'a'*16,'status':'done','problem':None}
+            elif app and path == '/api/documents/'+'a'*16+'/download':value=state['raw']
+            elif app and path == '/api/search':value={'hits':[{'doc_id':'a'*16}]}
+            elif app and path == '/api/jobs/7':value={'status':'completed','result':{'parts':[{'number':1}]}}
+            elif app and path == '/api/jobs/7/export/1':
+                out=BytesIO()
+                with ZipFile(out,'w') as archive:archive.writestr('fixture.docx',state['raw'])
+                value=out.getvalue()
+            elif app and path == '/api/chat/stream':
+                import time
+                state['stream_posts']+=1
+                self.send_response(200)
+                self.send_header('Content-Type','application/x-ndjson');self.send_header('Cache-Control','no-store')
+                self.send_header('X-Accel-Buffering','no');self.end_headers()
+                if state['mode']=='buffered':time.sleep(2.1)
+                self.wfile.write(b'{"type":"sources"}\n');self.wfile.flush()
+                if state['mode']=='interrupted':self.close_connection=True;return
+                if state['mode'] in ['malformed-stream','unknown-event']:
+                    self.wfile.write(b'not-json\n' if state['mode']=='malformed-stream' else b'{"type":"foreign"}\n')
+                    self.wfile.flush();return
+                if state['mode']!='buffered':time.sleep(2.1)
+                self.wfile.write(b'{"type":"delta"}\n{"type":"result"}\n');self.wfile.flush();return
+            elif app and path == '/api/auth/me':
                 value = {'mode': 'sso', 'user': {'username': 'lab-admin' if signed_in else 'anonymous',
                     'roles': ['admin'] if signed_in else []}}
                 if state['mode']=='simulation':value['mode']='simulation'
@@ -110,7 +145,7 @@ def gateway(tmp_path):
                 state['idp']=False;status=302;headers.append(('Location',APP+'/'))
             elif app and path == '/':value='<html>owned frontend</html>'
             else:status=404
-            raw=value.encode() if isinstance(value,str) else json.dumps(value).encode()
+            raw=value if isinstance(value,bytes) else value.encode() if isinstance(value,str) else json.dumps(value).encode()
             self.send_response(status)
             for key,value in headers:self.send_header(key,value)
             self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)

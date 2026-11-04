@@ -7,6 +7,7 @@ handler. Real provider/Gateway acceptance is separate from component tests.
 from __future__ import annotations
 
 from copy import copy
+from contextlib import contextmanager
 from hashlib import sha256
 from html.parser import HTMLParser
 import http.client
@@ -14,6 +15,7 @@ from http.cookiejar import Cookie, CookieJar
 import json
 import re
 import ssl
+import time
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 from urllib.request import Request
@@ -21,6 +23,34 @@ from urllib.request import Request
 from .replica_frontend_http import PrivateFiles
 
 MAX_BYTES = 1024 * 1024
+
+
+class OwnedHTTPSUnavailable(ValueError):
+    """A connection/read failure, distinct from a malformed application stream."""
+
+
+class _BoundedResponse:
+    def __init__(self, response):
+        self._response, self._size, self._started = response, 0, time.monotonic()
+        self.status, self.headers = response.status, response.headers
+
+    def _read(self, method, size):
+        if time.monotonic() - self._started > 45: raise ValueError('Owned HTTPS body deadline exceeded')
+        remaining = MAX_BYTES - self._size
+        if remaining < 0: raise ValueError('Owned HTTPS response too large')
+        amount = remaining + 1 if size is None or size < 0 else min(size, remaining + 1)
+        try: data = getattr(self._response, method)(amount)
+        except ssl.SSLCertVerificationError: raise
+        except (OSError, http.client.HTTPException):
+            raise OwnedHTTPSUnavailable('Owned HTTPS body unavailable; observe intent') from None
+        self._size += len(data)
+        if self._size > MAX_BYTES: raise ValueError('Owned HTTPS response too large')
+        if time.monotonic() - self._started > 45: raise ValueError('Owned HTTPS body deadline exceeded')
+        return data
+
+    def read(self, size=-1): return self._read('read', size)
+
+    def readline(self, size=-1): return self._read('readline', size)
 
 
 class _PinnedHTTPS(http.client.HTTPSConnection):
@@ -105,7 +135,9 @@ class OIDCProbe:
             raise ValueError('Ambiguous OIDC parameters')
         return {k: v[0] for k, v in values.items()}
 
-    def _request(self, method, url, body=None, headers=None, jar=None, context=None):
+    @contextmanager
+    def open_response(self, method, url, body=None, headers=None, jar=None, context=None):
+        """Yield the verified response before consuming its body; never follow redirects."""
         parsed = urlsplit(url)
         if (parsed.scheme != 'https' or parsed.netloc not in {urlsplit(self.origin).netloc, urlsplit(self.identity).netloc}
                 or parsed.fragment or parsed.username or parsed.password):
@@ -115,18 +147,23 @@ class OIDCProbe:
         jar.add_cookie_header(request)
         connection = _PinnedHTTPS(self.port, parsed.hostname, self.context if context is None else context)
         try:
-            connection.request(method, parsed.path + ('?' + parsed.query if parsed.query else ''), body=body,
-                headers={**dict(request.header_items()), 'Host': parsed.netloc, 'Connection': 'close'})
-            response = connection.getresponse()
+            try:
+                connection.request(method, parsed.path + ('?' + parsed.query if parsed.query else ''), body=body,
+                    headers={**dict(request.header_items()), 'Host': parsed.netloc, 'Connection': 'close'})
+                response = connection.getresponse()
+                jar.extract_cookies(SimpleNamespace(info=lambda: response.headers), request)
+            except ssl.SSLCertVerificationError: raise
+            except (OSError, http.client.HTTPException):
+                raise OwnedHTTPSUnavailable('Owned HTTPS transport unavailable; observe intent') from None
+            # Consumer/receipt I/O errors must not be relabelled as network loss.
+            yield _BoundedResponse(response)
+        finally: connection.close()
+
+    def _request(self, method, url, body=None, headers=None, jar=None, context=None):
+        with self.open_response(method, url, body=body, headers=headers, jar=jar, context=context) as response:
             raw = response.read(MAX_BYTES + 1)
             if len(raw) > MAX_BYTES: raise ValueError('Owned HTTPS response too large')
-            jar.extract_cookies(SimpleNamespace(info=lambda: response.headers), request)
             return response.status, raw, response.headers.get('Location')
-        except ssl.SSLCertVerificationError:
-            raise
-        except (OSError, http.client.HTTPException):
-            raise ValueError('Owned HTTPS transport unavailable; observe intent') from None
-        finally: connection.close()
 
     def reject_unknown_issuer(self):
         # No ambient/default roots. This control cannot inherit the fixture CA.

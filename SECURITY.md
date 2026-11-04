@@ -3246,6 +3246,20 @@ authenticated session, and valid-token logout revoking the old application and
 IdP sessions. Loopback TLS wire tests are component evidence only; they do not
 claim real Keycloak/Gateway acceptance or issue trust/certification.
 
+The TLS business transport reuses the existing document/publication/search/SHA/
+ZIP algorithms through two fixed Gateway slot headers and the ordinary Service
+route. It does not use plaintext frontend Pod forwards. Cookie, Host, CSRF,
+Authorization and slot overrides from callers are refused. The native caller
+must still prove the actual helper-route EndpointSlice/Pod UID membership before
+using it. Streaming shares the verified TLS connection and private OIDC cookies;
+the response wrapper enforces a cumulative1MiB/45s body bound even when a caller
+omits its own read limit. Only connection/header/body I/O errors become typed
+transport failures. Malformed/application events and receipt/progress callback
+failures cannot be reported as only a frontend connection loss. Loss-stream
+submission has its own exclusive intent and no automatic model request retry.
+These additions remain transport/component evidence until native integration
+and the fresh Gateway/Keycloak case are complete.
+
 The separately approved [Gateway prerequisite](docs/superpowers/reports/2026-11-05-replica-gateway-platform.json)
 installed only the pinned training Gateway API/kgateway package. Its official
 ClusterRole can read Secrets and manage workloads cluster-wide. The discovery
