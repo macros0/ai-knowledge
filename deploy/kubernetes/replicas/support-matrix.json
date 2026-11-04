@@ -13,7 +13,7 @@
   "profiles": [
     {
       "id": "compact-local",
-      "status": "planned",
+      "status": "tested",
       "artifact_backend": "local",
       "topology": "combined",
       "providers": {
@@ -22,16 +22,24 @@
         "artifacts": "local"
       },
       "remaining_gates": [
-        "compact-legacy-and-null-generation-adoption",
-        "independent-backup-restore",
-        "final-version-ci"
+        "current-compact-runtime-functional-and-fault-acceptance",
+        "gateway-sso-production-csrf-acceptance",
+        "trusted-current-profile-release-evidence"
       ],
       "certification": null,
-      "qualification_complete": false
+      "qualification_complete": false,
+      "evidence": [
+        {
+          "path": "docs/superpowers/reports/2026-11-03-replica-compact-independent-restore.json",
+          "sha256": "8d2db25f0fc8888b6f7bf6e324056cd40d26c61b3f07994ebede70a17ef7c1f8",
+          "scope": "Synthetic legacy compact rpl04 source-off recovery, official rpl05 upgrade, S4 exit23/resume and held handoff into distributed local target. Historical b5a9775 functional runtime; later source CI is separate. Original source/PVCs and independent PC archive retained; target off held3; older topology restored."
+        }
+      ],
+      "evidence_scope": "Selected synthetic training recipes only; historical runtime/source bindings remain as recorded. Tested is not full current profile qualification."
     },
     {
       "id": "frontend-split",
-      "status": "planned",
+      "status": "tested",
       "artifact_backend": "local-or-shared",
       "topology": "two-frontend-one-combined-backend",
       "providers": {
@@ -58,11 +66,12 @@
         }
       ],
       "selected_simulation_fixture_status": "tested",
-      "selected_common_frontend_producer_status": "tested"
+      "selected_common_frontend_producer_status": "tested",
+      "evidence_scope": "Selected basic simulation/local recipe only; real CSRF/Gateway/SSO and full profile qualification remain open."
     },
     {
       "id": "distributed-managed-rwx",
-      "status": "planned",
+      "status": "tested",
       "artifact_backend": "rwx",
       "topology": "distributed",
       "providers": {
@@ -71,13 +80,31 @@
         "artifacts": "platform-rwx"
       },
       "remaining_gates": [
-        "select-and-qualify-real-rwx-csi-recipe",
-        "real-rwx-end-to-end-runtime",
-        "independent-restore",
-        "final-version-ci"
+        "nfs41-large-write-and-prolonged-outage-qualification",
+        "selected-rwx-csi-cross-node-fault-qualification",
+        "gateway-sso-production-csrf-acceptance",
+        "trusted-current-profile-release-evidence"
       ],
       "certification": null,
-      "qualification_complete": false
+      "qualification_complete": false,
+      "evidence": [
+        {
+          "path": "docs/superpowers/reports/2026-11-03-replica-rwx-application.json",
+          "sha256": "aafdb822d327fbfdc2958d78b4d40f4076c3ed043614cd7d305030c70561be7a",
+          "scope": "Selected NFS4.1/CSI4.13.6 one-VM application, bounded ENOSPC and normal server restart. Large buffered write failure retained; no physical HA."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-03-replica-rwx-source-s3-restore.json",
+          "sha256": "99e12b7d40efe038a24210321247ea3d48158caa5457cda23e9046ca839f1327",
+          "scope": "Independent RWX-source encrypted PC copy restored into fresh S3 target with source stopped; selected cross-provider recipe."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-03-replica-rwx-target-restore.json",
+          "sha256": "b8b00ac0b26914fe3a44a2300a8b34afe09dc87bf2f106dc1e5bac489b02dc1a",
+          "scope": "Independent source-off recovery into fresh NFS4.1/CSI4.13.6 target, exact data, controlled exit23/resume, held adoption/release and functional acceptance; source claim unmounted, target off, claims retained."
+        }
+      ],
+      "evidence_scope": "Selected synthetic training recipes only; historical runtime/source bindings remain as recorded. Tested is not full current profile qualification."
     },
     {
       "id": "distributed-managed-s3",
@@ -165,20 +192,30 @@
           "path": "docs/superpowers/reports/2026-11-02-replica-local-backup-alerts.json",
           "sha256": "0ab93d6948a863dcae1e06586f2b2bc10abcfd4912485c0dd28bea795204d1f8",
           "scope": "actual local delivery of clock/candidate-copy drill alerts and recovery; no production monitoring"
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-04-replica-s3-application-full.json",
+          "sha256": "2d844b333f5fd4c4bc46f8fc410f070b9331531a1b2933d4c6eb2347fb9b74df",
+          "scope": "Actual current65d6ee2 application ENOSPC: rejected upload503, active old generation retained, same work completed attempt3/fence3 after own128Mi tmpfs release; fixture closed, capacity restored."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json",
+          "sha256": "92ace2fb1b0b728d552a07e5acee9b2d63833fac9a400248356bcd9e44ba3e25",
+          "scope": "Full immutable e42007a Linux backend CI:6859 cases/6638 pass/221 unchanged optional skips/87.70% coverage. Runtime application65d6ee2 unchanged; frontend case is separately basic combined, not distributed profile qualification."
         }
       ],
       "remaining_gates": [
-        "application-publication-storage-full",
-        "full-current-runtime-fault-qualification",
-        "final-version-full-backend-ci",
-        "fresh-whole-branch-review"
+        "current-selected-postgres-qdrant-model-fault-matrix",
+        "gateway-sso-production-csrf-acceptance",
+        "trusted-current-profile-release-evidence"
       ],
       "certification": null,
-      "qualification_complete": false
+      "qualification_complete": false,
+      "evidence_scope": "Selected synthetic training recipes only; historical runtime/source bindings remain as recorded. Tested is not full current profile qualification."
     },
     {
       "id": "distributed-all-external",
-      "status": "planned",
+      "status": "tested",
       "artifact_backend": "s3-or-rwx",
       "topology": "distributed",
       "providers": {
@@ -188,9 +225,9 @@
       },
       "remaining_gates": [
         "customer-specific-three-external-component-ownership-and-provider-fault-qualification",
-        "other-external-rwx-selected-recipes",
-        "real-model-gateway-idp-and-trusted-evidence-producers",
-        "complete-current-release-profile-evidence"
+        "other-selected-external-rwx-recipes",
+        "real-model-gateway-idp-acceptance",
+        "trusted-current-profile-release-evidence"
       ],
       "certification": null,
       "qualification_complete": false,
@@ -201,11 +238,12 @@
           "scope": "Selected all-external S3 contract: real2/2/2 with three TLS/scoped providers outside app namespace; encrypted PC backup and source-physically-off restore into disjoint managed target;81tables28seq/2vectors6blobs, held adoption/session revoke/release/old-new HTTP/4processes12coldSHA; both loans returned. Owned fixture/one VM/stub/simulated auth, not customer/profile/physical certification."
         }
       ],
-      "selected_s3_fixture_status": "tested"
+      "selected_s3_fixture_status": "tested",
+      "evidence_scope": "Selected synthetic training recipes only; historical runtime/source bindings remain as recorded. Tested is not full current profile qualification."
     },
     {
       "id": "distributed-mixed",
-      "status": "planned",
+      "status": "tested",
       "artifact_backend": "s3-or-rwx",
       "topology": "distributed",
       "providers": {
@@ -214,9 +252,11 @@
         "artifacts": "per-component-choice"
       },
       "remaining_gates": [
-        "real-mixed-per-component-ownership-end-to-end",
-        "mixed-independent-restore",
-        "final-version-ci"
+        "nas-target-relocation-with-explicit-nfs40-recipe",
+        "nas-power-loss-and-longer-uncertain-provider-outage",
+        "other-selected-component-ownership-recipes",
+        "real-model-gateway-idp-acceptance",
+        "trusted-current-profile-release-evidence"
       ],
       "certification": null,
       "qualification_complete": false,
@@ -230,8 +270,24 @@
           "path": "docs/superpowers/reports/2026-11-04-replica-s3-application-full.json",
           "sha256": "2d844b333f5fd4c4bc46f8fc410f070b9331531a1b2933d4c6eb2347fb9b74df",
           "scope": "Managed PG17/Qdrant plus external ephemeral RustFS1.0.4: actual bounded128Mi tmpfs ENOSPC during accepted regeneration, HTTP503 refusal/old publication preserved,75s independent cleanup and same-work attempt3/fence3 success;16cold SHA/four processes/2docs5business effects; all closed/capacity returned. One VM/stub/simulated auth; no quota/durability/profile certification."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-04-replica-synology-mixed-runtime.json",
+          "sha256": "0c0b74425c8384080276902e19d7b3c26fc7094226db12f489439973535b4500",
+          "scope": "Selected managed PG17/Qdrant plus external DS211 DSM6.2.4 Update8 NFS4.0/CSI4.13.6: actual2/2/2 and user quota EDQUOT507/recovery; synchronous export reported, NAS power loss unqualified."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-04-replica-synology-source-s3-restore.json",
+          "sha256": "474f90e046e1fa39779732649dbf66d113985be674756c773b48d1d0820ffda9",
+          "scope": "Independent NAS-source PC archive recovery into fresh S3 target with source stopped and target denied source access. Data/adoption/release/functional/cold SHA passed; targets closed and capacity returned."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-04-replica-synology-application-outage.json",
+          "sha256": "b78a478a23ea148fcc18d21e56540de54feb6f02706b9e5639986afe19ead280",
+          "scope": "Selected150s NAS network interruption during active publication recovered naturally with same work/attempt1; old session/search/download/export retained, own nft/handles removed, fixtures off and loans returned."
         }
-      ]
+      ],
+      "evidence_scope": "Selected synthetic training recipes only; historical runtime/source bindings remain as recorded. Tested is not full current profile qualification."
     },
     {
       "id": "distributed-resilient",
@@ -254,5 +310,30 @@
       "qualification_complete": false
     }
   ],
-  "production_backup_schedule": "disabled"
+  "production_backup_schedule": "disabled",
+  "evidence_inventory_review": {
+    "date": "2026-11-05",
+    "method": "Resolve stale inventory gates using exact immutable report paths/hashes, without changing reports, rebinding historical evidence or issuing certificates.",
+    "current_backend_ci": {
+      "revision": "e42007a734f60663fa4fbf7d295b330ea0d9104d",
+      "report": "docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json",
+      "tests": 6859,
+      "passed": 6638,
+      "optional_skips": 221,
+      "failures": 0,
+      "errors": 0,
+      "coverage_percent": 87.70342758432585
+    },
+    "unresolved_lab_scenarios": [
+      "Current selected PostgreSQL/Qdrant/model interruption matrix",
+      "Real CSRF and owned Gateway/SSO producer",
+      "NFS4.0 NAS target relocation requires an explicit recipe; the existing NFS4.1 target recipe must not silently admit it"
+    ],
+    "environment_inputs": [
+      "Customer provider releases/credentials and Gateway/IdP endpoints when available",
+      "Independent Linux workers/storage failure domains for physical resilient acceptance",
+      "Independent trusted qualification issuer; no self-minted trust from historical reports"
+    ],
+    "production_schedule": "disabled-by-user; no production stand"
+  }
 }

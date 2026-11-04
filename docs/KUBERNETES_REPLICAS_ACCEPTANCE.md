@@ -142,7 +142,7 @@ backup error/age alerts: [key recovery](superpowers/reports/2026-11-02-replica-b
 Production key custody/monitoring этим не квалифицируются.
 
 Выбранные RWX и mixed NAS application/full-storage/retry проверки завершены;
-NAS-source→S3 recovery и текущий96931d1 backend CI подтверждены в
+NAS-source→S3 recovery и полный e42007a backend CI подтверждены в
 [сводной матрице](REPLICA_ACCEPTANCE_MATRIX.md). Это отдельные результаты,
 а не один полный прогон всех профилей. Открыты остальные external provider и
 NAS-target relocation recipes, длительные outages, подключение реальных моделей,
@@ -150,6 +150,21 @@ IdP/Gateway и доверенных evidence producers. Для resilient доп�
 независимые физические домены, выбранные storage recipes и реальные испытания
 потери узла/хранилища. Production backup schedule остаётся выключенным по
 решению пользователя; его включение не является автоматическим итогом CI.
+
+Сверка inventory от05.11 закрывает устаревшие записи о непроведённых compact
+adoption/independent restore, RWX application/target restore, mixed runtime/
+independent restore, S3 application full и full backend CI. Каждая запись матрицы
+ссылается на неизменный отчёт с SHA; исторический runtime binding сохраняется.
+`tested` у шести вариантов означает ограниченную учебную проверку, а не
+qualification всей текущей версии. Resilient остаётся planned.
+
+Доступная дальнейшая работа на учебном стенде: объединить текущие PostgreSQL/
+Qdrant/model interruption checks; подготовить отдельный реальный CSRF/Gateway/SSO
+producer; добавить явно выбранный NFSv4.0 NAS-target relocation recipe. Нынешний
+строгий NFSv4.1 target recipe не допускает DS211 автоматически. Для окончательной
+приёмки нужны независимо выбранный доверенный issuer и, когда появятся,
+customer provider/Gateway/IdP inputs. Физический resilient gate требует отдельных
+worker/storage failure domains и не может быть закрыт двумя kind nodes одной VM.
 
 Порядок восстановления и ограничения:
 [recovery runbook](KUBERNETES_REPLICAS_RECOVERY.md),

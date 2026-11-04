@@ -57,19 +57,29 @@ partition/возврат устаревшего процесса и нагруз
 
 - **O1:** RWX independent restore, Synology256MiB write/read,150с application outage
   и логический перенос между двумя узлами VM103 уже проверены;
-  bounded S3 application full-storage case также закрыт; остаются остальные
-  external/mixed profiles и другие component-specific full-storage cases
-  и квалификация физической инфраструктуры/failure domains.
+  bounded S3 application full-storage и selected all-external S3 runtime/recovery
+  также закрыты. Остаются текущая PostgreSQL/Qdrant/model interruption matrix,
+  квалификация конкретных customer providers, длительных/неопределённых отказов
+  и физической инфраструктуры/failure domains.
   [Двухузловой результат](../reports/2026-11-04-replica-crossnode-vm103.json) сохраняет
   первый неуспешный автоподхват и отдельный успешный повтор после исправлений DNS/PG.
-- **O2:** оставшиеся adoption/update recipes; compact/NULL-generation source-off рецепт проверен,
-  и остальные profile-specific backup/restore recipes. Восстановление ключа из
+- **O2:** compact/NULL-generation, managed-S3, selected RWX target и NAS/all-external
+  source→S3 independent recovery проверены. Остаётся явно выбранный NAS-target
+  NFSv4.0 relocation recipe, остальные выбранные customer adoption/update recipes.
+  Восстановление ключа из
   отдельного защищённого каталога и доставка alerts локальному приёмнику на ПК
   проверены на учебной копии. Production-расписание выключено; production
   monitoring и независимый физический key escrow не квалифицированы.
 - **O3:** объединённая fault/profile matrix, квалификация текущего runtime/провайдеров,
-  итоговые runbooks и доверенные producers. Единственное свежее ревью всей ветки,
+  реальный CSRF/Gateway/SSO producer и доверенный release issuer. Default frontend
+  probe read-only; выбранный native producer закрыт новым 12-stage case. Единственное ревью всей ветки,
   единый проход пяти исправлений и полный ccfcf9e CI уже завершены.
+
+05.11 inventory audit: [семь вариантов](../../../deploy/kubernetes/replicas/support-matrix.json)
+сверены с неизменными SHA-отчётами. Шесть имеют ограниченные учебные доказательства
+(`tested`), resilient остаётся planned. Устаревшие gates о непроверенных compact/
+RWX/mixed restore, S3 application-full и полном backend CI заменены конкретными
+незакрытыми проверками. Это инвентарь разных bindings, не общий сертификат.
 
 O3 частичная проверка текущих источников:557/557 doc-parser tests,0 skips и новая
 standalone frontend production build с19 routes и проверенными health rewrite/
