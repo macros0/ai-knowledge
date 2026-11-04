@@ -40,12 +40,20 @@
         "artifacts": "selected-per-installation"
       },
       "remaining_gates": [
-        "gateway-sso-sse-acceptance",
-        "frontend-loss-functional-recovery",
-        "final-version-ci"
+        "gateway-sso-production-csrf-acceptance",
+        "common-frontend-functional-producer-integration",
+        "current-full-release-evidence"
       ],
       "certification": null,
-      "qualification_complete": false
+      "qualification_complete": false,
+      "evidence": [
+        {
+          "path": "docs/superpowers/reports/2026-11-04-replica-frontend-split.json",
+          "sha256": "f565d565f25e6fc08f88883a7293c2628ead3cc5cbba7aadb29d20314480b099",
+          "scope": "Selected2frontend/1combined backend: split-only CNI boundaries, six actual storage/model denials with backend controls; shared session/upload/search/download/ZIP/NDJSON, active UID-precondition frontend loss after first frame/model-active, survivor+replacement and no automatic model retry; logout401 all3. Fixture off/3PVC retained/both loans restored. Simulation, one VM, no customer Gateway/CSRF/IdP or full profile certificate."
+        }
+      ],
+      "selected_simulation_fixture_status": "tested"
     },
     {
       "id": "distributed-managed-rwx",

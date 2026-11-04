@@ -13,10 +13,12 @@ from urllib.parse import urlsplit
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_scripts.replica_runtime_acceptance import probe_runtime
+from test_scripts.replica_frontend_acceptance import probe_frontend
 from test_scripts.replica_runtime_plan import REQUIRED_CHECKS, STAGES
 
 RUNNER_SHA256 = sha256(b"".join((Path(__file__).parent / name).read_bytes()
-    for name in ("run_replica_acceptance.py", "replica_runtime_acceptance.py", "replica_runtime_faults.py"))).hexdigest()
+    for name in ("run_replica_acceptance.py", "replica_runtime_acceptance.py", "replica_runtime_faults.py",
+                 "replica_frontend_acceptance.py"))).hexdigest()
 
 SUITES = ("contracts", "frontend", "storage", "runtime", "operations", "all")
 
@@ -73,6 +75,10 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
     # Syntactic validation is not a live namespace/PVC/provider probe.
     checks.extend({"name": name, "status": "pending", "reason": "live_probe_not_implemented"}
                   for name in requested)
+    if (valid and live and "frontend" in requested
+            and (suite == "frontend" or manifest.get('deployment_mode') == 'frontend-split')):
+        checks = [check for check in checks if check["name"] != "frontend"]
+        checks.extend(probe_frontend(manifest, ssh_host=ssh_host, known_hosts=known_hosts))
     owned = None
     if valid and owned_stage is not None:
         if not live or "runtime" not in requested or owned_journal is None:

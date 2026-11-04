@@ -3112,3 +3112,33 @@ all owned forwards are closed and both earlier2/2/2 runtime/PVC/nine-table loans
 returned. A sampled CRI/Pod termination race refused closure before the next patch;
 only verified remaining intents were resumed. No runtime guard, queue/lease/slot
 or data edits bypassed it. Production scheduleOFF/certificationnull remain.
+
+### Frontend-split role network boundaries (2026-11-04)
+
+The frontend-split chart now isolates its two frontend Pods from PostgreSQL,
+Qdrant and model endpoints. Its previous shared compact policy allowed every
+same-release Pod to reach storage. A split-only default deny and explicit role
+policies allow frontend-to-combined-backend TCP8000 and DNS; external egress is
+attached only to the combined backend. Bundled storage and the model accept only
+the backend role. Compact retains its original combined-Pod network contract.
+These namespace policies require an enforcing CNI; rendered-policy tests do not
+alone qualify live Gateway/IdP, frontend loss or a production deployment.
+
+The [selected live F2 rehearsal](docs/superpowers/reports/2026-11-04-replica-frontend-split.json)
+now records six frontend PG/Q/model TCP denials with backend TLS/model positive
+controls, diagnostic-only Secret projection and zero frontend data/control PVCs.
+An actual UID-precondition frontend deletion after a proxied NDJSON frame and
+model-active proof interrupted that stream; the other frontend and combined
+backend survived. One model call completed without an automatic repeat. Old
+session/data/search/ZIP remained usable; logout revoked the old cookie on all
+three routes. Current Pods had zero restarts. Both capacity loans were returned
+with original runtime/PVC/nine-table hashes; the new fixture is physically off.
+
+The first harness Settings overlay failed before SQL tables existed. An early
+query-only raw-DELETE dry-run unexpectedly deleted an idle frontend; it is
+preserved separately and is not the later active-stream result. Subsequent
+DELETE used explicit body UID preconditions. No data/lease/slot edit recovered
+either case. The common frontend runner currently verifies only explicit split
+inventory/namespace/owner/native-image bindings and keeps functional producers
+pending. Simulation intentionally bypasses production CSRF; real CSRF/Gateway/
+IdP qualification remains open. No authentication or CSRF guard was weakened.

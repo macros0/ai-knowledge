@@ -1,0 +1,630 @@
+{
+  "schema_version": 1,
+  "status": "selected-frontend-split-network-and-active-stream-loss-verified-closed",
+  "observed_at": "2026-11-04T18:03:06.156597+00:00",
+  "scope": "Fresh synthetic2frontend/1combined backend fixture with separately owned TLS PG17/Qdrant on one kind/VM103; simulation authentication and immutable delayed model stub. Direct pinned Pod forwards, not customer Gateway/IdP, production or whole F2/profile certification.",
+  "operation_id": "579a5107c29a43439230631c70f94937",
+  "namespace": "replica-test-fs20261104",
+  "namespace_uid": "d3f6e163-4660-438f-b468-337de45b6565",
+  "runtime": {
+    "backend_image": "okf-backend:replicas-65d6ee2-sfull-26ab55b6298b",
+    "backend_application_code": "65d6ee285578df8342fe05148511a47f1c1b0246 unchanged",
+    "frontend_image": "okf-frontend:replicas-a95d589-current-47c3fb550152",
+    "model_image": "okf-model-stub:nas-app-outage-3e34cc3c5614-bddb93b4",
+    "native_kind_image_ids": {
+      "backend": "sha256:457d7b4bab5f96cc4d2ce86f34d3f87dbcc564925942cf4151431a443a580ce3",
+      "frontend": "sha256:4f41f1c72d1815d1a68ebb98ccaa321cbf6b380019ef4c9488ab6b6ac9e435c1",
+      "stub": "sha256:69687b7ba3bce908dd7a116494517b7a69a8662a64b46298392d578f36455826"
+    },
+    "backend_pod_uid": "d45c2716-484d-4344-ad4c-e8d41c9fe67b",
+    "backend_compatibility_settings_mode": "compact/combined single process; frontend-split is the Helm workload topology",
+    "frontend_pods": 2,
+    "combined_backend_pods": 1,
+    "workers": 0,
+    "frontend_shared_pvc_count": 0,
+    "frontend_storage_credentials": 0,
+    "frontend_secret_projection": "DIAGNOSTICS_INGEST_TOKEN only; no envFrom or shared data/control PVC",
+    "provider_scope": "two fresh managed512Mi TLS services, dedicated non-superuser compact schema creator; no root password in application"
+  },
+  "software": {
+    "source_sha256": {
+      "deploy/helm/ai-knowledge/templates/network.yaml": "348ca0f2882413c866101d3d9ac2f049167d49aa4174c2beebfe4c1a7a8868f5",
+      "deploy/helm/ai-knowledge/templates/frontend-split-network.yaml": "13be1ae6c28b35ed8228920ed4749782e35483e170dae04443bdabb8e8ed8017",
+      "backend/test_scripts/replica_frontend_acceptance.py": "33ed6c006ce46d6f05d90cd60332c914bcc46b5c55eabf6bae8d8b16dfa2bf41",
+      "backend/test_scripts/run_replica_acceptance.py": "59e0405b40809a9f579c16b1bcd8b87059a5e4f7dac6ef1d22c7e74635af4c2f",
+      "backend/tests/test_frontend_split_network.py": "9835c493b836a58df2bc265b69ce2f77af8b92f7c4a72ee4fc01ff74afbdb73a",
+      "backend/tests/test_replica_frontend_acceptance.py": "09be14aa6d261b4cd119c072ded2d820df76d873dfbc0332beecccbf2cd5c093"
+    },
+    "harness_sha256": {
+      "frontend_split_prepare.py": "0285f4b632e75851bc862326eee97b9f2e7ec7a770404cd29e37ddcfc4ffba83",
+      "frontend_split_support.py": "78d72b1cfe7800455f7e42afa783d9522744ef8808ab35bb5675f8913188d7f0",
+      "frontend_split_run.py": "28a621902ae5f0d7d4d464eb3419cce84d323f3e30512e735397dbe3f28d64b4",
+      "frontend_split_network.py": "0515685be10a5d391375229ec3b2320c1280f02497cdeebc11f6bc7bf8480b13",
+      "frontend_split_http.py": "5174f02c64d0c586a98edf782198b3d0cf56905f9cccae83e9f5f0a865a99d33",
+      "frontend-split-functional-native.py": "a487c102bfdb6612627bb67282c7e57ba619ad797cbfb46eb28ae7b94971a7dd",
+      "frontend_split_active_loss.py": "33c536625a81cd18082ee02b5c1a17d89487b92ae6ae0b39bfdeaf5f5b8fa0ef",
+      "frontend_split_observe_loss.py": "8622988ddc041c40d9a70836fd8a84b1b60b7f322b5e36145b7c085724b1b5ac",
+      "frontend_split_native.py": "0d03403790d574f59278da0abfd0c7edd91e8ad97b0448fbf2889b2d3f84bee2",
+      "frontend_split_close.py": "b3d47a0feb77a65bedc79c58131afaf207aa5dc47e3ac500f3ec4c5f77c40e0b"
+    },
+    "chart_regression": {
+      "red_failed": 7,
+      "red_passed": 6,
+      "green_initial_chart_tests": 34
+    },
+    "inventory_regression": {
+      "initial_red": 27,
+      "initial_green": 27,
+      "extra_literal_secret_and_privileged_pod_red": 2,
+      "extra_green": 2,
+      "distributed_all_dispatch_red": 1,
+      "namespace_service_owner_and_image_binding": true
+    },
+    "focused_cohort": {
+      "tests": 134,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "junit_sha256": "3bb25fe5e8d20c665016d1e8375341d276146147777480be31c290327b3c49b4",
+      "platform": "Windows; not a new full Linux backend CI"
+    },
+    "new_runner_scope": "read-only inventory admission only; functional producer integration remains pending",
+    "runner_observation": {
+      "suite": "frontend",
+      "run_id": "fs20261104",
+      "profile": "basic",
+      "revision": "2d31435fa3fc4cb92a469b74a8e2932c10d290c8",
+      "runner_sha256": "4223fc445c3e8ace8ddaf5da38c754dece9c1a179f25deba0b97eea416675bb0",
+      "checks": [
+        {
+          "name": "target_identity",
+          "status": "passed"
+        },
+        {
+          "name": "frontend.split_inventory",
+          "status": "passed"
+        },
+        {
+          "name": "frontend.session_csrf_upload_logout",
+          "status": "pending",
+          "reason": "native_scenario_not_observed"
+        },
+        {
+          "name": "frontend.streaming",
+          "status": "pending",
+          "reason": "native_scenario_not_observed"
+        },
+        {
+          "name": "frontend.frontend_loss",
+          "status": "pending",
+          "reason": "native_scenario_not_observed"
+        },
+        {
+          "name": "frontend.gateway_sso",
+          "status": "pending",
+          "reason": "native_scenario_not_observed"
+        }
+      ],
+      "passed": false,
+      "failed": 0,
+      "skipped_required": 4,
+      "durations": {},
+      "recovery_point_age_seconds": null
+    }
+  },
+  "network": {
+    "backend_before": {
+      "components": [
+        {
+          "host": "fs-storage-postgres",
+          "port": 5432,
+          "tls": true
+        },
+        {
+          "host": "fs-storage-qdrant",
+          "port": 6333,
+          "tls": true
+        }
+      ],
+      "model_positive": true,
+      "role": "combined",
+      "runtime_mode": "compact",
+      "backend_process_count": 1
+    },
+    "frontends": [
+      {
+        "pod_uid": "ce5ee1c9-6e17-40ed-ba75-112518e7c3bf",
+        "denials": [
+          {
+            "host": "fs-storage-postgres",
+            "port": 5432,
+            "denied": "timeout"
+          },
+          {
+            "host": "fs-storage-qdrant",
+            "port": 6333,
+            "denied": "timeout"
+          },
+          {
+            "host": "model-stub",
+            "port": 8000,
+            "denied": "timeout"
+          }
+        ]
+      },
+      {
+        "pod_uid": "3a31de5d-0723-482c-82b8-9987774e1313",
+        "denials": [
+          {
+            "host": "fs-storage-postgres",
+            "port": 5432,
+            "denied": "timeout"
+          },
+          {
+            "host": "fs-storage-qdrant",
+            "port": 6333,
+            "denied": "timeout"
+          },
+          {
+            "host": "model-stub",
+            "port": 8000,
+            "denied": "timeout"
+          }
+        ]
+      }
+    ],
+    "backend_after": {
+      "components": [
+        {
+          "host": "fs-storage-postgres",
+          "port": 5432,
+          "tls": true
+        },
+        {
+          "host": "fs-storage-qdrant",
+          "port": 6333,
+          "tls": true
+        }
+      ],
+      "model_positive": true,
+      "role": "combined",
+      "runtime_mode": "compact",
+      "backend_process_count": 1
+    },
+    "denials": 6,
+    "default_deny": true,
+    "frontend_allowed_egress": "combined backend TCP8000 and DNS only; externalEgress applies only to backend",
+    "compact_network_contract_unchanged": true
+  },
+  "http": {
+    "shared_session": {
+      "two_frontends_and_one_combined_backend": true,
+      "pinned_pod_uids": [
+        "ce5ee1c9-6e17-40ed-ba75-112518e7c3bf",
+        "3a31de5d-0723-482c-82b8-9987774e1313",
+        "d45c2716-484d-4344-ad4c-e8d41c9fe67b"
+      ]
+    },
+    "internal_boundaries": {
+      "internal_routes_hidden_on_both_frontends": true,
+      "direct_collector_requires_token": true,
+      "csrf_enforcement": "not exercised: simulation explicitly bypasses production CSRF"
+    },
+    "upload": {
+      "document_id": "f9b664c9dd3849aa",
+      "original_sha256": "dfb310f239e6011d0917fe8c0c8c6a217e2553b6ca367325040bd2cab05ae101",
+      "accepted_once_and_visible_on_second_frontend": true,
+      "legacy_compact_idempotency_not_claimed": true
+    },
+    "document": {
+      "document_id": "f9b664c9dd3849aa",
+      "done_without_problem": true,
+      "original_sha256_matches_all_three_routes": true,
+      "bm25_search_matches_all_three_routes": true
+    },
+    "stream": {
+      "frontends": [
+        {
+          "frontend_index": 0,
+          "events": [
+            "sources",
+            "ping",
+            "delta",
+            "result"
+          ],
+          "first_event_seconds": 0.074,
+          "total_seconds": 8.1,
+          "content_type": "application/x-ndjson",
+          "cache_control": "no-store",
+          "x_accel_buffering": "no"
+        },
+        {
+          "frontend_index": 1,
+          "events": [
+            "sources",
+            "ping",
+            "delta",
+            "result"
+          ],
+          "first_event_seconds": 0.072,
+          "total_seconds": 8.1,
+          "content_type": "application/x-ndjson",
+          "cache_control": "no-store",
+          "x_accel_buffering": "no"
+        }
+      ],
+      "streaming_not_buffered": true
+    },
+    "export": {
+      "job_id": 1,
+      "completed": true,
+      "export_sha256": "ca137a2b895edafa728b4ac44a30164658f08d7400ded86b6d621b2d346eb7fc",
+      "original_member_sha256_verified": true,
+      "all_three_routes": true
+    },
+    "survivor_session": {
+      "session_survived_frontend_loss": true,
+      "surviving_frontend_and_backend": true
+    },
+    "logout": {
+      "all_three_routes": [
+        {
+          "role": "frontend",
+          "pod_uid": "600eecde-1acd-427d-ac9d-5589dca0428e",
+          "anonymous_after_logout": true,
+          "protected_download_status": 401
+        },
+        {
+          "role": "frontend",
+          "pod_uid": "3a31de5d-0723-482c-82b8-9987774e1313",
+          "anonymous_after_logout": true,
+          "protected_download_status": 401
+        },
+        {
+          "role": "application",
+          "pod_uid": "d45c2716-484d-4344-ad4c-e8d41c9fe67b",
+          "anonymous_after_logout": true,
+          "protected_download_status": 401
+        }
+      ],
+      "logout_post_replayed": false
+    }
+  },
+  "active_loss": {
+    "operation_id": "8667007bd1a647b89006e0d901e70aca",
+    "victim_pod_uid": "1413d76e-64cc-40f4-8873-a8c1d999d31b",
+    "surviving_pod_uid": "3a31de5d-0723-482c-82b8-9987774e1313",
+    "backend_pod_uid": "d45c2716-484d-4344-ad4c-e8d41c9fe67b",
+    "gate": {
+      "client": {
+        "operation_id": "8667007bd1a647b89006e0d901e70aca",
+        "phase": "streaming",
+        "events": [
+          "sources"
+        ]
+      },
+      "model": {
+        "test_only": true,
+        "active": 1,
+        "peak_active": 1,
+        "started": 5,
+        "finished": 4
+      },
+      "at": "2026-11-04T17:43:41.920927+00:00"
+    },
+    "delete_options": {
+      "apiVersion": "v1",
+      "kind": "DeleteOptions",
+      "gracePeriodSeconds": 2,
+      "preconditions": {
+        "uid": "1413d76e-64cc-40f4-8873-a8c1d999d31b"
+      }
+    },
+    "delete_exit": 0,
+    "observation": {
+      "terminal": true,
+      "client": {
+        "operation_id": "8667007bd1a647b89006e0d901e70aca",
+        "phase": "eof",
+        "events": [
+          "sources"
+        ],
+        "terminal": true,
+        "result_seen": false
+      },
+      "client_live": false,
+      "model": {
+        "test_only": true,
+        "active": 0,
+        "peak_active": 1,
+        "started": 5,
+        "finished": 5
+      },
+      "frontend_pods": [
+        {
+          "name": "frontend-85b7f794b4-hrg8n",
+          "uid": "3a31de5d-0723-482c-82b8-9987774e1313"
+        },
+        {
+          "name": "frontend-85b7f794b4-w4sdh",
+          "uid": "600eecde-1acd-427d-ac9d-5589dca0428e"
+        }
+      ],
+      "victim_native_containers": 0,
+      "backend_uid_unchanged": true,
+      "backend_restarts": 0,
+      "no_automatic_model_retry": true
+    },
+    "delete_replayed": false
+  },
+  "native_final": {
+    "document": {
+      "id": "f9b664c9dd3849aa",
+      "status": "done",
+      "problem": null,
+      "file_hash": "dfb310f239e6011d0917fe8c0c8c6a217e2553b6ca367325040bd2cab05ae101",
+      "okf_concept_count": 1,
+      "processed_chunks": 1
+    },
+    "original_cold_sha256": "dfb310f239e6011d0917fe8c0c8c6a217e2553b6ca367325040bd2cab05ae101",
+    "counts": {
+      "documents": 1,
+      "document_generations": 1,
+      "document_generation_states": 1,
+      "okf_concepts": 1,
+      "document_chunks": 1,
+      "jobs": 1,
+      "work_items": 0
+    },
+    "upload_audits": 1,
+    "postgres_tls": true,
+    "postgres_non_superuser": true,
+    "model": {
+      "test_only": true,
+      "active": 0,
+      "peak_active": 1,
+      "started": 5,
+      "finished": 5
+    },
+    "normal_role": "combined",
+    "backend_compatibility_runtime_mode": "compact",
+    "frontend_shared_filesystem": false,
+    "backend_pod_uid": "d45c2716-484d-4344-ad4c-e8d41c9fe67b",
+    "frontend_pod_uids": [
+      "3a31de5d-0723-482c-82b8-9987774e1313",
+      "600eecde-1acd-427d-ac9d-5589dca0428e"
+    ],
+    "backend_uid_unchanged": true,
+    "all_current_pod_restarts": 0
+  },
+  "earlier_attempts": {
+    "startup": {
+      "type": "harness-profile-overlay",
+      "message": "Replica settings require explicit deployment schema",
+      "injected_fields": [
+        "DEPLOYMENT_MODE",
+        "FRONTEND_REPLICAS"
+      ],
+      "initial_observation": {
+        "pods": [
+          {
+            "name": "application-95bbf656f-9pghq",
+            "uid": "819ea6c9-5958-49d9-a9e3-a16b0539ef2e",
+            "role": "application",
+            "phase": "Running",
+            "ready": false,
+            "restarts": 4,
+            "native": [],
+            "image_ids": [
+              "docker.io/library/import-2026-11-04@sha256:aa5832df4a8a956ac28d02f7ca75995d4f8560f78d2452fde13bd71aa42a6d6f"
+            ],
+            "waiting": [
+              "CrashLoopBackOff"
+            ]
+          },
+          {
+            "name": "frontend-85b7f794b4-b6zcb",
+            "uid": "ce5ee1c9-6e17-40ed-ba75-112518e7c3bf",
+            "role": "frontend",
+            "phase": "Running",
+            "ready": true,
+            "restarts": 0,
+            "native": [
+              "7e8fa5642d7a92aaff9ffd9e50dc6791fc7482fbe4c46cc4acea6ff544b82ef0"
+            ],
+            "image_ids": [
+              "docker.io/library/import-2026-11-03@sha256:eebf4d7ad177f43a8cef10eade6fb5ccc92ae8177bd4e22c9d497c908cdfe4c9"
+            ],
+            "waiting": []
+          },
+          {
+            "name": "frontend-85b7f794b4-hrg8n",
+            "uid": "3a31de5d-0723-482c-82b8-9987774e1313",
+            "role": "frontend",
+            "phase": "Running",
+            "ready": true,
+            "restarts": 0,
+            "native": [
+              "23623b26faec2bbb440ce8ffe8d7347f8acf18479b540866fe6737a7d6ab1769"
+            ],
+            "image_ids": [
+              "docker.io/library/import-2026-11-03@sha256:eebf4d7ad177f43a8cef10eade6fb5ccc92ae8177bd4e22c9d497c908cdfe4c9"
+            ],
+            "waiting": []
+          },
+          {
+            "name": "fs-storage-postgres-0",
+            "uid": "485f01e5-21c9-486f-bc1c-8e806ede1caa",
+            "role": "postgres",
+            "phase": "Running",
+            "ready": true,
+            "restarts": 0,
+            "native": [
+              "b647ebe52423ae145c3b0960c14990f4e8697789e6476720accd50d0ac3745b2"
+            ],
+            "image_ids": [
+              "docker.io/library/postgres@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675"
+            ],
+            "waiting": []
+          },
+          {
+            "name": "fs-storage-qdrant-0",
+            "uid": "8784b02d-734a-4fbd-851a-788bd68e65fa",
+            "role": "qdrant",
+            "phase": "Running",
+            "ready": true,
+            "restarts": 0,
+            "native": [
+              "157ef2283c9e605907e6c7ddad001598b243d7d0d429087dbe366a1c1668ba9e"
+            ],
+            "image_ids": [
+              "docker.io/library/import-2026-10-03@sha256:6c0652f8d6925b22f2f6f0e0a5365a6c9dbc8768bd6e70ccc1cdc14847e452a0"
+            ],
+            "waiting": []
+          },
+          {
+            "name": "model-stub-58d5978c7b-9tzxj",
+            "uid": "25e37963-0b3b-469a-8b33-15b92ebd521e",
+            "role": "model-stub",
+            "phase": "Running",
+            "ready": true,
+            "restarts": 0,
+            "native": [
+              "93a134a6e39262cc6aeb74aa0b7aee1307644fc323b01d1468e1fd5ebcea849a"
+            ],
+            "image_ids": [
+              "docker.io/library/import-2026-11-04@sha256:3e31e8f8af2fec5bcf666a6f87afbbc7cd88b9038a638edf42e4663a9d232fc6"
+            ],
+            "waiting": []
+          }
+        ],
+        "claims": [
+          {
+            "name": "fs-files",
+            "uid": "a3cc35e5-fe8e-46f3-b110-1686a6a6a50b",
+            "phase": "Bound",
+            "volume": "pvc-a3cc35e5-fe8e-46f3-b110-1686a6a6a50b",
+            "volume_uid": "4df678d3-318a-4aa8-a058-3035a557c2cf"
+          },
+          {
+            "name": "fs-postgres",
+            "uid": "0a2f3f72-b8d4-4d0f-ab36-b61a32836b27",
+            "phase": "Bound",
+            "volume": "pvc-0a2f3f72-b8d4-4d0f-ab36-b61a32836b27",
+            "volume_uid": "581c6ea0-ca0b-4901-a6e9-c1018dff6014"
+          },
+          {
+            "name": "fs-qdrant",
+            "uid": "47af2582-4859-49b5-a240-3ea9f22e53dd",
+            "phase": "Bound",
+            "volume": "pvc-47af2582-4859-49b5-a240-3ea9f22e53dd",
+            "volume_uid": "0b3906ea-0343-4c27-8f72-fd6b848c3f3f"
+          }
+        ]
+      },
+      "private_log": "frontend-split-first-backend-startup-private.log",
+      "product_validator_unchanged": true,
+      "no_database_writes": {
+        "backend_pods": 0,
+        "backend_native": 0,
+        "public_tables": 0
+      }
+    },
+    "idle_frontend_replacement": {
+      "old_pod_uid": "ce5ee1c9-6e17-40ed-ba75-112518e7c3bf",
+      "surviving_pod_uid": "3a31de5d-0723-482c-82b8-9987774e1313",
+      "replacement": {
+        "name": "frontend-85b7f794b4-frglh",
+        "uid": "1413d76e-64cc-40f4-8873-a8c1d999d31b"
+      },
+      "backend_uid_unchanged": true,
+      "backend_restarts": 0,
+      "query_only_dry_run_failed_to_protect_delete": true,
+      "active_stream_not_tested": true
+    },
+    "harness_failures": [
+      {
+        "action": "raw-delete-dryrun",
+        "result": "selected owned frontend was deleted despite URL dryRun=All; no active stream during this preliminary attempt",
+        "recorded_and_not_counted_as_active_fault": true
+      },
+      {
+        "action": "read-only-repeat-receipt",
+        "result": "GET/search verification completed but exclusive output file already existed; original receipts retained, subsequent read-only equality check allows observation without overwriting",
+        "business_post_replayed": false
+      },
+      {
+        "action": "logout-receipt-shape",
+        "result": "Single logout returned200, auth/me correctly returns public_user(anonymous,roles=[]) rather than user:null; read-only observation verified old-cookie protected downloads denied on all3 routes",
+        "logout_post_replayed": false
+      }
+    ],
+    "receipt_label_corrections": {
+      "initial_baseline": "Raw v1 receipt label says two APIs; three pinned UIDs actually prove two frontends and one combined backend. Preserved raw receipt; corrected in public allowlist. No extra login/upload was sent."
+    },
+    "explicit_scope": "Initial invalid harness profile was refused before any SQL tables; only new immutable runtime config was staged. Query-only dryRun unexpectedly deleted the first idle frontend; that is separate from the later gated active-stream proof. Read-only receipt/anonymous-user observer failures were reconciled without repeating upload, export, logout or DELETE."
+  },
+  "closure": {
+    "nonterminal_pods": 0,
+    "live_native": 0,
+    "retained_bound_claims": 3,
+    "all_controllers_zero": true,
+    "data_deleted": false,
+    "preflight": {
+      "sessions": 0,
+      "processing": 0,
+      "running_work": 0,
+      "provider_owners": 0,
+      "chat_runs": 0,
+      "captures": 0,
+      "model": {
+        "test_only": true,
+        "active": 0,
+        "peak_active": 1,
+        "started": 5,
+        "finished": 5
+      }
+    },
+    "owned_forward_processes_live": 0,
+    "retired_frontend_forwards": 2,
+    "stream_client_live": 0,
+    "capacity_loans": [
+      {
+        "namespace": "replica-test-r5o2u20261102",
+        "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+        "operation_id": "868d162270ee4f919b8ccbc008eddd20",
+        "roles": {
+          "frontend": 2,
+          "api": 2,
+          "worker": 2
+        },
+        "runtime_and_pvcs_unchanged": true,
+        "canonical_materialized_tables_unchanged": 9
+      },
+      {
+        "namespace": "replica-test-r4o2t20261102",
+        "namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+        "operation_id": "a962d36015b14e3cb3ed0353cd7d0b95",
+        "roles": {
+          "frontend": 2,
+          "api": 2,
+          "worker": 2
+        },
+        "runtime_and_pvcs_unchanged": true,
+        "canonical_materialized_tables_unchanged": 9
+      }
+    ],
+    "open_capacity_loans": 0,
+    "namespace_and_claims_retained": true,
+    "old_sources_not_reopened": true
+  },
+  "remaining": [
+    "Production CSRF enforcement requires an authenticated non-simulation path; simulation bypasses it explicitly",
+    "Real customer Gateway/SSO/IdP and longer stream/proxy behaviour",
+    "Terminal functional producer integration into the common frontend suite; no retrospective signing or certification",
+    "New testing-tool Linux/full release evidence and remaining O1/O2/O3 profile qualification"
+  ],
+  "profile_qualified": false,
+  "certification": null,
+  "production_backup_schedule": "disabled"
+}

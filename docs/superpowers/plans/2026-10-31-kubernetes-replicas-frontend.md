@@ -14,6 +14,21 @@ Deployment backend сохраняет имя `application` для совмест
 в split mode он содержит только backend, новый Deployment `frontend` независим.
 Это инженерное уточнение имени `backend-combined` из исходного плана, без смены роли.
 
+04.11.2026: [выбранная F2-репетиция](../reports/2026-11-04-replica-frontend-split.json)
+проверила две frontend и один combined backend на текущих неизменных образах.
+Исправлена общая compact NetworkPolicy, разрешавшая frontend доступ к storage:
+семь новых регрессий RED, затем34 chart checks GREEN; CNI подтвердил6 реальных
+PG/Q/model отказов с TLS/model controls backend. Сессия, один upload/одна
+публикация, search/download SHA, ZIP и NDJSON через обе frontend прошли.
+Удаление выбранного Pod по UID при model-active=1 оборвало текущий stream;
+survivor/replacement/backend сохранили сессию и данные, вызов модели не повторился.
+Logout отозвал старую cookie на трёх маршрутах. Стенд выключен,3 PVC сохранены;
+обе capacity loans возвращены с исходными2/2/2/runtime/PVC/9 таблицами.
+Новый общий frontend probe пока проверяет inventory/ownership/builds, а его
+functional producers остаются pending. Полный текущий focused cohort:134 pass,
+0 skip. Реальный Gateway/SSO/CSRF не проверен: simulation исключён из production
+CSRF middleware. Первые ошибки входов/dry-run сохранены в отчёте отдельно.
+
 ## Global Constraints
 
 Все ограничения и правила тестов [основного плана](2026-10-31-kubernetes-replicas.md)

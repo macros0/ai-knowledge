@@ -7,6 +7,26 @@ managed/S3, all-external, mixed и resilient. Поле `tested` означает
 ограниченных фактических испытаний, а не разрешение production-развёртывания.
 Реализация адаптера или успешный Helm render не заменяет provider acceptance.
 
+## Frontend-split: допуск живого стенда
+
+Для явного `deployment_mode: frontend-split` общий runner с `--suite frontend
+--live` проверяет только topology: две frontend и один combined backend, точный
+namespace UID/installation label, controller ownership, Service endpoints,
+native image IDs, отсутствие frontend PVC/hostPath/дополнительных credentials.
+Manifest дополнительно задаёт `namespace_uid`, `runtime_secret` и
+`expected_image_ids: {backend: "sha256:…", frontend: "sha256:…"}`. Значения image
+IDs выбирает оператор из проверенных image receipts. Namespace должен иметь
+`okf-installation-id`, совпадающий с `installation_id` manifest.
+
+Этот probe ничего не загружает и не удаляет. Functional producers, streaming,
+frontend loss и Gateway/SSO остаются pending в общем runner. Отдельная
+[закрытая native-репетиция](superpowers/reports/2026-11-04-replica-frontend-split.json)
+подтвердила выбранные simulation/session/upload/NDJSON/active frontend loss
+случаи; она не подменяет эти pending checks и не подписывается задним числом.
+Simulation исключён из production CSRF guard, поэтому его успех не закрывает
+CSRF/SSO gate. На distributed topology общий `--suite all` не запускает
+combined-backend frontend-split probe.
+
 ## Привязка доказательств
 
 Для проверенного учебного managed/S3 варианта сохранены точные topology,
