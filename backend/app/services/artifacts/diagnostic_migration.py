@@ -259,7 +259,14 @@ class _OfflineStore(DiagnosticStore):
                     source='frontend' if component=='frontend' else 'backend',root=self.legacy_inputs))
 
     def pin_read_view(self,filter,cutoff_at):
-        return ReadViewLease(self,tuple(self.descriptors),filter,cutoff_at,input_root=self.legacy_inputs)
+        # These are verified private copies for an already accepted request,
+        # not live journal reads. Preserve eligibility at its persisted cutoff
+        # and grant only the copies a bounded preparation lease. The original
+        # markers and imported SQL segment expiry remain unchanged.
+        self.read_deadline=datetime.now(timezone.utc).timestamp()+600
+        descriptors=tuple(replace(item,expires_at=self.read_deadline if item.expires_at>cutoff_at.timestamp() else 0)
+            for item in self.descriptors)
+        return ReadViewLease(self,descriptors,filter,cutoff_at,input_root=self.legacy_inputs)
 
     def coverage(self,_requested_from=None):
         gaps=['recorder_status_unavailable']
@@ -374,7 +381,10 @@ def _compile_diagnostics(compiler,session):
                 snapshot.partial=True
                 snapshot.gaps=tuple(dict.fromkeys((*snapshot.gaps,'metadata_unavailable')))
                 snapshot.counts['recorder_counters_unknown']=1
-                try:built=build_bundle(snapshot,store.root/'bundles'/(row.id+'.zip'),limits,collection_mode='offline')
+                try:
+                    if datetime.now(timezone.utc).timestamp()>=store.read_deadline:
+                        raise ValueError('Legacy diagnostic preparation lease expired')
+                    built=build_bundle(snapshot,store.root/'bundles'/(row.id+'.zip'),limits,collection_mode='offline')
                 finally:snapshot.release()
                 ref=compiler._item(built.sha256,built.size_bytes,'application/zip',dict(kind='generated',path=built.path.relative_to(task.path.parent).as_posix()))
                 receipt=dict(version=1,ref=asdict(ref),cutoff_at=cutoff.isoformat(),request_sha256=canonical_hash(row.request),manifest=built.manifest)

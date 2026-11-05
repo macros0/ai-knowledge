@@ -1,8 +1,11 @@
 """S4 carries local diagnostic history and the exact pending bundle inputs."""
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+import io
 import json
+import os
 from uuid import uuid4
+from zipfile import ZipFile
 
 import pytest
 from sqlalchemy import select
@@ -165,6 +168,80 @@ def test_s4_transfers_all_retained_journal_bytes_and_freezes_pending_request(leg
         assert len(list(session.scalars(select(WorkItem))))==1
     assert files(legacy['source'].diagnostics_dir)==legacy['source_files']
     assert task.plan()['diagnostics']['version']==1
+
+
+@pytest.mark.parametrize('expiry_offset',[-1,0,1])
+def test_pending_bundle_preserves_inputs_eligible_at_acceptance_after_retention_elapsed(legacy,expiry_offset):
+    # The real child uses its own wall clock. Backdate the synthetic source,
+    # rather than mocking time or extending the source's retention deadline.
+    age=timedelta(days=10)
+    cutoff=legacy['cutoff']-age
+    root=legacy['source'].diagnostics_dir
+    for path in (root/'events').rglob('*.jsonl'):
+        stamp=path.stat().st_mtime_ns
+        values=[json.loads(line) for line in path.read_bytes().splitlines()]
+        for value in values:
+            value['timestamp_utc']=(datetime.fromisoformat(value['timestamp_utc'])-age).isoformat()
+        path.write_bytes(b''.join(encode_event(value) for value in values))
+        os.utime(path,ns=(stamp-int(age.total_seconds()*1e9),)*2)
+    expiry=cutoff+timedelta(seconds=expiry_offset)
+    marker=root/'capture-expiry'/(legacy['session_id']+'.json')
+    marker.write_text(json.dumps({'expires_at':expiry.timestamp()}))
+    with session_scope() as session:
+        capture=session.get(DiagnosticSession,legacy['session_id'])
+        for name in ('created_at','expires_at','stopped_at'):
+            setattr(capture,name,getattr(capture,name)-age)
+        bundle=session.get(DiagnosticBundle,legacy['bundle_id'])
+        bundle.created_at-=age;bundle.cutoff_at-=age
+        bundle.request={key:(datetime.fromisoformat(value)-age).isoformat() for key,value in bundle.request.items()}
+    retained={path.relative_to(root).as_posix():(sha256(path.read_bytes()).hexdigest(),path.stat().st_mtime_ns)
+        for path in root.rglob('*') if path.is_file()}
+    settings,_,_=migrate(legacy)
+    with migration_access(),session_scope() as session:
+        bundle=session.get(DiagnosticBundle,legacy['bundle_id'])
+        frozen=bundle.manifest['frozen_bundle']
+        ref=resolve_blob(session,owner_type='diagnostic_bundle',owner_id=bundle.id,
+            generation_id=None,logical_name='frozen-input.zip')
+        assert frozen['cutoff_at']==cutoff.isoformat() and bundle.status=='queued'
+        capture=session.get(DiagnosticSession,legacy['session_id'])
+        assert capture.status=='stopped' and capture.active_slot is None
+        from app.services.work.store import _utc
+        segments=list(session.scalars(select(DiagnosticSegment)))
+        assert sum(row.event_count for row in segments)==3
+        assert all(_utc(row.expires_at)==expiry for row in segments if row.stream==legacy['session_id'])
+    from app.services.artifacts.rwx import RwxBlobStore
+    with RwxBlobStore(settings.artifact_root,store_id=settings.artifact_store_id).open(ref) as handle:
+        raw=handle.read()
+    with ZipFile(io.BytesIO(raw)) as archive:
+        assert archive.testzip() is None
+        actual={json.loads(line)['event_id'] for name in (
+            'events/backend.jsonl','events/frontend.jsonl','events/browser.jsonl') for line in archive.read(name).splitlines()}
+    expected=legacy['expected_ids'] if expiry_offset>0 else legacy['expected_ids']-{legacy['captured_id']}
+    assert actual==expected
+    assert legacy['later_id'] not in actual
+    assert retained=={path.relative_to(root).as_posix():(sha256(path.read_bytes()).hexdigest(),path.stat().st_mtime_ns)
+        for path in root.rglob('*') if path.is_file()}
+
+
+def test_offline_preparation_deadline_refuses_migration_instead_of_freezing_empty_input(legacy,monkeypatch):
+    from app.services.artifacts import diagnostic_migration
+    from app.services.diagnostics import snapshot
+    actual=snapshot.collect_prepared_snapshot
+    clock=[datetime.now(timezone.utc)]
+    class Clock:
+        @staticmethod
+        def now(_timezone):return clock[0]
+    def delayed(*args,**kwargs):
+        prepared=actual(*args,**kwargs)
+        clock[0]+=timedelta(minutes=11)
+        return prepared
+    monkeypatch.setattr(diagnostic_migration,'datetime',type('Clock',(datetime,),{'now':Clock.now}))
+    monkeypatch.setattr(snapshot,'collect_prepared_snapshot',delayed)
+    with pytest.raises(ValueError,match='preparation lease expired'):migrate(legacy)
+    with migration_access(),session_scope() as session:
+        assert session.get(DiagnosticBundle,legacy['bundle_id']).artifact_version==1
+        assert session.scalar(select(DiagnosticSegment.id)) is None
+    assert files(legacy['source'].diagnostics_dir)==legacy['source_files']
 
 
 @pytest.mark.parametrize('fault',['extra-file','changed-file','changed-control-sql'])

@@ -97,6 +97,21 @@ def test_pinned_expired_segment_survives_sweep_until_release(tmp_path):
         assert not path.exists()
 
 
+def test_live_read_keeps_current_expiry_even_with_earlier_accepted_cutoff(tmp_path):
+    import json
+    now=datetime.now(timezone.utc)
+    session_id=str(uuid4())
+    with DiagnosticStore(tmp_path/'spool',DiagnosticLimits(min_free_bytes=0)) as store:
+        assert store.append(event(now-timedelta(seconds=3)),stream=session_id)
+        store.write_bytes(store.root/'capture-expiry'/(session_id+'.json'),
+            json.dumps({'expires_at':(now-timedelta(seconds=1)).timestamp()}).encode())
+        view=store.pin_read_view(EventFilter(),now-timedelta(seconds=2))
+        try:
+            page=store.read_event_page(view,offset=0,limit=50)
+            assert page.events==() and 'segment_expired' in page.gaps
+        finally:view.release()
+
+
 def test_pinned_expired_capture_does_not_abort_other_cleanup(tmp_path):
     now = datetime.now(timezone.utc)
     first, second = str(uuid4()), str(uuid4())
