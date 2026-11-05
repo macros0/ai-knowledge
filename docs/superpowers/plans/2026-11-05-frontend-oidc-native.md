@@ -129,3 +129,16 @@ attestation/runner/CLI tests passed67 cases (87.13s), and the separate common
 acceptance safety/report cohort passed47 cases (59.08s). Mandatory project
 checks passed (audit0, frontend756 passes/one existing skip, Ruff0). Actual
 current-source Linux/full Gateway/Keycloak evidence remains Task4.
+
+Task4 live correction: the first full Linux run for e5e7b39 passed6991 cases
+(6770 passes/221 unchanged optional skips, coverage87.7057%), including all three
+actual isolated TLS-child tests. A subsequent live fixture startup exposed that
+kubectl does not read `--patch-file=-` from stdin. The controller patch was
+rejected locally before application. An offline real-kubectl probe reproduced
+that rejection and proved inline `-p` JSON works without API mutations. Native
+replacement now uses that supported argument; a RED producer regression passed
+after the correction, and a new Linux test executes the producer's captured
+arguments with real `kubectl patch --local`. Windows correction cohort38 passes/
+one Linux-only skip; required project checks passed. The e5e7b39 full-CI record
+stays frozen; the corrected source requires its own full Linux run before the
+actual OIDC producer is admitted.

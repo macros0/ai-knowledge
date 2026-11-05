@@ -74,7 +74,8 @@ class LifecycleKube(NativeKube):
             self.calls.append((*args,json.loads(source)))
             return json.dumps(dict(kind='Status',status='Success'))
         if args[:2]==('patch','pod'):
-            patch=json.loads(source);self.calls.append((*args,patch))
+            assert source is None and '-p' in args
+            patch=json.loads(args[args.index('-p')+1]);self.calls.append((*args,patch))
             pod=next(p for p in self.parts[1] if p['kind']=='Pod' and p['metadata']['name']==args[2])
             assert patch[:2]==[dict(op='test',path='/metadata/uid',value=pod['metadata']['uid']),
                 dict(op='test',path='/metadata/resourceVersion',value=pod['metadata']['resourceVersion'])]
@@ -249,3 +250,15 @@ def test_lost_delete_ack_is_observed_from_the_same_victim_uid_without_replay(tmp
     assert current.dispatch(request,observe=True)['status']=='passed'
     assert len([c for c in kube.calls if c[0]=='delete'])==1
     assert len([c for c in process.calls if c[0]=='client'])==1
+
+
+def test_replacement_uses_supported_inline_json_patch_not_stdin_patch_file(tmp_path):
+    current,kube,_=before_loss(tmp_path);current.dispatch(envelope('loss'));replaced(current,kube)
+    current.dispatch(envelope('loss-observe'));run=kube.run
+    def supported(*args,source=None):
+        if args[0]=='patch':
+            assert '--patch-file=-' not in args and '-p' in args,'kubectl patch-file does not support stdin'
+            assert source is None
+        return run(*args,source=source)
+    kube.run=supported
+    assert current.dispatch(envelope('replacement'))['status']=='passed'

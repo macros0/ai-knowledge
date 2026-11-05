@@ -3310,3 +3310,10 @@ CSRF/Gateway checks. A manifest recipe flag, partial history, another capsule or
 mismatched receipt cannot provide that result. Simulation keeps those checks
 pending. This selected-case proof does not issue signed qualification,
 certification, production scheduling or a whole-profile acceptance result.
+
+Replacement label changes use kubectl's supported inline JSON patch argument.
+Only the Pod UID, resourceVersion and fixed slot label enter that argument;
+credential data remains outside argv. A real offline `kubectl patch --local`
+regression executes the producer's captured arguments, in addition to mocked
+API tests, so unsupported stdin/patch-file behavior cannot masquerade as a
+successful command. Unknown submitted mutations still require observation.

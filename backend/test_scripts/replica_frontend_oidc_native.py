@@ -447,7 +447,7 @@ class OIDCCoordinator(Coordinator):
                 dict(op='add',path='/metadata/labels/okf-f2-probe-slot',value='first')]
             intent=dict(target=target,patch=patch)
             self.files.once(intent_name,intent)
-            self.kube.run('patch','pod',target['name'],'--type=json','--patch-file=-','-o','json',source=json.dumps(patch))
+            self.kube.run('patch','pod',target['name'],'--type=json','-p',json.dumps(patch),'-o','json')
         # A lost patch ACK is adopted only from actual UID/slot/EndpointSlice observations.
         actual=self.guard()
         if actual['oidc_slot_frontends']['first']!=target:
