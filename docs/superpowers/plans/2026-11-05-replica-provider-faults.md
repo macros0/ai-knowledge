@@ -49,8 +49,10 @@ bounded and contain no arbitrary payload or credentials.
 
 ## Task2: staged native outage coordinator
 
-Create `scripts/kubernetes/replica_provider_outage.py` and
-`backend/tests/test_replica_provider_outage.py`. Reuse protected journal helpers,
+Create `scripts/kubernetes/replica_provider_outage.py`,
+`scripts/kubernetes/replica_provider_native.py` and matching
+`backend/tests/test_replica_provider_outage.py`/`test_replica_provider_native.py`.
+Separate native scope/SQL/HTTP from stage/policy journal mechanics. Reuse protected journal helpers,
 `Kubernetes`, scoped authority, bounded HTTP and existing corpus checks. Add
 fixed readonly SQL/model/connectivity observation source; no payload-driven SQL.
 Expose `preflight/baseline/inject/submit/observe/heal/verify/final` with explicit
@@ -59,19 +61,24 @@ spec, admitted Pod identities, old work IDs, publication and original SHA before
 dispatch. Final requires both provider cases and PG child report with matching
 current source/runtime/namespace binding. It issues no release certificate.
 
-- [ ] RED: changed namespace/provider/Pod/corpus; missing or duplicate work;
+- [x] RED: changed namespace/provider/Pod/corpus; missing or duplicate work;
   unknown ACK observes only; wrong policy UID blocks healing; partial history
   cannot produce final proof; model uncertainty cannot be released by a flag.
-- [ ] Implement literal action dispatch and exact unknown-ACK observation.
-- [ ] GREEN targeted Windows/Linux tests and mandatory project checks; commit.
+- [x] Implement literal action dispatch and exact unknown-ACK observation.
+- [x] GREEN targeted Windows/Linux tests and mandatory project checks; commit.
 
 ## Task3: fresh current managed-S3 rehearsal and publication
 
 Use separate protected `tests/tmp` fixture/journals, current65d runtime source
 equivalence and pinned provider/model images. Prepare all objects/dry-runs first;
 take fresh idle loans only after resource/disk budget and recovery inputs exist.
-Bootstrap retained96931d1 source; upload nonempty corpus/copy independently to PC;
-perform actual same-schema upgrade to65d and obtain scoped PG fault authority.
+Bootstrap retained96931d1 source, upload a nonempty corpus, complete the existing
+real scoped-credential coordinator, and copy independently to PC. Its verified
+credential journal is the genuine prior source journal for ImageUpgrade; do not
+invent bootstrap/upgrade provenance. Then perform actual same-schema upgrade
+to65d and make a second independent copy with
+current fingerprint/images, and obtain scoped PG fault authority. Pre-upgrade
+copy remains retained; no recovery-point equality check is relaxed.
 Run current PG partition/stale return and Qdrant/model cases through their fixed
 stages. Retain failures and exact intents; do not count a partial component as
 the whole matrix. Fix observed defects with RED/GREEN and rebuilt source/image
@@ -91,3 +98,34 @@ publication loss, duplicate/missing work, typed retry and same-work/newer-fence
 recovery refusal. Mandatory project checks passed (audit0/frontend756 passes+
 one existing optional skip/Ruff0). This is only the pure builder/checker; no
 fault policy has been applied and native/current-provider acceptance is pending.
+
+Task2 protocol/policy checkpoint:20 missing-module stage tests and14 selected
+policy tests failed before implementation; the combined31 cases then passed.
+The fixed13-stage history binds code/inputs and chains receipt hashes. Pending
+actions only observe, even with apply=True. Policy create/lost-ACK adoption and
+UID-preconditioned raw DELETE/absence observation are tested with actual call
+counters. This earlier checkpoint did not yet contain native admission.
+
+Task2 native adapter now provides the fixed CLI, source/backup/PG-child binding,
+Pod/container/image and Node/PV/claim identities, readonly SQL and fixed Pod-local
+HTTP intents. Unknown active controllers, changed runtime modes and aliased
+receipts fail closed. Final logout requires apply and rechecks the last verified
+publication/work/corpus/maintenance snapshot. Windows140 tests passed with
+zero skips/failures/errors; project checks passed (audit0/frontend756+one prior
+optional skip/Ruff0). A real read-only PostgreSQL component found SQLSTATE25001
+from setting isolation after business-session guards; a new connection now sets
+REPEATABLE READ, READ ONLY first. Actual observation then passed on22 synthetic
+documents,52 bound resources/oneNode/threePVs and positive connectivity on all
+four API/worker Pods. Targeted Linux CI then passed the same140 cases,0 skips/
+failures/errors,exit0/noOOM with source unchanged. Both new capacity operations
+returned original2/2/2/runtime/PVC/nine canonical tables. Primary verification
+waited read-only for background work to drain; no scaling was repeated.
+[Component evidence](../reports/2026-11-05-replica-provider-native-component-ci.json)
+is explicitly not a new provider fault acceptance or full backend CI.
+The Task3 fresh current-provider rehearsal remains pending.
+
+The initial137-case Windows/Linux source checkpoint is retained separately in
+the final component report. Three additional RED cases exposed final-target
+drift; they pass only after the final snapshot comparison, alongside a valid
+unchanged-snapshot control. The follow-up CI transfers only the two changed
+files and uses new capacity operations; no closed journal is reopened.

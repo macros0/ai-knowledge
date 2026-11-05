@@ -3341,3 +3341,32 @@ work with a newer fence/attempt, one new active generation and matching original
 SHA; missing/extra work, stale ownership and payload/credential fields fail
 closed. This checker cannot release uncertain model slots or mutate any queue,
 provider, clock, Kubernetes object or release gate.
+
+Provider stage journals use fixed ordered stages, protected atomic writes, unique
+intents and chained code/input-bound receipt hashes. An already active stage
+calls observation only, including when apply is supplied again. Public reports
+contain hashes/status, not private outcomes or arbitrary exception messages.
+Owned Cilium policy primitives require a live guard before every call, admit
+exact operation/name/namespace/spec/labels, record create intent before dispatch
+and bind healing to the created policy UID in a DeleteOptions body. An uncertain
+create or delete is observed without resubmission; foreign/replaced policies and
+preexisting objects are refused. These primitives do not supply native admission
+or validate live SQL/HTTP evidence by themselves; no release/qualification gate
+accepts their journal as a provider certificate.
+
+The fixed native provider adapter requires a verified same-schema upgrade,
+authenticated independent copy and matching completed PostgreSQL child proof.
+It pins current process/container/image, Node UID and PV/claim bindings; live
+readiness may degrade during denial, but replacements/restarts or changed
+Secrets/templates refuse continuation. Unknown active controllers are refused;
+completed Job TTL cleanup cannot authorize a writer. Each operation gets a
+separate protected receipt directory. The SQL observer sets REPEATABLE READ,
+READ ONLY on a new connection before its first query, rather than entering a
+business session that already queries guards. In-Pod HTTP has fixed loopback
+routes, no ambient proxies or redirects, bounded bodies and durable exclusive
+intents. A lost regenerate ACK cannot resend its POST. Final logout is an
+explicit apply stage. No adapter stage releases model capacity or edits work,
+leases, clocks or publication state, and this recipe never grants certification.
+Before final logout, the complete publication/work/corpus/maintenance snapshot
+must still equal the last verified recovery. A previously passed stage cannot
+hide subsequent target drift or provide a stale final success.

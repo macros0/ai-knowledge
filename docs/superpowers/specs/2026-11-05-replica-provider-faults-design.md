@@ -15,10 +15,19 @@ This is an implementation choice under the user's standing autonomous request.
 Do not fabricate an image-upgrade receipt or invoke the legacy privileged path.
 
 Use a fresh scoped bootstrap and real same-schema upgrade from the retained96931d1
-image to the unchanged current65d6ee2 runtime. A fresh independent nonempty copy
-on the authorized PC and actual upgrade verification supply PG fault authority.
-Reuse the verified instrumented `r5-active-f1852a67f4bd` model image only after
-its source/config/native digest checks. Bind all installation/namespace/Pod/image/
+image to the unchanged current65d6ee2 runtime. Keep a pre-upgrade independent
+copy for the upgrade after completing the existing scoped-credential coordinator;
+its actual verified journal supplies prior source/credential provenance to
+ImageUpgrade. Then create a fresh post-upgrade nonempty copy on the
+authorized PC. PG fault authority requires the latter's current fingerprint and
+images together with actual upgrade verification; the older copy cannot match.
+The retained `r5-active-f1852a67f4bd` has historical server bytes. Read-only OCI
+inspection proves the cached `nas-app-outage-3e34cc3c5614-bddb93b4` instead has the
+exact current Git server SHA `bddb93b4c18b1e54bf6df41b29308c5d826bff6cc6c744f591629989437a6788`.
+Prepare a new `r5-active-bddb93b4c18b` alias to those exact existing bytes to retain
+the existing fault coordinator's explicit instrumented-model tag contract. Verify
+all index/manifest/config/layer hashes and command/user; never force or retag an
+old reference. This is metadata delivery, not a new model or rebuild. Bind all installation/namespace/Pod/image/
 provider/Secret/CA/PVC identities before injection; no old source is reopened.
 
 ## Qdrant/model cases
