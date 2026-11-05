@@ -46,9 +46,16 @@ controller затем выключен, capacity loan возвращён. Соз
 Secret сохранён в его namespace, значения не включены в публичный отчёт.
 [Отдельный OIDC HTTP-компонент](../reports/2026-11-05-frontend-oidc-http-ci.json)
 прошёл99/99 одинаковых Windows/Linux cases с wire double и настоящим TLS.
-Native/common-runner интеграция и свежий real-Keycloak/Gateway функциональный
-прогон ещё не выполнены. Simulation guard, production gates и certification
-не ослаблены; повторный platform-допуск для уже разрешённого пакета не нужен.
+Последующая native/common-runner интеграция и
+[свежий real-Keycloak/Gateway прогон](../reports/2026-11-05-frontend-oidc-native-acceptance.json)
+на fdfae89 прошли все12 этапов с production CSRF middleware: SSO, оба CSRF-отказа,
+два frontend/Service, upload/publication/search/SHA/ZIP, streaming, UID loss при
+активной модели без replay, replacement и logout. Полный Linux7003 cases:
+6782passed/221unchanged optionalSkip/0failures/errors/87,70% coverage. Fixture
+выключен/8 controllers0/3handlesclosed/3PVCretained; обе исходные2/2/2/runtime/PVC/
+9 таблиц возвращены. Выбранная F2 basic/local recipe проверена; customer
+Gateway/IdP, остальные bindings и доверенный release certificate остаются O3 gates.
+Старые simulation/component reports сохраняют свои первоначальные ограничения.
 
 ## Global Constraints
 

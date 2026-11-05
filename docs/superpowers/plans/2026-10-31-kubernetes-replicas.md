@@ -51,8 +51,13 @@ controller выключен и память возвращена. Новый
 [OIDC wire-компонент](../reports/2026-11-05-frontend-oidc-http-ci.json) прошёл99/99
 одинаковых Windows/Linux cases без skips/errors/failures; источник не изменился,
 его отдельный CI loan также возвращён с2/2/2/runtime/PVC/9 таблицами. Реальная
-OIDC/Gateway приёмка требует native/common-runner интеграции и свежего fixture;
-ни этот компонент, ни platform admission не подменяют её.
+OIDC/Gateway приёмка затем [завершена для выбранной basic/local recipe](../reports/2026-11-05-frontend-oidc-native-acceptance.json):
+на fdfae89 прошли все12 native/common-runner этапов с настоящим Keycloak/CSRF,
+активной потерей frontend без model replay, replacement и logout. Полный CI:
+7003 cases/6782 passed/221 прежний optional skip/0failures/errors/87,70% coverage.
+Fixture выключен/3PVC сохранены, обе capacity loans возвращены с исходными
+2/2/2/runtime/PVC/9 таблицами. Customer providers и доверенная полная qualification
+остаются отдельными gates; старые отчёты не переподписываются.
 
 Связанный runtime-прогон R5 учебного managed-S3 профиля завершён:22/22 этапа,
 0 failures,0 required skips,80 прежних документов сохранены, maintenance
@@ -80,8 +85,8 @@ partition/возврат устаревшего процесса и нагруз
   проверены на учебной копии. Production-расписание выключено; production
   monitoring и независимый физический key escrow не квалифицированы.
 - **O3:** объединённая fault/profile matrix, квалификация текущего runtime/провайдеров,
-  реальный CSRF/Gateway/SSO producer и доверенный release issuer. Default frontend
-  probe read-only; выбранный native producer закрыт новым 12-stage case. Единственное ревью всей ветки,
+  customer Gateway/IdP и доверенный release issuer. Default frontend
+  probe read-only; выбранный real-CSRF/Gateway/SSO producer закрыт новым 12-stage case. Единственное ревью всей ветки,
   единый проход пяти исправлений и полный ccfcf9e CI уже завершены.
 
 05.11 inventory audit: [семь вариантов](../../../deploy/kubernetes/replicas/support-matrix.json)

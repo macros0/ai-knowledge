@@ -48,7 +48,7 @@
         "artifacts": "selected-per-installation"
       },
       "remaining_gates": [
-        "gateway-sso-production-csrf-acceptance",
+        "customer-gateway-idp-and-other-storage-bindings",
         "current-full-release-evidence"
       ],
       "certification": null,
@@ -73,13 +73,19 @@
           "path": "docs/superpowers/reports/2026-11-05-frontend-oidc-http-ci.json",
           "sha256": "d60d2e6a73776310615ef74a624631dbde0fd0cecf56a511b2d18435eba74966",
           "scope": "Separate bounded TLS/OIDC wire component:99 identical Windows/Linux cases,0skips/errors/failures,source2477unchanged and CI loan returned. Not yet native/common-runner wired; no real Keycloak/Gateway claim."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-05-frontend-oidc-native-acceptance.json",
+          "sha256": "123e5f4ffcea74a45591ab25222722a78386948058deb6256da6a9754ebbebd2",
+          "scope": "Exact fdfae89/current full Linux7003=6782passed+221unchanged optional skips; fresh two-frontend/single-combined local fixture through approved Gateway/real Keycloak. All12 native stages and completion attestation pass, real CSRF/SSO, two streams, active UID loss without model replay, replacement/session/SHA/search/ZIP/logout/cold check. Three handles closed/eight controllers0/threePVC retained/two original2/2/2 runtime/PVC/nine-table loans returned. Customer/physical/trusted qualification not claimed."
         }
       ],
       "selected_simulation_fixture_status": "tested",
       "selected_common_frontend_producer_status": "tested",
-      "evidence_scope": "Selected basic simulation/local recipe only; real CSRF/Gateway/SSO and full profile qualification remain open.",
+      "evidence_scope": "Selected basic local recipes: simulation and real owned Keycloak/Gateway/CSRF. Customer Gateway/IdP, other storage bindings and trusted full profile qualification remain separate.",
       "selected_gateway_prerequisite_status": "admitted-controller-stopped",
-      "selected_oidc_http_component_status": "tested-not-native-integrated"
+      "selected_oidc_http_component_status": "tested-and-native-integrated",
+      "selected_real_oidc_frontend_status": "tested"
     },
     {
       "id": "distributed-managed-rwx",

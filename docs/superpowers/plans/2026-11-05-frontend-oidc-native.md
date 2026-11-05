@@ -58,7 +58,7 @@ Real CSRF/SSO status requires the entire actual native recipe, not an input flag
   R5/offline controls. Clear selected real CSRF/Gateway checks only after all12
   actual OIDC stages with full receipt evidence; keep simulation pending and
   profile certification independent. Run mandatory project checks before commit.
-- [ ] **Current-source verification and fresh real case.** Run required Windows
+- [x] **Current-source verification and fresh real case.** Run required Windows
   cohorts and immutable current-source Linux CI, then build a fresh owned
   Gateway/Keycloak/frontend-split fixture with new keys/claims/realm/identity.
   Use the pinned approved controller/class and image digests. Run all12 common
@@ -167,3 +167,19 @@ with an explicitly empty expected Pod set, retaining all ownership/live endpoint
 checks. The partial execution and data remain evidence of an incomplete case;
 it must not be rebound to a changed source capsule or counted as all12 passed.
 Corrected-source verification and a fresh complete case remain required.
+
+
+Task4 COMPLETE on fdfae89: the exact corrected source passed full Linux7003
+cases/6782passes/221unchanged optional skips/0errors/failures/87.6989% coverage.
+All prior/Windows IDs, collection and tracked source hashes were retained.
+A separate fresh fp20261105 fixture passed all12 native stages and full common
+runner OIDC attestation. Real SSO/CSRF and both slots/Service, unbuffered streams,
+active UID loss without model replay, replacement/data/session/export, logout
+and cold SHA passed. Three handles closed; eight own controllers0/no Pod/native
+processes; three PVCs and corpus retained, discovery labels removed. Both Task4
+loans returned original2/2/2/runtime/PVC/nine-table hashes. Secondary verification
+waited for one transient queued work to finish, then resumed read-only without
+scaling again or editing jobs. No previous partial receipt/capsule was rebound.
+[Scoped report](../reports/2026-11-05-frontend-oidc-native-acceptance.json).
+Customer/provider/physical qualification and trusted release remain independent;
+certification=null and production scheduleOFF.

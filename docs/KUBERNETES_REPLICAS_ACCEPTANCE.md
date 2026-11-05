@@ -23,14 +23,14 @@ IDs выбирает оператор из проверенных image receipts
 `--apply-frontend` для нового действия. При неопределённом ответе используется
 `--observe-frontend` с тем же журналом и этапом: POST/DELETE не повторяется.
 [Контракт и все 12 этапов](superpowers/plans/2026-11-04-frontend-functional-runner.md)
-ограничены свежим basic simulation/local fixture с точными namespace UID,
+для `owned-simulation-local-v1` ограничены свежим basic simulation/local fixture с точными namespace UID,
 installation, native image IDs и проверенными собственными TLS providers.
 Cookies остаются в защищённом каталоге VM. Приём чужих passed receipts запрещён.
 
 [Новый прогон через общий runner](superpowers/reports/2026-11-05-frontend-native-acceptance.json)
 прошёл все 12 этапов, включая два NDJSON потока, один model-gated UID DELETE,
 замену Pod, SHA/поиск/ZIP и отзыв сессии. `selected_frontend_case_passed=true`,
-но общая qualification остаётся false: `frontend.production_csrf` и
+но в этом simulation-прогоне qualification остаётся false: `frontend.production_csrf` и
 `frontend.gateway_sso` pending. Ненулевой код CLI в этом случае означает
 незавершённую qualification; проверяйте результат выбранного этапа отдельно.
 Прежняя [отдельная репетиция](superpowers/reports/2026-11-04-replica-frontend-split.json)
@@ -49,9 +49,32 @@ capacity loan возвращён; CRD/RBAC/admission policy сохранены. 
 Отдельный [OIDC HTTP-компонент](superpowers/reports/2026-11-05-frontend-oidc-http-ci.json)
 прошёл99/99 одинаковых Windows/Linux cases с настоящим loopback TLS и HTTP wire
 double. Он проверяет bounded transitions/state/issuer/client, secure cookies,
-CSRF и logout/unknown-ACK без повтора. Пока компонент не включён в native capsule/
-общий runner и не выполнил реальный Keycloak/Gateway сценарий; pending checks
-`frontend.production_csrf` и `frontend.gateway_sso` сохраняются.
+CSRF и logout/unknown-ACK без повтора. Последующая интеграция и
+[новый полный прогон](superpowers/reports/2026-11-05-frontend-oidc-native-acceptance.json)
+на fdfae89 прошли все12 этапов уже через настоящий собственный Keycloak/Gateway.
+В этой выбранной basic/local recipe `frontend.production_csrf` и
+`frontend.gateway_sso` passed: проверены secure session/state/issuer, два отказа
+CSRF при живой сессии, два frontend slot и обычный Service, SHA/поиск/ZIP,
+model-active UID loss без replay, replacement и завершение app/IdP-сессии.
+Это native HTTP-проверка выбранного realm, а не приёмка браузера или IdP заказчика.
+
+Для этой recipe задаются `functional_recipe: owned-keycloak-local-v1`,
+`oidc_access_namespace`, `oidc_access_namespace_uid`, `oidc_platform_namespace_uid`,
+`oidc_controller_uid`, `oidc_gateway_class_uid`, `oidc_username` и
+`oidc_expected_images` с точными runtime digests Keycloak/Gateway/controller.
+Пароль, cookies и client secret в manifest не передаются: producer читает только
+admitted synthetic Secrets внутри VM после проверки namespace/route graph.
+Остаются те же12 этапов, `--apply-frontend` для нового действия и
+`--observe-frontend` для его неопределённого исхода. Изменение capsule или
+binding запрещает продолжение прежнего execution; его результаты сохраняются.
+
+Текущий полный Linux CI:7003 cases/6782 passed/221 неизменный optional skip,
+0failures/errors,87,70% coverage. Исходники app/frontend/parser не отличаются
+от проверенных runtime-образов65d6ee2. Новый fixture выключен:8 контроллеров0,
+3 процесса закрыты,3 PVC и корпус сохранены; discovery-метки сняты. Обе исходные
+топологии2/2/2 возвращены с runtime/PVC/9-table hash proof. Общая qualification
+и certification остаются отдельными: проверенный native proof закрывает только
+выбранные checks, без подписанного доверенным issuer release bundle.
 
 ## Привязка доказательств
 

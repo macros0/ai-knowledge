@@ -405,6 +405,16 @@ production monitoring/physical key escrow or strict RPO. Production scheduleOFF.
 
 ## Task O3: fault matrix, release gates и документация
 
+O3/F2 current-source follow-up,2026-11-05:
+[новая real-OIDC приёмка](../reports/2026-11-05-frontend-oidc-native-acceptance.json)
+прошла12 native/common-runner этапов через approved Gateway/Keycloak с настоящим
+CSRF guard и потерей frontend без model replay. Full Linux fdfae89:6782passes/
+221unchanged optionalSkip/0failures/errors/87,70% coverage,7003cases точно учтены,
+источники неизменны. Fixture0/3handlesclosed/3PVCretained; обе Task4loans вернули
+2/2/2/runtime/PVC/9 таблиц. Это закрывает selected real-SSO/CSRF producer, сохраняя
+customer provider/fault matrix, physical resilience и trusted release gates.
+
+
 O1/O3 bounded S3 application full milestone,2026-11-04:
 [actual ENOSPC and automatic retry](../reports/2026-11-04-replica-s3-application-full.json)
 uses managed PG/Q plus external ephemeral RustFS128Mi. Pre-fault verification
