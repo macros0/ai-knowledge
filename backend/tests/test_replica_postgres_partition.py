@@ -165,3 +165,45 @@ def test_a_counterless_process_with_no_useful_return_is_not_a_quarantine_proof(m
     op,calls=returned_fixture(monkeypatch,useful=False)
     with pytest.raises(ValueError):op.heal()
     assert op.journal['phase']=='healing' and 'original-token-rollback-probe' not in calls
+
+
+def report_fixture(monkeypatch,change=None):
+    tool=module();op=object.__new__(tool.PostgresPartition)
+    worker={'metadata':{'uid':'worker-uid'},'spec':{'replicas':2,'template':{'spec':{
+        'containers':[{'command':['python','-m','app.worker']} ]}}}}
+    current=copy.deepcopy(worker);policies=[];owners=0;fingerprint='a'*64
+    if change=='command':current['spec']['template']['spec']['containers'][0]['command']=['python','instrumented.py']
+    if change=='uid':current['metadata']['uid']='foreign-worker'
+    if change=='policy':policies=[{'metadata':{'name':'leftover-policy'}}]
+    if change=='slot':owners=1
+    if change=='identity':fingerprint='b'*64
+    op.fingerprint='a'*64;op.value={'namespace':'replica-test-fixture01'}
+    op.journal={'operation_id':'c'*32,'epoch':5,'old_deployments':{'worker':worker},
+        'policy':{'metadata':{'uid':'policy-uid'},'spec':{}},'network_sample':{'active':0},
+        'selected_worker':{'metadata':{'uid':'old-pod'}},'reclaimed_work':{'fence':2},'lease_losses_delta':0,
+        'proof_digest':'d'*64,'stale_token_probe':{'old_token_rejected':True,'probe_transaction_rolled_back':True}}
+    def run(*args,**kwargs):
+        if args==('get','deploy','worker','-o','json'):return __import__('json').dumps(current)
+        if args==('get','cnp','-o','json'):return __import__('json').dumps({'items':policies})
+        raise AssertionError(args)
+    op.kube=SimpleNamespace(run=run)
+    probe=SimpleNamespace(identity={'fingerprint':fingerprint},state=lambda:{'model_owners':owners,
+        'running_documents':0,'running_chats':0,'provider':{'active':0}})
+    monkeypatch.setattr(tool,'FaultProbe',lambda kube,value:probe)
+    return op,{'crashed_worker_containers':0,'provider_active_after_crash':1}
+
+
+def test_uncertain_pg_report_exposes_verified_canonical_consumer_fields(monkeypatch):
+    op,public=report_fixture(monkeypatch)
+    report=op.report_result(public)
+    assert report['fault_operation_id']=='c'*32 and report['maintenance_epoch']==5
+    assert report['policy_removed'] is True and report['normal_entrypoint_restored'] is True
+    assert report['capacity']['owned_slots_at_finish']==0
+    assert report['capacity']['completion']=='audited-stopped-provider-reconciliation'
+    assert report['capacity']['offline_reconciliation_required'] is True
+
+
+@pytest.mark.parametrize('change',['command','uid','policy','slot','identity'])
+def test_uncertain_pg_report_never_claims_unobserved_final_recovery_facts(monkeypatch,change):
+    op,public=report_fixture(monkeypatch,change)
+    with pytest.raises(ValueError):op.report_result(public)

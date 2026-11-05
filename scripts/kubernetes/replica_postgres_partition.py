@@ -551,9 +551,27 @@ print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':
         super().release()
 
     def report_result(self, public):
+        # The physical-reconciliation branch shares a consumer contract with the
+        # confirmed-reply branch. Re-observe each normalized final fact instead
+        # of inferring it merely from a historical phase or a different report.
+        if json.loads(self.kube.run("get", "cnp", "-o", "json"))["items"]:
+            raise ValueError("Partition policies remain after recovery")
+        worker = json.loads(self.kube.run("get", "deploy", "worker", "-o", "json"))
+        original = self.journal["old_deployments"]["worker"]
+        if (worker["metadata"]["uid"] != original["metadata"]["uid"]
+                or worker["spec"] != original["spec"] or worker["spec"].get("replicas") != 2):
+            raise ValueError("Normal worker entrypoint and counts were not restored")
+        probe = FaultProbe(self.kube, self.value)
+        if probe.identity["fingerprint"] != self.fingerprint:
+            raise ValueError("Recovered runtime identity changed before report")
+        final = require_quiescent(probe)
         public.pop("crashed_worker_containers")
         public.pop("provider_active_after_crash")
         public.update({"status": "owned-postgres-partition-stale-return-passed",
+            "fault_operation_id": self.journal["operation_id"], "maintenance_epoch": self.journal["epoch"],
+            "policy_removed": True, "normal_entrypoint_restored": True,
+            "capacity": {"completion": "audited-stopped-provider-reconciliation", "offline_reconciliation_required": True,
+                "owned_slots_at_finish": final["model_owners"], "proof_sha256": self.journal["proof_digest"]},
             "partition": {"policy_uid": self.journal["policy"]["metadata"]["uid"], "policy_sha256": digest(self.journal["policy"]["spec"]),
                 "selected_workers": 1, "port": 5432, "provider_active_before_policy_patch": 1,
                 "provider_active_at_network_sample": self.journal["network_sample"]["active"],

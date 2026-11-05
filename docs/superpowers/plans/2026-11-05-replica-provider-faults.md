@@ -158,3 +158,14 @@ The same in-progress fault uses an explicit observer-code handoff with parent
 driver/source hashes; no reinjection or rebinding of the old driver. This is the
 uncertain-call branch: physical writer/provider stop and audited exact-token
 reconciliation are still mandatory, not a confirmed-reply recovery claim.
+
+That physical recovery and functional PG verification subsequently passed with
+three prior documents preserved and the same interrupted work published at
+fence3. Consumer admission exposed a separate producer inconsistency: the
+physical branch omitted normalized final fields emitted by the confirmed
+branch. Six expected RED tests reproduce this. The physical producer now
+re-observes policy absence, exact normal worker UID/spec/count, actual runtime
+identity and quiescent slots before emitting canonical fields. All74 focused
+PG/WorkerLoss/authority cases pass without skips/errors/failures. Keep the first
+report and generate a separate newly verified report; do not manually patch an
+old receipt or weaken the consumer. Current Qdrant/model acceptance is pending.
