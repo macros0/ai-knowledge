@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -137,9 +138,11 @@ def test_legacy_upgrade_refuses_scoped_sql_principal_before_fence():
 
 def operation_with_roles(tool):
     operation = tool.ImageUpgrade.__new__(tool.ImageUpgrade)
+    operation.value = {"namespace": "replica-test-image"}
     roles = {name: api() for name in ("api", "worker", "frontend", "model-stub")}
     for name, value in roles.items():
-        value["metadata"].update(name=name, uid=name)
+        value.update(kind="Deployment")
+        value["metadata"].update(name=name, uid=name, namespace=operation.value["namespace"])
         value["spec"]["replicas"] = 1 if name == "model-stub" else 2
     operation.journal = {"old_deployments": roles, "next_runtime": "runtime-new", "next_identity": "identity-new",
         "image": "new-image", "runtime_secret": "private-runtime", "operator_secret": "operator-only"}
@@ -149,6 +152,7 @@ def operation_with_roles(tool):
         if name in {"api", "worker"}:
             current[name] = stage(tool, value, roles[name])
     operation.resource = lambda kind, name: copy.deepcopy(current[name])
+    operation.kube = SimpleNamespace(run=lambda *args: json.dumps({"items": list(current.values())}))
     return operation, current
 
 

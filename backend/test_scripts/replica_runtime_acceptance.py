@@ -1,6 +1,7 @@
 """Explicit owned-lab smoke; missing fault/recovery scenarios remain required."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from io import BytesIO
 import ipaddress
@@ -158,7 +159,11 @@ with session_scope() as session:
  owners=session.scalar(select(func.count()).select_from(ReplicaCapacitySlot).where(ReplicaCapacitySlot.resource=='llm',ReplicaCapacitySlot.owner_id.is_not(None)))
 print(json.dumps({'fingerprint':identity.fingerprint,'schema_revision':SCHEMA_REVISION,'model_owners':owners}))
 '''.replace("EXPECTED", repr(json.dumps(expected)))
-    receipts = [kube.python(p["metadata"]["name"], source) for p in role_pods(objects, "api") + role_pods(objects, "worker")]
+    pods = role_pods(objects, "api") + role_pods(objects, "worker")
+    # Independent read-only probes all remain mandatory. Bound concurrency so
+    # repeated live guards fit the existing fault window without extending it.
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        receipts = list(executor.map(lambda p: kube.python(p["metadata"]["name"], source), pods))
     if len({r["fingerprint"] for r in receipts}) != 1 or len({r["schema_revision"] for r in receipts}) != 1:
         raise ValueError("Runtime identities differ")
     return {"fingerprint": receipts[0]["fingerprint"], "schema_revision": receipts[0]["schema_revision"]}

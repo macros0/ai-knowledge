@@ -143,7 +143,14 @@ def rpc(tmp_path,monkeypatch):
                 self.send_response(200);self.end_headers();self.wfile.write(json.dumps({'hits':[{'doc_id':'1'*16}]}).encode())
             else:raise AssertionError(self.path)
         def do_GET(self):
-            calls.append(self.path);self.send_response(401 if revoked['value'] else 200);self.end_headers()
+            calls.append(self.path)
+            if revoked['value'] and self.path=='/api/auth/me' and fail.get('anonymous_me'):
+                user=dict(user_id='anonymous',username='anonymous',groups=[],roles=[])
+                if fail.get('user_field'):user[fail['user_field']]=['privileged'] if fail['user_field'] in {'groups','roles'} else 'replica.admin'
+                self.send_response(200);self.end_headers()
+                self.wfile.write(json.dumps(dict(mode=fail.get('mode','simulation'),user=user)).encode());return
+            allow_download=fail.get('download_allowed') and self.path=='/api/documents/'+'1'*16+'/download'
+            self.send_response(200 if revoked['value'] and allow_download else 401 if revoked['value'] else 200);self.end_headers()
             if self.path=='/api/documents/'+'1'*16+'/download':self.wfile.write(original_doc)
             elif self.path=='/api/jobs/17/export/1':self.wfile.write(export_raw)
             else:self.wfile.write(b'{"user":{"username":"replica.admin"}}')
@@ -216,6 +223,30 @@ def test_final_logout_is_explicit_and_old_session_is_revoked(rpc):
     m.pod_http({**request,'action':'login','observe':False},directory)
     assert m.pod_http({**request,'action':'logout','observe':False},directory)=={'passed':True,'session_revoked':True}
     assert m.pod_http({**request,'action':'logout','observe':True},directory)['session_revoked']
+    assert calls.count('/api/auth/logout')==1
+
+
+def test_logout_accepts_actual_anonymous_me_only_with_denied_protected_download(rpc):
+    m,request,directory,calls,_,fail,_=rpc;fail['anonymous_me']=True
+    m.pod_http({**request,'action':'login','observe':False},directory)
+    assert m.pod_http({**request,'action':'logout','observe':False},directory)['session_revoked']
+    (directory/'logout.result.json').unlink()
+    assert m.pod_http({**request,'action':'logout','observe':True},directory)['session_revoked']
+    assert m.pod_http({**request,'action':'logout','observe':False},directory)['session_revoked']
+    assert calls.count('/api/auth/logout')==1
+    assert calls.count('/api/documents/'+'1'*16+'/download')==3
+
+
+@pytest.mark.parametrize('fault',['user_id','username','groups','roles','mode','download','401-me-download'])
+def test_logout_refuses_remaining_identity_or_protected_access_without_reposting(rpc,fault):
+    m,request,directory,calls,_,fail,_=rpc
+    fail['anonymous_me']=fault!='401-me-download'
+    if fault in {'user_id','username','groups','roles'}:fail['user_field']=fault
+    if fault=='mode':fail['mode']='disabled'
+    if fault in {'download','401-me-download'}:fail['download_allowed']=True
+    m.pod_http({**request,'action':'login','observe':False},directory)
+    with pytest.raises(ValueError):m.pod_http({**request,'action':'logout','observe':False},directory)
+    assert m.pod_http({**request,'action':'logout','observe':True},directory) is None
     assert calls.count('/api/auth/logout')==1
 
 

@@ -97,6 +97,25 @@ baseline for subsequent attempts. Preserve the old baseline and previous PG
 proof, and create new manifest/execution/HTTP intents; no failed receipts are
 rebound. This repairs test ordering, with no application/readiness change.
 
+The first14-stage attempt also remains unqualified: its gate backend started at
+12:25:19Z, while failed release was observed at12:29:10Z, beyond its180s bound.
+The accepted work completed once after expiry; this cannot prove processing
+under Qdrant denial. Its policy, SQL backend/native processes and session were
+closed separately without rewriting core receipts.
+
+Keep gate and work lease timeouts unchanged. Read pinned ConfigMaps, Secrets,
+claims and storage controllers in one fresh namespaced inventory; read
+deployments in a separate fresh inventory. Validate every original UID, spec
+and immutable value; reject missing, duplicate or foreign resources. Never cache
+snapshots between guards. Probe every API/worker runtime identity with at most
+four concurrent read-only calls; every result and exception remains mandatory.
+
+The simulation logout API can return200 from `/auth/me` with its explicit
+anonymous identity and empty roles/groups. That response (or401) plus401 from
+the protected download with the old cookie are required. Lost logout ACKs use
+GET observations only. Keep the failed original intent and record observer
+source provenance when closing an unqualified trial with the corrected probe.
+
 ## Durable actions and evidence
 
 The coordinator uses existing protected `read_json`/`write_json`/FileLock and the

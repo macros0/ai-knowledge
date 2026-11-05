@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "status": "provider-batched-guard-component-ci-passed",
+  "scope": "fresh input snapshots, concurrent mandatory runtime probes, and actual simulation logout contract",
+  "source_sha256": {
+    "backend/test_scripts/replica_provider_faults.py": "1e887bbdbc6b31f08a4b15592c5482cd23538aad343795ab592fcc4a713e807e",
+    "backend/tests/test_replica_provider_faults.py": "66a68fbd08f928dfa095a6745d049e4eabaa8abbc7180cef2347ece900888504",
+    "scripts/kubernetes/replica_provider_outage.py": "8df0c2b1cfdeeb3eb23e091bd311c90a07d10199080d77e081ff9e105331768d",
+    "scripts/kubernetes/replica_provider_native.py": "5cef5820a641f67d897e3158dc19984a3d1be5155bb7407be9f0f4d948051195",
+    "backend/tests/test_replica_provider_outage.py": "e2bb3d8bd809fd0f39d3813185d31276315bc21fa85c77c76be37d1a435aceae",
+    "backend/tests/test_replica_provider_native.py": "c22e353c7849b4dc97f8c4567633ad9f381f385878f8193f3bf96693a31d8320",
+    "scripts/kubernetes/replica_provider_gate.py": "38e1c9c52b694c34a5e678677f4500bf9b62330da04ea91776d612207f4cbd41",
+    "scripts/kubernetes/replica_provider_gate_native.py": "ca2b5602df6d33a96a4265355266ed478ccd1c55c603830a5893e52b6c14fc90",
+    "backend/tests/test_replica_provider_gate.py": "88678e002c90f4703b67c1637c5c1a40461a525ac1c857ec6f152e6b555655d2",
+    "backend/tests/test_replica_provider_gate_native.py": "b69004c56bb5b8f17779d46ed2f61b72fd8e83a46cee9e2583f759b80f2bb89e",
+    "backend/tests/test_replica_provider_gate_admission.py": "cbafdfba122eda66923367dd71da4cc8a2e0a946eccf3c99972b13edd41dcf72",
+    "scripts/kubernetes/replica_postgres_partition.py": "45f1392358858925c11b0f44db196c4e0606db24953a3126bb7d6445fefe15a8",
+    "backend/tests/test_replica_postgres_partition.py": "85a73a53564d3afa42af17b1beb51e60f83bd6841062992374604a8b1c91a777",
+    "scripts/kubernetes/replica_image_upgrade.py": "abce93c3e54de2cb2c4fa79995c5fea0d8bf72485a1e7505f1733d1ef1fdf6db",
+    "backend/tests/test_replica_image_upgrade.py": "8ae3df1814c8224bf848e5e546fcf97f52b6ff643f706787a07438425644b823",
+    "backend/tests/test_replica_image_upgrade_snapshot.py": "97d6036e4c6fb0861efb0434d3859fb2d885376f572c714fa07764c7acc26804",
+    "backend/test_scripts/replica_runtime_acceptance.py": "94112dcff0e8dabe51d4ab4b9b332a4f641227b7fecfb4f323eb52b73b89de86",
+    "backend/tests/test_replica_runtime_identity_concurrency.py": "68184848c5de3181366347998c84559521356821e8fc1ea1e6370fcb78ab597c",
+    "backend/tests/test_replica_runtime_acceptance.py": "df18a6efb865282c5a9bbd35a06c07f7c873b9cfd0574bd8e00e4f43b0b68988"
+  },
+  "windows": {
+    "tests": 350,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "junit_sha256": "24fa987fb880b502d1631bcf52a27471e7d7da7684b785a4f527f4afb5aad2c9"
+  },
+  "linux": {
+    "operation_id": "adb8b9a719544a9e8013a7d304b39b23",
+    "running": false,
+    "container_id": "b1522052a84376aa309353890afb40a80a01e88d38e943eadbcf378b9612db89",
+    "exit_code": 0,
+    "oom": false,
+    "junit": {
+      "tests": 350,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sha256": "68240ae0549c5345c6ebbe74ded69d37106da601293bba57139ddf9b6a9d53a4"
+    },
+    "windows_case_ids_equal": true,
+    "source_unchanged": true,
+    "verified": true,
+    "failed_case_ids": []
+  },
+  "native_readonly_guard": {
+    "binding_seconds": 2.422000000020489,
+    "core_unchanged": true,
+    "guard_seconds": 9.702999999979511,
+    "mutations": 0,
+    "same_bound_resources": true,
+    "scope": "readonly-existing-fixture-guard-component",
+    "source_sha256": "abce93c3e54de2cb2c4fa79995c5fea0d8bf72485a1e7505f1733d1ef1fdf6db"
+  },
+  "retained_failed_trial": {
+    "execution_id": "6f415069dad046058616fb575f32491e",
+    "completed_stages": 4,
+    "total_stages": 14,
+    "status": "closed-unqualified",
+    "core_unchanged": true,
+    "gate_deadline_exceeded": true,
+    "explicit_release_verified": false,
+    "own_policy_absent": true,
+    "gate_native_processes_gone": true,
+    "sql_backend_gone": true,
+    "work_and_slots_quiescent": true,
+    "logout_observed_without_reposting": true,
+    "selected_publication_unchanged_in_failed_trial": false,
+    "closure_journal_sha256": "887eef13a55b739dae325959ada0667c298a3e8519c53b1e39cde35687adbb9c"
+  },
+  "ci_capacity": {
+    "phase": "capacity-recovered-and-source-verified",
+    "replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "canonical_tables_unchanged": 9,
+    "claims_runtime_and_provider_processes_verified": true,
+    "journal_sha256": "82daaf710744eb6f3798aefab98459298341cfbecd69f0246115b4c6281b274f"
+  },
+  "project_checks": {
+    "passed": true,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "existing_optional_skips": 1,
+    "ruff_findings": 0,
+    "log_sha256": "ec36f479d1055f217bfec46f76c9cc13d47ecf00dbb9438bcd6e65115306d70f"
+  },
+  "matrix_capacity_loans_still_active": 2,
+  "provider_fault_acceptance": false,
+  "full_backend_ci": false,
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled"
+}

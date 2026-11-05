@@ -93,22 +93,50 @@ class ImageUpgrade(ReplicaCredentials):
     def resource(self, kind, name):
         return json.loads(self.kube.run("get", kind, name, "-o", "json"))
 
+    def resource_snapshot(self, *, roles=False):
+        """Read fresh namespaced objects once; never cache between guards."""
+        kinds = {"Deployment"} if roles else {"ConfigMap", "Secret", "PersistentVolumeClaim", "StatefulSet"}
+        query = "deployments" if roles else "configmaps,secrets,persistentvolumeclaims,statefulsets"
+        objects = json.loads(self.kube.run("get", query, "-o", "json"))["items"]
+        if not isinstance(objects, list):
+            raise ValueError("Namespaced upgrade inventory required")
+        result = {}
+        for obj in objects:
+            metadata = obj.get("metadata", {})
+            key = obj.get("kind"), metadata.get("name")
+            if (key[0] not in kinds or not isinstance(key[1], str) or not key[1]
+                    or metadata.get("namespace") != self.value["namespace"]
+                    or not isinstance(metadata.get("uid"), str) or not metadata["uid"] or key in result):
+                raise ValueError("Duplicate, foreign or incomplete upgrade resource")
+            result[key] = obj
+        return result
+
     def check_inputs(self):
         self.lab.assert_namespace()
+        objects = self.resource_snapshot()
         for key, expected in self.journal["pinned_inputs"].items():
             kind, name = key.split("/", 1)
-            assert_pinned_input(self.resource(kind, name), expected)
-        claims = json.loads(self.kube.run("get", "pvc", "-o", "json"))["items"]
+            kind = {"cm": "ConfigMap", "secret": "Secret"}.get(kind, kind)
+            current = objects.get((kind, name))
+            if current is None:
+                raise ValueError("Pinned upgrade input is missing")
+            assert_pinned_input(current, expected)
+        claims = [obj for (kind, _), obj in objects.items() if kind == "PersistentVolumeClaim"]
         if {c["metadata"]["name"]: {"uid": c["metadata"]["uid"], "spec": c["spec"]} for c in claims} != self.journal["claims"]:
             raise ValueError("Retained upgrade claims changed")
         for name, expected in self.journal["old_storage"].items():
-            current = self.resource("sts", name)
+            current = objects.get(("StatefulSet", name))
+            if current is None:
+                raise ValueError("Retained storage controller is missing")
             if current["metadata"]["uid"] != expected["metadata"]["uid"] or current["spec"] != expected["spec"]:
                 raise ValueError("Storage controller changed during image-only upgrade")
 
     def check_roles(self, *, staged, allow_running=False):
+        objects = self.resource_snapshot(roles=True)
         for role, baseline in self.journal["old_deployments"].items():
-            current = self.resource("deploy", role)
+            current = objects.get(("Deployment", role))
+            if current is None:
+                raise ValueError("Owned upgrade deployment is missing")
             count = current["spec"]["replicas"]
             if count not in ({0, 1 if role == "model-stub" else 2} if allow_running else {0}):
                 raise ValueError("Expected stopped/staged upgrade role count differs")

@@ -89,7 +89,8 @@ project checks, current image/source and actual data must all agree.
   Scoped credentials, independent preimage copy (2 documents/12 encrypted
   objects), real same-schema upgrade to65d and current independent copy
   (3 documents/17 objects) are now verified on the corrected fresh fixture.
-  Current PG partition is proven; stale return and Qdrant/model remain pending.
+  Current PG partition/stale return and physical recovery are proven;
+  Qdrant/model remain pending.
 - [ ] Close handles/policies/fixtures, retain data and return all original
   counts/runtime/PVC/nine-table hashes; no open capacity debt.
 - [ ] Publish new scoped report, reconcile matrix/runbooks and commit after
@@ -233,3 +234,36 @@ processes. Only the owned frontend transport was refreshed afterward. Original
 two matrix capacity loans remain active until complete trial closure. A fresh
 14-stage history and final full backend CI are still required; the old4/13
 unqualified history is retained. No provider qualification or production change.
+
+### Task3 correction: fit full guards inside the unchanged fault window
+
+The new14-stage attempt reached4/14 before gate release failed. Actual gate
+backend start12:25:19Z and failure observation12:29:10Z exceed180s; selected
+work completed once after expiry and cannot prove a failed Qdrant attempt.
+Its exact CNP was removed; native parent/exec and SQL backend are gone, work
+and model slots quiescent. Core history remains unchanged/unqualified. The
+failed logout POST was then observed using the corrected real anonymous-user
+plus protected-download401 contract, without reposting.
+
+Ruling: batch fresh image-input/deployment reads and run every independent
+runtime identity probe with bounded concurrency4, retaining all integrity
+checks and exceptions. Do not extend timeouts, cache live state or relax guards.
+Read-only component measurements retain the same complete binding: bind2.42s,
+full guard9.70s (previous sample22.13s). These are not new fault acceptance.
+
+Files: image-upgrade input guards, runtime identity probe, provider native HTTP
+observer and corresponding tests. Eleven snapshot RED cases preceded batching;
+an actual `cm/secret` journal-alias RED case preceded canonical lookup.
+Anonymous logout and401-me with retained protected access reproduced RED before
+HTTP correction. Five concurrency cases failed before implementation. Windows
+changed suites:38 image/snapshot,63 native HTTP and5 concurrency cases pass.
+Next: combined Windows/Linux checks, required project checks, scoped commit and
+a new native history. Never resume the expired trial on changed source.
+
+[Guard correction evidence](../reports/2026-11-05-replica-provider-batched-guard-ci.json):
+all350 combined cases passed on both Windows and Linux with identical IDs,
+0 skips/failures/errors, noOOM and unchanged source. Required project checks
+passed. The new CI-only loan returned2/2/2/runtime/PVC/nine canonical tables and
+all four provider processes unchanged; only the owned frontend transport was
+refreshed. Both older matrix loans still await final matrix closure. The expired
+trial remains closed-unqualified; the prepared next trial has not yet started.

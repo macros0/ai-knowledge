@@ -181,6 +181,16 @@ def pod_http(request,directory):
         except urllib.error.HTTPError as exc:
             # Never return provider/app error bodies or response headers.
             return exc.code,b'',{}
+    def revoked():
+        status,body,_=http('/api/auth/me')
+        if status==200:
+            payload=json.loads(body);user=payload.get('user')
+            if not (payload.get('mode')=='simulation' and isinstance(user,dict)
+                    and user.get('user_id')==user.get('username')=='anonymous'
+                    and user.get('groups')==[] and user.get('roles')==[]):return False
+        elif status!=401:return False
+        protected,_,_=http('/api/documents/'+request['doc_id']+'/download')
+        return protected==401
     if action=='check':
         need(cookie is not None)
         expected=request['checks'];need(set(expected)=={'original_sha256','query','export_job','export_part','export_sha256'})
@@ -209,8 +219,7 @@ def pod_http(request,directory):
             if status==200 and json.loads(body)['user']['username']=='replica.admin':
                 return {'passed':True,'authenticated':True}
         if action=='logout' and cookie:
-            status,_,_=http('/api/auth/me')
-            if status==401:return {'passed':True,'session_revoked':True}
+            if revoked():return {'passed':True,'session_revoked':True}
         return None
     if observe:return None
     if action!='login':need(cookie is not None)
@@ -227,7 +236,7 @@ def pod_http(request,directory):
         need(json.loads(body)['id']==request['doc_id']);result={'passed':True,'document_id':request['doc_id']}
     else:
         status,_,_=http('/api/auth/logout',{});need(status==200)
-        status,_,_=http('/api/auth/me');need(status==401);result={'passed':True,'session_revoked':True}
+        need(revoked());result={'passed':True,'session_revoked':True}
     once(result_name,result)
     return result
 

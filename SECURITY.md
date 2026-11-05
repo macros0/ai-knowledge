@@ -3385,3 +3385,12 @@ database lease and an owned worker blocked by that exact backend before denial;
 rollback must finish before that captured lease expires. Expiry/EOF cannot be
 substituted for a successful explicit-release receipt. No readiness override,
 work lease/clock change or uncertain model-slot release is supplied by this gate.
+
+Image-input guards read fresh namespaced inventories without cross-guard caches;
+all pinned immutable values, UIDs, controller specs and claims remain checked.
+Missing, duplicate or foreign objects refuse admission. Runtime identity probes
+use at most four concurrent read-only calls, retain every result and propagate
+failures. Transport overhead is reduced without extending gate/work timeouts.
+Simulation logout evidence requires the old cookie to lose protected download
+access even when `/auth/me` returns its explicit anonymous identity with200.
+Observing a lost logout acknowledgement never sends a second POST.
