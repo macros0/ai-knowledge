@@ -139,7 +139,7 @@ def _observe_nfs_root(value):
             os.close(fd)
 
 
-def _mount(observed):
+def _mount(observed, *, version="4.1"):
     matches = []
     for line in observed["mountinfo"].splitlines():
         pieces = line.split(" - ")
@@ -162,13 +162,16 @@ def _mount(observed):
         if key in options:
             raise ValueError("Ambiguous NFS mount options")
         options[key] = value
-    if any(options.get(k) != v for k, v in {"vers": "4.1", "proto": "tcp", "sec": "sys"}.items()):
-        raise ValueError("Selected NFSv4.1 transport required")
+    if any(options.get(k) != v for k, v in {"vers": version, "proto": "tcp", "sec": "sys"}.items()):
+        raise ValueError("Selected NFS transport required")
     return after[1], options
 
 
 def verify_rwx_relocation(settings, plan, source_binding):
     """Return stable physical identity, never trust supplied target observations."""
+    from .nas_restore import RECIPE as NAS_RECIPE, verify_nas_relocation
+    if any(v.component == "artifacts" and v.recipe == NAS_RECIPE for v in plan.storage):
+        return verify_nas_relocation(settings, plan, source_binding)
     source, scope = _source(plan, source_binding)
     namespace = settings.deployment_namespace
     if (settings.artifact_backend != "rwx" or settings.artifact_provider != "external"
