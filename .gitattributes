@@ -40,3 +40,6 @@ docs/superpowers/reports/2026-11-06-replica-s4-final-backend-ci.json -text white
 docs/superpowers/reports/2026-11-06-replica-s4-rwx-native-closure.json -text whitespace=cr-at-eol
 docs/superpowers/reports/2026-11-06-replica-synology-target-closure.json -text whitespace=cr-at-eol
 deploy/kubernetes/replicas/support-matrix.json text eol=lf
+docs/superpowers/reports/2026-11-05-replica-gateway-platform.json text eol=lf
+docs/superpowers/reports/2026-11-05-frontend-oidc-http-ci.json text eol=lf
+docs/superpowers/reports/2026-11-02-replica-local-backup-alerts.json text eol=lf
