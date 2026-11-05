@@ -135,3 +135,20 @@ This sequence avoids using a superseded full run as current evidence. Close all
 forwards/policies/fixtures, retain data and return every fresh capacity loan with
 original2/2/2/runtime/PVC/nine-table hashes. Report selected scope only; all
 certifications remain null, physical/customer gates separate, productionOFF.
+
+An unknown model call can retain its global slot while document work is still
+running inside retry/admission waits. This is a supported quarantine branch,
+not evidence that TTL may release the call. A separate source-bound physical
+recovery producer may adopt the immutable parent history, reobserve its exact
+reservation, policy and both busy API identities, then use the existing audited
+stop/reconcile/release workflow. Preserve the parent as partial; never execute
+it using a forged old code digest or fabricate a worker-crash receipt. Final
+matrix validation must cover every required scenario through its actual
+parent/child receipts and epoch chain, without presenting a partial legacy
+automatic-retry history as an all-stage success.
+
+Retain only the own synthetic parent session in protected PC storage before
+stopping APIs. Verify its continuity after restart and revoke it exactly once.
+Record logout intent before POST; a lost acknowledgement permits GET-only
+observation. A changed post-recovery publication/work/corpus/maintenance snapshot,
+wrong frozen export or remaining protected access blocks final acceptance.

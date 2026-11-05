@@ -267,3 +267,48 @@ passed. The new CI-only loan returned2/2/2/runtime/PVC/nine canonical tables and
 all four provider processes unchanged; only the owned frontend transport was
 refreshed. Both older matrix loans still await final matrix closure. The expired
 trial remains closed-unqualified; the prepared next trial has not yet started.
+
+### Task3 actual model quarantine and physical recovery
+
+The next9ef5... history passed Qdrant gate/submit/deny/observe/heal/verify: the
+same work recovered atattempt2/fence2 with original SHA/search/frozen ZIP intact.
+It reached10/14 after one model-denied regeneration. The work remained running
+inside model-budget waits; an unknown call retains its reservation, even past
+DB-clock expiry. Both APIs independently refused new admission, model counters
+remained5started/5finished/0active and publication stayed unchanged. Preserve
+this expected quarantine branch; the old automatic queued/released-slot observer
+does not qualify it. Keep the parent history unchanged at10/14.
+
+Implement `replica_model_recovery.py` as a separate, source-bound producer for
+the existing independently backed exact-token physical recovery. Admit only the
+original history/work/namespace/policy and live slot; reobserve both API busy
+checks. Reuse the audited worker-loss stop/reconcile/release/start primitives,
+with truthful model fault reporting and no invented crash receipt. Minimal
+verification-client/authentication/summary hooks preserve old worker-loss
+behavior. Preserve the parent's synthetic cookie only in protected PC storage
+before stopping APIs; verify continuity and old-cookie revocation after return.
+Lost logout ACKs use observation only. No slot, queue or clock edits outside the
+existing audited reconciliation API are allowed.
+
+Windows118 and Linux118 recovery/worker/PG/authority cases passed identically,
+0skips/failures/errors; source unchanged/noOOM. Required project checks passed.
+This bounded CI used1GiB with a pre-start2GiB host floor (1GiB reserve), actual
+MemAvailable2435624960B; no capacity loan was needed. Native physical recovery,
+final source full backend CI and final matrix closure are still pending.
+
+[Model physical recovery](../reports/2026-11-05-replica-model-quarantine-recovery.json)
+now passed on the retained actual outage: exact slot11 was reconciled only after
+all writers/provider were physically absent, with one audit under epoch6. The
+same accepted work recovered from captured fence3 to4; all four documents,
+original SHA/search/frozen ZIP and parent-session continuity survived. One logout
+revoked the original cookie. CNP0 and2/2/2 were verified. The first verify command
+refused a relative journal path in the report guard before HTTP/logout; an
+absolute journal path completed the unchanged code/operation. Keep this CLI
+path limitation documented; no evidence was rewritten to bypass it.
+
+The historical parent remains10/14, rather than a false14/14 success. Final
+provider-matrix evidence must explicitly combine its completed Qdrant receipts
+with this exact parent-bound quarantine/recovery child. Full final-source backend
+CI, fixture shutdown, handle closure and both original matrix capacity returns
+remain required before completing Task3. Do not repeat closed native faults
+merely to hide the expected quarantine branch or discard their history.

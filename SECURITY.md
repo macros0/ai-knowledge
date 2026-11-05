@@ -3394,3 +3394,14 @@ failures. Transport overhead is reduced without extending gate/work timeouts.
 Simulation logout evidence requires the old cookie to lose protected download
 access even when `/auth/me` returns its explicit anonymous identity with200.
 Observing a lost logout acknowledgement never sends a second POST.
+
+Owned model quarantine recovery validates immutable historical provider receipts
+without executing a parent with an overridden code digest. Its independent
+source/backup authority and live namespace, exact reservation, selective policy
+and two busy API probes precede any physical recovery. The existing audited
+reconciliation remains the only slot-release path. Stop facts are reobserved
+before UID-bound policy removal and maintenance release. The parent stays
+partial; no fabricated crash receipt or implicit TTL acknowledgement is allowed.
+Only that synthetic run's session may be retained in protected local storage
+for restart continuity and one-shot logout. Snapshot drift, wrong frozen export,
+remaining old-cookie access or a report path alias blocks verification.

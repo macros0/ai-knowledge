@@ -503,9 +503,19 @@ else:
         self.save(phase="running", runtime=ready)
         emit("recovery-running", epoch=self.journal["epoch"], replicas=ready["replicas"], functional_check="pending")
 
+    def verification_client(self):
+        import httpx
+        return httpx.Client(base_url=self.value["frontend_url"], trust_env=False, timeout=25)
+
+    def authenticate_verification_client(self, client):
+        client.post("/api/auth/simulate", json={"username": "replica.admin"}).raise_for_status()
+
+    def fault_summary(self):
+        return {"crashed_worker_containers": self.journal["crash_receipt"]["stopped_containers"],
+            "provider_active_after_crash": 1}
+
     def verify(self, report):
         self.preflight("verify")
-        import httpx
         from test_scripts.replica_runtime_faults import verify_corpus_search_download
         if self.journal["phase"] not in {"running", "verified"}:
             raise ValueError("Running recovered installation required")
@@ -514,9 +524,9 @@ else:
             raise ValueError("Recovered runtime identity differs")
         document = self.journal["document"]
         began, last_progress = time.monotonic(), time.monotonic()
-        with httpx.Client(base_url=self.value["frontend_url"], trust_env=False, timeout=25) as client:
+        with self.verification_client() as client:
             client.get("/").raise_for_status()
-            client.post("/api/auth/simulate", json={"username": "replica.admin"}).raise_for_status()
+            self.authenticate_verification_client(client)
             while True:
                 response = client.get("/api/documents/" + document["id"])
                 response.raise_for_status()
@@ -549,7 +559,7 @@ else:
             "namespace": self.value["namespace"], "namespace_uid": self.value["namespace_uid"],
             "installation_id": self.config["installation_id"], "runtime_fingerprint": self.fingerprint,
             "operation_id": self.journal["operation_id"], "source_epoch": self.journal["source_epoch"], "recovery_epoch": self.journal["epoch"],
-            "crashed_worker_containers": self.journal["crash_receipt"]["stopped_containers"], "provider_active_after_crash": 1,
+            **self.fault_summary(),
             "provider_image_digest": self.journal["binding"]["provider_image_digest"],
             "quarantine": {"provider_finished": True, "db_clock_past_original_expiry": True,
                 "original_reservation_retained": True, "busy_independent_apis": 2, "extra_provider_requests": 0},
