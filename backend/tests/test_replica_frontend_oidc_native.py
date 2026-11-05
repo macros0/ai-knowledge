@@ -271,8 +271,7 @@ def test_backend_proof_rejects_wrong_client_secret_before_sql(tmp_path):
     exec(source,{'s':settings,'json':json})
 
 
-@pytest.mark.parametrize('empty_endpoints',[[],None])
-def test_only_explicit_lost_first_slot_may_temporarily_have_no_endpoint(empty_endpoints):
+def _assert_only_explicit_lost_first_slot_may_have_no_endpoint(empty_endpoints):
     parts=world();v,app,_,_,_=parts
     fronts={o['metadata']['labels']['okf-f2-probe-slot']:o for o in app if o['kind']=='Pod' and 'okf-f2-probe-slot' in o['metadata']['labels']}
     first=fronts['first'];del first['metadata']['labels']['okf-f2-probe-slot']
@@ -281,6 +280,14 @@ def test_only_explicit_lost_first_slot_may_temporarily_have_no_endpoint(empty_en
     with pytest.raises(ValueError):validate(parts)
     observed=module().validate_oidc_scope(*parts,slot_bindings={'first':None,'second':fronts['second']['metadata']['uid']})
     assert observed['slot_frontends']['first'] is None
+
+
+def test_only_explicit_lost_first_slot_may_temporarily_have_no_endpoint():
+    _assert_only_explicit_lost_first_slot_may_have_no_endpoint([])
+
+
+def test_null_slice_is_admitted_only_for_explicit_lost_first_slot():
+    _assert_only_explicit_lost_first_slot_may_have_no_endpoint(None)
 
 
 def test_null_endpoint_slice_cannot_hide_an_expected_live_frontend():
