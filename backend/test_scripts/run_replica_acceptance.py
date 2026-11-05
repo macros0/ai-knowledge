@@ -14,14 +14,15 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_scripts.replica_runtime_acceptance import probe_runtime
 from test_scripts.replica_frontend_acceptance import probe_frontend
-from test_scripts.replica_frontend_adapter import execute_frontend
-from test_scripts.replica_frontend_native import STAGES as FRONTEND_STAGES
+from test_scripts.replica_frontend_adapter import execute_frontend, capsule_fingerprint
+from test_scripts.replica_frontend_native import STAGES as FRONTEND_STAGES, digest
 from test_scripts.replica_runtime_plan import REQUIRED_CHECKS, STAGES
 
 RUNNER_SHA256 = sha256(b"".join((Path(__file__).parent / name).read_bytes()
     for name in ("run_replica_acceptance.py", "replica_runtime_acceptance.py", "replica_runtime_faults.py",
                  "replica_frontend_acceptance.py", "replica_frontend_adapter.py", "replica_frontend_native.py",
-                 "replica_frontend_process.py", "replica_frontend_http.py", "replica_frontend_run.py"))).hexdigest()
+                 "replica_frontend_process.py", "replica_frontend_http.py", "replica_frontend_run.py",
+                 "replica_frontend_oidc_http.py", "replica_frontend_oidc_business.py", "replica_frontend_oidc_native.py"))).hexdigest()
 
 SUITES = ("contracts", "frontend", "storage", "runtime", "operations", "all")
 
@@ -65,6 +66,25 @@ def execute_owned_runtime(manifest, journal, stage, *, apply=False, resume=False
     return execute(manifest, journal, stage, apply=apply, resume=resume)
 
 
+def verified_oidc_provider(manifest,frontend):
+    evidence=frontend.get('provider_evidence')
+    if evidence is None:return False
+    recipe='owned-keycloak-local-v1'
+    if manifest.get('functional_recipe')!=recipe or frontend.get('selected_case_passed') is not True:
+        raise ValueError('Complete real OIDC recipe required')
+    for field,size in [('execution_id',32),('runner_sha256',64),('binding_sha256',64)]:
+        if not isinstance(frontend.get(field),str) or not re.fullmatch('[0-9a-f]{'+str(size)+'}',frontend[field]):
+            raise ValueError('Native OIDC identity differs')
+    receipts={r['name'].removeprefix('frontend.'):r.get('evidence_sha256') for r in frontend['checks']}
+    if (set(receipts)!=set(FRONTEND_STAGES) or any(r['status']!='passed' for r in frontend['checks'])
+            or any(not isinstance(x,str) or not re.fullmatch('[0-9a-f]{64}',x) for x in receipts.values())):
+        raise ValueError('All actual native OIDC stage receipts required')
+    expected=dict(recipe=recipe,execution_id=frontend['execution_id'],code_sha256=frontend['runner_sha256'],
+        binding_sha256=frontend['binding_sha256'],capsule_sha256=capsule_fingerprint(recipe),receipts_sha256=receipts)
+    if evidence!=expected:raise ValueError('Native OIDC provider evidence differs')
+    return True
+
+
 def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known_hosts=None, idle_faults=False, active_faults=False,
                  owned_stage=None, owned_journal=None, apply_owned=False, resume_owned=False,
                  frontend_stage=None, frontend_journal=None, apply_frontend=False, observe_frontend=False) -> dict:
@@ -79,7 +99,7 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
     # Syntactic validation is not a live namespace/PVC/provider probe.
     checks.extend({"name": name, "status": "pending", "reason": "live_probe_not_implemented"}
                   for name in requested)
-    frontend = None
+    frontend = None;oidc_verified=False
     selected_frontend = any((frontend_stage,frontend_journal,apply_frontend,observe_frontend))
     if selected_frontend and (not live or suite!='frontend' or frontend_stage is None or frontend_journal is None
             or any((owned_stage,owned_journal,apply_owned,resume_owned,idle_faults,active_faults))
@@ -96,12 +116,14 @@ def build_report(manifest: dict, suite: str, *, live=False, ssh_host=None, known
                     or type(frontend.get('selected_case_passed')) is not bool
                     or (frontend['selected_case_passed'] and any(row['status']!='passed' for row in rows))):
                 raise ValueError('Full native frontend stage set required')
+            oidc_verified=verified_oidc_provider(manifest,frontend)
             checks.extend({k:v for k,v in row.items() if k in {'name','status','evidence_sha256'}} for row in rows)
         except Exception:
-            frontend = None
+            frontend = None;oidc_verified=False
             checks.append({'name':'frontend.owned_stage','status':'failed','reason':'owned_frontend_refused_or_interrupted'})
             checks.append({'name':'frontend.current_run','status':'pending','reason':'observe_same_native_intent'})
-        checks.extend({'name':'frontend.'+name,'status':'pending','reason':'real_provider_not_observed'}
+        checks.extend({'name':'frontend.'+name,'status':'passed' if oidc_verified else 'pending',
+                      **({'evidence_sha256':digest(frontend['provider_evidence'])} if oidc_verified else {'reason':'real_provider_not_observed'})}
                       for name in ('production_csrf','gateway_sso'))
     elif (valid and live and "frontend" in requested
             and (suite == "frontend" or manifest.get('deployment_mode') == 'frontend-split')):

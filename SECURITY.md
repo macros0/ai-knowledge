@@ -3296,3 +3296,17 @@ state; the mutations are never resubmitted. Native handle closure covers the
 two Gateway forwards and client; simulation admission and its five handles
 retain their separate defaults. These implementation tests do not clear real
 Keycloak/Gateway acceptance or production qualification gates.
+
+The common frontend runner selects OIDC only through its separate literal
+eight-module capsule. Its bootstrap and stream child use isolated Python;
+only seven additional nonsecret namespace/controller/image/user identity fields
+cross the parent transport. The three child modules are materialized privately
+with exact source/hash equality, never imported from VM cwd or PYTHONPATH.
+After all twelve stages, a separate native verification rechecks current scope
+and every stage receipt, then returns their hashes with execution/code/binding
+and capsule identities. The parent must match all hashes to its completed
+journal and current capsule before the common CLI clears the selected real
+CSRF/Gateway checks. A manifest recipe flag, partial history, another capsule or
+mismatched receipt cannot provide that result. Simulation keeps those checks
+pending. This selected-case proof does not issue signed qualification,
+certification, production scheduling or a whole-profile acceptance result.

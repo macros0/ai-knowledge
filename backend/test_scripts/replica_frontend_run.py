@@ -1,4 +1,4 @@
-"""Durable stages for an explicitly selected, owned frontend simulation.
+"""Durable stages for an explicitly selected, owned frontend recipe.
 
 This is an execution journal, not a signed qualification producer. Native
 side effects have one intent each; an uncertain response permits observation

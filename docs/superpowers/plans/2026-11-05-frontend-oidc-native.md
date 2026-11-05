@@ -51,7 +51,7 @@ Real CSRF/SSO status requires the entire actual native recipe, not an input flag
   model/PID loss gate, one tested label patch and delete, replacement read checks,
   logout and exact handle closure. Keep the simulation recipe strict. Stage
   source modules needed by the child as private SHA-verified immutable files.
-- [ ] **Common runner integration.** Add only declared OIDC modules and
+- [x] **Common runner integration.** Add only declared OIDC modules and
   nonsecret safe fields in `replica_frontend_adapter.py`; select coordinator by
   exact recipe. Reuse parent stage/journal flags. Add adapter/CLI tests rejecting
   missing/mismatched capsule/recipe/UID metadata, passwords in payload and mixed
@@ -110,3 +110,22 @@ HTTPRoute had backendRefs; redirect routes correctly have none. The corrected
 combined run passed. Common runner/capsule completion attestation is still Task3;
 the native implementation does not clear release gates by itself. No VM resource
 change, capacity loan or source transfer was used in Task2.
+
+## Task3 verification
+
+The separate literal OIDC capsule now contains the original five modules plus
+OIDC wire/business/native modules in dependency order. Its bootstrap uses Python
+isolated mode and materializes only the three declared child modules, requiring
+exact source equality on observation. The transport adds only the seven typed
+nonsecret OIDC identity fields. After completion it requests a read-only native
+all-stage proof and compares the twelve actual receipt hashes, execution/code/
+binding identities and current capsule to the parent's completed journal.
+
+The common CLI requires that full proof to clear selected production_csrf and
+gateway_sso checks; the recipe flag, missing proof, partial stages and mismatched
+capsule/receipt/identity keep them open. Global qualification stays independent.
+The common runner fingerprint includes all three OIDC sources. Adapter/native
+attestation/runner/CLI tests passed67 cases (87.13s), and the separate common
+acceptance safety/report cohort passed47 cases (59.08s). Mandatory project
+checks passed (audit0, frontend756 passes/one existing skip, Ruff0). Actual
+current-source Linux/full Gateway/Keycloak evidence remains Task4.

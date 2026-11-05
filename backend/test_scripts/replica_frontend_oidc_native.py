@@ -11,7 +11,7 @@ import os
 from urllib.parse import urlsplit
 
 from test_scripts.replica_frontend_acceptance import validate_frontend_inventory
-from test_scripts.replica_frontend_native import Coordinator, digest
+from test_scripts.replica_frontend_native import Coordinator, STAGES, digest
 from test_scripts.replica_frontend_oidc_http import OIDCProbe
 from test_scripts.replica_frontend_oidc_business import GatewayFrontendHTTP
 
@@ -327,6 +327,15 @@ class OIDCCoordinator(Coordinator):
         validate_oidc_inputs(value)
         super().__init__(directory,value,http_factory=http_factory,**kwargs)
         self.probe_factory=probe_factory
+
+    def attest(self,request):
+        require(request.get('stage')=='final' and all(self.files.path('native.'+s+'.result.json').exists() for s in STAGES))
+        require(self.files.path('loss.delete-ack.json').exists() and self.files.path('oidc.replacement-label.ack.json').exists())
+        result=self.dispatch(request,observe=True)
+        require(result is not None and result['status']=='passed')
+        return dict(recipe=self.RECIPE,**{k:request[k] for k in ('execution_id','code_sha256','binding_sha256')},
+            capsule_sha256=digest(self.files.read('capsule.json')),
+            receipts_sha256={s:digest(self.files.read('native.'+s+'.result.json')) for s in STAGES})
 
     def snapshot(self):
         v=self.value
