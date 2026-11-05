@@ -271,15 +271,23 @@ def test_backend_proof_rejects_wrong_client_secret_before_sql(tmp_path):
     exec(source,{'s':settings,'json':json})
 
 
-def test_only_explicit_lost_first_slot_may_temporarily_have_no_endpoint():
+@pytest.mark.parametrize('empty_endpoints',[[],None])
+def test_only_explicit_lost_first_slot_may_temporarily_have_no_endpoint(empty_endpoints):
     parts=world();v,app,_,_,_=parts
     fronts={o['metadata']['labels']['okf-f2-probe-slot']:o for o in app if o['kind']=='Pod' and 'okf-f2-probe-slot' in o['metadata']['labels']}
     first=fronts['first'];del first['metadata']['labels']['okf-f2-probe-slot']
     ep=next(o for o in app if o['kind']=='EndpointSlice' and o['metadata']['labels'].get('kubernetes.io/service-name')=='frontend-slot-first')
-    ep['endpoints']=[]
+    ep['endpoints']=empty_endpoints
     with pytest.raises(ValueError):validate(parts)
     observed=module().validate_oidc_scope(*parts,slot_bindings={'first':None,'second':fronts['second']['metadata']['uid']})
     assert observed['slot_frontends']['first'] is None
+
+
+def test_null_endpoint_slice_cannot_hide_an_expected_live_frontend():
+    parts=world()
+    ep=next(o for o in parts[1] if o['kind']=='EndpointSlice' and o['metadata']['labels'].get('kubernetes.io/service-name')=='frontend-slot-first')
+    ep['endpoints']=None
+    with pytest.raises(ValueError):validate(parts)
 
 
 def test_explicit_slot_binding_rejects_an_unjournaled_replacement():

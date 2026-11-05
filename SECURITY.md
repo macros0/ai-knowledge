@@ -3322,3 +3322,9 @@ ListenerSet admission checks Accepted/Programmed on the set and the current
 generation's Accepted/ResolvedRefs/Programmed plus no conflict on its exact
 named listener. HTTPRoute support must be present. A top-level ready flag cannot
 hide a missing, stale, conflicting or unresolved listener certificate reference.
+
+An EndpointSlice serialized with `endpoints: null` is accepted as empty only
+when no Pod is expected for that Service. The first OIDC helper slot can reach
+that state only under the existing journaled victim-loss binding; null endpoints
+cannot substitute for a live frontend, survivor, IdP or Gateway endpoint. Service
+owner UID and exact ready endpoint identities remain mandatory.

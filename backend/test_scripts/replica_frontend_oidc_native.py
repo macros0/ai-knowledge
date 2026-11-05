@@ -128,7 +128,12 @@ def endpoints(objects, service, pods):
         if ep['kind']!='EndpointSlice' or ep['metadata'].get('labels',{}).get('kubernetes.io/service-name')!=service['metadata']['name']:continue
         refs=ep['metadata'].get('ownerReferences',[])
         require(len(refs)==1 and refs[0]['kind']=='Service' and refs[0]['uid']==service['metadata']['uid'])
-        for e in ep.get('endpoints',[]):
+        entries=ep.get('endpoints')
+        if entries is None:
+            require(not expected)
+            entries=[]
+        require(isinstance(entries,list))
+        for e in entries:
             if e.get('conditions',{}).get('ready') is not True:continue
             ref=e.get('targetRef',{});identity=ref.get('uid')
             require(ref.get('kind')=='Pod' and identity in expected and not e['conditions'].get('terminating'))

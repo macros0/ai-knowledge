@@ -209,6 +209,14 @@ def test_bad_tls_stream_or_child_source_never_allows_delete(fault,tmp_path):
     assert not [c for c in kube.calls if c[0]=='delete']
 
 
+def test_loss_observation_accepts_api_null_slice_only_after_owned_delete(tmp_path):
+    current,kube,_=before_loss(tmp_path);current.dispatch(envelope('loss'));replaced(current,kube)
+    ep=next(o for o in kube.parts[1] if o['kind']=='EndpointSlice' and o['metadata']['labels'].get('kubernetes.io/service-name')=='frontend-slot-first')
+    ep['endpoints']=None
+    assert current.dispatch(envelope('loss-observe'))['status']=='passed'
+    assert len([c for c in kube.calls if c[0]=='delete'])==1
+
+
 def test_replacement_patches_one_uid_and_resource_version_then_preserves_session(tmp_path):
     current,kube,process=before_loss(tmp_path);current.dispatch(envelope('loss'));replaced(current,kube)
     assert current.dispatch(envelope('loss-observe'))['status']=='passed'

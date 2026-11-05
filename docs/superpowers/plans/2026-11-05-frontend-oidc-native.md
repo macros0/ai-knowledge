@@ -150,3 +150,20 @@ support and Conflicted=False. Seven RED cases covered the real status shape and
 missing/unresolved/conflicting/stale/foreign/unsupported listeners; the corrected
 native/lifecycle/attestation cohort passed70 cases. The prepared85ff81e CI packet
 was not transferred or started; the next full run must include this correction.
+
+Task4 live verification on5d46ce8: full Linux CI collected/executed7000 cases,
+6779 passed/221 unchanged optional skips,0 failures/errors,87.6989% coverage;
+all prior/Windows IDs and exact tracked source hashes were retained. The first
+real session attempt exposed a fixture-only ingress mismatch: actual Envoy
+ports80/443 versus8080/8443. Both old forwards were closed and empty corpus/
+sessions/model confirmed before a UID/spec-tested own NetworkPolicy correction.
+Verified HTTPS discovery then returned200 with the exact issuer.
+
+A separate execution passed preflight, real SSO/CSRF/session, upload, publish,
+export, streams and the actual gated UID deletion. Its read-only loss observation
+exposed API serialization of the now-empty first EndpointSlice as `null`.
+Two regression tests reproduced that failure; admission now accepts null only
+with an explicitly empty expected Pod set, retaining all ownership/live endpoint
+checks. The partial execution and data remain evidence of an incomplete case;
+it must not be rebound to a changed source capsule or counted as all12 passed.
+Corrected-source verification and a fresh complete case remain required.
