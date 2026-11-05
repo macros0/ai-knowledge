@@ -8,7 +8,7 @@ import sys
 import pytest
 
 
-STAGES=('preflight','baseline','qdrant.inject','qdrant.submit','qdrant.observe','qdrant.heal','qdrant.verify',
+STAGES=('preflight','baseline','qdrant.gate','qdrant.submit','qdrant.inject','qdrant.observe','qdrant.heal','qdrant.verify',
     'model.inject','model.submit','model.observe','model.heal','model.verify','final')
 
 
@@ -70,7 +70,7 @@ def test_out_of_order_stage_has_no_side_effect(tmp_path,stage):
     assert not a.calls
 
 
-@pytest.mark.parametrize('stage',['baseline','qdrant.inject','qdrant.submit','qdrant.heal','final'])
+@pytest.mark.parametrize('stage',['baseline','qdrant.gate','qdrant.inject','qdrant.submit','qdrant.heal','final'])
 def test_new_mutation_requires_explicit_apply(tmp_path,stage):
     _,a,current=run(tmp_path)
     if stage!='baseline':through(current,STAGES[STAGES.index(stage)-1])
@@ -80,7 +80,7 @@ def test_new_mutation_requires_explicit_apply(tmp_path,stage):
     assert a.calls==before
 
 
-@pytest.mark.parametrize('stage',['qdrant.inject','qdrant.submit','qdrant.heal'])
+@pytest.mark.parametrize('stage',['qdrant.gate','qdrant.inject','qdrant.submit','qdrant.heal'])
 def test_unknown_create_post_or_delete_ack_only_observes_the_original_intent(tmp_path,stage):
     tool,a,current=run(tmp_path);through(current,STAGES[STAGES.index(stage)-1]);a.fail=stage
     with pytest.raises(ValueError):current.execute(stage,apply=True)
@@ -98,7 +98,7 @@ def test_unknown_create_post_or_delete_ack_only_observes_the_original_intent(tmp
 
 
 def test_readonly_pending_observation_is_not_reexecuted(tmp_path):
-    tool,a,current=run(tmp_path);through(current,'qdrant.submit');a.pending='qdrant.observe'
+    tool,a,current=run(tmp_path);through(current,'qdrant.inject');a.pending='qdrant.observe'
     current.execute('qdrant.observe');calls=list(a.calls)
     current=tool.ProviderRun(current.path,a,code_sha256='a'*64)
     current.execute('qdrant.observe',observe=True)
@@ -119,9 +119,9 @@ def test_changed_input_or_source_cannot_resume_an_old_operation(tmp_path,change)
 
 
 def test_live_guard_refusal_precedes_intent_or_action(tmp_path):
-    _,a,current=run(tmp_path);through(current,'baseline');before=current.path.read_bytes();a.block=True
+    _,a,current=run(tmp_path);through(current,'qdrant.submit');before=current.path.read_bytes();a.block=True
     with pytest.raises(ValueError):current.execute('qdrant.inject',apply=True)
-    assert current.path.read_bytes()==before and [s for s,_ in a.calls]==['preflight','baseline']
+    assert current.path.read_bytes()==before and [s for s,_ in a.calls]==list(STAGES[:STAGES.index('qdrant.inject')])
 
 
 def test_observation_without_a_started_intent_cannot_execute_anything(tmp_path):

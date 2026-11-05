@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "status": "provider-active-work-gate-component-verified",
+  "scope": "fixed gate and focused CI; not a provider outage acceptance",
+  "source_sha256": {
+    "backend/test_scripts/replica_provider_stop.py": "9d43606afcf083f4ed2f183a84f34478b538f008c7493f5b4938d10e747f0f68",
+    "backend/tests/test_replica_postgres_partition.py": "85a73a53564d3afa42af17b1beb51e60f83bd6841062992374604a8b1c91a777",
+    "backend/tests/test_replica_provider_stop.py": "e9b435d9c630cb5854d2247372c1bc115436e0a2db86d5f074caa80d67fec6cd",
+    "scripts/kubernetes/replica_postgres_partition.py": "45f1392358858925c11b0f44db196c4e0606db24953a3126bb7d6445fefe15a8",
+    "backend/test_scripts/replica_provider_faults.py": "1e887bbdbc6b31f08a4b15592c5482cd23538aad343795ab592fcc4a713e807e",
+    "backend/tests/test_replica_provider_faults.py": "66a68fbd08f928dfa095a6745d049e4eabaa8abbc7180cef2347ece900888504",
+    "scripts/kubernetes/replica_provider_outage.py": "8df0c2b1cfdeeb3eb23e091bd311c90a07d10199080d77e081ff9e105331768d",
+    "scripts/kubernetes/replica_provider_native.py": "d2f34d30010f36cb01a32a81b88fb2c33ac37a580b09d9217b88cff5b68f7294",
+    "backend/tests/test_replica_provider_outage.py": "e2bb3d8bd809fd0f39d3813185d31276315bc21fa85c77c76be37d1a435aceae",
+    "backend/tests/test_replica_provider_native.py": "016bec828251fc0c898d425e04f89623c8020adfd2bc90bbceb9811265092d33",
+    "scripts/kubernetes/replica_provider_gate.py": "38e1c9c52b694c34a5e678677f4500bf9b62330da04ea91776d612207f4cbd41",
+    "scripts/kubernetes/replica_provider_gate_native.py": "ca2b5602df6d33a96a4265355266ed478ccd1c55c603830a5893e52b6c14fc90",
+    "backend/tests/test_replica_provider_gate.py": "88678e002c90f4703b67c1637c5c1a40461a525ac1c857ec6f152e6b555655d2",
+    "backend/tests/test_replica_provider_gate_native.py": "b69004c56bb5b8f17779d46ed2f61b72fd8e83a46cee9e2583f759b80f2bb89e",
+    "backend/tests/test_replica_provider_gate_admission.py": "cbafdfba122eda66923367dd71da4cc8a2e0a946eccf3c99972b13edd41dcf72"
+  },
+  "windows": {
+    "tests": 278,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "junit_sha256": "c0835e1821d5b9b29f9ffd83ae9a7648d93a9316c0219ced41ccc02527978cc6"
+  },
+  "linux": {
+    "operation_id": "39d17b46c6dd4e588f98f1cd0d823d97",
+    "running": false,
+    "container_id": "27137ec08c53c75c08f778717da79a3707cdf6376f6fb74ecc221d528840594e",
+    "exit_code": 0,
+    "oom": false,
+    "junit": {
+      "tests": 278,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sha256": "c6494f608ba378ef0dc8d14a6af60e9b8ab035d73af49a7c9ef80ac0bb31e861"
+    },
+    "windows_case_ids_equal": true,
+    "source_unchanged": true,
+    "verified": true,
+    "failed_case_ids": []
+  },
+  "native_components": [
+    {
+      "operation_id": "f6e3bda829354bd0a5557013d5427a6b",
+      "controller_loss": false,
+      "explicit_release_verified": true,
+      "sql_backend_gone": true,
+      "native_parent_gone": true,
+      "corpus_resource_slots_unchanged": true,
+      "rows_changed": 0,
+      "model_calls": 0,
+      "policy_changes": 0,
+      "native_journal_sha256": "c4bff8026ef0c0fccd0c6570ef5887ef0d3db1b3a45e2bd97a7d15f6e43d40f1"
+    },
+    {
+      "operation_id": "92a7c7609a604add828436c622a7a89a",
+      "controller_loss": true,
+      "explicit_release_verified": false,
+      "sql_backend_gone": true,
+      "native_parent_gone": true,
+      "corpus_resource_slots_unchanged": true,
+      "rows_changed": 0,
+      "model_calls": 0,
+      "policy_changes": 0,
+      "native_journal_sha256": "f4ebf19e2b5e4283def0fe440f34f5d329b29dbe68a6496d1f72af046ea62dbb"
+    }
+  ],
+  "capacity": {
+    "phase": "capacity-recovered-and-source-verified",
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "canonical_tables_unchanged": 9,
+    "provider_processes_unchanged": true,
+    "claims_and_runtime_verified": true
+  },
+  "protocol_stages": 14,
+  "previous_13_stage_trial": "closed-unqualified-without-work-attempt",
+  "full_backend_ci": false,
+  "provider_fault_acceptance": false,
+  "qualification_complete": false,
+  "certification": null,
+  "production_backup_schedule_enabled": false
+}

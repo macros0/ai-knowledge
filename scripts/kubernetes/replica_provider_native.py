@@ -16,6 +16,8 @@ ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'backend'))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from replica_provider_outage import PolicyActions, ProviderRun, STAGES
+from replica_provider_gate import GateActions, assert_admitted_claim, assert_released_claim
+from replica_provider_gate_native import NativeGate
 from replica_runtime_run import OwnedAdapter, digest, read_json
 from test_scripts.replica_frontend_http import PrivateFiles
 from test_scripts.replica_provider_faults import (
@@ -292,6 +294,9 @@ class NativeAdapter:
         if not directory.exists():directory.mkdir(mode=0o700)
         self.files=PrivateFiles(directory)
         self.policy=PolicyActions(self.kube,self.value,directory,self.operation,lambda:self.guard())
+        gate_value={**self.value,'runtime_fingerprint':self.manifest['runtime_fingerprint']}
+        self.gate_backend=NativeGate(self.kube,gate_value,self.operation)
+        self.gate=GateActions(gate_value,directory,self.operation,lambda:self.guard(),backend=self.gate_backend)
         # This snapshot is recomputed on resume, not trusted merely because a file exists.
         return {**binding,'provider_recipe':RECIPE,'inventory':self.snapshot,'platform':self.platform,'postgres':pg}
 
@@ -326,6 +331,15 @@ class NativeAdapter:
             require(all(new[k]==v for k,v in old.items() if k!=self.extra['doc_id']))
 
     def api(self):return sorted(role_pods(self.kube.inventory(),'api'),key=lambda p:p['metadata']['name'])[0]['metadata']['name']
+
+    def gate_api(self):
+        return json.loads(self.kube.run('get','pod',self.api(),'-o','json'))
+
+    def worker_ips(self):
+        pods=role_pods(self.kube.inventory(),'worker')
+        require(len(pods)==2 and {p['metadata']['uid'] for p in pods}=={key for key,role in self.expected_pods.items() if role=='worker'})
+        result={p['status']['podIP'] for p in pods};require(len(result)==2)
+        return result
 
     def database(self):
         expected={k:self.manifest[k] for k in ('installation_id','runtime_fingerprint')};expected['doc_id']=self.extra['doc_id']
@@ -418,22 +432,56 @@ print(json.dumps({'connectivity':result,'live':live}))
             if logout is None:return None
             return dict(passed=True,provider=provider,postgres=self.pg,session_revoked=True,policies_absent=True)
         provider,action=stage.split('.');base=self.case_base(provider,state)
-        if action=='inject':
+        if action=='gate':
+            require(provider=='qdrant')
             if not observe:
-                self.positive();idle=self.database();require(not any(idle[k] for k in ('model_owners','running','chats')))
+                self.positive();current=self.database()
+                require(current['publication']==base['publication'] and current['works']==base['works']
+                    and not any(current[k] for k in ('model_owners','running','chats')) and self.model()['active']==0)
+            result=self.gate.observe() if observe else self.gate.start(self.gate_api(),base['maintenance']['epoch'])
+            if result is None:return None
+            return dict(passed=True,gate=result['proof'])
+        if action=='inject':
+            claim=None
+            if not observe:
+                self.positive();idle=self.database()
+                require(not any(idle[k] for k in ('model_owners','chats')))
                 require(self.model()['active']==0)
+                if provider=='qdrant':
+                    previous={w['id'] for w in base['works']};added=[w for w in idle['works'] if w['id'] not in previous]
+                    require(idle['publication']==base['publication'] and len(added)==1
+                        and set(w['id'] for w in idle['works'])==previous|{added[0]['id']}
+                        and added[0]['id']==state['completed']['qdrant.submit']['outcome']['work_id'])
+                    ready=self.gate.observe()
+                    probe=self.gate_backend.claim_probe(self.gate.binding(),ready['proof'],added[0]['id'])
+                    claim=assert_admitted_claim(added[0],probe,ready['proof'],self.worker_ips())
+                    self.files.once('qdrant.claim.before-deny.json',claim)
+                else:
+                    require(idle['running']==0)
             result=self.policy.observe_create(provider) if observe else self.policy.create(provider)
             if result is None:return None
             rows=self.network();controls=assert_network(rows,self.expected_pods,provider)
+            if provider=='qdrant':
+                if observe:
+                    claim=self.files.read('qdrant.claim.before-deny.json')
+                require(claim['work_id']==state['completed']['qdrant.submit']['outcome']['work_id'])
+                closed=self.gate.observe_release() if observe else self.gate.release()
+                if closed is None:return None
+                assert_released_claim(claim,closed)
+                return dict(passed=True,policy=result['evidence'],network=controls,provider=self.model(),
+                    admitted_work=claim,gate=closed)
             return dict(passed=True,policy=result['evidence'],network=controls,provider=self.model())
         if action=='submit':
             current=self.database();old={w['id'] for w in base['works']};added=[w for w in current['works'] if w['id'] not in old]
+            if provider=='qdrant':self.gate.observe()
             if observe:
                 receipt=self.rpc(stage,state,observe=True)
                 if receipt is None and not added:return None
             else:
                 require(not added and current['publication']==base['publication'])
-                rows=self.network();assert_network(rows,self.expected_pods,provider)
+                if provider=='qdrant':self.positive()
+                else:
+                    rows=self.network();assert_network(rows,self.expected_pods,provider)
                 receipt=self.rpc(stage,state,observe=False)
                 if receipt is None:return None
                 current=self.database();added=[w for w in current['works'] if w['id'] not in old]

@@ -3370,3 +3370,18 @@ leases, clocks or publication state, and this recipe never grants certification.
 Before final logout, the complete publication/work/corpus/maintenance snapshot
 must still equal the last verified recovery. A previously passed stage cannot
 hide subsequent target drift or provide a stale final success.
+
+The Qdrant active-work rehearsal uses a bounded transaction on only the owned
+installation's `replica_capacity_resources` row for `llm`. It changes no rows,
+uses scoped API runtime credentials and always rolls back, including on stdin
+EOF; PostgreSQL idle-transaction timeout also bounds it to180 seconds. New gate
+creation requires a ready API; observing/closing an existing exact gate may
+continue during the controlled loss of readiness. Namespace/Pod/container/image,
+native PID/start-time and SQL backend PID/start-time are bound before admission.
+Lost start/release acknowledgements are observed without spawning another actor
+or writing another release marker. Gate commands/SQL/module paths are literal
+code, not manifest inputs. The selected work must already have an actual future
+database lease and an owned worker blocked by that exact backend before denial;
+rollback must finish before that captured lease expires. Expiry/EOF cannot be
+substituted for a successful explicit-release receipt. No readiness override,
+work lease/clock change or uncertain model-slot release is supplied by this gate.

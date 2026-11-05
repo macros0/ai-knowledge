@@ -24,7 +24,7 @@ from test_scripts.replica_frontend_http import PrivateFiles
 from test_scripts.replica_provider_faults import fault_policy, require, uid
 from replica_runtime_run import digest, now, read_json, write_json
 
-STAGES=('preflight','baseline','qdrant.inject','qdrant.submit','qdrant.observe','qdrant.heal','qdrant.verify',
+STAGES=('preflight','baseline','qdrant.gate','qdrant.submit','qdrant.inject','qdrant.observe','qdrant.heal','qdrant.verify',
     'model.inject','model.submit','model.observe','model.heal','model.verify','final')
 READ_ONLY={'preflight','qdrant.observe','qdrant.verify','model.observe','model.verify'}
 

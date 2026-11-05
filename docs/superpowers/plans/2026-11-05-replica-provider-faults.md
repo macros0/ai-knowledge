@@ -169,3 +169,67 @@ identity and quiescent slots before emitting canonical fields. All74 focused
 PG/WorkerLoss/authority cases pass without skips/errors/failures. Keep the first
 report and generate a separate newly verified report; do not manually patch an
 old receipt or weaken the consumer. Current Qdrant/model acceptance is pending.
+
+### Task3 correction: claim work before Qdrant readiness is lost
+
+The first native execution reached4/13: valid Qdrant denial and one accepted
+regeneration, but work stayed queued/attempts0/fence0. It is not failed-attempt
+acceptance. Exact update cancellation and UID-bound policy removal succeeded;
+final observation confirmed original publication/corpus unchanged, work cancelled
+without an attempt and CNP0. Core history remains4/13/unqualified.
+
+**Files:** create `scripts/kubernetes/replica_provider_gate.py` and
+`scripts/kubernetes/replica_provider_gate_native.py` with their focused tests
+`backend/tests/test_replica_provider_gate.py`,
+`backend/tests/test_replica_provider_gate_native.py` and
+`backend/tests/test_replica_provider_gate_admission.py`; modify
+`scripts/kubernetes/replica_provider_outage.py`,
+`scripts/kubernetes/replica_provider_native.py`, corresponding tests and
+`SECURITY.md`. Keep this plan's existing ledger; execute inline, no new agents.
+
+**Interfaces:** fixed `GateActions.start/observe/release` use a180s scoped API
+SQL transaction with rollback and exact native PID/start-time/Pod/container plus
+backend PID/start-time binding. No arbitrary module/SQL/command inputs. A new
+`qdrant.gate` precedes `qdrant.submit` and `qdrant.inject`; inject proves the
+selected work has been claimed and blocked by that gate, then releases it after
+actual four-Pod denial. Keep explicit apply and observe-only unknown outcomes.
+Source SQL remains READ ONLY; expose database time/claim wait facts for real
+lease checks, without modifying lease/fence/queue/clock. Core becomes14 stages;
+old13-stage journals/reports remain immutable and cannot resume on changed code.
+
+- [x] RED gate scope/unknown-start/expiry/changed-native-process/no-owned-waiter,
+  stale work lease and no-claim refusal; no model release or hidden readiness
+  override. Expected: new gate module/protocol assertions fail before implementation.
+- [x] Implement the fixed gate actor/controller and ordered protocol. Gate rollback
+  after explicit release must be proved; expired/EOF cannot stand in for it.
+  Expected: focused tests pass, all negative controls still refuse.
+- [x] Validate targeted Windows/Linux source and required project checks. Use new
+  CI/capacity intents if needed, never reopen old operations. Commit scoped code.
+- [ ] Prepare a fresh private manifest and export for the post-image PG document,
+  preserving source baseline/actual PG report/current independent copy. Run the
+  new14-stage native history. If model uncertainty is encountered, retain it and
+  implement the already required exact-token physical recovery path; no flag may
+  clear a slot. Complete final-source full Linux CI and the original closure/
+  report/matrix tasks above. Keep production/provider/physical gates explicit.
+
+Gate checkpoint:62 pure/protocol RED->GREEN; readiness/native-boundary12 initial
+RED cases then74 gate/native-boundary/protocol cases passed. A real idle native
+component `f6e3bda829354bd0a5557013d5427a6b` then acquired/released the own row
+gate, verified rollback and absence of its parent/SQL backend, with exact corpus,
+resource and model-slot hashes unchanged. It created no policy or document and
+is explicitly not an active-work outage acceptance. Seven additional admission/
+lease RED cases preceded integration; the combined202 Windows provider/gate
+cases pass without skips/failures/errors. Native blocked-worker, controller-loss,
+Linux CI and final live14-stage evidence remain separate gates.
+
+Follow-up [gate component evidence](../reports/2026-11-05-replica-provider-active-gate-ci.json):
+278 focused tests passed on Windows and Linux with identical case IDs, no skips,
+failures or errors, exit0/noOOM and unchanged Linux sources. Both real idle gate
+components closed: explicit release proved rollback and backend/process exit;
+controller loss independently proved EOF cleanup without fabricating a release
+receipt. Corpus/resource/slot hashes stayed unchanged. The CI-only capacity loan
+returned2/2/2, the same PVC/runtime/nine canonical tables and four provider
+processes. Only the owned frontend transport was refreshed afterward. Original
+two matrix capacity loans remain active until complete trial closure. A fresh
+14-stage history and final full backend CI are still required; the old4/13
+unqualified history is retained. No provider qualification or production change.

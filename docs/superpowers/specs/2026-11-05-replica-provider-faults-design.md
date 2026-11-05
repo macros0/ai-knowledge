@@ -64,6 +64,39 @@ unchanged publication. A counter alone is not publication authority. Such a run
 must retain the uncertain slot and perform the existing physical-stop/audited
 reconciliation before release; it does not count as confirmed-reply recovery.
 
+## Admitted Qdrant work, before storage readiness changes
+
+The first native Qdrant trial proved denial on all four Pods, but the submitted
+work remained queued with attempts0/fence0. This is expected: worker readiness
+checks Qdrant and prevents new claims after its loss. An unclaimed job does not
+prove the required failed-attempt/retry contract. Keep that run unqualified;
+cancel its exact pending update through the normal authenticated API and remove
+only its own UID-bound policy. Do not change readiness or edit the queue.
+
+For a fresh execution, arm a bounded SQL transaction in an owned API process.
+It locks only this installation's `replica_capacity_resources` row for `llm`,
+changes no rows and always rolls back. It uses scoped runtime credentials,
+checks namespace/Pod/container/identity/maintenance binding, and expires within
+180 seconds even if its controller disappears. Native process/SQL handles and
+each start/release intent are journaled; an uncertain start is observed, never
+repeated. The earlier cross-node lab used the same row-gate mechanism.
+
+The fixed Qdrant order becomes gate -> submit -> inject -> observe -> heal ->
+verify (14 total provider stages). Submit while connectivity is positive. Before
+injecting, prove exactly that new work is running with a real unexpired database
+lease, no model owner/provider request, and an owned worker SQL session blocked
+by the exact gate backend. After denial/positive controls, release the gate in
+the same inject stage and verify its explicit rollback before claiming success.
+An expired gate, stale work lease or changed caller cannot pass. Never extend a
+work lease, change its clock or bypass the real runtime guard to fit the test.
+If any bounded precondition expires, close that failed execution and retain its
+evidence; do not rewrite its history as a later successful run.
+
+Use a post-image synthetic document outside the image-operation's retained
+baseline for subsequent attempts. Preserve the old baseline and previous PG
+proof, and create new manifest/execution/HTTP intents; no failed receipts are
+rebound. This repairs test ordering, with no application/readiness change.
+
 ## Durable actions and evidence
 
 The coordinator uses existing protected `read_json`/`write_json`/FileLock and the
