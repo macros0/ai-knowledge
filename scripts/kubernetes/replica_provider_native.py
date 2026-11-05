@@ -182,7 +182,7 @@ def pod_http(request,directory):
     if action=='check':
         need(cookie is not None)
         expected=request['checks'];need(set(expected)=={'original_sha256','query','export_job','export_part','export_sha256'})
-        need(re.fullmatch('[0-9a-f]{32}',expected['export_job']) is not None
+        need(type(expected['export_job']) is int and 1<=expected['export_job']<=2147483647
             and type(expected['export_part']) is int and expected['export_part']>0
             and isinstance(expected['query'],str) and 1<=len(expected['query'])<=1000)
         for key in ('original_sha256','export_sha256'):need(re.fullmatch('[0-9a-f]{64}',expected[key]) is not None)
@@ -190,7 +190,7 @@ def pod_http(request,directory):
         need(hashlib.sha256(body).hexdigest()==expected['original_sha256'])
         status,raw,_=http('/api/search',{'query':expected['query'],'mode':'bm25','top_k':40});need(status==200)
         need(request['doc_id'] in {h['doc_id'] for h in json.loads(raw)['hits']})
-        status,raw,_=http('/api/jobs/'+expected['export_job']+'/export/'+str(expected['export_part']));need(status==200)
+        status,raw,_=http('/api/jobs/'+str(expected['export_job'])+'/export/'+str(expected['export_part']));need(status==200)
         need(hashlib.sha256(raw).hexdigest()==expected['export_sha256'])
         with ZipFile(BytesIO(raw)) as archive:
             docs=[v for v in archive.infolist() if v.filename.endswith('.docx')]
@@ -267,7 +267,8 @@ class NativeAdapter:
         checks=extra['checks']
         require(isinstance(checks,dict) and set(checks)=={'original_sha256','query','export_job','export_part','export_sha256'}
             and hexadecimal(checks['original_sha256'],64) and hexadecimal(checks['export_sha256'],64)
-            and hexadecimal(checks['export_job'],32) and type(checks['export_part']) is int and checks['export_part']>0
+            and type(checks['export_job']) is int and 1<=checks['export_job']<=2147483647
+            and type(checks['export_part']) is int and checks['export_part']>0
             and isinstance(checks['query'],str) and 1<=len(checks['query'])<=1000)
         for key in ('pg_journal','pg_report'):
             path=Path(extra[key]).absolute();require(path.parent==self.private and path not in self.owned.paths.values()

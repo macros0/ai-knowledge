@@ -1,6 +1,8 @@
 """Exercise native admission and real HTTP intents without a Kubernetes server."""
 import copy
+from hashlib import sha256
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 import importlib.util
 import json
 from pathlib import Path
@@ -9,8 +11,19 @@ import threading
 from types import SimpleNamespace
 import urllib.request
 from uuid import UUID
+from zipfile import ZipFile
 
 import pytest
+
+
+def export_fixture():
+    original=b'provider-native-synthetic-original'
+    output=BytesIO()
+    with ZipFile(output,'w') as archive:
+        archive.writestr('original.docx',original)
+    raw=output.getvalue()
+    return original,raw,dict(original_sha256=sha256(original).hexdigest(),query='synthetic marker',
+        export_job=17,export_part=1,export_sha256=sha256(raw).hexdigest())
 
 
 def tool():
@@ -112,6 +125,7 @@ def test_foreign_or_incomplete_pg_proof_cannot_close_provider_matrix(fault):
 @pytest.fixture
 def rpc(tmp_path,monkeypatch):
     m=tool();calls=[];accepted={'value':False};fail={'value':False};revoked={'value':False}
+    original_doc,export_raw,checks=export_fixture()
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args):pass
         def do_POST(self):
@@ -125,10 +139,14 @@ def rpc(tmp_path,monkeypatch):
                 self.send_response(200);self.end_headers();self.wfile.write(json.dumps({'id':'1'*16}).encode())
             elif self.path=='/api/auth/logout':
                 revoked['value']=True;self.send_response(200);self.end_headers();self.wfile.write(b'{}')
+            elif self.path=='/api/search':
+                self.send_response(200);self.end_headers();self.wfile.write(json.dumps({'hits':[{'doc_id':'1'*16}]}).encode())
             else:raise AssertionError(self.path)
         def do_GET(self):
             calls.append(self.path);self.send_response(401 if revoked['value'] else 200);self.end_headers()
-            self.wfile.write(b'{"user":{"username":"replica.admin"}}')
+            if self.path=='/api/documents/'+'1'*16+'/download':self.wfile.write(original_doc)
+            elif self.path=='/api/jobs/17/export/1':self.wfile.write(export_raw)
+            else:self.wfile.write(b'{"user":{"username":"replica.admin"}}')
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     original=urllib.request.OpenerDirector.open
     def redirected(opener,request,*args,**kwargs):
@@ -145,7 +163,7 @@ def rpc(tmp_path,monkeypatch):
     monkeypatch.setattr(app.deployment.runtime_identity,'enforce_runtime_identity',lambda _:SimpleNamespace(
         fingerprint='2'*64,installation_id='3'*32))
     request=dict(execution_id='4'*32,namespace='replica-test-faults01',runtime_fingerprint='2'*64,
-        installation_id='3'*32,doc_id='1'*16)
+        installation_id='3'*32,doc_id='1'*16,checks=checks)
     directory=tmp_path/'rpc'
     yield m,request,directory,calls,accepted,fail,settings
     server.shutdown();server.server_close();thread.join(timeout=3)
@@ -217,6 +235,24 @@ def test_resuming_login_after_receipt_write_loss_only_checks_existing_session(rp
     assert calls.count('/api/auth/simulate')==1
 
 
+def test_functional_rpc_downloads_integer_export_job_from_real_http_contract(rpc):
+    m,request,directory,calls,*_=rpc
+    m.pod_http({**request,'action':'login','observe':False},directory)
+    result=m.pod_http({**request,'action':'check','observe':True},directory)
+    assert result['download_search_export_verified'] is True
+    assert calls[-3:]==['/api/documents/'+'1'*16+'/download','/api/search','/api/jobs/17/export/1']
+
+
+@pytest.mark.parametrize('job_id',[True,0,-1,'17','9'*32,2147483648])
+def test_functional_rpc_refuses_invalid_export_job_before_download(rpc,job_id):
+    m,request,directory,calls,*_=rpc
+    m.pod_http({**request,'action':'login','observe':False},directory)
+    count=len(calls)
+    request['checks']['export_job']=job_id
+    with pytest.raises(ValueError):m.pod_http({**request,'action':'check','observe':True},directory)
+    assert len(calls)==count
+
+
 def native_adapter(tmp_path,monkeypatch):
     m=tool();binding,authority,child,report=pg_inputs()
     pg_journal=tmp_path/'pg.json';pg_report=tmp_path/'pg-report.json'
@@ -224,7 +260,7 @@ def native_adapter(tmp_path,monkeypatch):
     for p in (pg_journal,pg_report):p.chmod(0o600)
     manifest={**binding,'provider_fault':dict(recipe='owned-managed-s3-dependencies-v1',doc_id='1'*16,
         pg_journal=str(pg_journal),pg_report=str(pg_report),checks=dict(original_sha256='8'*64,
-        query='synthetic marker',export_job='9'*32,export_part=1,export_sha256='a'*64))}
+        query='synthetic marker',export_job=17,export_part=1,export_sha256='a'*64))}
     value=dict(run_id='faults01',application_release='app',storage_release='storage',**binding)
     class Kube:
         def run(self,*args,**kwargs):
@@ -252,7 +288,9 @@ def test_native_binding_uses_real_config_contract_and_separates_operation_receip
     assert path1!=adapter.policy.files.directory and path1.parent==adapter.private
 
 
-@pytest.mark.parametrize('field,value',[('export_part',0),('export_job','../foreign'),('export_sha256','missing'),('query','')])
+@pytest.mark.parametrize('field,value',[('export_part',0),('export_job','../foreign'),('export_job',True),
+    ('export_job',0),('export_job',-1),('export_job','17'),('export_job','9'*32),('export_job',2147483648),
+    ('export_sha256','missing'),('query','')])
 def test_invalid_functional_receipts_are_refused_before_native_admission(tmp_path,monkeypatch,field,value):
     m,adapter,manifest=native_adapter(tmp_path,monkeypatch)
     manifest['provider_fault']['checks'][field]=value

@@ -86,6 +86,10 @@ proof if runtime changes. Full final-source Linux CI, matching focused tests,
 project checks, current image/source and actual data must all agree.
 
 - [ ] Actual scoped upgrade/copy/current PG child and Qdrant/model checks pass.
+  Scoped credentials, independent preimage copy (2 documents/12 encrypted
+  objects), real same-schema upgrade to65d and current independent copy
+  (3 documents/17 objects) are now verified on the corrected fresh fixture.
+  Current PG partition is proven; stale return and Qdrant/model remain pending.
 - [ ] Close handles/policies/fixtures, retain data and return all original
   counts/runtime/PVC/nine-table hashes; no open capacity debt.
 - [ ] Publish new scoped report, reconcile matrix/runbooks and commit after
@@ -122,10 +126,20 @@ returned original2/2/2/runtime/PVC/nine canonical tables. Primary verification
 waited read-only for background work to drain; no scaling was repeated.
 [Component evidence](../reports/2026-11-05-replica-provider-native-component-ci.json)
 is explicitly not a new provider fault acceptance or full backend CI.
-The Task3 fresh current-provider rehearsal remains pending.
+The Task3 fresh current-provider rehearsal remains in progress.
 
 The initial137-case Windows/Linux source checkpoint is retained separately in
 the final component report. Three additional RED cases exposed final-target
 drift; they pass only after the final snapshot comparison, alongside a valid
 unchanged-snapshot control. The follow-up CI transfers only the two changed
 files and uses new capacity operations; no closed journal is reopened.
+
+Task3 checker correction: the actual bulk-export API uses positive SQL Integer
+job IDs, not32hex UUIDs. Both native admission and Pod-local HTTP now require a
+bounded integer and construct its numeric download URL. Real local HTTP checks
+cover original/download, BM25 and ZIP bytes; boolean/string/zero/negative/overflow
+IDs are refused. Seven expected RED failures exposed the mismatch; the first
+fix left one URL-concatenation failure, then all153 focused Windows cases passed
+with0 skips/failures/errors. Required project checks passed (audit0/frontend756+
+one existing optional skip/Ruff0). This changes the checker only; no runtime
+image change or Linux/current-provider acceptance is inferred from these tests.
