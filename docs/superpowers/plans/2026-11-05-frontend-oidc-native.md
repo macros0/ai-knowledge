@@ -40,7 +40,7 @@ Real CSRF/SSO status requires the entire actual native recipe, not an input flag
   exact slot headers/CSRF/secure cookies, all three routes/SHA/ZIP, interrupted
   stream/no replay and refusal of caller Cookie/Host/slot overrides. GREEN new
   tests plus existing HTTP/OIDC tests. Update SECURITY before committing.
-- [ ] **Native OIDC admission and lifecycle.** Create
+- [x] **Native OIDC admission and lifecycle.** Create
   `replica_frontend_oidc_native.py`, tests `test_replica_frontend_oidc_native.py`.
   Add explicit recipe/hooks to the base coordinator and a separately admitted
   gateway-forward method to `replica_frontend_process.py` with regression tests.
@@ -90,3 +90,23 @@ the prior HTTP/OIDC cases. Mandatory project checks passed (audit0,
 frontend756 passes/one existing optional skip, Ruff0). No live workload or
 resource loan was used in this task. Current-source Linux/full native verification
 remains Task4; the earlier99-case Linux report stays bound to a3af1ac.
+
+## Task2 verification
+
+The native OIDC coordinator admits all three namespaces and the observed route
+graph before Secret reads, validates the exact synthetic realm/probe import and
+binds backend OIDC settings/client-secret hash before SQL. Both Gateway sockets,
+anonymous redirect/hidden-route/TLS controls, verified TLS child loading, strict
+sources/model/PID loss gate, UID-preconditioned deletion and a UID/resourceVersion
+label patch are covered. Lost DELETE and patch acknowledgements are observed
+without reissuing either mutation. All application/access/platform Node UIDs are
+bound; helper slots admit only the recorded victim/replacement transition.
+
+The combined Windows native/process/HTTP/OIDC/business cohort passed165 tests,
+with one existing Linux pidfd skip (299.08s). Separate real Linux child-loader
+tests collect three platform skips on Windows and remain an explicit Task4 Linux
+gate. The first combined run's single failure was a test fixture assuming every
+HTTPRoute had backendRefs; redirect routes correctly have none. The corrected
+combined run passed. Common runner/capsule completion attestation is still Task3;
+the native implementation does not clear release gates by itself. No VM resource
+change, capacity loan or source transfer was used in Task2.

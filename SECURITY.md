@@ -3269,3 +3269,30 @@ public evidence includes only its metadata. The admitted controller was tested
 non-root with a read-only root and no effective capabilities, then scaled to
 zero and its capacity loan returned. Retained CRDs/RBAC/admission policy are not
 deleted automatically. This prerequisite does not close real CSRF/SSO gates.
+
+### Native owned OIDC coordinator (2026-11-05)
+
+The separate `owned-keycloak-local-v1` coordinator admits application, access
+and platform namespace identities and the observed Gateway/ListenerSet/route/
+Service/EndpointSlice graph before reading any Secret data. Image/controller/
+GatewayClass identities and configuration hashes remain bound on every stage,
+including receipt adoption. Passwords are selected only inside the native host
+from an exact synthetic five-user realm/probe pair; federation, extra clients,
+redirect targets and alternate group mappings are refused. Backend OIDC settings
+and the client-secret hash must match before the read-only SQL freshness proof.
+Credential material never enters the public receipt or background-client input.
+
+Only the admitted Gateway Pod receives HTTP/HTTPS loopback forwards. Anonymous
+redirect, unknown-root rejection and hidden-internal-route controls precede
+login. The loss client uses Python isolated mode, excluding ambient module paths
+and user site packages, and verifies its private capsule and three source-module
+hashes before loading the TLS business transport. A sources frame, exact live
+client PID and one active model call are required again immediately before the
+UID-preconditioned Pod deletion. Protocol/application errors cannot authorize
+that deletion. Only a journaled replacement may receive the first helper slot,
+using one JSON patch tested against its UID and resourceVersion. Uncertain
+patch/delete acknowledgements are observed from actual membership and endpoint
+state; the mutations are never resubmitted. Native handle closure covers the
+two Gateway forwards and client; simulation admission and its five handles
+retain their separate defaults. These implementation tests do not clear real
+Keycloak/Gateway acceptance or production qualification gates.

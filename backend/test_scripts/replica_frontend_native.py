@@ -80,11 +80,15 @@ def require_receipt(receipt, request):
 
 
 class Coordinator:
+    RECIPE = 'owned-simulation-local-v1'
+    DYNAMIC_SCOPE = {'frontends'}
+    HANDLE_SLOTS = ('pf-0','pf-0r','pf-1','pf-2','client')
+
     def __init__(self, directory, value, *, kube=None, processes=None, http_factory=FrontendHTTP):
         validate_live_inputs(value)
         if (value.get('deployment_mode') != 'frontend-split'
                 or value.get('profile') != 'basic'
-                or value.get('functional_recipe') != 'owned-simulation-local-v1'
+                or value.get('functional_recipe') != self.RECIPE
                 or not re.fullmatch('sha256:[0-9a-f]{64}', value.get('expected_model_image_id', ''))):
             raise ValueError('Explicit isolated frontend functional recipe required')
         self.value, self.files = value, PrivateFiles(directory)
@@ -92,11 +96,12 @@ class Coordinator:
         self.processes = processes or OwnedProcesses(directory, value)
         self.http_factory, self.sleep = http_factory, time.sleep
 
-    def snapshot(self):
-        namespace = json.loads(self.kube.run('get', 'namespace', self.value['namespace'], '-o', 'json'))
-        objects = json.loads(self.kube.run('get', 'deployments,statefulsets,replicasets,pods,services,endpointslices,'
-            'configmaps,secrets,persistentvolumeclaims,networkpolicies,jobs,cronjobs,daemonsets', '-o', 'json'))['items']
-        objects = [namespace, *objects]
+    def snapshot(self, objects=None):
+        if objects is None:
+            namespace = json.loads(self.kube.run('get', 'namespace', self.value['namespace'], '-o', 'json'))
+            objects = json.loads(self.kube.run('get', 'deployments,statefulsets,replicasets,pods,services,endpointslices,'
+                'configmaps,secrets,persistentvolumeclaims,networkpolicies,jobs,cronjobs,daemonsets', '-o', 'json'))['items']
+            objects = [namespace, *objects]
         admission = validate_frontend_inventory(objects, self.value)
         if any(o['kind'] in {'Job', 'CronJob', 'DaemonSet'} for o in objects):
             raise ValueError('Unexpected native controller')
@@ -178,10 +183,12 @@ class Coordinator:
                 'backend_pod_uid': admission['backend_pod_uid'], 'provider_services':provider_services}
 
     def guard(self):
-        actual = self.snapshot()
+        return self.check_scope(self.snapshot())
+
+    def check_scope(self,actual):
         if self.files.path('scope.json').exists():
             original = self.files.read('scope.json')
-            if {k:v for k,v in actual.items() if k!='frontends'} != {k:v for k,v in original.items() if k!='frontends'}:
+            if {k:v for k,v in actual.items() if k not in self.DYNAMIC_SCOPE} != {k:v for k,v in original.items() if k not in self.DYNAMIC_SCOPE}:
                 raise ValueError('Native frontend configuration/controller/claim binding changed')
             if actual['frontends'] != original['frontends']:
                 if not self.files.path('loss.delete-ack.json').exists(): raise ValueError('Unplanned frontend replacement')
@@ -215,15 +222,28 @@ print(json.dumps({k:value[k] for k in ['started','finished','active']}))
             self.processes.forward('pf-' + str(index), pod, 8000 if index == 2 else 3000)
         return self.http().session()
 
+    def loss_victim(self):
+        return self.files.read('scope.json')['frontends'][0]
+
+    def loss_client(self,victim):
+        route=self.processes.route('pf-0')
+        if route['pod']!=victim:raise ValueError('Native victim forward differs')
+        return LOSS_CLIENT, {'directory':str(self.files.directory),'url':route['url']}
+
+    def active_progress(self,progress):
+        return progress.get('sources_seen') is True and not progress.get('terminal') and not progress.get('result_seen')
+
+    def interrupted_progress(self,progress):
+        return progress.get('terminal') and progress.get('sources_seen') and not progress.get('result_seen')
+
     def loss(self, snapshot):
         baseline = self.metrics()
         if baseline['active'] != 0 or baseline['started'] != baseline['finished']:
             raise ValueError('Model must be idle before frontend loss')
-        victim = self.files.read('scope.json')['frontends'][0]
-        route = self.processes.route('pf-0')
-        if route['pod'] != victim: raise ValueError('Native victim forward differs')
+        victim = self.loss_victim()
+        program,configuration=self.loss_client(victim)
         self.files.once('loss.baseline.json', {'model': baseline, 'victim': victim})
-        self.processes.start_client(LOSS_CLIENT, {'directory': str(self.files.directory), 'url': route['url']})
+        self.processes.start_client(program,configuration)
         gate = None
         for _ in range(80):
             path = self.files.path('loss.progress.json')
@@ -231,7 +251,7 @@ print(json.dumps({k:value[k] for k in ['started','finished','active']}))
             model = self.metrics()
             client = self.files.read('client.pid.json')
             if self.processes.describe(client['pid']) != client: break
-            if (progress.get('sources_seen') is True and not progress.get('terminal') and not progress.get('result_seen')
+            if (self.active_progress(progress)
                     and model['active'] == 1 and model['started'] == baseline['started'] + 1
                     and model['finished'] == baseline['finished']):
                 gate = {'first_sources_frame': True, 'model': model}; break
@@ -243,8 +263,7 @@ print(json.dumps({k:value[k] for k in ['started','finished','active']}))
             raise ValueError('Native victim changed before deletion')
         progress = self.files.read('loss.progress.json')
         model = self.metrics()
-        if (self.processes.describe(client['pid']) != client or progress.get('sources_seen') is not True
-                or progress.get('terminal') or progress.get('result_seen') or model['active'] != 1
+        if (self.processes.describe(client['pid']) != client or not self.active_progress(progress) or model['active'] != 1
                 or model['started'] != baseline['started']+1 or model['finished'] != baseline['finished']):
             raise ValueError('Native stream/model gate ended before DELETE; no deletion')
         gate['model'] = model
@@ -267,7 +286,7 @@ print(json.dumps({k:value[k] for k in ['started','finished','active']}))
         if self.processes.describe(client['pid']) == client or model['active'] != 0:
             return {'status': 'pending'}
         progress = self.files.read('loss.progress.json')
-        if not progress.get('terminal') or not progress.get('sources_seen') or progress.get('result_seen'):
+        if not self.interrupted_progress(progress):
             raise ValueError('Lost stream has no proven interrupted terminal result')
         if model['started'] != model['finished'] or model['finished'] != original['model']['started'] + 1:
             return {'status': 'pending'}
@@ -331,12 +350,12 @@ print(json.dumps(dict(quiescent=True,original_sha256=p['original_sha256'],model=
                 raise ValueError('Native closure proof differs')
             return value
         proof()
-        for slot in ('pf-0','pf-0r','pf-1','pf-2','client'):
+        for slot in self.HANDLE_SLOTS:
             self.processes.stop(slot)
             if self.files.read(slot+'.closed.json').get('original_process_gone') is not True:
                 raise ValueError('Native owned handle closure incomplete')
         self.guard()
-        return {**proof(), 'owned_handles_closed':5}
+        return {**proof(), 'owned_handles_closed':len(self.HANDLE_SLOTS)}
 
     def perform(self, stage, snapshot):
         if stage == 'preflight':
@@ -351,6 +370,9 @@ print(json.dumps(dict(quiescent=True,original_sha256=p['original_sha256'],model=
         function = {'upload': 'upload', 'publish': 'publish', 'export': 'export',
                     'export-observe': 'export_observe', 'stream': 'stream', 'logout': 'logout'}[stage]
         return getattr(self.http(), function)()
+
+    def auth_proof_source(self, snapshot):
+        return "assert s.auth_provider=='simulation'"
 
     def fresh_proof(self, snapshot):
         source = '''import json,urllib.request
@@ -374,7 +396,8 @@ assert vector.scheme=='https' and vector.hostname in local_hosts('qdrant') and v
 assert vector.path in {'','/'} and not vector.query and not vector.fragment and not vector.username and not vector.password
 assert database.query.get('sslmode')=='verify-full' and database.query.get('sslrootcert') and Path(database.query['sslrootcert']).is_file()
 assert s.qdrant_collection=='replica_test_'+p['run_id'] and s.artifact_backend=='local' and not s.artifact_uploads_enabled
-assert s.auth_provider=='simulation' and s.embedding_provider=='fake' and s.model_mode=='stub'
+AUTH_PROOF
+assert s.embedding_provider=='fake' and s.model_mode=='stub'
 assert s.llm_base_url=='http://model-stub:8000/v1'
 assert not any(directory.exists() and any(directory.iterdir()) for directory in [s.uploads_dir,s.okf_dir,s.staging_dir,s.exports_dir])
 with get_engine().connect() as c:
@@ -390,7 +413,7 @@ opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
 model=json.load(opener.open('http://model-stub:8000/test/status',timeout=3))
 assert model['started']==model['finished']==model['active']==0
 print(json.dumps(dict(fresh=True,model={k:model[k] for k in ['started','finished','active']})))
-'''.replace('EXPECTED', repr(json.dumps({**{k: self.value[k] for k in ('namespace', 'run_id')},
+'''.replace('AUTH_PROOF', self.auth_proof_source(snapshot)).replace('EXPECTED', repr(json.dumps({**{k: self.value[k] for k in ('namespace', 'run_id')},
                                        'provider_services':snapshot['provider_services']})))
         proof = self.kube.python(snapshot['backend']['name'], source)
         if proof.get('fresh') is not True or proof.get('model') != {'started': 0, 'finished': 0, 'active': 0}:
@@ -426,12 +449,15 @@ print(json.dumps(dict(fresh=True,model={k:model[k] for k in ['started','finished
         else: self.files.once(intent, request)
         snapshot = self.guard()
         if exists and stage not in READ_ONLY and stage != 'final':
-            terminal = {'loss': 'loss.delete-ack.json', 'replacement': 'replacement.result.json'}.get(stage, stage + '.result.json')
-            if not self.files.path(terminal).exists(): return None
-            evidence = self.files.read(terminal)
+            evidence=self.recover_stage(stage,snapshot)
+            if evidence is None:return None
         else: evidence = self.perform(stage, snapshot)
         status = evidence.pop('status', 'passed')
         if status not in {'passed', 'pending'}: raise ValueError('Unknown native stage outcome')
         receipt = {**request, 'version': 1, 'status': status, 'evidence': evidence}
         if status == 'passed': self.files.once(result, receipt)
         return receipt
+
+    def recover_stage(self,stage,snapshot):
+        terminal={'loss':'loss.delete-ack.json','replacement':'replacement.result.json'}.get(stage,stage+'.result.json')
+        return self.files.read(terminal) if self.files.path(terminal).exists() else None

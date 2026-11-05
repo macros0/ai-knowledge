@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -60,6 +61,50 @@ def test_completed_native_handle_cannot_be_substituted(tmp_path):
     path = tmp_path / 'pf-0.pid.json'
     value = json.loads(path.read_bytes()); value['argv'] = ['another-command']; path.write_text(json.dumps(value))
     with pytest.raises(ValueError): current.route('pf-0')
+
+
+def test_gateway_forward_uses_only_bound_access_namespace_tls_port_and_process(tmp_path,monkeypatch):
+    current,_=manager(tmp_path);tool=module()
+    current.value.update(run_id='abcdefgh',functional_recipe='owned-keycloak-local-v1',oidc_access_namespace='okf-f2-abcdefgh')
+    called=[]
+    def launch(argv,**kwargs):
+        called.append(argv);kwargs['stdout'].write(b'Forwarding from 127.0.0.1:25443 -> 8443\n');kwargs['stdout'].flush()
+        return SimpleNamespace(pid=43210)
+    monkeypatch.setattr(tool.subprocess,'Popen',launch);monkeypatch.setattr(tool.os,'getuid',lambda:1000,raising=False)
+    current.describe=lambda pid:dict(pid=pid,start_ticks='bound',uid=1000,argv=called[-1])
+    pod={'name':'home-gateway-0','uid':'01234567-89ab-cdef-0123-456789abcdef'}
+    assert hasattr(current,'forward_gateway'),'Separate admitted Gateway forward missing'
+    route=current.forward_gateway('gw-https',pod,8443,tls=True)
+    assert route['url']=='https://127.0.0.1:25443' and route['namespace']=='okf-f2-abcdefgh' and route['pod']==pod
+    assert called[0][called[0].index('-n')+1]=='okf-f2-abcdefgh' and '--address=127.0.0.1' in called[0]
+    with pytest.raises(ValueError):current.forward_gateway('gw-https',pod,8443,tls=True)
+    assert len(called)==1
+
+
+@pytest.mark.parametrize('fault',['recipe','namespace','port','slot'])
+def test_invalid_gateway_forward_is_refused_before_process_or_intent(tmp_path,fault):
+    current,_=manager(tmp_path)
+    current.value.update(run_id='abcdefgh',functional_recipe='owned-keycloak-local-v1',oidc_access_namespace='okf-f2-abcdefgh')
+    port,slot=8443,'gw-https'
+    if fault=='recipe':current.value['functional_recipe']='owned-simulation-local-v1'
+    elif fault=='namespace':current.value['oidc_access_namespace']='customer'
+    elif fault=='port':port=22
+    else:slot='pf-0'
+    assert hasattr(current,'forward_gateway'),'Separate admitted Gateway forward missing'
+    with pytest.raises(ValueError):current.forward_gateway(slot,{'name':'gateway-0','uid':'01234567-89ab-cdef-0123-456789abcdef'},port,tls=True)
+    assert not current.files.path('gw-https.intent.json').exists()
+
+
+def test_oidc_stream_child_uses_isolated_python_and_never_replays(tmp_path,monkeypatch):
+    tool=module();current=tool.OwnedProcesses(tmp_path,{'functional_recipe':'owned-keycloak-local-v1'})
+    called=[]
+    def launch(argv,**kwargs):called.append(argv);return SimpleNamespace(pid=43210)
+    monkeypatch.setattr(tool.subprocess,'Popen',launch);monkeypatch.setattr(tool.os,'getuid',lambda:1000,raising=False)
+    current.describe=lambda pid:dict(pid=pid,start_ticks='bound',uid=1000,argv=called[-1])
+    current.start_client('pass',{'directory':str(tmp_path)})
+    assert called[0][:3]==[sys.executable,'-I','-c']
+    with pytest.raises(ValueError):current.start_client('pass',{'directory':str(tmp_path)})
+    assert len(called)==1
 
 
 @pytest.mark.skipif(os.name!='posix' or not hasattr(os,'pidfd_open'),reason='Native coordinator requires Linux pidfd')

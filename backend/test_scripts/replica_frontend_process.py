@@ -31,9 +31,24 @@ class OwnedProcesses:
     def forward(self, slot, pod, port):
         if port not in {3000, 8000} or not re.fullmatch('[a-z0-9][-a-z0-9.]{0,252}', pod['name']):
             raise ValueError('Invalid native Pod forward')
-        argv = ['kubectl', '--context', self.value['context'], '-n', self.value['namespace'],
+        return self._forward(slot,pod,port,self.value['namespace'])
+
+    def forward_gateway(self, slot, pod, port, *, tls):
+        namespace=self.value.get('oidc_access_namespace')
+        if (self.value.get('functional_recipe')!='owned-keycloak-local-v1'
+                or namespace!='okf-f2-'+self.value.get('run_id','') or type(tls) is not bool
+                or slot!=('gw-https' if tls else 'gw-http') or port not in ({443,8443} if tls else {80,8080})
+                or not re.fullmatch('[a-z0-9][-a-z0-9.]{0,252}',pod.get('name',''))
+                or not re.fullmatch('[0-9a-f-]{36}',pod.get('uid',''))):
+            raise ValueError('Explicit admitted Gateway forward required')
+        return self._forward(slot,pod,port,namespace,'https' if tls else 'http')
+
+    def _forward(self, slot, pod, port, namespace, scheme=None):
+        argv = ['kubectl', '--context', self.value['context'], '-n', namespace,
                 'port-forward', 'pod/' + pod['name'], '--address=127.0.0.1', '--pod-running-timeout=20s', '0:' + str(port)]
-        self.files.once(slot + '.intent.json', {'pod': pod, 'port': port, 'argv': argv})
+        intent={'pod':pod,'port':port,'argv':argv}
+        if scheme is not None:intent.update(namespace=namespace,scheme=scheme)
+        self.files.once(slot + '.intent.json', intent)
         path = self.files.path(slot + '.log')
         fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         with os.fdopen(fd, 'wb') as output:
@@ -60,11 +75,16 @@ class OwnedProcesses:
                            log.decode(), re.MULTILINE)
         if len(set(ports)) != 1 or not 1 <= int(ports[0]) <= 65535:
             raise ValueError('Native loopback forward is not ready')
-        return {'url': 'http://127.0.0.1:' + ports[0], 'pod': intent['pod'], 'slot': slot}
+        scheme=intent.get('scheme','http')
+        if scheme not in {'http','https'}:raise ValueError('Invalid retained native route protocol')
+        result={'url':scheme+'://127.0.0.1:'+ports[0],'pod':intent['pod'],'slot':slot}
+        if 'namespace' in intent:result['namespace']=intent['namespace']
+        return result
 
     def start_client(self, program, configuration):
         self.files.once('loss-client-input.json', configuration)
-        argv = [sys.executable, '-c', program, str(self.files.path('loss-client-input.json'))]
+        isolated=['-I'] if self.value.get('functional_recipe')=='owned-keycloak-local-v1' else []
+        argv = [sys.executable, *isolated, '-c', program, str(self.files.path('loss-client-input.json'))]
         self.files.once('client.intent.json', {'argv': argv})
         fd = os.open(self.files.path('client.log'), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         with os.fdopen(fd, 'wb') as output:
