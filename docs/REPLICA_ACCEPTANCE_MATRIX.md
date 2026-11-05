@@ -1,9 +1,17 @@
 # Матрица приёмки реплик и хранилищ
 
-Состояние доказательств на05.11.2026. План реализации:
+Состояние доказательств на06.11.2026. План реализации:
 [Kubernetes replicas and storage](superpowers/plans/2026-10-31-kubernetes-replicas.md).
 Зелёный отдельный тест или старый отказной прогон не заменяет приёмку всей
 текущей версии и выбранного профиля. Ни один профиль пока не объявлен resilient.
+
+Выбранная учебная приёмка закрыта:
+[legacy→RWX f1b38e8](superpowers/reports/2026-11-06-replica-s4-rwx-native-closure.json),
+[NAS-target closure](superpowers/reports/2026-11-06-replica-synology-target-closure.json),
+[полный CI7358=7137PASS+221прежний optional SKIP](superpowers/reports/2026-11-06-replica-s4-final-backend-ci.json).
+Оба текущих capacity loans возвращены:2/2/2, runtime fingerprint,3 PVC и9
+канонических таблиц каждого прежнего стенда сохранены. Новые стенды остановлены,
+данные сохранены. Эти результаты не выпускают сертификат и не включают production.
 
 | Область | Подтверждённый результат | Незакрытая проверка |
 |---|---|---|
@@ -17,9 +25,9 @@
 | Файлы S1–S4 | Local/RWX/S3 adapters, перенос потребителей, GC и возобновляемая offline-миграция с проверкой целостности реализованы; [runbook](ARTIFACT_STORAGE_MIGRATION.md) | Квалификация конкретного RWX/CSI/provider; миграция рабочего корпуса выполняется только после проверенного backup |
 | Runtime R1–R4 | PostgreSQL ownership/fencing, роли API/worker и координация реализованы; cancel/delete, worker-loss и partition прошли в общем текущем запуске | Дополнительные внешние providers и полная release matrix |
 | Runtime R5 | Общий текущий22-stage run прошёл без failures/required skips;80 прежних документов сохранены, финальные2 frontend +2 API +2 workers проверены | Другие providers, реальные модели/IdP и физические домены отказа требуют собственных gates |
-| Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, смена CA и CNI; NFS/CSI, RWX application/ENOSPC/restart и fresh RWX-target restore проверены. Отдельный mixed DS211 NFSv4.0/CSI4.13.6 + managed PG/Q прошёл2/2/2, пользовательскую EDQUOT507 и повтор после освобождения места | Исходная большая запись в одном Linux-ядре остаётся failed; длительный outage/cross-node, остальные external provider contracts и независимые failure domains открыты |
-| Recovery O2 | Независимые current-copy, rpl04→rpl05 replacement, compact held-handoff и selected RWX-target recovery прошли. Корпус внешнего NAS отдельно скопирован на ПК и восстановлен в новый S3 target; прежние данные/новая публикация/2/2/2 проверены при остановленном источнике и запрещённом из target доступе к NAS. Проверены cold-check, журнал попыток, учебное восстановление ключа и локальные alerts | NAS-target relocation вне строгого NFSv4.1 рецепта, остальные provider recipes; production key custody/monitoring не квалифицированы |
-| Release O3 | Обязательные project checks и профильные Windows/Linux cohorts;557 parser passes и standalone frontend build; полный Linux backend CI fdfae89:6782 passed/221 прежний optional skip/87,70% coverage, включая real-OIDC native frontend runner. Финальное ревью и пять исправлений проверены; policy validator, подписанные файлы и read-only runner реализованы. [Семь профилей](../deploy/kubernetes/replicas/support-matrix.json) перечислены с открытыми gates, certified-профилей нет | Повтор CI при последующих изменениях кода, реальные доверенные evidence producers, общая fault/profile matrix и завершение runbooks |
+| Storage O1 | Managed basic PG/Qdrant/S3, TLS, scoped credentials, CA/CNI и RWX application/ENOSPC/restart проверены. DS211 NFS4.0/CSI4.13.6 прошёл2/2/2, пользовательскую EDQUOT507 с повтором,150с application outage и отдельный логический cross-node case на VM103 | Большая NFS4.1 запись в одном ядре остаётся failed; power-loss/длительный неопределённый outage, конкретные customer providers и физические failure domains не квалифицированы |
+| Recovery O2 | Независимые current-copy, rpl04→rpl05, compact held-handoff, RWX/NAS→S3 и отдельный NAS4.0-target restore проверены. Исходный S4 legacy→RWX закрыл exit23/resume,10 SHA, checkpoint/cutoff/event,2/2/2 и download/search/export на четырёх маршрутах. Ключ/локальные alerts проверены; обе текущие capacity loans возвращены | Остальные customer provider recipes и физический key escrow/production monitoring остаются отдельными; production scheduleOFF |
+| Release O3 | Полный Linux CI f1b38e8:7137 PASS/221 прежний optional SKIP/0 failures/errors/87,72%;5 новых регрессий.557 parser passes и frontend build сохранены при неизменных деревьях исходников. Выбранные native cases, final report inventory и runbooks согласованы; [семь профилей](../deploy/kubernetes/replicas/support-matrix.json), исторические bindings/SHA сохранены, сертификатов нет | Доверенный полный release bundle, конкретные customer bindings и физическая/resilient qualification; при новых изменениях кода требуется соответствующая проверка |
 
 ## Доказательства учебного профиля
 

@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "status": "selected-authorized-lab-plan-completion-audited",
+  "verified_at": "2026-11-05T22:27:10.651029+00:00",
+  "application_revision": "f1b38e8b13af9ee83673908bfdea4b7fed7a0060",
+  "scope": "Existing agreed implementation plus selected authorized isolated lab cases; no customer/physical/release qualification inferred",
+  "requirement_evidence": {
+    "S4-original-legacy-to-rwx": "docs/superpowers/reports/2026-11-06-replica-s4-rwx-native-closure.json",
+    "S4-original-legacy-to-s3": "docs/superpowers/reports/2026-11-03-replica-compact-independent-restore.json",
+    "D1-selected-provider-fault-matrix": "docs/superpowers/reports/2026-11-05-replica-provider-matrix.json",
+    "D2-final-source-ci": "docs/superpowers/reports/2026-11-06-replica-s4-final-backend-ci.json",
+    "D3-provider-fixture-and-original-loans": "docs/superpowers/reports/2026-11-05-replica-provider-matrix-closure.json",
+    "D4-selected-nas-target-restore-and-current-loans": "docs/superpowers/reports/2026-11-06-replica-synology-target-closure.json",
+    "D5-inventory-runbooks-and-history": "deploy/kubernetes/replicas/support-matrix.json"
+  },
+  "profiles": 7,
+  "inventory_evidence_files": 24,
+  "inventory_evidence_sha256_all_match": true,
+  "historical_reports_and_bindings_preserved": true,
+  "matrix_sha256": "408ee6ae05f0229d253f18570de22e1fb670f6209cab6b9dff3b3f4d660b365c",
+  "current_final_ci": {
+    "tests": 7358,
+    "passed": 7137,
+    "optional_skips": 221,
+    "failures": 0,
+    "errors": 0,
+    "source_unchanged": true,
+    "coverage_percent": 87.7189002812812,
+    "terminal": {
+      "running": false,
+      "exit_code": 0,
+      "oom": false
+    }
+  },
+  "unchanged_component_trees": {
+    "frontend": {
+      "tree": "ec1cb339da5e4af3c3cdea71955d82eab7f34c25",
+      "unchanged_from_reusable_evidence": true
+    },
+    "doc-parser": {
+      "tree": "7316d77841e128ff0bb378a586bf6e1642bb57d4",
+      "unchanged_from_reusable_evidence": true
+    }
+  },
+  "reused_parser_cases": 557,
+  "reused_frontend_standalone_routes": 19,
+  "final_inventory_policy_tests": 33,
+  "mandatory_project_checks_passed": true,
+  "npm_audit_vulnerabilities": 0,
+  "frontend_tests_passed": 756,
+  "frontend_optional_skips": 1,
+  "relative_document_links_checked": 194,
+  "fresh_native_stopped_fixtures": [
+    {
+      "namespace": "replica-test-s4p20261105",
+      "namespace_uid": "f6e29198-a603-4150-9f76-cf75dd1e7c8c",
+      "controllers_zero": 6,
+      "live_cri": 0,
+      "nonterminal_pods": 0,
+      "pvcs_retained": 4,
+      "own_nfs_mounts": 0
+    },
+    {
+      "namespace": "replica-test-nast20261105",
+      "namespace_uid": "3b4c9925-1d0a-46c3-ac05-78b38fc7383b",
+      "controllers_zero": 6,
+      "live_cri": 0,
+      "nonterminal_pods": 0,
+      "pvcs_retained": 3,
+      "own_nfs_mounts": 0
+    }
+  ],
+  "current_capacity_returns": [
+    {
+      "namespace": "replica-test-r5o2u20261102",
+      "runtime_fingerprint": "529fdd8f27a9051d27f42753bbc8660e67a24b391c81a7a3ad9a539c6bdd26a7",
+      "returned": true,
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "pvcs_preserved": 3,
+      "canonical_tables_unchanged": 9
+    },
+    {
+      "namespace": "replica-test-r4o2t20261102",
+      "runtime_fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3",
+      "returned": true,
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "pvcs_preserved": 3,
+      "canonical_tables_unchanged": 9
+    }
+  ],
+  "open_capacity_loans": 0,
+  "selected_lab_scenarios_open": [],
+  "customer_and_release_gates": [
+    "Customer provider releases/credentials and Gateway/IdP endpoints when available",
+    "Independent Linux workers/storage failure domains for physical resilient acceptance",
+    "Independent trusted qualification issuer; no self-minted trust from historical reports"
+  ],
+  "global_release_status": "incomplete",
+  "certification": null,
+  "production_schedule": "disabled"
+}

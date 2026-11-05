@@ -1,11 +1,24 @@
 # Приёмка профилей Kubernetes replicas
 
-Статус на05.11.2026: общая приёмка **не завершена**, certified-профилей нет.
+Статус на06.11.2026: выбранная учебная приёмка завершена; общая customer/release
+qualification **не завершена**, certified-профилей нет.
 [Матрица JSON](../deploy/kubernetes/replicas/support-matrix.json) хранит семь
 предусмотренных вариантов: compact/local, frontend split, managed/RWX,
 managed/S3, all-external, mixed и resilient. Поле `tested` означает наличие
 ограниченных фактических испытаний, а не разрешение production-развёртывания.
 Реализация адаптера или успешный Helm render не заменяет provider acceptance.
+
+[Финальный CI f1b38e8](superpowers/reports/2026-11-06-replica-s4-final-backend-ci.json):
+7137 PASS/221 прежний optional SKIP/0 failures/errors/87,72% coverage.
+[Legacy→NAS4.0](superpowers/reports/2026-11-06-replica-s4-rwx-native-closure.json)
+подтвердил process exit23, тот же resume без перезаписи, исходный диагностический
+cutoff/event, held handoff и работу2/2/2 с download/search/export на четырёх
+маршрутах. Стенд выключен/held2/4 PVC сохранены; обе capacity loans возвращены.
+[NAS-target restore closure](superpowers/reports/2026-11-06-replica-synology-target-closure.json)
+закрывает отдельную репетицию восстановления уже переносимого корпуса.
+Серверные capabilities, физические failure domains и доверенный release issuer
+остаются привязаны к конкретной поставке. Production backup schedule выключен
+по выбору пользователя; производственного стенда нет.
 
 ## Frontend-split: допуск живого стенда
 

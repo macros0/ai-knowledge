@@ -8,7 +8,7 @@
     "resilient-certified"
   ],
   "purpose": "public evidence inventory; not a provider capability or release certificate",
-  "qualification_enforcement": "strict policy plus bounded Ed25519 file verification and explicit offline runner mode implemented; real trusted issuers/producers and complete current evidence pending; default live runner remains fail-closed",
+  "qualification_enforcement": "Strict policy, bounded Ed25519 file verification and explicit offline runner mode implemented. Selected authorized lab scenarios and final source CI complete; customer-specific bindings and independent trusted issuers remain required. Default live runner stays fail-closed.",
   "binding_invalidation": "Any topology, component ownership, recipe/version/image, runtime/config/identity or model/auth change requires matching new acceptance evidence.",
   "profiles": [
     {
@@ -279,7 +279,6 @@
         "artifacts": "per-component-choice"
       },
       "remaining_gates": [
-        "nas-target-relocation-with-explicit-nfs40-recipe",
         "nas-power-loss-and-longer-uncertain-provider-outage",
         "other-selected-component-ownership-recipes",
         "real-model-gateway-idp-acceptance",
@@ -312,9 +311,26 @@
           "path": "docs/superpowers/reports/2026-11-04-replica-synology-application-outage.json",
           "sha256": "b78a478a23ea148fcc18d21e56540de54feb6f02706b9e5639986afe19ead280",
           "scope": "Selected150s NAS network interruption during active publication recovered naturally with same work/attempt1; old session/search/download/export retained, own nft/handles removed, fixtures off and loans returned."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-05-replica-synology-target-restore.json",
+          "sha256": "124bc16c90ee60472997a4f7bdabb6097c30f6bc2c3ef2ca326cd696ad4c0bf1",
+          "scope": "Historical bbced15 NAS4.0 independent restore into a fresh disjoint claim:81tables/28sequences/4points/11blobs, official identity, held/release and2/2/2; source-off, target held3/stopped. Original report retains then-pending capacity returns and natural ready-export expiry; final closure is separate."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-06-replica-synology-target-closure.json",
+          "sha256": "d5879a9698bec85ed18a573b11fac60f12d1f2a627541603f4deeb95eabd5176",
+          "scope": "Closes both current capacity loans with original2/2/2/fingerprint/PVC/nine canonical tables preserved. Original NAS functional evidence and its historical runtime binding are unchanged; no certificate inferred."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-06-replica-s4-rwx-native-closure.json",
+          "sha256": "b82d616d47676ca5a3f96166f25eb074342d79d0695368b5b3d7a710b1234fbe",
+          "scope": "Exact f1b38e8 legacy-to-selected-NAS4.0 migration from independent original compact archive: real exit23/2PUT/1SQLreceipt, same-plan resume preserving orphan inode/mtime/SHA,10verified objects/cutover, exact accepted cutoff/event, held handoff3, all-four original download/search/export/frozenZIP plus new idempotent upload,4ordinary-process21coldSHA/13original events/checkpoint preserved. Target held2/off/PVC4retained and both loans returned. One VM/client-only provenance; no physical/customer qualification."
         }
       ],
-      "evidence_scope": "Selected synthetic training recipes only; historical runtime/source bindings remain as recorded. Tested is not full current profile qualification."
+      "evidence_scope": "Selected synthetic training recipes only; historical runtime/source bindings remain as recorded. Tested is not full current profile qualification.",
+      "selected_nas_target_restore_status": "verified-historical-native-restore-and-current-capacity-closure",
+      "selected_legacy_to_nas_migration_status": "f1b38e8-native-copy-crash-resume-and-functional-closure-verified"
     },
     {
       "id": "distributed-resilient",
@@ -339,28 +355,32 @@
   ],
   "production_backup_schedule": "disabled",
   "evidence_inventory_review": {
-    "date": "2026-11-05",
-    "method": "Resolve stale inventory gates using exact immutable report paths/hashes, without changing reports, rebinding historical evidence or issuing certificates.",
+    "date": "2026-11-06",
+    "method": "Verify immutable report SHA and exact source scope; close only selected authorized lab scenarios. Preserve historical bindings, all customer/physical/trusted-issuer gates and null certificates.",
     "current_backend_ci": {
-      "revision": "6b41f851ceeba78d228e26cd6cc44c518b9033ca",
-      "report": "docs/superpowers/reports/2026-11-05-replica-provider-matrix-closure.json",
-      "tests": 7317,
-      "passed": 7096,
+      "tests": 7358,
+      "passed": 7137,
       "optional_skips": 221,
       "failures": 0,
       "errors": 0,
-      "coverage_percent": 87.69888171651968,
-      "source_scope": "Latest complete snapshot; later NASbbced15 has focused74-case CI only and retains its final full-CI gate."
+      "coverage_percent": 87.7189002812812,
+      "revision": "f1b38e8b13af9ee83673908bfdea4b7fed7a0060",
+      "report": "docs/superpowers/reports/2026-11-06-replica-s4-final-backend-ci.json",
+      "report_sha256": "ba72185d4c80ec655612b50e9dafb506e974512a233cddd74132b072820148cc",
+      "source_scope": "Complete immutable f1b38e8 source snapshot. Later inventory/runbook/report-only changes are verified separately; no provider or release certification inferred."
     },
-    "unresolved_lab_scenarios": [
-      "Native NAS-target relocation using the explicit bbced15 NFS4.0 recipe; old strict NFS4.1 recipe remains unchanged",
-      "Final-source full CI and release evidence audit after the NAS target rehearsal"
-    ],
+    "unresolved_lab_scenarios": [],
     "environment_inputs": [
       "Customer provider releases/credentials and Gateway/IdP endpoints when available",
       "Independent Linux workers/storage failure domains for physical resilient acceptance",
       "Independent trusted qualification issuer; no self-minted trust from historical reports"
     ],
-    "production_schedule": "disabled-by-user; no production stand"
+    "production_schedule": "disabled-by-user; no production stand",
+    "selected_authorized_lab_plan_status": "complete",
+    "closed_lab_scenarios": [
+      "docs/superpowers/reports/2026-11-06-replica-synology-target-closure.json",
+      "docs/superpowers/reports/2026-11-06-replica-s4-rwx-native-closure.json"
+    ],
+    "open_capacity_loans": 0
   }
 }

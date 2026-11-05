@@ -10,12 +10,24 @@
 
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
-Статус 05.11.2026: реализация продолжается в `codex/kubernetes-replicas`.
+Статус 06.11.2026: реализация и выбранная учебная приёмка завершены в
+`codex/kubernetes-replicas`; customer/release qualification остаётся отдельной.
 P0/P1, frontend split, local/RWX/S3 adapters, перенос файловых потребителей,
 поиск orphan-объектов/безопасный GC и verified/resumable offline-миграция корпуса
 реализованы. Миграция не удаляет исходник и не требует реиндексации;
 [runbook](../../ARTIFACT_STORAGE_MIGRATION.md). Поддержка конкретного provider/CSI
 по-прежнему требует собственной приёмки; SDK/unit tests её не заменяют.
+
+Последний исходный критерий S4 подтверждён
+[legacy→NAS4.0 репетицией f1b38e8](../reports/2026-11-06-replica-s4-rwx-native-closure.json):
+реальный exit23/2 PUT/1 SQL receipt, тот же resume с неизменным orphan,
+10 проверенных объектов, исходный cutoff/event, checkpoint и held handoff.
+Прошли2/2/2, оба download/search, экспорт и диагностический ZIP на четырёх
+маршрутах;21 cold SHA и13 исходных событий проверены четырьмя API/worker.
+Оба новых стенда выключены, данные/PVC сохранены, обе текущие capacity loans
+возвращены с исходными2/2/2/runtime/PVC/9 таблицами.
+[Финальный CI](../reports/2026-11-06-replica-s4-final-backend-ci.json):7358 cases,
+7137 PASS+221 прежний optional SKIP,0failures/errors,87,72% coverage.
 
 Runtime ledger/fencing/публикация, API/worker lifecycle и общая координация
 реализованы. На изолированном managed-S3 учебном профиле фактически проверены
@@ -67,7 +79,7 @@ partition/возврат устаревшего процесса и нагруз
 [Результат](../reports/2026-11-02-replica-common-runtime.json).
 Эта приёмка не распространяется на другие providers и физические домены отказа.
 
-Открыты три крупных блока, частично выполненные:
+Гейты за пределами выбранной учебной приёмки:
 
 - **O1:** RWX independent restore, Synology256MiB write/read,150с application outage
   и логический перенос между двумя узлами VM103 уже проверены;
@@ -83,8 +95,9 @@ partition/возврат устаревшего процесса и нагруз
   [Двухузловой результат](../reports/2026-11-04-replica-crossnode-vm103.json) сохраняет
   первый неуспешный автоподхват и отдельный успешный повтор после исправлений DNS/PG.
 - **O2:** compact/NULL-generation, managed-S3, selected RWX target и NAS/all-external
-  source→S3 independent recovery проверены. Остаётся явно выбранный NAS-target
-  NFSv4.0 relocation recipe, остальные выбранные customer adoption/update recipes.
+  source→S3 independent recovery проверены. Выбранный NAS-target NFSv4.0
+  relocation recipe [закрыт отдельно](../reports/2026-11-06-replica-synology-target-closure.json).
+  Остаются остальные customer adoption/update recipes с их конкретными входами.
   Восстановление ключа из
   отдельного защищённого каталога и доставка alerts локальному приёмнику на ПК
   проверены на учебной копии. Production-расписание выключено; production
@@ -92,16 +105,22 @@ partition/возврат устаревшего процесса и нагруз
 - **O3:** объединённая fault/profile matrix, квалификация текущего runtime/провайдеров,
   customer Gateway/IdP и доверенный release issuer. Текущие PG/Qdrant/model
   branches объединены в отчёт с10/14 неизменным parent и проверенным physical
-  recovery child; полный CI6b41f85 и закрытие этого прогона прошли. Последующий
-  NAS-компонент bbced15 требует своей нативной приёмки и финального CI. Default frontend
+  recovery child; полный CI6b41f85 и закрытие этого прогона прошли. Последующие
+  NAS-target и legacy→RWX cases закрыты, полный исходный CI обновлён доf1b38e8.
+  Доверенный общий release bundle не выпущен. Default frontend
   probe read-only; выбранный real-CSRF/Gateway/SSO producer закрыт новым 12-stage case. Единственное ревью всей ветки,
   единый проход пяти исправлений и полный ccfcf9e CI уже завершены.
 
-05.11 inventory audit: [семь вариантов](../../../deploy/kubernetes/replicas/support-matrix.json)
+06.11 inventory audit: [семь вариантов](../../../deploy/kubernetes/replicas/support-matrix.json)
 сверены с неизменными SHA-отчётами. Шесть имеют ограниченные учебные доказательства
 (`tested`), resilient остаётся planned. Устаревшие gates о непроверенных compact/
 RWX/mixed restore, S3 application-full и полном backend CI заменены конкретными
 незакрытыми проверками. Это инвентарь разных bindings, не общий сертификат.
+В выбранной учебной поставке открытых сценариев и capacity loans больше нет.
+Production-расписание выключено по выбору пользователя; физическая HA,
+конкретные customer providers/Gateway/IdP и независимый доверенный issuer
+сохраняют отдельные gates. Глобальные условия готовности ниже включают эти
+проверки и не объявляются пройденными результатами одного учебного стенда.
 
 O3 частичная проверка текущих источников:557/557 doc-parser tests,0 skips и новая
 standalone frontend production build с19 routes и проверенными health rewrite/

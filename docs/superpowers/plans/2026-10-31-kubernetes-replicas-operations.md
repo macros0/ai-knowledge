@@ -15,6 +15,19 @@
 platform допуска. Bare local disk, один NFS и одна физическая машина не получают
 resilient label на основании числа Pod. Лицензии и exact versions фиксируются P0.
 
+Текущий checkpoint06.11.2026: выбранные учебные O1/O2 cases и возврат ресурсов
+закрыты. [NAS4.0-target closure](../reports/2026-11-06-replica-synology-target-closure.json)
+дополняет прежнюю независимую NAS→S3 копию; отдельный
+[legacy→RWX S4](../reports/2026-11-06-replica-s4-rwx-native-closure.json) сохранил
+cutoff/event/checkpoint, прошёл crash/resume/held handoff и функциональную2/2/2
+приёмку. Оба новых стенда выключены с сохранёнными PVC, обе текущие capacity
+loans закрыты с2/2/2/runtime/PVC/9 таблицами каждого прежнего стенда.
+[Полный CI f1b38e8](../reports/2026-11-06-replica-s4-final-backend-ci.json)
+прошёл7137+221прежний optional SKIP/0failures/errors. Старые отчёты и bindings
+не изменялись. Ниже сохраняется история отдельных milestones; её прежние
+pending-заметки не отменяют этот checkpoint. Customer/physical/trusted-issuer
+gates остаются отдельными, production scheduleOFF по выбору пользователя.
+
 ## Review Focus
 
 Mixed ownership ломает backup; старый worker продолжает писать после scale=0;

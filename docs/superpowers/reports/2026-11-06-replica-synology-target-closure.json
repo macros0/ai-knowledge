@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "status": "selected-nas-target-restore-closure-verified",
+  "verified_at": "2026-11-05T22:11:59.185312+00:00",
+  "prior_functional_evidence": "docs/superpowers/reports/2026-11-05-replica-synology-target-restore.json",
+  "prior_functional_evidence_sha256": "124bc16c90ee60472997a4f7bdabb6097c30f6bc2c3ef2ca326cd696ad4c0bf1",
+  "target_namespace": "replica-test-nast20261105",
+  "target_namespace_uid": "3b4c9925-1d0a-46c3-ac05-78b38fc7383b",
+  "maintenance_epoch": 3,
+  "all_target_pods_terminal": true,
+  "live_cri": 0,
+  "retained_pvcs": 3,
+  "prior_report_not_rewritten": true,
+  "capacity_returns": [
+    {
+      "namespace": "replica-test-r5o2u20261102",
+      "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+      "phase": "capacity-recovered-and-source-verified",
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "runtime_fingerprint": "529fdd8f27a9051d27f42753bbc8660e67a24b391c81a7a3ad9a539c6bdd26a7",
+      "claims_preserved": 3,
+      "materialized_tables_unchanged": 9,
+      "data_mutations": 0,
+      "journal_sha256": "7c729b05ff0afe949a7145898f141c8ccb21451b3826e2682bbe4a408b6bed36"
+    },
+    {
+      "namespace": "replica-test-r4o2t20261102",
+      "namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+      "phase": "capacity-recovered-and-source-verified",
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "runtime_fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3",
+      "claims_preserved": 3,
+      "materialized_tables_unchanged": 9,
+      "data_mutations": 0,
+      "journal_sha256": "b41529e86fcc6e41854aaec17b3c0d60e32265d0d430f1306abf5d71924c57f2"
+    }
+  ],
+  "open_capacity_loans": 0,
+  "final_source_ci": "docs/superpowers/reports/2026-11-06-replica-s4-final-backend-ci.json",
+  "historical_runtime_scope_preserved": true,
+  "qualification_inferred": false,
+  "certification": null,
+  "production_schedule": "disabled"
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "status": "s4-diagnostic-fix-full-backend-linux-ci-verified",
+  "verified_at": "2026-11-05T21:22:51.473772+00:00",
+  "source_revision": "f1b38e8b13af9ee83673908bfdea4b7fed7a0060",
+  "application_revision": "f1b38e8b13af9ee83673908bfdea4b7fed7a0060",
+  "source_scope": "Immutable Git snapshot; one application-file diagnostic migration fix and two test-file changes; later operational helpers/reports excluded",
+  "source_files": 2528,
+  "patch_files": 3,
+  "patch_bytes": 61440,
+  "patch_sha256": "b8f896ca4bb7bfa8cebdf2101ad129811299cd469efff5d9e80c3540e0c627a8",
+  "container_id": "baa359f54da41c9ec0bd68952a9f5cf1bddfd2163c37755e1a692a0829dd70d7",
+  "tests": 7358,
+  "passed": 7137,
+  "optional_skips": 221,
+  "failures": 0,
+  "errors": 0,
+  "coverage_percent": 87.7189002812812,
+  "junit_sha256": "43e6d2ac8bdf744607fb6ee4d4e9229e83b94742f495967ad42b552240ed1b3d",
+  "collection_sha256": "b61bf695186a5d748ce5fc35874d8776ea8f43ccb6650402f46b93979a3f5535",
+  "verified_checks": {
+    "prior_case_ids_retained": true,
+    "windows_case_ids_retained": true,
+    "optional_skip_ids_unchanged": true,
+    "required_added_modules_present": true,
+    "collection_complete": true,
+    "source_unchanged": true
+  },
+  "new_regression_cases": 5,
+  "prior_full_backend_ci": "docs/superpowers/reports/2026-11-05-replica-final-backend-ci.json",
+  "regression_evidence": "docs/superpowers/reports/2026-11-05-replica-s4-diagnostic-regression.json",
+  "isolation": {
+    "network": "none",
+    "user": "1000:1000",
+    "read_only_root": true,
+    "memory_limit_mib": 2816,
+    "swap_disabled": true
+  },
+  "qualification_inferred": false,
+  "certification": null,
+  "production_schedule": "disabled",
+  "still_required": [
+    "Native fixed-image legacy-to-RWX acceptance",
+    "Return both current capacity loans",
+    "Final evidence/runbook reconciliation"
+  ]
+}

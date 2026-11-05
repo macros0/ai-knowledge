@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "status": "published-evidence-git-byte-custody-verified",
+  "verified_at": "2026-11-05T22:34:45.361228+00:00",
+  "scope": "Metadata-only Git serialization repair; actual report files and published SHA remain unchanged",
+  "inventory_reports_verified_in_git_index": 24,
+  "historical_reports_with_normalization_repaired": 14,
+  "actual_report_files_rewritten": 0,
+  "json_semantics_changed": 0,
+  "published_sha_rebased": 0,
+  "historical_bindings_changed": 0,
+  "report_attributes": "Explicit -text entries preserve published LF or CRLF bytes on Windows/Linux checkouts",
+  "matrix_attributes": "text eol=lf preserves the audited inventory serialization",
+  "records": [
+    {
+      "path": "docs/superpowers/reports/2026-11-02-replica-backup-key-recovery.json",
+      "published_sha256": "b3bb4762fe83187d6aada636e64921bb83b2209535001ce6bd16eb1e02dd68c3",
+      "previous_git_blob_sha256": "3e3290cef2da50c0daa0d5bbde527ddcac54435ba10a9c0173355f437ed850c5",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-02-replica-current-artifact-ci.json",
+      "published_sha256": "0d0578ab57798cdfc502f78b07d6145459fe9b39f7f271031e675c8e3d8e8168",
+      "previous_git_blob_sha256": "1851c4d3800ac8b0a419e4b90265dcdea22397698cb54198d70a5fde691a2470",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-02-replica-predecessor-schema-recovery.json",
+      "published_sha256": "403e3ebe484c513c9900615411514638db63d72d2ace13a9e2673f421b5ab1f6",
+      "previous_git_blob_sha256": "894754d6be2de37247ddee1c1dd7273cfdbbee4e54bee5579fe0727117be7531",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-03-replica-compact-independent-restore.json",
+      "published_sha256": "8d2db25f0fc8888b6f7bf6e324056cd40d26c61b3f07994ebede70a17ef7c1f8",
+      "previous_git_blob_sha256": "b256175c9fa6a173fc78f7e13415de488b590f5b28e71ef5d651c7bfb96dfebe",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-03-replica-rwx-application.json",
+      "published_sha256": "aafdb822d327fbfdc2958d78b4d40f4076c3ed043614cd7d305030c70561be7a",
+      "previous_git_blob_sha256": "ecbd4d58fa2633b3bd941983df19267dcf7786dcd412c788fb6ce105db6fe014",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-03-replica-rwx-source-s3-restore.json",
+      "published_sha256": "99e12b7d40efe038a24210321247ea3d48158caa5457cda23e9046ca839f1327",
+      "previous_git_blob_sha256": "d8eb77dfe70afc07a1d025a0ea9fc4858f18fdfab14af2fdd0e30b8fa00c7fbf",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-03-replica-rwx-target-restore.json",
+      "published_sha256": "b8b00ac0b26914fe3a44a2300a8b34afe09dc87bf2f106dc1e5bac489b02dc1a",
+      "previous_git_blob_sha256": "fa99d9ca50e95b690dd76afa3055214ed40aeb0e1e548ec525024a65e30e012e",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-04-replica-synology-application-outage.json",
+      "published_sha256": "b78a478a23ea148fcc18d21e56540de54feb6f02706b9e5639986afe19ead280",
+      "previous_git_blob_sha256": "8fc98a2e4f0b573d290a633e3713ad115471b440e547c11157ce87d3f3530314",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-04-replica-synology-mixed-runtime.json",
+      "published_sha256": "0c0b74425c8384080276902e19d7b3c26fc7094226db12f489439973535b4500",
+      "previous_git_blob_sha256": "74e8f06b13f8b5f5a86847eb5bd966802e9cadaf5089ecc124387f5af98d380b",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-04-replica-synology-source-s3-restore.json",
+      "published_sha256": "474f90e046e1fa39779732649dbf66d113985be674756c773b48d1d0820ffda9",
+      "previous_git_blob_sha256": "e89d97157c45b0ac3e683d18d3bea9ab42bff9a3ba23eba592ce2ae897ad5f00",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json",
+      "published_sha256": "92ace2fb1b0b728d552a07e5acee9b2d63833fac9a400248356bcd9e44ba3e25",
+      "previous_git_blob_sha256": "cc24f1c73aaf724606fa2e2fc97ec061901be2e9e3924d10dc8a4dbe06c4fb46",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-05-frontend-oidc-native-acceptance.json",
+      "published_sha256": "123e5f4ffcea74a45591ab25222722a78386948058deb6256da6a9754ebbebd2",
+      "previous_git_blob_sha256": "1b545d64f52725aaa67fe21eb64b4d17d9df4c37aeef783f28e21edff4a3ea07",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-05-replica-provider-matrix-closure.json",
+      "published_sha256": "b1dc669e3c7f9b260ed51240f2d5a3588c26a9059c6537a67db1640358179edc",
+      "previous_git_blob_sha256": "755b405bb213a58dcc6b1b4cfe832a20cc1c60fca76ee5d75f9dc9012da333ea",
+      "json_semantics_unchanged": true
+    },
+    {
+      "path": "docs/superpowers/reports/2026-11-05-replica-provider-matrix.json",
+      "published_sha256": "a6678bcb331342a0fbbf656756c93ada5db983becd155e0286363d4bf2878d4f",
+      "previous_git_blob_sha256": "2631a0316ef406f2ac0cd799769bd6b4df4d0466dceba146ffc1350231ec5f18",
+      "json_semantics_unchanged": true
+    }
+  ],
+  "foreign_paths_excluded_from_index": [
+    "backend/pyproject.toml",
+    "docs/superpowers/plans/2026-10-23-chat-answer-scenarios.md",
+    "docs/superpowers/specs/2026-10-21-audit-storage-modes-design.md",
+    "docs/superpowers/specs/2026-10-23-chat-answer-scenarios-design.md"
+  ],
+  "application_source_changed": false,
+  "qualification_inferred": false,
+  "certification": null,
+  "production_schedule": "disabled"
+}

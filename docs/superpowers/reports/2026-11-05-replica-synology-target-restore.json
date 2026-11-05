@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "status": "independent-nas-target-functional-verified-stopped-capacity-pending",
+  "observed_at": "2026-11-05T19:01:52.083346+00:00",
+  "operation_id": "dbe91531e82642e48246c827b298168f",
+  "source_namespace": "replica-test-synr20261104",
+  "source_namespace_uid": "2b02a536-f2c2-4f50-a79d-319bf6a7e545",
+  "target_namespace": "replica-test-nast20261105",
+  "target_namespace_uid": "3b4c9925-1d0a-46c3-ac05-78b38fc7383b",
+  "scope": "Synthetic selected DS211 DSM6.2.4-25556U8 NFS4.0/CSI4.13.6; same NAS, disjoint new claim directory; one VM/kind; client-only provenance",
+  "backup": {
+    "backup_id": "d90b9d5f09464b54b142d0a0427325b6",
+    "manifest_sha256": "30a4855b5b2112d6e29aaa59467fa5acbb6a08426bbda6c1224cb7d066da9027",
+    "encrypted_objects": 13,
+    "custody": "independent PC",
+    "master_key_transferred_to_vm": false,
+    "ca_signing_key_transferred_to_vm": false
+  },
+  "physical_target": {
+    "namespace": "replica-test-nast20261105",
+    "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-nast20261105-artifacts-pvc-e438f15c-d04b-4da3-98f1-f1dca62921a1",
+    "nfs_version": "4.0",
+    "client_directory_inode": 16371,
+    "client_directory_uid": 0,
+    "client_directory_gid": 100,
+    "client_directory_mode": 1528,
+    "wire_uid": 1031,
+    "wire_gid": 100,
+    "source_scope_sha256": "c2640b71d6144724fbc9a9f50999df7c755479e9bb95e72e8b6789c2fd7884f2",
+    "server_filesystem_identity_claimed": false,
+    "claim_uid": "e438f15c-d04b-4da3-98f1-f1dca62921a1",
+    "pv_uid": "0be91f1f-0ccb-468a-96fe-768d7e4592fb",
+    "recipe": "synology-ds211-dsm6.2.4-25556-u8-nfs4.0-csi4.13.6-training-v1",
+    "driver": "okf-training-nfs.csi.k8s.io",
+    "source_disjoint": true
+  },
+  "runtime": {
+    "revision": "bbced156bb8fe18da688a1ee5cc5025d96b2751e",
+    "image": "okf-backend:replicas-bbced15-nast-68515b160741",
+    "kind_image_id": "sha256:2eac3b5c95eb892d5ae3ea5c6cc5408f028507f1dc11335e0885271cc034c53d",
+    "build_fingerprint": "800ef836f0e2f29e063085f3774e48ef848270631133836e317eb14a65b51416",
+    "installation_id": "72993a7cee56457096b00124f50c4fa5",
+    "runtime_fingerprint": "e6ab817df5c54311de90e770165a41a9c1b17a5ba012eaa3f2e05e871019a60e"
+  },
+  "imported": {
+    "postgres_tables": 81,
+    "postgres_sequences": 28,
+    "postgres_catalog_sha256": "c09b2b028d2e530a77d47a247eb8aa21563d203247b077a418bdff848ed5bd9a",
+    "qdrant_full_points": 4,
+    "qdrant_points_sha256": "2536719db229f1aedf7a967920d5e12d5c5edfda982da099a6685ecb9b3ce6f9",
+    "blobs": 11,
+    "all_blob_sha256_verified": true,
+    "original_source_off_and_unmounted": true,
+    "application_replicas_during_import": 0
+  },
+  "identity": {
+    "official_command_unchanged": true,
+    "nas_proof_reobserved": true,
+    "invalidated_old_sessions": 1,
+    "held_epoch": 2,
+    "ordinary_start_write_claim_artifact_runtime_denied": true,
+    "application_principal_non_admin": true,
+    "pg_acl_denials": 10,
+    "explicit_release": true
+  },
+  "functional": {
+    "frontend_replicas": 2,
+    "api_replicas": 2,
+    "worker_replicas": 2,
+    "all_ready_zero_restarts": true,
+    "endpoints": 4,
+    "old_cookie_rejected_all_four": true,
+    "new_session_shared_all_four": true,
+    "original_documents": 2,
+    "original_document_sha_and_search_all_four": true,
+    "new_document_done_without_problem": true,
+    "cross_frontend_idempotency": true,
+    "new_document_sha_and_search_all_four": true,
+    "new_export_sha256": "98a39f5072025694e0cea5782fc60be4fe2f1795a90aae139409c25b72e8814f",
+    "new_export_zip_and_member_sha_all_four": true,
+    "native_processes": 4,
+    "cold_objects_per_process": 17,
+    "scratch_files": 0,
+    "legacy_business_work_never_reexecuted": 3,
+    "new_business_work_succeeded_once": 2
+  },
+  "original_export_retention": {
+    "original_archive_sha256": "2bf2471d069db8b0d292bc7c0be029091e90e480875bff1758aebe27afdfc929",
+    "cold_native_import_sha256_matched": true,
+    "zip_integrity": true,
+    "original_member_sha256_matched": true,
+    "expires_at": "2026-11-04T22:38:21.981982+00:00",
+    "observed_at": "2026-11-05T18:48:26.84037+00:00",
+    "artifact_status": "expired",
+    "retention_audit_count": 1,
+    "source_expiry_preserved": true,
+    "clock_modified": false,
+    "old_zip_http_success_claimed": false
+  },
+  "retained_trial_failures": {
+    "initial_mount_probe_missing_app_path": true,
+    "old_zip_http_200_assumption_after_expiry": true,
+    "first_upload_rejected_as_similar": true,
+    "production_behavior_or_checks_relaxed": false
+  },
+  "stopped": {
+    "maintenance_held": true,
+    "epoch": 3,
+    "nonterminal_pods": 0,
+    "running_containers": 0,
+    "bound_pvcs_retained": 3,
+    "target_nfs_node_mounts": 0,
+    "owned_http_forwards": 0,
+    "native_owned_listeners": 0
+  },
+  "capacity_returns": [
+    {
+      "namespace": "replica-test-r5o2u20261102",
+      "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+      "phase": "roles-reduced-for-frontend-split",
+      "original_replicas": {
+        "frontend": 2,
+        "api": 2,
+        "worker": 2
+      },
+      "return_required": true
+    },
+    {
+      "namespace": "replica-test-r4o2t20261102",
+      "namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+      "phase": "roles-reduced-for-frontend-split-runtime",
+      "original_replicas": {
+        "frontend": 2,
+        "api": 2,
+        "worker": 2
+      },
+      "return_required": true
+    }
+  ],
+  "open_capacity_loans": 2,
+  "final_backend_ci": {
+    "revision": "ae8bffb09110878bd263c6b7f1326d573f419b4e",
+    "container_id": "099f4c4c664c08208c6c5e5c77c2d2f6d0ab26be0725689ffb98fd50f5aecaa5",
+    "phase": "running",
+    "result_claimed": false,
+    "source_files": 2528,
+    "subsequent_report_only_updates_require_metadata_checks": true
+  },
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled"
+}

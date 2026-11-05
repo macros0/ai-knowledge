@@ -7,7 +7,30 @@
 **Tech Stack:** Python, SQLAlchemy/Alembic, файловая система, S3 SDK из общего requirements lock, существующие Qdrant generation filters.
 **Spec:** [Согласованный дизайн](../specs/2026-10-31-kubernetes-replicas-storage-design.md).
 
-Статус 31.10.2026: S1 в работе. Реализованы BlobRef/BlobStore, local/RWX/S3,
+Актуальный checkpoint05.11.2026: реализация S1–S4 и её unit/PostgreSQL проверки
+существуют; последующие runtime/backup отчёты находятся в основном плане.
+[Нативная legacy→S3 репетиция](../reports/2026-11-03-replica-compact-independent-restore.json)
+подтверждает настоящий exit23/copy-resume/cutover и работу старого корпуса.
+Исходный критерий S4 legacy→RWX закрыт отдельной
+[нативной репетицией f1b38e8](../reports/2026-11-06-replica-s4-rwx-native-closure.json)
+на выбранном NAS4.0. Два исходных документа и10 объектов перенесены после
+настоящего exit23:2 PUT/1 SQL receipt; resume сохранил inode/mtime/SHA orphan.
+Исходное событие и cutoff диагностического ZIP, checkpoint и approval сохранены.
+После held handoff/release прошли2/2/2, оба download/search, экспорт и ZIP на
+четырёх маршрутах, новая идемпотентная загрузка и21 cold SHA в четырёх процессах.
+Стенд held2/выключен,4 PVC сохранены; обе текущие capacity loans возвращены.
+Это legacy-миграция, отдельно от
+[восстановления уже переносимого NAS-корпуса](../reports/2026-11-06-replica-synology-target-closure.json).
+
+[Первый неудачный прогон](../reports/2026-11-05-replica-s4-diagnostic-regression.json)
+сохранён: истёкший к моменту миграции capture ошибочно исключался из уже
+принятого исторического запроса. Патч f1b38e8 ограничен частной подготовительной
+копией; исходные сроки хранения и обычное чтение не меняются. Пять новых
+регрессий и [полный Linux CI](../reports/2026-11-06-replica-s4-final-backend-ci.json)
+прошли:7358 cases=7137 PASS+221 прежний optional SKIP/0failures/errors/87,72%.
+Первый стенд также выключен, его4 PVC сохранены. Рабочий `data/` не использовался.
+
+Исторический checkpoint31.10.2026: S1 в работе. Реализованы BlobRef/BlobStore, local/RWX/S3,
 factory/settings и materialize с проверкой integrity, concurrent publication и
 типизированных ошибок. Есть общий suite и реальные botocore model/hook tests.
 По умолчанию pipeline сохраняет legacy режим (original preview описан ниже). Реальные provider contract tests
@@ -198,7 +221,7 @@ Cutover допускается при остановленных writers и по
 - [x] `test_resume_copy_without_duplicates`, `test_bad_hash_refuses_cutover`, `test_paths_rebased_for_attachments`, `test_wrong_installation_refused`, `test_unverified_target_never_active`: assert source остаётся выбранным при любом отказе, counts/hash совпадают, storage refs не ссылаются на старый абсолютный путь.
 - [x] RED: `python -m pytest tests/test_artifact_storage_migration.py -q`.
 - [x] Реализовать phases и receipt. Existing generations/staging/scope sidecars сохраняют identity/signatures. Смена storage не меняет embedding model/sparse formula; reindex нужен только как проверенный recovery вариант. Перед миграцией обязателен отдельный backup, после начала новых записей rollback — согласованное восстановление, не обратный env toggle.
-- [ ] GREEN и runner storage: legacy nonempty corpus → local adapter → RWX и S3 на отдельных targets, затем download/search/export и прерванный copy/resume. Никакого запуска против рабочего `data/`.
+- [x] GREEN и runner storage: legacy nonempty corpus → local adapter → RWX и S3 на отдельных targets, затем download/search/export и прерванный copy/resume. Никакого запуска против рабочего `data/`.
 - [x] Commit `feat: migrate artifact storage with verified cutover`.
 
 Local/RWX adapter + S3 protocol double проверяют cold publication/export/attachments,

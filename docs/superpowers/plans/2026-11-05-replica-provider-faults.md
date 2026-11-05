@@ -80,8 +80,8 @@ qualification to the lab's denominator or treating those gates as passed:
   added recovery/matrix tests, complete collection and unchanged optional skips.
 - [x] D3: stop the current fixture, close owned transports and return both
   original capacity loans, verifying counts/runtime/PVC/nine-table hashes.
-- [ ] D4 (O2): execute the selected NAS-target NFSv4.0 relocation recipe.
-- [ ] D5 (O3): reconcile the overall plan, support matrix and operator runbooks
+- [x] D4 (O2): execute the selected NAS-target NFSv4.0 relocation recipe.
+- [x] D5 (O3): reconcile the overall plan, support matrix and operator runbooks
   against actual evidence and retain the explicit customer/production gates.
 
 These are the existing remaining deliverables, not a new feature programme.

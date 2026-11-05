@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "status": "native-regression-reproduced-source-fix-under-linux-ci",
+  "observed_at": "2026-11-05T20:57:49.867276+00:00",
+  "requirement": "Original S4 legacy nonempty corpus to selected RWX with interrupted copy/resume and accepted intents preserved",
+  "failed_trial": {
+    "namespace": "replica-test-s4n20261105",
+    "namespace_uid": "8add555c-372e-46a1-a649-e77a171c2b66",
+    "source_backup_id": "61b33d604f9648e097b6ab30ef57b2c3",
+    "source_manifest_sha256": "b74a96f7b044a93822206885f21ff30e4bfdde01e1873e09c8bf42ae7cd0b787",
+    "source_revision": "75706f1d58222f637def24873fd9db0f7ccef4b40b8558d3f23d5752ddeaa311",
+    "actual_planned_crash_exit": 23,
+    "objects_copied_and_verified_before_final_assertion": 10,
+    "resume_preserved_unreceipted_object_inode_mtime_sha": true,
+    "cutover_committed": true,
+    "final_acceptance_passed": false,
+    "failure": {
+      "frozen_zip_events": 0,
+      "expected_event_id": "938cf31d-2c64-458f-97f1-027cd17c5e34",
+      "raw_history_events": 13,
+      "cutoff_at": "2026-11-03T06:13:17.619304+00:00",
+      "capture_expires_at": "2026-11-04T06:13:17.698607+00:00",
+      "capture_valid_at_cutoff": true,
+      "retention_elapsed_at_migration": true,
+      "manifest_gap": "segment_expired",
+      "frozen_blob_sha256": "1789865dad603931e8609abd5198ff5a3f5211e5196b05a810cf37729a04fe13"
+    },
+    "closure": {
+      "live_cri": 0,
+      "nonterminal_pods": 0,
+      "own_nfs_mounts": 0,
+      "retained_bound_pvcs": 4
+    },
+    "failed_result_retained": true,
+    "source_archive_unchanged": true
+  },
+  "source_fix": {
+    "revision": "f1b38e8b13af9ee83673908bfdea4b7fed7a0060",
+    "changed_application_files": [
+      "backend/app/services/artifacts/diagnostic_migration.py"
+    ],
+    "changed_test_files": [
+      "backend/tests/test_artifact_legacy_diagnostics.py",
+      "backend/tests/test_diagnostics_read_view.py"
+    ],
+    "behavior": "Private verified copies use original accepted cutoff eligibility and a bounded preparation lease; timeout refuses migration",
+    "source_retention_deadlines_preserved": true,
+    "ordinary_live_read_expiry_unchanged": true,
+    "future_event_excluded": true,
+    "expired_at_or_before_cutoff_capture_excluded": true,
+    "backdated_real_child_red_cases": 3,
+    "green_new_regression_cases": 5,
+    "windows": {
+      "tests": 88,
+      "passed": 87,
+      "failures": 0,
+      "errors": 0,
+      "optional_skips": 1,
+      "skip": "test_revision_on_private_postgres_schema: private PostgreSQL connection not configured",
+      "junit_sha256": "7242a1377bd8cda2952eb019dc846a054d82919685f4f1d3c5768d77a2803633"
+    },
+    "mandatory_project_checks_passed": true,
+    "npm_audit_vulnerabilities": 0
+  },
+  "linux_ci": {
+    "operation_id": "90d1d9465e7b4639a9a071fc3149363b",
+    "container_id": "baa359f54da41c9ec0bd68952a9f5cf1bddfd2163c37755e1a692a0829dd70d7",
+    "revision": "f1b38e8b13af9ee83673908bfdea4b7fed7a0060",
+    "status": "running-not-yet-verified",
+    "patch_files": 3,
+    "patch_bytes": 61440,
+    "patch_sha256": "b8f896ca4bb7bfa8cebdf2101ad129811299cd469efff5d9e80c3540e0c627a8",
+    "source_files": 2528
+  },
+  "remaining": [
+    "Full Linux CI of the source fix",
+    "Fresh independent legacy-to-RWX rehearsal through held adoption and runtime acceptance",
+    "Return the two current owned capacity loans",
+    "Final evidence and operator runbook reconciliation"
+  ],
+  "certification": null,
+  "production_schedule": "disabled"
+}

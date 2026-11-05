@@ -75,13 +75,46 @@ namespaced manifests reuse the admitted CSI/StorageClass; render and dry-run
 first. Do not reuse a closed capacity loan. Any necessary new loan records exact
 pre-state and closes with original counts/runtime/PVC/nine materialized tables.
 
-- [ ] Verify source-off and independent archive; prove the fresh/disjoint target
+- [x] Verify source-off and independent archive; prove the fresh/disjoint target
   mount with actual non-root UID1031/G100 before import or identity changes.
-- [ ] Import81 tables/28 sequences/four full points/eleven authenticated blobs
+- [x] Import81 tables/28 sequences/four full points/eleven authenticated blobs
   with native intent/unknown-ACK handling; compare before adoption, jobs held.
-- [ ] Use unchanged official identity command and scoped operator projection;
+- [x] Use unchanged official identity command and scoped operator projection;
   verify new identity/old-cookie rejection/explicit release/2/2/2 and old/new
   search/download/export/upload plus cold SHA.
-- [ ] Fence/stop target, close handles, retain all PVC/data and restore capacity.
+- [x] Fence/stop target, close handles, retain all PVC/data and restore capacity.
   Publish a typed sanitized report, update D4/runbooks/support matrix and retain
   all customer/physical/trusted-issuer gates.
+
+Actual Task2 functional evidence is now available in the
+[NAS target report](../reports/2026-11-05-replica-synology-target-restore.json).
+The new claim's client inode16371 differs from source16314; all81 tables,
+28 sequences, four full points and eleven blobs matched before adoption.
+The unchanged identity command revoked the old session; held/release checks,
+2/2/2 readiness, all-four-endpoint document SHA/search, new ZIP integrity and
+four-process cold reads of17 ready objects passed. The target is now held at
+epoch3, all Pods terminal/CRI0, three PVCs retained, its NFS mount and owned
+listeners gone. [Closure on06Nov](../reports/2026-11-06-replica-synology-target-closure.json)
+confirms both current capacity returns: original2/2/2, fingerprints, three PVCs
+and nine canonical tables per source preserved. D4 is closed for this selected
+lab recipe. [Final f1b38e8 CI](../reports/2026-11-06-replica-s4-final-backend-ci.json)
+passed7137+221unchanged optional skips; the original runtime binding remains bbced15.
+
+The frozen original ZIP expired at2026-11-04T22:38:21.981982Z before this
+rehearsal. Its authenticated bytes, native-import SHA and DOCX-member SHA passed;
+the normally running worker then retired it once under the existing retention
+rule. A separate test proved its HTTP409 rejection on all four endpoints.
+No post-expiry HTTP200 is claimed, no clock/expiry was changed, and the original
+failed HTTP200 assumption is retained. The first new fixture was legitimately
+rejected as similar; a distinct synthetic topic with a new key passed with
+deduplication unchanged and the rejected intent/bytes preserved.
+
+Ruling, updated after D5 requirement audit: retain the same two fresh owned-idle
+capacity loans through the single final backend CI and the original
+[S4 legacy→RWX criterion](2026-10-31-kubernetes-replicas-storage.md), then restore
+both original2/2/2 counts/runtime/PVC/materialized tables immediately. That
+criterion was still unproven; portable NAS restore must not substitute for it.
+This avoided another stop/start cycle; the loans remained explicitly open and
+prevent D4 closure until returned. The immutable backend CI
+uses ae8bffb (application bbced15); later report-only edits require separate
+metadata checks and are not part of that snapshot.
