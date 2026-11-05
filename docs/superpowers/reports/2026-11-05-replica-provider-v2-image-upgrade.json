@@ -1,0 +1,115 @@
+{
+  "status": "owned-scoped-same-schema-image-upgrade-passed",
+  "scope": "single-node-managed-s3-synthetic-stub",
+  "namespace": "replica-test-pfv220261105",
+  "namespace_uid": "adeadac9-7a37-461b-9b9e-5f06268e6a79",
+  "installation_id": "000355b4864949949cb98e70e7138cb9",
+  "operation_id": "9a88821f01aa4321a5c4bbfd93f0ec2c",
+  "epoch": 3,
+  "old_fingerprint": "2764e4e25f9624d2326bacd95cf0204fccd03687c0b24f524d6a0723eef69efc",
+  "new_fingerprint": "7efcb6125d2e697938d9f6ca50a5a7e2d2221024a205afc6a14394b7d770d4d7",
+  "runtime_secret": "replica-credentials-998b8b0008a8-runtime",
+  "identity_configmap": "replica-image-9a88821f01aa-identity",
+  "actual_scoped_api_worker_processes": 4,
+  "operator_secret_in_application": false,
+  "pg_rights": {
+    "allowed": [
+      "business_crud",
+      "row_lock_replica_maintenance_state",
+      "row_lock_replica_runtime_identity",
+      "row_lock_artifact_storage_control"
+    ],
+    "denied": [
+      "maintenance_epoch",
+      "runtime_fingerprint",
+      "storage_control",
+      "audit_update",
+      "audit_delete",
+      "migration_head",
+      "operator_password_catalog",
+      "public_ddl",
+      "temporary_ddl",
+      "truncate_privilege"
+    ],
+    "tls_verify_full": true,
+    "wrong_password_denied": true,
+    "connection_limit": 64
+  },
+  "s3_rights": {
+    "allowed": [
+      "dedicated_bucket_head_list",
+      "prefix_conditional_put",
+      "prefix_cold_range_read",
+      "prefix_delete",
+      "multipart_complete_conditional",
+      "multipart_abort"
+    ],
+    "denied": [
+      "foreign_prefix_read",
+      "foreign_prefix_write",
+      "foreign_prefix_delete",
+      "foreign_bucket_read",
+      "foreign_bucket_write",
+      "foreign_bucket_delete",
+      "foreign_bucket_list",
+      "iam_admin_list",
+      "wrong_secret"
+    ],
+    "tls_verified": true,
+    "bucket_listing_scope": "dedicated-installation-bucket",
+    "bucket_discovery": {
+      "mode": "filtered",
+      "visible_bucket_count": 1
+    }
+  },
+  "held_corpus_unchanged": true,
+  "audits_verified": true,
+  "retired_identity_rejected": true,
+  "signing_key_preserved": true,
+  "shared_session": {
+    "shared_session": true,
+    "distinct_apis": 2
+  },
+  "preserved_existing_documents": 2,
+  "new_document": {
+    "id": "82e5cf28d4ef4236",
+    "sha256": "17de1bf2d7f171ab939a8933cee78fce2d47d1048e9252ee5879c3f559ff69ad",
+    "status": "done",
+    "problem": null,
+    "active_publications": 1,
+    "search_download_sha256_verified": true
+  },
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:eebf4d7ad177f43a8cef10eade6fb5ccc92ae8177bd4e22c9d497c908cdfe4c9",
+      "api": "sha256:aa5832df4a8a956ac28d02f7ca75995d4f8560f78d2452fde13bd71aa42a6d6f",
+      "worker": "sha256:aa5832df4a8a956ac28d02f7ca75995d4f8560f78d2452fde13bd71aa42a6d6f"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "production_schedule": "disabled",
+  "verified_at": "2026-11-05T09:33:19.204755+00:00",
+  "limitations": [
+    "dedicated PG instance and dedicated S3 bucket only",
+    "not customer/external/mixed/RWX certification",
+    "not node or host failover"
+  ],
+  "image": "okf-backend:replicas-65d6ee2-26ab55b6298b",
+  "existing_session_preserved": true,
+  "runtime_secret_unchanged": true,
+  "storage_claims_and_controllers_unchanged": true,
+  "held_vectors_unchanged": true,
+  "independent_backup_id": "4a676f274bcc4bde886a2a193f97c927",
+  "rights_denials_reused_from_operation": "998b8b0008a8413598218a2d9a482c97",
+  "runtime_configmap": "replica-image-9a88821f01aa-runtime"
+}

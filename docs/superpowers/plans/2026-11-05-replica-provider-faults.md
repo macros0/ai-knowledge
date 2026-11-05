@@ -69,6 +69,34 @@ current source/runtime/namespace binding. It issues no release certificate.
 
 ## Task3: fresh current managed-S3 rehearsal and publication
 
+Progress reporting correction (05.11): the earlier85% estimate had no weighted
+calculation and must not be used as a completion metric. Track the remaining
+available lab deliverables explicitly, without adding customer infrastructure
+qualification to the lab's denominator or treating those gates as passed:
+
+- [x] D1: assemble the actual PG/Qdrant/model branches with a fresh read-only
+  state check and source provenance; preserve the original10/14 parent history.
+- [ ] D2: full Linux backend CI of the final committed source, including the
+  added recovery/matrix tests, complete collection and unchanged optional skips.
+- [ ] D3: stop the current fixture, close owned transports and return both
+  original capacity loans, verifying counts/runtime/PVC/nine-table hashes.
+- [ ] D4 (O2): execute the selected NAS-target NFSv4.0 relocation recipe.
+- [ ] D5 (O3): reconcile the overall plan, support matrix and operator runbooks
+  against actual evidence and retain the explicit customer/production gates.
+
+These are the existing remaining deliverables, not a new feature programme.
+Closed fault trials are not repeated just to obtain a simpler all-green history.
+
+[D1 native matrix](../reports/2026-11-05-replica-provider-matrix.json) verifies
+the exact PG physical/stale-token report, Qdrant same-work retry at fence2 and
+parent-bound model physical recovery at fence4. Fresh read-only checks confirm
+four preserved documents, epoch6 released,2/2/2, no CNP/model owner/running work
+and unchanged resource/platform snapshots. Both historical producer hashes are
+reconstructed from their unchanged isolated CI manifests; the only WorkerLoss
+difference affects functional verification methods, with all other AST nodes
+unchanged. The parent remains10/14, qualification=false/certification=null.
+Matrix Windows29/29 cases and required project checks passed. D2/D3 remain open.
+
 Use separate protected `tests/tmp` fixture/journals, current65d runtime source
 equivalence and pinned provider/model images. Prepare all objects/dry-runs first;
 take fresh idle loans only after resource/disk budget and recovery inputs exist.
