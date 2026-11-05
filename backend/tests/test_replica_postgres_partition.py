@@ -3,6 +3,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -96,3 +97,71 @@ def test_confirmed_reply_recovery_requires_only_the_new_generation_to_publish(fa
         work["status"] = "running"
     with pytest.raises(ValueError):
         tool.assert_confirmed_return({"id": "work", "fence": 1}, {"fence": 2}, work, doc)
+
+
+def returned_fixture(monkeypatch, *, proof=None, loss=0, useful=True):
+    tool=module();op=object.__new__(tool.PostgresPartition);calls=[]
+    old={'metadata':{'uid':'old-pod','name':'old-worker'}}
+    before={'okf_replica_process_claims_total':10,'okf_replica_process_completed_total':9,
+        'okf_replica_process_lease_losses_total':0}
+    metrics={**before,'okf_replica_process_claims_total':12 if useful else 10,
+        'okf_replica_process_completed_total':11 if useful else 9,'okf_replica_process_lease_losses_total':loss}
+    lease={'id':'slot','resource':'llm','owner_id':'provider-owner','fence':3,'release_required':True}
+    doc={'active':None,'candidate':'new-generation','candidate_work_fence':2,'active_count':0}
+    op.config={'storage_release':'storage'};op.value={'namespace':'replica-test-fixture01'}
+    op.journal={'phase':'healing','selected_worker':old,'healthy_worker':{'metadata':{'name':'healthy-worker'}},'metrics_before':{'old-pod':before},
+        'original_lease':lease,'provider_before':{'started':1},
+        'original_work':{'id':'work','owner_id':'old','fence':1},
+        'reclaimed_work':{'id':'work','owner_id':'new','fence':2,'status':'running'},'before_return':doc}
+    def save(**values):op.journal.update(values)
+    op.save=save;op.preflight=lambda phase:calls.append('preflight:'+phase)
+    op.pod=lambda expected:old;op.delete_policy=lambda:calls.append('observe-owned-policy-absence')
+    op.state=lambda:{'leases':[lease],'provider':{'started':1,'active':0},'work':[{'id':'work','status':'running'}]}
+    op.doc_state=lambda:copy.deepcopy(doc)
+    def python(pod,source):
+        if source==tool.connectivity_source(op.config):return {'postgres':True,'qdrant':True,'model':True,'live':200,'ready':200}
+        if source==tool.METRICS_SOURCE:return metrics
+        if 'prepare_document_attempt' in source:
+            assert "'owner_id': 'old'" in source and "'fence': 1" in source
+            assert 'raise ProbeRollback()' in source
+            calls.append('original-token-rollback-probe')
+            return proof if proof is not None else {'old_token_rejected':True,'probe_transaction_rolled_back':True}
+        if 'acquire_model_budget' in source:
+            calls.append('busy-api:'+pod);return {'busy':True}
+        raise AssertionError('Unexpected action')
+    op.kube=SimpleNamespace(python=python,inventory=lambda:[])
+    monkeypatch.setattr(tool,'role_pods',lambda objects,role:[{'metadata':{'name':'api1'}},{'metadata':{'name':'api2'}}])
+    monkeypatch.setattr(tool,'validate_inventory',lambda objects,value:None)
+    times=iter([0,181,182,183]);monkeypatch.setattr(tool.time,'monotonic',lambda:next(times))
+    monkeypatch.setattr(tool.time,'sleep',lambda _:None)
+    return op,calls
+
+
+@pytest.mark.parametrize('loss',[0,1])
+def test_returned_process_can_prove_quarantine_with_exact_sql_token_not_a_counter(monkeypatch,loss):
+    op,calls=returned_fixture(monkeypatch,loss=loss)
+    op.heal()
+    assert op.journal['phase']=='quarantine-proven'
+    assert op.journal['lease_losses_delta']==loss
+    assert op.journal['stale_token_probe']=={'old_token_rejected':True,'probe_transaction_rolled_back':True}
+    assert calls.count('original-token-rollback-probe')==1
+    assert calls[-2:]==['busy-api:api1','busy-api:api2']
+    assert op.journal['original_lease']['owner_id']=='provider-owner'
+
+
+@pytest.mark.parametrize('proof',[{'old_token_rejected':False,'probe_transaction_rolled_back':True},
+    {'old_token_rejected':True,'probe_transaction_rolled_back':False},
+    {'old_token_rejected':1,'probe_transaction_rolled_back':True},{}])
+def test_quarantine_rejects_an_accepted_or_unproven_stale_token_without_slot_repair(monkeypatch,proof):
+    op,calls=returned_fixture(monkeypatch,proof=proof)
+    with pytest.raises(ValueError):op.heal()
+    assert op.journal['phase']=='healing'
+    assert calls.count('original-token-rollback-probe')==1
+    assert not any(v.startswith('busy-api:') for v in calls)
+    assert op.journal['original_lease']['owner_id']=='provider-owner'
+
+
+def test_a_counterless_process_with_no_useful_return_is_not_a_quarantine_proof(monkeypatch):
+    op,calls=returned_fixture(monkeypatch,useful=False)
+    with pytest.raises(ValueError):op.heal()
+    assert op.journal['phase']=='healing' and 'original-token-rollback-probe' not in calls

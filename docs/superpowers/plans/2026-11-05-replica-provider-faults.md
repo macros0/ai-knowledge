@@ -143,3 +143,18 @@ fix left one URL-concatenation failure, then all153 focused Windows cases passed
 with0 skips/failures/errors. Required project checks passed (audit0/frontend756+
 one existing optional skip/Ruff0). This changes the checker only; no runtime
 image change or Linux/current-provider acceptance is inferred from these tests.
+
+Task3 uncertain PG-return branch: the real old process returned and completed
+other jobs while the original model slot remained reserved. A heartbeat
+OperationalError can exit before the LostOwnership metrics branch, so waiting
+only for a lease-loss counter incorrectly prevented existing physical recovery.
+The observer now requires a captured-original-owner/fence SQL publication probe
+with unconditional rollback, unchanged publication and the same returned
+process. Both API admission probes must still report busy; exact slot identity
+and provider counters remain unchanged. Zero lease-loss delta is reported as
+observed, never fabricated. Five expected RED cases preceded the correction;
+68 Windows PG/WorkerLoss/authority cases pass with0 skips/failures/errors.
+The same in-progress fault uses an explicit observer-code handoff with parent
+driver/source hashes; no reinjection or rebinding of the old driver. This is the
+uncertain-call branch: physical writer/provider stop and audited exact-token
+reconciliation are still mandatory, not a confirmed-reply recovery claim.

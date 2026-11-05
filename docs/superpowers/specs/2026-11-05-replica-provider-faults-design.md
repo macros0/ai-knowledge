@@ -56,6 +56,14 @@ engaged, preserve it and use existing independently backed, exact-token physical
 recovery; never clear a slot to fit the result. Native model counters distinguish
 no accepted request from a request still active or uncertain.
 
+For PostgreSQL stale return, a heartbeat connection failure can bypass the
+LostOwnership counter branch while leaving a conservative model reservation.
+Require the same returned process and direct rejection of its captured original
+owner/fence by the real SQL publication guard, with unconditional rollback and
+unchanged publication. A counter alone is not publication authority. Such a run
+must retain the uncertain slot and perform the existing physical-stop/audited
+reconciliation before release; it does not count as confirmed-reply recovery.
+
 ## Durable actions and evidence
 
 The coordinator uses existing protected `read_json`/`write_json`/FileLock and the

@@ -298,6 +298,7 @@ class PostgresPartition(WorkerLoss):
         if self.journal["phase"] not in {"reclaim-proven", "healing"}:
             raise ValueError("New healthy ownership must be observed before old worker return")
         self.pod(self.journal["selected_worker"])
+        self.pod(self.journal["healthy_worker"])
         self.save(phase="healing")
         self.delete_policy()
         deadline = time.monotonic() + 180
@@ -311,7 +312,10 @@ class PostgresPartition(WorkerLoss):
                     return self.finish()
                 metrics = self.kube.python(old["metadata"]["name"], METRICS_SOURCE)
                 before = self.journal["metrics_before"][old["metadata"]["uid"]]
-                if metrics["okf_replica_process_lease_losses_total"] > before["okf_replica_process_lease_losses_total"]:
+                useful_return = (metrics["okf_replica_process_claims_total"] >= before["okf_replica_process_claims_total"] + 2
+                    and metrics["okf_replica_process_completed_total"] > before["okf_replica_process_completed_total"])
+                if metrics["okf_replica_process_lease_losses_total"] > before["okf_replica_process_lease_losses_total"] or useful_return:
+                    stale_token_probe = self.probe_original_token(old)
                     break
             if time.monotonic() > deadline:
                 raise ValueError("Original process return/ownership refusal unproven")
@@ -339,9 +343,50 @@ else:
             if self.kube.python(pod["metadata"]["name"], busy_source) != {"busy": True}:
                 raise ValueError("Expired uncertain request no longer blocks API admission")
         self.save(phase="quarantine-proven", stale_return=doc, returned_metrics=metrics, returned_connectivity=connectivity,
-            lease_losses_delta=metrics["okf_replica_process_lease_losses_total"] - before["okf_replica_process_lease_losses_total"])
+            lease_losses_delta=metrics["okf_replica_process_lease_losses_total"] - before["okf_replica_process_lease_losses_total"],
+            stale_token_probe=stale_token_probe)
         emit("stale-worker-return-fenced", unchanged_container=True, lease_losses=self.journal["lease_losses_delta"],
             active_publications=0, original_slot_still_owned=True, busy_apis=2)
+
+    def probe_original_token(self, old):
+        """Prove SQL rejects the captured owner/fence; always roll the probe back.
+
+        A heartbeat connection failure can leave run_once via OperationalError,
+        before its LostOwnership counter branch. That counter is diagnostic;
+        actual publication authority is decided by this unchanged SQL guard.
+        """
+        self.pod(old)
+        before = self.doc_state()
+        receipt = {k: self.journal["original_work"][k] for k in ("id", "owner_id", "fence")}
+        source = '''import json
+from datetime import datetime,timezone
+from app.config import get_settings
+from app.deployment.runtime_identity import enforce_runtime_identity
+from app.db.session import session_scope
+from app.db.models import WorkItem
+from app.services.work.models import WorkClaim,WorkSpec,LostOwnership
+from app.services.work.document_handler import prepare_document_attempt
+s=get_settings();enforce_runtime_identity(s)
+original=ORIGINAL
+with session_scope() as session:
+ row=session.get(WorkItem,original['id'])
+ spec=WorkSpec(row.kind,row.payload_version,row.payload_json,row.dedupe_key,row.doc_id)
+claim=WorkClaim(original['id'],original['owner_id'],original['fence'],datetime.max.replace(tzinfo=timezone.utc),spec,s._maintenance_epoch)
+class ProbeRollback(Exception):pass
+rejected=False
+try:
+ with session_scope() as session:
+  try:prepare_document_attempt(session,claim,s)
+  except LostOwnership:rejected=True
+  raise ProbeRollback()
+except ProbeRollback:pass
+print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':True}))
+'''.replace("ORIGINAL", repr(receipt))
+        rejected = self.kube.python(old["metadata"]["name"], source)
+        if (not isinstance(rejected, dict) or set(rejected) != {"old_token_rejected", "probe_transaction_rolled_back"}
+                or any(value is not True for value in rejected.values()) or self.doc_state() != before):
+            raise ValueError("Stale publication probe was accepted or changed persisted data")
+        return rejected
 
     def finish(self):
         """A live old provider client can acknowledge its confirmed terminal reply.
@@ -516,6 +561,7 @@ print(json.dumps({'old_token_rejected':rejected,'probe_transaction_rolled_back':
                 "healthy_worker_postgres_positive": True, "qdrant_model_positive": True, "old_worker_live": True, "old_worker_ready": False},
             "stale_return": {"original_pod_uid": self.journal["selected_worker"]["metadata"]["uid"], "same_container_no_restart": True,
                 "reclaimed_fence": self.journal["reclaimed_work"]["fence"], "process_lease_losses_delta": self.journal["lease_losses_delta"],
+                "captured_old_owner_fence_publication_probe": self.journal.get("stale_token_probe"),
                 "late_active_publications": 0, "late_model_requests": 0, "uncertain_slot_retained": True, "normal_entrypoint_restored": True},
             "test_instrumentation": "only runtime UUID source derived from Pod UID; full production worker entrypoint/queue/handlers/heartbeat unchanged",
             "remaining_runtime_faults": ["resource_load_qualification"]})
