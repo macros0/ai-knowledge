@@ -156,7 +156,14 @@ def listener(objects, name, host, access, namespace_name):
         and len(certs)==1 and certs[0].get('name')=='lab-tls' and certs[0].get('namespace',namespace_name)==namespace_name
         and certs[0].get('kind','Secret')=='Secret' and certs[0].get('group','')==''
         and item['allowedRoutes']=={'namespaces':{'from':'Same'}})
-    ready_conditions(obj,('Accepted','ResolvedRefs'))
+    ready_conditions(obj,('Accepted','Programmed'))
+    listeners=obj.get('status',{}).get('listeners',[])
+    require(len(listeners)==1 and listeners[0].get('name')==item['name'])
+    status=listeners[0];ready_conditions({'metadata':obj['metadata'],'status':status},('Accepted','ResolvedRefs','Programmed'))
+    conflicts=[c for c in status.get('conditions',[]) if c['type']=='Conflicted']
+    require(len(conflicts)==1 and conflicts[0].get('status')=='False'
+        and conflicts[0].get('observedGeneration')==obj['metadata']['generation'])
+    require(dict(group=GROUP,kind='HTTPRoute') in status.get('supportedKinds',[]))
 
 
 def route(objects, name, host, parent, backend, port, slot=None):

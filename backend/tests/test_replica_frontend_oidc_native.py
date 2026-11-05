@@ -68,9 +68,11 @@ def service(namespace,name,selector,ports,pods,*,gateway_uid=None):
 
 
 def listener(namespace,access,name,host):
-    return obj('ListenerSet',name,namespace,spec=dict(parentRef=dict(name='home-gateway',namespace=access,kind='Gateway',group='gateway.networking.k8s.io'),
+    item=obj('ListenerSet',name,namespace,spec=dict(parentRef=dict(name='home-gateway',namespace=access,kind='Gateway',group='gateway.networking.k8s.io'),
         listeners=[dict(name='https',hostname=host,port=443,protocol='HTTPS',tls=dict(mode='Terminate',certificateRefs=[{'name':'lab-tls'}]),
-                        allowedRoutes={'namespaces':{'from':'Same'}})]),status={'conditions':conditions('Accepted','ResolvedRefs')})
+                        allowedRoutes={'namespaces':{'from':'Same'}})]))
+    item['status']=actual_listener_status(item)
+    return item
 
 
 def route(namespace,name,host,parent,backend,port,slot=None):
@@ -308,6 +310,35 @@ def test_anonymous_http_redirect_is_admitted_before_credentials(fault):
     elif fault=='backend':redirect['spec']['rules'][0]['backendRefs']=[dict(name='keycloak',port=8080)]
     elif fault=='redirect_host':redirect['spec']['rules'][0]['filters'][0]['requestRedirect']['hostname']='foreign.invalid'
     else:redirect['status']['parents'][0]['conditions'][0]['status']='False'
+    with pytest.raises(ValueError):validate(parts)
+
+
+def actual_listener_status(item):
+    return dict(conditions=conditions('Accepted','Programmed'),listeners=[dict(name=item['spec']['listeners'][0]['name'],
+        conditions=[*conditions('Accepted','ResolvedRefs','Programmed'),dict(type='Conflicted',status='False',observedGeneration=1)],
+        supportedKinds=[dict(group='gateway.networking.k8s.io',kind='HTTPRoute')])])
+
+
+def test_real_listener_set_status_resolves_references_on_its_named_listener():
+    parts=world()
+    for objects in parts[1:3]:
+        for item in objects:
+            if item['kind']=='ListenerSet':item['status']=actual_listener_status(item)
+    assert validate(parts)['gateway']
+
+
+@pytest.mark.parametrize('fault',['missing_listener','refs','conflict','stale','name','kind'])
+def test_listener_level_reference_or_conflict_failure_is_not_hidden_by_top_level_ready(fault):
+    parts=world();item=next(o for o in parts[2] if o['kind']=='ListenerSet');item['status']=actual_listener_status(item)
+    # A legacy/top-level ResolvedRefs cannot substitute for the named listener proof.
+    item['status']['conditions'].extend(conditions('ResolvedRefs'))
+    row=item['status']['listeners'][0]
+    if fault=='missing_listener':item['status']['listeners']=[]
+    elif fault=='refs':next(c for c in row['conditions'] if c['type']=='ResolvedRefs')['status']='False'
+    elif fault=='conflict':next(c for c in row['conditions'] if c['type']=='Conflicted')['status']='True'
+    elif fault=='stale':next(c for c in row['conditions'] if c['type']=='ResolvedRefs')['observedGeneration']=0
+    elif fault=='name':row['name']='foreign'
+    else:row['supportedKinds']=[dict(group='gateway.networking.k8s.io',kind='GRPCRoute')]
     with pytest.raises(ValueError):validate(parts)
 
 

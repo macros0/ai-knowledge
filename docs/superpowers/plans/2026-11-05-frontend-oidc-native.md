@@ -142,3 +142,11 @@ arguments with real `kubectl patch --local`. Windows correction cohort38 passes/
 one Linux-only skip; required project checks passed. The e5e7b39 full-CI record
 stays frozen; the corrected source requires its own full Linux run before the
 actual OIDC producer is admitted.
+
+Task4 ListenerSet correction: the actual v1 API reports reference resolution on
+each named listener, with Accepted/Programmed at set level. Admission now checks
+both levels, matching the listener name and generation, requiring HTTPRoute
+support and Conflicted=False. Seven RED cases covered the real status shape and
+missing/unresolved/conflicting/stale/foreign/unsupported listeners; the corrected
+native/lifecycle/attestation cohort passed70 cases. The prepared85ff81e CI packet
+was not transferred or started; the next full run must include this correction.

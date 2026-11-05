@@ -3317,3 +3317,8 @@ credential data remains outside argv. A real offline `kubectl patch --local`
 regression executes the producer's captured arguments, in addition to mocked
 API tests, so unsupported stdin/patch-file behavior cannot masquerade as a
 successful command. Unknown submitted mutations still require observation.
+
+ListenerSet admission checks Accepted/Programmed on the set and the current
+generation's Accepted/ResolvedRefs/Programmed plus no conflict on its exact
+named listener. HTTPRoute support must be present. A top-level ready flag cannot
+hide a missing, stale, conflicting or unresolved listener certificate reference.
