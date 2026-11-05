@@ -76,9 +76,9 @@ qualification to the lab's denominator or treating those gates as passed:
 
 - [x] D1: assemble the actual PG/Qdrant/model branches with a fresh read-only
   state check and source provenance; preserve the original10/14 parent history.
-- [ ] D2: full Linux backend CI of the final committed source, including the
+- [x] D2: full Linux backend CI of the final committed source, including the
   added recovery/matrix tests, complete collection and unchanged optional skips.
-- [ ] D3: stop the current fixture, close owned transports and return both
+- [x] D3: stop the current fixture, close owned transports and return both
   original capacity loans, verifying counts/runtime/PVC/nine-table hashes.
 - [ ] D4 (O2): execute the selected NAS-target NFSv4.0 relocation recipe.
 - [ ] D5 (O3): reconcile the overall plan, support matrix and operator runbooks
@@ -95,7 +95,24 @@ and unchanged resource/platform snapshots. Both historical producer hashes are
 reconstructed from their unchanged isolated CI manifests; the only WorkerLoss
 difference affects functional verification methods, with all other AST nodes
 unchanged. The parent remains10/14, qualification=false/certification=null.
-Matrix Windows29/29 cases and required project checks passed. D2/D3 remain open.
+Matrix Windows29/29 cases and required project checks passed. D2/D3 are closed below.
+
+[D2/D3 closure](../reports/2026-11-05-replica-provider-matrix-closure.json)
+supersedes that pending checkpoint: immutable6b41f85 full Linux CI passed7317
+cases=7096pass+221unchanged optional skips,0failures/errors,87.70% coverage.
+Collection/prior IDs/Windows cohorts/added modules and all2522 source files were
+verified. Fixture is off/held7, Pod+CRI0, three PVC retained; five handles, SSH and
+all14 PG-supervisor child handles are gone. Both original loans returned2/2/2
+with original runtime/PVCs/nine materialized tables, no data mutations.
+
+Return uncovered expired three-day TLS leaves in both borrowed stacks. Six
+mutable Secrets received locally signed same-CA/same-public-key/SAN leaf renewals;
+CA roots, private keys, credentials, images and controller specs were retained.
+Strict hostname/CA/new-DER probes passed from API on all six services. The
+initial model-stub probe failed DNS due its existing isolation; no policy was
+opened. API/worker/frontend scaling continued from acknowledged intents, without
+replaying the timed-out first return. The later bbced15 NAS component is outside
+the6b41f85 full CI scope; D4/D5 remain open.
 
 Use separate protected `tests/tmp` fixture/journals, current65d runtime source
 equivalence and pinned provider/model images. Prepare all objects/dry-runs first;
@@ -113,15 +130,15 @@ the whole matrix. Fix observed defects with RED/GREEN and rebuilt source/image
 proof if runtime changes. Full final-source Linux CI, matching focused tests,
 project checks, current image/source and actual data must all agree.
 
-- [ ] Actual scoped upgrade/copy/current PG child and Qdrant/model checks pass.
+- [x] Actual scoped upgrade/copy/current PG child and Qdrant/model checks pass.
   Scoped credentials, independent preimage copy (2 documents/12 encrypted
   objects), real same-schema upgrade to65d and current independent copy
   (3 documents/17 objects) are now verified on the corrected fresh fixture.
-  Current PG partition/stale return and physical recovery are proven;
-  Qdrant/model remain pending.
-- [ ] Close handles/policies/fixtures, retain data and return all original
+  Current PG, Qdrant retry and parent-bound physical model recovery are proven;
+  the original automatic parent remains10/14 without fabricated completion.
+- [x] Close handles/policies/fixtures, retain data and return all original
   counts/runtime/PVC/nine-table hashes; no open capacity debt.
-- [ ] Publish new scoped report, reconcile matrix/runbooks and commit after
+- [x] Publish new scoped report, reconcile matrix/runbooks and commit after
   project checks. Keep customer/physical/trusted-release gates explicit.
 
 

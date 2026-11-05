@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "status": "selected-provider-matrix-final-ci-and-closure-verified",
+  "verified_at": "2026-11-05T17:44:45.166659+00:00",
+  "source_revision": "6b41f851ceeba78d228e26cd6cc44c518b9033ca",
+  "full_linux_ci": {
+    "tests": 7317,
+    "passed": 7096,
+    "optional_skips": 221,
+    "failures": 0,
+    "errors": 0,
+    "coverage_percent": 87.69888171651968,
+    "collection_complete": true,
+    "prior_case_ids_retained": true,
+    "windows_case_ids_retained": true,
+    "optional_skip_ids_unchanged": true,
+    "required_added_modules_present": true,
+    "source_unchanged": true,
+    "junit_sha256": "09ee41cd5b6245a854993ef5e66a57960be38546c3c4007e244138b446398b75",
+    "collection_sha256": "5fe67a784e2e444e24b69483359c0e91e501fedd071ae532d281dd68888c2d48",
+    "container_id": "ab16738c54e261ac794eb14d264448797dd7ac17bbda38358e9f2901f50c4f7e"
+  },
+  "current_fixture": {
+    "namespace": "replica-test-pfv220261105",
+    "namespace_uid": "adeadac9-7a37-461b-9b9e-5f06268e6a79",
+    "nonterminal_pods": 0,
+    "native_containers": 0,
+    "controllers_zero": 7,
+    "claims_retained": 3,
+    "epoch": 7,
+    "maintenance_held": true,
+    "materialized_tables_unchanged": 9,
+    "closure_sha256": "5e93de53985788a3496087bbd6750ab58772ad23b637026a26701471ee97548d"
+  },
+  "transports": {
+    "native_original_handles_gone": true,
+    "native_listeners_remaining": 0,
+    "pc_original_process_gone": true,
+    "pg_supervisor_stopped": true,
+    "pg_child_handles_gone": 14
+  },
+  "capacity_returns": [
+    {
+      "namespace": "replica-test-r5o2u20261102",
+      "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+      "replicas": {
+        "api": 2,
+        "worker": 2,
+        "frontend": 2
+      },
+      "runtime_fingerprint": "529fdd8f27a9051d27f42753bbc8660e67a24b391c81a7a3ad9a539c6bdd26a7",
+      "claims_preserved": 3,
+      "materialized_tables_unchanged": 9,
+      "journal_sha256": "a07821e24184a9a9ec7cbf8c7b1b2cd4781a8f044a5b3b16a5ba6f3fe4a86406",
+      "phase": "capacity-recovered-and-source-verified"
+    },
+    {
+      "namespace": "replica-test-r4o2t20261102",
+      "namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+      "replicas": {
+        "api": 2,
+        "worker": 2,
+        "frontend": 2
+      },
+      "runtime_fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3",
+      "claims_preserved": 3,
+      "materialized_tables_unchanged": 9,
+      "journal_sha256": "811efc14309085badd4ced8a503f8f33ad2f8fa82e3fb84c833fe7d4ec4549d3",
+      "phase": "capacity-recovered-and-source-verified"
+    }
+  ],
+  "open_capacity_loans": 0,
+  "native_matrix_report": "2026-11-05-replica-provider-matrix.json",
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled",
+  "later_nas_revision_excluded": "bbced15",
+  "tls_leaf_maintenance": {
+    "renewed_expired_leaves": 6,
+    "namespace_count": 2,
+    "same_ca": true,
+    "same_leaf_public_keys": true,
+    "strict_peer_checks": 6,
+    "private_keys_transferred": false,
+    "tls_verification_disabled": false,
+    "renewal_journal_sha256": "02d16fccca31779456bc75cf6e6c8d6a56b07714e43ad0dfb001ee3731bc9222",
+    "new_leaf_expiry_utc": [
+      "2026-11-09T09:29:12+00:00",
+      "2026-11-09T16:31:34+00:00"
+    ]
+  }
+}

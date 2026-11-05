@@ -195,10 +195,20 @@ independent restore, S3 application full и full backend CI. Каждая зап
 `tested` у шести вариантов означает ограниченную учебную проверку, а не
 qualification всей текущей версии. Resilient остаётся planned.
 
-Доступная дальнейшая работа на учебном стенде: объединить текущие PostgreSQL/
-Qdrant/model interruption checks; подготовить отдельный реальный CSRF/Gateway/SSO
-producer; добавить явно выбранный NFSv4.0 NAS-target relocation recipe. Нынешний
-строгий NFSv4.1 target recipe не допускает DS211 автоматически. Для окончательной
+Текущие PostgreSQL/Qdrant/model interruption checks объединены в
+[отдельный нативный отчёт](superpowers/reports/2026-11-05-replica-provider-matrix.json).
+Он связывает10/14 исходных этапов с отдельным parent-bound физическим
+восстановлением модели. [CI и закрытие прогона](superpowers/reports/2026-11-05-replica-provider-matrix-closure.json)
+подтвердили7317 cases/7096 passes/221 прежний optional skip/0 failures,
+87,70% coverage на6b41f85, выключенный fixture и возврат обоих займов с
+исходными2/2/2/runtime/PVC/девятью таблицами. Истёкшие листья TLS обновлены
+с прежними CA и ключами; проверки TLS не отключались. Реальный owned CSRF/Gateway/SSO producer также
+[проверен](superpowers/reports/2026-11-05-frontend-oidc-native-acceptance.json).
+Доступная дальнейшая работа на учебном стенде — фактическое восстановление в NAS
+по [отдельному NFSv4.0-рецепту](superpowers/plans/2026-11-05-synology-target-relocation.md)
+и финальный CI/аудит после него. Компонент bbced15 прошёл74 одинаковых
+Windows/Linux cases; его будущий target ещё не принят. Строгий NFSv4.1
+рецепт сохранён. Для окончательной
 приёмки нужны независимо выбранный доверенный issuer и, когда появятся,
 customer provider/Gateway/IdP inputs. Физический resilient gate требует отдельных
 worker/storage failure domains и не может быть закрыт двумя kind nodes одной VM.

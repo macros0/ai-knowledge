@@ -49,7 +49,14 @@ NFS source and client inode/UID/GID/mode, wire identity, selected version and
   changed proof before SQL must refuse.
 - [x] Implement the separate bounded proof and narrow dispatch; GREEN new tests
   plus existing RWX/identity tests, required checks and a source-bound Linux cohort.
-- [ ] Commit source and record exact image/source verification for Task2.
+- [x] Commit source and record exact image/source verification for Task2.
+
+Source commit bbced15 and a separately verified Docker image are ready:
+`sha256:8210b868876c16fba1c41f7d2274b9cb64fd9e37d0235ccf6bf1c47397362486`.
+All575 packaged Git files and117 unchanged packages were checked; only the two
+NAS/RWX modules differ from the verified65d base. No native image import or
+target startup is claimed at this checkpoint. Both prior matrix loans and the
+prior fixture are now closed in the linked provider plan.
 
 [Component evidence](../reports/2026-11-05-replica-nas-target-proof-ci.json):35 new
 cases reproduced the missing NAS branch, while the legacy4.1 rejection passed.

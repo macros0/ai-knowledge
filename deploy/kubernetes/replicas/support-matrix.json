@@ -220,10 +220,19 @@
           "path": "docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json",
           "sha256": "92ace2fb1b0b728d552a07e5acee9b2d63833fac9a400248356bcd9e44ba3e25",
           "scope": "Full immutable e42007a Linux backend CI:6859 cases/6638 pass/221 unchanged optional skips/87.70% coverage. Runtime application65d6ee2 unchanged; frontend case is separately basic combined, not distributed profile qualification."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-05-replica-provider-matrix.json",
+          "sha256": "a6678bcb331342a0fbbf656756c93ada5db983becd155e0286363d4bf2878d4f",
+          "scope": "Actual selected current managed-S3 PG/Qdrant/model branches: PG stale SQL-token rollback, Qdrant failed attempt and same-work fence2 recovery, parent-bound physical model quarantine/reconciliation and same-work fence4. Four docs/SHA/search/frozenZIP/session retained. Historical parent stays10/14; no certification."
+        },
+        {
+          "path": "docs/superpowers/reports/2026-11-05-replica-provider-matrix-closure.json",
+          "sha256": "b1dc669e3c7f9b260ed51240f2d5a3588c26a9059c6537a67db1640358179edc",
+          "scope": "Full immutable6b41f85 Linux7317=7096pass+221unchanged optional skips/0fail/87.70%, complete source/collection; fixtureoffheld7/PVC3, all handles gone, both original2/2/2/runtime/PVC/nine-table loans returned. Expired leaves renewed with same CA/key and six strict TLS probes. Later NASbbced15 excluded."
         }
       ],
       "remaining_gates": [
-        "current-selected-postgres-qdrant-model-fault-matrix",
         "gateway-sso-production-csrf-acceptance",
         "trusted-current-profile-release-evidence"
       ],
@@ -333,19 +342,19 @@
     "date": "2026-11-05",
     "method": "Resolve stale inventory gates using exact immutable report paths/hashes, without changing reports, rebinding historical evidence or issuing certificates.",
     "current_backend_ci": {
-      "revision": "e42007a734f60663fa4fbf7d295b330ea0d9104d",
-      "report": "docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json",
-      "tests": 6859,
-      "passed": 6638,
+      "revision": "6b41f851ceeba78d228e26cd6cc44c518b9033ca",
+      "report": "docs/superpowers/reports/2026-11-05-replica-provider-matrix-closure.json",
+      "tests": 7317,
+      "passed": 7096,
       "optional_skips": 221,
       "failures": 0,
       "errors": 0,
-      "coverage_percent": 87.70342758432585
+      "coverage_percent": 87.69888171651968,
+      "source_scope": "Latest complete snapshot; later NASbbced15 has focused74-case CI only and retains its final full-CI gate."
     },
     "unresolved_lab_scenarios": [
-      "Current selected PostgreSQL/Qdrant/model interruption matrix",
-      "Real CSRF and owned Gateway/SSO producer",
-      "NFS4.0 NAS target relocation requires an explicit recipe; the existing NFS4.1 target recipe must not silently admit it"
+      "Native NAS-target relocation using the explicit bbced15 NFS4.0 recipe; old strict NFS4.1 recipe remains unchanged",
+      "Final-source full CI and release evidence audit after the NAS target rehearsal"
     ],
     "environment_inputs": [
       "Customer provider releases/credentials and Gateway/IdP endpoints when available",

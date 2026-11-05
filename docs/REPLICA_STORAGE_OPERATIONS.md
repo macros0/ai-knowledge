@@ -840,3 +840,24 @@ four processes checked12 hashes and unchanged old work IDs/fences. Final source
 held1 and target held3 are off, six PVCs/copy retained, both earlier capacity loans
 restored with original runtime/PVC/nine-table hashes. Profile/customer/provider
 failure qualification remains open; production schedule remains disabled.
+## Возврат учебных ресурсов после длительного простоя
+
+Перед возвратом остановленных replicas проверьте срок действия серверных
+TLS-листьев. В [закрытом прогоне матрицы отказов](superpowers/reports/2026-11-05-replica-provider-matrix-closure.json)
+трёхдневные листья истекли, пока приложения были остановлены. API не прошли
+проверку TLS и не стали Ready; повтор масштабирования это не исправляет.
+
+При сохранённом действительном CA обновляйте только истёкшие листья с теми же
+ключами и SAN. Подписывающий ключ остаётся на защищённом ПК. Остановите writers,
+проверьте UID/resourceVersion и неизменность остальных данных Secret, выполните
+server dry-run, затем загрузите листья штатной заменой собственных Pod с
+UID-precondition. Контроллеры, образы и PVC сохраняются. Проверяйте цепочку CA,
+имя и новый peer certificate из роли, которой разрешён доступ к storage.
+Model-stub может быть изолирован и не иметь даже DNS-доступа к этим сервисам.
+
+Таймаут rollout оставляет прежний intent открытым: сначала наблюдайте фактический
+UID/spec/count/Ready, затем продолжайте оставшиеся роли. После возврата сверяйте
+прежнюю identity, PVC и девять таблиц данных; служебные work_items/work_progress
+могут пополняться завершёнными плановыми заданиями. Смена CA, ключей или runtime
+binding требует отдельной процедуры. Не отключайте TLS verification и не меняйте
+часы, чтобы принять истёкший сертификат.

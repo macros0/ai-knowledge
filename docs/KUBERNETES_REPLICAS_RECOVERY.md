@@ -1116,3 +1116,20 @@ stop source providers. Partial scale-down or a local boolean is not source-off
 proof: exact namespace/Pod/CRI checks guard every import and adoption action.
 The providers here are a separately owned training fixture on the same VM; this
 is no customer provider or physical failure qualification.
+## Неопределённый model call и исторические журналы
+
+[Выбранная матрица отказов](superpowers/reports/2026-11-05-replica-provider-matrix.json)
+связывает фактический Qdrant retry с отдельным восстановлением model quarantine.
+Исходный parent сохранён с10/14 этапами; ожидаемая консервативная блокировка
+не объявлена успешным автоматическим retry. Истечение TTL не разрешает повторное
+использование неопределённого model slot. Требуются физическое отсутствие всех
+writers/provider, текущий maintenance epoch и одна аудированная reconciliation
+точного owner/fence/slot с независимо проверенной копией.
+
+Закрытый parent/child используется только как историческое доказательство.
+Не переписывайте его кодовые хэши и не запускайте его с прежним code override
+после изменения исходников. Отдельный read-only collector связывает исходные
+receipts, проверяет provenance и свежее состояние; он не повторяет fault или
+reconciliation. [CI и закрытие ресурсов](superpowers/reports/2026-11-05-replica-provider-matrix-closure.json)
+подтверждены отдельным отчётом для6b41f85. Последующие provider/source bindings
+требуют собственных проверок; этот результат не выдаёт resilient certificate.

@@ -72,7 +72,12 @@ partition/возврат устаревшего процесса и нагруз
 - **O1:** RWX independent restore, Synology256MiB write/read,150с application outage
   и логический перенос между двумя узлами VM103 уже проверены;
   bounded S3 application full-storage и selected all-external S3 runtime/recovery
-  также закрыты. Остаются текущая PostgreSQL/Qdrant/model interruption matrix,
+  также закрыты. Текущая [PostgreSQL/Qdrant/model interruption matrix](../reports/2026-11-05-replica-provider-matrix.json)
+  теперь связывает фактические PG/Qdrant проверки с отдельным физическим
+  model recovery. [CI6b41f85 и возврат ресурсов](../reports/2026-11-05-replica-provider-matrix-closure.json)
+  завершены:7317 cases/7096 pass/221 прежний optional skip/0 failures,
+  обе прежние2/2/2/runtime/PVC/9 таблиц восстановлены, новый fixture выключен.
+  Остаются
   квалификация конкретных customer providers, длительных/неопределённых отказов
   и физической инфраструктуры/failure domains.
   [Двухузловой результат](../reports/2026-11-04-replica-crossnode-vm103.json) сохраняет
@@ -85,7 +90,10 @@ partition/возврат устаревшего процесса и нагруз
   проверены на учебной копии. Production-расписание выключено; production
   monitoring и независимый физический key escrow не квалифицированы.
 - **O3:** объединённая fault/profile matrix, квалификация текущего runtime/провайдеров,
-  customer Gateway/IdP и доверенный release issuer. Default frontend
+  customer Gateway/IdP и доверенный release issuer. Текущие PG/Qdrant/model
+  branches объединены в отчёт с10/14 неизменным parent и проверенным physical
+  recovery child; полный CI6b41f85 и закрытие этого прогона прошли. Последующий
+  NAS-компонент bbced15 требует своей нативной приёмки и финального CI. Default frontend
   probe read-only; выбранный real-CSRF/Gateway/SSO producer закрыт новым 12-stage case. Единственное ревью всей ветки,
   единый проход пяти исправлений и полный ccfcf9e CI уже завершены.
 
