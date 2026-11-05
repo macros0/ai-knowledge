@@ -3328,3 +3328,16 @@ when no Pod is expected for that Service. The first OIDC helper slot can reach
 that state only under the existing journaled victim-loss binding; null endpoints
 cannot substitute for a live frontend, survivor, IdP or Gateway endpoint. Service
 owner UID and exact ready endpoint identities remain mandatory.
+
+The selected provider-fault checker builds only fixed namespace-scoped Cilium
+deny metadata for the admitted basic distributed managed-S3 recipe. It is a pure
+builder/validator, not permission to apply a policy or a provider certificate.
+The native caller must separately bind namespace/runtime/Pod/image/provider
+identity before every action. A network proof requires the exact two API/two
+worker Pod set, target denial, all other dependency controls, live processes and
+no restarts. Outage evidence must retain the original publication and contain
+one actual queued typed transient document work. Recovery must use that same
+work with a newer fence/attempt, one new active generation and matching original
+SHA; missing/extra work, stale ownership and payload/credential fields fail
+closed. This checker cannot release uncertain model slots or mutate any queue,
+provider, clock, Kubernetes object or release gate.
