@@ -212,7 +212,10 @@ def test_keyless_endpoint_does_not_inherit_ambient_credentials(monkeypatch):
     monkeypatch.setattr(handler, 'completion', provider)
     client=LLMClient(interactive=True, settings=resolve_assessment_connection(s).settings)
     with pytest.raises(module.litellm.exceptions.APIConnectionError):
-        client.assess_json_once('system', 'user', max_tokens=128, timeout_seconds=1)
+        # Credential isolation is the contract here; cold SDK setup/error mapping
+        # on single-core CI must not turn this into a one-second deadline test.
+        # Network remains forbidden and the provider is still a failing stub.
+        client.assess_json_once('system', 'user', max_tokens=128, timeout_seconds=30)
     assert len(seen)==1
     assert seen[0]['api_key'] not in {None, '', 'synthetic-ambient-key', 'synthetic-global-key', 'primary-key'}
 

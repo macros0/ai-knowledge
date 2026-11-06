@@ -8,11 +8,23 @@ from pathlib import Path
 import re
 import shutil
 import uuid
+from functools import wraps
+from sqlalchemy import select
 
 from app.services.generation_files import _reject_links
 from app.services.staging import write_json_atomic
 
 STAGES = ("parse", "concepts", "embeddings")
+
+
+def _portable_method(method):
+    @wraps(method)
+    def dispatch(self, *args, **kwargs):
+        adapter = self._portable()
+        if adapter is not None:
+            return adapter.run(method.__name__, *args, **kwargs)
+        return method(self, *args, **kwargs)
+    return dispatch
 
 
 def embedding_fingerprint(settings):
@@ -64,11 +76,31 @@ class SourceResultCache:
     interrupted write leaves the last complete version readable. Merely finding
     files, or a partial array of concepts, never establishes completion.
     """
-    def __init__(self, root, doc_id):
+    def __init__(self, root, doc_id, *, _local_only=False):
         if not re.fullmatch(r"[0-9a-f]{16}", doc_id):
             raise ValueError("Invalid cache document")
         self.root, self.doc_id = Path(root).absolute(), doc_id
+        self._local_only = _local_only
         _reject_links(self.root)
+
+    def _portable(self):
+        if self._local_only:
+            return None
+        from app.config import get_settings
+        from app.db.session import current_session, session_scope
+        from app.db.models import Document
+        from contextlib import nullcontext
+        settings = get_settings()
+        with (nullcontext(current_session()) if current_session() is not None else session_scope()) as session:
+            version = session.scalar(select(Document.source_cache_version).where(Document.id == self.doc_id))
+            from app.services.artifacts.repository import document_uses_portable_artifacts
+            portable = document_uses_portable_artifacts(session, settings, self.doc_id)
+        if version not in {None, 1, 2}:
+            raise ValueError("Invalid source cache protocol")
+        if portable or version == 2:
+            from app.services.artifacts.source_cache import PortableSourceCache
+            return PortableSourceCache(self, settings)
+        return None
 
     def identity(self, source):
         for key in ("source_key", "content_fingerprint"):
@@ -108,6 +140,7 @@ class SourceResultCache:
             raise ValueError("Cache stage hash mismatch")
         return path
 
+    @_portable_method
     def inspect(self, source):
         hit = {"verified": False, "cache_id": None, "stages": dict.fromkeys(STAGES, False), "counts": {}}
         try:
@@ -133,6 +166,7 @@ class SourceResultCache:
             pass
         return hit
 
+    @_portable_method
     def save_stage(self, source, stage, artifact, *, record_streams=None):
         if stage not in STAGES:
             raise ValueError("Unknown cache stage")
@@ -181,6 +215,7 @@ class SourceResultCache:
         finally:
             temporary.unlink(missing_ok=True)
 
+    @_portable_method
     def read_stage(self, source, stage, *, allow_partial=False, record_kinds=None, omit_records=()):
         if stage not in STAGES:
             raise ValueError("Unknown cache stage")
@@ -192,6 +227,7 @@ class SourceResultCache:
             result[kind].append(value)
         return result
 
+    @_portable_method
     def iter_stage_records(self,source,stage,kind,*,allow_partial=False):
         if stage not in STAGES:raise ValueError("Unknown cache stage")
         entry=self._manifest(source)["stages"].get(stage,{})
@@ -217,6 +253,7 @@ class SourceResultCache:
         if counts!=entry.get("counts",{}):
             raise ValueError("Cache count mismatch")
 
+    @_portable_method
     def save_original(self, source, path, extension):
         if not re.fullmatch(r"\.[a-z0-9]{1,8}", extension):
             raise ValueError("Invalid original extension")
@@ -241,6 +278,7 @@ class SourceResultCache:
             temporary.unlink(missing_ok=True)
         return target
 
+    @_portable_method
     def original_path(self, source):
         original = self._manifest(source).get("original")
         if not original or not re.fullmatch(r"original\.[a-z0-9]{1,8}", original.get("file", "")):
@@ -251,6 +289,7 @@ class SourceResultCache:
             raise ValueError("Cached original changed")
         return path
 
+    @_portable_method
     def copy_to(self, source, destination):
         manifest = self._manifest(source)
         if not manifest["stages"]:
@@ -315,6 +354,12 @@ def assert_full_regeneration_cache_safe(session, settings, doc_id, selection):
                             code="scope_cache_preservation_required")
     desired={d["source_key"] for d in (selection or generation.processing_scope_json or {}).get("decisions",[])
              if d.get("effective_included")}
+    from app.db.models import SourceCacheHead
+    cached_keys = session.scalars(select(SourceCacheHead.source_key).where(SourceCacheHead.doc_id == doc_id,
+        SourceCacheHead.generation_id.in_(["", state.active_generation_id])))
+    if any(key not in desired for key in cached_keys):
+        raise ConflictError("Полная регенерация может потерять кэш выключенных вложений. Используйте изменение состава.",
+                            code="scope_cache_preservation_required")
     roots=[generation_paths(settings,doc_id,state.active_generation_id).bundle/"source-cache",
            settings.uploads_dir/doc_id/"scope-stage-cache"]
     for root in roots:
@@ -368,6 +413,17 @@ def copy_source_cache(doc_id, cache_id, generation_id):
     if not re.fullmatch(r"[0-9a-f]{64}", cache_id or ""):
         raise ValueError("Invalid cache identity")
     cache = _document_cache(doc_id)
+    if cache._portable() is not None:
+        from app.db.models import SourceCacheHead
+        from app.db.session import current_session, session_scope
+        from contextlib import nullcontext
+        with (nullcontext(current_session()) if current_session() is not None else session_scope()) as session:
+            head = session.get(SourceCacheHead, (doc_id, "", cache_id))
+            if head is None:
+                raise ValueError("Source cache identity unavailable")
+            source = {"source_key": head.source_key, "content_fingerprint": head.content_fingerprint}
+        destination = SourceResultCache(generation_paths(get_settings(), doc_id, generation_id).bundle / "source-cache", doc_id)
+        return cache.copy_to(source, destination)
     manifest_path = cache.root / cache_id / "manifest.json"
     _reject_links(manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

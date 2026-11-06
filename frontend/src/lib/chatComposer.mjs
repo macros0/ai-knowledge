@@ -2,12 +2,13 @@ export function shouldSubmitQuestion({key,shiftKey=false,isComposing=false}) {
   return key === "Enter" && !shiftKey && !isComposing;
 }
 export function retryRequestOptions(message) {
-  return Object.fromEntries(["requestAssessSources", "requestSessionId", "requestLocale", "requestDense", "requestBm25", "requestSourceLocales", "requestIncludeUnknownLocale", "requestUseGlossary", "requestMailMode", "requestTags", "requestTopK", "requestMode", "requestSearchDepth", "requestSourceSelection", "requestDocIds", "requestSourceLocale", "responseMode"].map(key => [key,message[key]]));
+  return Object.fromEntries(["requestScenarioId", "requestAssessSources", "requestSessionId", "requestLocale", "requestDense", "requestBm25", "requestSourceLocales", "requestIncludeUnknownLocale", "requestUseGlossary", "requestMailMode", "requestTags", "requestTopK", "requestMode", "requestSearchDepth", "requestSourceSelection", "requestDocIds", "requestSourceLocale", "responseMode"].map(key => [key,message[key]]));
 }
 
 export function freshSourceSearchOptions(message) {
   const options=retryRequestOptions(message);
   delete options.requestSourceSelection;
+  delete options.requestScenarioId;
   return {...options,responseMode:"documents"};
 }
 

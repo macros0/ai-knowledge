@@ -27,7 +27,11 @@
           ]
         },
         "mode": {
-          "const": "compact"
+          "enum": [
+            "compact",
+            "frontend-split",
+            "distributed"
+          ]
         }
       }
     },
@@ -88,6 +92,9 @@
         "auditDbEnabled": {
           "type": "boolean",
           "default": true
+        },
+        "identityConfigMap": {
+          "type": "string"
         }
       },
       "allOf": [
@@ -160,7 +167,7 @@
         "properties": {
           "existingClaim": {
             "type": "string",
-            "minLength": 1
+            "minLength": 0
           }
         }
       }
@@ -270,6 +277,161 @@
           "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
         }
       }
+    },
+    "replicaStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "postgres",
+        "qdrant",
+        "artifacts"
+      ],
+      "properties": {
+        "postgres": {
+          "type": "object",
+          "required": [
+            "provider"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "enum": [
+                "managed",
+                "external"
+              ]
+            }
+          }
+        },
+        "qdrant": {
+          "type": "object",
+          "required": [
+            "provider"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "enum": [
+                "managed",
+                "external"
+              ]
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "required": [
+            "provider",
+            "backend"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "enum": [
+                "managed",
+                "external"
+              ]
+            },
+            "backend": {
+              "enum": [
+                "local",
+                "rwx",
+                "s3"
+              ]
+            },
+            "storeId": {
+              "type": "string"
+            }
+          }
+        },
+        "infrastructureRelease": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        }
+      }
+    },
+    "resilience": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class"
+      ],
+      "properties": {
+        "class": {
+          "enum": [
+            "basic",
+            "resilient"
+          ]
+        }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "required": [
+        "replicas"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "replicas": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "api": {
+      "type": "object",
+      "required": [
+        "replicas"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "replicas": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "required": [
+        "replicas"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "replicas": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "topologyKey"
+      ],
+      "properties": {
+        "topologyKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scratch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sizeLimit"
+      ],
+      "properties": {
+        "sizeLimit": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+        }
+      }
     }
   },
   "definitions": {
@@ -348,5 +510,193 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "deployment": {
+            "properties": {
+              "mode": {
+                "const": "compact"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          }
+        },
+        "required": [
+          "deployment"
+        ]
+      },
+      "then": {
+        "properties": {
+          "frontend": {
+            "properties": {
+              "replicas": {
+                "const": 1
+              }
+            }
+          },
+          "api": {
+            "properties": {
+              "replicas": {
+                "const": 1
+              }
+            }
+          },
+          "worker": {
+            "properties": {
+              "replicas": {
+                "const": 0
+              }
+            }
+          },
+          "resilience": {
+            "properties": {
+              "class": {
+                "const": "basic"
+              }
+            }
+          },
+          "replicaStorage": {
+            "properties": {
+              "postgres": {
+                "properties": {
+                  "provider": {
+                    "const": "managed"
+                  }
+                }
+              },
+              "qdrant": {
+                "properties": {
+                  "provider": {
+                    "const": "managed"
+                  }
+                }
+              },
+              "artifacts": {
+                "properties": {
+                  "provider": {
+                    "const": "managed"
+                  },
+                  "backend": {
+                    "const": "local"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "deployment"
+        ],
+        "properties": {
+          "deployment": {
+            "required": [
+              "mode"
+            ],
+            "properties": {
+              "mode": {
+                "const": "frontend-split"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "replicas": {
+                "const": 1
+              }
+            }
+          },
+          "worker": {
+            "properties": {
+              "replicas": {
+                "const": 0
+              }
+            }
+          },
+          "resilience": {
+            "properties": {
+              "class": {
+                "const": "basic"
+              }
+            }
+          },
+          "replicaStorage": {
+            "properties": {
+              "postgres": {
+                "properties": {
+                  "provider": {
+                    "const": "managed"
+                  }
+                }
+              },
+              "qdrant": {
+                "properties": {
+                  "provider": {
+                    "const": "managed"
+                  }
+                }
+              },
+              "artifacts": {
+                "properties": {
+                  "provider": {
+                    "const": "managed"
+                  },
+                  "backend": {
+                    "const": "local"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "deployment": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "compact",
+                  "frontend-split"
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          }
+        },
+        "required": [
+          "deployment"
+        ]
+      },
+      "then": {
+        "properties": {
+          "persistence": {
+            "additionalProperties": {
+              "properties": {
+                "existingClaim": {
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

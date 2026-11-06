@@ -38,6 +38,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
-    result = migrate(get_engine(), apply=parser.parse_args().apply)
+    args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_glossary_aliases")
+    result = migrate(get_engine(), apply=args.apply)
     print(json.dumps(result))
     raise SystemExit(0 if result["ready"] else 1)

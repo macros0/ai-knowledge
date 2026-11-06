@@ -1,0 +1,834 @@
+{
+  "schema_version": 1,
+  "status": "selected-synology-active-worker-150s-outage-functional-recovery-verified-closed",
+  "observed_at": "2026-11-04T08:20:07.998967+00:00",
+  "operation_id": "3e34cc3c5614465a9221acc54a2451f5",
+  "namespace": "replica-test-syno20261104",
+  "namespace_uid": "40a5d2cb-a799-4d70-bbe9-0a446580d81c",
+  "installation_id": "048bafec4d3544d18592f11d308f6764",
+  "scope": "Synthetic two-document app on one VM/kind node, managed PG17/Qdrant plus external DS211/NFSv4.0/CSI4.13.6. Actual accepted worker/model activity before bounded node-to-NAS fault. No physical node loss, NAS power-loss, real model/IdP or production certificate.",
+  "runtime": {
+    "product_commit": "96931d1cfa05dc7f3e685305016f792ad7a9ce50",
+    "backend_image": "okf-backend:replicas-96931d1-synr-2cbebc13dedf",
+    "kind_backend_image_id": "sha256:56c858bbebf1768827709a14b0029df4d6d851ddafe7d2daa2289588f05f4a37",
+    "identity": {
+      "version": 1,
+      "deployment_schema": "replicas-v1",
+      "installation_id": "048bafec4d3544d18592f11d308f6764",
+      "artifact_backend": "rwx",
+      "artifact_store_id": "synr-3e34cc3c5614465a",
+      "storage_receipt_digest": "sha256:4b20c0004e8cbd6f086588b6dfca236a24ed962b093c3294d4508c80c3f4e7f2",
+      "runtime_fingerprint": "30e00d8ea1ddb50e9298c952cd36c2b488e255f2d35753bd751897d52bc12a35"
+    },
+    "full_backend_ci": "6472 passed /221 identical optional skips /0 failures on unchanged product source",
+    "model_fixture": {
+      "tag": "okf-model-stub:nas-app-outage-3e34cc3c5614-bddb93b4",
+      "docker_image_id": "sha256:99481d48d38adcfd5138bc1ffc24a9492416c955bfec535b7b297d1fb685e427",
+      "kind_image_id": "sha256:69687b7ba3bce908dd7a116494517b7a69a8662a64b46298392d578f36455826",
+      "rootfs_exact": true,
+      "source": {
+        "sha256": "bddb93b4c18b1e54bf6df41b29308c5d826bff6cc6c744f591629989437a6788",
+        "metrics": true,
+        "delay": true
+      },
+      "source_transferred": false,
+      "image_built": true,
+      "base_image_id": "sha256:3700f660b41b8e89bfcbfa738690df8201b5e478a8301fd12b4215c156b27c45",
+      "base_rootfs_preserved": true,
+      "packages_installed": 0,
+      "producer_exit": 0,
+      "consumer_exit": 0,
+      "directory": "/home/ubuntu/replica-synology-app-outage-mixed-3e34cc3c5614/fixture-current-source",
+      "context_files_at_build": [
+        "Dockerfile",
+        "server.py",
+        "operation.json",
+        "build.log"
+      ],
+      "copied_into_image": [
+        "server.py"
+      ],
+      "runtime_secrets_or_working_data_in_context": false
+    },
+    "model_fixture_delay_seconds": 30,
+    "model_fixture_updated_only_while_business_and_provider_owners_zero": true,
+    "application_code_or_packages_changed": false
+  },
+  "infrastructure": {
+    "parent_component_report": "2026-11-04-replica-synology-bounded-outage.json",
+    "existing_owned_empty_claim_reused": true,
+    "existing_csi_and_sc_preserved": true,
+    "managed_local_pvcs_requested_bytes": 536870912,
+    "external_nas_claim_requested_bytes": 134217728,
+    "pvc_request_is_user_quota": false,
+    "disk_budget": {
+      "host_pvc_bytes": 1073741824,
+      "scratch_bytes": 268435456,
+      "free_floor_fraction": 0.1
+    },
+    "bootstrap": {
+      "sql_tables": 81,
+      "sql_denials": 10,
+      "correct_wrong_correct_tls_scram": true,
+      "operator_credential_not_in_application": true
+    },
+    "claims": [
+      {
+        "name": "artifacts",
+        "uid": "561dd188-1d68-4e41-9eb7-3194bfada567",
+        "phase": "Bound",
+        "volume": "pvc-561dd188-1d68-4e41-9eb7-3194bfada567",
+        "volume_uid": "9ea63715-95b9-45e9-9ae0-939064e4e9e9"
+      },
+      {
+        "name": "syn-postgres",
+        "uid": "49d5f0bd-b261-4e16-8a3d-acf7de4f6b8b",
+        "phase": "Bound",
+        "volume": "pvc-49d5f0bd-b261-4e16-8a3d-acf7de4f6b8b",
+        "volume_uid": "c9efa8bd-f8bb-4c6e-8b07-f43a5ca0213e"
+      },
+      {
+        "name": "syn-qdrant",
+        "uid": "56945e88-4b96-4c74-8ef1-c347c6e87d48",
+        "phase": "Bound",
+        "volume": "pvc-56945e88-4b96-4c74-8ef1-c347c6e87d48",
+        "volume_uid": "441fc5b4-6e62-4783-a63f-f56a17ae8c5b"
+      }
+    ]
+  },
+  "baseline": {
+    "document_id": "42cec0689e8145c9",
+    "original_sha256": "48bffb83bce5692da63106832900b2f80d91831c3f4d7e61ce80b49e6e8fd23a",
+    "export": {
+      "job_id": 1,
+      "completed": true,
+      "export_sha256": "88d9c77a739da57d4ec252be4cc0585068ce969b9440f9b79b3a8a3eabdbc091",
+      "original_member_sha256_verified": true,
+      "all_four_endpoints": true
+    },
+    "shared_session_all_four": true,
+    "old_business_work": 2,
+    "old_ready_objects": 6,
+    "old_concepts_sha256": "a1dac07b574782a48044f8ec52ed70d6c2a581be4f370c3403cd60cebdf4a122"
+  },
+  "fault": {
+    "platform_authorization": "Explicit user call_1058de4d48e240888483bc1a2c4b67b2; same reviewed node/endpoint150s action, fresh independent full-app trial after both component trials completely closed",
+    "package_operation_id": "d9d88fc44c2b4b9ab1621f834176345d",
+    "root_action_scope": "same frozen fault.nft/cleanup.nft bytes, only inet OUTPUT TCP10.10.1.5:2049 in the pinned kind network namespace; all NAS mounts were this one owned claim",
+    "started_at": "2026-11-04T07:32:48.374298+00:00",
+    "configured_timeout_seconds": 150,
+    "kernel_element_expiry": true,
+    "timeout_renewed": false,
+    "unknown_apply_replayed": false,
+    "table_handle": 15,
+    "table_removed_after_exact_handle_spec_check": true,
+    "host_nas_positive_controls": true,
+    "nas_or_vm_host_firewall_configuration_changed": false
+  },
+  "owned_work": {
+    "document_id": "b2a48a203d934f44",
+    "original_sha256": "196bc4a98dbe64a35fedc882e8777b6b4ecd4c8332705577e40a489479e78fc1",
+    "work_id": "e5415057de7346a892b37254e3fb3507",
+    "owned_running_at_arm": true,
+    "model_active_at_arm": 1,
+    "initial_candidate_generation": "399dd72474014e1e9a0f49abdec12c87",
+    "published_same_generation": "399dd72474014e1e9a0f49abdec12c87",
+    "attempts": 1,
+    "owner_renewed_through_outage": true,
+    "completion_first_observed_by_seconds": 194.153,
+    "final_status": "succeeded",
+    "final_owner": null,
+    "done_problem": null
+  },
+  "timeline": [
+    {
+      "sample_end_seconds": 8.893,
+      "element_active_at_table_read": true,
+      "dropped_packets": 13,
+      "document_status": "processing",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 27.227,
+      "element_active_at_table_read": true,
+      "dropped_packets": 40,
+      "document_status": "processing",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 45.424,
+      "element_active_at_table_read": true,
+      "dropped_packets": 61,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 63.734,
+      "element_active_at_table_read": true,
+      "dropped_packets": 81,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 81.843,
+      "element_active_at_table_read": true,
+      "dropped_packets": 96,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 100.143,
+      "element_active_at_table_read": true,
+      "dropped_packets": 109,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 118.35,
+      "element_active_at_table_read": true,
+      "dropped_packets": 125,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 136.473,
+      "element_active_at_table_read": true,
+      "dropped_packets": 141,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": "timeout-or-transport"
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 150.876,
+      "element_active_at_table_read": true,
+      "dropped_packets": 152,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": 200
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": 200
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 165.288,
+      "element_active_at_table_read": false,
+      "dropped_packets": 152,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": 200
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": 200
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 179.717,
+      "element_active_at_table_read": false,
+      "dropped_packets": 152,
+      "document_status": "splitting",
+      "published_generation": null,
+      "work_status": "running",
+      "attempts": 1,
+      "same_initial_owner": true,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": 200
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": 200
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    },
+    {
+      "sample_end_seconds": 194.153,
+      "element_active_at_table_read": false,
+      "dropped_packets": 152,
+      "document_status": "done",
+      "published_generation": "399dd72474014e1e9a0f49abdec12c87",
+      "work_status": "succeeded",
+      "attempts": 1,
+      "same_initial_owner": false,
+      "api_health": [
+        {
+          "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+          "live": 200,
+          "ready": 200
+        },
+        {
+          "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+          "live": 200,
+          "ready": 200
+        }
+      ],
+      "pod_restarts": 0,
+      "old_concepts_unchanged": true,
+      "host_nas_tcp_control": true
+    }
+  ],
+  "timeline_semantics": "Elapsed values mark completion of sequential nft\u2192nativeSQL\u2192HTTP observations; the element state was read before SQL/HTTP, not atomically at the displayed end time. No timer extension. Recovery time is an observed bounded lab interval including poll/RPC delay, not a production RTO SLA.",
+  "post_recovery_http": {
+    "new-result": {
+      "document_id": "b2a48a203d934f44",
+      "done_without_problem": true,
+      "original_sha256_matches_all_four_endpoints": true,
+      "bm25_search_matches_all_four_endpoints": true
+    },
+    "old-data": {
+      "session_survived_all_four": true,
+      "old_and_new_original_sha_all_four": true,
+      "old_and_new_search_all_four": true,
+      "pre_fault_export_zip_and_member_unchanged_all_four": true
+    },
+    "idempotent-retry": {
+      "post_outage_same_key_and_payload_returned_same_document": true,
+      "document_id": "b2a48a203d934f44"
+    },
+    "export": {
+      "job_id": 2
+    },
+    "export-result": {
+      "job_id": 2,
+      "completed": true,
+      "export_sha256": "3ae086f33f0651b5878322b36eb6adccee5772b1a64f0cd139eff598e569d622",
+      "original_member_sha256_verified": true,
+      "all_four_endpoints": true
+    }
+  },
+  "native_processes": [
+    {
+      "role": "api",
+      "pod_uid": "b02a03db-aa37-478f-8ca1-a99b7a24eb35",
+      "fingerprint": "30e00d8ea1ddb50e9298c952cd36c2b488e255f2d35753bd751897d52bc12a35",
+      "mount_type": "nfs4",
+      "root_access": {
+        "read": true,
+        "write": false,
+        "execute": true
+      },
+      "mutation_directories": {
+        "objects": true,
+        "tmp": true
+      },
+      "artifact_readiness": true,
+      "ready_objects_cold_sha_verified": 12,
+      "scoped_original_scratch_files": 0,
+      "logical": {
+        "documents": {
+          "count": 2,
+          "sha256": "dd2ed647b3b3834b3d4d74d021078d38fe961738ae2fff79804a6231935a8f6c"
+        },
+        "document_generations": {
+          "count": 2,
+          "sha256": "8b559587ca85c31c1155d158857aefc5016dd94d9c81995ed1d7e13f9ede486b"
+        },
+        "artifact_objects": {
+          "count": 12,
+          "sha256": "b75ff5deeea8a5a7266318449bd2ec4fd06ef65af88535ffdaa0d2c9bc7b412b"
+        },
+        "artifact_bindings": {
+          "count": 6,
+          "sha256": "f7c3bc8ddd6a17d05e95d735a9cb08de367b80489de0d1f2dea7dab69d04e098"
+        },
+        "upload_receipts": {
+          "count": 2,
+          "sha256": "c689d8acee5a79bc197bce0e9da098e57b0f2eb5d18921a08e62e0677b63a078"
+        },
+        "work_items": {
+          "count": 4,
+          "sha256": "e5366597a13ffd17eb2619a8c15d2ec123648954af098f5890af61d1a3ebed9d"
+        }
+      },
+      "upload_audits": 2,
+      "work": [
+        {
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ]
+    },
+    {
+      "role": "api",
+      "pod_uid": "889dff3d-8648-44f1-93da-79c6d429c85d",
+      "fingerprint": "30e00d8ea1ddb50e9298c952cd36c2b488e255f2d35753bd751897d52bc12a35",
+      "mount_type": "nfs4",
+      "root_access": {
+        "read": true,
+        "write": false,
+        "execute": true
+      },
+      "mutation_directories": {
+        "objects": true,
+        "tmp": true
+      },
+      "artifact_readiness": true,
+      "ready_objects_cold_sha_verified": 12,
+      "scoped_original_scratch_files": 0,
+      "logical": {
+        "documents": {
+          "count": 2,
+          "sha256": "dd2ed647b3b3834b3d4d74d021078d38fe961738ae2fff79804a6231935a8f6c"
+        },
+        "document_generations": {
+          "count": 2,
+          "sha256": "8b559587ca85c31c1155d158857aefc5016dd94d9c81995ed1d7e13f9ede486b"
+        },
+        "artifact_objects": {
+          "count": 12,
+          "sha256": "b75ff5deeea8a5a7266318449bd2ec4fd06ef65af88535ffdaa0d2c9bc7b412b"
+        },
+        "artifact_bindings": {
+          "count": 6,
+          "sha256": "f7c3bc8ddd6a17d05e95d735a9cb08de367b80489de0d1f2dea7dab69d04e098"
+        },
+        "upload_receipts": {
+          "count": 2,
+          "sha256": "c689d8acee5a79bc197bce0e9da098e57b0f2eb5d18921a08e62e0677b63a078"
+        },
+        "work_items": {
+          "count": 4,
+          "sha256": "e5366597a13ffd17eb2619a8c15d2ec123648954af098f5890af61d1a3ebed9d"
+        }
+      },
+      "upload_audits": 2,
+      "work": [
+        {
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "pod_uid": "15a100f3-cea2-4881-a1d4-1c0690e5fcd4",
+      "fingerprint": "30e00d8ea1ddb50e9298c952cd36c2b488e255f2d35753bd751897d52bc12a35",
+      "mount_type": "nfs4",
+      "root_access": {
+        "read": true,
+        "write": false,
+        "execute": true
+      },
+      "mutation_directories": {
+        "objects": true,
+        "tmp": true
+      },
+      "artifact_readiness": true,
+      "ready_objects_cold_sha_verified": 12,
+      "scoped_original_scratch_files": 0,
+      "logical": {
+        "documents": {
+          "count": 2,
+          "sha256": "dd2ed647b3b3834b3d4d74d021078d38fe961738ae2fff79804a6231935a8f6c"
+        },
+        "document_generations": {
+          "count": 2,
+          "sha256": "8b559587ca85c31c1155d158857aefc5016dd94d9c81995ed1d7e13f9ede486b"
+        },
+        "artifact_objects": {
+          "count": 12,
+          "sha256": "b75ff5deeea8a5a7266318449bd2ec4fd06ef65af88535ffdaa0d2c9bc7b412b"
+        },
+        "artifact_bindings": {
+          "count": 6,
+          "sha256": "f7c3bc8ddd6a17d05e95d735a9cb08de367b80489de0d1f2dea7dab69d04e098"
+        },
+        "upload_receipts": {
+          "count": 2,
+          "sha256": "c689d8acee5a79bc197bce0e9da098e57b0f2eb5d18921a08e62e0677b63a078"
+        },
+        "work_items": {
+          "count": 4,
+          "sha256": "e5366597a13ffd17eb2619a8c15d2ec123648954af098f5890af61d1a3ebed9d"
+        }
+      },
+      "upload_audits": 2,
+      "work": [
+        {
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "pod_uid": "5c636845-8690-4600-82a0-b47604cbacbc",
+      "fingerprint": "30e00d8ea1ddb50e9298c952cd36c2b488e255f2d35753bd751897d52bc12a35",
+      "mount_type": "nfs4",
+      "root_access": {
+        "read": true,
+        "write": false,
+        "execute": true
+      },
+      "mutation_directories": {
+        "objects": true,
+        "tmp": true
+      },
+      "artifact_readiness": true,
+      "ready_objects_cold_sha_verified": 12,
+      "scoped_original_scratch_files": 0,
+      "logical": {
+        "documents": {
+          "count": 2,
+          "sha256": "dd2ed647b3b3834b3d4d74d021078d38fe961738ae2fff79804a6231935a8f6c"
+        },
+        "document_generations": {
+          "count": 2,
+          "sha256": "8b559587ca85c31c1155d158857aefc5016dd94d9c81995ed1d7e13f9ede486b"
+        },
+        "artifact_objects": {
+          "count": 12,
+          "sha256": "b75ff5deeea8a5a7266318449bd2ec4fd06ef65af88535ffdaa0d2c9bc7b412b"
+        },
+        "artifact_bindings": {
+          "count": 6,
+          "sha256": "f7c3bc8ddd6a17d05e95d735a9cb08de367b80489de0d1f2dea7dab69d04e098"
+        },
+        "upload_receipts": {
+          "count": 2,
+          "sha256": "c689d8acee5a79bc197bce0e9da098e57b0f2eb5d18921a08e62e0677b63a078"
+        },
+        "work_items": {
+          "count": 4,
+          "sha256": "e5366597a13ffd17eb2619a8c15d2ec123648954af098f5890af61d1a3ebed9d"
+        }
+      },
+      "upload_audits": 2,
+      "work": [
+        {
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ]
+    }
+  ],
+  "closure": {
+    "current": {
+      "namespace_uid": "40a5d2cb-a799-4d70-bbe9-0a446580d81c",
+      "nonterminal_pods": 0,
+      "live_cri": 0,
+      "nas_node_mounts": 0,
+      "retained_bound_pvcs": 3,
+      "owned_http_forwards_live": 0,
+      "http_ports_free": true,
+      "fault_table_absent": true,
+      "original_output_unchanged": true,
+      "held_epoch": 1
+    },
+    "held_operation": "fea6c0f3df5849ceb25a5d8c6e6bd301",
+    "held_epoch": 1,
+    "all_new_counts_zero": true,
+    "all_original_sources": {
+      "source_application_and_storage_off": true,
+      "source_live_cri": 0,
+      "source_claim_unmounted": true,
+      "source_server_stopped": false,
+      "node_uid": "9020a1d9-843e-4947-8808-53477289b863",
+      "namespace_uid": "1f8bb3cc-d8da-4af4-9107-c96442a4ff0b"
+    },
+    "capacity": {
+      "operation_id": "ff2c05ed30f94e3c9b2743aafcabc08c",
+      "four_provider_operations": {
+        "model": "9652c95831214816aaddd53fecccd2df",
+        "pg": "3cc8efc11a7e443b8e4a123182ed925a",
+        "q": "6282b160b55a4fcda9f16118ca7139e9",
+        "s3": "900e152ab89e46f2aa129f986f7720aa"
+      },
+      "original_two_two_two_restored": true,
+      "original_pvc_identity_and_nine_tables_unchanged": true,
+      "original_pg_catalog_entries": 109,
+      "original_q_full_points_and_config_unchanged": true,
+      "old_live_s3_hashes_rechecked": 8,
+      "old_native_processes": 4
+    },
+    "all_capacity_debts_closed": true,
+    "corpus_deleted": false,
+    "old_scratch_or_cache_pruned": false
+  },
+  "harness_boundaries": [
+    "Initial native observer used identity JSON field name rather than SQL fingerprint column; refused before any upload/fault and fixed against actual model",
+    "Legacy fixture lacked /test/status; cached R5 source SHA differed, so it was not deployed. A minimal current Git/CI source fixture was built without new dependencies or network; base RootFS preserved, Docker/kind RootFS exact, no app source changes",
+    "Docker build context had two source files plus non-secret operation/build records; only server.py copied into the image; no runtime secrets or working data",
+    "Qdrant restoration verification initially observed normal startup; only read-only verification resumed, no second scale"
+  ],
+  "remaining": [
+    "Cross-node and independent physical failure domains",
+    "Selected NAS-target relocation recipe and customer/provider profile qualification",
+    "Real model/IdP/Gateway acceptance and trusted complete-profile evidence"
+  ],
+  "restored": true,
+  "profile_qualified": false,
+  "certification": null,
+  "production_backup_schedule": "disabled"
+}

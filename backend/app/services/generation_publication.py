@@ -18,18 +18,70 @@ from app.services.generation_artifacts import GenerationIntegrityError
 logger = logging.getLogger(__name__)
 
 
-def publish_prepared_document(settings, vector_store, doc_id: str, generation_id: str) -> bool:
+def publish_prepared_document(settings, vector_store, doc_id: str, generation_id: str, *, claim=None) -> bool:
+    from contextlib import nullcontext
+    from app.services.work.context import current_claim, document_execution, work_execution
+    from app.services.work.models import LostOwnership
+    claim = claim or current_claim()
+    if claim is None and settings.app_role != "combined":
+        raise LostOwnership("Distributed publication requires work ownership")
+    if claim is None:
+        with session_scope() as session:
+            generation = session.get(DocumentGeneration, generation_id)
+            if generation is not None and generation.work_id is not None:
+                raise LostOwnership("Work-owned generation requires its claim")
+    if claim is not None and claim.spec.doc_id != doc_id:
+        raise LostOwnership("Foreign document work")
+    if claim is not None and claim.spec.kind not in {"document", "scope_change", "canonical_repair"}:
+        raise LostOwnership("Unsupported publication work kind")
+    context = document_execution(claim) if claim and claim.spec.kind == "document" else work_execution(claim) if claim else nullcontext()
+    with context:
+        return _publish_prepared_document(settings, vector_store, doc_id, generation_id, claim=claim)
+
+
+def _publish_prepared_document(settings, vector_store, doc_id, generation_id, *, claim):
     """Commit canonical rows and active pointer together; False if already active.
 
     File and search-point verification precede canonical writes. The caller owns
     any checkpoint cleanup, which must never turn a committed publication into
     a failed operation.
     """
+    from app.services.artifacts.publication import hydrate_publication
+    hydrate_publication(settings, doc_id, generation_id, skip_active=True)
     with session_scope() as session:
+        if claim is not None:
+            from app.services.work.store import assert_owner
+            from app.services.work.models import LostOwnership
+            assert_owner(session, claim)
+            owned = session.get(DocumentGeneration, generation_id)
+            if owned is None or (owned.work_id, owned.work_fence) != (claim.work_id, claim.fence):
+                raise LostOwnership("Generation belongs to a different work attempt")
         if not publish_generation(session, doc_id, generation_id):
             return False
         generation = session.get(DocumentGeneration, generation_id)
-        prepared = load_verified_publication(settings, doc_id, generation_id, generation.publication_hash)
+        if claim is not None:
+            from app.db.models import DocumentWorkInput
+            from app.services.work.admission import validate_document_scope, scope_policy
+            frozen = session.get(DocumentWorkInput, claim.work_id)
+            if frozen is not None:
+                if frozen.doc_id != doc_id or scope_policy(frozen.processing_scope_json) != scope_policy(generation.processing_scope_json):
+                    raise LostOwnership("Document input changed before publication")
+                validate_document_scope(session, doc_id, frozen.processing_scope_json,
+                    claim.spec.payload.get("source_file_hash"), frozen.scope_request_id)
+                if generation.processing_scope_json is not None:
+                    from app.services.processing_scope_cache import embedding_fingerprint
+                    if generation.processing_scope_json.get("vector_space") != {"kind": "proven", "fingerprint": embedding_fingerprint(settings)}:
+                        raise GenerationIntegrityError()
+        prepared = load_verified_publication(settings, doc_id, generation_id, generation.publication_hash, session=session)
+        if claim is not None and claim.spec.kind == "canonical_repair":
+            from app.services.work.repair import validate_input
+            from app.services.artifacts.publication import canonical_hash
+            validate_input(session, claim, settings, publication=generation)
+            if (prepared.get("repair_input_hash") != canonical_hash(claim.spec.payload)
+                    or prepared.get("canonical_base_hash") != claim.spec.payload["canonical_digest"]):
+                raise GenerationIntegrityError()
+        if claim is not None and claim.spec.kind == "scope_change" and not prepared.get("scope_change_id"):
+            raise GenerationIntegrityError()
         scope_change = None
         if prepared.get("scope_change_id"):
             from app.db.models import DocumentScopeChange, DocumentProcessingReview
@@ -37,6 +89,16 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
             from app.services.generation_store import GenerationConflict
             from datetime import datetime, timezone
             scope_change = session.get(DocumentScopeChange, prepared["scope_change_id"], populate_existing=True)
+            if claim is not None and claim.spec.kind == "scope_change":
+                from app.services.work.scope import scope_operation
+                accepted = scope_operation(session, claim)
+                # These fields describe computed output; selection and vector proof stay frozen.
+                from app.services.work.admission import DERIVED_SCOPE_OUTPUT_FIELDS
+                derived = DERIVED_SCOPE_OUTPUT_FIELDS
+                accepted_policy = {key: value for key, value in accepted.plan_json["snapshot"].items() if key not in derived}
+                generated_policy = {key: value for key, value in (generation.processing_scope_json or {}).items() if key not in derived}
+                if accepted.id != prepared["scope_change_id"] or generated_policy != accepted_policy:
+                    raise GenerationConflict("Accepted scope policy changed before publication")
             if (not scope_change or scope_change.doc_id != doc_id or scope_change.state != "ready"
                     or scope_change.candidate_generation_id != generation_id
                     or scope_change.owner_token != prepared.get("scope_owner_token")):
@@ -52,10 +114,19 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
             from app.services.generation_artifacts import file_digest
             from app.services.generation_files import _reject_links
             document = session.get(Document, doc_id)
-            original = settings.uploads_dir / (doc_id + Path(document.filename).suffix.lower())
-            _reject_links(original)
-            if not original.is_file() or file_digest(original) != prepared["processing_scope"]["source_file_hash"]:
-                raise GenerationConflict("Original changed before publication")
+            from app.services.artifacts.repository import resolve_blob
+            original_ref = resolve_blob(session, owner_type="original", owner_id=doc_id,
+                generation_id=None, logical_name="original")
+            if original_ref is not None:
+                # The consumed bytes were verified during materialization. The
+                # immutable binding, not a per-pod copy, is publication input.
+                if original_ref.sha256 != prepared["processing_scope"]["source_file_hash"]:
+                    raise GenerationConflict("Original changed before publication")
+            else:
+                original = settings.uploads_dir / (doc_id + Path(document.filename).suffix.lower())
+                _reject_links(original)
+                if not original.is_file() or file_digest(original) != prepared["processing_scope"]["source_file_hash"]:
+                    raise GenerationConflict("Original changed before publication")
         if prepared.get("canonical_base_hash"):
             from app.services.canonical_repair import canonical_rows_digest
             from app.services.generation_store import GenerationConflict
@@ -189,10 +260,25 @@ def publish_prepared_document(settings, vector_store, doc_id: str, generation_id
         if scope_change is not None:
             scope_change.state = "published"
             scope_change.finished_at = datetime.now(timezone.utc)
+            if claim is not None:
+                scope_change.owner_token, scope_change.lease_expires_at = None, None
             scope_change.result_json = {"mode": scope_change.plan_json["preview"]["mode"],
                                        "generation_id": generation_id,
                                        "counts": scope_change.plan_json["preview"].get("counts")}
-    if effects.get("signature"):
+        if claim is not None:
+            from app.services.work.store import enqueue, finish
+            from app.services.work.models import WorkSpec
+            enqueue(session, WorkSpec("checkpoint_retire", 1,
+                {"doc_id": doc_id, "generation_id": generation_id},
+                f"checkpoint-retire/{generation_id}"))
+            if effects.get("signature"):
+                previous_ids = sorted(previous_duplicate_ids)
+                for offset in range(0, max(1, len(previous_ids)), 256):
+                    enqueue(session, WorkSpec("duplicate_refresh", 1,
+                        {"doc_id": doc_id, "previous_ids": previous_ids[offset:offset + 256]},
+                        f"duplicate-refresh/{claim.work_id}/{claim.fence}/{offset}", None))
+            finish(session, claim, outcome="succeeded")
+    if effects.get("signature") and claim is None:
         from app.services.deduplication import refresh_duplicate_flags
 
         try:

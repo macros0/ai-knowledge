@@ -1,0 +1,66 @@
+{
+  "format": 3,
+  "backup_id": "6bfd7725f526474990e1e706eb4201a4",
+  "namespace": "replica-test-r5o2t20261101",
+  "source_epoch": 11,
+  "runtime_configmap": "replica-image-79e6e939fb02-runtime",
+  "runtime_fingerprint": "6a41ae2937c6e95d8877f36f3e884d05da3e522c27ae54f7c73d4e00841837e4",
+  "consistent_at": "2026-11-02T01:50:17.812031+00:00",
+  "counts": {
+    "documents": 20,
+    "concepts": 20,
+    "chunks": 20,
+    "work_items": 6824,
+    "audit_events": 93,
+    "blobs": 100
+  },
+  "encrypted_objects": 102,
+  "plaintext_bytes": 2888731,
+  "production_schedule": "disabled",
+  "restore_verified": false,
+  "status": "owned-current-runtime-backup-passed",
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "installation_id": "55555555555555555555555555555555",
+  "destination": "user-confirmed-separate-physical-pc",
+  "signing_and_runtime_identity_preserved": true,
+  "preserved_documents": 20,
+  "source_search_download_sha_verified": true,
+  "scoped_processes_verified": 4,
+  "maintenance_audit_pair": true,
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e",
+      "worker": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "limitations": [
+    "cold verified copy; this archive has not been restored",
+    "owned single-node synthetic managed-S3 recipe only"
+  ],
+  "backup_health": {
+    "schema_version": 1,
+    "state": "healthy",
+    "checked_at": "2026-11-02T02:00:09.858377+00:00",
+    "alerts": [],
+    "archive_verified": true,
+    "backup_id": "6bfd7725f526474990e1e706eb4201a4",
+    "recovery_point_age_seconds": 592.046346,
+    "max_age_seconds": 86400,
+    "attempt_status": "complete",
+    "restore_verified": false,
+    "rpo_assured": false
+  },
+  "backup_attempt_journal_verified": true
+}

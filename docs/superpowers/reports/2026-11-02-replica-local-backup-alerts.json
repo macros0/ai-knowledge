@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "status": "training-local-backup-alert-delivery-passed",
+  "scope": "user-approved loopback receiver on separate PC; synthetic format3 archive only",
+  "operation_id": "36d3781a0a9f4c1d9fed577fba01aa84",
+  "backup_id": "4f3e1677bcb94fd88d5a271a979edb6b",
+  "completed_at": "2026-11-02T22:14:19.386471+03:00",
+  "source_sha256": {
+    "scripts/kubernetes/backup_alert_protocol.py": "3aa43e4a092a446b95a6fd6abc3bb1760f3bd6996f22f6b680a44229515fcb20",
+    "scripts/kubernetes/replica_backup_alert_receiver.py": "b5c03522f41c22fca5727fbe4a70537508da6c27eb989ee43d2237bfd16848d5",
+    "scripts/kubernetes/replica_backup_alerts.py": "5e0c6351a7d822cdde161280bd640c7fdcbd0ec978c9968c89552caed4ad1360",
+    "backend/tests/test_replica_backup_alert_protocol.py": "dcd556d10266707e7e5dd639e2bef32c620f8e90e65a15963696d21b02d37acf",
+    "backend/tests/test_replica_backup_alert_receiver.py": "7762fa82ffb28ec79c0b68013f1e3eacedabb16472d4d0b270347420d09945f8",
+    "backend/tests/test_replica_backup_alerts.py": "4921e8c6fc8d8fc691a39c432a9f8f5a3a19081a08501c6e5936b817a3b90ba7",
+    "backend/tests/test_replica_backup_alerts_cli.py": "e063d5f70b8eee06c3e800b355d411efbef49b791f8793862f458ccb35f1fd88"
+  },
+  "tests": {
+    "platform": "Windows Python3.12",
+    "passed": 107,
+    "skipped": 1,
+    "failed": 0,
+    "skip_scope": "existing POSIX-only backup-health FIFO test",
+    "linux_cohort_run": false,
+    "log_sha256": "a01f30ac44772cd9d3d4c282ba3ccae3ad74410e26e469f624a3205d731c01fe",
+    "root_check": {
+      "exit_code": 0,
+      "audit_vulnerabilities": 0,
+      "frontend_passed": 756,
+      "frontend_skipped": 1,
+      "eslint": "passed",
+      "ruff": "passed",
+      "log_sha256": "0590ff28222e45a6dd64975b8f47bc9bbe7e8a2ade64e9ec0420b4d7f5827034"
+    }
+  },
+  "receiver": {
+    "endpoint": "http://127.0.0.1:16491/v1/backup-alerts",
+    "loopback_only": true,
+    "hidden_background_process": true,
+    "launcher_pid": 69100,
+    "listener_pid": 45276,
+    "durable_inbox": "SQLite FULL commit before authenticated ACK",
+    "events": 4,
+    "signing_key_distinct_from_archive_key": true,
+    "signing_key_bytes": 32,
+    "protected_parent_directory": true,
+    "key_access_rules": 3,
+    "broad_key_access_rules": 0,
+    "key_value_or_digest_emitted": false
+  },
+  "drill_steps": [
+    {
+      "name": "initial-real-healthy-quiet",
+      "exit_code": 0,
+      "health_state": "healthy",
+      "observation_mode": "real-time",
+      "alerts": [],
+      "archive_verified": true,
+      "delivery": "quiet",
+      "inbox_events": 0
+    },
+    {
+      "name": "offline-clock-age-86401-alert",
+      "exit_code": 2,
+      "health_state": "alert",
+      "observation_mode": "offline-clock-drill",
+      "alerts": [
+        "backup_recovery_point_stale"
+      ],
+      "archive_verified": true,
+      "delivery": "delivered",
+      "inbox_events": 1
+    },
+    {
+      "name": "unchanged-stale-age-86402-quiet",
+      "exit_code": 2,
+      "health_state": "alert",
+      "observation_mode": "offline-clock-drill",
+      "alerts": [
+        "backup_recovery_point_stale"
+      ],
+      "archive_verified": true,
+      "delivery": "quiet",
+      "inbox_events": 1
+    },
+    {
+      "name": "actual-incomplete-copy-verification-and-attempt-error",
+      "exit_code": 2,
+      "health_state": "alert",
+      "observation_mode": "fault-shadow",
+      "alerts": [
+        "backup_last_attempt_failed",
+        "backup_unverifiable"
+      ],
+      "archive_verified": false,
+      "delivery": "delivered",
+      "inbox_events": 2
+    },
+    {
+      "name": "older-good-copy-cannot-hide-failed-latest-attempt",
+      "exit_code": 2,
+      "health_state": "alert",
+      "observation_mode": "real-time",
+      "alerts": [
+        "backup_last_attempt_failed"
+      ],
+      "archive_verified": true,
+      "delivery": "delivered",
+      "inbox_events": 3
+    },
+    {
+      "name": "unchanged-failed-latest-attempt-quiet",
+      "exit_code": 2,
+      "health_state": "alert",
+      "observation_mode": "real-time",
+      "alerts": [
+        "backup_last_attempt_failed"
+      ],
+      "archive_verified": true,
+      "delivery": "quiet",
+      "inbox_events": 3
+    },
+    {
+      "name": "verified-copy-attempt-recovery-notification",
+      "exit_code": 0,
+      "health_state": "healthy",
+      "observation_mode": "real-time",
+      "alerts": [],
+      "archive_verified": true,
+      "delivery": "delivered",
+      "inbox_events": 4
+    },
+    {
+      "name": "unchanged-real-healthy-quiet",
+      "exit_code": 0,
+      "health_state": "healthy",
+      "observation_mode": "real-time",
+      "alerts": [],
+      "archive_verified": true,
+      "delivery": "quiet",
+      "inbox_events": 4
+    }
+  ],
+  "inbox_receipts": [
+    {
+      "event_id": "fbe5d0553bc343758a9feca37db67608",
+      "body_sha256": "c56b4540e1b66147df6d8c12106a232a99cd99e5b2f010852a52f721bb02b40a",
+      "kind": "alert",
+      "alerts": [
+        "backup_recovery_point_stale"
+      ],
+      "observation_mode": "offline-clock-drill",
+      "received_at": 1793646832.9629858
+    },
+    {
+      "event_id": "7767ba7b5b5b4d40bd93533b765f394d",
+      "body_sha256": "5785e7f92fa388bf1577ac381443fd7352f07fdd969e790304d912d2b94205a8",
+      "kind": "alert",
+      "alerts": [
+        "backup_last_attempt_failed",
+        "backup_unverifiable"
+      ],
+      "observation_mode": "fault-shadow",
+      "received_at": 1793646841.4638124
+    },
+    {
+      "event_id": "6336bd30322f461780e2d48d2bc19ce7",
+      "body_sha256": "5b93178608b8dc41df8640823b8bdf43a3bfcb8093e5477e8fb0d2d7a3f50e34",
+      "kind": "alert",
+      "alerts": [
+        "backup_last_attempt_failed"
+      ],
+      "observation_mode": "real-time",
+      "received_at": 1793646845.0190957
+    },
+    {
+      "event_id": "50c03834bebb4e4cb3c3bbbb918793d7",
+      "body_sha256": "ab028242099eadc39be8d57c0a0159c02c7f0609878989f6c7a8adb16aa29764",
+      "kind": "recovered",
+      "alerts": [],
+      "observation_mode": "real-time",
+      "received_at": 1793646853.8364637
+    }
+  ],
+  "unit_http_failure_proofs": [
+    "commit followed by lost ACK retries identical event with one durable row",
+    "wrong key, body, expiry, forged ACK and conflicting ID refused",
+    "corrupt persisted inbox payload refused before duplicate ACK",
+    "uncertain journal writes and concurrent senders refused"
+  ],
+  "preservation": {
+    "original_archive_files_unchanged": 13,
+    "original_objects_cold_verified": 12,
+    "primary_key_file_unchanged": true,
+    "source_physically_off": true,
+    "source_pvcs_retained": 3,
+    "target_pvcs_retained": 3
+  },
+  "limitations": [
+    "stale age uses explicit offline clock, not an actual missed night",
+    "failed attempt is an isolated local encrypted-copy candidate with one deliberately omitted object",
+    "no real provider nightly backup failure or production monitoring/SLA qualification",
+    "loopback receiver is on archive PC and shares its failure domain",
+    "no new restore was performed by the notification drill; healthy delivery does not prove restore or RPO"
+  ],
+  "production_installation_exists": false,
+  "production_backup_schedule": "disabled",
+  "external_recipients": 0,
+  "automated_sender_schedule_created": false,
+  "whole_O2_complete": false,
+  "profile_certification": null
+}

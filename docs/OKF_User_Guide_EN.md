@@ -2,7 +2,7 @@
 
 User guide
 
-English edition · 18 October 2026
+English edition · 23 October 2026
 
 A practical guide to search, documents and knowledge-base maintenance. Commands use the English interface labels. Available actions depend on your roles and installation settings. Administrators can override translations, so some labels may differ.
 
@@ -128,6 +128,7 @@ Type your question in **Ask about documents**. Multiple lines are supported. Ent
 | Find sources | Documents and excerpts without a synthesized answer; useful for inspection and manual selection |
 | Quick answer | An answer using the most relevant sources; useful for a focused question |
 | Full research | Processing of retrieved excerpts in batches and a combined answer; useful for comparisons and overviews |
+| Use scenario | An answer using saved private or public instructions, with the applied version preserved |
 
 Available modes depend on settings. **Full research works on the retrieved set within the search-depth limit**, not necessarily every document in the database. It can take longer; progress shows batch processing and answer synthesis.
 
@@ -145,6 +146,23 @@ Include an object name, code, version or development when known. Restate the sub
 **Stop** interrupts the current answer. Already displayed text may remain with an incomplete-result notice; it is not a finished answer. The restart action repeats the request. **Edit question** places it in the composer; replacing an existing draft requires confirmation.
 
 Leaving the chat page may stop a running answer. Wait for completion when you need the full result. A completed answer can be copied as Markdown.
+
+### Answer scenarios
+
+Select **Use scenario** in the top toolbar and choose a scenario next to it. Sending is disabled until one is selected. The choice survives page navigation and applies to subsequent questions until you change the mode or scenario.
+
+1. Open **Scenarios** → **Create scenario**. Enter a name, description and answer instructions.
+2. The default visibility is **Private**, available only to you. **Public** shares the name, description and instructions with all service users.
+3. Enter a **Test question** and choose **Test**. The test uses your current filters and search depth and the normal request allowance, but is not saved in history. **Stop** cancels only this test.
+4. Choose **Save**, then **Apply** in the catalog. Ask your question in the main chat.
+
+Authors can edit or delete their own scenarios. Administrators can also edit or delete another user's public scenario; other users' private scenarios remain inaccessible in the catalog. You can view and apply another user's public scenario or **Create private copy**. A copy is independent and starts at version 1. To unpublish, the author changes visibility to **Private** and saves.
+
+Every new request automatically uses the latest saved version. An already running answer finishes with the version accepted at its start. Each answer shows **Scenario: name · vN**; open the label to inspect that answer's exact instruction snapshot. Updating, unpublishing or deleting a scenario does not change previous answers or independent copies. A repeated request uses the current available version; replace an unavailable scenario explicitly.
+
+![Use scenario and the version preserved with an answer. Narrow-screen example with test requirements.](assets/user-guide/en-answer-scenarios.png)
+
+Grounding and source citations always apply. Scenarios work on retrieved evidence within your search-depth limit; asking for everything does not expand the search scope. Authorship checks use a protected format with an explanation. Your own document permissions continue to apply. Scenarios are unavailable with one shared anonymous identity.
 
 <a id="guide-05"></a>
 ## 5. Search settings
@@ -652,7 +670,7 @@ The Russian edition is available as `OKF_User_Guide.md` and `OKF_User_Guide.pdf`
 <a id="guide-21"></a>
 ## 21. Interface examples
 
-Screenshots were captured on 18 October 2026 in the running interface. Document examples use a previously uploaded introduction to the service; search and glossary examples use the current knowledge base. The introductory document does not describe current capabilities. Counts and results reflect the capture time. Document content, glossary entries and the profile's configured name remain in their original language when the interface changes.
+Screenshots were captured on 23 October 2026 in the running interface. Document examples use a previously uploaded introduction to the service; search and glossary examples use the current knowledge base. The introductory document does not describe current capabilities. Counts and results reflect the capture time. Document content, glossary entries and the profile's configured name remain in their original language when the interface changes.
 
 ![Figure 1. Register: filename search, filters, selection and individual document actions. See section 3.](assets/user-guide/en-documents.png)
 

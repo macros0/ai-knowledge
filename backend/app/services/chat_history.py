@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from contextlib import nullcontext
 from dataclasses import dataclass
 import threading
 import time
@@ -45,10 +46,17 @@ class AttemptRef:
     attempt_id: str
     status: str = "incomplete"
     existing: bool = False
+    run_id: str | None = None
+    run_owner: str | None = None
+    run_fence: int | None = None
 
 
-def _attempt_message(s, ref: AttemptRef, user):
-    sess = s.get(ChatSession, ref.session_id)
+def _attempt_message(s, ref: AttemptRef, user, *, write=False, terminal_draft=False, _lock_session=False):
+    if write:
+        from app.services.work.chat import guard_history_write
+        guard_history_write(s, ref, user, terminal_draft=terminal_draft)
+    sess = s.get(ChatSession, ref.session_id, with_for_update=write or _lock_session,
+        populate_existing=write or _lock_session)
     if sess is None or sess.user_id != user.user_id:
         raise ChatOwnershipError("Сессия принадлежит другому пользователю")
     if sess.deleted_at is not None:
@@ -57,13 +65,18 @@ def _attempt_message(s, ref: AttemptRef, user):
     if (message is None or message.session_id != sess.id or
             (message.retrieval_metadata or {}).get("answer_attempt", {}).get("id") != ref.attempt_id):
         raise ChatOwnershipError("Попытка ответа не найдена")
+    if write:
+        # Session/message lock waits can outlive the first owner check.
+        guard_history_write(s, ref, user, terminal_draft=terminal_draft)
     return message
 
 
-def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, response_mode: str) -> AttemptRef:
+def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, response_mode: str, *, scenario_id: str | None = None, _session=None) -> AttemptRef:
     """Persist one question/placeholder pair before search; no evidence checkpoint."""
+    if _session is None:
+        _require_legacy_history_writer()
     session_id = session_id or str(uuid.uuid4())
-    with session_scope() as s:
+    with (session_scope() if _session is None else nullcontext(_session)) as s:
         sess = s.get(ChatSession, session_id, with_for_update=True)
         if sess is not None:
             if sess.user_id != user.user_id:
@@ -74,7 +87,7 @@ def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, res
             for message in messages:
                 attempt = (message.retrieval_metadata or {}).get("answer_attempt", {})
                 if attempt.get("id") == attempt_id:
-                    if attempt.get("query") != query or attempt.get("mode") != response_mode:
+                    if attempt.get("query") != query or attempt.get("mode") != response_mode or attempt.get("scenario_id") != scenario_id:
                         raise ValueError("Attempt ID reused with different request")
                     return AttemptRef(session_id, message.id, attempt_id, attempt.get("status", "incomplete"), True)
                 if message.role == "assistant" and attempt.get("status") == "incomplete":
@@ -86,12 +99,18 @@ def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, res
                 username=getattr(user, "username", None), title=query[:1024],
             )
             s.add(sess)
+        scenario_metadata = {}
+        if scenario_id:
+            from app.services.answer_scenarios import resolve_scenario_snapshot
+            snapshot = resolve_scenario_snapshot(s, scenario_id, user)
+            scenario_metadata = {"scenario": snapshot.model_dump(mode="json"), "scenario_execution":{"status":"accepted"}}
         sess.updated_at = _now()
         s.add(ChatMessage(session_id=session_id, role="user", content=query))
         message = ChatMessage(
             session_id=session_id, role="assistant", content="",
-            sources=[], retrieval_metadata={"answer_attempt": {
+            sources=[], retrieval_metadata={**scenario_metadata, "answer_attempt": {
                 "id": attempt_id, "query": query, "mode": response_mode,
+                **({"scenario_id":scenario_id} if scenario_id else {}),
                 "status": "incomplete",
             }},
         )
@@ -102,13 +121,13 @@ def begin_attempt(session_id: str | None, user, query: str, attempt_id: str, res
 
 def save_attempt_sources(ref: AttemptRef, user, sources: list[dict], *, retrieval_metadata: dict | None = None) -> None:
     with session_scope() as s:
-        message = _attempt_message(s, ref, user)
+        message = _attempt_message(s, ref, user, write=True)
         if message.retrieval_metadata["answer_attempt"]["status"] == "incomplete":
             message.sources = deepcopy(sources)
             if retrieval_metadata is not None:
                 message.retrieval_metadata = {
                     **message.retrieval_metadata,
-                    **{k: deepcopy(v) for k, v in retrieval_metadata.items() if k != "answer_attempt"},
+                    **{k: deepcopy(v) for k, v in retrieval_metadata.items() if k not in {"answer_attempt", "scenario", "scenario_execution"}},
                 }
 
 
@@ -116,6 +135,10 @@ def finish_attempt(ref: AttemptRef, user, *, status: str, answer: str) -> bool:
     if status not in {"completed", "stopped", "failed"}:
         raise ValueError("Invalid terminal status")
     with session_scope() as s:
+        from app.services.work.chat import finish_managed_attempt
+        managed = finish_managed_attempt(s, ref, user, status=status, answer=answer)
+        if managed is not None:
+            return managed
         message = _attempt_message(s, ref, user)
         metadata = message.retrieval_metadata or {}
         if metadata.get("answer_attempt", {}).get("status") != "incomplete":
@@ -133,7 +156,7 @@ def retain_attempt_draft(ref: AttemptRef, user, answer: str, *, error_code: str 
     if not answer.strip():
         return False
     with session_scope() as s:
-        message = _attempt_message(s, ref, user)
+        message = _attempt_message(s, ref, user, write=True, terminal_draft=True)
         metadata = message.retrieval_metadata or {}
         attempt = metadata.get("answer_attempt", {})
         if attempt.get("status") not in {"failed", "stopped"} or message.content:
@@ -234,6 +257,14 @@ def check_session_state(session_id: str, user_id: str | None) -> None:
         raise ChatSessionDeletedError("Сессия удалена")
 
 
+def _require_legacy_history_writer():
+    from app.config import get_settings as current_settings
+    from app.services.work.admission import durable_documents
+    if durable_documents(current_settings()):
+        from app.services.work.chat import ChatRunOwnershipLost
+        raise ChatRunOwnershipLost("Durable chat admission is required")
+
+
 def store_turn(
     session_id: str | None,
     user,
@@ -249,6 +280,7 @@ def store_turn(
     Иначе — сессия либо принадлежит текущему пользователю (reuse), либо бросает
     ChatOwnershipError. Заголовок треда — первое сообщение пользователя.
     """
+    _require_legacy_history_writer()
     user_id = getattr(user, "user_id", None) or "anonymous"
     username = getattr(user, "username", None) or "anonymous"
     sources = deepcopy(sources or [])
@@ -462,6 +494,8 @@ def soft_delete_session(session_id: str, user) -> bool:
     """Помечает тред удалённым (окно хранения). Возвращает False, если тред не найден/чужой."""
     user_id = getattr(user, "user_id", None) or "anonymous"
     with session_scope() as s:
+        from app.services.work.chat import cancel_chat_session
+        cancel_chat_session(s, session_id, user)
         sess = s.get(ChatSession, session_id)
         if sess is None:
             return False
@@ -513,6 +547,8 @@ def purge_expired_sessions() -> int:
     settings = get_settings()
     cutoff = _now() - timedelta(days=settings.chat_history_retention_days)
     with session_scope() as s:
+        from app.services.work.chat import lock_chat_history_purge
+        lock_chat_history_purge(s)
         rows = (
             s.execute(
                 select(ChatSession).where(
@@ -580,3 +616,17 @@ def start_chat_purge_loop() -> threading.Thread | None:
     thread = threading.Thread(target=_loop, name="chat-history-purge", daemon=True)
     thread.start()
     return thread
+
+
+def read_attempt_scenario(ref: AttemptRef, user):
+    from app.models.answer_scenarios import ScenarioSnapshot
+    with session_scope() as s:
+        raw=(_attempt_message(s,ref,user).retrieval_metadata or {}).get("scenario")
+        return ScenarioSnapshot.model_validate(raw) if raw else None
+
+
+def set_scenario_execution(ref: AttemptRef, user, execution):
+    with session_scope() as s:
+        message=_attempt_message(s,ref,user,write=True)
+        if (message.retrieval_metadata or {}).get("scenario"):
+            message.retrieval_metadata={**message.retrieval_metadata,"scenario_execution":execution.model_dump(mode="json")}

@@ -1,0 +1,23 @@
+{{- range $name := list "postgres" "qdrant" "artifacts" }}
+{{- $component := index $.Values $name }}
+{{- if eq $component.provider "managed" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: {{ $.Release.Name }}-{{ $name }}}
+spec:
+  podSelector: {matchLabels: {okf-storage-component: {{ $name }}, app.kubernetes.io/instance: {{ $.Release.Name }}}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/instance: {{ $.Values.applicationRelease }}}
+            matchExpressions: [{key: okf-role, operator: In, values: [api, worker, backup, bootstrap]}]
+      ports:
+        - {protocol: TCP, port: {{ ternary 5432 (ternary 6333 9000 (eq $name "qdrant")) (eq $name "postgres") }}}
+        {{- if eq $name "qdrant" }}
+        - {protocol: TCP, port: 6334}
+        {{- end }}
+  egress: []
+{{- end }}
+{{- end }}

@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "status": "bounded-oidc-http-component-windows-linux-cohorts-verified-capacity-restored",
+  "observed_at": "2026-11-04T22:37:45.302349+00:00",
+  "scope": "HTTP component and regression cohorts only: real loopback TLS with an HTTP wire double, not real Keycloak/Gateway acceptance or a complete backend suite.",
+  "source": {
+    "base_revision": "e42007a734f60663fa4fbf7d295b330ea0d9104d",
+    "implementation_parent": "3d8a80a",
+    "normalized_utf8_lf_sha256": {
+      "backend/test_scripts/replica_frontend_oidc_http.py": "f13c23ba9e4f9ba8aba06fd2eafb9ffce041de3d2d68cbf272f282cbb83ebbc8",
+      "backend/tests/test_replica_frontend_oidc_http.py": "3fd001c002ff10a38db5ca7e1e30c8f015fedd66fa8a18882d787c19e5f08fbc"
+    },
+    "files": 2477,
+    "patch_files": 2,
+    "source_manifest_sha256": "6ad0495500cbca148df0766e95bc9066539e83af1b2bcf1bfbb5618c21cb77c0",
+    "assembly": "Exact verified e42007a canonical source plus two minimal new files; no .env, keys, four foreign dirty files or working data"
+  },
+  "tdd": {
+    "red_missing_module": 26,
+    "initial_green_passes": 21,
+    "initial_harness_failures": 5,
+    "harness_correction": "Nonowned-scope assertion compares directory before/after because shared conftest already created isolated test.db; no implementation guard was weakened"
+  },
+  "windows": {
+    "tests": 99,
+    "passed": 99,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "junit_sha256": "8bbb8a700bbffe49e1b2f616205e22f6ca26b501ce6a4a633fdb89ffab0bbaaf"
+  },
+  "linux": {
+    "operation_id": "b7f34899e77b45efb84ecfa3eff2f42d",
+    "image": "sha256:5ea412ca80682429ca77d6a5c970da1b1be8d18d554156f25ba8b5aa36d608eb",
+    "running": false,
+    "container_id": "a1a567cbead460e5a207dcb0917ba725c959b730a318e2e8e50096ad6687abad",
+    "exit_code": 0,
+    "oom": false,
+    "junit": {
+      "tests": 99,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sha256": "5c4ea5bd785a924281e8ec9e470a4b706c837c50dac2383aa967b7285f123989"
+    },
+    "windows_case_ids_equal": true,
+    "source_unchanged": true,
+    "verified": true,
+    "failed_case_ids": [],
+    "isolation": "network-none/read-only container root/non-root1000/cap-drop ALL/no-new-privileges/2GiB/2CPU; fresh isolated writable source copy for legacy fixtures; all2477 tracked source hashes unchanged"
+  },
+  "coverage": [
+    "Exact pinned logical HTTPS origins over loopback sockets, custom CA and hostname validation, independent untrusted-root rejection, no ambient proxy destination",
+    "Single bounded authorization/form/callback sequence with state/issuer/client checks; malformed or foreign transitions do not send credentials or redeem codes",
+    "Real mode=sso and secure HttpOnly session required; exact missing/wrong-CSRF denial while authenticated, valid-token logout and old-session/IdP revocation checks",
+    "Private cookies and one-shot intents, callback/logout lost-ACK refusal and terminal receipt reopening without network replay",
+    "Existing HTTP publication/export/NDJSON, private parent journal and home-access regression cohorts"
+  ],
+  "capacity_loan": {
+    "operation_id": "3ab442f02b4545f18dce8ed580c1cc8f",
+    "namespace": "replica-test-r5o2u20261102",
+    "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+    "status": "capacity-recovered-and-source-verified",
+    "runtime_fingerprint": "529fdd8f27a9051d27f42753bbc8660e67a24b391c81a7a3ad9a539c6bdd26a7",
+    "restored_replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "pvc_bindings_unchanged": true,
+    "canonical_tables_unchanged": 9,
+    "data_mutations": 0
+  },
+  "gateway_prerequisite": {
+    "path": "docs/superpowers/reports/2026-11-05-replica-gateway-platform.json",
+    "sha256": "fad55fbdd09d6065c99b5a00a29492d782c332dfa8b3941d7024d738ad4eab8c",
+    "controller_stopped": true
+  },
+  "project_checks": {
+    "result": "passed",
+    "npm_audit": "zero vulnerabilities",
+    "frontend_passed": 756,
+    "frontend_existing_optional_skips": 1,
+    "ruff": "passed",
+    "log_sha256": "21bf565b2b38ad27af7b240fb0b86a6354adc18ddc5855e345be5fbe6c862745"
+  },
+  "limits": [
+    "The component is not yet wired into the native capsule/common runner; simulation admission is unchanged.",
+    "Namespace/controller/forward/image/config/credential ownership is the future native coordinator responsibility; a hostname suffix alone is not admission.",
+    "No real IdP token/code exchange, Gateway data plane, real-CSRF acceptance or authenticated frontend loss was performed by these wire doubles.",
+    "This focused99-case cohort does not replace the complete backend suite or qualify all profiles."
+  ],
+  "pending": [
+    "Native fixed OIDC coordinator and common-runner integration",
+    "Fresh real Keycloak/Gateway frontend-split functional/loss case",
+    "Trusted full-profile release evidence"
+  ],
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled"
+}

@@ -67,9 +67,12 @@ def test_fresh_main_alembic_chain(tmp_path):
     engine=create_engine(env["DATABASE_URL"])
     with engine.connect() as c:
         validate_audit_schema(c)
-        assert c.scalar(text("SELECT version_num FROM alembic_version"))=="067b1c2d3e4f"
+        assert c.scalar(text("SELECT version_num FROM alembic_version"))=="rpl05_maintenance_epoch"
         from sqlalchemy import inspect
-        assert {"auth_sessions","document_generations","reference_resource_states"} <= set(inspect(c).get_table_names())
+        assert {"auth_sessions","document_generations","reference_resource_states","answer_scenarios","answer_scenario_versions",
+                "artifact_objects","artifact_bindings","work_items","replica_runtime_identity","replica_maintenance_state"} <= set(inspect(c).get_table_names())
+        assert {"epoch","operation_id","enabled","owner_id","installation_id"} <= {
+            column["name"] for column in inspect(c).get_columns("replica_maintenance_state")}
         # The migrated schema must match create_all's audit metadata as well as
         # preserve rows; a unique index and unique constraint are not identical.
         from alembic.autogenerate import compare_metadata

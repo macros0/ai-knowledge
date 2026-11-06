@@ -3,6 +3,7 @@ from datetime import timedelta
 from app.db.session import session_scope
 from app.services.reference_resources import ReferenceKey
 from app.services.reference_concurrency import ReferenceError, lock_reference_resources
+from tests.sql_observer import SQLReadLog
 
 
 def test_bounded_counters_and_authoritative_active_counts():
@@ -52,9 +53,7 @@ def test_development_list_reads_content_and_revisions_in_one_query_without_n_plu
     registry = DevelopmentRegistry()
     for index in range(5):
         registry.create(str(index), f"Development {index}")
-    statements = []
-    def capture(_conn, _cursor, statement, _parameters, _context, _many):
-        statements.append(statement)
+    capture = SQLReadLog()
     engine = get_engine()
     event.listen(engine, "before_cursor_execute", capture)
     try:
@@ -63,8 +62,10 @@ def test_development_list_reads_content_and_revisions_in_one_query_without_n_plu
         event.remove(engine, "before_cursor_execute", capture)
     assert len(rows) == total == 5
     assert all(row["reference_revision"] == 1 for row in rows)
-    assert len(statements) == 2, "one count plus one coherent content/revision snapshot"
-    assert "reference_resource_states" in statements[-1]
+    assert len(capture.data_selects) == 2, "one count plus one coherent content/revision snapshot"
+    assert "reference_resource_states" in capture.data_selects[-1]
+    assert len(capture.guard_selects) == 7
+    assert not capture.other_statements
 
 
 def test_tag_snapshot_uses_one_statement_for_content_translations_counts_and_revision():
@@ -75,9 +76,7 @@ def test_tag_snapshot_uses_one_statement_for_content_translations_counts_and_rev
     registry.add(["one", "two"])
     identifier = registry.all()[0]["id"]
     registry.set_translation(identifier, "en", "Translated", expected_reference_revision=1)
-    statements = []
-    def capture(_conn, _cursor, statement, _parameters, _context, _many):
-        statements.append(statement)
+    capture = SQLReadLog()
     engine = get_engine()
     event.listen(engine, "before_cursor_execute", capture)
     try:
@@ -87,7 +86,9 @@ def test_tag_snapshot_uses_one_statement_for_content_translations_counts_and_rev
     assert len(rows) == 2
     assert rows[0]["display"] == "Translated"
     assert rows[0]["reference_revision"] == 2
-    assert len(statements) == 1, "all versioned content must come from the same SQL snapshot"
+    assert len(capture.data_selects) == 1, "all versioned content must come from the same SQL snapshot"
+    assert len(capture.guard_selects) == 7
+    assert not capture.other_statements
 
 
 def test_reference_locale_keys_preserve_existing_multiple_subtag_contract():

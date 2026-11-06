@@ -1,5 +1,14 @@
 # SECURITY.md — security model
 
+## Next.js dependency security update (2026-10-23)
+
+Next.js and matching ESLint packages are updated from 16.3.8 to 16.4.2.
+The lock no longer selects the affected Next.js range in GHSA-2464-fhr4-w9xw,
+GHSA-673q-mjm6-r5xr and GHSA-p3m5-59mp-jv5r; the required sharp floor is 0.35.5.
+This addresses dependency advisories, not evidence of exploitation in this app.
+Existing deployments require a new build and restart to run the update.
+[Upstream advisory](https://nextjs.org/blog/nextjs-security-update-october-14-2026).
+
 ## Python runtime dependency integrity (2026-10-18)
 
 The backend image and Python CI jobs install the complete backend and parser
@@ -576,6 +585,23 @@ does not corrupt data.
   development keeps a warning for visibility.
   Redis (or another shared limiter/queue backend) becomes mandatory before enabling multiple
   workers, adding a second backend replica, or horizontally scaling for load.
+  The planned `replicas-v1` backend schema currently has a build-controlled
+  rejection in settings and migration preflight; no environment flag enables
+  additional backend roles yet. Helm permits independent frontend replicas with
+  the original single combined backend; distributed backend mode remains refused.
+  Structural profile validation is not deployment certification.
+  Compact Helm values reject unsupported replica counts, external ownership,
+  object storage and resilience claims rather than silently ignoring them.
+  Internal diagnostic transport is disabled unless DIAGNOSTICS_INGEST_TOKEN is
+  configured (32–512 characters). `/internal/diagnostics` uses constant-time
+  bearer validation independently of browser sessions and is excluded from the
+  public API proxy; unsafe proxy path segments are rejected before forwarding.
+  Frontend transport permits no redirects, bounds requests to 100 events/256 KiB
+  and 2 seconds, queues at most 1000 events and accepts only content-free frontend
+  server events through the existing sanitizer. The SQL inbox caps 10000 receipts
+  and 20 MiB of pending payload, retains retry receipts for seven days and retries
+  delivery with per-batch backoff. Its immutable segments are charged to the
+  frontend diagnostic budget. This is diagnostic telemetry, not security audit.
 - **Pipeline admission** — the document parser currently remains an in-process worker; the
   production deployment must keep a bounded worker count and pending queue. A multi-worker or
   multi-replica deployment must use a shared queue before increasing process count.
@@ -1484,3 +1510,1912 @@ Solid archive decode work remains subject to worker limits even for excluded mem
 The Docker helper is installed only at build time from a pinned official artifact
 with SHA-256 verification and matching license notices. Review/audit records must
 not contain raw cell contents, credentials or private helper errors.
+
+
+## 2026-10-31 — Local artifact contract foundation
+
+Added an unconnected local artifact adapter with opaque keys, immutable exclusive
+publication, SHA256/size checks, bounded range readers and existing link guards.
+Storage failures use typed, path-free errors; parser scratch is temporary and
+reverified before use. This does not change active retention/purge or permit
+multi-node local storage. Shared-adapter certification, DB reference/lease guards
+and pipeline integration remain required before runtime activation.
+
+Shared adapter foundation now adds RWX existing-root checks and S3 conditional
+PUT/multipart completion, full SHA256 verification, bounded temporary spooling,
+explicit endpoint/credentials and TLS verification. SDK redirect authority is
+checked before transmission; secrets are excluded from Settings serialization.
+No automatic credential discovery or unconditional overwrite fallback is used.
+Missing buckets remain errors. Protocol doubles do not certify provider/CSI
+guarantees, and these adapters are not connected to production retention or GC.
+
+## 2026-10-31 — Python dependency security floors
+
+Raised pypdf to >=6.21.4, joserfc to >=1.7.6, Brotli to >=1.2.1 (CPython),
+brotlicffi to >=1.2.1.0 (PyPy) and filelock to
+>=4.2.1,<5. LiteLLM is temporarily pinned to published 1.103.10 because 1.106.x
+requires filelock<4; no wheel metadata override or advisory suppression is used.
+Boto3 is pinned to 1.43.117, satisfying that compatible LiteLLM release. The hash
+lock resolves the full graph. Real JWT decoder tests reject oversized compact
+tokens before segment allocation and retain signed-token/signature validation.
+LLM transport and cache-lock compatibility are checked separately from model
+quality; customer provider acceptance remains required.
+
+## 2026-10-31 — Atomic artifact upload preview
+
+Added immutable blob metadata/bindings and hashed actor-scoped upload receipt
+keys with full request fingerprints. A durable original is written before the
+single SQL transaction creates its document, binding and receipt. Conflicting
+keys fail with409; retries of removed documents fail with410. Receipts remain
+tombstones after purge and do not grant document access. Authentication/current
+document visibility precedes blob resolution/open. Verified private scratch
+preserves Range/HEAD and closes on disconnect; corruption/missing bound data
+cannot be hidden by legacy fallback. Pipeline originals are recoverable caches,
+never the authority after binding.
+
+The new admission path defaults off and is prohibited in production pending
+S3/S4 retention, orphan GC and migration. Purge detaches references without
+deleting provider objects; unreferenced bytes remain a preview limitation.
+Queue admission is still outside the SQL transaction until R2: failures retain
+a paused document/receipt, and a retry returns it without starting another job.
+No role, document scope, distributed-backend or provider certification gate is
+relaxed. No original bytes, raw attempt key or credential is added to audit.
+
+## 2026-10-31 — Artifact read leases, checkpoints and orphan deletion
+
+Metadata-known objects now have ready/deleting/deleted states. A shared SQL row
+lock serializes binding/checkpoint/read-lease creation against an orphan deletion
+claim. GC never detaches owners: live references or unexpired leases block its
+claim. Claimed/deleted identities cannot be rebound; deletion receipts use tokens
+so a stale collector cannot complete another attempt. Failed provider deletion
+leaves a retryable claim and tombstone. Default orphan grace is24hours; creation
+time comes from the database clock, matching lease/GC time rather than client clocks.
+
+Authorized original reads commit their document/ref snapshot before acquiring a
+separate durable read lease, avoiding a SQLite self-deadlock. Leases renew during
+provider verification and streaming; guards stop further byte delivery on loss
+or conservative local deadline expiry. Private materialized HTTP copies remain
+independent after provider reading finishes. Pipeline cache publication rechecks
+the live document under its writer lock. Checkpoints require the current writable
+generation, exact source signature and CAS for replacement. Purge/retired cleanup
+detach references without directly deleting provider objects; existing leases
+still protect in-progress readers.
+
+The initial lifecycle stage kept provider discovery/scheduling disabled. The
+later opt-in GC preview below implements them; R2 job fencing
+remains pending and production activation stays prohibited. The lifecycle contract
+and migration were exercised on isolated PostgreSQL in the user's training VM;
+this does not establish multi-node/provider failure certification.
+
+## 2026-10-31 — Portable publication manifest v2 preview
+
+The pipeline, canonical repair and scope writer now seal generation files and a
+canonical manifest to immutable blobs/bindings before publication. The v2 format
+uses scoped BlobRefs and portable logical paths, rejects path/Windows aliases
+and ambiguous JSON key representations, and retains the no-Markdown-bundle mode.
+Database publication_version identifies the authoritative protocol independently
+of cache presence; rpl01c adds/backfills it. Lost v2 references cannot enable
+filesystem fallback or a silent downgrade. Legacy manifests are accepted only
+for local combined execution/migration.
+
+Leased provider materialization precedes publication SQL; local cache writes
+reacquire the document writer lock and verify the current generation/hash/ref.
+A cleanup race cannot resurrect a retired generation directory. Publication
+verifies the canonical manifest hash, complete cache and exact scoped binding
+set before canonical rows/active pointer commit. Missing/corrupt provider bytes
+leave the prior publication active. Storage-full errors retain their existing
+domain classification. Idempotent active replay requires no old artifact read.
+
+Source/attachment routes authenticate before resolving registered ancestry and
+the active generation's refs; v2 reads do not trust local path resolution or fall
+back to old files. Private scratch, Range/disposition and transaction/disconnect
+cleanup remain enforced. Preview remains default-off/prohibited in production:
+explicit corpus migration and R2
+fencing/provider acceptance are still required for distributed runtime.
+
+## 2026-10-31 — Portable staging checkpoint preview
+
+Opt-in staging snapshots keep raw chunk input, generated concepts, table-reference
+payload and provenance in one immutable blob. The durable put precedes the SQL
+transaction that atomically replaces the scoped checkpoint pointer and progress.
+Document/generation checks and CAS reject stale snapshots; abandoned/deleted
+owners cannot publish new checkpoint references. Existing partial results move
+to the new candidate without trusting the former worker's disk. Job lease/fence
+ownership remains the separate R2 gate; this does not enable multiple workers.
+
+Reads authorize the live owner and exact checkpoint binding before provider I/O,
+materialize under a renewable SQL read lease, and recheck the current staging
+pointer under the document lock before publishing local cache files. Cleanup
+cannot be undone by late hydration. Missing metadata/bytes and source signature
+changes never fall back to cache. Finalization uses the committed chunk inventory;
+unregistered leftover files on a worker do not enter the published corpus.
+Replacement/removal detach only the owned generation's references; checkpoints
+of other generations remain bound. Immutable byte deletion uses existing
+GC grace/read-lease rules. Automatic GC remains separately opt-in as described below.
+
+The rpl01d migration preserves legacy rows as protocol1 and adds a durable
+checkpoint_version marker for protocol2, which survives feature-flag changes.
+Legacy checkpoints are not silently promoted. Downgrade refuses while portable
+rows exist, preventing loss of the marker and accidental filesystem fallback.
+Production preview remains prohibited; explicit corpus
+migration and platform acceptance are still required. Working DB data is not
+migrated by these tests; PostgreSQL probes use disposable namespace/schemas only.
+
+## 2026-10-31 — Portable source caches and durable file consumers
+
+Source-result stage files and retained originals now have an immutable manifest,
+exact scoped bindings and an atomic SQL head. Known committed cache corruption
+raises an integrity failure rather than causing silent regeneration of accepted
+source identities. Pending review originals are sealed before acknowledgment.
+Document/review protocol markers survive preview flag changes; rpl01e/rpl01f
+preserve legacy rows and refuse unsafe downgrades. New portable documents cannot
+silently return to filesystem authority when admission preview is disabled.
+
+Repair, scope selection, table import and OKF export hydrate registered inputs.
+Owner/phase/version/hash are checked before provider access; hashes and exact
+binding sets are checked before local cache publication. Helpers inside an owner
+transaction use same-session read leases, with document locks/committed refs
+pinning the bytes. Sessions stay in the invoking thread. This preview can hold
+SQL locks during provider I/O; distributed owner fencing remains the R2 gate.
+
+Queued exports pin selected original refs in the admission/audit transaction.
+Ready export/diagnostic archives bind their bytes with audited ready metadata.
+Expiry/deletion/rollback retire only the matching job's refs, including when
+the former worker's disk is gone. Source refs remain until completion/failure;
+document purge cannot delete bytes needed by accepted queued exports. Object
+deletion still follows GC grace/read-lease rules, never direct purge unlink.
+
+Archive downloads authorize before SDK access, reserve scratch capacity,
+materialize verified private copies, recheck job/ref and record the audit before
+delivery. Missing bound bytes never fall back to cache. Response cancellation
+releases descriptors, private scratch and quota through shielded thread cleanup;
+retirement/GC cannot invalidate an already materialized private reader. Diagnostic
+stream Range policy remains unchanged. Diagnostic recorder spool is local scratch;
+distributed recorder/control and global quota coordination remain R3/R4.
+Portable export ETags use the immutable digest so If-Range does not depend on
+the timestamp of the current API's temporary file.
+
+Explicit legacy corpus migration, distributed runtime and real RWX/S3 acceptance
+remain open. Bytes written before a failed SQL commit can leave provider-only
+orphans, now handled by the separately enabled quarantined discovery below. Production preview
+remains prohibited; tests do not modify the working application database.
+
+## 2026-10-31 — Quarantined provider discovery and automatic artifact GC
+
+ARTIFACT_GC_ENABLED defaults false and is restricted to non-production combined
+execution pending migration/runtime/provider acceptance. The lifespan owns its
+worker and signals shutdown; no executor starts on module import. Bounded pages,
+durable inventory/orphan/sweep cursors, per-cycle byte budget and a renewable SQL
+run token limit work and support restart. DB time determines quarantine/leases;
+provider timestamps do not shorten the minimum 24-hour orphan quarantine.
+
+Discovery considers only canonical immutable object keys in the configured
+service-owned root/prefix. Every discovered orphan is fully streamed/hashed after
+quarantine before registration. ETag, listing sizes and uploaded checksum metadata
+are not content integrity evidence. Changed inventory metadata restarts quarantine.
+Deletion still commits a SQL claim after checking bindings, checkpoint pointers,
+source-cache heads and live read leases under the object lock. It never decides
+owner retention or detaches references. Failed provider I/O leaves retryable
+claims/tombstones; late PUTs for deleted IDs can be quarantined/redeleted without
+making the ID readable. Stop/lease-loss guards run during verification/before delete.
+
+A persisted database scope token/location hash must match a conditional provider
+gc-owner.json marker. Empty stores can initialize; existing unmarked stores require
+explicit adoption through the CLI with --apply, after target/backup verification
+and writer shutdown. A foreign/lost marker, wrong restored DB or changed location
+blocks deletion. Adoption cannot overwrite a foreign marker. Backup/restore must
+preserve the matching database identity and provider marker together; backup
+locations must never be GC targets. rpl01g adds quarantine/state/indexes; downgrade
+refuses initialized GC ownership. Commands without --apply perform no provider/DB
+mutation. Logs report aggregate counts/error classes without credentials or content.
+
+This GC covers completed current objects. Temporary files, incomplete multipart
+uploads and noncurrent S3 versions retain separate scratch/provider lifecycle
+requirements. It does not certify customer CSI/S3 or enable distributed workers.
+PostgreSQL contention/migration probes use disposable schemas/namespace only.
+
+## 2026-10-31 — Verified offline artifact storage migration
+
+The rpl01h schema persists installation identity, maintenance/selected-store
+control, immutable-plan receipts and independent protocol markers for migrated
+legacy/candidate snapshots. Offline plan/copy/verify/cutover is an explicit
+operator operation, restricted to non-production combined execution pending
+runtime/provider acceptance. No source deletion, automatic reindex or credential
+export is performed. Transfer inventories contain private corpus metadata and
+require operator-only persistent storage outside runtime/provider/backup roots.
+
+Mutations require --apply, stopped writers and independent backup evidence bound
+to the source revision. Backup files are fully hashed; evidence attests operator
+backup selection and does not prove semantic restore completeness. A separate
+restore drill remains required. Source SQL, original bytes, target full SHA256,
+binding ownership, copy receipts and GC scope marker must match before atomic
+selection. Each copied object is pinned with its receipt in the same transaction;
+interrupted copy/commit resumes with stable IDs. Old snapshots/generation IDs,
+Qdrant identities and accepted source/checkpoint results are preserved.
+
+Maintenance blocks ordinary SQL sessions; selected-provider checks fence old
+runtime writes/startup and reject writable caches inside retired source roots.
+These application guards supplement stopped processes and OS/IAM source read-only
+permissions; privileged raw SQL/provider access remains an operator boundary.
+The CLI alone cannot stop external writers. Kubernetes maintenance stops both
+workloads; failure retains the operation lock and never restarts the old runtime.
+Source archive retention and cleanup are explicit later operations. Downgrade
+refuses migration receipts/selection/portable pointers; rollback after new writes
+requires a coherent restore, not an environment toggle. See
+[the migration runbook](docs/ARTIFACT_STORAGE_MIGRATION.md).
+
+## 2026-11-01 — Transactional work ownership foundation
+
+R1 adds an internal, versioned WorkItem ledger without changing public Job
+four-eyes approval/statuses or granting new API access. Enqueue/dedupe and caller
+metadata share one SQL transaction. Canonical JSON distinguishes booleans/numbers;
+payloads are bounded data, and a trusted registry selects handlers. Kind/version
+unsupported by a worker remains queued, with a non-destructive diagnostic marker.
+
+PostgreSQL row locks/SKIP LOCKED, DB UTC time, owner ID and monotonically increasing
+fence govern claim/renew/completion. Cancellation invalidates the publication
+guard; old/expired owners cannot ACK, even before reclaim. Handlers run outside
+SQL transactions. An orphaned running handler retains local worker capacity;
+coordinator failures back off, and only classified transient errors retry within
+a bounded attempt count. Exception text/payloads/credentials are not persisted or
+logged by this primitive. Accepted work history prevents schema downgrade.
+
+This foundation does not activate distributed roles or promise stale-write/global
+LLM fencing yet. R2/R3/R4/O2 must integrate publication, roles, capacity and
+installation epochs first. Existing runtime/production guards remain in force.
+Offline corpus transfer includes the work ledger in its source revision;
+rpl02 is required before using this build on an existing DB. Real multiprocess
+PostgreSQL checks run only in owned disposable schemas, never the working DB.
+
+## 2026-10-31 — Dependency denial-of-service advisories
+
+Updated tooling Zod to 4.6.7 (GHSA-mrhx-c7xc-m3w5) and all upstream minimatch
+implementations to 11.0.3 (GHSA-g3hv-75wg-m249), preserving the required lint
+checks rather than suppressing advisories. Legacy CommonJS ESLint callers use a
+private adapter to the patched matching engine; makeRe consumers retain their
+test predicate, without reintroducing regex generation removed upstream.
+Ordinary matching, Windows paths, partial traversal and actual import-rule
+diagnostics are covered. New local tooling is included before Docker npm ci.
+Independent review found no concrete surviving bypass/regression. npm audit
+reports zero vulnerabilities after clean installation; this is dependency
+remediation, not a repository-wide security audit.
+
+## 2026-10-31 — Independent frontend maintenance
+
+Frontend split retains exactly one backend, uses isolated ephemeral frontend
+diagnostic directories and an internal token from the existing runtime Secret.
+Maintenance stops both workloads and persists replica counts in its lock before
+scaling; resume refuses a backend count above one and restores frontend counts.
+Desired/current frontend probe/grace budgets are checked before maintenance.
+Unknown writer/node states still require investigation; no force deletion or
+distributed-backend guarantee is introduced.
+
+## 2026-11-01 — Fenced document execution foundation
+
+Document execution foundation (replica runtime remains gated): a work claim fences
+SQL progress, checkpoint bindings and canonical publication. Publication and work
+success commit together. Reclaimed work uses a fresh generation and point IDs;
+completion authority is limited to that transaction, including callers that reuse
+a SQL session. Bulk approval/cancellation commits its private work intent with
+the public Job transition and audit, preserving the second-administrator rule.
+Accepted checkpoints are reused only with matching source, parser and scope
+signatures. A document's frozen work input retains its private processing policy
+under the document's existing access and retention rules and is removed on hard
+purge. Work payloads contain identifiers and hashes, without source content.
+Deletion invalidates outstanding document work before changing the document.
+Retired work generations retain exclusion identity against late external writes.
+After hard purge, only generation/document/work IDs and fence survive in a
+non-content tombstone; no processing policy, title or extracted text is retained
+there. These identities have no automatic expiry while late writes remain possible.
+This foundation does not enable distributed runtime or certify a storage provider.
+
+## 2026-10-31 — Internal frontend diagnostics transport
+
+Added opt-in token authentication, strict content-free payload validation, bounded
+SQL inbox and immutable retry segments for internal frontend events. Diagnostics
+capture and security audit keep separate contracts. Public proxy path segments
+are validated/encoded so `..` cannot normalize the destination outside `/api`.
+Reason: independent frontend replicas must not require shared control files or
+expose the new internal endpoints through user-controlled proxy paths.
+
+## Replica runtime isolation (2026-11-01, activation remains gated)
+
+The future API role starts request services only. It does not recover global
+document/job state, start job executors, purge retained data or recover another
+instance's diagnostic capture. Its diagnostic heartbeat renews only its own
+in-memory capture. The separate worker command exposes process/storage health
+on internal port 8001; this port must not be routed through the user Gateway.
+Health responses contain no storage identities or credentials. Model outages
+do not invalidate the independent process heartbeat. Shutdown stops new claims
+and handlers; unfinished claims expire without a late success acknowledgement.
+Non-document durable handlers use the same owner/fence/lease SQL guard as
+document work. Checkpoint retirement names an expected generation and preserves
+partial output and checkpoints of newer attempts. Public permissions and
+retention periods remain those of the existing operations. The replicas-v1
+build/provider activation gates remain closed pending the complete runtime and
+coordination acceptance checks.
+Future export admission commits its public Job and private intent together.
+Only verified immutable archive bindings can authorize public completion;
+attempt scratch directories are unique and disposable. Bulk coordinators yield
+their worker slot while durable document children run. Approval remains a
+public Job transition, separate from execution. Future delete/restore commits
+visibility and duplicate-refresh intents with the document mutation; no Qdrant
+visibility write precedes that transaction. Projection handlers read the latest
+SQL state while holding the document lock, so a delayed delete cannot undo a
+subsequent restore. Classified transport failures use bounded work retries.
+Private work cursors are versioned, bounded and tied to the immutable input
+fingerprint. SQL ownership guards reject writes from an expired attempt, and
+accepted cursors survive reclaim. Artifact migration fingerprints this progress
+too; downgrade refuses to discard accepted cursor history. Export retention
+retires audited archive bindings in bounded pages while existing artifact read
+leases continue to protect readers. Chat retention commits audit and deletion
+in one transaction and preserves active/recent threads.
+Trash sweep cursors and document intents are durable. Each purge rechecks the
+exact deletion timestamp and current retention cutoff under the document lock;
+a restore or a later deletion invalidates the old intent. SQL deletion, audit
+and the follow-up cleanup intent commit together. Qdrant/cache cleanup runs
+separately after confirming that the document remains absent. Immutable blob
+collection retains the existing quarantine, binding and read-lease rules.
+Scope changes commit their frozen private plan and Work intent with confirmation
+and audit. Each reclaimed claim allocates a fresh generation. Trash/restore and
+classified transient failures retain the accepted selection for explicit resume;
+explicit cancellation discards it through the existing published-update restore
+path. Regeneration may reuse the current published selection only after verifying
+its immutable publication proof. Work payloads carry IDs and hashes, not content.
+Diagnostic bundle admission commits the public record, audit and work intent in
+one globally serialized transaction. Builders use unique snapshot/part identities
+per attempt; readiness requires verified immutable ZIP bindings and work success
+in the same audited transaction. An expired builder cannot publish. The separate
+worker starts audit preflight and its own diagnostic recorder without global
+capture recovery or a legacy bundle executor. Cross-replica diagnostic inbox and
+instance path coordination remain R4 prerequisites for activation.
+Index backfills use bounded sweep cursors and per-document work with a frozen
+generation identity. The generation is checked under the document read lock,
+including after embedding; a superseded intent cannot write a newer generation.
+Future whole-corpus entry points require a scoped work claim. Legacy NULL
+generation identities require offline adoption before distributed activation.
+Failed chunk batches propagate to durable retries instead of acknowledging a
+partial result as successful work. Existing combined maintenance remains intact.
+Future reference/glossary backfills are admin-admitted public Jobs backed by
+versioned work and bounded cursors. Input hashes protect the accepted locale,
+selection and expected versions. Model calls run outside SQL; each accepted
+translation, its revision checks, audit and cursor commit together. Human edits
+and reviewed translations retain their existing protection. Terminal work is
+reconciled to public status in bounded audited pages. Permissions and four-eyes
+rules for existing document operations are unchanged.
+Diagnostic maintenance retires expired portable bindings with audit and cursor
+in one transaction. Existing artifact read leases protect active downloads.
+Terminal portable bundle metadata is pruned after the existing seven-day period;
+pending audit receipts prevent pruning. Legacy local archives require migration.
+Future canonical repairs select only the trusted attachment-path/comment-thread
+operations. Admission freezes the published base, canonical digest, original hash
+and embedding identity. Every reclaimed attempt owns a fresh generation; verified
+immutable embedding batches are reused only for the same frozen input and text
+hashes. Provider calls run outside SQL. Publication validates the accepted repair
+proof and commits with work success. Direct future repair scripts enqueue work;
+they cannot select arbitrary callables from payload data. Stored processing
+selections keep their existing unsupported-repair protection. Terminal repair
+candidates are abandoned under coordinated cancellation before ordinary cleanup,
+including when the document is in trash; active publication remains intact.
+Future export storage failures retain a retryable public Job until the bounded
+retry limit. Terminal work receipts are reconciled to an audited public failure;
+an audit failure rolls back that projection. Local export attempt directories
+live under the worker's private `exports/attempts-v1` scratch root. A kernel lock
+protects each live builder; only recognised, unlocked UUID directories from the
+same host are eligible for bounded cleanup. Links, junctions, unknown markers
+and paths outside that exact root are retained. Scratch cleanup cannot retire
+blob bindings or change a completed receipt. This root must be per-instance local
+storage; diagnostic subprocess scratch has a separate lifecycle under R4.
+Legacy operator writers, backup/restore helpers and migration commands refuse
+replicas-v1 until the coordinated maintenance protocol replaces them. The guard
+uses the command's selected runtime settings, including explicit env files.
+Supported path/comment repairs enqueue trusted work; mail/table reprocessing
+uses existing durable admission. Legacy interactive chunk reconstruction also
+refuses to mutate canonical state in the future runtime: existing NULL-generation
+corpora require verified adoption before activation. Read-only inspections keep
+their existing access contract. No override disables these maintenance guards.
+
+The development mail-schema repair compares and creates only its frozen
+mail/publication release contract. Later ORM fields cannot silently expand the
+repair into replica storage or work migration. Baseline column types/nullability
+and mail constraints/indexes remain checked; incompatible drift refuses all
+repair DDL. It never stamps Alembic or changes existing corpus rows. The existing
+development-only apply and stopped-writer/backup requirements remain in force.
+
+Same-schema image updates after scoped credential activation use the explicit
+phase-controlled `replica_image_upgrade.py` recipe. Runtime Secrets and trust
+bindings stay unchanged; only offline bootstrap Jobs mount the separate operator
+database URL file. That URL never replaces the runtime settings used to compute
+the identity. A fresh authenticated independent backup, exact immutable input
+UIDs/data, stopped source templates and retained storage controller/PVC identities
+are checked before transition. Mixed image/config/identity templates refuse
+staging. While held, SQL corpus, object bytes and complete vector inventory are
+verified. A lost release response observes the same fully bound Job, without
+re-entering maintenance or submitting another release. The legacy recipe refuses
+a scoped SQL principal before taking a fence. Existing production/provider gates
+remain unchanged.
+
+An owned backup may use a verified prior source journal to recognise the exact
+retained failed diagnostic from CA acceptance. Its namespace/installation/current
+fingerprint must match. The existing UID/spec/terminated-process/Ready-node
+verifier runs on every drain observation; unrelated or changed failures still
+block. No failed Job is deleted, restarted or reported as successful.
+
+## Replica coordination foundation (2026-11-01, activation gated)
+
+The future runtime shares capacity slots and rolling rate windows through short
+PostgreSQL transactions and database time. Resource locks serialize admission;
+release/renewal require the same slot/resource/owner/fence. Conflicting live
+policies fail closed. Rate keys are hashed, and bulk operation/document weights
+commit together, so a rejected request does not consume another budget. SQLite
+remains a single-writer test/development fallback.
+All future LLMClient completion paths, including chat, generation, translation
+and source assessment, share `LLM_GLOBAL_MAX_CONCURRENCY` (default1). Existing
+local pools remain secondary limits. Admission must commit outside a caller's
+SQL transaction before starting the provider. A normal confirmed terminal reply
+or definite rejected request releases the slot; abandoning a live provider call
+does not. Ambiguous transport failure, unconfirmed stream end or process loss
+leaves the slot quarantined even after lease expiry. A timeout/stream close does
+not prove that the external model stopped computing. There is no automatic TTL
+reallocation of uncertain provider executions; O2 needs audited reconciliation
+with completion/provider-stop proof. This deliberately trades availability for
+bounded admission and does not certify the remote provider's execution cap.
+Catalog mutations bump a durable revision in their existing reference/audit
+transaction. Future stopword caches check that revision before a TTL hit; UI
+dictionary reads already use SQL. Audit dispatcher failover and diagnostic instance/inbox
+coordination remain R4 work. Migration refuses to discard accepted coordination
+state. The distributed build/provider activation gates remain closed.
+
+Future session creation/expiry and active-user-block decisions use database time,
+so API host clock skew cannot extend a session or prematurely disable a block.
+Each request reloads the server-side identity and block state; group-to-role
+mapping remains the common deployment configuration and is recomputed per request.
+Independent-process PostgreSQL checks cover block/unblock, changed groups, removal
+of recognized roles and logout. They do not certify cookie signing/IdP failover.
+Reference creation and mutation bump one shared `references` epoch with the
+existing domain/audit transaction. Prior localization revision rows are retained;
+the current future build reads the catalog epoch. The authenticated revision
+probe exposes only known opaque decimal counters and uses private/no-store.
+Browser lookups recheck while visible, abort on unmount and refresh on foreground
+activity. Changed epochs invalidate UI overrides, shared tag lookups and language
+options without replacing editor-controlled selections. Transient dictionary
+failure is retried; obsolete lookup responses cannot replace a newer generation.
+Derived tag counts additionally expire through a bounded lookup TTL. These
+presentation caches never authorize operations; existing SQL permission, revision
+and edit-lease checks remain authoritative. All writer roles must use the same
+supported build/runtime identity before activation.
+
+Future persistent chats bind a unique actor/attempt ID to one assistant message
+and a leased owner/fence. Admission commits the placeholder, immutable request
+digest, ChatRun and global chat slot together. Repeated attempts do not call the
+model again; interrupted requests require a new explicit attempt. A request-local
+heartbeat renews the chat lease and observes durable cancellation. Another API
+can cancel the same actor's attempt; stopped/expired owners cannot complete it,
+change its sources or change its scenario execution. Completion commits history,
+run status and slot release together. Legacy direct history admission refuses
+the future runtime. Private owner/fence fields are never emitted in stream events.
+Ownership is checked again after history locks and before/after global provider
+reservation, so an expired lease cannot become valid through a lock/queue wait.
+An owned partial draft may fill only its own empty stopped/failed message; it
+cannot overwrite a completed response or another attempt. Soft deletion cancels
+the owning runs. Retention removes their identities with the history under the
+same coordinated lock order. Bounded reconciliation marks expired requests
+interrupted/stopped without replaying the model or releasing uncertain provider
+capacity. Preview requests share the global chat/provider budgets while keeping
+their existing no-history contract. These checks preserve existing actor/history
+permissions and do not establish customer-provider or multi-Pod acceptance.
+
+Future diagnostic control (2026-11-01, activation gated) commits capture start and
+stop with their security audit in one SQL transaction. Another API reads the same
+control and can stop the capture. Failed stops disable the local selector, return
+an error and retry; they are never acknowledged solely through an ephemeral
+deferred journal. Combined mode retains its existing journal/recovery contract.
+Future hot selectors use a monotonic lease of at most ten seconds sampled before
+SQL, so a stalled refresh or DB outage cannot extend capture authorization.
+Frontend control reads shared SQL without a local projection file. Browser
+membership mutations recheck active state and DB expiry after the SQL row lock;
+a stale selector cannot join a stopped capture. Join/report rate budgets use the
+shared rolling limiter. Stopping one replica does not stop the global capture.
+Future diagnostic events use bounded immutable canonical SQL segments, separate
+from the security audit outbox and portable ZIP bundles. Shared row/byte quotas,
+capture state and publication use one coordinated SQL lock order. Frontend inbox
+admission is idempotent across APIs; segment publication and clearing the inbox
+payload commit together. Already admitted capture events may finish after stop;
+new stale producers cannot publish. Expired pending ordinary events become an
+explicit loss counter. Instance heartbeat/counter data is allowlisted, and missing
+coverage or unknown frontend counter history is never reported as verified.
+Read/prepare inputs are copied from verified segment hashes into private instance
+scratch. Cleanup checks known same-host markers, absolute containment, absence of
+links and OS locks held by the recorder, bundle parent and child. Children own a
+bounded watchdog even if their parent dies. Shutdown uses local capture state,
+without waiting for a fresh SQL read. Offline filesystem export explicitly marks
+unavailable shared SQL events. Legacy deferred journals are preserved and rejected
+by the future runtime until O2 adoption; customer/provider activation remains gated.
+
+Diagnostic read leases pin a streamed SHA-256 of the exact selected prefix in
+addition to file identity/length/mtime. Legacy backend and attached frontend pins
+capture bounded prefixes; distributed materialization reuses the verified SQL
+segment digest. Child payloads require the digest and an input byte budget.
+Preserved/coarse timestamps and a later append cannot hide rewritten prefix bytes.
+Before selection, an unreadable or mismatched segment becomes an explicit coverage
+gap. If input changes after preparation starts emitting provisional bytes, the
+whole child fails; parent cleanup/reaccounting runs instead of returning a ready
+archive containing already emitted untrusted rows. Event pages validate their
+entire current prefix before an early page return and discard that segment's
+provisional rows/counters on failure. Pagination coverage tokens include the
+content digest. Benign appends outside a pinned prefix remain readable. Hashing
+uses64KiB blocks and configured input budgets, without a full prefix copy or
+uncredited spool. No raw diagnostic data or paths are added to public errors.
+
+Future audit delivery (2026-11-01, activation gated) uses one dedicated PostgreSQL
+session for advisory ownership and every queue transaction. Standby instances
+cannot read or mark the queue; lost/invalidated sessions cannot reconnect to
+acknowledge a previous stdout write. Candidate and owner connections are physically
+discarded on release, so session locks never return to the shared pool. Preflight
+fails if the ownership connection cannot be checked; another healthy owner is a
+valid standby. API and worker lifecycles participate in the same lock domain.
+DB-only, external-only and combined sinks retain their existing schema and
+immutable event identity. Retried output between stdout and marker may repeat the
+same ID; local stdout completion is not downstream acknowledgement. Future event
+and retry timing use PostgreSQL time. Direct PostgreSQL or session pooling is
+required; transaction pooling is unsupported. Existing legacy diagnostic deferred
+stop journals still require verified O2 adoption before activation.
+
+Distributed runtime identity and exposure (2026-11-01): API/worker startup requires
+an operator-provided bounded identity document with a keyed HMAC over normalized
+common settings (including secrets), application source identity, namespace and
+storage receipt. Only the digest leaves memory; raw credentials are not in the
+document. A matching installed SQL singleton, selected artifact identity and exact
+Alembic revision are mandatory. Entrypoints never bootstrap or auto-adopt identity.
+Every guarded SQL boundary checks the installed identity; retired configurations
+fail closed. Trusted offline migration access remains a Python operator boundary,
+not an environment switch. Existing legacy databases without installed identity
+retain their existing behavior. Production auth protections still apply.
+
+The distributed chart exposes API through the backend Service and frontend only
+through Gateway rules. Workers have no public Service/route. Namespace policies
+deny worker ingress and restrict frontend egress to API/DNS; API/worker external
+egress is an explicit platform input. Kubelet probes remain private. Runtime
+ConfigMap values override chart-controlled Secret keys, and stub endpoints are
+pinned explicitly. Administrator metrics contain fixed-cardinality counts/ages,
+never document IDs/payloads, owners or endpoints. Worker metrics are private and
+return generic503 on SQL failure. Uncertain provider reservations remain occupied.
+These are implementation controls; provider, CNI and multi-Pod qualification and
+O1/O2 bootstrap/recovery remain required before customer activation.
+
+Basic storage/bootstrap implementation (2026-11-01, qualification pending):
+distributed application releases do not own database/vector storage workloads or
+PVCs. The separate infrastructure chart creates only explicitly managed
+namespace-scoped components and retained claims; external components create none.
+Provisioning cannot adopt a foreign live PVC. Selected image content digests are
+fixed, including when mirrored. Secret values are existing references, never Helm
+values. Storage accepts only the selected application release's API/worker/backup/
+bootstrap roles; no cluster operator or privileged storage-node change is installed.
+Managed single-node recipes provide no HA. Server TLS Secrets and application CA
+references remain separate. Root/admin lab accounts are not production scoped IAM;
+restricted application credentials and remaining provider gates are mandatory.
+
+The explicit offline bootstrap constructor can prepare a missing identity file;
+it does not alter the normal Settings loader or entrypoint enforcement. Fresh
+migration/installation refuses application data and edited reference seeds. Only
+new probe object IDs are written/deleted, and populated Qdrant collections cannot
+be adopted automatically. Existing installed identities cannot be replaced by
+this path. SQL acceptance and create-only atomic identity publication support a
+safe retry after interruption. CLI output omits raw validation/provider exceptions.
+The common identity now includes parser source, Python/package versions, backend
+image reference and custom CA bytes. API/worker CA files are mounted as per-Pod
+snapshots; coordinated rotation must update identity and restart the roles.
+External production PostgreSQL requires verify-full and Qdrant HTTPS. HTTP and
+gRPC clients receive the same per-Pod CA snapshot; gRPC is configured explicitly
+with GRPC_DEFAULT_SSL_ROOTS_FILE_PATH. The isolated basic lab has now verified
+PostgreSQL direct-Pod TCP/SCRAM/verify-full, Qdrant REST/gRPC and RustFS TLS,
+including hostname/retired-CA rejection and specific authentication refusals.
+Storage Pods restarted onto a second CA without changing their owned PVCs, and
+a pre-restart S3 object's full SHA-256 was retained. This does not qualify a
+coordinated running-application CA/identity rotation, customer PKI, scoped IAM,
+independent restore or storage failover. Those gates remain open.
+
+The explicit replica acceptance `--live` path creates synthetic documents only
+after verifying namespace purpose/run/manager labels, release ownership, two ready
+Pods per role, API-only service endpoints and the actual installed runtime/storage
+identities. It requires simulation/stub/fake models and an owned loopback frontend
+tunnel. Pinned SSH is optional; commands use argument arrays and quoted remote
+arguments, with bounded subprocess execution. Reports omit cookies, raw provider
+errors and credentials. TCP policy denial includes an API positive control against
+the same live storage endpoints. Optional idle fault probes refuse active or
+uncertain provider reservations, retain normal Kubernetes termination and never
+clear those reservations. They provide no active-writer drain, provider-stop,
+backup-consistency or failover guarantee. Missing active fault/recovery checks keep
+the overall acceptance failed/pending.
+
+The explicit `--active-faults` path additionally binds the recorded namespace UID
+and an owned instrumented test-model deployment before writing new synthetic
+documents. The model fixture's read-only `/test/status` exposes bounded aggregate
+active/peak/started/finished counters only, without prompts, model input or request
+identities; there is no reset endpoint. Fixture rollout/delay changes require no
+live or uncertain model owners, document work or chat, and use normal Kubernetes
+termination. Cancellation/deletion probes require a real in-flight provider call,
+then check the original SQL publication/content hash after that call returns,
+work cancellation fencing and search/download visibility. Capacity probes observe
+two running document workers with one actual provider call; independent API
+processes must reject admission without another provider request, and both
+documents must subsequently finish. The fixture returns to its prior success
+configuration only after quiescence is verified. These probes never free provider
+reservations, kill a live provider, or certify missing worker-loss/partition/stale
+return scenarios. Passing implemented checks removes only their own pending
+entries; missing required checks still fail overall acceptance.
+
+Offline provider reconciliation foundation (2026-11-01): the first recipe accepts
+only the owned simulation/fake/stub lab and its namespace-local model-stub service.
+It is not a real/external-provider cancellation adapter. The exact retained
+operator connection and enabled recovery epoch are required. A typed proof binds
+operation/installation/epoch/namespace UID, retired provider/writer Pod UIDs,
+provider image, stopped writers, no unknown writers/unreachable nodes/provider
+Pods/endpoints, a physical-observation digest and original lease-set digest. A
+mandatory live coordinator guard revalidates before and after SQL changes; this
+library does not collect physical observations itself. Changed owners/fences or a
+failed guard refuse release. Elapsed time never signals completion. Slot completion
+and `replica_model_reconcile` audit commit atomically; its target is the proof digest,
+never input or credentials. Retry requires identical cleared lease identities and
+matching durable DB/outbox audit. Maintenance stays enabled.
+
+Owned worker-loss coordinator: `scripts/kubernetes/replica_worker_loss.py` has
+explicit inject/observe/recover/release phases and a protected original-token
+journal. Failure injection checks exact full container IDs, Pod UIDs, namespace,
+container name and the fixed owned kind node through CRI before stopping only
+the selected workers. Normal Pod termination is retained. Stop guards fetch fresh
+Kubernetes controller/Pod/endpoint/Job/node identities and a fresh CRI container
+list on every call, including both sides of reconciliation SQL. Unknown running
+namespace containers, orphan processes, changed/unreachable nodes or active
+controllers refuse proof. The provider must be the instrumented owned stub;
+neither server completion nor lease expiry authorizes release. Release uses the
+same image/identity and a separate held-corpus verification Job. No automatic
+cleanup or restart follows an uncertain outcome. Live qualification is recorded
+separately from these coordinator controls.
+
+Live owned-stub follow-up: worker-container loss was observed while the provider
+remained active; expiry/completion kept the original slot busy on both APIs. The
+same held epoch5 then passed fresh physical Kubernetes/CRI guards around exact
+audited completion. A nullable EndpointSlice failure retained maintenance; after
+the tested fix, same-operation resume succeeded. Held data hashes and the original
+9 documents were preserved; the interrupted document automatically published once
+with a newer fence. This qualifies only that owned stub recipe; real providers,
+PostgreSQL partition, stale-process return and node/host loss remain separate gates.
+
+Owned PostgreSQL-partition coordinator: a namespace-local Cilium egress deny
+selects one bound worker's private fault label, application release and role,
+and only the managed PostgreSQL endpoint on TCP5432. Existing allow rules are not
+weakened. The test startup derives runtime's per-process UUID from the Pod UID to
+locate the SQL owner without reading process memory; the full worker entrypoint,
+queue, heartbeat, publication and capacity code remain unchanged. Pod/container/
+image/restart identities must survive the partition and return. A healthy peer
+must reclaim with a newer fence while the old process stays live and unready;
+healing requires the exact policy UID/spec. The returning container must be the
+same, and either the original claim loses ownership while capacity stays unknown,
+or a confirmed reply is acknowledged normally and only a newer fence publishes.
+The confirmed path also runs the real publication guard with the captured old
+owner/fence and a deliberately future client lease, requiring refusal and rollback.
+Unknown outcomes retain the original capacity. That path restores normal startup
+with workers stopped after physical provider reconciliation. Confirmed, quiescent
+completion instead permits the ordinary idle fixture rollout. Original tokens
+remain in a protected phase journal. This is a Cilium-specific owned-lab fixture,
+not an external-provider or node-loss recovery adapter; live evidence is separate.
+
+Actual owned Cilium follow-up: the old worker stayed live/unready with only PG
+denied; the peer reclaimed fence1→2. After healing the exact rule, the same old
+container resumed work, and the captured old-token publication probe was refused
+with rollback even when given a future client lease. Its generation remained
+abandoned; only the new owner published. A confirmed reply was acknowledged by
+the live provider client normally, model peak stayed1 and no uncertain slot was
+cleared by an operator. All10 previous documents were preserved and the fixture
+returned to normal2/2/2. The report records that provider finish preceded the first
+confirmed network sample, and that the process lease-loss metric stayed0; neither
+is hidden or substituted for the actual guard/ownership evidence.
+
+Owned load measurements use the same namespace/installation/fingerprint boundary
+and a protected journal. Only the worker count is varied1→2 after confirmed idle
+document/provider state; API/frontend stay2 each. Each case creates exactly three
+synthetic DOCX, observes the same receipts, validates done/problemNone and a single
+publication, and checks source SHA/search. Per-frontend Node probes retain their
+simulation cookies only in process memory and return bounded status/latency data.
+Cgroup comparisons require unchanged container identity/counters and refuse OOM
+or restart. An interrupted observation never re-uploads or reports interrupted
+timing as successful throughput; uncertain model capacity is never cleared.
+The full previous corpus/delete state is rechecked. These are small stub/fake,
+single-node application measurements, not production sizing or provider capacity
+certification; resource/model limits and production scheduling are unchanged.
+
+Owned credential bootstrap (O1): the selected dedicated PostgreSQL17 instance
+receives a separate LOGIN role without superuser, role/database creation,
+replication, bypass-RLS or inherited memberships. It gets schema USAGE, ordinary
+application DML and sequence USAGE, with no DDL/TRUNCATE or future default grants.
+Runtime identity, maintenance and storage-control singleton tables are SELECT-only
+except UPDATE(id) to permit PostgreSQL row locks; bootstrap verifies their id=1
+CHECK before granting this no-authority-change column permission. Audit log grants
+are SELECT/INSERT; migration ledger/history are read-only. Existing SQL roles need
+the exact operation/installation ownership comment and attributes; unknown roles
+are never adopted. Public CREATE/TEMP/CONNECT are removed only on the dedicated
+owned application database, and the runtime role receives explicit CONNECT.
+
+The native RustFS1.0.4 Admin API is called with SigV4 over verified TLS using
+operator credentials from the protected config. A separate runtime IAM user has
+bucket metadata/list access only to its dedicated installation bucket and object
+Get/Put/Delete/AbortMultipart rights only under the application prefix. No IAM,
+bucket-policy, bucket create/delete or cross-bucket permissions are included.
+HeadBucket uses ListBucket, so metadata listing covers that dedicated bucket;
+this recipe does not claim prefix-only listing isolation in a shared bucket.
+Secrets stay in a separate protected operation journal; creation/testing does not
+silently replace any running runtime Secret or installed identity. A credential
+transition must subsequently stop writers, use a separately held operator DB
+connection, audit the changed common fingerprint and explicitly release roles.
+`replica_credentials.py` now performs that transition in the selected owned lab:
+create-only immutable runtime/operator Secrets are separate. Only offline Jobs
+mount the operator database URL as a read-only file; it never enters application
+envFrom. Both API/worker controllers change Secret/identity bindings at replicas0.
+The old APP_SECRET_KEY is preserved. Compute/release Jobs use application settings
+for the HMAC and a distinct operator connection for authority changes. Exact
+maintenance ownership, zero uncertain model reservations and unchanged held
+corpus/work hashes precede release. Observation retries inspect the same bound
+Job; they do not start another Job or hide unrelated Pods/controllers. Actual
+PG/S3 deny probes and a new-document roundtrip passed on the owned synthetic lab;
+four running API/worker processes proved their scoped credentials, matching
+identity, transition audits and rejection of the retired identity. Shared-bucket
+listing isolation and customer/external/mixed/RWX privileges remain unqualified.
+
+2026-11-01 replica audit UI correction: the fixed action catalogue and bundled
+ru/en dictionaries include maintenance entry/exit, stopped-provider reconciliation
+and runtime configuration upgrade. The full backend run exposed missing UI keys
+for these already recorded events. Canonical key/English seed manifests are
+regenerated from the locale sources; unknown actions remain rejected. This changes
+display labels and the explicit expected enum only, not event payloads or grants.
+The fresh-main-chain regression explicitly pins `rpl05_maintenance_epoch` and
+requires artifact bindings, work items, runtime identity and the maintenance
+epoch/operation/owner/installation columns. Audit schema/metadata comparison and
+the independent full model-drift check remain required; an older head cannot
+satisfy the updated regression simply by preserving the historical audit tables.
+
+2026-11-01 backup source binding: the owned lab exporter resolves the common
+immutable runtime ConfigMap from the actual API/worker templates, rather than
+trusting a retained object named `runtime` after configuration upgrades. Ambiguous
+references and synthetic/auth/audit env overrides fail before entry; only the
+fixture's exact literal model-stub URL is allowed. Live role settings supply the
+audit flags, and their verified common fingerprint must match SQL before entry,
+inside the retained operator transaction and in the frozen export. The receipt
+contains only the selected configuration reference/fingerprint, not Secret data.
+The actual scoped-credential follow-up cold-verified92 encrypted objects covering
+18 synthetic documents and90 SQL-ready blobs. Normal restart preserved all source
+document/generation/hash/delete state and the common runtime identity; four scoped
+processes verified released epoch7 and its audit pair. This archive has not been
+restore-rehearsed, and its receipt explicitly says so. Existing independent copies
+and separate protected key are retained; production scheduling remains disabled.
+
+Owned coordinated CA replacement (O1) uses immutable new trust/TLS resources and
+a separate protected journal. Authenticated independent backup verification,
+namespace/controller/claim identities, scoped runtime Secret data and the retained
+operator-only DB Secret precede the held maintenance epoch. All app/model writers
+stop before storage TLS references change. Installation, schema, image, credentials,
+PVCs, source corpus/work hashes, S3 bytes and complete Qdrant payloads/vectors are
+preserved. Only the common fingerprint, trust and certificate bindings change.
+Normal workloads keep scoped credentials; the diagnostic TLS Job has no operator
+database mount. Native PG/REST/gRPC/S3 clients must accept new trust and specifically
+reject the retired root and wrong hostname before audited release. Job observation
+reuses the same bound inputs rather than recreating a timed-out Job. The retained
+login session, four actual API/worker identities and a fresh publication are checked
+before the protected PC config selects the new CA. No uncertain phase resumes app
+roles automatically, no old key/backup is deleted, and no verification bypass is
+introduced. Short-lived lab certificates do not qualify customer PKI or node HA.
+An explicit correction of the first probe's unset optional gRPC port retains its
+failed Job/Pod and records the UID/full spec digest. Only that recorded terminal
+diagnostic leaves the drain view, after fresh failure/zero-active/terminated-state
+checks on Ready nodes. Its status remains failed. Changed identity/spec, running
+containers, unreachable nodes or an unrelated failed Job still block maintenance;
+no generic failure retry or broad drain exception is added.
+
+Replica metrics and internal diagnostic ingest/control errors use ApiError with
+existing stable codes. HTTP statuses, admin/token checks, constant-time comparison,
+batch limits and sanitized failure details are unchanged; provider exception text
+is never copied into a response.
+
+Owned bounded ENOSPC acceptance uses a separate restricted Pod/namespace with
+only size-limited Memory emptyDir volumes. No PVC, hostPath, host namespace,
+service-account token, external endpoint or working configuration is available.
+The writer accepts only the exact128Mi writable /full tmpfs and records a unique
+regular single-link filler inode/device before bounded writes. Recovery removes
+only that inode. Original namespace/Pod/spec/imageIDs, zero container restarts and
+a Ready node precede observations. Server TLS keys are absent from the probe;
+its client verifies the isolated root and obtains only this fixture's S3 keys.
+Operation/action/source-bound receipts atomically persist completed native phases;
+a started phase without a receipt is uncertain and is never silently reinjected.
+The public report allowlists refusal/integrity/recovery facts, not raw credentials,
+keys or provider messages. Normal cleanup deletes only the verified original
+memory-only Pod after its report; existing namespaces/PVCs and all app data remain.
+Native RustFS1.0.4 returned opaque500 InternalError on real ENOSPC: the adapter
+refuses the write as BlobUnavailable without claiming a successful receipt or
+misclassifying arbitrary500 responses as disk-full. This component contract does
+not qualify physical disk/PVC quotas or API/worker publication under storage-full.
+
+An explicit same-schema upgrade operator may replace the exact expected installed
+fingerprint under its held upgrade/recovery epoch, preserving installation, schema,
+storage descriptor and receipt. Owned LLM requests prohibit it. Identity change
+and `replica_runtime_upgrade` audit are atomic; file-publication retry requires the
+same audited identity/epoch. `upgrade_replica_runtime.py` produces a public identity
+document without starting roles or releasing maintenance. Normal startup still
+requires matching file/build/SQL identity. Physical stop-proof collection, live
+image update and active-provider worker-loss acceptance remain to be exercised.
+
+Owned same-schema rollout follow-up: an explicit lab coordinator now binds the
+recorded namespace UID, creates a private source journal, fences/stops roles and
+hashes corpus/artifact bindings/work state while held. Bootstrap-policy Jobs in
+the selected new image compute the identity and separately verify the held data
+before exact-owner release. Role image/runtime/immutable identity references are
+changed only at replicas0, with UID/resourceVersion checks. A failed Job kept
+maintenance enabled and all writers off; same-operation resume with unchanged
+source checks passed after correcting its policy role. Live PG/S3/Qdrant lab
+rollout preserved all8 documents, source SHA/search/delete visibility and the
+held queue; a fresh document processed after release. This does not qualify schema
+migration, real/external providers or physical unknown-provider reconciliation.
+
+Replica maintenance foundation (2026-11-01, O2 incomplete): PostgreSQL shared
+transaction locks precede work/control locks, while offline entry obtains the
+exclusive epoch fence. Epochs bind once per process and per Work claim; ending
+maintenance cannot revive a stale process or claim. Request ORM/text writes,
+session scopes and the audit dispatcher's owned sessions use the same fence.
+Entry/exit audit events commit with state changes. An offline operator retains
+one advisory-lock-owning physical connection across phase transactions; only that
+exact scoped transaction bypasses retired live identity/epoch checks. Explicit
+offline audit settings avoid loading a retired runtime. Loss cannot ACK/reconnect
+through another connection, and releasing the operator discards its connection.
+The storage maintenance token excludes concurrent S4 migration. Unknown operations
+are retained, not automatically reversed. Exit refuses missing/unknown writer
+attestations and every owned/uncertain LLM reservation; no timed capacity release
+is introduced. These trusted library attestations are not physical stop proof.
+Kubernetes drain, provider-specific reconciliation, independent backup/restore
+and new-target release qualification remain mandatory and unimplemented here.
+The rpl05 upgrade holds installed replicas and requires stopped old writers and
+a future explicit adoption/release procedure; it is not an online upgrade.
+
+Replica backup format3 archive library (2026-11-01, owned managed-S3 recovery exercised):
+only encrypted data enters a new archive directory. AES256-GCM uses bounded4MiB
+frames, per-object HKDF keys with fresh128-bit file salts, distinct96-bit frame
+counter nonces and authenticated plan/object/order/finality. A separately derived
+HMAC-SHA256 key binds the allowlisted manifest and full inventory. No backup key,
+connection string or source payload is serialized in metadata. Both frozen-source
+and actual destination-binding guards are required; independence depends on
+verified platform/host facts, not just different names. The filesystem destination
+requires create-only object publication, regular files, no linked archive paths
+and a single writer lock. Cold completion verifies every frame and complete
+plaintext/ciphertext hashes/sizes before publishing complete. A changed source,
+missing component, corrupt object, wrong key or incomplete inventory cannot pass.
+Resume reauthenticates the same plan and published objects; it never overwrites
+an existing complete backup. Root keys are managed outside this library/archive.
+The original compact format2 path stays separate. The owned-kind-lab coordinator
+now validates namespace UID, installation/schema/provider scope and explicit PC
+destination evidence, fences SQL writes and normally stops every application role
+and its synthetic provider. Unknown/terminating writers, unhealthy nodes, scheduled
+or unfinished jobs and uncertain LLM owners refuse completion. A retained PostgreSQL
+snapshot and Pod-local pg_dump, a Qdrant snapshot and all SQL-ready artifacts are
+streamed into encryption. Failed exports remain incomplete/held. No lost snapshot
+is silently recreated under an old plan. Restore authenticates before importing to
+new empty PG/Qdrant/S3/PVCs with source workloads unavailable and application roles
+stopped. All object hashes, counts and an unchanged held work ledger are verified.
+An offline operator in the saved image atomically rebinds installation/storage/
+Linux configuration identity under an incremented held epoch, revokes auth/OIDC
+sessions and holds pending audit events. It requires the exact operator connection,
+refuses uncertain model owners and never activates workloads itself. The rehearsal
+verified zero execution and denied writes before explicit release, and successful
+search/download/new processing afterwards. Generic production activation, external/
+mixed/RWX qualification, installed upgrades, durable destination/key recovery and
+remaining fault scenarios still require evidence. The selected lab destination is the user's separate Windows PC;
+production scheduling remains disabled, with no retention deletion or alerts sent.
+
+## User answer scenarios (2026-10-23)
+
+Authenticated users, including viewer, may create and publish their own answer
+instructions. The owner may edit, unpublish or delete their scenarios.
+Administrators may edit or delete another user's public scenario, but cannot
+view or mutate their private scenarios through the catalog. Public scenarios can be read, used
+and copied by other authenticated users. Private and missing IDs
+are indistinguishable. Disabled authentication has one anonymous identity and
+cannot use this feature. Scenario publication does not grant document access.
+Each accepted answer stores its exact scenario snapshot under existing chat
+history authorization and retention. Unpublishing/deleting does not revoke
+snapshots already in history or independent copies. Catalog deletion removes
+catalog versions only; historical snapshots remain independent.
+Scenario instructions are lower priority than source grounding and citation
+rules, are never executed as code, and do not enable tools or network actions.
+Catalog mutation audit events contain IDs, versions and public/private state,
+never instruction/name/description text. Mutations use the transactional audit
+outbox so audit failure rolls back the change. CHAT_SCENARIOS_ENABLED=false
+blocks new scenario operations while leaving historical snapshots readable.
+
+## Replica backup health and attempt journal (2026-11-02)
+
+The opt-in offline health command authenticates the full format3 archive and its
+installation/destination binding before reporting copy health. Recovery-point age
+comes from authenticated consistent_at; copy completion, mtime and a green Job do
+not refresh it. Missing/corrupt/incomplete/foreign/future archives fail closed.
+A healthy copy never asserts restore qualification or production RPO assurance.
+JSON uses fixed alert codes and excludes paths, raw exceptions, credentials and
+key material. The key is read separately with a33-byte bound. The monitor has no
+source-service connections, maintenance privileges, scheduling or message delivery.
+
+The optional backup attempt journal belongs to the protected config directory,
+outside the archive. Bounded regular-file/no-link reads, exclusive file locking,
+atomic mode0600 writes and fsync protect status publication. Running is durable
+before provider work; only the identical active attempt may finish, and foreign
+or unresolved attempts cannot be replaced. Failure records only backup_failed;
+an exclusive write-intent marker precedes status publication and remains on an
+uncertain write/rename/directory-sync. Readers reject it before and after reading
+JSON, so an unacknowledged complete-looking replacement cannot report healthy.
+A failed/overdue/invalid latest
+attempt or a completed ID different from the selected archive cannot be hidden
+behind an older fresh copy. The journal is trusted operator-owned local metadata,
+not a signed proof of provider recovery. Protect its directory and reuse it on
+all configured attempts; omitting it checks the selected copy only. No retention,
+source release, automatic retries, recipient configuration or production schedule
+is enabled by this change. Real delivery and independent key recovery remain gates.
+
+## Scoped owned-lab fault authority (2026-11-02)
+
+Worker-loss and PostgreSQL-partition recipes can reuse a verified current image
+operation's immutable input pins and its exact retained failed-diagnostic verifier.
+New admission requires an authenticated independent backup for the current source
+fingerprint within24h. Protected fault journals pin its manifest authentication,
+backup ID and source-journal hash; resume cannot silently select new provenance.
+The original admission time is retained for recovery instead of rejecting an
+already-admitted recovery merely because its backup aged beyond24h. A standalone
+legacy injection refuses scoped credentials before starting the fault probe.
+
+Release keeps the application Secret in runtime Settings and projects privileged
+SQL only from a distinct read-only0440 offline operator file. Existing Jobs are
+observed with strict command/env/input bindings, never blindly replaced. The new
+read-only preflight phase cannot inject or create its journal. Restart after a
+verified release is a separate resumable phase: it checks source templates/UIDs,
+scales only stopped roles, and verifies released epoch/operation/audit before ACK.
+It cannot reclaim uncertain provider reservations by elapsed time or re-inject a
+fault as recovery. These are explicit synthetic owned-kind operations, not a
+production scheduler or authorization for customer/real-provider faults.
+
+## One-run owned runtime acceptance (2026-11-02)
+
+The common acceptance entrypoint has an explicit staged owned-runtime path. It
+accepts only the basic synthetic managed-S3 kind profile and protected references
+to the validated config, verified image journal, matching independent archive and
+separate key. Real image digests must match the authenticated archive; the verified
+source corpus must still be present. Profile/input/recipe-code changes invalidate
+qualification. The full fixed22-stage set is required; a smoke, empty set, skipped
+stage, foreign child or partial run cannot produce runtime PASS. Other suites and
+customer/physical-node/provider certification retain their independent gates.
+
+Parent state is bounded, no-link, mode0600, atomically replaced and fsynced under
+an exclusive per-run file lock. A write-intent marker blocks a false completion
+after uncertain status I/O. Mutation intent precedes execution, and every member
+is stamped with its unique parent run ID before its first save/action. Child scope,
+source/backup provenance and actual terminal outcomes are checked. Unknown active
+injections are never automatically replayed; explicit resume covers only recognized
+existing phases and cannot clear uncertain provider slots. Transport health probes
+precede HTTP mutation intent. Transport refresh stays outside retained SQL phases;
+no listener killing, NodePorts, TLS/CNI bypass, production scheduling or messages
+are introduced. Native progress goes to stderr; stdout contains the sole common
+report, so a member PASS cannot be mistaken for completed-run qualification.
+Private failure evidence is retained for inspection, while public output contains
+allowlisted checks, timings and hashes rather than raw inputs/errors/documents.
+
+Runtime idle admission follow-up: probes now explicitly bind their own process
+runtime identity and maintenance epoch before opening a normal read session.
+An unbound process remains refused; read-only admission never uses the offline
+operator bypass to hide missing runtime initialization.
+
+Synthetic replica acceptance verifies each live source SHA before searching its
+own UUID marker (or the original legacy fixture heading). A shared ranked top-N
+result is not an inventory and cannot prove that every retained document is
+indexed. Missing targeted hits, changed downloads and visible/downloadable trash
+still fail acceptance. Production query limits, visibility filters, credentials
+and runtime images are unchanged by this test-harness correction.
+
+The staged partition adapter accepts the real injector's already-confirmed
+terminal phase. A separate confirmation re-reads the same policy UID/spec,
+selected worker, PostgreSQL-only connectivity, unchanged provider reservation
+and healthy peer. It never re-injects, rewinds a journal or adopts another run;
+an interrupted parent stays unqualified after recipe code changes.
+
+Partition report validation recognizes the existing confirmed-return
+`fault_operation_id` and offline-recovery `operation_id` protocols. At least one
+must be present and every present operation field must equal the same owned
+child operation. Conflicting aliases never hide a foreign operation. Namespace,
+runtime fingerprint, parent-run ownership and recovery provenance checks remain
+mandatory; no failed parent/report is rewritten to manufacture qualification.
+
+Owned-lab operation snapshots stream metadata in bounded batches, cover every
+row and preserve the existing sorted-JSON digest. Their hard limits are100000
+rows per table and64MiB of serialized content across all tables; lower test
+budgets cannot enlarge either limit. Budget refusal closes the cursor and keeps
+maintenance held. No row filtering, sampling or deletion is used to fit a corpus.
+The embedded release Job uses the same self-contained snapshot function before
+release, including recovery resumed after an already-audited slot reconciliation.
+
+The capacity acceptance oracle requires actual saturation and exact refusals
+from both API processes without a provider call. Normal worker RPC completion
+and subsequent admission may occur while the remote probes import; cumulative
+start counters need not stay fixed. Lifetime provider peak remains bounded by
+one, counter regression/reset is refused, both documents must complete with
+verified search/download, and uncertain reservations are never cleared by the
+probe. A missing refusal still leaves the trial unqualified.
+
+Current owned managed-S3 runtime evidence is one complete22-stage execution,
+including two physically proven/audited uncertain-provider recoveries and an
+unchanged80-document baseline. It does not aggregate failed older runs or remove
+customer/provider/physical-failure-domain gates. Production backup scheduling
+remains disabled by the user's decision. The independent20-document copy later
+passed its own source-off restore drill into a new namespace and disjoint PVCs;
+its receipt covers recovery and seven smoke checks, not a transferred22-stage
+runtime qualification.
+
+Offline restore identity adoption accepts an explicit `--operator-db-file`
+projection so its SQL engine can use administrative credentials while Settings
+and the keyed runtime fingerprint retain the scoped application credentials.
+The opened projection must be a regular file of at most16KiB; supported Kubernetes
+projection symlinks are followed, and a FIFO is refused without waiting for a
+writer. Only the SQL principal/password may differ: driver, named TCP host,
+database, effective port and every query/TLS parameter must match the selected
+application target, with explicit verify-full and a root certificate. Invalid
+material is refused before provider probes or SQL configuration and is never
+printed. The separate operator Secret remains a read-only0440 Job projection;
+ordinary roles never receive it. Existing source-off/held-job/adoption guards
+and the legacy bootstrap connection path remain unchanged.
+
+The current-copy managed-S3 rehearsal verified all100 restored blob hashes and
+held20 document rows before release, with zero restored jobs executed. Fresh
+scoped SQL/S3 principals passed native permission controls,25 source sessions
+were invalidated, and ordinary roles received no operator credentials. The source
+remained unavailable throughout import and functional checks; its96 documents
+and three PVCs were preserved. One failed read-only diagnostic Job is retained
+and excluded from the drain view only after exact UID/spec/terminal-process
+validation. Schema-changing adoption, key recovery, alert delivery, other
+providers and physical failure domains still require their own qualification.
+
+Offline rpl04-to-rpl05 schema adoption can claim only the migration-created
+epoch1/zero-operation/schema-migration fence under an owned operator connection.
+The exact installed schema, original identity, unchanged storage and explicit
+writer-stop receipts/counts are required. Running or leased work, running chats,
+owned/unreconciled model slots and unknown storage-migration history fail closed.
+The new epoch2 remains held; no owner is cleared and no workload is started.
+Source/transition/owner/receipt hashes bind repeat calls to the same transactional
+maintenance audit, including durable-outbox-only mode. Identity replacement and
+the claim roll back together if auditing fails. This database primitive is not
+an application bypass, automatic release, compact/legacy-corpus adoption or
+qualification of a complete Kubernetes schema-update procedure.
+
+The explicit offline upgrade CLI accepts schema adoption only with its supported
+predecessor plus complete bounded writer/count inputs. Input planning configures
+no SQL connection and publishes no identity. Its separately projected16KiB
+operator URL retains the application's exact verified PostgreSQL transport while
+only the SQL principal may differ; signed Settings remain scoped. Identity
+publication is create-only after the held SQL commit, allowing the same owned
+operation to retry a lost/failed file publication without advancing the epoch or
+duplicating audit. JSON inputs are bounded regular8KiB files; projection links
+are supported and FIFOs refused without waiting. Raw errors/credentials are not
+printed. The CLI never performs schema migration, clears uncertain owners,
+releases maintenance or scales workloads. Saved older recovery images retain
+the standalone transport implementation rather than importing a missing new
+application module.
+
+The predecessor format3 path has a separate strict-zero-epoch source type and
+versioned owned-kind stop proof. It requires an owned S4 artifact token, bound
+source/runtime/namespace/controller/CRI evidence, stopped writers and quiescent
+SQL state. It does not weaken the existing positive-epoch source or change its
+canonical/HMAC bytes. Snapshot export must retain fresh physical/SQL guards.
+The real rpl04 token already blocks ordinary old-code sessions. Its transfer to
+rpl05 is performed only in one owned non-autocommit PG transaction: NULL is
+visible to the migration, while other sessions see either the old token or the
+new held maintenance fence. DDL failure rolls back token clearance as well.
+Predecessor target rebinding requires the fresh migrated fence and authenticated
+source scope/counts, revokes old authentication and keeps jobs held at epoch2.
+No generic token-clearing, force deletion, automatic activation or customer
+provider qualification is introduced. The complete old-image restore and
+Kubernetes schema-update recipe still require live acceptance.
+
+The separate owned-kind predecessor export CLI requires explicit old schema,
+namespace UID, runtime fingerprint, independent destination evidence and a new
+protected operation journal. Its live guards revalidate the current audited S4
+token/identity, the retained advisory-lock connection and the original exported
+snapshot transaction/driver/backend together with fresh Kubernetes/node/CRI
+observations before archive publication. A connection/PID surviving commit or
+rollback cannot authorize the old snapshot. Native PG dump failure, changed
+physical/SQL authority or a missing/checksum-mismatched provider stream cannot
+complete the encrypted archive. Success and failure both leave the old source
+held/stopped; there is no automatic release or schema change. Journal/snapshot
+loss requires observation and explicit recovery, not a blind CLI retry. The
+actual synthetic rpl04 provider archive has been cold-verified on the independent
+PC and its source physically stopped with PVCs retained; this does not qualify
+production scheduling or other provider recipes.
+
+The separate predecessor provider-import CLI accepts only an authenticated rpl04
+archive and matching completed source operation provenance. It requires a fresh
+empty target and disjoint PVCs, retains a target SQL advisory-lock connection,
+and rechecks original source node/CRI unavailability plus source/target PVC and
+target controller/storage-Pod identity through provider writes. Actual imported
+SQL must retain the old schema, absence of maintenance table/work epoch column,
+source identity/fingerprint/counts, exact S4 token and unique epoch0 audit.
+Known TLS descriptor fields are verified and preserved; HTTP, wrong CA and
+unknown descriptor fields fail closed. Conditional blob imports are read back
+for size/SHA and held SQL/corpus/work state must remain unchanged. No schema
+adoption, identity rebinding, authentication cleanup or activation is performed.
+Existing journals/targets cannot be blindly replayed. The selected synthetic
+source-off provider import and subsequent replacement schema recovery passed;
+other provider profiles still require their own acceptance.
+
+The actual predecessor replacement recovery uses the verified current image's
+transactional rpl04-to-rpl05 migration and retains a held fence through new scoped
+identity and authentication cleanup. Administrator SQL/S3 material is projected
+only into offline Jobs, separately from the future application Settings and
+immutable scoped runtime Secret. Canonical corpus/work hashes, restored blob SHA,
+vectors/active-generation references, zero source sessions and a denied held
+write precede explicit same-operation release. Ordinary deployments cannot
+reference the offline administrator Secret. A genuine old-image read-only direct
+transactional guard probe isolates schema rejection with otherwise matching
+current identity/storage; it grants no old-image startup bypass. Retained source
+storage is not modified or deleted. The qualified training result covers only
+new-target recovery, not in-place/compact adoption, other providers, full current
+fault qualification or physical HA.
+
+The qualification policy module consumes only strict bounded public binding/check
+metadata from a trusted already-verified harness. Its fixed required check set
+cannot be shortened by a caller; missing/failed/pending/skipped, foreign binding,
+incorrect evidence kind or unverified restore prohibit qualification. Per-component
+external ownership requires its own live check, and kind cannot certify physical
+resilience. No input URLs, provider credentials or arbitrary output fields are
+accepted. Validation errors do not echo Pydantic input values. This policy reads
+no receipts and provides no signature/issuer authentication: SHA-shaped metadata
+alone proves no acceptance occurred, and `certificate_applies` is only a stale
+binding/policy check. File-backed receipt verification and runner integration
+remain separate gates. Repository inventory certificates remain null; this code
+does not authorize production deployment, notifications, scheduling or activation.
+
+The separate owned-lab backup notification tools use an explicitly selected
+protected local configuration and a signing key distinct from archive encryption.
+Only canonical HTTP127.0.0.1 endpoints and a bounded fixed event path are accepted;
+redirects and environment proxies are disabled. Public events project allowlisted
+health fields/codes and never provider paths, credentials or raw exceptions.
+Request HMAC timestamps use real wall time even during a marked offline health
+clock drill. ACK HMAC has a separate domain and binds event ID/body SHA.
+
+The sender locks the journal across durable pending publication, transport and
+matching signed ACK publication. Lost/untrusted responses retain the same ID/body;
+uncertain write-intent/fsync outcomes refuse further action. The receiver binds
+only IPv4 loopback, bounds body size/concurrency/socket time, suppresses raw
+request/error logs and commits SQLite FULL before ACK. Its inbox is bound to the
+signing authority; foreign databases and changed ID/body or corrupted persisted
+payloads are refused. This is local key-authenticated delivery, not arbitrary
+remote webhook support or production monitoring qualification. The approved PC
+drill used synthetic ciphertext copies and an isolated copy-attempt journal; no
+production installation, sender schedule or external recipient was created.
+
+2026-11-02: qualification now has a separate read-only file verifier. An operator
+selects expected binding, protected manifest and Ed25519 trust policy outside the
+evidence root. Issuers are enabled explicitly and pinned to producer SHA/check
+permissions. Receipts bind acceptance ID/run/namespace UID/installation/binding
+and the SHA of actual bounded strict outcome files. A separately authorized,
+domain-separated terminal bundle signature binds the complete receipt set;
+individual signatures alone would let an assembler choose or omit old results.
+Failed/pending/skipped summaries and unverified restore cannot qualify. Links,
+hardlinks, FIFO, duplicate keys, path aliases and unstable files are refused.
+Canonical external paths also prevent a parent-directory alias from disguising
+an evidence-supplied trust policy as a separately selected operator input.
+
+The common runner's explicit offline flags cannot combine with live/SSH/fault/
+owned/apply/resume actions or a partial suite. Public errors stay redacted, no
+network is opened and no evidence is rewritten. Signature validation authenticates
+the configured harness; its native-reference hashes remain attestations, not
+independently replayed observations. The issuer must close an acceptance ID once
+with immutable terminal evidence. There is no remote revocation log or generic
+sign-any-JSON CLI. No real issuer/private key or actual certificate is configured
+by these tests. Historical reports are not retroactively signed, and inventory
+certificates remain null. Reverify trust and all files rather than treating
+`certificate_applies` as authenticated authority or production permission.
+
+2026-11-03: nonempty compact adoption has an explicit offline SQL/CLI phase.
+Fresh bootstrap still rejects existing application rows. The new phase requires
+the current Alembic head and known tables/columns/primary keys, a selected verified
+S4 shared-store cutover and reviewed logical source snapshot. All application
+tables are locked on the retained PostgreSQL operator connection before source
+comparison; original audit prefixes remain hashed and exactly one new adoption
+audit binds source, target identity, operation/owner, counts and writer receipts.
+Identity, storage token and enabled epoch1 are committed atomically. Audit failure
+rolls back all three. An existing installation is accepted only as the exact
+same held retry; a released or foreign operation cannot reuse the snapshot.
+
+The CLI reads only its bounded literal runtime file; ambient variables, the root
+dotenv and dotenv interpolation cannot select another database or secret. Input
+JSON is bounded with duplicate-key rejection. SQL credentials may differ only
+through the existing same-target offline operator transport. Identity publication
+is create-only after acknowledged SQL commit; publication failure retains the
+hold and can resume without a second audit. Unknown commit outcomes report an
+unknown hold status. Public errors contain fixed metadata, not private inputs.
+
+This phase preserves NULL/missing generations, configuration, authentication
+history, audit and supported durable queued work. It refuses active/uncertain
+work/chat/capacity ownership and unconverted legacy queued/running public Jobs
+or document intents. That refusal does not implement legacy queue handoff.
+Stop receipts and storage probes are trusted coordinator inputs, not independent
+physical evidence. The command does not migrate schema, revoke sessions, execute
+work, reconcile providers, release maintenance or start roles. Independent backup
+restoration, actual provider qualification and a populated source-off Kubernetes
+adoption/release rehearsal remain mandatory. Native PostgreSQL tests use only a
+new temporary cluster/database and synthetic filesystem/backup fixtures.
+
+2026-11-03: compact adoption can additionally consume an explicit reviewed
+version1 legacy handoff plan. The plan is bounded to4096 intents/4MiB and carries
+only known recipes, owner IDs, accepted-input hashes and deterministic Work IDs.
+The operator reproduces the complete plan from locked SQL; omitted/extra/changed
+entries, unknown versions and conflicting admission identities refuse the whole
+transaction. Bulk approvals/params, S4-frozen export refs, translation versions,
+accepted scope plans and portable document checkpoint policies remain unchanged.
+No current threshold grants approval, no draft substitutes for an accepted
+policy, and started/owned/ambiguous work cannot be made safe by lease expiry.
+
+New pristine WorkItems and DocumentWorkInputs commit with the held identity and
+one adoption audit binding the plan digest. The foreign-key parents are flushed
+before their inputs, within that same transaction; native PostgreSQL regression
+tests detected and verified this ordering. A retry excludes only those exact new
+IDs from original-source hashing and separately verifies spec, policy, admission
+timestamp, counters and unexecuted status. Changed/missing new rows refuse while
+retaining the fence. CLI inspect publishes source/plan create-only, and apply
+requires the same plan again after an acknowledged-commit publication failure.
+
+Pending splitting/indexing documents, diagnostic bundles and scope operations
+cannot escape adoption checks merely by living outside public Job status filters.
+Queued work for an awaiting-approval job is explicitly refused. Progress without
+an accepted portable checkpoint is not silently regenerated. Shared protocol2
+diagnostic requests can retain their existing request/cutoff; legacy protocol1
+requests require the verified S4 journal/input conversion. Ready-archive copying
+alone does not establish that conversion. Actual source-off Kubernetes/provider/
+release acceptance remains required; SQL handoff does not qualify the platform.
+
+### Offline legacy diagnostic conversion
+
+2026-11-03: pending legacy requests could retain source-disk dependencies after
+ordinary artifact migration. S4 now verifies/imports their journal and freezes
+the accepted input; diagnostic SQL enters the backup digest and cutover locks.
+This prevents silent history loss or recollection from a later time window.
+
+S4 inventories all selected retained backend/frontend events and control records,
+hashes diagnostic SQL into the backup source revision, and rechecks the complete
+inventory before atomic cutover. It holds an existing backend OS writer lock
+without creating/changing source files. Unknown/live frontend markers, active SQL
+captures, active/unknown control projections, unreconciled deferred audit records,
+links, changed or truncated input refuse conversion. Physical source stops remain
+an independent trusted operator obligation; lease expiry is not authority.
+PostgreSQL locks diagnostic tables together with corpus tables at cutover.
+
+Raw source hashes are verified in the target before SQL immutable segments are
+inserted, preserving source expiry rather than renewing retention. Backend
+canonical bytes are required; frontend normalization must preserve every parsed
+field/value. Source files remain retained. Missing coverage/counters are explicit
+unknowns. Private transfer state contains sensitive source/history data and must
+receive the same protection as the corpus. Preparation uses bounded extra scratch
+capacity without widening runtime capture or archive limits.
+
+Queued legacy bundle requests keep their original request/cutoff. The existing
+supervised bounded snapshot and fixed seven-entry ZIP builder freezes accepted
+input; S4 binds it under `frozen-input.zip` and updates a strict receipt/protocol
+in the same cutover. It does not mark ready or enqueue/execute work. Held compact
+handoff admits only verified `diagnostic_frozen.v1` receipts as Work version2.
+The worker verifies SHA/size/ZIP inventory/manifest under a current claim, then
+commits ready binding/audit/Work success atomically; stale claims cannot publish.
+Version1 cannot recollect a frozen request. Subsequent S4 transfers update the
+receipt and matching pristine queued Work digest atomically, refusing attempted,
+owned, cancelled or ambiguous work. No missing journal is silently replaced by
+new observations. See [bounded evidence](docs/superpowers/reports/2026-11-03-replica-legacy-diagnostics.json).
+
+### Prefix-scoped artifact readiness
+
+2026-11-03: runtime readiness used HEAD bucket, which requires ListBucket
+without a prefix condition. This falsely rejected a correctly scoped runtime
+principal and prevented API/worker readiness. The probe now lists at most one
+object under the configured installation prefix. Empty prefixes remain valid
+when the deployment intentionally owns the whole bucket. An actual access denial
+or provider error still fails readiness; no bucket-wide grant is added.
+
+### Atomic upload admission audit and replay
+
+2026-11-03: a shared-store upload could commit its document, receipt and work
+before its upload audit. API loss in that interval permanently lost the event
+because receipt replay returned early. Shared-original admission now records
+the upload audit/outbox in that same SQL transaction; audit failure rolls back
+admission and replay never duplicates the event. The legacy local flow retains
+its existing audit path.
+
+A concurrent same-key request can also observe the committed hash after its
+initial receipt miss. Before returning an exact-duplicate response, it now
+rechecks the actor-bound receipt under the admission lock. Changed inputs still
+conflict and a deleted document cannot be revived through replay.
+
+### Bounded replica original scratch and independent read leases
+
+2026-11-03: replicas previously retained every materialized original in the
+pod uploads directory. Replica requests now own private materializations through
+the complete response, including streaming; worker attempts own them through
+the attempt. Nested consumers share that lifetime and parallel readers retain
+separate locked directories. Cleanup reclaims only recognized, unlocked local
+attempts and preserves unknown paths. Legacy combined originals remain durable.
+Export admission records the canonical binding without downloading the source.
+Direct processing-admission service calls also own a scratch scope, including
+confirmation and regeneration preparation without an HTTP request.
+Only an explicit replicas-v1 schema selects distributed scratch behavior;
+legacy callers with reduced settings retain the prior local-original path.
+
+The initial metadata session ends before a replica read starts provider I/O.
+Its object lease and work heartbeat can therefore commit independently while
+the provider is slow. Explicit caller-owned transactions retain their existing
+transaction-bound lease behavior. Publication checks the accepted canonical
+original hash rather than relying on a retained pod-local original.
+
+### Physical writer-stop observation for current-runtime lab backups
+
+2026-11-03: the current-runtime owned-kind backup coordinator now binds writer,
+provider, controller, storage-process and node identities before stopping roles.
+Every stopped guard refreshes Kubernetes and node CRI observations, rejects
+retired or unknown live processes, changed nodes or incomplete storage-process
+observations, and repeats the guard after cold archive verification. Uncertainty
+keeps maintenance held. This single-node training recipe is not a production
+failure-domain or backup-schedule qualification.
+
+### Explicitly admitted single-node NFS training platform
+
+2026-11-03: the user separately authorized the reviewed NFS/CSI package on VM103.
+The new NFSv4 server exports only a fresh bounded1GiB ext4 regular-file filesystem
+to the bound kind node172.18.0.2, listens on172.18.0.1:2049, uses root_squash and
+keeps RPC bind/statd network services masked. This private sec=sys recipe has no
+production transport/authentication or physical-HA qualification. Its backing
+capacity is shared across test PV directories; a PVC request is not a per-PVC quota.
+
+The pinned official NFS CSI4.13.6 render creates a separate namespace, privileged
+node plugin/kubelet mounts and six explicit cluster-scoped resources including a
+nondefault Retain StorageClass. Every create is journaled with its UID; existing
+resources are not adopted. No snapshot CRDs are installed. The first offline apt
+step refused local archives before installation; its startup guard and evidence
+were retained. The same operation recovered through only the five SHA-verified
+offline debs. Private bind/mount dependencies were persisted before package setup.
+
+Two non-root/read-only/no-token, network-denied probe Pods passed real NFS mount,
+immutable/idempotent creation, other-Pod read/range, one-winner concurrent creation
+and deletion of only their two known synthetic objects. Application lifecycle,
+server-loss/full-storage, independent restore and cross-node gates remain open;
+no certification or production backup schedule is enabled. See the
+[bounded NFS evidence](docs/superpowers/reports/2026-11-03-replica-nfs-rwx-bootstrap.json).
+
+### RWX application fault boundaries and physical recovery
+
+2026-11-03: a separate synthetic namespace uses fresh scoped PostgreSQL credentials,
+TLS and a new platform-owned NFS claim. No administrative DB Secret enters app
+env; simulated auth/model inputs stay in the lab. Actual ENOSPC returned507 before
+any partial document/receipt/work/binding admission. Existing blob SHA and business
+tables were unchanged; exact-inode filler cleanup allowed the same-key retry.
+Normal NFS restart preserved sessions, documents and export across both frontends
+and APIs; four processes verified all11 blob hashes and empty original scratch.
+
+The earlier large buffered client write stalled before ENOSPC in kernel NFS
+reclaim/COMMIT paths. Its failure remains unqualified: only the exact source-hash/
+PID-start/fd-bound filler received SIGKILL, and exit was proved after temporarily
+increasing this server's threads4→8. The test roles drained physically before
+cleanup; the known inode alone was removed and threads restored8→4 without changing
+persistent config. No VM reboot, forced unmount/Pod deletion, unknown process kill
+or foreign workload change was used. Fresh cold verification preserved six blob
+hashes and six canonical business tables. The separate successful server-local
+preallocation ENOSPC test does not erase this large-write limitation.
+
+The new app/storage are stopped with retained PVCs and audited maintenance epoch1;
+old capacity counts/runtime/PVCs and nine canonical tables were restored. This
+adds bounded training evidence only; independent RWX restore, large-write/outage
+and cross-node/provider certification remain open, production scheduleOFF. See
+[RWX application evidence](docs/superpowers/reports/2026-11-03-replica-rwx-application.json).
+
+### Independent RWX backup custody and restore boundary
+
+2026-11-03: source application writers stayed stopped under the existing audited
+epoch1 while native PG17/Qdrant exporters and server-native read-only NFS reads
+produced13 encrypted format3 objects on the separately authorized PC. Exact
+node/controller/PVC/PV/provider Pod/native-container bindings and unknown-process
+refusal were rechecked per entry and after cold authentication; all81 public-table
+hashes/28 sequences, four complete points and11 blob hashes stayed unchanged.
+Native TLS verified real service hostnames over pinned loopback transports; keys
+and passwords never entered argv or the VM backup material. The backup key stays
+in the protected PC vault; no plaintext document payload enters the archive.
+
+The adjacent non-secret physical source-binding JSON is a required part of this
+backup set. Its digest is authenticated by the manifest's artifact storage scope;
+retain it with the encrypted archive for disjoint-target verification. Snapshot
+connections and owned tunnels closed before both source providers stopped; all
+PVCs remain, and prior capacity/runtime/nine canonical tables were restored.
+
+This copy does not authorize an identity guard bypass. At the backup-only checkpoint
+the rebind CLI was S3-only; selected RWX support is now described below. Same
+`/artifacts` paths cannot establish a new RWX volume. Strict authenticated source
+and observed target binding must precede RWX restore/release.
+The NFS server itself was available during export, and large-write/outage/cross-node
+qualification remains open. Production scheduleOFF, certificationnull. See the
+[backup-only evidence](docs/superpowers/reports/2026-11-03-replica-rwx-independent-backup.json).
+
+### RWX-source to S3 recovery evidence
+
+The [2026-11-03 completed drill](docs/superpowers/reports/2026-11-03-replica-rwx-source-s3-restore.json)
+used real fresh S3/PG/Qdrant targets, independent PC-only backup custody and the
+unchanged scoped restore CLI while source NFS/PG/Qdrant were physically off.
+Exact source/target node, controller, claim and native-container guards remained
+active. All original SQL/sequence/vector/blob hashes matched before identity
+adoption; old auth was revoked under held2 before explicit release. The original
+163-row Work table stayed identical until release. Runtime/operator Secrets
+remain separate and the master backup key never reached the VM.
+
+Native PG password denial was proved through the actual Pod IP/SCRAM route;
+local Pod-loopback trust and a failed port-forward are not authentication proof.
+The public auth/me contract returns anonymous200; actual old-cookie rejection
+was proved as401 on protected documents across four endpoints. Held startup,
+writes, claims and artifact-runtime access refused correctly. Failed harness
+parents remain recorded, alongside successful corrected checks. Cleanup retained
+all data/PVCs, held the target at epoch3, restored NFS and prior lab capacity.
+This proves no fresh RWX-target relocation, physical HA or certification; the
+previous failed large buffered NFS write remains unqualified. ScheduleOFF.
+
+### Selected RWX target physical identity
+
+The [selected guard](docs/superpowers/reports/2026-11-03-replica-rwx-relocation-guard.json)
+requires authenticated source-binding coordinates and actual in-process NFS root
+observation before artifact writes. Local root strings, caller-supplied success
+flags and client statvfs filesystem IDs are not physical identity. The selected
+source recipe/namespace/scope digest and actual target server/export/inode must
+agree with the narrow relocation policy; aliases and ambiguous mounts refuse.
+The stable target digest is bound into the restore receipt and must match on
+resume. Existing S3 behavior and owned transactional auth/epoch changes remain.
+The initial read-only native proof used mounted candidate code. Subsequent
+[current-image recovery](docs/superpowers/reports/2026-11-03-replica-rwx-target-restore.json)
+passed full Linux CI (6466 passes/221 unchanged optional skips), fresh store
+imports, scoped PG rights, held adoption and a real exit23/output-boundary resume.
+That crash followed an already successful adoption; it does not prove an initial
+stamp crash. Identity publication waited for unchanged109-entry catalog and
+same-identity resume. Normal held runtime refused startup/write/claim/artifact
+access; explicit release preceded functional2/2/2 and four native17-object cold
+checks. Final target is stopped/held3 with three PVCs retained; prior2/2/2 and nine
+canonical tables are restored. Source claim was unmounted while the same NFS
+server stayed up. Large-write/outage/cross-node gates and provider certification
+remain open; production scheduling stays off.
+
+### Admitted VM103 cross-node platform boundary (2026-11-04)
+
+The user selected a logical two-node rehearsal on VM103. The
+[reviewed plan](docs/superpowers/plans/2026-11-04-replica-crossnode-vm103.md)
+was explicitly admitted by the user in `call_dd93b9225d464094a786a12d8deb4473`.
+Root disk100→130GiB/ext4 growth and the independent two-node kind cluster
+were applied once with GPT backups on the separate PC and exact UUID/geometry
+checks. It pins node/Cilium/CSI images,
+43 rendered objects including10 explicit Cilium CRDs, a nondefault Retain NAS
+class, loopback-only API and an independent owner-only kubeconfig. Hubble and
+automatic CRD creation are disabled; final manifests contain no Secrets. The
+existing clusters, customer NAS configuration and old claims are outside the
+mutation scope. Only fresh synthetic app credentials/data may enter the cluster.
+Logical worker-loss testing must bind exact new node/native ownership and keep
+PG/Q on the surviving control-plane. This topology does not establish physical
+failure-domain resilience; production backup schedule remains off.
+
+The first logical worker-loss attempt exposed co-located DNS replicas and a
+dead TCP client retaining PostgreSQL transaction locks after lease expiry.
+That trial is retained as an automatic takeover failure; terminating one exactly
+identified backend of an absent owned Pod provided assisted recovery only.
+The new cluster DNS Deployment now requires separate node placement; managed
+PostgreSQL uses server TCP keepalive30/10/3 and user timeout60000ms. The change
+does not acknowledge uncertain provider calls or clear capacity slots.
+The separate repeat proved automatic completion by210.36s while the original
+worker stayed off until240s: same accepted work, attempt2/fence2, no manual
+backend termination or lease/slot edits. Four routes and four cold native
+processes verified the corpus after return. Fresh work IDs and failed evidence
+are preserved in the [bounded report](docs/superpowers/reports/2026-11-04-replica-crossnode-vm103.json).
+
+### Remote Synology native component boundary (2026-11-03)
+
+The user supplied `10.10.1.5:/volume1/Vitaliy`, enabled its NFS access and allowed
+clearing that share. Tests instead used fresh random child directories and
+preserved existing files. [Native evidence](docs/superpowers/reports/2026-11-03-replica-synology-nfs4-component.json)
+confirms NFSv4.0 and a256MiB current-image RwxBlobStore write/cold hash/range/
+conflict refusal through separate non-root containers. Actual in-container NFS
+mount and owned directory inode/observed UID/GID were checked before writes.
+The observed65534 owner mapping is recorded; no production mapping/authorization
+claim or change to the selected restore guard is implied. Initial strict owner
+refusal is preserved, with no blob writes before its read-only reconciliation.
+
+A separately bounded quota probe accepted1025MiB without storage-full failure;
+the claimed1GiB limit is therefore not enforced for this NFS path. The probe
+stopped at its cap, preserved its baseline and removed only its own files. Both
+mounts and all owned running containers are gone; prior2/2/2 remains Ready.
+No SQL, secrets, Kubernetes resources, NAS configuration or other NAS files were
+changed. CSI/application/outage/restore and quota acceptance remain open for
+this recipe; NFSv4.1 refused and is not qualified by the v4.0 result.
+
+The user clarified that the available Synology limit is a per-user quota. Use a
+dedicated NAS principal with the correct numeric UID/GID; an SMB login name does
+not switch AUTH_SYS credentials for UID1000 clients. The shown rule selects no
+squash mapping and asynchronous writes; its applied DSM state is not independently
+read. No power-loss durability is claimed. Separate VM provisioning is deferred;
+next tests wait for the dedicated NAS UID/GID and quota, without NAS passwords.
+
+Subsequent [correct-principal and CSI evidence](docs/superpowers/reports/2026-11-03-replica-synology-userquota-csi.json)
+uses user-confirmed `Vitaly` UID1031/GID100. The bounded native write produced an
+actual StorageFullError, preserved its baseline and retried the failed object ID
+after temporary cleanup. Existing CSI4.13.6 then provisioned a new retained NAS
+claim through a separate nondefault StorageClass; no driver/operator or storage
+node configuration changed. Two non-root Pod processes checked actual NFSv4.0
+mounts,256MiB write/cold SHA/range/conflict refusal and own-file cleanup. Jobs are
+Succeeded, live CRI and target NFS mounts zero; empty PVC/PV/namespace/class are
+retained. The512Mi PVC request is not a quota: capacity is limited by the NAS
+user's quota over volume1. Existing NAS files and the user-created identity output
+remain. This closes these component gates only; ordinary application, backup,
+restore, sustained outage/cross-node and synchronous durability remain separate.
+
+### Filesystem readiness mutation scope (2026-11-04)
+
+The selected NAS demonstrated successful blob create/read/delete with W_OK false
+on the mounted root, while owned `objects` and `tmp` reported full access. Root
+owner alignment alone did not resolve this. Filesystem readiness now requires
+root read/traverse and read/write/traverse on both actual mutation directories.
+An unavailable or unwritable object/temp directory still refuses readiness. The
+probe creates no test objects and does not broaden filesystem permissions. S3
+retains its bounded prefix-scoped list probe. This change grants no provider or
+power-loss certification and does not change runtime/maintenance identity guards.
+
+### Recoverable artifact failures (2026-11-04)
+
+Typed `BlobUnavailable` now maps to dependency/processing unavailability so the
+durable worker can retry the same accepted work with a fresh fence. Missing,
+corrupt, conflicting objects and lost read leases remain terminal reconciliation
+errors, including when their chained cause is transient. Provider error strings
+do not determine this classification; opaque S3 HTTP500 is not reported as507.
+The worker regression preserves the old publication during failure and proves
+normal retry/publication without bypassing work ownership or publication fences.
+The separate application storage-full rehearsal fills only its own128MiB memory
+S3 fixture with synthetic data and an independently scheduled own-file cleanup.
+Its result cannot qualify provider durability, physical HA or production quotas.
+
+The [application rehearsal](docs/superpowers/reports/2026-11-04-replica-s3-application-full.json)
+now confirms actual bounded ENOSPC, HTTP503 refusal without a document receipt,
+old publication integrity and independent own-file removal at75.08s. The same
+accepted work completed automatically on attempt3/fence3; two earlier generations
+are abandoned. No live queue/lease/slot/clock edits. Both capacity loans returned
+to original runtime/PVC/nine-table hashes. New writers/storage are off held3,
+two PVCs retained, all16 ready synthetic blobs rehashed on the independent PC.
+An initial escrow attempt correctly hit the runtime factory maintenance fence;
+its Failed Job remains. The successful offline reader retained the exact operator
+advisory lock, verified identity/store/epoch and used scoped S3 read calls. Runtime
+guards were unchanged. This blob-only escrow is not coordinated backup evidence.
+
+### All-external service contract and independent recovery (2026-11-04)
+
+The [bounded rehearsal](docs/superpowers/reports/2026-11-04-replica-all-external-runtime-recovery.json)
+uses no storage workload/PVC/root credential in its application namespace. Three
+separate provider services have explicit cross-namespace role policies, scoped
+SQL/S3 accounts and verified TLS. Wrong hostname/credentials and frontend access
+are rejected with positive controls. The external fixture is independently owned
+for this test; it does not establish customer permission or physical independence.
+
+Before recovery, inherited source egress was removed from the fresh managed target.
+API/worker/bootstrap probes denied all three live source endpoints while reaching
+their own providers; source host TCP controls succeeded before/after. All source
+writers and providers were then physically stopped. Frozen namespace/spec/Pod/CRI
+guards require source-off before every import/adoption/runtime step. The format3
+archive and master key stay on the independent PC; only authenticated native
+restore bytes are streamed. All81 tables/28 sequences/two full vectors/six blobs
+matched before official identity adoption. The old session was revoked;172 work
+rows remained unchanged before explicit release. Runtime has no operator secrets.
+Four ordinary processes verified12 cold hashes, no scratch and no old work replay.
+
+Source/target are now physically off under held1/held3 with six PVCs retained;
+all owned forwards are closed and both earlier2/2/2 runtime/PVC/nine-table loans
+returned. A sampled CRI/Pod termination race refused closure before the next patch;
+only verified remaining intents were resumed. No runtime guard, queue/lease/slot
+or data edits bypassed it. Production scheduleOFF/certificationnull remain.
+
+### Frontend-split role network boundaries (2026-11-04)
+
+The frontend-split chart now isolates its two frontend Pods from PostgreSQL,
+Qdrant and model endpoints. Its previous shared compact policy allowed every
+same-release Pod to reach storage. A split-only default deny and explicit role
+policies allow frontend-to-combined-backend TCP8000 and DNS; external egress is
+attached only to the combined backend. Bundled storage and the model accept only
+the backend role. Compact retains its original combined-Pod network contract.
+These namespace policies require an enforcing CNI; rendered-policy tests do not
+alone qualify live Gateway/IdP, frontend loss or a production deployment.
+
+The [selected live F2 rehearsal](docs/superpowers/reports/2026-11-04-replica-frontend-split.json)
+now records six frontend PG/Q/model TCP denials with backend TLS/model positive
+controls, diagnostic-only Secret projection and zero frontend data/control PVCs.
+An actual UID-precondition frontend deletion after a proxied NDJSON frame and
+model-active proof interrupted that stream; the other frontend and combined
+backend survived. One model call completed without an automatic repeat. Old
+session/data/search/ZIP remained usable; logout revoked the old cookie on all
+three routes. Current Pods had zero restarts. Both capacity loans were returned
+with original runtime/PVC/nine-table hashes; the new fixture is physically off.
+
+The first harness Settings overlay failed before SQL tables existed. An early
+query-only raw-DELETE dry-run unexpectedly deleted an idle frontend; it is
+preserved separately and is not the later active-stream result. Subsequent
+DELETE used explicit body UID preconditions. No data/lease/slot edit recovered
+either case. At that rehearsal checkpoint, the common frontend runner verified
+explicit split inventory/namespace/owner/native-image bindings while functional
+producers remained pending. Simulation intentionally bypasses production CSRF; real CSRF/Gateway/
+IdP qualification remains open. No authentication or CSRF guard was weakened.
+
+The staged frontend journal now gives each native action a distinct durable
+intent bound to the runner recipe, selected inputs and installation. A lost
+response allows only observation of that same intent; explicit apply cannot
+resubmit it. Completion requires the exact execution/stage/intent/code/binding
+tuple from the native adapter. The parent retains a receipt digest, never its
+cookie-bearing body or raw provider exception. Linked/aliased journals, uncertain
+writes, stale concurrent writers and reordered histories are refused. This
+journal foundation supplied the protocol for the native producer described below.
+It cannot supply signed qualification or close the pending CSRF/Gateway/IdP gates.
+
+Its native HTTP component now uses three distinct loopback routes supplied by
+the ownership-checking coordinator. It disables proxy discovery and
+redirects, bounds response/NDJSON sizes and checks early delivery before the
+delayed result. Login/upload/export/stream/logout each write an exclusive native
+intent before a request; an accepted upload is separate from terminal proof of
+visibility through the other frontend. Cookies remain in owner-private native
+files; receipts contain only fixed observations and content digests. Linked or
+aliased cookie/receipt files are refused. Legacy compact uploads do not claim
+idempotency. Real HTTP fixture tests verify cross-route sessions, original/ZIP
+hashes and server-side logout; they do not prove Kubernetes ownership, active
+frontend loss, real Gateway/IdP or production CSRF. The native implementation is
+described below; a new live acceptance run is still required.
+
+[Component CI evidence](docs/superpowers/reports/2026-11-04-frontend-runner-protocol-ci.json)
+records 74 Windows checks and 42 focused Linux checks. The first Linux attempt
+failed before tests because default DATA_DIR pointed into read-only source; the
+second used the same source with explicit ephemeral data paths and passed.
+Both attempts remain retained. The sole temporary six-replica capacity loan was
+returned; original2/2/2/runtime/PVC/nine-table checks and foreign-service checks
+passed. This is component evidence against the stated frozen application base,
+not current full-release CI or another live F2 acceptance result.
+
+### Owned native frontend stages (implementation, 2026-11-04)
+
+The common runner now accepts explicit frontend stage/journal/apply/observe
+flags for the selected basic `owned-simulation-local-v1` recipe. Its default frontend
+probe stays read-only. Native execution binds namespace purpose/run/UID and
+installation labels, Pod/ReplicaSet/Deployment ownership and native image IDs,
+configuration/Secret digests, PVC/PV UIDs and node UIDs. Backend preflight requires
+an empty disposable database, empty corpus directories/vector collection, PostgreSQL/Qdrant Services
+selecting owned StatefulSet Pods, scoped
+non-superuser PostgreSQL over verified TLS, simulation auth, fake embeddings,
+local artifacts and an idle owned model stub. A fixed source capsule reaches
+the Linux coordinator through pinned SSH; runtime DSNs and keys are excluded
+from that transport. The full parent manifest is bound by digest; the native
+payload contains only the required nonsecret fields. Private native files have exclusive intents and terminal
+receipts, a per-execution flock and code/input/capsule bindings.
+
+The coordinator creates three exact-Pod loopback forwards and retains PID,
+start-time, argv and UID identities. Closure uses pidfd signalling without a
+PID-only fallback. The single frontend deletion requires a delivered sources
+frame and one active model call, rechecks both signals and the client process
+identity immediately before DELETE, and puts the victim UID precondition in the
+DeleteOptions body. No query-only dry-run is used. The subsequent stages require
+client EOF without a result, no automatic model repeat, a surviving backend and
+frontend, a ready replacement, unchanged session/original/search/ZIP access and
+server-side logout. Final closure checks native original SHA and SQL/model
+quiescence before and after stopping only the retained owned handles. These
+fault/control probes use read-only SQL. Normal business API writes follow the
+application's own behavior; node settings, clocks and firewall rules stay
+unchanged. Unknown native actions are observed under the same intent.
+
+Current implementation verification: 170 Windows tests passed, with one
+Linux-only pidfd check skipped on Windows. A separate real VM103 kernel check
+refused a wrong process identity and terminated only its own Python helper;
+that helper is gone. A real common-runner SSH/RPC negative admission check
+refused an absent owned namespace with exact capsule/intent bindings and no
+forward/cookie files or application requests. The subsequent
+[e42007a native rehearsal](docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json)
+completed all 12 stages; its full Linux CI had 6638 passes and 221 unchanged
+optional skips. These observations apply to that source/capsule and selected
+simulation fixture. A completed
+selected simulation keeps real production-CSRF and Gateway/IdP checks pending;
+it does not produce a signed qualification or deployment authorization.
+
+### Separate owned OIDC HTTP component (2026-11-05)
+
+`replica_frontend_oidc_http.py` supplies bounded HTTPS wire actions for the next
+F2 producer; it is not yet part of the live native capsule or common runner.
+It accepts only the paired knowledge/identity names of one explicit `okf-*`
+cluster-local lab namespace, connected to one explicit loopback port. Logical
+hostname/SNI and private CA verification remain enabled; no ambient proxy or
+default-root lookup selects a destination. An independent empty trust store
+must reject the reachable peer before HTTP. Response bodies and transitions are
+bounded. Authorization client/realm/redirect URI, state/issuer and credential
+form destination are checked before the next request. There is no automatic
+redirect handling, external form action, credential POST retry or IdP discovery
+to an arbitrary URL in this component. Backend Authlib still validates the
+actual authorization code/token; this wire client does not replace it.
+
+Private one-shot login/CSRF/logout intents precede their HTTP actions. Cookies
+are retained only in the existing owner-private file primitive; they and
+passwords/codes/id-token hints are excluded from returned receipts. A completed
+receipt can be reopened without another HTTP action. Ambiguous transport is
+not permission to replay login or logout. The caller must separately admit the
+namespace, controller, forward process, exact images/config and synthetic
+credentials before invoking this component. Those checks are not inferred from
+the hostname pattern. Production CSRF checks require an actual `mode=sso`
+identity, a secure HttpOnly session, exact `csrf_failed` denials with a surviving
+authenticated session, and valid-token logout revoking the old application and
+IdP sessions. Loopback TLS wire tests are component evidence only; they do not
+claim real Keycloak/Gateway acceptance or issue trust/certification.
+
+The TLS business transport reuses the existing document/publication/search/SHA/
+ZIP algorithms through two fixed Gateway slot headers and the ordinary Service
+route. It does not use plaintext frontend Pod forwards. Cookie, Host, CSRF,
+Authorization and slot overrides from callers are refused. The native caller
+must still prove the actual helper-route EndpointSlice/Pod UID membership before
+using it. Streaming shares the verified TLS connection and private OIDC cookies;
+the response wrapper enforces a cumulative1MiB/45s body bound even when a caller
+omits its own read limit. Only connection/header/body I/O errors become typed
+transport failures. Malformed/application events and receipt/progress callback
+failures cannot be reported as only a frontend connection loss. Loss-stream
+submission has its own exclusive intent and no automatic model request retry.
+These additions remain transport/component evidence until native integration
+and the fresh Gateway/Keycloak case are complete.
+
+The separately approved [Gateway prerequisite](docs/superpowers/reports/2026-11-05-replica-gateway-platform.json)
+installed only the pinned training Gateway API/kgateway package. Its official
+ClusterRole can read Secrets and manage workloads cluster-wide. The discovery
+namespace selector is not an RBAC authorization boundary. The controller's
+own namespace also contains its automatically generated OAuth2 HMAC Secret;
+public evidence includes only its metadata. The admitted controller was tested
+non-root with a read-only root and no effective capabilities, then scaled to
+zero and its capacity loan returned. Retained CRDs/RBAC/admission policy are not
+deleted automatically. This prerequisite does not close real CSRF/SSO gates.
+
+### Native owned OIDC coordinator (2026-11-05)
+
+The separate `owned-keycloak-local-v1` coordinator admits application, access
+and platform namespace identities and the observed Gateway/ListenerSet/route/
+Service/EndpointSlice graph before reading any Secret data. Image/controller/
+GatewayClass identities and configuration hashes remain bound on every stage,
+including receipt adoption. Passwords are selected only inside the native host
+from an exact synthetic five-user realm/probe pair; federation, extra clients,
+redirect targets and alternate group mappings are refused. Backend OIDC settings
+and the client-secret hash must match before the read-only SQL freshness proof.
+Credential material never enters the public receipt or background-client input.
+
+Only the admitted Gateway Pod receives HTTP/HTTPS loopback forwards. Anonymous
+redirect, unknown-root rejection and hidden-internal-route controls precede
+login. The loss client uses Python isolated mode, excluding ambient module paths
+and user site packages, and verifies its private capsule and three source-module
+hashes before loading the TLS business transport. A sources frame, exact live
+client PID and one active model call are required again immediately before the
+UID-preconditioned Pod deletion. Protocol/application errors cannot authorize
+that deletion. Only a journaled replacement may receive the first helper slot,
+using one JSON patch tested against its UID and resourceVersion. Uncertain
+patch/delete acknowledgements are observed from actual membership and endpoint
+state; the mutations are never resubmitted. Native handle closure covers the
+two Gateway forwards and client; simulation admission and its five handles
+retain their separate defaults. These implementation tests do not clear real
+Keycloak/Gateway acceptance or production qualification gates.
+
+The common frontend runner selects OIDC only through its separate literal
+eight-module capsule. Its bootstrap and stream child use isolated Python;
+only seven additional nonsecret namespace/controller/image/user identity fields
+cross the parent transport. The three child modules are materialized privately
+with exact source/hash equality, never imported from VM cwd or PYTHONPATH.
+After all twelve stages, a separate native verification rechecks current scope
+and every stage receipt, then returns their hashes with execution/code/binding
+and capsule identities. The parent must match all hashes to its completed
+journal and current capsule before the common CLI clears the selected real
+CSRF/Gateway checks. A manifest recipe flag, partial history, another capsule or
+mismatched receipt cannot provide that result. Simulation keeps those checks
+pending. This selected-case proof does not issue signed qualification,
+certification, production scheduling or a whole-profile acceptance result.
+
+Replacement label changes use kubectl's supported inline JSON patch argument.
+Only the Pod UID, resourceVersion and fixed slot label enter that argument;
+credential data remains outside argv. A real offline `kubectl patch --local`
+regression executes the producer's captured arguments, in addition to mocked
+API tests, so unsupported stdin/patch-file behavior cannot masquerade as a
+successful command. Unknown submitted mutations still require observation.
+
+ListenerSet admission checks Accepted/Programmed on the set and the current
+generation's Accepted/ResolvedRefs/Programmed plus no conflict on its exact
+named listener. HTTPRoute support must be present. A top-level ready flag cannot
+hide a missing, stale, conflicting or unresolved listener certificate reference.
+
+An EndpointSlice serialized with `endpoints: null` is accepted as empty only
+when no Pod is expected for that Service. The first OIDC helper slot can reach
+that state only under the existing journaled victim-loss binding; null endpoints
+cannot substitute for a live frontend, survivor, IdP or Gateway endpoint. Service
+owner UID and exact ready endpoint identities remain mandatory.
+
+The selected provider-fault checker builds only fixed namespace-scoped Cilium
+deny metadata for the admitted basic distributed managed-S3 recipe. It is a pure
+builder/validator, not permission to apply a policy or a provider certificate.
+The native caller must separately bind namespace/runtime/Pod/image/provider
+identity before every action. A network proof requires the exact two API/two
+worker Pod set, target denial, all other dependency controls, live processes and
+no restarts. Outage evidence must retain the original publication and contain
+one actual queued typed transient document work. Recovery must use that same
+work with a newer fence/attempt, one new active generation and matching original
+SHA; missing/extra work, stale ownership and payload/credential fields fail
+closed. This checker cannot release uncertain model slots or mutate any queue,
+provider, clock, Kubernetes object or release gate.
+
+Provider stage journals use fixed ordered stages, protected atomic writes, unique
+intents and chained code/input-bound receipt hashes. An already active stage
+calls observation only, including when apply is supplied again. Public reports
+contain hashes/status, not private outcomes or arbitrary exception messages.
+Owned Cilium policy primitives require a live guard before every call, admit
+exact operation/name/namespace/spec/labels, record create intent before dispatch
+and bind healing to the created policy UID in a DeleteOptions body. An uncertain
+create or delete is observed without resubmission; foreign/replaced policies and
+preexisting objects are refused. These primitives do not supply native admission
+or validate live SQL/HTTP evidence by themselves; no release/qualification gate
+accepts their journal as a provider certificate.
+
+The fixed native provider adapter requires a verified same-schema upgrade,
+authenticated independent copy and matching completed PostgreSQL child proof.
+It pins current process/container/image, Node UID and PV/claim bindings; live
+readiness may degrade during denial, but replacements/restarts or changed
+Secrets/templates refuse continuation. Unknown active controllers are refused;
+completed Job TTL cleanup cannot authorize a writer. Each operation gets a
+separate protected receipt directory. The SQL observer sets REPEATABLE READ,
+READ ONLY on a new connection before its first query, rather than entering a
+business session that already queries guards. In-Pod HTTP has fixed loopback
+routes, no ambient proxies or redirects, bounded bodies and durable exclusive
+intents. A lost regenerate ACK cannot resend its POST. Final logout is an
+explicit apply stage. No adapter stage releases model capacity or edits work,
+leases, clocks or publication state, and this recipe never grants certification.
+Before final logout, the complete publication/work/corpus/maintenance snapshot
+must still equal the last verified recovery. A previously passed stage cannot
+hide subsequent target drift or provide a stale final success.
+
+The Qdrant active-work rehearsal uses a bounded transaction on only the owned
+installation's `replica_capacity_resources` row for `llm`. It changes no rows,
+uses scoped API runtime credentials and always rolls back, including on stdin
+EOF; PostgreSQL idle-transaction timeout also bounds it to180 seconds. New gate
+creation requires a ready API; observing/closing an existing exact gate may
+continue during the controlled loss of readiness. Namespace/Pod/container/image,
+native PID/start-time and SQL backend PID/start-time are bound before admission.
+Lost start/release acknowledgements are observed without spawning another actor
+or writing another release marker. Gate commands/SQL/module paths are literal
+code, not manifest inputs. The selected work must already have an actual future
+database lease and an owned worker blocked by that exact backend before denial;
+rollback must finish before that captured lease expires. Expiry/EOF cannot be
+substituted for a successful explicit-release receipt. No readiness override,
+work lease/clock change or uncertain model-slot release is supplied by this gate.
+
+Image-input guards read fresh namespaced inventories without cross-guard caches;
+all pinned immutable values, UIDs, controller specs and claims remain checked.
+Missing, duplicate or foreign objects refuse admission. Runtime identity probes
+use at most four concurrent read-only calls, retain every result and propagate
+failures. Transport overhead is reduced without extending gate/work timeouts.
+Simulation logout evidence requires the old cookie to lose protected download
+access even when `/auth/me` returns its explicit anonymous identity with200.
+Observing a lost logout acknowledgement never sends a second POST.
+
+Owned model quarantine recovery validates immutable historical provider receipts
+without executing a parent with an overridden code digest. Its independent
+source/backup authority and live namespace, exact reservation, selective policy
+and two busy API probes precede any physical recovery. The existing audited
+reconciliation remains the only slot-release path. Stop facts are reobserved
+before UID-bound policy removal and maintenance release. The parent stays
+partial; no fabricated crash receipt or implicit TTL acknowledgement is allowed.
+Only that synthetic run's session may be retained in protected local storage
+for restart continuity and one-shot logout. Snapshot drift, wrong frozen export,
+remaining old-cookie access or a report path alias blocks verification.
+
+## Fixed predecessor SQL identifiers and worker health listener
+
+The predecessor restore/upgrade count queries select table names exclusively
+from a literal mapping in the function. Backup counts are compared as values;
+backup/request input never becomes a SQL identifier. The two B608 annotations
+cover only those fixed-identifier expressions.
+
+The replicas worker intentionally binds its health/aggregate-metrics port to
+Pod interfaces so kubelet probes can reach it. The chart publishes no worker
+Service or Gateway route and applies default-deny worker ingress through
+`distributed-network.yaml`. The two B104 annotations cover only that internal
+listener declaration/default; they do not authorize public exposure of port
+8001. External monitoring needs an explicit scoped network policy.

@@ -68,9 +68,18 @@ def _digest(rows: dict) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def repair_published_document(doc_id, settings, generator, embedder, vector_store, transform, *, dry_run=False) -> dict:
+def repair_published_document(doc_id, settings, generator, embedder, vector_store, transform, *, dry_run=False, recovery_source=None) -> dict:
     """Transform a canonical snapshot and publish it with no parser/LLM calls."""
+    from app.services.work.context import current_claim
+    from app.services.work.admission import durable_documents
+    from app.services.work.models import LostOwnership
+    work = current_claim()
+    if not dry_run and durable_documents(settings) and work is None:
+        raise LostOwnership("Distributed repair requires its work claim")
     with session_scope() as session:
+        if work is not None:
+            from app.services.work.repair import validate_input
+            validate_input(session, work, settings)
         if not lock_document_write(session, doc_id, allow_deleted=False):
             raise GenerationConflict("Document is missing or deleted")
         from app.db.models import DocumentProcessingReview
@@ -79,6 +88,9 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
             return {'doc_id':doc_id,'status':'skipped','reason':'processing_scope_review_required'}
         document = session.get(Document, doc_id)
         state = session.get(DocumentGenerationState, doc_id)
+        if state and state.active_generation_id:
+            from app.services.artifacts.publication import hydrate_publication
+            hydrate_publication(settings, doc_id, state.active_generation_id)
         if state and state.active_generation_id:
             from app.services.processing_scope import scope_for_generation
             if scope_for_generation(session,doc_id,state.active_generation_id) is not None:
@@ -99,6 +111,12 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
             return {"changed": changed, "generation_id": None, "dry_run": dry_run}
         generation = begin_generation(session, doc_id)
         generation.chunk_projection_version = before.get("chunk_projection_version")
+        if work is not None:
+            generation.work_id, generation.work_fence = work.work_id, work.fence
+            session.flush()
+            if recovery_source:
+                from app.services.work.repair_embeddings import copy_embeddings
+                copy_embeddings(session, work, recovery_source, generation.id)
         generation_id, base_id = generation.id, generation.base_generation_id
         dev = session.get(Development, document.development_id) if document.development_id else None
         metadata = {"global_tags": global_tags, "source_locale": document.source_locale,
@@ -152,9 +170,22 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
                 raise GenerationConflict("Canonical document changed while preparing repair")
             _copy_artifacts(settings, doc_id, base_id, generation_id, paths, proposal)
             docs = _write_bundle(generator, doc_id, filename, paths, proposal)
-            point_ids = _index_candidate(settings, vector_store, embedder, doc_id, filename,
-                                         generation_id, docs, proposal["chunks"], metadata, sources=proposal["sources"],
-                                         chunk_projection_version=before.get("chunk_projection_version"), projection_session=session)
+            if work is None:
+                point_ids = _index_candidate(settings, vector_store, embedder, doc_id, filename,
+                    generation_id, docs, proposal["chunks"], metadata, sources=proposal["sources"],
+                    chunk_projection_version=before.get("chunk_projection_version"), projection_session=session)
+        if work is not None:
+            from app.services.work.repair_embeddings import RepairEmbedder
+            from app.services.work.repair import guarded_store
+            point_ids = _index_candidate(settings, guarded_store(vector_store, settings, work, generation_id),
+                RepairEmbedder(embedder, settings, work, generation_id), doc_id, filename, generation_id, docs,
+                proposal["chunks"], metadata, sources=proposal["sources"], chunk_projection_version=before.get("chunk_projection_version"))
+        with session_scope() as session:
+            lock_generation_read(session, [doc_id])
+            state = session.get(DocumentGenerationState, doc_id)
+            if (state is None or state.candidate_generation_id != generation_id
+                    or canonical_rows_digest(session, doc_id) != base_hash):
+                raise GenerationConflict("Canonical document changed while indexing repair")
             vector_store.verify_generation_points(doc_id, generation_id, sorted(point_ids))
             effects = {}
             if proposal["chunks"] != before["chunks"]:
@@ -172,17 +203,28 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
                 "parse_effects": effects, "point_ids": sorted(point_ids),
                 "artifacts": artifact_manifest(settings, doc_id, generation_id),
             }
+            if work is not None:
+                from app.services.artifacts.publication import canonical_hash
+                prepared["repair_input_hash"] = canonical_hash(work.spec.payload)
             if before.get("chunk_projection_version") is not None:
                 prepared["chunk_projection_version"] = before["chunk_projection_version"]
-            publication = paths.uploads_root / "publication.json"
             # Snapshot provenance includes datetimes; use the same JSON form as
             # Pydantic manifests so restored publication does not need ORM rows.
             serializable = json.loads(json.dumps(prepared, default=lambda value: value.isoformat()))
-            write_json_atomic(publication, serializable)
+            from app.services.artifacts.publication import write_prepared_publication
+            publication_hash = write_prepared_publication(session, settings, serializable)
         with session_scope() as session:
-            mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication))
+            mark_generation_ready(session, doc_id, generation_id, publication_hash=publication_hash)
         publish_prepared_document(settings, vector_store, doc_id, generation_id)
     except Exception as exc:
+        if work is not None:
+            from app.services.errors import public_error_code
+            from app.services.artifacts.contract import BlobUnavailable
+            from app.services.work.handlers import TransientWorkError
+            from app import error_codes as codes
+            if isinstance(exc, (LostOwnership, TransientWorkError, BlobUnavailable)) or public_error_code(exc) in {
+                    codes.DEPENDENCY_UNAVAILABLE, codes.TIMEOUT, codes.RATE_LIMITED}:
+                raise  # Keep accepted batches/candidate protected until fenced handoff.
         try:
             with session_scope() as session:
                 candidate = session.get(DocumentGeneration, generation_id)
@@ -192,6 +234,8 @@ def repair_published_document(doc_id, settings, generator, embedder, vector_stor
         except Exception:
             logger.warning("[%s] Не удалось отменить ремонтную версию %s", doc_id, generation_id, exc_info=True)
         raise
+    if work is not None:
+        return {"changed": True, "generation_id": generation_id, "dry_run": False}
     try:
         cleanup_document_generations(settings, vector_store, doc_id)
     except Exception:

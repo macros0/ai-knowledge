@@ -1,4 +1,5 @@
 {{- range $name, $port := dict "frontend" 3000 "backend" 8000 "postgres" 5432 "qdrant" 6333 }}
+{{- if or (ne $.Values.deployment.mode "distributed") (has $name (list "frontend" "backend")) }}
 ---
 apiVersion: v1
 kind: Service
@@ -9,6 +10,8 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    okf-role: {{ ternary "application" $name (has $name (list "frontend" "backend")) }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    okf-role: {{ if and (eq $name "backend") (eq $.Values.deployment.mode "distributed") }}api{{ else if and (eq $name "frontend") (has $.Values.deployment.mode (list "frontend-split" "distributed")) }}frontend{{ else }}{{ ternary "application" $name (has $name (list "frontend" "backend")) }}{{ end }}
   ports: [{name: http, port: {{ $port }}, targetPort: {{ $port }}}]
+{{- end }}
 {{- end }}

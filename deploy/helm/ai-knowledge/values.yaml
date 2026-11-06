@@ -4,6 +4,16 @@ deployment:
 application:
   enabled: true
   replicas: 1
+# Shared runtime/storage identity is mandatory for distributed roles.
+replicaStorage:
+  infrastructureRelease: okf-storage
+  postgres: {provider: managed}
+  qdrant: {provider: managed, url: "http://qdrant:6333"}
+  artifacts: {provider: managed, backend: local, storeId: ""}
+resilience: {class: basic}
+frontend: {replicas: 1}
+api: {replicas: 1}
+worker: {replicas: 0}
 runtime:
   environment: production
   workers: 1
@@ -11,7 +21,10 @@ runtime:
   auditDbEnabled: true
   auditStdoutMode: disabled
   auditStdoutFormat: native
+  identityConfigMap: ""
   config: {}
+placement: {topologyKey: kubernetes.io/hostname}
+scratch: {sizeLimit: 8Gi}
 trust:
   existingConfigMap: ""
 secrets:
@@ -46,6 +59,12 @@ probes:
     liveness: {initialDelaySeconds: 0, periodSeconds: 10, timeoutSeconds: 1, failureThreshold: 3}
     readiness: {initialDelaySeconds: 0, periodSeconds: 5, timeoutSeconds: 1, failureThreshold: 3}
 resources:
+  api:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "2", memory: 2Gi, ephemeral-storage: 8Gi}
+  worker:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {cpu: "2", memory: 3Gi, ephemeral-storage: 8Gi}
   backend:
     requests: {cpu: 250m, memory: 512Mi}
     limits: {cpu: "2", memory: 2Gi}

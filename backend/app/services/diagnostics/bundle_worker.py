@@ -11,6 +11,7 @@ from .sanitize import valid_uuid
 from .schema import DiagnosticLimits
 from .safe_metadata import _safe_operations, _safe_runtime
 from .paths import assert_no_links
+from .scratch import child_lease
 
 MAX_INPUT_BYTES = 4 * 1048576
 
@@ -73,7 +74,9 @@ def main() -> int:
         raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
         if len(raw) > MAX_INPUT_BYTES:
             raise ValueError("Worker payload too large")
-        result = _work(json.loads(raw))
+        payload = json.loads(raw)
+        with child_lease(Path(payload["root"])):
+            result = _work(payload)
     except BundleTooLarge:
         result = {"status": "too_large"}
     except Exception:

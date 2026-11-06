@@ -176,6 +176,20 @@ def export_generation_tables(session, doc_id, generation_id, bundle: Path):
 
 def import_generation_tables(doc_id, generation_id, bundle: Path):
     from app.services.generation_files import _reject_links
+    if bundle.name == doc_id and bundle.parent.name == "okf_bundles":
+        from app.config import get_settings
+        from app.services.artifacts.legacy import hydrate_snapshot
+        settings = get_settings()
+        if hydrate_snapshot(settings, doc_id):
+            bundle = settings.okf_dir / doc_id
+    if (bundle.parent.name == 'generations' and bundle.parent.parent.name == doc_id
+            and re.fullmatch(r'[0-9a-f]{32}', bundle.name)):
+        from app.config import get_settings
+        from app.services.generation_files import generation_paths
+        from app.services.artifacts.publication import hydrate_publication
+        settings = get_settings()
+        if hydrate_publication(settings, doc_id, bundle.name):
+            bundle = generation_paths(settings, doc_id, bundle.name).bundle
     folder = bundle / 'tables'
     _reject_links(folder / 'manifest.json')
     raw = (folder / 'manifest.json').read_bytes()

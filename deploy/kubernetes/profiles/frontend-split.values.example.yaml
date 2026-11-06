@@ -1,0 +1,4 @@
+# Add DIAGNOSTICS_INGEST_TOKEN (32+ characters) to the existing runtime Secret.
+# Backend stays one combined process; storage stays bundled.
+deployment: {mode: frontend-split}
+frontend: {replicas: 2}

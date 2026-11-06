@@ -142,6 +142,9 @@ def _collect(root: Path, output: Path, since: datetime, until: datetime,
                                         store=store, metadata_provider=_unavailable)
             try:
                 snapshot.capture_policies = _offline_policy_projection(root)
+                if (root / "instances").is_dir() or (root / ".instance-v1.json").is_file():
+                    snapshot.gaps += ("shared_events_require_database",)
+                    snapshot.partial = True
                 snapshot.runtime = {**snapshot.runtime, "containers": containers or {}}
                 if not containers or containers_incomplete:
                     snapshot.gaps += ("container_state_unavailable",)

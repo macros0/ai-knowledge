@@ -1,4 +1,5 @@
 "use client";
+import ChatScenarioBadge from "./ChatScenarioBadge";
 
 import {useState} from "react";
 import ChatHistorySources from "./ChatHistorySources";
@@ -22,7 +23,7 @@ export function SourceBadges({sources,responseMode}) {
   return <ChatHistorySources sources={sources || []} responseMode={responseMode} open={open} onToggle={setOpen}/>;
 }
 
-export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, actionsPending, documentSelectionEnabled = true }) {
+export function HistoryMessage({ m, sessionId, userLabel, onContinueWithoutAssessment, actionsPending, documentSelectionEnabled = true }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { t } = useI18n();
   const youLabel = userLabel ?? t("chat.you");
@@ -46,6 +47,7 @@ export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, acti
     <div className={`msg ${m.role}`}>
       <div className="role">{m.role === "user" ? youLabel : t("chat.assistant")}</div>
       <div className="bubble history-bubble">{content}</div>
+      {m.role === "assistant" && <ChatScenarioBadge scenario={m.retrieval_metadata?.scenario} execution={m.retrieval_metadata?.scenario_execution} />}
       {m.role === "assistant" && attempt && attempt.status !== "completed" && m.content && (
         <div className="meta" role={attempt.status === "failed" ? "alert" : "status"}>
           <div>{t("chat.retainedAnswerNotice")}</div>
@@ -71,7 +73,7 @@ export function HistoryMessage({ m, userLabel, onContinueWithoutAssessment, acti
         outcome={m.retrieval_metadata?.source_assessment} candidateCount={m.sources?.length ?? 0}
         responseMode={attempt?.mode} pending={actionsPending} onShowCandidates={() => setSourcesOpen(true)}
         onContinueWithoutAssessment={onContinueWithoutAssessment ? () => onContinueWithoutAssessment(m) : undefined} />}
-      <ChatHistorySources sources={m.sources || []} responseMode={attempt?.mode} open={sourcesOpen} onToggle={setSourcesOpen} documentSelectionEnabled={documentSelectionEnabled} />
+      <ChatHistorySources message={m} sessionId={sessionId} sources={m.sources || []} responseMode={attempt?.mode} open={sourcesOpen} onToggle={setSourcesOpen} documentSelectionEnabled={documentSelectionEnabled} />
     </div>
   );
 }

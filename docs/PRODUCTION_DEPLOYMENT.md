@@ -471,3 +471,12 @@ backend/frontend. Порядок действий администратора, 
 Диагностическая папка должна оставаться вне `OKF_DATA_DIR` и обычного
 `data.tar` backup. Build-аргумент `OKF_BUILD_REVISION` задавайте фактическим
 коммитом релиза; при локальной сборке оставляйте `unknown`.
+
+## Distributed implementation status (2026-11-01)
+
+The basic frontend/API/worker topology is implemented but production rollout is
+pending storage bootstrap, coordinated maintenance and multi-Pod acceptance.
+See `docs/KUBERNETES_DEPLOYMENT.md`. A namespace-bound keyed runtime identity and
+the matching installed SQL identity/schema are mandatory; a replica cannot
+silently create or adopt them. Local scratch is disposable; API Services exclude
+workers. Resilient profiles remain rejected until provider/topology qualification.

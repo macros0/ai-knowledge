@@ -56,6 +56,11 @@ def main(argv=None, *, settings=None, runner=None) -> int:
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--workers", type=int, default=int(os.getenv("UVICORN_WORKERS", "1")))
     args = parser.parse_args(argv)
+    from app.config import get_settings
+    resolved = settings or get_settings()
+    if resolved.okf_deployment_schema == "replicas-v1":
+        from app.deployment.runtime_identity import enforce_runtime_identity
+        enforce_runtime_identity(resolved)
     runtime = diagnostics_runtime.install_entrypoint_runtime(settings)
     try:
         if args.workers != 1:

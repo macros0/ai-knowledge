@@ -42,6 +42,10 @@ jobs:
           docker build -f backend/Dockerfile --build-arg OKF_BUILD_REVISION="$GITHUB_SHA" -t okf-backend:kube-smoke .
           docker build -f frontend/Dockerfile --build-arg OKF_BUILD_REVISION="$GITHUB_SHA" -t okf-frontend:kube-smoke frontend
           docker build -f backend/test_scripts/model_stub/Dockerfile -t okf-model-stub:kube-smoke backend/test_scripts/model_stub
+      - name: Replica evidence and notification contracts without provider access
+        run: |
+          cd backend
+          python -m pytest tests/test_replica_evidence.py tests/test_replica_evidence_runner.py tests/test_replica_acceptance_report.py tests/test_replica_acceptance_safety.py tests/test_replica_backup_alert_protocol.py tests/test_replica_backup_alert_receiver.py tests/test_replica_backup_alerts.py tests/test_replica_backup_alerts_cli.py tests/test_replica_backup_health.py -q
       - name: Isolated install and persistent restart smoke
         run: |
           kind create cluster --name okf-kube --image kindest/node:v1.37.0 --config deploy/kubernetes/lab/kind.yaml --wait 120s

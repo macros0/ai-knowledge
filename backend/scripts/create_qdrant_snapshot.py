@@ -55,6 +55,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("create_qdrant_snapshot")
     try:
         path = create_snapshot(args.output_dir)
     except Exception as exc:

@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "status": "physical-rwx-relocation-guard-with-completed-current-image-restore",
+  "source_recipe": "authorized-nfs-csi-4.13.6-training-v1",
+  "scope": "Selected authorized NFS/CSI training target; initial outside-image read-only proof below is historical. Full current Linux CI/image and completed RWX-target restore are recorded separately.",
+  "implementation": [
+    "Manifest-bound strict source coordinates; bounded regular JSON with duplicate-key refusal",
+    "Actual canonical no-follow NFS mount/root observation; reject aliases, local/bind/stacked mounts and unsupported transport",
+    "Pre-probe, post-probe and transactional target proof; stable target digest bound into identity storage receipt",
+    "Same-path RWX adoption and resume only after proof; unchanged ownership/schema/auth/epoch controls and S3 behavior"
+  ],
+  "tests": {
+    "initial_red_physical": 27,
+    "initial_red_adoption": 3,
+    "first_focused_green": 33,
+    "complete_contract_cohort_passed": 76,
+    "late_focused_cohort": {
+      "passed": 36,
+      "failed": 2,
+      "reason": "Two new CLI race fixtures lacked selection.model_dump; production path refused AttributeError before reaching the intended boundary"
+    },
+    "corrected_race_and_binding_cohort": {
+      "passed": 3,
+      "failed": 0
+    },
+    "mandatory_project_checks": {
+      "passed": true,
+      "audit_vulnerabilities": 0,
+      "frontend_passed": 756,
+      "frontend_skipped": 1,
+      "ruff": "passed",
+      "eslint": "passed with existing warnings"
+    }
+  },
+  "native": {
+    "namespace": "replica-test-rwxt20261103",
+    "namespace_uid": "8e78c9c3-fd3c-428a-b1bf-507b7dc95952",
+    "claim": {
+      "claim_uid": "5d4fec89-4edd-4e1a-8e33-40d96a609065",
+      "pv_uid": "cefec51f-d38f-4aa3-810f-2e09e228fb42",
+      "pv_name": "pvc-5d4fec89-4edd-4e1a-8e33-40d96a609065",
+      "csi": {
+        "driver": "okf-training-nfs.csi.k8s.io",
+        "volumeAttributes": {
+          "csi.storage.k8s.io/pv/name": "pvc-5d4fec89-4edd-4e1a-8e33-40d96a609065",
+          "csi.storage.k8s.io/pvc/name": "rwxt-artifacts",
+          "csi.storage.k8s.io/pvc/namespace": "replica-test-rwxt20261103",
+          "mountPermissions": "0770",
+          "onDelete": "retain",
+          "server": "172.18.0.1",
+          "share": "/",
+          "storage.kubernetes.io/csiProvisionerIdentity": "1793713974150-3326-okf-training-nfs.csi.k8s.io",
+          "subDir": "okf-replica-test-rwxt20261103-rwxt-artifacts-pvc-5d4fec89-4edd-4e1a-8e33-40d96a609065"
+        },
+        "volumeHandle": "172.18.0.1##okf-replica-test-rwxt20261103-rwxt-artifacts-pvc-5d4fec89-4edd-4e1a-8e33-40d96a609065#pvc-5d4fec89-4edd-4e1a-8e33-40d96a609065#retain"
+      }
+    },
+    "module_sha256": "58ff7f01fc89497f971c9d0e2144861b784d87c22267dc6f1ab86db9b9b000cd",
+    "saved_image": "okf-backend:replicas-ccfcf9e-review-3e0d390d6e27",
+    "candidate_code_mounted_outside_image": true,
+    "observation": {
+      "succeeded": 1,
+      "failed": 0,
+      "active": 0,
+      "receipt": {
+        "proof": {
+          "source_scope_sha256": "9140263c59fc11f13acb85c05c85ee827c32199380b08d8589a10eea72b902f3",
+          "namespace": "replica-test-rwxt20261103",
+          "nfs_source": "172.18.0.1:/okf-replica-test-rwxt20261103-rwxt-artifacts-pvc-5d4fec89-4edd-4e1a-8e33-40d96a609065",
+          "inode": 8194,
+          "uid": 1000,
+          "gid": 1000,
+          "mode": 504
+        },
+        "read_only": true,
+        "sql_access": false,
+        "artifact_writes": 0
+      },
+      "live_cri": 0
+    },
+    "sql_access": false,
+    "artifact_writes": 0,
+    "master_key_transferred": false,
+    "secrets_mounted": false,
+    "service_account_token": false
+  },
+  "closure": {
+    "observer_pod_and_both_native_jobs_terminal": true,
+    "live_cri": 0,
+    "claim_retained": true,
+    "nfs_source_workloads_still_off": true,
+    "borrowed_capacity": false
+  },
+  "full_current_ci": true,
+  "rwx_target_restore_performed": true,
+  "certification": null,
+  "production_backup_schedule": "disabled",
+  "completed_restore_report": "2026-11-03-replica-rwx-target-restore.json",
+  "current_ci": {
+    "operation_id": "16185383212a473db815b418876c63f5",
+    "canonical_git_files_unchanged": 2439,
+    "passed": 6466,
+    "optional_skipped": 221,
+    "failed": 0,
+    "errors": 0,
+    "coverage_percent": 87.6827244413122,
+    "junit_sha256": "2af6b918c7012b6a9ccadb9411c815086b5abbbe28fac72f3faa7bcdc125c1f5",
+    "case_ids_sha256": "23861942f92771dc7a5362afac54d87fb395cb6f49f2702e9af4408f595dcd79",
+    "comparison": {
+      "all6652_previous_cases_retained": true,
+      "added_cases": 35,
+      "optional_skip_case_ids_exactly_unchanged": true
+    },
+    "container": "network-none, read-only, non-root, capabilities dropped, bounded CPU/memory/tmpfs"
+  }
+}

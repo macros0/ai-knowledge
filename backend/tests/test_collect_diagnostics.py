@@ -52,6 +52,17 @@ def test_cli_works_without_database_and_never_exports_raw_files(tmp_path):
                for path in (root / "events" / "baseline").glob("*.jsonl"))
 
 
+def test_offline_export_marks_unavailable_shared_replica_events(tmp_path):
+    root, output = tmp_path / "replica-spool", tmp_path / "replica-support.zip"
+    now = _seed(root)
+    (root / "instances").mkdir()
+    assert collect_diagnostics.main(_args(root, output, now)) == 0
+    with ZipFile(output) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["partial"] is True
+        assert "shared_events_require_database" in manifest["gaps"]
+
+
 def test_cli_refuses_live_backend_writer_and_existing_output(tmp_path):
     root, output = tmp_path / "spool", tmp_path / "support.zip"
     now = _seed(root)

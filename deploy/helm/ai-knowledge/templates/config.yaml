@@ -7,15 +7,30 @@ metadata:
     {{- include "okf.labels" . | nindent 4 }}
 data:
   ENVIRONMENT: {{ .Values.runtime.environment | quote }}
-  DATA_DIR: /data
-  STORAGE_MODE: bundled
-  QDRANT_URL: http://qdrant:6333
+  DATA_DIR: {{ ternary "/scratch/data" "/data" (eq .Values.deployment.mode "distributed") | quote }}
+  STORAGE_MODE: {{ ternary "replicas" "bundled" (eq .Values.deployment.mode "distributed") }}
+  QDRANT_URL: {{ ternary .Values.replicaStorage.qdrant.url "http://qdrant:6333" (eq .Values.deployment.mode "distributed") | quote }}
   DEPLOYMENT_TIER: {{ .Values.deployment.environment | quote }}
   MODEL_MODE: {{ .Values.models.mode | quote }}
   UVICORN_WORKERS: "1"
   AUDIT_DB_ENABLED: {{ .Values.runtime.auditDbEnabled | quote }}
   AUDIT_STDOUT_MODE: {{ .Values.runtime.auditStdoutMode | quote }}
   AUDIT_STDOUT_FORMAT: {{ .Values.runtime.auditStdoutFormat | quote }}
+  {{- if eq .Values.deployment.mode "distributed" }}
+  OKF_DEPLOYMENT_SCHEMA: replicas-v1
+  DEPLOYMENT_MODE: distributed
+  RUNTIME_IMAGE_ID: {{ include "okf.image" (dict "image" .Values.images.backend "tier" .Values.deployment.environment) | quote }}
+  FRONTEND_REPLICAS: {{ .Values.frontend.replicas | quote }}
+  API_REPLICAS: {{ .Values.api.replicas | quote }}
+  WORKER_REPLICAS: {{ .Values.worker.replicas | quote }}
+  RESILIENCE_CLASS: {{ .Values.resilience.class | quote }}
+  ARTIFACT_BACKEND: {{ .Values.replicaStorage.artifacts.backend | quote }}
+  ARTIFACT_STORE_ID: {{ .Values.replicaStorage.artifacts.storeId | quote }}
+  ARTIFACT_UPLOADS_ENABLED: "true"
+  POSTGRES_PROVIDER: {{ .Values.replicaStorage.postgres.provider | quote }}
+  QDRANT_PROVIDER: {{ .Values.replicaStorage.qdrant.provider | quote }}
+  ARTIFACT_PROVIDER: {{ .Values.replicaStorage.artifacts.provider | quote }}
+  {{- end }}
   {{- if eq .Values.models.mode "stub" }}
   EMBEDDING_PROVIDER: fake
   LLM_MODEL: openai/test-stub

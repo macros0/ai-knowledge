@@ -16,13 +16,41 @@ from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 _engine: Engine | None = None
 _session_factory: sessionmaker | None = None
+_current_session = ContextVar("current_sql_session", default=None)
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _track_storage_write(execution):
+    if execution.is_insert or execution.is_update or execution.is_delete or getattr(execution.statement, "is_text", False):
+        from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+        enforce_maintenance(execution.session)
+        from app.services.work.context import enforce_session as enforce_work
+        enforce_work(execution.session)
+        execution.session.info["artifact_storage_write"] = True
+        from app.services.artifacts.control import enforce_session, enforce_write
+        enforce_session(execution.session)
+        enforce_write(execution.session)
+
+
+@event.listens_for(Session, "before_flush")
+def _guard_storage_flush(session, _context, _instances):
+    if session.new or session.dirty or session.deleted:
+        from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+        enforce_maintenance(session)
+        from app.services.work.context import enforce_session as enforce_work
+        enforce_work(session)
+        session.info["artifact_storage_write"] = True
+        from app.services.artifacts.control import enforce_session, enforce_write
+        enforce_session(session)
+        enforce_write(session)
 # RLock (не Lock): get_session_factory() вызывает get_engine() внутри своей
 # критической секции — обычный Lock дал бы deadlock при первом создании движка.
 _lock = threading.RLock()
@@ -89,9 +117,29 @@ def session_scope():
     Используется и в эндпоинтах, и в фоновом пайплайне (по одной операции на
     сессию, commit сразу после записи — поведение как у прежнего _save()).
     """
+    from app.services.work.context import current_claim, enforce_session as enforce_work
+    parent = _current_session.get()
+    if parent is not None and (current_claim() is not None or parent.info.get("document_work_claim") is not None):
+        from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+        enforce_maintenance(parent)
+        enforce_work(parent)
+        with parent.begin_nested():
+            yield parent
+            enforce_work(parent)
+        return
     session = get_session_factory()()
+    token = _current_session.set(session)
     try:
+        from app.services.work.maintenance_control import enforce_session as enforce_maintenance
+        enforce_maintenance(session)
+        from app.services.work.context import enforce_session as enforce_work
+        enforce_work(session)
+        from app.services.artifacts.control import enforce_session, enforce_write
+        enforce_session(session)
         yield session
+        enforce_work(session)
+        enforce_write(session)
+        enforce_session(session)
         session.commit()
     except Exception as exc:
         session.rollback()
@@ -101,11 +149,24 @@ def session_scope():
             translate_reference_timeout(exc, dialect)
         raise
     finally:
-        session.close()
+        try:
+            session.close()
+        finally:
+            _current_session.reset(token)
+
+
+def current_session():
+    """Caller-owned transaction, for artifact operations inside an owner guard."""
+    return _current_session.get()
 
 
 def configure_for_tests(url: str = "sqlite:///:memory:") -> None:
     """Подменяет глобальный движок (для тестов — in-memory SQLite)."""
+    configure_database(url)
+
+
+def configure_database(url: str) -> None:
+    """Select an explicit database before starting any runtime/CLI workers."""
     global _engine, _session_factory
     with _lock:
         _engine = _make_engine(url)
@@ -123,6 +184,10 @@ def init_db() -> None:
     from app.db import models  # noqa: F401  (регистрация таблиц)
 
     Base.metadata.create_all(get_engine())
+    from app.services.artifacts.control import initialize_control
+    initialize_control(get_engine())
+    from app.services.work.admission import initialize_admission
+    initialize_admission(get_engine())
     # The glossary writer lock is a singleton row.  Seed it before request
     # threads can start so two first writers cannot race on its INSERT.
     if hasattr(models, "GlossaryState"):

@@ -54,7 +54,9 @@ from app.services.llm_profiles import request_scope, request_state, remaining
 from app.services.chat_stream import stream_chat
 from app.services.chat_answer_modes import select_batches, EvidenceTooLarge
 from app.services.chat_token_budget import ChatTokenBudget, ChatBudgetUnavailable
-from app.services.rate_limiter import RateLimitExceeded, get_rate_limiter
+from app.services.rate_limiter import get_rate_limiter as get_rate_limiter
+from app.services.chat_execution import ChatRunContext, check_chat_rate
+from app.models.answer_scenarios import ScenarioExecution
 from app.services.stopwords import KIND_BM25, get_stopwords
 from app.services.vector_store import VectorStore
 from app.services.glossary.expansion import prepare_query
@@ -102,22 +104,11 @@ _inflight_lock = threading.Lock()
 _inflight_by_limit: dict[int, threading.BoundedSemaphore] = {}
 _BUSY_RETRY_AFTER_SECONDS = 5
 
-_FACT_INSTRUCTIONS = (
-    "Extract only facts relevant to the question. Return JSON only: "
-    '{"facts":[{"text":"fact","source":1,"quote":"exact short excerpt"}]}. '
-    "Use global source numbers shown in context. Every quote must occur verbatim "
-    "in its numbered source. Return an empty facts list if none apply."
+from app.services.chat_prompt_builder import (
+    FACT_INSTRUCTIONS as _FACT_INSTRUCTIONS, REDUCE_INSTRUCTIONS as _REDUCE_INSTRUCTIONS,
+    SYNTHESIS_INSTRUCTIONS as _SYNTHESIS_INSTRUCTIONS, build_scenario_prompts, scenario_user_payload,
 )
-_REDUCE_INSTRUCTIONS = (
-    "Shorten these source facts as JSON while retaining every source and exact quote pair. "
-    'Return {"facts":[{"text":"...","source":1,"quote":"..."}]}. '
-    "Preserve numbers, negations, units and attribution."
-)
-_SYNTHESIS_INSTRUCTIONS = (
-    "Answer the question using only verified source facts in the user message. "
-    "Preserve exact numbers, negations and global [N] citations. "
-    "Do not cite any source number absent from the facts."
-)
+
 _AUTHORSHIP_INSTRUCTIONS = (
     'Select verbatim excerpts answering the factual parts of the question. '
     'Return only JSON: {"quotes": [{"source": 1, "quote": "exact original excerpt"}]}. '
@@ -169,12 +160,12 @@ def _verified_facts(raw: str, source_text: dict[int, str]) -> list[dict]:
     return verified
 
 
-def _fact_groups(facts: list[dict], counter: ChatTokenBudget, output_tokens: int) -> list[list[dict]]:
+def _fact_groups(facts: list[dict], counter: ChatTokenBudget, output_tokens: int, system: str = _REDUCE_INSTRUCTIONS) -> list[list[dict]]:
     groups: list[list[dict]] = []
     current: list[dict] = []
     for fact in facts:
         candidate = [*current, fact]
-        if counter.fits(_REDUCE_INSTRUCTIONS, json.dumps(candidate, ensure_ascii=False),
+        if counter.fits(system, json.dumps(candidate, ensure_ascii=False),
                         output_tokens=output_tokens):
             current = candidate
             continue
@@ -182,7 +173,7 @@ def _fact_groups(facts: list[dict], counter: ChatTokenBudget, output_tokens: int
             raise ValueError("chat_summary_too_large")
         groups.append(current)
         current = [fact]
-        if not counter.fits(_REDUCE_INSTRUCTIONS, json.dumps(current, ensure_ascii=False),
+        if not counter.fits(system, json.dumps(current, ensure_ascii=False),
                             output_tokens=output_tokens):
             raise ValueError("chat_summary_too_large")
     if current:
@@ -257,19 +248,7 @@ def _chat_system_prompt(query: str, locale: str, settings: Settings) -> str:
 @observed_operation("chat")
 def chat(req: ChatRequest, current_user: User = Depends(require_user)):
     settings = get_settings()
-    try:
-        get_rate_limiter().check_action(
-            current_user.user_id,
-            "chat",
-            max_requests=settings.chat_rate_limit_per_minute,
-        )
-    except RateLimitExceeded as exc:
-        raise ApiError(
-            status_code=429,
-            code=errors.RATE_LIMITED,
-            detail=str(exc),
-            headers={"Retry-After": str(max(1, int(exc.retry_after)))},
-        ) from exc
+    check_chat_rate(current_user, settings)
     if req.session_id and not chat_history.is_valid_session_id(req.session_id):
         raise ApiError(
             status_code=422,
@@ -296,6 +275,11 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
 
     # Допуск после дешёвых проверок, до embed → поиск → LLM: всё это время
     # запрос держит поток общего пула синхронных эндпоинтов.
+    from app.services.work.admission import durable_documents
+    if durable_documents(settings):
+        from app.services.work.chat_runtime import managed_chat
+        with managed_chat(settings, req, current_user) as ref:
+            return _execute_chat_attempt(req, current_user, settings, ref)
     slots = _admit_chat(settings.chat_max_inflight)
     try:
         if req.response_mode is None:
@@ -303,35 +287,53 @@ def chat(req: ChatRequest, current_user: User = Depends(require_user)):
         attempt_id = req.attempt_id or str(uuid.uuid4())
         try:
             uuid.UUID(attempt_id)
-            ref = chat_history.begin_attempt(req.session_id, current_user, req.query, attempt_id, req.response_mode)
+            ref = chat_history.begin_attempt(req.session_id, current_user, req.query, attempt_id, req.response_mode, **({"scenario_id":str(req.scenario_id)} if req.scenario_id else {}))
         except ValueError as exc:
             raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Некорректный attempt_id") from exc
-        on_start = request_state().get("on_start")
-        if on_start:
-            on_start(ref)
-        if ref.existing or ref.status != "incomplete":
-            raise ApiError(status_code=409, code=errors.CONFLICT, detail="Эта попытка уже завершена")
-        try:
-            if req.search_doc_ids is not None:
-                chat_history.save_attempt_sources(ref, current_user, [],
-                    retrieval_metadata={'search_doc_ids': req.search_doc_ids})
-            remaining(settings.llm_chat_total_timeout_seconds)
-            result = _answer(req, current_user, settings, attempt_ref=ref)
-            cancel = request_state().get("cancel")
-            if cancel is not None and cancel.is_set():
-                chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
-                raise LLMCancelled()
-            if not chat_history.finish_attempt(ref, current_user, status="completed", answer=result.answer):
-                raise LLMCancelled()
-            return result
-        except LLMCancelled:
-            chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
-            raise
-        except Exception:
-            chat_history.finish_attempt(ref, current_user, status="failed", answer="")
-            raise
+        return _execute_chat_attempt(req, current_user, settings, ref)
     finally:
         slots.release()
+
+
+def _execute_chat_attempt(req, current_user, settings, ref):
+    on_start = request_state().get("on_start")
+    if on_start:
+        on_start(ref)
+    if ref.existing or ref.status != "incomplete":
+        raise ApiError(status_code=409, code=errors.CONFLICT, detail="Эта попытка уже завершена")
+    try:
+        if req.search_doc_ids is not None:
+            chat_history.save_attempt_sources(ref, current_user, [],
+                retrieval_metadata={'search_doc_ids': req.search_doc_ids})
+        remaining(settings.llm_chat_total_timeout_seconds)
+        snapshot = chat_history.read_attempt_scenario(ref, current_user)
+        run = ChatRunContext(snapshot,build_scenario_prompts(req.query,req.locale,settings)) if snapshot else None
+        if run:
+            accepted=ScenarioExecution(status="accepted",prompt_fingerprint=run.scenario_prompts.fingerprint)
+            chat_history.set_scenario_execution(ref,current_user,accepted)
+            on_progress=request_state().get("on_progress")
+            if on_progress:on_progress({"phase":"scenario","scenario":snapshot.model_dump(mode="json"),"scenario_execution":accepted.model_dump(mode="json")})
+        result = _answer(req, current_user, settings, attempt_ref=ref, **({"run":run} if run else {}))
+        if run:
+            result.scenario=snapshot
+            model_id=getattr(_get_llm(),"model",None) if any(s.in_model_context for s in result.sources) else None
+            result.scenario_execution=run.execution(result,model_id)
+            chat_history.set_scenario_execution(ref,current_user,result.scenario_execution)
+        cancel = request_state().get("cancel")
+        if cancel is not None and cancel.is_set():
+            chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
+            raise LLMCancelled()
+        if not chat_history.finish_attempt(ref, current_user, status="completed", answer=result.answer):
+            raise LLMCancelled()
+        return result
+    except LLMCancelled:
+        chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
+        raise
+    except Exception:
+        cancel = request_state().get("cancel")
+        stopped = ref.run_id is not None and cancel is not None and cancel.is_set()
+        chat_history.finish_attempt(ref, current_user, status="stopped" if stopped else "failed", answer="")
+        raise
 
 
 def _search_scope_documents(doc_ids: list[str]) -> list[ChatSearchScopeDocument]:
@@ -365,7 +367,7 @@ def _run_source_assessment(req, blocks, sources, settings, attempt_ref, config, 
     effective = snapshot["effective_enabled"]
     metadata = {"source_assessment_request": snapshot,
                 "source_assessment_replay": {"requested_enabled": req.assess_sources},
-                "chat_request": req.model_dump(exclude={"session_id", "attempt_id"})}
+                "chat_request": req.model_dump(mode="json", exclude={"session_id", "attempt_id"})}
     serialized = [s.model_dump(mode="json") for s in sources]
     if attempt_ref:
         chat_history.save_attempt_sources(attempt_ref, current_user,
@@ -424,12 +426,12 @@ def _assessment_reject_answer(req, outcome):
     return f"Поиск не дал достаточно релевантных источников. Проверены первые {outcome.sampled_count} фрагментов."
 
 
-def _answer_selected(req, current_user, settings, attempt_ref):
+def _answer_selected(req, current_user, settings, attempt_ref, run=None):
     saved = chat_history.read_attempt_sources(req.session_id, current_user, req.source_selection.attempt_id)
     if saved is None:
         raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Результат поиска не найден")
     found, metadata = saved
-    if (metadata.get('answer_attempt', {}).get('mode') not in {'documents', 'fast', 'full'}
+    if (metadata.get('answer_attempt', {}).get('mode') not in {'documents', 'fast', 'full', 'scenario'}
             or metadata.get('answer_attempt', {}).get('query') != req.query):
         raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Выбор не относится к этому поиску")
     indexes = sorted(set(req.source_selection.indexes))
@@ -445,7 +447,7 @@ def _answer_selected(req, current_user, settings, attempt_ref):
         'completed_parts': 0, 'cited': False, 'partial': False,
         'selectable': True}) for number, index in enumerate(indexes, 1)]
     selected_metadata = {'schema_version': 1, 'mail_mode': req.mail_mode,
-                         'response_mode': 'full', 'source_blocks': snapshot_blocks(merged), 'source_selection': {
+                         'response_mode': req.response_mode, 'source_blocks': snapshot_blocks(merged), 'source_selection': {
                              'attempt_id': req.source_selection.attempt_id, 'indexes': indexes}}
     chat_history.save_attempt_sources(attempt_ref, current_user,
         [source.model_dump(mode='json') for source in sources], retrieval_metadata=selected_metadata)
@@ -456,10 +458,11 @@ def _answer_selected(req, current_user, settings, attempt_ref):
         on_sources([source.model_dump(mode='json') for source in sources])
     answer = (_assessment_reject_answer(req, source_assessment) if source_assessment.decision == "reject" else
         _answer_mode(req, merged, sources, settings, (), {}, {},
-                     attempt_ref=attempt_ref, current_user=current_user))
+                     attempt_ref=attempt_ref, current_user=current_user,
+                     scenario=run.scenario if run else None,scenario_prompts=run.scenario_prompts if run else None))
     _validate_final_source_state(merged)
     return ChatResponse(query=req.query, answer=answer, sources=sources, session_id=attempt_ref.session_id,
-                        response_mode='full', attempt_id=attempt_ref.attempt_id, source_assessment=source_assessment)
+                        response_mode=req.response_mode, attempt_id=attempt_ref.attempt_id, source_assessment=source_assessment)
 
 
 def _filtered_chat_blocks(hits, req, settings, exact_groups):
@@ -480,15 +483,16 @@ def _filtered_chat_blocks(hits, req, settings, exact_groups):
     return hits, merged, doc_lookup, domain_cache, lexical_cache
 
 
-def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_ref=None) -> ChatResponse:
+def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_ref=None, *, run=None) -> ChatResponse:
+    from app.services.work.chat import ChatRunOwnershipLost
     assessment_config = resolve_assessment_config(settings)
     if attempt_ref:
         chat_history.save_attempt_sources(attempt_ref, current_user, [], retrieval_metadata={
             "source_assessment_request": _assessment_request_snapshot(req, settings, assessment_config),
             "source_assessment_replay": {"requested_enabled": req.assess_sources},
-            "chat_request": req.model_dump(exclude={"session_id", "attempt_id"})})
+            "chat_request": req.model_dump(mode="json", exclude={"session_id", "attempt_id"})})
     if req.source_selection:
-        return _answer_selected(req, current_user, settings, attempt_ref)
+        return _answer_selected(req, current_user, settings, attempt_ref, run=run)
     scope_ids = None
     if req.search_doc_ids is not None:
         if not req.search_doc_ids:
@@ -656,7 +660,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
             for index, block in enumerate(merged, 1):
                 block["_source_index"] = index
             answer = _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lexical_cache,
-                                  attempt_ref=attempt_ref, current_user=current_user)
+                                  attempt_ref=attempt_ref, current_user=current_user,
+                                  scenario=run.scenario if run else None,scenario_prompts=run.scenario_prompts if run else None)
         elif not context_blocks:
             answer = _no_sources_answer(req)
         else:
@@ -709,7 +714,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
             session_id = attempt_ref.session_id
             chat_history.save_attempt_sources(attempt_ref, current_user, [s.model_dump(mode="json") for s in sources],
                                               retrieval_metadata=retrieval_metadata)
-        else:
+        elif run is None or run.persist_history:
             session_id = chat_history.store_turn(
                 req.session_id,
                 current_user,
@@ -730,6 +735,8 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
             code=errors.CONFLICT,
             detail=str(exc),
         ) from exc
+    except ChatRunOwnershipLost:
+        raise
     except Exception:
         logger.warning("Не удалось сохранить историю чата", exc_info=True)
 
@@ -748,7 +755,7 @@ def _answer(req: ChatRequest, current_user: User, settings: Settings, attempt_re
 
 
 def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lexical_cache,
-                 *, attempt_ref=None, current_user=None):
+                 *, attempt_ref=None, current_user=None, scenario=None, scenario_prompts=None):
     """Use the same retrieved source list for all three response modes."""
     if req.response_mode == "documents":
         count = len({block["doc_id"] for block in merged})
@@ -756,6 +763,7 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
             return f"Documents found: {count}" if count else "No documents found."
         return f"Найдено документов: {count}" if count else "Документы не найдены."
 
+    generation_mode = "full" if req.response_mode == "scenario" else req.response_mode
     authorship = is_authorship_query(req.query)
     if authorship:
         if req.source_selection:
@@ -779,7 +787,18 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
         if not merged:
             return build_authorship_answer([], "{}", locale=req.locale)
 
-    system = _chat_system_prompt(req.query, req.locale, settings)
+    scenario_prompts = scenario_prompts or (build_scenario_prompts(req.query, req.locale, settings) if scenario else None)
+    system = scenario_prompts.core_system if scenario_prompts else _chat_system_prompt(req.query, req.locale, settings)
+    map_system = scenario_prompts.map_system if scenario_prompts else _FACT_INSTRUCTIONS
+    reduce_system = scenario_prompts.reduce_system if scenario_prompts else _REDUCE_INSTRUCTIONS
+    synthesis_system = scenario_prompts.synthesis_system if scenario_prompts else _SYNTHESIS_INSTRUCTIONS
+
+    def user_payload(*, context=None, facts=None):
+        if scenario:
+            return scenario_user_payload(query=req.query, instructions=scenario.instructions, context=context, facts=facts)
+        if facts is not None:
+            return json.dumps({"query":req.query,"facts":facts},ensure_ascii=False)
+        return get_store().format("chat_user", context=context, query=req.query)
     llm = _get_llm()
     counter = ChatTokenBudget(settings, llm.model)
     output_tokens = settings.llm_chat_max_tokens
@@ -791,12 +810,12 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
         )
 
     def direct_fits(context):
-        prompt = get_store().format("chat_user", context=context, query=req.query)
+        prompt = user_payload(context=context)
         return counter.fits(system, prompt, output_tokens=output_tokens)
 
     def map_fits(context):
-        prompt = json.dumps({"query": req.query, "context": context}, ensure_ascii=False)
-        return counter.fits(_FACT_INSTRUCTIONS, prompt, output_tokens=output_tokens)
+        prompt = scenario_user_payload(query=req.query,instructions=scenario.instructions,context=context) if scenario else json.dumps({"query": req.query, "context": context}, ensure_ascii=False)
+        return counter.fits(map_system, prompt, output_tokens=output_tokens)
 
     def auth_render(blocks):
         return json.dumps({"question": req.query, "sources": _authorship_evidence(blocks)}, ensure_ascii=False)
@@ -810,14 +829,14 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
 
     try:
         all_context = pack_render(merged)
-        if (req.response_mode == "full" and len(all_context) <= settings.chat_max_context_chars
+        if (generation_mode == "full" and len(all_context) <= settings.chat_max_context_chars
                 and pack_direct_fits(all_context)):
             batches = [merged]
         else:
             batches = select_batches(
-                merged, mode=req.response_mode,
+                merged, mode=generation_mode,
                 max_context_chars=settings.chat_max_context_chars,
-                fits=pack_direct_fits if req.response_mode == "fast" else pack_map_fits,
+                fits=pack_direct_fits if generation_mode == "fast" else pack_map_fits,
                 render=pack_render,
             )
     except ChatBudgetUnavailable as exc:
@@ -891,9 +910,9 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
                          "batches_total": len(batches)})
 
     try:
-        if len(batches) == 1 or req.response_mode == "fast":
+        if len(batches) == 1 or generation_mode == "fast":
             batch = batches[0]
-            prompt = get_store().format("chat_user", context=render(batch), query=req.query)
+            prompt = user_payload(context=render(batch))
             mark_submitted(batch)
             check_active()
             try:
@@ -908,7 +927,7 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
                         answer = llm.chat(system, prompt)
                     answer = normalize_citations(answer, max_index=len(sources))
             except LLMTruncationError:
-                if req.response_mode == "fast":
+                if generation_mode == "fast":
                     raise
                 repartition(0, batch)
             else:
@@ -961,12 +980,12 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
                         continue
                 authorship_blocks.extend(batch)
             else:
-                map_user = json.dumps({"query": req.query, "context": batch_context}, ensure_ascii=False)
+                map_user = scenario_user_payload(query=req.query,instructions=scenario.instructions,context=batch_context) if scenario else json.dumps({"query": req.query, "context": batch_context}, ensure_ascii=False)
                 try:
                     for attempt in range(2):
                         check_active()
                         with request_scope(on_text=None, single_pass=True):
-                            raw = llm.chat(_FACT_INSTRUCTIONS, map_user)
+                            raw = llm.chat(map_system, map_user)
                         try:
                             verified = _verified_facts(raw, batch_text_by_id)
                             break
@@ -992,13 +1011,13 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
             return ("В найденных фрагментах не удалось подтвердить ответ на вопрос."
                     if not req.locale.lower().startswith("en") else
                     "The retrieved excerpts do not establish an answer to the question.")
-        final_prompt = json.dumps({"query": req.query, "facts": facts}, ensure_ascii=False)
-        while not counter.fits(_SYNTHESIS_INSTRUCTIONS, final_prompt, output_tokens=output_tokens):
+        final_prompt = user_payload(facts=facts)
+        while not counter.fits(synthesis_system, final_prompt, output_tokens=output_tokens):
             reduced = []
-            for group in _fact_groups(facts, counter, output_tokens):
+            for group in _fact_groups(facts, counter, output_tokens, reduce_system):
                 check_active()
                 with request_scope(on_text=None, single_pass=True):
-                    raw = llm.chat(_REDUCE_INSTRUCTIONS, json.dumps(group, ensure_ascii=False))
+                    raw = llm.chat(reduce_system, json.dumps(group, ensure_ascii=False))
                 allowed = {(f["source"], f["quote"]) for f in group}
                 part = _verified_facts(raw, {f["source"]: "\n".join(
                     item["quote"] for item in group if item["source"] == f["source"]
@@ -1009,11 +1028,11 @@ def _answer_mode(req, merged, sources, settings, exact_groups, domain_cache, lex
             if len(json.dumps(reduced, ensure_ascii=False)) >= len(json.dumps(facts, ensure_ascii=False)):
                 raise ValueError("chat_summary_too_large")
             facts = reduced
-            final_prompt = json.dumps({"query": req.query, "facts": facts}, ensure_ascii=False)
+            final_prompt = user_payload(facts=facts)
         if on_progress:
             on_progress({"phase": "synthesis", "batches_done": len(batches), "batches_total": len(batches)})
         check_active()
-        answer = llm.chat(_SYNTHESIS_INSTRUCTIONS, final_prompt)
+        answer = llm.chat(synthesis_system, final_prompt)
         answer = normalize_citations(answer, max_index=len(sources))
         allowed_indices = {fact["source"] for fact in facts}
         cited_indices = {int(item) for item in re.findall(r"\[(\d+)\]", answer)}
@@ -1057,7 +1076,14 @@ def cancel_chat_attempt(attempt_id: str, req: ChatAttemptCancelRequest,
     ref = chat_history.find_attempt(req.session_id, current_user, attempt_id)
     if ref is None:
         raise ApiError(status_code=404, code=errors.SESSION_NOT_FOUND, detail="Попытка не найдена")
-    chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
+    from app.services.work.admission import durable_documents
+    managed = False
+    if durable_documents(get_settings()):
+        from app.services.work.chat import cancel_chat_run
+        with session_scope() as session:
+            managed = cancel_chat_run(session, session_id=req.session_id, attempt_id=attempt_id, user=current_user)
+    if not managed:
+        chat_history.finish_attempt(ref, current_user, status="stopped", answer="")
     return {"status": chat_history.attempt_status(ref, current_user),
             "session_id": ref.session_id, "attempt_id": attempt_id}
 

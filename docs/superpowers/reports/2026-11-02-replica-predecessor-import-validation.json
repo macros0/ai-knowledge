@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "status": "predecessor-provider-import-verified-s4-held",
+  "scope": "owned-basic-kind-real-rpl04-source-off-provider-import; schema-transition-and-activation-not-performed",
+  "base_revision": "cd7e0cb8842d8ca35f7f9e1e60ab36a5c6abeadb",
+  "source_overlay_sha256": {
+    "scripts/kubernetes/replica_predecessor_restore.py": "a98c323256d2f2153ff3522317053fcc7b938f93ac2b11367b30a0b08c682d09",
+    "backend/tests/test_replica_predecessor_import.py": "e61fb57ff6ca4144aa30b0d08d4dc656b627ad42584f80c4b1b06d0fba43e9eb",
+    "backend/tests/replica_postgres/test_predecessor_import.py": "0b15f5f1697c1fe13847cea66d548bfc9611e53fc6a0948b0eaccd07fa28311e"
+  },
+  "windows": {
+    "passed": 100,
+    "failed": 0,
+    "duration_seconds": 134.57
+  },
+  "linux": {
+    "ci_image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "container_id": "d5e46766d255842a7db0894cd44e264be8a7d04354fbc62ea947b46234ba2562",
+    "started_at": "2026-11-02T16:59:54.11986875Z",
+    "finished_at": "2026-11-02T17:04:51.159315946Z",
+    "exit_code": 0,
+    "oom_killed": false,
+    "tests": 174,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "sha256": "9c4fbb62f468e1b3ee17f9060a76a9462657e6bffab56cccc2de2e4ba7268508",
+    "passed": 174,
+    "native_pg_cases": [
+      {
+        "name": "test_pg_export_snapshot_guard_rejects_same_backend_after_transaction_end[commit]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_export_snapshot_guard_rejects_same_backend_after_transaction_end[rollback]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_source_guard_reads_actual_old_schema",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_guard_refuses_real_uncertain_source[running_work]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_guard_refuses_real_uncertain_source[changed_schema]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_predecessor_recovery_after_real_forward_migration",
+        "passed": true
+      },
+      {
+        "name": "test_pg_artifact_fence_transfers_atomically_to_real_maintenance[False]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_artifact_fence_transfers_atomically_to_real_maintenance[True]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_import_reads_actual_old_columns_and_keeps_source_identity",
+        "passed": true
+      },
+      {
+        "name": "test_pg_import_rejects_a_changed_old_fence_or_partially_migrated_shape[token]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_import_rejects_a_changed_old_fence_or_partially_migrated_shape[epoch_column]",
+        "passed": true
+      }
+    ],
+    "postgres_id": "c78900d5868b38ce59a9ad60aab9eb10b4c1ffe312f06e6b2082eee0db47b057",
+    "postgres_version": "17.11-1.pgdg13+2",
+    "postgres_stopped_at": "2026-11-02T17:10:53.896216479Z",
+    "postgres_scope": "isolated CI database; not selected Kubernetes storage recipe",
+    "host_ports": false,
+    "pvcs": false,
+    "working_service_mutations": false
+  },
+  "retained_failed_ci": {
+    "tests": 174,
+    "passed": 171,
+    "failures": 0,
+    "errors": 3,
+    "cause": "new native test module omitted bootstrap_settings fixture import",
+    "correction": "explicit fixture import alias; production import code unchanged",
+    "raw_artifacts_retained_on_training_vm": true
+  },
+  "actual_import": {
+    "status": "predecessor-providers-restored-s4-held",
+    "backup_id": "4f3e1677bcb94fd88d5a271a979edb6b",
+    "operation_id": "66ab82dc6ad440e29672747a7dfa4502",
+    "target_namespace": "replica-test-r4o2t20261102",
+    "namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+    "target_volumes": [
+      [
+        "predecessor-target-artifacts",
+        "e0b7d6ed-f08e-4d3d-a9df-3d4d87ea3888",
+        "pvc-e0b7d6ed-f08e-4d3d-a9df-3d4d87ea3888"
+      ],
+      [
+        "predecessor-target-postgres",
+        "0f5c7125-13e3-4cd5-a64b-a68f581456b8",
+        "pvc-0f5c7125-13e3-4cd5-a64b-a68f581456b8"
+      ],
+      [
+        "predecessor-target-qdrant",
+        "5352a6d5-c20c-4863-974e-5a27e2d1619b",
+        "pvc-5352a6d5-c20c-4863-974e-5a27e2d1619b"
+      ]
+    ],
+    "source_volumes": [
+      [
+        "predecessor-source-artifacts",
+        "d586dbfa-f29a-4b6f-bf18-1256fbb13055",
+        "pvc-d586dbfa-f29a-4b6f-bf18-1256fbb13055"
+      ],
+      [
+        "predecessor-source-postgres",
+        "2fbeeb10-ea4c-47b9-a7f3-d4d67cc89a49",
+        "pvc-2fbeeb10-ea4c-47b9-a7f3-d4d67cc89a49"
+      ],
+      [
+        "predecessor-source-qdrant",
+        "189a2a20-bc0f-4ecd-9dd5-95c54d7f9b0e",
+        "pvc-189a2a20-bc0f-4ecd-9dd5-95c54d7f9b0e"
+      ]
+    ],
+    "counts": {
+      "documents": 2,
+      "concepts": 2,
+      "chunks": 2,
+      "work_items": 369,
+      "audit_events": 6,
+      "blobs": 10
+    },
+    "qdrant_points": 4,
+    "artifact_hashes_verified": 10,
+    "held_work_state_sha256": "557baf92848a73a50495be737137c2d3267ac52bd9602acd65987981b43ae83a",
+    "materialized_tables": {
+      "documents": {
+        "count": 2,
+        "sha256": "12d13a8f0f3e23633edcc4ad468103df7576cdcaebf63713cefc9c58257de379"
+      },
+      "okf_concepts": {
+        "count": 2,
+        "sha256": "1a6e5155269854f57f27bc7937508e39de384a9d26c585a19898831dba57e2b1"
+      },
+      "document_chunks": {
+        "count": 2,
+        "sha256": "dd9fe5eedec98d782057e0affbb1e1fec38dbb4995ac0f181aa747e7c88bbb92"
+      },
+      "document_generation_states": {
+        "count": 2,
+        "sha256": "62255b4dc16407734929caf38ec0c041f6f38fcf461c138f0ec1a1e3b3045aa5"
+      },
+      "document_generations": {
+        "count": 2,
+        "sha256": "b52af9d682ca1217754f8cb8d1bf6872ac3d6ac28e847a74dd960ed4ab707672"
+      },
+      "document_sources": {
+        "count": 2,
+        "sha256": "9ca6748a800321d9c27101e7d37fbf07e6cc93411a8154f5618be0bc403a8db0"
+      },
+      "document_staging": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "artifact_objects": {
+        "count": 10,
+        "sha256": "490c19b7fb94687ddd2348d65331ce0883ef399c70f485f99823d9d2b86c4a1c"
+      },
+      "artifact_bindings": {
+        "count": 4,
+        "sha256": "8c7e6061a5091ce2b3a76aa2dbdccc3270af6c4dd9de90de522884e665830f7a"
+      }
+    },
+    "sql_scope_sha256": "8374a61a0b60a780531b526542b940ba25d718ff3614efb34741187295d25ff5",
+    "schema_revision": "rpl04_runtime_identity",
+    "source_epoch": 0,
+    "source_unavailable": true,
+    "source_running_cri_containers": 0,
+    "application_replicas": 0,
+    "restored_executed_jobs": 0,
+    "identity_rebound": false,
+    "schema_migrated": false,
+    "activated": false,
+    "import_finished_at": "2026-11-02T16:54:22.845610+00:00",
+    "production_schedule": "disabled"
+  },
+  "native_post_import_checks": {
+    "source_still_physically_off": true,
+    "target_application_replicas": 0,
+    "target_pvc_bindings_unchanged": 3,
+    "source_pvc_bindings_unchanged": 3,
+    "maintenance_table_missing": true,
+    "work_epoch_column_missing": true,
+    "active_work": 0,
+    "source_auth_sessions": 2
+  },
+  "guard_properties": {
+    "archive_authenticated_before_provider_mutation": true,
+    "retained_target_sql_operation_lock": true,
+    "fresh_source_nodes_cri_pvcs_per_stage": true,
+    "old_schema_source_identity_and_s4_token_preserved": true,
+    "held_sql_materialized_tables_preserved": 9,
+    "native_single_transaction_pg_restore": true,
+    "conditional_s3_put_and_sha_readback": true,
+    "unknown_descriptor_fields_refused": true,
+    "blind_repeat_after_intent_refused": true,
+    "automatic_migration_identity_rebind_auth_cleanup_or_activation": false
+  },
+  "capacity_action": {
+    "removed_remote_duplicate_source_archives": 3,
+    "each_duplicate_sha_and_size_matched_existing_pc_source_archive": true,
+    "raw_ci_payload_transfer": "rejected-by-automatic-approval-review-and-not-performed",
+    "raw_ci_data_retained_on_training_vm": true
+  },
+  "project_checks": {
+    "npm_audit_vulnerabilities": 0,
+    "eslint": "passed",
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff": "passed"
+  },
+  "not_proven": [
+    "Kubernetes rpl04-to-rpl05 rollout and new identity",
+    "restored target auth cleanup and activation",
+    "compact/NULL-generation adoption",
+    "other provider and physical failure-domain qualification",
+    "full final backend CI"
+  ],
+  "production_backup_schedule": "disabled"
+}

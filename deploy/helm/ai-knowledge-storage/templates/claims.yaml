@@ -1,0 +1,29 @@
+{{- include "storage.validate" . }}
+{{- range $name := list "postgres" "qdrant" "artifacts" }}
+{{- $component := index $.Values $name }}
+{{- if and (eq $component.provider "managed") $component.provision }}
+{{- $existing := lookup "v1" "PersistentVolumeClaim" $.Release.Namespace $component.claim.name }}
+{{- if $existing }}
+{{- if or (ne (index $existing.metadata.labels "okf-installation-id") $.Values.installationId) (ne (index $existing.metadata.annotations "meta.helm.sh/release-name") $.Release.Name) }}
+{{- fail "Provision refuses to adopt an existing unowned PVC" }}
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $component.claim.name }}
+  labels:
+    {{- include "storage.labels" $ | nindent 4 }}
+    okf-storage-component: {{ $name }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if $component.claim.storageClass }}
+  storageClassName: {{ $component.claim.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests: {storage: {{ $component.claim.size | quote }}}
+{{- end }}
+{{- end }}

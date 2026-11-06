@@ -79,7 +79,9 @@ export function applyAnswerEvent(messages, event) {
       sourcesOpen,
     };
   } else if (event.type === "progress") {
-    changed = event.phase === "source_assessment"
+    changed = event.phase === "scenario"
+      ? {...current, scenario: event.scenario, scenarioExecution: event.scenario_execution}
+      : event.phase === "source_assessment"
       ? {...applyAssessmentOutcome(current, event.source_assessment ?? {status: event.status}), progress: event}
       : event.phase === "retrieval"
       ? { ...current, requestSearchDepth: event.search_depth, searchLimitReached: event.search_limit_reached }

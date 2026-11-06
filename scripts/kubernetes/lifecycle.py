@@ -329,7 +329,7 @@ class Manager:
         self.operation = uuid.uuid4().hex[:12]
         self.lock = "okf-operation-lock"
         self.base = ["kubectl", "--context", context, "--namespace", namespace]
-        self.selector = f"app.kubernetes.io/instance={release},okf-role=application"
+        self.selector = f"app.kubernetes.io/instance={release},okf-role in (application,frontend)"
         self.documents = []
         self.trust_identities = {}
 
@@ -370,6 +370,13 @@ class Manager:
             raise OperationError("Runtime Secret is missing mandatory keys")
         if require_secret:
             validate_runtime_secret(secret)
+            if any(d and d.get("kind") == "Deployment" and d["metadata"]["name"] == "frontend" for d in self.documents):
+                try:
+                    token = base64.b64decode(secret["data"]["DIAGNOSTICS_INGEST_TOKEN"], validate=True).decode()
+                    if not 32 <= len(token) <= 512 or "\r" in token or "\n" in token:
+                        raise ValueError()
+                except (KeyError, ValueError, UnicodeError):
+                    raise OperationError("Frontend split requires a valid internal diagnostics Secret") from None
         for document in self.documents:
             if not document:
                 continue
@@ -400,7 +407,7 @@ class Manager:
                 raise OperationError("Requested migration image must match the installed backend image")
             self._migration_backend = copy.deepcopy(backend)
             self._migration_backend["image"] = self.migration_image
-        validate_operator_budgets(application, current_application)
+        self.validate_workload_budgets()
         validate_claim_bindings(current_application, application)
         self.preflight_trust(spec, runtime)
         if current_application:
@@ -461,6 +468,12 @@ class Manager:
     def document(self, kind, name):
         return next(d for d in self.documents if d and d["kind"] == kind and d["metadata"]["name"] == name)
 
+    def validate_workload_budgets(self):
+        for name in ("application", "frontend"):
+            desired = next((d for d in self.documents if d and d.get("kind") == "Deployment"
+                            and d["metadata"]["name"] == name), None)
+            validate_operator_budgets(desired, self.get("deployment", name))
+
     def acquire(self):
         if self.get("configmap", self.lock):
             raise OperationError("Maintenance lock exists; inspect its operation and Jobs before recovery")
@@ -479,14 +492,50 @@ class Manager:
 
     def stop(self):
         old = self.get("deployment", "application")
-        if old:
-            self.kube("scale", "deployment/application", "--replicas=0")
+        frontend = self.get("deployment", "frontend")
+        self._stopped_counts = {}
+        for name, deployment in (("application", old), ("frontend", frontend)):
+            if deployment:
+                if deployment.get("metadata", {}).get("labels", {}).get("app.kubernetes.io/instance") != self.release:
+                    raise OperationError("Workload belongs to another release")
+                self._stopped_counts[name] = deployment["spec"].get("replicas", 1)
+        if (any(type(count) is not int or count < 0 for count in self._stopped_counts.values())
+                or self._stopped_counts.get("application", 0) not in {0, 1}):
+            raise OperationError("Maintenance requires a single backend replica")
+        lock = self.get("configmap", self.lock)
+        if not lock or lock.get("data", {}).get("operation") != self.operation:
+            raise OperationError("Maintenance lock ownership changed")
+        self.kube("patch", "configmap", self.lock, "--type=merge", "--patch", json.dumps({
+            "data": {"replicas": json.dumps(self._stopped_counts)}}))
+        for name in ("frontend", "application"):
+            if name in self._stopped_counts:
+                self.kube("scale", f"deployment/{name}", "--replicas=0")
         deadline = time.monotonic() + 180
         while self.application_pods():
             if time.monotonic() > deadline:
                 raise OperationError("Old application has not exited; no writer Job will start (never force-delete)")
             time.sleep(2)
+        if old and frontend:
+            old["_stopped_frontend"] = frontend
         return old
+
+    def resume_stopped(self):
+        lock = self.get("configmap", self.lock)
+        if not lock or lock.get("data", {}).get("operation") != self.operation:
+            raise OperationError("Maintenance lock ownership changed")
+        counts = getattr(self, "_stopped_counts", None)
+        if counts is None:
+            counts = json.loads(lock["data"].get("replicas", "null"))
+        if (not isinstance(counts, dict) or set(counts) - {"application", "frontend"}
+                or any(type(count) is not int or count < 0 for count in counts.values())):
+            raise OperationError("Invalid maintenance replica receipt")
+        if counts.get("application", 0) not in {0, 1}:
+            raise OperationError("Resume requires a single backend replica")
+        for name in ("application", "frontend"):
+            if name in counts:
+                self.kube("scale", f"deployment/{name}", f"--replicas={counts[name]}")
+                if counts[name]:
+                    self.kube("rollout", "status", f"deployment/{name}", "--timeout=600s")
 
     def chart(self, enabled):
         args = ["helm", "upgrade", "--install", self.release, self.chart_path, "--kube-context", self.context,
@@ -556,9 +605,41 @@ class Manager:
             time.sleep(2)
         self.finish_job(name)
 
+    def migrate_artifacts(self, source, target, plan, phase, backup=None, private_config=None):
+        if phase not in {"plan", "copy", "verify", "cutover"} or (phase != "plan" and not backup):
+            raise OperationError("Explicit migration phase and independent backup evidence required")
+        for path in (source, target, plan, backup, private_config):
+            if path is not None and (not str(path).startswith("/") or ".." in Path(path).parts):
+                raise OperationError("Migration paths must be absolute paths mounted in the operation Pod")
+        self.preflight()
+        self.acquire()
+        self.stop()
+        command = ["python", "scripts/migrate_artifact_storage.py", "--source-manifest", str(source),
+                   "--target-manifest", str(target), "--plan", str(plan), "--phase", phase, "--apply", "--writers-stopped"]
+        if backup:
+            command += ["--backup-manifest", str(backup)]
+        if private_config:
+            command += ["--private-config", str(private_config)]
+        name = self.job(command)
+        deadline = time.monotonic() + 3600
+        while True:
+            status = self.get("job", name).get("status", {})
+            if any(c.get("type") == "Failed" and c.get("status") == "True" for c in status.get("conditions", [])):
+                raise OperationError("Artifact migration failed; application stays stopped and lock retained")
+            if status.get("succeeded") == 1:
+                break
+            if time.monotonic() > deadline:
+                raise OperationError("Artifact migration timed out; inspect the Job before recovery")
+            time.sleep(2)
+        self.finish_job(name)
+        self.release_lock()
+        # Never restore the old runtime configuration or scale writers here.
+
     def start(self):
         self.chart(True)
         self.kube("rollout", "status", "deployment/application", "--timeout=600s")
+        if any(d and d.get("kind") == "Deployment" and d["metadata"]["name"] == "frontend" for d in self.documents):
+            self.kube("rollout", "status", "deployment/frontend", "--timeout=600s")
 
     def deploy(self, backup_root):
         self.preflight()
@@ -630,6 +711,8 @@ class Manager:
                     "alembic": revision, "trust": trust,
                     "storage_images": [self.get("statefulset", s)["spec"]["template"]["spec"]["containers"][0]["image"] for s in ("postgres", "qdrant")],
                     "model_mode": self.get("configmap", "runtime")["data"]["MODEL_MODE"]}
+        if old.get("_stopped_frontend"):
+            identity["images"].extend(c["image"] for c in old["_stopped_frontend"]["spec"]["template"]["spec"]["containers"])
         (target / "release.json").write_text(json.dumps(identity, indent=2), encoding="utf-8")
         self.finish_job(job)
         artifacts = ARTIFACTS | ({'trust-bundle.pem'} if trust else set())
@@ -647,8 +730,7 @@ class Manager:
         if not old:
             raise OperationError("No application installation to back up")
         self.backup_stopped(root, old)
-        self.kube("scale", "deployment/application", "--replicas=1")
-        self.kube("rollout", "status", "deployment/application", "--timeout=600s")
+        self.resume_stopped()
         self.release_lock()
 
     def restore(self, source):
@@ -674,7 +756,7 @@ class Manager:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("preflight", "provision", "deploy", "backup", "restore", "recover-lock"))
+    parser.add_argument("operation", choices=("preflight", "provision", "deploy", "backup", "restore", "recover-lock", "migrate-artifacts"))
     parser.add_argument("--context", required=True)
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--release", default="ai-knowledge")
@@ -685,14 +767,27 @@ def main():
     parser.add_argument("--backup", type=Path)
     parser.add_argument("--operation-id")
     parser.add_argument("--migration-image", help="Deploy only: installed backend image for forward migrations during a validated binary rollback")
+    parser.add_argument("--source-manifest")
+    parser.add_argument("--target-manifest")
+    parser.add_argument("--migration-plan")
+    parser.add_argument("--migration-phase", choices=("plan", "copy", "verify", "cutover"), default="plan")
+    parser.add_argument("--backup-manifest")
+    parser.add_argument("--private-config")
+    parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     if args.operation == 'restore':
         parser.error('Automatic restore is unsupported in the compact home kit; use the stopped manual restore runbook before application startup')
+    if args.operation == "migrate-artifacts" and (not args.apply or not args.source_manifest or not args.target_manifest or not args.migration_plan
+            or args.migration_phase != "plan" and not args.backup_manifest):
+        parser.error("migrate-artifacts requires --apply, mounted manifests/plan and backup evidence for mutation phases")
     try:
         if args.migration_image and args.operation != "deploy":
             parser.error("--migration-image is allowed only for deploy")
         manager = Manager(args.context, args.namespace, args.release, args.values, args.chart, args.expected_tier, args.migration_image)
-        if args.operation in ("deploy", "backup"):
+        if args.operation == "migrate-artifacts":
+            manager.migrate_artifacts(args.source_manifest, args.target_manifest, args.migration_plan, args.migration_phase,
+                                      args.backup_manifest, args.private_config)
+        elif args.operation in ("deploy", "backup"):
             if not args.backup_root:
                 parser.error("--backup-root is required, outside application PVCs")
             getattr(manager, args.operation)(args.backup_root.resolve())

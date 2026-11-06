@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "status": "final-current-backend-linux-ci-verified",
+  "verified_at": "2026-11-05T19:38:12.135390+00:00",
+  "source_revision": "ae8bffb09110878bd263c6b7f1326d573f419b4e",
+  "application_revision": "bbced156bb8fe18da688a1ee5cc5025d96b2751e",
+  "source_scope": "Immutable Git snapshot including NAS relocation code/tests; later reports/runbooks are separately checked and excluded from this source snapshot",
+  "source_files": 2528,
+  "patch_files": 14,
+  "patch_bytes": 337920,
+  "patch_sha256": "d8a59cb3a6deefec3a0830ab88abc44e7e9c25c15961c1fc75a0f6800416935e",
+  "container_id": "099f4c4c664c08208c6c5e5c77c2d2f6d0ab26be0725689ffb98fd50f5aecaa5",
+  "tests": 7353,
+  "passed": 7132,
+  "optional_skips": 221,
+  "failures": 0,
+  "errors": 0,
+  "coverage_percent": 87.71296989496132,
+  "junit_sha256": "7b9b9d518a8cd516fd4ba7d8173dc19383edc9a5e9adc1cdb583a94c615fd6f3",
+  "collection_sha256": "b94b407cba2f779eab12ab50b681e12d3e13308ce98adba6f5b9e27b1b8a8615",
+  "verified_checks": {
+    "prior_case_ids_retained": true,
+    "windows_case_ids_retained": true,
+    "optional_skip_ids_unchanged": true,
+    "required_added_modules_present": true,
+    "collection_complete": true,
+    "source_unchanged": true
+  },
+  "isolation": {
+    "network": "none",
+    "user": "1000:1000",
+    "read_only_root": true,
+    "memory_bytes": 2952790016,
+    "swap_disabled": true,
+    "oom": false
+  },
+  "unchanged_artifact_evidence": {
+    "report": "docs/superpowers/reports/2026-11-02-replica-current-artifact-ci.json",
+    "parser_cases": 557,
+    "parser_skips": 0,
+    "frontend_standalone_routes": 19,
+    "frontend_git_tree": "ec1cb339da5e4af3c3cdea71955d82eab7f34c25",
+    "parser_git_tree": "7316d77841e128ff0bb378a586bf6e1642bb57d4",
+    "baseline_revision": "4fd55566652f63dd8795a5a8f75237179aeb831c",
+    "both_git_trees_identical": true
+  },
+  "outstanding": [
+    "Original S4 legacy-to-selected-RWX native migration criterion",
+    "Two owned capacity returns and final metadata/runbook audit"
+  ],
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled"
+}

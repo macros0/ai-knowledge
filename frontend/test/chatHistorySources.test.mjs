@@ -3,6 +3,8 @@ import test from 'node:test';
 import React from 'react';
 import {componentHarness} from './support/componentHarness.mjs';
 import * as scope from '../src/lib/chatSearchScope.mjs';
+import * as sourceSelection from '../src/lib/chatSourceSelection.mjs';
+import * as assessment from '../src/lib/chatSourceAssessment.mjs';
 import {createTranslator} from '../src/i18n/core.js';
 
 const t = createTranslator('ru').t;
@@ -16,7 +18,9 @@ const tick = async () => {await new Promise(resolve => setImmediate(resolve));};
 
 function setup() {
   const requests = [];
+  const navigations = [];
   const context = {searchScopeDocuments:[], searchScopeEnabled:false, sourceView:'documents', setSourceView:() => {}};
+  context.setQueuedSourceAnswer = value => {context.queuedSourceAnswer = value;};
   context.setSearchScopeDocuments = value => {context.searchScopeDocuments = typeof value === 'function' ? value(context.searchScopeDocuments) : value;};
   context.setSearchScopeEnabled = value => {context.searchScopeEnabled = value;};
   const ChatSources = () => null;
@@ -24,6 +28,9 @@ function setup() {
   const harness = componentHarness(new URL('../src/components/ChatHistorySources.jsx', import.meta.url), {
     '@/context/ChatContext':{useChat:() => context},
     '@/lib/chatSearchScope.mjs':scope,
+    '@/lib/chatSourceSelection.mjs':sourceSelection,
+    '@/lib/chatSourceAssessment.mjs':assessment,
+    'next/navigation':{useRouter:() => ({push:path => navigations.push(path)})},
     '@/lib/api':{friendlyApiError:error => error.message, getChatSearchScope:ids => new Promise((resolve,reject) => requests.push({ids:[...ids],resolve,reject}))},
     '@/i18n/LocaleContext':{useI18n:() => ({t})},
     './ChatSources':{__esModule:true, default:ChatSources},
@@ -32,8 +39,84 @@ function setup() {
   const draw = extra => harness.render({...props,...extra});
   const selection = () => harness.find(node => node.type === ChatSources).props.documentSelection;
   const button = key => harness.find(node => node.type === 'button' && node.props.children === t(key));
-  return {harness,context,requests,draw,selection,button};
+  return {harness,context,requests,draw,selection,button,navigations,
+    sourceProps:() => harness.find(node => node.type === ChatSources).props};
 }
+
+const savedSources = [
+  {doc_id:'a',filename:'Old.docx',source_index:1,title:'First',selectable:true},
+  {doc_id:'a',filename:'Old.docx',source_index:2,title:'Second',selectable:true},
+  {doc_id:'b',filename:'Deleted.docx',source_index:3,title:'Third',selectable:true},
+];
+const savedMessage = {role:'assistant',content:'Found',sources:savedSources,retrieval_metadata:{
+  answer_attempt:{id:'saved-attempt',query:'ИТ 0004',mode:'documents',status:'completed'},
+  chat_request:{tags:['HR'],mail_mode:'exclude',search_depth:200},
+}};
+
+test('saved history selects fragments and queues the original question and session', async () => {
+  const h = setup();
+  const props = {sources:savedSources,message:savedMessage,sessionId:'original-session',open:true};
+  h.draw(props);
+  assert.equal(h.sourceProps().selectionEnabled,true);
+  assert.equal(h.selection(),undefined);
+  h.sourceProps().onSelect([1,2],true); h.draw(props);
+  h.sourceProps().onSelect([2],false); h.draw(props);
+  assert.deepEqual([...h.sourceProps().selectedIndexes],[1]);
+  const answer = () => h.harness.find(node => node.type === 'button' && node.props.children === t('chat.answerSelected',{count:1}));
+  assert.ok(answer());
+  h.sourceProps().onToggle(false); h.draw({...props,open:false});
+  assert.deepEqual([...h.sourceProps().selectedIndexes],[1]);
+  answer().props.onClick();
+  assert.equal(h.context.queuedSourceAnswer.query,'ИТ 0004');
+  assert.equal(h.context.queuedSourceAnswer.requestSessionId,'original-session');
+  assert.equal(h.context.queuedSourceAnswer.attemptId,'saved-attempt');
+  assert.deepEqual([...h.context.queuedSourceAnswer.selectedSourceIndexes],[1]);
+  assert.deepEqual(h.navigations,['/chat']);
+  h.harness.dispose();
+});
+
+test('fragment selection adds only available current documents and remains selected', async () => {
+  const h = setup();
+  const props = {sources:savedSources,message:savedMessage,sessionId:'original-session',open:true};
+  h.draw(props); h.requests[0].resolve(items); await tick(); h.draw(props);
+  h.sourceProps().onSelect([2,3],true); h.draw(props);
+  h.button('chat.scopeAddSelected').props.onClick(); h.draw(props);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.context.searchScopeDocuments)),[{doc_id:'a',filename:'Current.docx'}]);
+  assert.deepEqual([...h.sourceProps().selectedIndexes],[2,3]);
+  h.harness.dispose();
+});
+
+test('saved history cannot queue an answer while another request is pending or in admin history', () => {
+  const h = setup();
+  const props = {sources:savedSources,message:savedMessage,sessionId:'original-session',open:true};
+  h.draw(props); h.sourceProps().onSelect([1],true); h.context.pending = true; h.draw(props);
+  const answer = h.harness.find(node => node.type === 'button' && node.props.children === t('chat.answerSelected',{count:1}));
+  assert.equal(answer.props.disabled,true);
+  answer.props.onClick(); assert.equal(h.context.queuedSourceAnswer,undefined);
+  h.draw({...props,documentSelectionEnabled:false});
+  assert.equal(h.sourceProps().selectionEnabled,false);
+  assert.equal(h.harness.find(node => node.type === 'button' && node.props.children === t('chat.answerSelected',{count:1})),undefined);
+  h.harness.dispose();
+});
+
+test('selection works in every saved answer mode and does not leak between attempts with the same documents', () => {
+  const h = setup();
+  for (const mode of ['documents','fast','full']) {
+    const message = {...savedMessage,retrieval_metadata:{...savedMessage.retrieval_metadata,
+      answer_attempt:{...savedMessage.retrieval_metadata.answer_attempt,id:`attempt-${mode}`,mode}}};
+    const props = {sources:savedSources,message,sessionId:'original-session',open:true};
+    h.draw(props);
+    assert.equal(h.sourceProps().selectionEnabled,true);
+    assert.deepEqual([...h.sourceProps().selectedIndexes],[]);
+    h.sourceProps().onSelect([1,2,3],true); h.draw(props);
+    h.sourceProps().onSelect([1,2],false); h.draw(props);
+    assert.deepEqual([...h.sourceProps().selectedIndexes],[3]);
+    h.sourceProps().onToggle(false); h.draw({...props,open:false});
+    h.sourceProps().onToggle(true); h.draw(props);
+    assert.deepEqual([...h.sourceProps().selectedIndexes],[3]);
+  }
+  h.harness.dispose();
+});
 
 test('history batches unique documents on expansion and adds current available versions to shared scope', async () => {
   const h = setup();
@@ -76,9 +159,9 @@ test('availability errors permit retry and never mark documents as unavailable',
 
 test('closing and reopening rechecks availability and ignores a late closed-list response', async () => {
   const h = setup();
-  let tree = h.draw({open:true});
-  tree.props.onToggle(false); h.draw({open:false});
-  tree = h.draw({open:true});
+  h.draw({open:true});
+  h.sourceProps().onToggle(false); h.draw({open:false});
+  h.draw({open:true});
   h.requests[1].resolve([{doc_id:'a',available:false},{doc_id:'b',available:false}]);
   await tick(); h.draw({open:true});
   h.requests[0].resolve(items); await tick(); h.draw({open:true});

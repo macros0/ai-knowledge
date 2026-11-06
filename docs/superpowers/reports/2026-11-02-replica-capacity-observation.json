@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "scope": "owned-basic-managed-s3-synthetic",
+  "status": "capacity_observation_oracle_verified",
+  "base_revision": "83e33235661e48128d88afa5d738275299a8faad",
+  "source_sha256": {
+    "backend/test_scripts/replica_runtime_faults.py": "cbef9e4b616c51b429feffe4b4d6fcf96de6cedf5279ff71c66abc79029bf21a",
+    "backend/tests/test_replica_runtime_faults.py": "f5a7ae02c3cf5b0392c24984733c4ca69d23b08aa0323ed9089437d80eddd195"
+  },
+  "regression": {
+    "initial_red_failures": 3,
+    "initial_red_passes": 13,
+    "legal_rpc_handoff_and_completion_reproduced": true,
+    "missing_api_refusal_still_fails": true,
+    "real_peak_violation_still_fails": true,
+    "counter_reset_still_fails": true,
+    "real_remote_admission_source_executed": true,
+    "provider_forbidden_during_admission_source_test": true
+  },
+  "windows": {
+    "passed": 103,
+    "skipped": 0,
+    "seconds": 143.96,
+    "log_sha256": "6d6620f7ed58580ad9cd8938e55bead1563880d2dbc2df1f0304503c37078730"
+  },
+  "linux": {
+    "container_id": "9dd3a6ce0016bed0cd81828d59c6bf039b418aa4b570f2bbbd0d38712860c46b",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T09:01:14.966180429Z",
+    "FinishedAt": "2026-11-02T09:06:38.909153372Z",
+    "junit": {
+      "tests": 103,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "0bb6ff36e7fb56d8d63c625d7d379089269524ce6c5d3d0a8833c82ca4811af5"
+    },
+    "failed_cases": []
+  },
+  "root_gate": {
+    "passed": true,
+    "audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff_passed": true,
+    "log_sha256": "c4c7b366ca8deac695d456b8fe10c7cf66c05211f3fff1f1bdb9f0b225837ee9"
+  },
+  "native": {
+    "running_documents_when_saturated": 2,
+    "api_processes_rejected_without_provider_call": 2,
+    "global_limit": 1,
+    "peak_provider_calls": 1,
+    "completed_documents": 2,
+    "download_sha256_matches": 2,
+    "search_matches": 2,
+    "seconds": 141.45300000000861,
+    "provider_calls_started_during_admission_observation": 1,
+    "provider_calls_active_after_admission": 1
+  },
+  "native_admission_timings_seconds": [
+    12.453,
+    10.969
+  ],
+  "final_quiescent": true,
+  "final_model_scenario": "success",
+  "failed_parent_unchanged_sha256": "fd03fa554f7e2b873204f4490adddea332e08d18961bd71a5a4dffb91b87c518",
+  "native_diagnostic_sha256": "233436e595c32f65d3114dca73206cab8b91904a72de51c1f781a36ba41f13eb",
+  "limitations": [
+    "Diagnostic trial is not a completed common runtime run.",
+    "Original v7 failure branch was not retained in the public generic error.",
+    "Both API refusals remain mandatory; losing the observation does not qualify.",
+    "No production model sizing or physical node/storage HA is certified."
+  ],
+  "current_runtime_acceptance_complete": false,
+  "all_profiles_certified": false
+}

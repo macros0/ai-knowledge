@@ -26,6 +26,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-ci-fixture", action="store_true")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("seed_backup_fixture")
     if not args.confirm_ci_fixture:
         parser.error("refusing to write fixture without --confirm-ci-fixture")
 

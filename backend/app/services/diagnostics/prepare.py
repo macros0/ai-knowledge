@@ -24,20 +24,29 @@ def prepare_in_child(store, view, job_id: str, *, frontend_root=None,
                      timeout_seconds=300, on_child=None) -> PrepareResult:
     if valid_uuid(job_id) is None or view.released or view.store is not store:
         raise ValueError("Invalid diagnostic prepare job")
+    if view.input_root is not None:
+        checked = store.safe_path(view.input_root)
+        if checked.parent != store.root / "inputs" or valid_uuid(checked.name) is None:
+            raise ValueError("Invalid diagnostic input root")
     directory = store.safe_path(store.root / "snapshots" / job_id)
     directory.mkdir(mode=0o770)
+    input_root = view.input_root or store.root
+    source_frontend_root = input_root if view.input_root is not None else frontend_root
     payload = {
-        "root": str(store.root), "frontend_root": str(frontend_root) if frontend_root else None,
+        "root": str(store.root), "input_root": str(view.input_root) if view.input_root else None,
+        "frontend_root": str(source_frontend_root) if source_frontend_root else None,
         "job_id": job_id, "cutoff_at": view.cutoff_at.isoformat(),
         "filter": {key: value.isoformat() if hasattr(value, "isoformat") else value
                    for key, value in vars(view.filter).items()},
         "limits": {"baseline_seconds": store.limits.baseline_seconds,
                    "capture_seconds": store.limits.capture_seconds,
                    "frontend_bytes": store.limits.frontend_bytes,
+                   "input_bytes": store.limits.total_bytes,
                    "bundle_bytes": store.limits.bundle_bytes},
         "descriptors": [{"path": str(item.path), "stream": item.stream,
                          "identity": list(item.identity), "length": item.length,
                          "expires_at": item.expires_at, "mtime_ns": item.mtime_ns,
+                         "prefix_sha256": item.prefix_sha256,
                          "source": item.source} for item in view.descriptors],
     }
     module_root = str(Path(__file__).resolve().parents[3])

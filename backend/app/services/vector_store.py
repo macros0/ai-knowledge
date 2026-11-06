@@ -341,8 +341,8 @@ def close_shared_qdrant_clients() -> None:
 
 
 class VectorStore:
-    def __init__(self):
-        self.settings = get_settings()
+    def __init__(self, *, settings=None):
+        self.settings = settings if settings is not None else get_settings()
 
     @property
     def client(self) -> QdrantClient:
@@ -1423,7 +1423,7 @@ class VectorStore:
                 break
 
     def backfill_sparse(
-        self, batch_size: int = 100, *, force: bool = False, include_chunks: bool = False
+        self, batch_size: int = 100, *, force: bool = False, include_chunks: bool = False, doc_id: str | None = None
     ) -> int:
         """Добивает sparse-векторы старых точек из PostgreSQL (okf_concepts; с
         include_chunks=True — ещё и document_chunks).
@@ -1467,6 +1467,10 @@ class VectorStore:
         from app.db.models import Document, DocumentChunk, OkfConcept
         from app.db.session import session_scope
 
+        from app.services.work.index_backfill import index_scope, assert_index_generation
+        index_scope(self.settings, "sparse", doc_id)
+        target_doc_id = doc_id
+
         # Без force берём только точки БЕЗ sparse — остальные не нужны вовсе.
         # point_type не фильтруем намеренно: id из БД всё равно концептные, а
         # легаси-точки без этого ключа payload должны оставаться чинимыми.
@@ -1475,6 +1479,9 @@ class VectorStore:
             if force
             else qm.Filter(must_not=[qm.HasVectorCondition(has_vector=SPARSE_VECTOR_NAME)])
         )
+        if target_doc_id is not None:
+            scroll_filter = scroll_filter or qm.Filter()
+            scroll_filter.must = [qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=target_doc_id))]
         from app.services.maintenance_point_ids import disk_point_ids
 
         with disk_point_ids(
@@ -1496,10 +1503,13 @@ class VectorStore:
 
             cap = self.settings.okf_max_concept_chars
             with session_scope() as s:
-                active_generations = lock_generation_read(s)
+                active_generations = lock_generation_read(s, [target_doc_id] if target_doc_id is not None else None)
+                if target_doc_id is not None:
+                    assert_index_generation(target_doc_id, active_generations.get(target_doc_id))
                 rows = s.execute(
                     select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.title, capped_text_expression(s, OkfConcept.content, cap))
-                    .join(Document, OkfConcept.doc_id == Document.id).execution_options(yield_per=batch_size)
+                    .join(Document, OkfConcept.doc_id == Document.id)
+                    .where(OkfConcept.doc_id == target_doc_id if target_doc_id is not None else True).execution_options(yield_per=batch_size)
                 )
                 for doc_id, slug, title, content in rows:
                     point_id = concept_point_id(doc_id, slug, generation_id=active_generations.get(doc_id))
@@ -1518,7 +1528,9 @@ class VectorStore:
             if include_chunks:
                 cap_chunk = self.settings.okf_max_chunk_index_chars
                 with session_scope() as s:
-                    active_generations = lock_generation_read(s)
+                    active_generations = lock_generation_read(s, [target_doc_id] if target_doc_id is not None else None)
+                    if target_doc_id is not None:
+                        assert_index_generation(target_doc_id, active_generations.get(target_doc_id))
                     from app.services.chunk_projection_maintenance import generation_projection_version, rebuild_projection_sparse
                     projection_docs = set()
                     for doc_id, generation_id in active_generations.items():
@@ -1532,7 +1544,8 @@ class VectorStore:
                             DocumentChunk.section_title,
                             capped_text_expression(s, DocumentChunk.content, cap_chunk),
                         ).join(Document, DocumentChunk.doc_id == Document.id)
-                        .where(DocumentChunk.doc_id.not_in(projection_docs)).execution_options(yield_per=batch_size)
+                        .where(DocumentChunk.doc_id.not_in(projection_docs),
+                            DocumentChunk.doc_id == target_doc_id if target_doc_id is not None else True).execution_options(yield_per=batch_size)
                     )
                     for doc_id, chunk_index, section_title, content in chunk_rows:
                         point_id = chunk_point_id(doc_id, chunk_index, generation_id=active_generations.get(doc_id))
@@ -1553,7 +1566,7 @@ class VectorStore:
             flush_sparse()
             return sparse_total + projection_total
 
-    def backfill_chunks(self, embedder, batch_size: int = 64) -> int:
+    def backfill_chunks(self, embedder, batch_size: int = 64, *, doc_id: str | None = None) -> int:
         """Индексирует чанки из PostgreSQL (document_chunks) — Этап 2b.
 
         Для каждого done-документа (не в корзине) читает чанки из document_chunks,
@@ -1563,18 +1576,21 @@ class VectorStore:
         document_tags. Чанки документов, чей текст ещё не перенесён в БД, остаются
         в Qdrant нетронутыми (существующие точки не удаляются).
         """
+        from app.services.work.index_backfill import index_scope
+        index_scope(self.settings, "chunks", doc_id)
         if not self.settings.search_index_chunks_enabled:
             return 0
 
         from app.services.maintenance_point_ids import disk_point_ids
 
         with disk_point_ids(
-            str(rec.id) for rec in self._scroll_points(with_payload=False, with_vectors=False)
+            str(rec.id) for rec in self._scroll_points(with_payload=False, with_vectors=False,
+                scroll_filter=qm.Filter(must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=doc_id))]) if doc_id else None)
         ) as existing_ids:
             from app.services.legacy_chunk_maintenance import backfill_legacy_chunks
-            return backfill_legacy_chunks(self, embedder, existing_ids, batch_size)
+            return backfill_legacy_chunks(self, embedder, existing_ids, batch_size, doc_id=doc_id)
 
-    def backfill_relations(self) -> int:
+    def backfill_relations(self, *, doc_id: str | None = None) -> int:
         """Нормализует relations в payload концептов из PostgreSQL (okf_concepts).
 
         Этап 2b: источник истины — БД (relations уже нормализованы при финализации).
@@ -1591,12 +1607,18 @@ class VectorStore:
         from app.db.models import Document, OkfConcept
         from app.db.session import session_scope
 
+        from app.services.work.index_backfill import index_scope, assert_index_generation
+        index_scope(self.settings, "relations", doc_id)
+        target_doc_id = doc_id
+
         with session_scope() as s:
-            active_generations = lock_generation_read(s)
+            active_generations = lock_generation_read(s, [target_doc_id] if target_doc_id is not None else None)
+            if target_doc_id is not None:
+                assert_index_generation(target_doc_id, active_generations.get(target_doc_id))
             rows = s.execute(
                 select(OkfConcept.doc_id, OkfConcept.slug, OkfConcept.relations)
                 .join(Document, OkfConcept.doc_id == Document.id)
-                .where(Document.deleted_at.is_(None))
+                .where(Document.deleted_at.is_(None), OkfConcept.doc_id == target_doc_id if target_doc_id is not None else True)
             ).all()
 
         db_relations: dict[str, list[str]] = {}
@@ -1612,7 +1634,8 @@ class VectorStore:
         # текст всего корпуса ради одного ключа.
         existing: dict[str, list[str]] = {}
         for rec in self._scroll_points(
-            with_payload=["relations"], with_vectors=False
+            with_payload=["relations"], with_vectors=False,
+            scroll_filter=qm.Filter(must=[qm.FieldCondition(key="doc_id", match=qm.MatchValue(value=target_doc_id))]) if target_doc_id else None
         ):
             pid = str(rec.id)
             if pid in db_relations:

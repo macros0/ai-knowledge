@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "status": "offline-schema-upgrade-cli-passed",
+  "scope": "current-version-cli-and-native-isolated-postgresql-sql-protocol",
+  "base_revision": "5f462e3d8f79d22479cbc0b7b6f260cc7ca8b8d6",
+  "source_overlay_sha256": {
+    "backend/app/deployment/operator_database.py": "1c03c35d0b87e7c934220e5d6a54f58bdd7f2a652827c2be1c701988e8169b97",
+    "backend/scripts/upgrade_replica_runtime.py": "24282dff4a289c168a830fa97f7c0b712149fb2f219672cbc63e2c073d00de3f",
+    "backend/tests/test_replica_schema_upgrade_cli.py": "8d2d1d2b0d22e18e596fc67986b826167fa458c1691dc4dcba04839d504dee0a",
+    "backend/tests/test_replica_operator_database.py": "ffae93c189855068c2248de8214f6d91187d36ea7603fc01b2822ebe77a47d1a",
+    "backend/tests/replica_postgres/test_schema_adoption.py": "5affdf9be78980b9692e87326b170b42832f59a0f0931da3373ef1d020fa38cc"
+  },
+  "cli": {
+    "supported_predecessor": "rpl04_runtime_identity",
+    "target": "rpl05_maintenance_epoch",
+    "separate_operator_database_url": true,
+    "signed_settings_remain_scoped": true,
+    "json_regular_file_byte_limit": 8192,
+    "operator_url_byte_limit": 16384,
+    "projected_symlink_supported": true,
+    "fifo_refused_without_waiting": true,
+    "plan_only_sql_configurations": 0,
+    "automatic_migration_release_or_scaling": false,
+    "publication": "create-only-after-held-SQL-commit",
+    "same_operation_publication_failure_resume": "same-epoch-identity-and-audit",
+    "public_error_fields": [
+      "status",
+      "type",
+      "jobs_held"
+    ]
+  },
+  "windows": {
+    "passed": 80,
+    "skipped": 4,
+    "failures": 0,
+    "duration_seconds": 164.18,
+    "skip_scope": "Two projected-symlink and two FIFO cases qualified in Linux cohort",
+    "additional_default_same_schema_cli": {
+      "passed": 1,
+      "duration_seconds": 9.82,
+      "source_sha256": "03df8309a3bcc5b96d6f8bc741b14cd63cb3758b1ca383270bbf8bb978609ffa",
+      "linux_scope": "This additional test-only file was added after the107-case snapshot; no Linux claim for it."
+    }
+  },
+  "linux": {
+    "passed": 107,
+    "skipped": 0,
+    "failures": 0,
+    "ci": {
+      "id": "6b270f99cebd0b419e6ff1493cbc482ff711ad3f881ebf4418985112620c8ffa",
+      "Running": false,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "StartedAt": "2026-11-02T12:35:30.399939496Z",
+      "FinishedAt": "2026-11-02T12:39:52.995749521Z"
+    },
+    "junit": {
+      "tests": 107,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "b0eb4b12586d8b89be862023ef22251834f1b2d2d171b2a00dcd0f038de46b8a"
+    },
+    "native_pg_cases": [
+      {
+        "name": "test_pg_populated_real_schema_upgrade_adopt_release_preserves_data",
+        "passed": true
+      },
+      {
+        "name": "test_pg_schema_adoption_failure_keeps_migration_fence[audit]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_schema_adoption_failure_keeps_migration_fence[unknown_provider]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_conflicting_storage_operation_rolls_back_real_schema_ddl",
+        "passed": true
+      },
+      {
+        "name": "test_pg_schema_cli_adopts_and_resumes_without_release[False]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_schema_cli_adopts_and_resumes_without_release[True]",
+        "passed": true
+      }
+    ],
+    "postgres_version": "17.11-1.pgdg13+2",
+    "postgres_image": "sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3",
+    "postgres": {
+      "id": "5c8acca2fa32a88d330dc2b0b13c2eb13eae3f4c7e07c1f612cc6fe32228d3ae",
+      "Running": false,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "StartedAt": "2026-11-02T12:35:28.802917349Z",
+      "FinishedAt": "2026-11-02T12:42:43.89135657Z"
+    },
+    "no_host_ports_or_persistent_volumes": true,
+    "network": "isolated-loopback-only",
+    "postgres_stopped_after_terminal_ci": true,
+    "containers_logs_archives_retained": true
+  },
+  "saved_image_standalone_restore": {
+    "source_sha256": "c3e2492b797367caff77b875ad10b3cbdaaccedc614546241d311caa2e656f89",
+    "unchanged": true,
+    "transport_contract_cases_in_cohort": true
+  },
+  "red_green": {
+    "before_implementation": {
+      "failed": 25,
+      "windows_posix_skipped": 2,
+      "seconds": 52.51
+    },
+    "expected_causes": [
+      "Missing schema/operator CLI flags",
+      "Missing current-version operator transport module"
+    ]
+  },
+  "project_check": {
+    "passed": true,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "eslint": "passed",
+    "ruff": "passed"
+  },
+  "production_schedule": "disabled",
+  "full_kubernetes_schema_update_verified": false,
+  "full_final_version_ci": false,
+  "limitations": [
+    "Native CLI SQL uses a disposable loopback PG17 server; TLS/scoped projection transport has separate contract tests.",
+    "The complete Kubernetes schema-update coordinator, predecessor backup/restore and old-binary drill remain open.",
+    "Compact/NULL-generation corpus adoption and remaining provider/key/alert/release gates remain open.",
+    "No running application namespace or customer/working corpus was changed by these tests."
+  ]
+}

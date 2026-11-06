@@ -27,6 +27,23 @@ import { createTranslator } from "../src/i18n/core.js";
 // англоязычный пользователь получал бы русские литералы из api.js.
 const t = createTranslator("ru").t;
 
+test("upload sends the supplied attempt key while retaining FormData and CSRF handling", async () => {
+  const original = globalThis.fetch;
+  const originalDocument = globalThis.document;
+  globalThis.document = { cookie: "csrf_token=test-csrf" };
+  let options;
+  globalThis.fetch = async (_url, init) => { options = init; return Response.json({ id: "accepted" }); };
+  try {
+    await api.uploadDocument(new Blob(["bytes"], { type: "application/pdf" }), ["tag"], {
+      idempotencyKey: "upload-attempt-0123456789", allowSimilar: true,
+    });
+    assert.equal(new Headers(options.headers).get("Idempotency-Key"), "upload-attempt-0123456789");
+    assert.equal(options.body.get("allow_similar"), "true");
+    assert.equal(options.body.get("tags"), "tag");
+    assert.equal(new Headers(options.headers).get("X-CSRF-Token"), "test-csrf");
+  } finally { globalThis.fetch = original; globalThis.document = originalDocument; }
+});
+
 test("document queue status reads the shared admission snapshot", async () => {
   const original = globalThis.fetch;
   let requestedUrl;

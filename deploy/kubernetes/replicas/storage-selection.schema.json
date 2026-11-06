@@ -1,0 +1,140 @@
+{
+  "$defs": {
+    "StorageComponent": {
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "enum": [
+            "managed",
+            "external"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "recipe": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Recipe",
+          "type": "string"
+        },
+        "image": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image"
+        },
+        "license": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "License",
+          "type": "string"
+        },
+        "install_scope": {
+          "enum": [
+            "namespace",
+            "external"
+          ],
+          "title": "Install Scope",
+          "type": "string"
+        },
+        "disk_layout": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Disk Layout",
+          "type": "string"
+        },
+        "failure_model": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Failure Model",
+          "type": "string"
+        },
+        "backup_restore_recipe": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Backup Restore Recipe",
+          "type": "string"
+        },
+        "maintenance_owner": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Maintenance Owner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "recipe",
+        "license",
+        "install_scope",
+        "disk_layout",
+        "failure_model",
+        "backup_restore_recipe",
+        "maintenance_owner"
+      ],
+      "title": "StorageComponent",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "installation_id": {
+      "pattern": "^[0-9a-f]{32}$",
+      "title": "Installation Id",
+      "type": "string"
+    },
+    "namespace": {
+      "maxLength": 63,
+      "minLength": 1,
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "title": "Namespace",
+      "type": "string"
+    },
+    "profile": {
+      "const": "basic",
+      "title": "Profile",
+      "type": "string"
+    },
+    "artifact_backend": {
+      "enum": [
+        "s3",
+        "rwx"
+      ],
+      "title": "Artifact Backend",
+      "type": "string"
+    },
+    "postgres": {
+      "$ref": "#/$defs/StorageComponent"
+    },
+    "qdrant": {
+      "$ref": "#/$defs/StorageComponent"
+    },
+    "artifacts": {
+      "$ref": "#/$defs/StorageComponent"
+    }
+  },
+  "required": [
+    "version",
+    "installation_id",
+    "namespace",
+    "profile",
+    "artifact_backend",
+    "postgres",
+    "qdrant",
+    "artifacts"
+  ],
+  "title": "StorageSelection",
+  "type": "object"
+}

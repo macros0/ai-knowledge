@@ -14,7 +14,8 @@ from app.services.chunk_projection_maintenance import generation_projection_vers
 logger = logging.getLogger('app.services.vector_store')
 
 
-def backfill_legacy_chunks(store, embedder, existing_ids, batch_size):
+def backfill_legacy_chunks(store, embedder, existing_ids, batch_size, *, doc_id=None):
+    from app.services.work.index_backfill import assert_index_generation
     from app.services.vector_store import chunk_point_id, _sparse_text, to_sparse_vector, SPARSE_VECTOR_NAME, CHUNK_POINT_TYPE
     if type(batch_size) is not int or not 1 <= batch_size <= 256:
         raise ValueError('Invalid maintenance batch size')
@@ -22,10 +23,12 @@ def backfill_legacy_chunks(store, embedder, existing_ids, batch_size):
     cap = store.settings.okf_max_chunk_index_chars
     indexed = projection_count = attempted = failed = batches = 0
     failed_docs = set()
-    last_doc = None
+    last_doc, target_doc_id = None, doc_id
     while True:
         with session_scope() as session:
             query = select(Document.id).where(Document.deleted_at.is_(None)).order_by(Document.id).limit(1)
+            if target_doc_id is not None:
+                query = query.where(Document.id == target_doc_id)
             if last_doc is not None:
                 query = query.where(Document.id > last_doc)
             doc_id = session.scalar(query)
@@ -34,6 +37,7 @@ def backfill_legacy_chunks(store, embedder, existing_ids, batch_size):
         last_doc = doc_id
         with session_scope() as session:
             generation_id = lock_generation_read(session, [doc_id]).get(doc_id)
+            assert_index_generation(doc_id, generation_id)
             doc = session.get(Document, doc_id)
             if doc is None or doc.deleted_at is not None:
                 continue
@@ -53,6 +57,7 @@ def backfill_legacy_chunks(store, embedder, existing_ids, batch_size):
         while True:
             with session_scope() as session:
                 current = lock_generation_read(session, [doc_id]).get(doc_id)
+                assert_index_generation(doc_id, current)
                 doc = session.get(Document, doc_id)
                 if doc is None or doc.deleted_at is not None or current != generation_id:
                     break
@@ -83,6 +88,7 @@ def backfill_legacy_chunks(store, embedder, existing_ids, batch_size):
                 for (identity, ci, sid, title, text), vector in zip(missing, vectors)]
             with session_scope() as session:
                 current = lock_generation_read(session, [doc_id]).get(doc_id)
+                assert_index_generation(doc_id, current)
                 doc = session.get(Document, doc_id)
                 if doc is None or doc.deleted_at is not None or current != generation_id:
                     break
@@ -92,6 +98,10 @@ def backfill_legacy_chunks(store, embedder, existing_ids, batch_size):
                     store.client.upsert(collection_name=store.collection, points=points)
                     indexed += len(points)
                 except Exception as exc:
+                    from app.services.work.context import current_claim
+                    current_work = current_claim()
+                    if current_work is not None and current_work.spec.kind == "index_backfill":
+                        raise  # The durable receipt must retry, never report a partial batch as done.
                     failed += 1
                     failed_docs.add(doc_id)
                     logger.error('Backfill чанков: батч %d упал (%d точек): %s', batches, len(points), exc)

@@ -48,11 +48,14 @@ def identity_from_session(request: Request) -> AuthenticatedIdentity | None:
     try:
         key = hashlib.sha256(session_id.encode("ascii")).hexdigest()
         with session_scope() as db:
+            from app.services.work.admission import durable_documents
+            from app.services.work.store import _now
             row = db.get(AuthSession, key)
+            now = _now(db) if durable_documents(config_mod.get_settings()) else datetime.now(timezone.utc)
             expires_at = row.expires_at if row is not None else None
             if expires_at is not None and expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if row is None or expires_at <= datetime.now(timezone.utc):
+            if row is None or expires_at <= now:
                 if row is not None:
                     db.delete(row)
                 request.session.clear()
@@ -67,13 +70,16 @@ def store_identity(request: Request, identity: AuthenticatedIdentity) -> None:
     session_id = secrets.token_urlsafe(32)
     key = hashlib.sha256(session_id.encode("ascii")).hexdigest()
     settings = config_mod.get_settings()
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.auth_session_ttl_seconds)
     payload = identity.model_dump(mode="json")
     id_token = (payload.get("attributes") or {}).get("id_token")
     raw=request.session.get(_SESSION_KEY) or {}
     previous=raw.get("session_id") if isinstance(raw,dict) else None
     try:
         with session_scope() as db:
+            from app.services.work.admission import durable_documents
+            from app.services.work.store import _now
+            now = _now(db) if durable_documents(settings) else datetime.now(timezone.utc)
+            expires_at = now + timedelta(seconds=settings.auth_session_ttl_seconds)
             from app.services.audit_security import enabled
             if enabled() and isinstance(previous,str) and previous.isascii():
                 db.execute(delete(AuthSession).where(AuthSession.id==hashlib.sha256(previous.encode("ascii")).hexdigest()))

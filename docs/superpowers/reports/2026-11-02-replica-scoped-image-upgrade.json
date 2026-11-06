@@ -1,0 +1,142 @@
+{
+  "status": "owned-scoped-same-schema-image-upgrade-passed",
+  "scope": "single-node-managed-s3-synthetic-stub",
+  "namespace": "replica-test-r5o2t20261101",
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "installation_id": "55555555555555555555555555555555",
+  "operation_id": "79e6e939fb0249468e89e1f981dda7ec",
+  "epoch": 10,
+  "old_fingerprint": "13548fdb5c6e7ed466d3dd1c4d62010ce359da4563e32602a58bbb0a7cbeb3cc",
+  "new_fingerprint": "6a41ae2937c6e95d8877f36f3e884d05da3e522c27ae54f7c73d4e00841837e4",
+  "runtime_secret": "replica-credentials-f3d736ea0ebe-runtime",
+  "identity_configmap": "replica-image-79e6e939fb02-identity",
+  "actual_scoped_api_worker_processes": 4,
+  "operator_secret_in_application": false,
+  "pg_rights": {
+    "allowed": [
+      "business_crud",
+      "row_lock_replica_maintenance_state",
+      "row_lock_replica_runtime_identity",
+      "row_lock_artifact_storage_control"
+    ],
+    "denied": [
+      "maintenance_epoch",
+      "runtime_fingerprint",
+      "storage_control",
+      "audit_update",
+      "audit_delete",
+      "migration_head",
+      "operator_password_catalog",
+      "public_ddl",
+      "temporary_ddl",
+      "truncate_privilege"
+    ],
+    "tls_verify_full": true,
+    "wrong_password_denied": true,
+    "connection_limit": 64
+  },
+  "s3_rights": {
+    "allowed": [
+      "dedicated_bucket_head_list",
+      "prefix_conditional_put",
+      "prefix_cold_range_read",
+      "prefix_delete",
+      "multipart_complete_conditional",
+      "multipart_abort"
+    ],
+    "denied": [
+      "foreign_prefix_read",
+      "foreign_prefix_write",
+      "foreign_prefix_delete",
+      "foreign_bucket_read",
+      "foreign_bucket_write",
+      "foreign_bucket_delete",
+      "foreign_bucket_list",
+      "iam_admin_list",
+      "wrong_secret"
+    ],
+    "tls_verified": true,
+    "bucket_listing_scope": "dedicated-installation-bucket",
+    "bucket_discovery": {
+      "mode": "filtered",
+      "visible_bucket_count": 1
+    }
+  },
+  "held_corpus_unchanged": true,
+  "audits_verified": true,
+  "retired_identity_rejected": true,
+  "signing_key_preserved": true,
+  "shared_session": {
+    "shared_session": true,
+    "distinct_apis": 2
+  },
+  "preserved_existing_documents": 19,
+  "new_document": {
+    "id": "9cd8b41fdc7d41b9",
+    "sha256": "1c791e4307760236c81df0685f7498080af3171c937be9d40836767bab956ba4",
+    "status": "done",
+    "problem": null,
+    "active_publications": 1,
+    "search_download_sha256_verified": true
+  },
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e",
+      "worker": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "production_schedule": "disabled",
+  "verified_at": "2026-11-02T00:28:39.306820+00:00",
+  "limitations": [
+    "dedicated PG instance and dedicated S3 bucket only",
+    "not customer/external/mixed/RWX certification",
+    "not node or host failover"
+  ],
+  "image": "okf-backend:replicas-dc3534a-b44023a3aa80",
+  "existing_session_preserved": true,
+  "runtime_secret_unchanged": true,
+  "storage_claims_and_controllers_unchanged": true,
+  "held_vectors_unchanged": true,
+  "independent_backup_id": "1e4f494397594f5e83daf39361996d04",
+  "rights_denials_reused_from_operation": "f3d736ea0ebe457689d98187b3ba49a6",
+  "runtime_configmap": "replica-image-79e6e939fb02-runtime",
+  "schema_revision": "rpl05_maintenance_epoch",
+  "held_ready_blobs_sha256_verified": 95,
+  "held_vector_points_verified": 38,
+  "build_source_identity": "b44023a3aa804d6ddbf747390325e76b126e7d64ae3bbe70878e11902132a190",
+  "built_image_index_digest": "sha256:74da6698c528bcf2feec9464b128c89b494780e91a3ad7e33edfc0433dbffca6",
+  "verified_image_code_files": 449,
+  "transport_observations": [
+    {
+      "phase": "fence-post-check",
+      "outcome": "durable-held-epoch10; rebind-recorded-PG-forward and verify same operation"
+    },
+    {
+      "phase": "compute-post-check",
+      "outcome": "same completed compute Job/new identity recorded; fresh held checks passed before staging"
+    }
+  ],
+  "repeated_fence": false,
+  "repeated_compute_job": false,
+  "final_combined_fault_acceptance": "pending",
+  "full_backend_ci_pass": false,
+  "application_source_revision": "dc3534a29a07d6a6dd6f8c81dfa91562e7d58868",
+  "running_process_code_sha256": "40b18372580943714e5569c3353e571fe2aa980de3fba93a20173f4eea6097e5",
+  "running_process_code_verified": 4,
+  "final_documents": 20,
+  "final_trashed_documents": 1,
+  "final_provider_owners": 0,
+  "final_maintenance_released": true
+}

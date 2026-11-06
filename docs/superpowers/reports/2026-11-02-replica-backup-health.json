@@ -1,0 +1,78 @@
+{
+  "status": "focused-validation-passed",
+  "base_revision": "0768dd95624be54aafa939e43782e6b9e92753f1",
+  "source_overlay_sha256": {
+    "backend/app/deployment/replica_backup_health.py": "b9b9015345fbae2add5c1f3c51a0b2b06fca1d6c6ddd2428281f0f53724f4866",
+    "scripts/kubernetes/replica_backup.py": "07a5e1c47634962ef235f5d7c49239f2820c5096396e81068eac91d33b62a2bc",
+    "scripts/kubernetes/replica_backup_health.py": "8a1a5250558567646696edc88926599fc3659641f65634a4030823bf83840f5b",
+    "backend/tests/test_replica_backup_health.py": "868a4db46d88f085e6f4f7b56072515024217fd925b325ac821383840385ff39"
+  },
+  "windows": {
+    "tests": 111,
+    "passed": 110,
+    "skipped": 1,
+    "skip_reason": "Windows host does not permit symlink creation; required Linux cohort covers it",
+    "log_sha256": "fc487c3310f570d80abceffc6a218bbc7b9357d2a38300d5f0a12a947b9c328a"
+  },
+  "linux": {
+    "container_id": "00ed8fdd8f20bfd86f456ab859399aa16feb26ef2ea8035ddac4f555ea4dfff7",
+    "image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "archive_sha256": "32c601324fe96d20b7075989f11de2478ec954c251dc9faf2cae4ae1d2610c9d",
+    "terminal_verified": true,
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T01:20:36.305766722Z",
+    "FinishedAt": "2026-11-02T01:26:15.820083323Z",
+    "junit": {
+      "tests": 111,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "990050890f8ef5ab30515e5e2ea7f3ade9cfbaf6d0dc7548171da64def21d04f"
+    },
+    "failed_cases": []
+  },
+  "native_copy_check": {
+    "checked_at": "2026-11-02T01:12:33.432598+00:00",
+    "backup_id": "1e4f494397594f5e83daf39361996d04",
+    "archive_verified": true,
+    "recovery_point_age_seconds": 5170.575727,
+    "restore_verified": false,
+    "rpo_assured": false,
+    "attempt_status": null,
+    "exit_code": 0,
+    "source_services_contacted": false
+  },
+  "coverage": [
+    "cold authentication and explicit archive scope",
+    "consistent_at age boundaries86400/86401",
+    "missing/corrupt/partial/wrong-key/future copies",
+    "failed/overdue/unreadable/foreign/latest-ID-mismatch attempts",
+    "concurrent start and owned completion",
+    "write/rename/fsync uncertainty marker",
+    "real CLI preflight-failure status and monitor",
+    "real CLI fresh/stale/failed-attempt checks",
+    "protected journal path and secret redaction"
+  ],
+  "production_schedule": "disabled",
+  "notification_delivery_verified": false,
+  "full_backend_ci_pass": false,
+  "limitations": [
+    "Local JSON/exit-code alert emission only; no recipient configured or messages sent.",
+    "Real backup failure drill uses missing local destination evidence before provider/Kubernetes access.",
+    "Actual separate-PC archive cold-checked; this archive has not been restored.",
+    "Optional latest-attempt journal must be configured consistently on future attempts.",
+    "Not external/mixed/RWX, production scheduling/key recovery, physical-node or HA certification."
+  ],
+  "root_gate": {
+    "command": "node scripts/check-project.mjs",
+    "exit_code": 0,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "eslint_passed": true,
+    "backend_ruff_passed": true,
+    "log_sha256": "9b1e2c509caee59f3f89b96669ffec19f7daee1d47d28ca5cfd3a265f46b90fb"
+  }
+}

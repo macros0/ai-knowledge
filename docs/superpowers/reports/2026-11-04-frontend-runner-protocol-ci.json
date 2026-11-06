@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "scope": "frontend-runner-protocol-components",
+  "certification": null,
+  "qualification_complete": false,
+  "live_frontend_rehearsal": false,
+  "production_schedule": "disabled",
+  "source": {
+    "application_ci_base_revision": "65d6ee285578df8342fe05148511a47f1c1b0246",
+    "transferred_working_tree_files_sha256": {
+      "backend/test_scripts/replica_frontend_run.py": "baf5963f40c2f15e1a513e0aeaf0cb1a767dab12a76bbd298fbf1fb70590ab3f",
+      "backend/test_scripts/replica_frontend_http.py": "ba980086a796ffbfd70df912d83ade426941ec30179c39a63c156c63f8bef43d",
+      "backend/tests/test_replica_frontend_run.py": "bbe055bcb370d0ee64bada9d4a00864d5e992572ede220bdfc95ea91e5dca3a0",
+      "backend/tests/test_replica_frontend_http.py": "f16b5e16dbacc96209316df775f376c1320914ad67a846bf736025619c9ce4e8"
+    },
+    "full_current_release_ci": false
+  },
+  "windows": {
+    "journal_and_admission": {
+      "tests": 60,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "064b8d78dfa72ba66628023f3c61b8d00bad7f6e9731f42cfa6bb9a1e0f22dd0"
+    },
+    "http": {
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "2cb756db108456d233be17e7701a2035bcc730e97672a91545b51febad2e2568"
+    }
+  },
+  "linux": {
+    "tests": 42,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junit_sha256": "6178af582043ea20ec12ae5f3c7f20c6a592ba8b746f525fc246ece576b1d2f0",
+    "image_id": "sha256:5ea412ca80682429ca77d6a5c970da1b1be8d18d554156f25ba8b5aa36d608eb",
+    "source_files": 2457,
+    "source_unchanged": true,
+    "network": "none",
+    "source_read_only": true,
+    "root_filesystem_read_only": true,
+    "user": "1000:1000",
+    "capabilities": "dropped",
+    "memory_limit_mib": 1536,
+    "cpus": 2,
+    "oom": false
+  },
+  "preserved_first_attempt": {
+    "tests": 42,
+    "setup_errors": 42,
+    "tests_executed": false,
+    "reason": "Default data path under read-only source; explicit ephemeral DATA_DIR/DIAGNOSTICS_DIR fixed setup without changing source or tests",
+    "junit_sha256": "663d9baf170c5b6603f029f5ffb43ffe6b89224d62737b32f00992eb9798d10f"
+  },
+  "cleanup": {
+    "open_capacity_loans": 0,
+    "original_replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "original_runtime_verified": true,
+    "original_pvc_bindings_verified": true,
+    "canonical_tables_unchanged": 9,
+    "data_mutations": 0,
+    "foreign_audit_running": true,
+    "policy_node_running": true,
+    "crossnode_containers_off": true
+  },
+  "limitations": [
+    "HTTP fixtures are synthetic loopback servers, not the Next.js/Kubernetes application",
+    "Native Kubernetes/process ownership coordinator and active frontend loss remain unfinished",
+    "Common CLI functional integration and a fresh staged live case remain unfinished",
+    "Real CSRF, customer Gateway/IdP and trusted full-release qualification remain open"
+  ]
+}

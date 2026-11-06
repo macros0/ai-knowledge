@@ -1,0 +1,144 @@
+{
+  "status": "owned-model-quarantine-recovery-passed",
+  "scope": "single-node-managed-s3-synthetic-stub",
+  "namespace": "replica-test-pfv220261105",
+  "namespace_uid": "adeadac9-7a37-461b-9b9e-5f06268e6a79",
+  "installation_id": "000355b4864949949cb98e70e7138cb9",
+  "runtime_fingerprint": "7efcb6125d2e697938d9f6ca50a5a7e2d2221024a205afc6a14394b7d770d4d7",
+  "operation_id": "2a18181afb2947be8ab5085f09e7db3a",
+  "source_epoch": 5,
+  "recovery_epoch": 6,
+  "fault_kind": "model-connectivity-loss",
+  "worker_crash_injected": false,
+  "provider_requests_started_during_fault": 0,
+  "provider_image_digest": "sha256:3e31e8f8af2fec5bcf666a6f87afbbc7cd88b9038a638edf42e4663a9d232fc6",
+  "quarantine": {
+    "provider_finished": true,
+    "db_clock_past_original_expiry": true,
+    "original_reservation_retained": true,
+    "busy_independent_apis": 2,
+    "extra_provider_requests": 0
+  },
+  "reconciliation": {
+    "proof_sha256": "824aa8fd05bf3736304733092be73eaed93d26227c0e5f3c98cb36e9e3e717d8",
+    "observation_sha256": "e70291aa0f8fa52f12254f1fd2525c3fb0072ca07388e0ffe8c538f27e1cc796",
+    "live_kubernetes_and_cri_guards": true,
+    "unreachable_nodes": 0,
+    "unknown_writers": 0,
+    "provider_pods": 0,
+    "provider_endpoints": 0,
+    "audit_confirmed": true,
+    "held_corpus_verified_before_release": true
+  },
+  "recovered_document": {
+    "id": "845551aa6d6b450d",
+    "search_query": "d6fee6296bc64c529e29b69c5dbeb2e3",
+    "sha256": "b069302c2ef0194def61cb773b1102c6430ad384dc587d277aa4aaab0bd859ee",
+    "status": "done",
+    "problem": null,
+    "active_publications": 1,
+    "original_fence": 3,
+    "recovered_fence": 4,
+    "search_download_sha256_verified": true
+  },
+  "preserved_existing_documents": 3,
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:eebf4d7ad177f43a8cef10eade6fb5ccc92ae8177bd4e22c9d497c908cdfe4c9",
+      "api": "sha256:aa5832df4a8a956ac28d02f7ca75995d4f8560f78d2452fde13bd71aa42a6d6f",
+      "worker": "sha256:aa5832df4a8a956ac28d02f7ca75995d4f8560f78d2452fde13bd71aa42a6d6f"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "production_schedule": "disabled",
+  "verified_at": "2026-11-05T14:59:23.280743+00:00",
+  "remaining_runtime_faults": [
+    "final-source-provider-matrix-and-full-CI"
+  ],
+  "limitations": [
+    "not node or host failover",
+    "not a real/external-provider recovery recipe",
+    "no production SLA"
+  ],
+  "parent_execution_id": "9ef5ebcefe5c4f00a787a77a1f7a80e0",
+  "parent_core_sha256": "8a0ec0544f39929cdbd6830c0a1d146ea250622bb173af859978459280f77951",
+  "parent_completed_native_stages": 10,
+  "parent_history_unchanged": true,
+  "policy_removed": true,
+  "qualification_complete": false,
+  "certification": null,
+  "session": {
+    "session_revoked": true,
+    "old_cookie_checked": true,
+    "parent_session_preserved_across_restart": true
+  },
+  "old_export_verified": true,
+  "schema_version": 1,
+  "source_sha256": {
+    "scripts/kubernetes/replica_model_recovery.py": "b746b49287dda75ecc4add5c0ed56c241c2c0cb7a329e5947b7a94f3a2fa4c5e",
+    "scripts/kubernetes/replica_worker_loss.py": "f9325cef056444c791207fac0cfaa054dc288cfb6f9ec86cd4bdfab0ed58034b",
+    "backend/tests/test_replica_model_recovery.py": "a35c1231739e827fa6850a0ac1f962ee07070d265c2164af49474fd570c46d77",
+    "backend/tests/test_replica_worker_loss.py": "9ebc7ee02a9aae3faba0268eb97fbfc167e9b6b985f0ec0da43f0928f2b63622",
+    "backend/tests/test_replica_postgres_partition.py": "85a73a53564d3afa42af17b1beb51e60f83bd6841062992374604a8b1c91a777",
+    "backend/tests/test_replica_fault_authority.py": "fab502e29922af3c1db6163bfc51f3e79cbff2b5d8756f4bf025106e323efdb0"
+  },
+  "targeted_windows": {
+    "tests": 118,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "junit_sha256": "ed7fecb11d963cd57e46ef83fc2342e4db16390438576061763c07867b33864c"
+  },
+  "targeted_linux": {
+    "operation_id": "88cf705eae654c3eabd56d2181301484",
+    "running": false,
+    "container_id": "ce8f3e39b3f597eddabc7dc9cc2f6e50c42851a38e0fab0e191520400958bce3",
+    "exit_code": 0,
+    "oom": false,
+    "junit": {
+      "tests": 118,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sha256": "0b15a0862995f0703caa77037ddb2cc0c8d5c009299d8d80b2a143331df8d699"
+    },
+    "windows_case_ids_equal": true,
+    "source_unchanged": true,
+    "verified": true,
+    "failed_case_ids": []
+  },
+  "ci_resources": {
+    "container_limit_bytes": 1073741824,
+    "required_available_bytes": 2147483648,
+    "host_reserve_bytes": 1073741824,
+    "actual_available_before": 2435624960,
+    "new_capacity_loans": 0
+  },
+  "project_checks": {
+    "passed": true,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "existing_optional_skips": 1,
+    "ruff_findings": 0,
+    "log_sha256": "5c79463314eca728bca9e7132878dde3a67cc6b107ce493b1adfdef916add2d9"
+  },
+  "native_journal_sha256": "e3159a406cee126412e99cc7f8084c2f603c0c9b4eb927b80265b03300e2cf8f",
+  "native_report_sha256": "1bd40abba9a2f917ed62e98410bc6844e7cde51a3ea04c27e730d1f18ca722c9",
+  "source_parent_completed_stages": 10,
+  "source_parent_total_stages": 14,
+  "source_parent_all_stages_passed": false,
+  "full_backend_ci": false,
+  "whole_provider_matrix_complete": false,
+  "fixture_closed": false,
+  "matrix_capacity_loans_still_active": 2
+}

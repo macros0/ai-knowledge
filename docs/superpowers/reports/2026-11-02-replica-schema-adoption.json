@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "status": "schema-adoption-sql-foundation-passed",
+  "base_revision": "46a047ff1f2e36cdaef9fb2c43efd9d718c902d3",
+  "source_overlay_sha256": {
+    "backend/app/deployment/runtime_upgrade.py": "d7bef2337f0a12aabec60ec8d183474b9c257e9577033e434be51078ad762fa8",
+    "backend/tests/test_replica_schema_adoption.py": "dde41387277526a7f72d7cbc9ad9ef3d9ba3923fcec94847738625ab5a7693d2",
+    "backend/tests/replica_postgres/test_schema_adoption.py": "7ce80c78e9660c8f8e47c7dd33380daf3cac9f6816b5d5cb93807e680142a67b"
+  },
+  "scope": "owned-disposable-schema-real-postgresql-chain-and-focused-windows-linux-tests",
+  "transition": {
+    "previous": "rpl04_runtime_identity",
+    "target": "rpl05_maintenance_epoch",
+    "migration_fence_epoch": 1,
+    "adopted_held_epoch": 2,
+    "installation_preserved": true,
+    "document_queue_auth_rows_preserved": true,
+    "automatic_release": false,
+    "audit_and_identity_atomic": true,
+    "replay_bound_to_source_owner_counts_receipts": true,
+    "db_and_or_durable_outbox_replay": true
+  },
+  "refusals": [
+    "foreign_source_identity",
+    "foreign_operation_owner",
+    "unknown_schema_transition",
+    "changed_storage",
+    "running_or_leased_work",
+    "running_chat",
+    "owned_or_unreconciled_model_slot",
+    "unknown_storage_migration_history",
+    "missing_writer_stop_receipts",
+    "ambiguous_or_missing_audit",
+    "installed_maintenance_history_downgrade"
+  ],
+  "windows": {
+    "passed": 69,
+    "skipped": 0,
+    "failures": 0,
+    "duration_seconds": 148.25,
+    "selection": [
+      "tests/test_replica_schema_adoption.py",
+      "tests/test_replica_runtime_upgrade.py",
+      "tests/test_replica_maintenance_migration.py",
+      "tests/test_replica_maintenance.py",
+      "tests/test_audit.py"
+    ]
+  },
+  "linux": {
+    "passed": 55,
+    "skipped": 0,
+    "failures": 0,
+    "ci": {
+      "id": "a0f8bd5aaacaa094167f57b9a164a428b8f8ac3529e4519ccb4addec46479795",
+      "Running": false,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "StartedAt": "2026-11-02T12:22:09.035054941Z",
+      "FinishedAt": "2026-11-02T12:24:44.784480315Z"
+    },
+    "junit": {
+      "tests": 55,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "945ccccf4f280d61d451dd61c89e693bce626f3128a0cb0768e458bce896b4c2"
+    },
+    "native_pg_cases": [
+      {
+        "name": "test_pg_populated_real_schema_upgrade_adopt_release_preserves_data",
+        "passed": true
+      },
+      {
+        "name": "test_pg_schema_adoption_failure_keeps_migration_fence[audit]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_schema_adoption_failure_keeps_migration_fence[unknown_provider]",
+        "passed": true
+      },
+      {
+        "name": "test_pg_conflicting_storage_operation_rolls_back_real_schema_ddl",
+        "passed": true
+      }
+    ],
+    "postgres_version": "17.11-1.pgdg13+2",
+    "postgres_image": "sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3",
+    "postgres": {
+      "id": "56b5728289908303c2b1b2674ed61d35cef2b4701aea8818a056cd1e5e26295f",
+      "Running": false,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "StartedAt": "2026-11-02T12:22:07.456124406Z",
+      "FinishedAt": "2026-11-02T12:26:05.492118137Z"
+    },
+    "no_host_ports_or_persistent_volumes": true,
+    "network": "shared-isolated-loopback-only",
+    "own_postgres_stopped_after_ci": true,
+    "logs_containers_retained": true
+  },
+  "red_green": {
+    "initial_missing_feature": "24 failed before implementation",
+    "uncertain_provider_regressions": "2 failed before running-chat/ownerless-slot guards",
+    "storage_history_regression": "1 failed before unknown migration-history guard",
+    "invalid_parallel_temp_run": "3 setup errors; excluded; repeated in a distinct basetemp"
+  },
+  "project_check": {
+    "passed": true,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "eslint": "passed",
+    "ruff": "passed"
+  },
+  "production_schedule": "disabled",
+  "full_kubernetes_schema_update_verified": false,
+  "legacy_compact_or_null_generation_corpus_adopted": false,
+  "full_final_version_ci": false,
+  "limitations": [
+    "Database transition only; no Kubernetes schema-update coordinator or old-binary process drill.",
+    "The separate PostgreSQL17.11 test image is not qualification of every selected production storage version.",
+    "Source-off managed-S3 recovery and22-stage runtime evidence belong to their separately recorded installations.",
+    "Other providers, physical failure domains, key recovery, alert delivery and final release gates remain open."
+  ]
+}

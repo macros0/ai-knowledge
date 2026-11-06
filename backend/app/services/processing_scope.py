@@ -101,6 +101,8 @@ def create_review(session, doc_id, inventory, *, base_generation_id, actor, limi
     if (state.active_generation_id if state else None) != base_generation_id:
         raise ProcessingScopeConflict()
     if existing:
+        from app.services.artifacts.review_files import retire_review_files
+        retire_review_files(session, doc_id, existing.id)
         session.delete(existing)
         session.flush()
     scope = automatic_snapshot(inventory, limits)
@@ -401,11 +403,38 @@ def recover_review_admission(session, doc_id, settings, *, force=False):
     """Revoke an expired validator under the same lock used by its late writes."""
     from datetime import datetime, timezone, timedelta
     from app.db.models import Document
+    from app.services.work.admission import durable_documents, lock_document_intents
+    durable = durable_documents(settings)
+    pending = []
+    if durable:
+        pending = lock_document_intents(session, doc_id)
     if not lock_document_write(session, doc_id, allow_deleted=False):
         return False
     row = session.get(DocumentProcessingReview, doc_id, populate_existing=True)
     if not row or row.state not in {"validating", "submitted"} or row.generation_id is not None:
         return False
+    if durable and row.state == "submitted":
+        from app.services.work.scope import retained_scope_receipt
+        retained = retained_scope_receipt(session, doc_id, request_id=row.request_id)
+        if (retained is not None and retained[0].plan_json.get("review_id") == row.id
+                and retained[0].plan_json.get("revision") == row.revision):
+            return False
+        from app.db.models import DocumentWorkInput, WorkItem
+        accepted = session.scalar(select(WorkItem.id).join(DocumentWorkInput, DocumentWorkInput.work_id == WorkItem.id)
+            .where(DocumentWorkInput.doc_id == doc_id, DocumentWorkInput.scope_request_id == row.request_id,
+                   WorkItem.kind == "document", WorkItem.status.in_(["queued", "running"]), WorkItem.cancel_requested.is_(False)))
+        if accepted is not None:
+            return False
+        from app.db.models import DocumentScopeChange
+        for work in pending:
+            if (work.kind != "scope_change" or work.cancel_requested
+                    or (work.payload_json or {}).get("request_id") != row.request_id):
+                continue
+            operation = session.get(DocumentScopeChange, work.payload_json.get("plan_id"))
+            if (operation is not None and operation.doc_id == doc_id and operation.request_id == row.request_id
+                    and operation.plan_json.get("review_id") == row.id
+                    and operation.plan_json.get("revision") == row.revision):
+                return False
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=max(180, settings.parser_timeout_seconds + 60))
     started = row.validation_started_at
     if not force and started and (started.replace(tzinfo=timezone.utc) if started.tzinfo is None else started) > cutoff:

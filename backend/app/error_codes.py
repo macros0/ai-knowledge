@@ -65,6 +65,7 @@ GENERATION_TIMEOUT = "generation_timeout"
 GENERATION_RATE_LIMITED = "generation_rate_limited"
 GENERATION_CONTEXT_EXCEEDED = "generation_context_exceeded"
 PROCESSING_UNAVAILABLE = "processing_unavailable"
+LEGACY_CORPUS_ADOPTION_REQUIRED = "legacy_corpus_adoption_required"
 
 # --- Доменные правила (коды для DomainError сервисного слоя) ---
 NOT_IN_TRASH = "not_in_trash"
@@ -157,3 +158,7 @@ CHAT_SUMMARY_TOO_LARGE = "chat_summary_too_large"
 CHAT_EVIDENCE_TOO_LARGE = "chat_evidence_too_large"
 CHAT_SEARCH_SCOPE_EMPTY = "chat_search_scope_empty"
 CHAT_SEARCH_SCOPE_UNAVAILABLE = "chat_search_scope_unavailable"
+
+SCENARIOS_UNAVAILABLE = "scenarios_unavailable"
+SCENARIO_NOT_FOUND = "scenario_not_found"
+SCENARIO_VERSION_CONFLICT = "scenario_version_conflict"

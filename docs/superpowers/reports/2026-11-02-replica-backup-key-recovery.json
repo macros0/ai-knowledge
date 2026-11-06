@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "status": "training-vault-key-recovery-cold-decoding-passed",
+  "scope": "separate user-approved protected directory on the independent PC; synthetic format3 archive only",
+  "operation_id": "1ae9535c155b479589a91d77aa89da21",
+  "backup_id": "4f3e1677bcb94fd88d5a271a979edb6b",
+  "completed_at": "2026-11-02T18:12:02.319450+00:00",
+  "key_custody": {
+    "location": "separate-protected-pc-directory",
+    "directory_acl_inheritance_disabled": true,
+    "allowed_principals": [
+      "current-user",
+      "SYSTEM",
+      "Administrators"
+    ],
+    "key_access_rules": 3,
+    "broad_access_rules": 0,
+    "key_size_bytes": 32,
+    "git_ignored": true,
+    "key_value_or_digest_emitted": false,
+    "separate_physical_device_from_archive": false,
+    "independent_from_training_proxmox_host": true
+  },
+  "verification": {
+    "status": "vault-key-cold-decoding-passed",
+    "backup_id": "4f3e1677bcb94fd88d5a271a979edb6b",
+    "encrypted_objects_authenticated_and_decoded": 12,
+    "verified_plaintext_bytes": 1260646,
+    "wrong_key_refused": true,
+    "primary_key_directory_negative_control_refused": true,
+    "primary_key_reads": 0,
+    "primary_key_open_attempts_after_negative_control": 0,
+    "guard_scope": "separate Python process with audited open refusal; not OS-level sandbox isolation",
+    "plaintext_files_written": 0,
+    "provider_restore_repeated": false
+  },
+  "primary_key_file_unchanged": true,
+  "source_physically_off_after_verification": true,
+  "source_pvcs_retained": 3,
+  "target_pvcs_retained": 3,
+  "verification_worker_source_sha256": "3877845f2892805bf319ada3f23d7bbbaae9b3595f91a4ce53488e7655ade749",
+  "not_proven": [
+    "OS-level primary-key sandbox isolation",
+    "independent physical key-escrow device",
+    "a second full provider restoration using the recovered key",
+    "production key custody or monitoring"
+  ],
+  "production_installation_exists": false,
+  "production_backup_schedule": "disabled"
+}

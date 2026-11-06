@@ -1,5 +1,5 @@
 export function selectableSources(message) {
-  if (!message.attemptId || !['documents', 'fast', 'full'].includes(message.responseMode)) return [];
+  if (!message.attemptId || !['documents', 'fast', 'full', 'scenario'].includes(message.responseMode)) return [];
   return (message.sources ?? []).filter((source) => source.selectable === true && Number.isInteger(source.source_index));
 }
 

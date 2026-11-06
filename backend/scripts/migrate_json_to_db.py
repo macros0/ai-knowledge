@@ -218,6 +218,8 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path("./data"), help="Каталог данных (по умолчанию ./data)")
     parser.add_argument("--reset", action="store_true", help="Очистить таблицы приложения и перечитать всё")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_json_to_db")
 
     init_db()
 

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "status": "profile-certification-policy-unit-validated",
+  "scope": "strict distributed S3/RWX policy over trusted already-verified harness metadata; no raw-receipt authentication or deployment authority",
+  "base_revision": "c8bdf8373782a03c37b1dedb35e9f34e8c518d80",
+  "source_overlay_sha256": {
+    "backend/test_scripts/replica_acceptance_report.py": "3045d3d015ff6d1807002e44637bb4d0e0892ba353f9d8f6498495135f241b85",
+    "backend/tests/test_replica_acceptance_report.py": "29a8e09b95983b72d41a95f5ce393b38fcfefa4df0f898ec1f6340b4113b7860"
+  },
+  "tdd": {
+    "initial_missing_module_failures": 27,
+    "additional_missing_module_failures": 6,
+    "windows_passed": 47,
+    "new_policy_cases": 33,
+    "existing_runner_safety_cases": 14,
+    "failed": 0,
+    "duration_seconds": 63.94
+  },
+  "policy_properties": [
+    "required pending/skipped/failed/missing checks prohibit certification",
+    "failed or unverified restore prohibits certification",
+    "unit/integration/CI cannot stand in for live restore",
+    "duplicate or unknown checks fail closed",
+    "topology/provider/version/image/config identity/model changes invalidate binding",
+    "per-component external ownership requires live checks",
+    "kind cannot qualify physical resilience",
+    "resilient requires live node loss/storage loss/independent-domain restore",
+    "untrusted extra fields and malformed hashes refused without echoing private values"
+  ],
+  "actual_inventory_certificates_issued": 0,
+  "actual_inventory_release_status": "incomplete",
+  "raw_receipt_ingestion_implemented": false,
+  "runner_integration_implemented": false,
+  "linux_policy_cohort_run": false,
+  "working_services_mutated": false,
+  "project_checks": {
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "eslint": "passed",
+    "ruff": "passed"
+  },
+  "remaining_gates": [
+    "trusted bounded file-backed evidence/receipt ingestion",
+    "runner integration and profile authority",
+    "compact/frontend-split profile qualification",
+    "full final backend CI",
+    "remaining provider/runtime/operations gates",
+    "fresh whole-branch review"
+  ],
+  "production_backup_schedule": "disabled"
+}

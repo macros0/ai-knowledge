@@ -5,9 +5,7 @@ from hashlib import sha256
 import json
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from starlette.background import BackgroundTask
 
 from app import error_codes as codes
 from app.api.errors import ApiError
@@ -103,7 +101,7 @@ def query_events(body: EventQuery, request: Request, user: User = admin):
     try:
         if getattr(diag, "frontend_root", None):
             attach_frontend(view, diag.frontend_root)
-        token_source = [(str(item.path), item.identity, item.length, item.mtime_ns)
+        token_source = [(str(item.path), item.identity, item.length, item.mtime_ns, item.prefix_sha256)
                         for item in view.descriptors]
         view_token = sha256(json.dumps(token_source, separators=(",", ":")).encode()).hexdigest()
         changed = body.view_token is not None and body.view_token != view_token
@@ -212,8 +210,9 @@ def download_bundle(bundle_id: UUID, request: Request, user: User = admin):
         lease = diag.bundle_queue.acquire_download(bundle_id, user)
     except BundleQueueError as exc:
         error(exc)
-    return StreamingResponse(
-        lease.chunks(), media_type="application/zip", background=BackgroundTask(lease.release),
+    from app.services.artifact_response import LeasedStreamingResponse
+    return LeasedStreamingResponse(
+        lease.chunks(), media_type="application/zip", on_close=lease.release,
         headers={"Content-Length": str(lease.size_bytes),
                  "Content-Disposition": f'attachment; filename="{lease.filename}"',
                  "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",

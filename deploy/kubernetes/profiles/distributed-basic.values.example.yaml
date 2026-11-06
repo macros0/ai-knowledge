@@ -1,0 +1,20 @@
+# R5 topology example. Keep application disabled until O1 bootstrap has installed
+# the verified storage receipt/common identity and O2 maintenance is available.
+deployment: {environment: home, mode: distributed}
+application: {enabled: false}
+frontend: {replicas: 2}
+api: {replicas: 2}
+worker: {replicas: 2}
+resilience: {class: basic}
+runtime:
+  environment: production
+  workers: 1
+  identityConfigMap: replace-with-installed-identity
+replicaStorage:
+  postgres: {provider: managed}
+  qdrant: {provider: managed, url: "http://qdrant:6333"}
+  artifacts: {provider: external, backend: s3, storeId: replace-with-unique-store-id}
+placement: {topologyKey: kubernetes.io/hostname}
+# Supply images, existingSecret, selected storage/CA configuration and existing
+# claims through a private overlay. No credentials belong in Helm values.
+# Basic permits storage downtime and does not certify host/storage failover.

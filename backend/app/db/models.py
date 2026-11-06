@@ -28,6 +28,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     ForeignKeyConstraint,
+    func,
     Index,
     Integer,
     String,
@@ -60,6 +61,62 @@ class ReferenceResourceState(Base):
     activity_sequence: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
     __table_args__ = (
         CheckConstraint("revision >= 1 AND lease_epoch >= 0 AND activity_sequence >= 0", name="ck_reference_state_bounds"),
+    )
+
+
+class DiagnosticIngestBatch(Base):
+    """Bounded, content-free frontend inbox with durable retry receipts."""
+
+    __tablename__ = "diagnostic_ingest_batches"
+    instance_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    batch_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[list] = mapped_column(JSON, nullable=False)
+    payload_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    accepted: Mapped[int] = mapped_column(Integer, nullable=False)
+    delivered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
+
+
+class DiagnosticReplicaState(Base):
+    __tablename__ = "diagnostic_replica_state"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    evicted_segments: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_diagnostic_replica_singleton"),)
+
+
+class DiagnosticInstance(Base):
+    __tablename__ = "diagnostic_instances"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    role: Mapped[str] = mapped_column(String(12), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    counters: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    __table_args__ = (CheckConstraint("role IN ('api','worker','combined','frontend')", name="ck_diagnostic_instance_role"),)
+
+
+class DiagnosticSegment(Base):
+    """Immutable bounded canonical event bytes; local files are only read scratch."""
+    __tablename__ = "diagnostic_segments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    stream: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    component: Mapped[str] = mapped_column(String(12), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    first_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    __table_args__ = (
+        CheckConstraint("size > 0 AND size <= 65536 AND event_count > 0", name="ck_diagnostic_segment_size"),
+        CheckConstraint("component IN ('backend','frontend')", name="ck_diagnostic_segment_component"),
+        Index("ix_diagnostic_segment_window", "stream", "created_at", "id"),
     )
 
 
@@ -110,6 +167,7 @@ class DiagnosticBundle(Base):
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     audit_receipts: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    artifact_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
 
 class Organization(Base):
@@ -246,6 +304,9 @@ class Document(Base):
     development_suggestion: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Дедупликация (Этап 4.2): SHA-256 байтов файла и нормализованного текста.
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    source_cache_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    legacy_artifacts_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    legacy_artifacts_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Канонический отпечаток standalone EML/MSG, только при полном извлечении
     # вложений. Нужен для similar-review, не является hard duplicate.
@@ -542,6 +603,12 @@ class DocumentGeneration(Base):
     table_schema_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_projection_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     publication_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    publication_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    migration_artifacts_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    migration_artifacts_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    work_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    work_fence: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    work_cleanup_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     processing_scope_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     processing_scope_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     scope_request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
@@ -553,7 +620,27 @@ class DocumentGeneration(Base):
             "phase IN ('preparing', 'ready', 'active', 'retired', 'abandoned')",
             name="ck_document_generations_phase",
         ),
+        Index("ix_generation_work_attempt", "work_id", "work_fence", unique=True),
     )
+
+
+class DocumentWorkInput(Base):
+    """Immutable, private policy captured in the same transaction as admission."""
+    __tablename__ = "document_work_inputs"
+    work_id: Mapped[str] = mapped_column(ForeignKey("work_items.id"), primary_key=True)
+    # Match the deployed rpl02a column; FK type inference would narrow it to 16.
+    doc_id: Mapped[str] = mapped_column(String(64), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    processing_scope_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    scope_request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
+
+
+class DeletedWorkGeneration(Base):
+    """Non-content exclusion identity survives the document's cascading purge."""
+    __tablename__ = "deleted_work_generations"
+    generation_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    work_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    work_fence: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class DocumentUpdateAttempt(Base):
@@ -662,6 +749,8 @@ class DocumentProcessingReview(Base):
     id: Mapped[str] = mapped_column(String(32),nullable=False,unique=True)
     revision: Mapped[int] = mapped_column(Integer,nullable=False,default=1)
     state: Mapped[str] = mapped_column(String(24),nullable=False,default='draft')
+    artifact_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    artifact_revision: Mapped[str | None] = mapped_column(String(32), nullable=True)
     source_file_hash: Mapped[str] = mapped_column(String(64),nullable=False)
     parser_version: Mapped[str] = mapped_column(String(64),nullable=False)
     assessor_version: Mapped[str] = mapped_column(String(64),nullable=False)
@@ -697,6 +786,7 @@ class DocumentStaging(Base):
     source_file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     processing_scope_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     generation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    checkpoint_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="in_progress")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
@@ -1066,6 +1156,31 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages_rel")
+    run_rel: Mapped["ChatRun | None"] = relationship(back_populates="message", cascade="all, delete-orphan", uselist=False)
+
+
+class ChatRun(Base):
+    __tablename__ = "chat_runs"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    attempt_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    session_id: Mapped[str] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False, unique=True)
+    owner_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    fence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    lease_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    capacity_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    capacity_fence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    message: Mapped[ChatMessage] = relationship(back_populates="run_rel")
+    __table_args__ = (UniqueConstraint("actor_id", "attempt_id", name="uq_chat_actor_attempt"),
+        CheckConstraint("fence >= 1 AND capacity_fence >= 1", name="ck_chat_run_fence"),
+        CheckConstraint("status IN ('running','completed','stopped','failed','interrupted')", name="ck_chat_run_status"),
+        Index("ix_chat_run_expired", "status", "lease_until"))
 
 
 class Locale(Base):
@@ -1213,3 +1328,266 @@ class DocumentChunkFragment(Base):
             ["document_chunk_projections.doc_id", "document_chunk_projections.generation_id", "document_chunk_projections.chunk_index"], ondelete="CASCADE"),
         CheckConstraint("ordinal >= 0", name="ck_chunk_fragment_ordinal"),
     )
+
+
+class AnswerScenario(Base):
+    __tablename__ = "answer_scenarios"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner_username: Mapped[str | None] = mapped_column(String(255))
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False, default="private")
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    __table_args__ = (
+        CheckConstraint("visibility IN ('private', 'public')", name="ck_answer_scenario_visibility"),
+        CheckConstraint("current_version > 0", name="ck_answer_scenario_version"),
+        Index("ix_answer_scenarios_visibility_updated", "visibility", "updated_at"),
+    )
+
+
+class AnswerScenarioVersion(Base):
+    __tablename__ = "answer_scenario_versions"
+    scenario_id: Mapped[str] = mapped_column(ForeignKey("answer_scenarios.id", ondelete="CASCADE"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    instructions: Mapped[str] = mapped_column(Text, nullable=False)
+    instructions_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_answer_scenario_versions_positive"),
+        CheckConstraint("visibility IN ('private', 'public')", name="ck_answer_scenario_versions_visibility"),
+    )
+
+
+class WorkAdmissionState(Base):
+    __tablename__ = "work_admission_state"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_work_admission_singleton"),)
+
+
+class WorkItem(Base):
+    """Internal at-least-once execution ledger; public Job approval stays separate."""
+    __tablename__ = "work_items"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    doc_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", server_default="queued")
+    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    maintenance_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.current_timestamp())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.current_timestamp())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    __table_args__ = (Index("ix_work_claim", "status", "available_at", "created_at", "id"),
+        Index("ix_work_expired", "status", "lease_until"),
+        CheckConstraint("status IN ('queued','running','succeeded','failed','cancelled')", name="ck_work_status"),
+        CheckConstraint("fence >= 0 AND attempts >= 0 AND payload_version >= 1", name="ck_work_counters"))
+
+
+class WorkProgress(Base):
+    """Private accepted cursor, retained across new claims of the same work."""
+    __tablename__ = "work_progress"
+    work_id: Mapped[str] = mapped_column(ForeignKey("work_items.id"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    state_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    __table_args__ = (CheckConstraint("version >= 1", name="ck_work_progress_version"),)
+
+
+class ReplicaCapacityResource(Base):
+    __tablename__ = "replica_capacity_resources"
+    resource: Mapped[str] = mapped_column(String(64), primary_key=True)
+    capacity_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (CheckConstraint("capacity_limit >= 1 AND capacity_limit <= 10000", name="ck_replica_capacity_limit"),)
+
+
+class ReplicaCapacitySlot(Base):
+    __tablename__ = "replica_capacity_slots"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    resource: Mapped[str] = mapped_column(ForeignKey("replica_capacity_resources.resource"), nullable=False)
+    slot: Mapped[int] = mapped_column(Integer, nullable=False)
+    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    protected_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    release_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    __table_args__ = (UniqueConstraint("resource", "slot", name="uq_replica_capacity_slot"),
+        CheckConstraint("slot >= 0 AND fence >= 1", name="ck_replica_capacity_slot"))
+
+
+class ReplicaRateBucket(Base):
+    __tablename__ = "replica_rate_buckets"
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    window_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (CheckConstraint("request_limit >= 1 AND window_seconds >= 1", name="ck_replica_rate_policy"),)
+
+
+class ReplicaRateEvent(Base):
+    __tablename__ = "replica_rate_events"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key_hash: Mapped[str] = mapped_column(ForeignKey("replica_rate_buckets.key_hash"), nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cost: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    __table_args__ = (Index("ix_replica_rate_window", "key_hash", "accepted_at"),
+        CheckConstraint("cost >= 1 AND cost <= 10000", name="ck_replica_rate_cost"))
+
+
+class ConfigRevision(Base):
+    __tablename__ = "config_revisions"
+    domain: Mapped[str] = mapped_column(String(64), primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    __table_args__ = (CheckConstraint("revision >= 0", name="ck_config_revision"),)
+
+
+class ArtifactStorageControl(Base):
+    __tablename__ = "artifact_storage_control"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    active_store_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    active_descriptor: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    readonly_roots: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    maintenance_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    migration_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_artifact_storage_singleton"),)
+
+
+class ReplicaRuntimeIdentity(Base):
+    __tablename__ = "replica_runtime_identity"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_receipt_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    schema_revision: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_replica_runtime_singleton"),)
+
+
+class MaintenanceState(Base):
+    __tablename__ = "replica_maintenance_state"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    operation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    operation_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    intended_counts_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    writer_receipts_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_replica_maintenance_singleton"),
+        CheckConstraint("epoch >= 0", name="ck_replica_maintenance_epoch"))
+
+
+class ArtifactStorageMigration(Base):
+    __tablename__ = "artifact_storage_migrations"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    plan_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_revision: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    backup_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    receipts: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    verified_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    __table_args__ = (CheckConstraint("status IN ('copying','verified','cutover')", name="ck_artifact_storage_migration_status"),)
+
+
+class ArtifactObject(Base):
+    __tablename__ = "artifact_objects"
+    object_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key: Mapped[str] = mapped_column(String(40), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    media_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="ready", server_default="ready")
+    delete_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    delete_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())
+    __table_args__ = (Index("ix_artifact_gc_candidates", "store_id", "state", "object_id"),
+                      CheckConstraint("size >= 0", name="ck_artifact_size"),
+                      CheckConstraint("state IN ('ready', 'deleting', 'deleted')", name="ck_artifact_state"))
+
+
+class ArtifactGcState(Base):
+    __tablename__ = "artifact_gc_state"
+    store_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    scope_token: Mapped[str] = mapped_column(String(32), nullable=False)
+    location_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    inventory_cursor: Mapped[str | None] = mapped_column(Text, nullable=True)
+    orphan_cursor: Mapped[str] = mapped_column(String(32), nullable=False, default="", server_default="")
+    sweep_cursor: Mapped[str] = mapped_column(String(32), nullable=False, default="", server_default="")
+    owner_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ArtifactOrphan(Base):
+    __tablename__ = "artifact_orphans"
+    object_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.current_timestamp())
+    __table_args__ = (CheckConstraint("size >= 0", name="ck_artifact_orphan_size"),)
+
+
+class ArtifactReadLease(Base):
+    __tablename__ = "artifact_read_leases"
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), primary_key=True)
+    owner_token: Mapped[str] = mapped_column(String(32), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class SourceCacheHead(Base):
+    __tablename__ = "artifact_source_caches"
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(String(32), primary_key=True, default="")
+    cache_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), nullable=False, index=True)
+
+
+class CheckpointBinding(Base):
+    __tablename__ = "artifact_checkpoints"
+    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(ForeignKey("document_generations.id"), primary_key=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_signature: Mapped[str] = mapped_column(String(64), primary_key=True)
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), nullable=False, index=True)
+    __table_args__ = (CheckConstraint("chunk_index >= 0", name="ck_artifact_checkpoint_index"),)
+
+
+class ArtifactBinding(Base):
+    __tablename__ = "artifact_bindings"
+    owner_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Empty string is the canonical absent version: SQL NULL would allow duplicates.
+    generation_id: Mapped[str] = mapped_column(String(32), primary_key=True, default="")
+    logical_name: Mapped[str] = mapped_column(String(512), primary_key=True)
+    object_id: Mapped[str] = mapped_column(ForeignKey("artifact_objects.object_id"), nullable=False, index=True)
+    doc_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id"), nullable=True, index=True)
+
+
+class UploadReceipt(Base):
+    __tablename__ = "upload_receipts"
+    actor_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Retained tombstone after purge; a retry must not recreate a deleted document.
+    document_id: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="committed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

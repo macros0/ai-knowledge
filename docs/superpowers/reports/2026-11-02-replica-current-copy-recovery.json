@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "status": "current-independent-copy-recovery-passed",
+  "scope": "owned-basic-managed-s3-synthetic-stub-fake-embeddings",
+  "backup_id": "6bfd7725f526474990e1e706eb4201a4",
+  "source_namespace": "replica-test-r5o2t20261101",
+  "source_namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "source_stop_operation": "ff4bd9f82b334ef2aaf7cb668c724254",
+  "source_held_epoch": 18,
+  "source_unavailable_during_import_and_functional_checks": true,
+  "source_documents_retained": 96,
+  "source_documents_sha256_at_stop": "2dc8a9fe01f7a2ad51118fc9435f6e9945d2caab28056b77b04c656ca5a0468b",
+  "source_volumes_retained": [
+    [
+      "target-artifacts",
+      "d98192a3-5446-46e5-96bf-df40e3381fdb",
+      "pvc-d98192a3-5446-46e5-96bf-df40e3381fdb"
+    ],
+    [
+      "target-postgres",
+      "c834e773-7e91-41ac-8ecd-7c72570d3bc4",
+      "pvc-c834e773-7e91-41ac-8ecd-7c72570d3bc4"
+    ],
+    [
+      "target-qdrant",
+      "f57e1a08-0e25-4945-9d62-4978177956f9",
+      "pvc-f57e1a08-0e25-4945-9d62-4978177956f9"
+    ]
+  ],
+  "target_namespace": "replica-test-r5o2u20261102",
+  "target_namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+  "target_installation_id": "66666666666666666666666666666666",
+  "restore_operation": "294e0264e2634e1b8a167530beb8abee",
+  "target_released_epoch": 12,
+  "new_disjoint_target_volumes": [
+    [
+      "restore20-artifacts",
+      "714e03b6-c833-4de0-89b7-0372d0f49a24",
+      "pvc-714e03b6-c833-4de0-89b7-0372d0f49a24"
+    ],
+    [
+      "restore20-postgres",
+      "322c86f0-d112-4478-a1e3-4f9fa4392bc8",
+      "pvc-322c86f0-d112-4478-a1e3-4f9fa4392bc8"
+    ],
+    [
+      "restore20-qdrant",
+      "4b4ae5b5-751f-43c2-9628-3d8e94f0c6b5",
+      "pvc-4b4ae5b5-751f-43c2-9628-3d8e94f0c6b5"
+    ]
+  ],
+  "archive_counts": {
+    "documents": 20,
+    "concepts": 20,
+    "chunks": 20,
+    "blobs": 100,
+    "work_items": 6824,
+    "audit_events": 93
+  },
+  "restored_qdrant_points": 40,
+  "restored_artifact_sha256_matches": 100,
+  "restored_document_rows_verified_before_release": 20,
+  "visible_original_search_download_sha256_matches": 19,
+  "trash_hidden_and_download_404": 1,
+  "restored_executed_jobs_before_release": 0,
+  "held_work_state_sha256": "43c9546d0b76772305f72fc247c79e3feb8a607c80a0903a0d4bfb3f972472ee",
+  "ordinary_write_before_release": "denied",
+  "invalidated_sessions": 25,
+  "old_cookie_rejected_as_admin": true,
+  "scoped_pg_rights": {
+    "allowed": [
+      "business_crud",
+      "row_lock_replica_maintenance_state",
+      "row_lock_replica_runtime_identity",
+      "row_lock_artifact_storage_control"
+    ],
+    "connection_limit": 64,
+    "denied": [
+      "maintenance_epoch",
+      "runtime_fingerprint",
+      "storage_control",
+      "audit_update",
+      "audit_delete",
+      "migration_head",
+      "operator_password_catalog",
+      "public_ddl",
+      "temporary_ddl",
+      "truncate_privilege"
+    ],
+    "ok": true,
+    "probe_data_rolled_back": true,
+    "tls_verify_full": true,
+    "wrong_password_denied": true
+  },
+  "scoped_s3_rights": {
+    "allowed": [
+      "dedicated_bucket_head_list",
+      "prefix_conditional_put",
+      "prefix_cold_range_read",
+      "prefix_delete",
+      "multipart_complete_conditional",
+      "multipart_abort"
+    ],
+    "bucket_discovery": {
+      "mode": "filtered",
+      "visible_bucket_count": 1
+    },
+    "bucket_listing_scope": "dedicated-installation-bucket",
+    "denied": [
+      "foreign_prefix_read",
+      "foreign_prefix_write",
+      "foreign_prefix_delete",
+      "foreign_bucket_read",
+      "foreign_bucket_write",
+      "foreign_bucket_delete",
+      "foreign_bucket_list",
+      "iam_admin_list",
+      "wrong_secret"
+    ],
+    "tls_verified": true
+  },
+  "specific_wrong_password_refusal_verified_directly_in_linux": true,
+  "operator_url_only_in_readonly_0440_offline_job_projection": true,
+  "operator_credentials_in_ordinary_roles": false,
+  "identity_job": {
+    "uid": "6a118331-04cb-49f9-b778-15e108d9ee94",
+    "script_sha256": "c3e2492b797367caff77b875ad10b3cbdaaccedc614546241d311caa2e656f89",
+    "runtime_fingerprint": "529fdd8f27a9051d27f42753bbc8660e67a24b391c81a7a3ad9a539c6bdd26a7"
+  },
+  "runtime": {
+    "api_endpoints": 2,
+    "images": {
+      "api": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e",
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "worker": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e"
+    },
+    "replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "restarts": {
+      "api": 0,
+      "frontend": 0,
+      "worker": 0
+    }
+  },
+  "quiescent_after_fresh_uploads": {
+    "model_owners": 0,
+    "running_chats": 0,
+    "running_documents": 0
+  },
+  "fresh_upload_roundtrip": {
+    "documents": 2,
+    "documents_per_minute": 3.898508820374024,
+    "download_sha256_matches": 2,
+    "duration_seconds": 30.78100000001723,
+    "embeddings": "fake",
+    "model": "stub",
+    "search_matches": 2,
+    "upload_seconds": [
+      2.1410000000032596,
+      1.9219999999913853
+    ]
+  },
+  "native_smoke_checks": [
+    {
+      "name": "runtime.scope",
+      "status": "passed",
+      "evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    {
+      "name": "runtime.role_inventory",
+      "status": "passed",
+      "evidence_sha256": "5b24e40241d4af75b493e47146c95d43fa4ba8965ab2c6f2204cc8a3f5c2ea60"
+    },
+    {
+      "name": "runtime.common_identity",
+      "status": "passed",
+      "evidence_sha256": "15d22c32fdacdb71e1c5bc41a0587849a268beb90468817016349e7b9660bf13"
+    },
+    {
+      "name": "runtime.shared_session",
+      "status": "passed",
+      "evidence_sha256": "6ad19a4e8c01757957a46451beff9a67d2c0d5781b2fdb8975c147ed25b3cae5"
+    },
+    {
+      "name": "runtime.frontend_storage_boundary",
+      "status": "passed",
+      "evidence_sha256": "3c1f1d34deca0725d5df5ddae27e513bf10b04afc97fa5d4a738b5bfeab01986"
+    },
+    {
+      "name": "runtime.document_roundtrip",
+      "status": "passed",
+      "evidence_sha256": "5f7f726ffa9fbf7c0d4633574c3a0d7ccd7f0013d3765b5f85cb7bfb1c2cce6e"
+    },
+    {
+      "name": "runtime.memory_samples",
+      "status": "passed",
+      "evidence_sha256": "6926dd57811ad7f55afed79a31316ff9c91bdbe56bf678b8f0cda6cc289ee17b"
+    }
+  ],
+  "retained_failed_diagnostics": [
+    {
+      "name": "restore20-pg-rights",
+      "spec_sha256": "f4db8323620d53260f57696bb9bfc70094226d6ea2c9cff22356ebdb2ec39cd0",
+      "uid": "7daa3b5f-0cce-4116-b3d9-e95d06f170b2"
+    }
+  ],
+  "pc_wrong_password_transport_result_used_for_authentication_proof": false,
+  "consistent_at": "2026-11-02T01:50:17.812031+00:00",
+  "source_offline_confirmed_at": "2026-11-02T10:56:47.380918+00:00",
+  "provider_import_finished_at": "2026-11-02T10:57:03.564048+00:00",
+  "originals_functionally_verified_at": "2026-11-02T11:40:13.601513+00:00",
+  "verified_at": "2026-11-02T11:42:11.618942+00:00",
+  "observed_recovery_point_age_at_offline_confirmation_seconds": 32789.568887,
+  "provider_import_seconds": 16.18313,
+  "workflow_recovery_interval_seconds": 3207.880079,
+  "post_offline_confirmation_recovery_interval_seconds": 2606.220595,
+  "timing_scope": "Single-node rehearsal including operator implementation/corrections and manual verification; not production RTO sizing or SLA.",
+  "journal_sha256": "391f21f39cf732c959f76fb6c2fcda8128b5de94fcba52c18977baf5b40638e6",
+  "production_schedule": "disabled",
+  "runtime_full_fault_requalified_for_new_target": false,
+  "all_profiles_certified": false,
+  "limitations": [
+    "Managed-S3 source-off restore only; no physical node/storage HA or external/mixed/RWX qualification.",
+    "The22-stage R5 receipt belongs to the retained source installation; the new target passed recovery and7-check runtime smoke.",
+    "Schema-changing adoption, key escrow recovery, alert delivery, final-version CI and final review remain open."
+  ]
+}

@@ -80,6 +80,8 @@ def active_bundle_path(settings, doc_id: str) -> Path:
         generation_id = state.active_generation_id if state else None
     if generation_id:
         return generation_paths(settings, doc_id, generation_id).bundle
+    from app.services.artifacts.legacy import hydrate_snapshot
+    hydrate_snapshot(settings, doc_id)
     return settings.okf_dir / doc_id
 
 

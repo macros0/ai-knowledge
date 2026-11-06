@@ -397,3 +397,26 @@ def test_query_reports_changed_coverage_between_pages(api):
         "offset": 1, "cutoff_at": first["cutoff_at"], "view_token": first["view_token"]}).json()
     assert second["partial"] is True
     assert "coverage_changed" in second["gaps"]
+
+
+def test_query_reports_same_length_change_between_pages(api):
+    import os
+    client, queue = api
+    login(client, "demo.admin")
+    now = datetime.now(timezone.utc)
+    for _ in range(2):
+        assert queue.store.append(encode_event({"schema_version": 1, "event_id": str(uuid4()), "boot_id": str(uuid4()),
+            "timestamp_utc": now.isoformat(), "component": "backend", "level": "ERROR",
+            "event_code": "operation_failed", "origin": "server", "error_code": "internal_error"}), stream="baseline")
+    first = client.post("/api/admin/diagnostics/events/query", json={"limit": 1}).json()
+    source = next((queue.store.root / "events" / "baseline").glob("*.jsonl"))
+    before = source.stat()
+    raw = source.read_bytes()
+    changed = raw.replace(b"internal_error", b"file_too_large")
+    assert changed != raw and len(changed) == len(raw)
+    source.write_bytes(changed)
+    os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+    second = client.post("/api/admin/diagnostics/events/query", json={"limit": 1,
+        "offset": 1, "cutoff_at": first["cutoff_at"], "view_token": first["view_token"]}).json()
+    assert second["view_token"] != first["view_token"]
+    assert second["partial"] and "coverage_changed" in second["gaps"]

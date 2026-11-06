@@ -13,8 +13,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import Column, String, Text, inspect, text
 
-from app.db import models  # noqa: F401 - registers canonical tables
-from app.db.base import Base
+from scripts.mail_schema_v1 import mail_metadata
 
 NEW_TABLES = ("document_sources", "document_generation_states", "document_generations")
 NEW_COLUMNS = {
@@ -33,36 +32,35 @@ NEW_INDEXES = {
 TABLES = set(NEW_TABLES) | set(NEW_COLUMNS)
 
 
-# This helper repairs the mail release only. Later table fields have their
-# own additive migration and must not turn mail-only inspection into a repair.
-_TABLE_COLUMNS = {'table_refs', 'table_schema_version', 'chunk_projection_version'}
-_SCOPE_COLUMNS = {'signature_scope_hash', 'processing_scope_hash', 'processing_scope_json',
-                  'processing_scope_summary_json', 'scope_request_id', 'display_order'}
-
-
-def _include_object(_obj, name, type_, _reflected, _compare_to):
-    if type_ == 'table': return name in TABLES
-    if type_ == 'column' and name in _TABLE_COLUMNS | _SCOPE_COLUMNS: return False
-    if type_ == 'unique_constraint' and any(c.name in _SCOPE_COLUMNS for c in _obj.columns): return False
+def _include_object(obj, name, type_, metadata):
+    if type_ == 'table':
+        return name in TABLES
+    table = metadata.tables.get(obj.table.name)
+    if table is None:
+        return False
+    if type_ == 'column':
+        return name in table.c
+    if type_ in {'index', 'foreign_key_constraint', 'unique_constraint'}:
+        return all(column.name in table.c for column in obj.columns)
     return True
 
 
 def _mail_compare_type(_context, inspected_column, _metadata_column, inspected_type, metadata_type):
-    # The known legacy title definition belongs to the mail schema. Its later
-    # widening is owned by the table release; this helper never alters it.
+    # Both known definitions are valid: widening belongs to a later release.
+    # Unknown INTEGER/short VARCHAR title drift still fails before any write.
     if (inspected_column.table.name == 'document_chunks' and inspected_column.name == 'section_title'
-            and isinstance(inspected_type, String) and not isinstance(inspected_type, Text)
-            and inspected_type.length == 1024 and isinstance(metadata_type, Text)):
+            and isinstance(inspected_type, Text) and isinstance(metadata_type, String)):
         return False
     return None
 
 
-def _diffs(connection):
+def _diffs(connection, metadata):
     context = MigrationContext.configure(connection, opts={
-        "include_object": _include_object,
+        "include_object": lambda obj, name, type_, _reflected, _compare_to:
+            _include_object(obj, name, type_, metadata),
         "compare_type": _mail_compare_type,
     })
-    return [item for diff in compare_metadata(context, Base.metadata)
+    return [item for diff in compare_metadata(context, metadata)
             for item in (diff if isinstance(diff, list) else [diff])]
 
 
@@ -89,29 +87,30 @@ def _description(diff):
 
 
 def migrate(engine, *, apply=False):
+    metadata = mail_metadata()
     with engine.begin() as connection:
         inspector = inspect(connection)
         versions = (list(connection.scalars(text("SELECT version_num FROM alembic_version")))
                     if inspector.has_table("alembic_version") else [])
-        before = _diffs(connection)
+        before = _diffs(connection, metadata)
         conflicts = [_description(diff) for diff in before if not _is_additive(diff)]
         missing = [_description(diff) for diff in before if _is_additive(diff)]
         if apply and conflicts:
             raise ValueError("Mail schema has incompatible drift: " + "; ".join(conflicts))
         if apply:
             for name in NEW_TABLES:
-                Base.metadata.tables[name].create(connection, checkfirst=True)
+                metadata.tables[name].create(connection, checkfirst=True)
             operations = Operations(MigrationContext.configure(connection))
             for name, columns in NEW_COLUMNS.items():
                 existing = {column["name"] for column in inspect(connection).get_columns(name)}
                 for column_name in sorted(columns - existing):
-                    column = Base.metadata.tables[name].c[column_name]
+                    column = metadata.tables[name].c[column_name]
                     operations.add_column(name, Column(column_name, column.type, nullable=True))
             for name in TABLES:
-                for index in Base.metadata.tables[name].indexes:
+                for index in metadata.tables[name].indexes:
                     if index.name in NEW_INDEXES:
                         index.create(connection, checkfirst=True)
-        after = _diffs(connection) if apply else before
+        after = _diffs(connection, metadata) if apply else before
         return {"ready": not after, "applied": bool(apply and before),
                 "missing": missing, "conflicts": conflicts, "alembic_versions": versions,
                 "remaining": [_description(diff) for diff in after]}
@@ -124,6 +123,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_mail_schema")
     if args.apply and get_settings().environment != "development":
         parser.error("--apply is only supported for development databases")
     result = migrate(get_engine(), apply=args.apply)

@@ -1,0 +1,427 @@
+{
+  "schema_version": 1,
+  "status": "selected-common-runner-native-frontend-case-verified-closed",
+  "observed_at": "2026-11-04T21:42:51.888881+00:00",
+  "scope": "Fresh synthetic two-frontend/single-combined-backend basic fixture on one kind node/VM103. Simulation auth, fake embeddings, local artifacts and delayed owned model. Direct pinned Pod forwards; no customer Gateway/IdP or production qualification.",
+  "revision": "e42007a734f60663fa4fbf7d295b330ea0d9104d",
+  "operation_id": "de695669c71441799d3338748bb675da",
+  "namespace": "replica-test-fr20261104",
+  "namespace_uid": "072a8cf9-79c8-4804-98ef-3b3e1c37584e",
+  "execution_id": "83762aebd8864723b0ab35bae2f7818a",
+  "code_sha256": "a6c7f1cab5eb7e4a67eb74b97027aaf50e9de098aad4d4b6f369dc11309a0dbb",
+  "binding_sha256": "a1ace8a9a5a51486b47442a281514cf064c5094a9339781912f86cf0eb2a0b8a",
+  "native_capsule_sha256": {
+    "replica_frontend_acceptance": "33ed6c006ce46d6f05d90cd60332c914bcc46b5c55eabf6bae8d8b16dfa2bf41",
+    "replica_frontend_http": "ba980086a796ffbfd70df912d83ade426941ec30179c39a63c156c63f8bef43d",
+    "replica_frontend_native": "ca2b1db8c9cd0a7d907adb3809a3edbc0e7d1ec45978b7919485a77a099e1fc6",
+    "replica_frontend_process": "1253de60c05b310b0a8c3b861666e91412f632afbde6d9d4de918bdd6468f5ac",
+    "replica_runtime_acceptance": "779ea2b2b823ade79dcb7804643e78aa61c628d018b42a1a53f5e7876c19609e"
+  },
+  "native_scope": {
+    "backend": {
+      "name": "application-79ff6d9767-8q45n",
+      "uid": "e89bf58b-38fc-48fd-9cbf-8ac27a5f5528"
+    },
+    "backend_pod_uid": "e89bf58b-38fc-48fd-9cbf-8ac27a5f5528",
+    "frontends": [
+      {
+        "name": "frontend-756d8f9fd9-pgw7b",
+        "uid": "a8e9d9e3-cf5a-4cee-a424-64bd4aa087c8"
+      },
+      {
+        "name": "frontend-756d8f9fd9-lrwmd",
+        "uid": "d2f061a1-3276-4a65-972e-838be6db8649"
+      }
+    ],
+    "model": {
+      "name": "model-stub-86b7677cd-z55kh",
+      "uid": "8de6fdca-568e-4c91-8dd1-4bd7b2ed999e"
+    },
+    "provider_services": {
+      "postgres": "fr-storage-postgres",
+      "qdrant": "fr-storage-qdrant"
+    },
+    "resources_sha256": "0e0bec98867b46ff80f0c40aa2e54bf9e15c3bf5e5fa41e76fc3944e74059961"
+  },
+  "runtime": {
+    "application_revision": "65d6ee285578df8342fe05148511a47f1c1b0246",
+    "application_code_unchanged": true,
+    "frontend_replicas": 2,
+    "combined_backend_replicas": 1,
+    "worker_replicas": 0,
+    "backend_settings": "compact/combined/schema-none/legacy-frontend-default-one; Helm frontend-split topology",
+    "postgres_tls": "verify-full, active SSL, scoped non-superuser role",
+    "frontend_shared_pvc_count": 0
+  },
+  "software": {
+    "windows": {
+      "tests": 171,
+      "passed": 170,
+      "skipped": 1,
+      "skip_reason": "Linux-only pidfd; passed in actual Linux CI",
+      "failures": 0,
+      "errors": 0,
+      "junit_sha256": "295d327e539e64a336d79bc24d217e89b26036b697ac8dacb2d8950f645460a3"
+    },
+    "linux": {
+      "operation_id": "c95d34cc6ebd433bb2b32b41af5405d1",
+      "image": "sha256:5ea412ca80682429ca77d6a5c970da1b1be8d18d554156f25ba8b5aa36d608eb",
+      "source_files": 2475,
+      "minimal_patch_files": 35,
+      "archive_sha256": "7ef77a7fd3253292c9f76d690f84fd3f6f14b4d6a2211428b6a415ea2d947b68",
+      "passed": 6638,
+      "running": false,
+      "container_id": "af6a383d431d7a90df66e1b9b5e53edc37450bca856748acf9ea666777ed905d",
+      "exit_code": 0,
+      "oom": false,
+      "junit": {
+        "tests": 6859,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 221,
+        "sha256": "b4717306d03675407c5ee53e285c809e705be7a3c224ca424cfa6bab6094719c"
+      },
+      "prior_case_ids_retained": true,
+      "windows_case_ids_retained": true,
+      "optional_skip_ids_unchanged": true,
+      "required_added_modules_present": true,
+      "collection_complete": true,
+      "collected_cases": 6859,
+      "collection_sha256": "bbf2f56d24a2641555a341c701b70119264c23f430ba3db813f3081f9aa7d3fe",
+      "failed_case_ids": [],
+      "coverage_percent": 87.70342758432585,
+      "source_unchanged": true,
+      "verified": true
+    },
+    "isolation": "Linux network-none, read-only container root, non-root, cap-drop ALL; fresh isolated writable source copy for legacy test fixtures, no env/secrets/working data; exact tracked source hashes unchanged"
+  },
+  "stages": [
+    {
+      "stage": "preflight",
+      "status": "passed",
+      "intent_id": "074a6accd5a14e8f8d5b91ff0dbca52a",
+      "receipt_sha256": "b52d2fa0302ed2ac5a94660144fa8dfb56d5a021e4c6d472f3c38942743839f9",
+      "started_at": "2026-11-04T21:32:59.691687+00:00",
+      "finished_at": "2026-11-04T21:33:02.135605+00:00",
+      "evidence": {
+        "fresh_isolated_fixture": true,
+        "scope_sha256": "b39c8ca0a22f164baee3b9662c946dccdf3466d1e0e638e377d5f8e19383b522"
+      }
+    },
+    {
+      "stage": "session",
+      "status": "passed",
+      "intent_id": "ebdb58caa1dc431e8e71cfeb5daffd56",
+      "receipt_sha256": "68787225e9f4bd34142f63b56e611e7c018af9a0cc9bf272915d4bbdf43c5fd2",
+      "started_at": "2026-11-04T21:33:02.192840+00:00",
+      "finished_at": "2026-11-04T21:33:04.736892+00:00",
+      "evidence": {
+        "csrf": "simulation-exempt",
+        "internal_routes_hidden": true,
+        "shared_routes": 3
+      }
+    },
+    {
+      "stage": "upload",
+      "status": "passed",
+      "intent_id": "fd33dc2489344969b5acbf371187e8df",
+      "receipt_sha256": "e3ac2dfd6fd4e3395c285bee3de70fe356991c343aea0656a44af71fdd31aae2",
+      "started_at": "2026-11-04T21:33:04.799942+00:00",
+      "finished_at": "2026-11-04T21:33:06.668347+00:00",
+      "evidence": {
+        "document_id": "aa647c2fb9a54998",
+        "legacy_idempotency_claimed": false,
+        "original_sha256": "26584bda3ad0382f7c7496ebbeeb37b73138a9218e62138f9759b4a2acce5048"
+      }
+    },
+    {
+      "stage": "publish",
+      "status": "passed",
+      "intent_id": "f8e932d96e0b41f18e0cb6d4a2111064",
+      "receipt_sha256": "721858c6779ad8df9ec4811375fd2eb191362123d62c7c69ad721c3e7a53e406",
+      "started_at": "2026-11-04T21:33:06.744017+00:00",
+      "finished_at": "2026-11-04T21:33:19.651606+00:00",
+      "evidence": {
+        "verified_routes": 3
+      }
+    },
+    {
+      "stage": "export",
+      "status": "passed",
+      "intent_id": "4fe75cbc4feb425db486a8c4c472a098",
+      "receipt_sha256": "37153d093f385bac26e6495b43ed3061c701818404e6806ccb22767a5abdc7e8",
+      "started_at": "2026-11-04T21:33:19.726115+00:00",
+      "finished_at": "2026-11-04T21:33:20.655530+00:00",
+      "evidence": {
+        "job_id": 1
+      }
+    },
+    {
+      "stage": "export-observe",
+      "status": "passed",
+      "intent_id": "4bdd86a955be458bb240d098251fa6e6",
+      "receipt_sha256": "ec7b06eadd2cc259ecad5418efc54d3bf3484b90cc36f2cd02c9e483ddafa405",
+      "started_at": "2026-11-04T21:33:20.735611+00:00",
+      "finished_at": "2026-11-04T21:33:21.712182+00:00",
+      "evidence": {
+        "export_sha256": "c825dedd1b90c4edc258ff250dfbecdf12c8912c1e9a911939a75fb9c7b1ad31",
+        "verified_routes": 3
+      }
+    },
+    {
+      "stage": "stream",
+      "status": "passed",
+      "intent_id": "3107abbee2f84c13abcb3a322fd45816",
+      "receipt_sha256": "73bb6dcef2038c745242c6963fddda908db9f7f3b359b9d76154d2b3f201b6b3",
+      "started_at": "2026-11-04T21:33:21.783343+00:00",
+      "finished_at": "2026-11-04T21:33:38.798115+00:00",
+      "evidence": {
+        "streams": [
+          {
+            "event_count": 4,
+            "first_event_seconds": 0.074,
+            "total_seconds": 8.097
+          },
+          {
+            "event_count": 4,
+            "first_event_seconds": 0.074,
+            "total_seconds": 8.101
+          }
+        ],
+        "unbuffered_frontends": 2
+      }
+    },
+    {
+      "stage": "loss",
+      "status": "passed",
+      "intent_id": "7c4cc75c60b8484083ef064e3f341afd",
+      "receipt_sha256": "02d2abbb9fce9f732284b9428ce78ae6e0fea5e39087cc235d0fdf13c389daf5",
+      "started_at": "2026-11-04T21:33:38.860114+00:00",
+      "finished_at": "2026-11-04T21:33:40.798499+00:00",
+      "evidence": {
+        "delete_options": {
+          "apiVersion": "v1",
+          "gracePeriodSeconds": 2,
+          "kind": "DeleteOptions",
+          "preconditions": {
+            "uid": "a8e9d9e3-cf5a-4cee-a424-64bd4aa087c8"
+          }
+        },
+        "gate": {
+          "first_sources_frame": true,
+          "model": {
+            "active": 1,
+            "finished": 3,
+            "started": 4
+          }
+        },
+        "victim": {
+          "name": "frontend-756d8f9fd9-pgw7b",
+          "uid": "a8e9d9e3-cf5a-4cee-a424-64bd4aa087c8"
+        }
+      }
+    },
+    {
+      "stage": "loss-observe",
+      "status": "passed",
+      "intent_id": "7c0b76f36ad84e0f9733e97b41a34ba5",
+      "receipt_sha256": "b30db06bf9cbdc65e84d2263dd5d68843462c55d6c0756021da11d8c5cb0b81b",
+      "started_at": "2026-11-04T21:33:40.875151+00:00",
+      "finished_at": "2026-11-04T21:33:48.938225+00:00",
+      "evidence": {
+        "client_gone": true,
+        "interrupted_stream": true,
+        "model": {
+          "active": 0,
+          "finished": 4,
+          "started": 4
+        },
+        "victim_gone": true
+      }
+    },
+    {
+      "stage": "replacement",
+      "status": "passed",
+      "intent_id": "a5756fdb4b664ed1b354b4e617fbdb8c",
+      "receipt_sha256": "44bfda3d903675fcd5310083646440fabf99c4962c56b6a4119aab3e67f2edb8",
+      "started_at": "2026-11-04T21:33:49.017173+00:00",
+      "finished_at": "2026-11-04T21:33:50.640041+00:00",
+      "evidence": {
+        "export_sha256": "c825dedd1b90c4edc258ff250dfbecdf12c8912c1e9a911939a75fb9c7b1ad31",
+        "publication_survived": true,
+        "replacement": {
+          "name": "frontend-756d8f9fd9-mhwdt",
+          "uid": "74184695-7ebc-4b4b-aa59-d8fe306601c1"
+        },
+        "session_survived": true
+      }
+    },
+    {
+      "stage": "logout",
+      "status": "passed",
+      "intent_id": "de2964610f934a618bf02d3592a9c0cd",
+      "receipt_sha256": "305da10d94a75becf50b9d1ff84ecaa023a29cc7f82309ecd668b44529194b37",
+      "started_at": "2026-11-04T21:33:50.717160+00:00",
+      "finished_at": "2026-11-04T21:33:53.170039+00:00",
+      "evidence": {
+        "csrf": "simulation-exempt",
+        "old_session_revoked_routes": 3
+      }
+    },
+    {
+      "stage": "final",
+      "status": "passed",
+      "intent_id": "7f8faa0c0a2740d1be954ce0ca0153c4",
+      "receipt_sha256": "85b84fd75836c143764848cff4d967ebd8321fcb84b7d38923714e66c6da795b",
+      "started_at": "2026-11-04T21:33:53.263245+00:00",
+      "finished_at": "2026-11-04T21:33:56.275377+00:00",
+      "evidence": {
+        "model": {
+          "active": 0,
+          "finished": 4,
+          "started": 4
+        },
+        "original_sha256": "26584bda3ad0382f7c7496ebbeeb37b73138a9218e62138f9759b4a2acce5048",
+        "owned_handles_closed": 5,
+        "quiescent": true
+      }
+    }
+  ],
+  "observation_notes": [
+    "Publish readiness and loss/replacement readiness were polled under their original durable intents. A transient loss-observe failure was retained; the same intent later passed without replaying DELETE or model POST.",
+    "Legacy compact upload makes no idempotency guarantee; each business mutation and UID-preconditioned DELETE was submitted once by this case.",
+    "Two complete NDJSON streams plus one interrupted loss stream followed initial publication: model started=finished=4, active=0 at closure; no automatic replay of interrupted generation.",
+    "Earlier component CI and separate frontend-split reports remain frozen; this new run does not retrospectively sign them."
+  ],
+  "closure": {
+    "owned_handles_closed": [
+      "pf-0",
+      "pf-0r",
+      "pf-1",
+      "pf-2",
+      "client"
+    ],
+    "native_containers": 0,
+    "nonterminal_pods": 0,
+    "controller_counts": {
+      "fr-storage-postgres": 0,
+      "fr-storage-qdrant": 0,
+      "application": 0,
+      "frontend": 0,
+      "model-stub": 0
+    },
+    "retained_claims": [
+      {
+        "name": "fr-files",
+        "uid": "951afda7-353c-4bbc-9bcf-efcbac82a15e",
+        "phase": "Bound",
+        "volume": "pvc-951afda7-353c-4bbc-9bcf-efcbac82a15e",
+        "volume_uid": "eb5dd01f-e059-41e0-a403-8c4a51f1160c"
+      },
+      {
+        "name": "fr-postgres",
+        "uid": "5556c6f9-3eab-48f8-beda-b9f919d3897e",
+        "phase": "Bound",
+        "volume": "pvc-5556c6f9-3eab-48f8-beda-b9f919d3897e",
+        "volume_uid": "68f6d378-d72f-4ae8-b7f8-6ad70bb3b616"
+      },
+      {
+        "name": "fr-qdrant",
+        "uid": "670a1295-0954-4a19-912d-356ce97f1e03",
+        "phase": "Bound",
+        "volume": "pvc-670a1295-0954-4a19-912d-356ce97f1e03",
+        "volume_uid": "de87cae1-9887-4e30-a8f9-d1c2b9477436"
+      }
+    ],
+    "capacity_loans": [
+      {
+        "journal": "frontend-native-full-ci-capacity.json",
+        "operation_id": "ba1fcf7203e4433e84a188ae2c0074a7",
+        "namespace": "replica-test-r5o2u20261102",
+        "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+        "status": "capacity-recovered-and-source-verified",
+        "runtime_fingerprint": "529fdd8f27a9051d27f42753bbc8660e67a24b391c81a7a3ad9a539c6bdd26a7",
+        "restored_replicas": {
+          "api": 2,
+          "frontend": 2,
+          "worker": 2
+        },
+        "pvc_bindings_unchanged": true,
+        "canonical_tables_unchanged": 9
+      },
+      {
+        "journal": "frontend-native-capacity.json",
+        "operation_id": "ec28b684106e4f5f96c513ab16b66cbe",
+        "namespace": "replica-test-r5o2u20261102",
+        "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+        "status": "capacity-recovered-and-source-verified",
+        "runtime_fingerprint": "529fdd8f27a9051d27f42753bbc8660e67a24b391c81a7a3ad9a539c6bdd26a7",
+        "restored_replicas": {
+          "api": 2,
+          "frontend": 2,
+          "worker": 2
+        },
+        "pvc_bindings_unchanged": true,
+        "canonical_tables_unchanged": 9
+      },
+      {
+        "journal": "frontend-native-secondary-capacity.json",
+        "operation_id": "56bc87e2f8054025a2e8a298f25d454e",
+        "namespace": "replica-test-r4o2t20261102",
+        "namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+        "status": "capacity-recovered-and-source-verified",
+        "runtime_fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3",
+        "restored_replicas": {
+          "api": 2,
+          "frontend": 2,
+          "worker": 2
+        },
+        "pvc_bindings_unchanged": true,
+        "canonical_tables_unchanged": 9
+      }
+    ],
+    "cookies_transferred": false,
+    "native_private_state_retained": true,
+    "postflight": {
+      "containers": [
+        {
+          "name": "okf-policy-control-plane",
+          "container_id": "ca41499db6e13c8c7f0879a7d967036f884edd722113f82c8e14234708dc69f9",
+          "running": true
+        },
+        {
+          "name": "okf-windows-audit-opensearch",
+          "container_id": "bcfedd66b15fb5e9792e03fe32412337907e6a62a1aadbcb493f56dd743a2e9f",
+          "running": true
+        },
+        {
+          "name": "okf-crossnode-control-plane",
+          "container_id": "5c63e0ea023f252fe762c314633e21afdb337d5484c892c940adedd393f6ba82",
+          "running": false
+        },
+        {
+          "name": "okf-crossnode-worker",
+          "container_id": "df4fb790095a3ef291d476f9af6db2b5ceb0150413f1362b04f169c8f659bc6b",
+          "running": false
+        }
+      ],
+      "old_kube_running": false,
+      "node_uid": "9020a1d9-843e-4947-8808-53477289b863",
+      "node_ready": true,
+      "disk_pressure": false
+    }
+  },
+  "selected_frontend_case_passed": true,
+  "qualification_complete": false,
+  "pending_checks": [
+    "frontend.production_csrf",
+    "frontend.gateway_sso"
+  ],
+  "limits": [
+    "Simulation is CSRF-exempt; real CSRF, Gateway/SSO and IdP require separate inputs and acceptance.",
+    "This basic recipe does not cover distributed/resilient frontend qualification or physical failure domains.",
+    "Native receipt digests bind this owned execution; this report is not an independently trusted signed terminal bundle or a certificate."
+  ],
+  "certification": null,
+  "production_schedule": "disabled"
+}

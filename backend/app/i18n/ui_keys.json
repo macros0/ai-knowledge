@@ -164,6 +164,8 @@
   "admin.jobType.bulk_export": [],
   "admin.jobType.bulk_regenerate": [],
   "admin.jobType.bulk_resume": [],
+  "admin.jobType.glossary_translation": [],
+  "admin.jobType.reference_translation": [],
   "admin.languages.actError": [
     "message"
   ],
@@ -379,6 +381,8 @@
   "apiError.job_not_awaiting_approval": [],
   "apiError.job_not_cancellable": [],
   "apiError.job_not_found": [],
+  "apiError.job_still_running": [],
+  "apiError.legacy_corpus_adoption_required": [],
   "apiError.locale_not_found": [],
   "apiError.mail_import_disabled": [],
   "apiError.mail_object_unsupported": [],
@@ -412,6 +416,9 @@
   "apiError.reference_write_busy": [],
   "apiError.regenerate_failed": [],
   "apiError.regenerate_timeout": [],
+  "apiError.scenario_not_found": [],
+  "apiError.scenario_version_conflict": [],
+  "apiError.scenarios_unavailable": [],
   "apiError.scope_cache_preservation_required": [],
   "apiError.scope_change_in_progress": [],
   "apiError.scope_edit_lock_lost": [],
@@ -613,6 +620,8 @@
   "chat.responseMode.fast.label": [],
   "chat.responseMode.full.description": [],
   "chat.responseMode.full.label": [],
+  "chat.responseMode.scenario.description": [],
+  "chat.responseMode.scenario.label": [],
   "chat.responseModeLabel": [],
   "chat.restartAnswer": [],
   "chat.resultsLabel": [],
@@ -1412,6 +1421,52 @@
   "reference.retry": [],
   "reference.reviewPreview": [],
   "reference.startEditing": [],
+  "scenario.all": [],
+  "scenario.catalog": [],
+  "scenario.choose": [],
+  "scenario.chooseHint": [],
+  "scenario.close": [],
+  "scenario.copy": [],
+  "scenario.create": [],
+  "scenario.currentVersion": [
+    "version"
+  ],
+  "scenario.delete": [],
+  "scenario.deleteConfirm": [],
+  "scenario.description": [],
+  "scenario.discard": [],
+  "scenario.draft": [],
+  "scenario.edit": [],
+  "scenario.empty": [],
+  "scenario.grounding": [],
+  "scenario.instructions": [],
+  "scenario.loading": [],
+  "scenario.mine": [],
+  "scenario.name": [],
+  "scenario.next": [],
+  "scenario.previewHint": [],
+  "scenario.previous": [],
+  "scenario.private": [],
+  "scenario.protectedAuthorship": [],
+  "scenario.public": [],
+  "scenario.publishHint": [],
+  "scenario.reapply": [
+    "version"
+  ],
+  "scenario.save": [],
+  "scenario.scope": [],
+  "scenario.search": [],
+  "scenario.stop": [],
+  "scenario.test": [],
+  "scenario.testQuestion": [],
+  "scenario.unavailable": [],
+  "scenario.use": [],
+  "scenario.used": [
+    "name",
+    "version"
+  ],
+  "scenario.view": [],
+  "scenario.visibility": [],
   "scope.acquireEditor": [],
   "scope.aggregateBudget": [],
   "scope.ancestorUnavailable": [],
@@ -1567,6 +1622,12 @@
   "scope.viewPending": [],
   "scope.viewPublished": [],
   "scope.working": [],
+  "security.action.answer_scenario_copy": [],
+  "security.action.answer_scenario_create": [],
+  "security.action.answer_scenario_delete": [],
+  "security.action.answer_scenario_publish": [],
+  "security.action.answer_scenario_unpublish": [],
+  "security.action.answer_scenario_update": [],
   "security.action.attribute_create": [],
   "security.action.attribute_delete": [],
   "security.action.auth_access_denied": [],
@@ -1639,6 +1700,10 @@
   "security.action.reference_edit_released": [],
   "security.action.reference_edit_revoked": [],
   "security.action.reference_translation_commit": [],
+  "security.action.replica_maintenance_enter": [],
+  "security.action.replica_maintenance_leave": [],
+  "security.action.replica_model_reconcile": [],
+  "security.action.replica_runtime_upgrade": [],
   "security.action.stopwords_import": [],
   "security.action.stopwords_rollback": [],
   "security.action.stopwords_update": [],
@@ -1756,13 +1821,20 @@
   "sort.label": [],
   "sort.newFirst": [],
   "sort.oldFirst": [],
+  "sourceLocation.changed": [],
   "sourceLocation.chunkOnly": [
+    "index"
+  ],
+  "sourceLocation.conceptEvidence": [
     "index"
   ],
   "sourceLocation.exact": [
     "index"
   ],
   "sourceLocation.inferred": [
+    "index"
+  ],
+  "sourceLocation.match": [
     "index"
   ],
   "sourceLocation.navigation": [],
@@ -1780,9 +1852,6 @@
     "index"
   ],
   "sourceLocation.title": [],
-  "sourceLocation.match": ["index"],
-  "sourceLocation.conceptEvidence": ["index"],
-  "sourceLocation.changed": [],
   "sourceLocation.unavailable": [],
   "sources.collapse": [
     "name"

@@ -21,6 +21,7 @@ import re
 from hashlib import sha256
 import shutil
 import threading
+from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -56,6 +57,33 @@ def _staging_lock(doc_id: str) -> threading.Lock:
         return lock
 
 
+def _portable_method(method):
+    @wraps(method)
+    def dispatch(self, *args, **kwargs):
+        settings = get_settings()
+        with session_scope() as session:
+            version = session.scalar(select(DocumentStaging.checkpoint_version).where(DocumentStaging.doc_id == self.doc_id))
+            from app.services.artifacts.repository import document_uses_portable_artifacts
+            portable = document_uses_portable_artifacts(session, settings, self.doc_id)
+        if version not in {None, 1, 2}:
+            from app.services.generation_artifacts import GenerationIntegrityError
+            raise GenerationIntegrityError()
+        if version == 2 or portable:
+            from app.services.artifacts.staging import PortableStaging
+            if version == 1 and method.__name__ != "remove":
+                from app.services.generation_artifacts import GenerationIntegrityError
+                raise GenerationIntegrityError()
+            try:
+                return getattr(PortableStaging(self, settings), method.__name__)(*args, **kwargs)
+            except OSError as exc:
+                from app.services.storage import StorageFullError, is_storage_full
+                if is_storage_full(exc):
+                    raise StorageFullError() from exc
+                raise
+        return method(self, *args, **kwargs)
+    return dispatch
+
+
 class StagingStore:
     def __init__(self, doc_id: str, staging_root: Path | None = None):
         self.doc_id = doc_id
@@ -65,6 +93,7 @@ class StagingStore:
     def exists(self) -> bool:
         return self._load_raw() is not None
 
+    @_portable_method
     def create(
         self,
         total_chunks: int,
@@ -110,6 +139,7 @@ class StagingStore:
                 "source_file_hash": row.source_file_hash,
                 "generation_id": row.generation_id,
                 "processing_scope_hash": row.processing_scope_hash,
+                "checkpoint_version": row.checkpoint_version,
             }
 
     def _reference_bytes(self, filename: str) -> bytes:
@@ -161,6 +191,7 @@ class StagingStore:
             result["table_refs"] = refs
         return result
 
+    @_portable_method
     def load(self) -> dict | None:
         manifest = self._load_raw()
         if manifest is not None:
@@ -230,6 +261,7 @@ class StagingStore:
                 processed_chunks=manifest['processed_chunks'], used_slugs=manifest['used_slugs'],
                 chunks_data=patched, status='in_progress'))
 
+    @_portable_method
     def set_chunks_metadata(self, entries) -> None:
         """Checkpoint source metadata in bounded batches; preserve completed work.
 
@@ -253,6 +285,7 @@ class StagingStore:
                     manifest['chunks_data'][index] = info
                 self._write(manifest)
 
+    @_portable_method
     def bind_generation(self, generation_id: str) -> None:
         with self._lock:
             manifest = self._load_raw()
@@ -268,6 +301,7 @@ class StagingStore:
     def partial_chunks(self) -> list[int]:
         return partial_chunk_indices((self._load_raw() or {}).get("chunks_data", {}))
 
+    @_portable_method
     def save_chunk_text(self, index: int, text: str) -> None:
         """Сохраняет сырой текст чанка (LLM-вход) для просмотра в UI.
 
@@ -280,6 +314,7 @@ class StagingStore:
         with (self.dir / f"chunk_{index:02d}.md").open("w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
 
+    @_portable_method
     def set_chunk_source(self, index: int, source_id: str) -> None:
         """Сохраняет происхождение чанка до первого LLM-вызова."""
         with self._lock:
@@ -291,6 +326,7 @@ class StagingStore:
             manifest["chunks_data"] = chunks_data
             self._write(manifest)
 
+    @_portable_method
     def set_chunk_table_refs(self, index: int, refs: list[dict], *, title: str = "") -> None:
         with self._lock:
             manifest = self._load_raw()
@@ -300,6 +336,7 @@ class StagingStore:
             manifest["chunks_data"][str(index)] = info
             self._write(manifest)
 
+    @_portable_method
     def append_chunk(
         self,
         index: int,
@@ -357,6 +394,7 @@ class StagingStore:
             self._write_checkpoint(index, manifest)
             return slugs
 
+    @_portable_method
     def concepts(self) -> list[Concept]:
         manifest = self._load_raw()
         if not manifest:
@@ -390,13 +428,18 @@ class StagingStore:
                 slugs.extend(info.get("slugs", []))
         return slugs
 
-    def remove(self) -> None:
-        with session_scope() as s:
+    @_portable_method
+    def remove(self, *, expected_generation_id=None) -> None:
+        with self._lock, session_scope() as s:
+            from app.services.generation_store import lock_document_write
+            lock_document_write(s, self.doc_id)
             row = s.get(DocumentStaging, self.doc_id)
+            if expected_generation_id is not None and (row is None or row.generation_id != expected_generation_id):
+                return
             if row is not None:
                 s.delete(row)
-        if self.dir.exists():
-            shutil.rmtree(self.dir, ignore_errors=True)
+            if self.dir.exists():
+                shutil.rmtree(self.dir, ignore_errors=True)
 
     @staticmethod
     def _allocate_slugs(concepts: list[Concept], used: list[str]) -> list[str]:

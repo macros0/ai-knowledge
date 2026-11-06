@@ -1,4 +1,4 @@
-{{- if .Values.application.enabled }}
+{{- if and .Values.application.enabled (ne .Values.deployment.mode "distributed") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -98,6 +98,7 @@ spec:
             httpGet: {path: /health/ready, port: 8000}
             {{- include "okf.probeTiming" .Values.probes.backend.readiness | nindent 12 }}
           resources: {{ toYaml .Values.resources.backend | nindent 12 }}
+        {{- if eq .Values.deployment.mode "compact" }}
         {{- $tlsContainer = "frontend" }}
         - name: frontend
           image: {{ include "okf.image" (dict "image" .Values.images.frontend "tier" .Values.deployment.environment) | quote }}
@@ -132,6 +133,7 @@ spec:
             tcpSocket: {port: 3000}
             {{- include "okf.probeTiming" .Values.probes.frontend.liveness | nindent 12 }}
           resources: {{ toYaml .Values.resources.frontend | nindent 12 }}
+        {{- end }}
       volumes:
         {{- if .Values.trust.existingConfigMap }}
         - name: runtime-trust

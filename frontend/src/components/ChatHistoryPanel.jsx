@@ -66,7 +66,7 @@ export default function ChatHistoryPanel() {
       </div>
       <AsyncContentState state={current?.error ? "error" : !current || current.pending ? "loading" : "ready"}
         error={current?.error} message={current?.error ? t("chat.openThreadError",{message:friendlyApiError(current.error,t)}) : null} onRetry={()=>setRevision(n=>n+1)} />
-      {current?.data && <div className="chat-log history-log">{current.data.messages.map((m,i)=><HistoryMessage key={i} m={m} actionsPending={pending} onContinueWithoutAssessment={message => {
+      {current?.data && <div className="chat-log history-log">{current.data.messages.map((m,i)=><HistoryMessage key={i} m={m} sessionId={current.data.session_id} actionsPending={pending} onContinueWithoutAssessment={message => {
         if (pending) return;
         setQueuedAssessmentRetry(historyAssessmentMessage(message, current.data.session_id));
         router.push("/chat");

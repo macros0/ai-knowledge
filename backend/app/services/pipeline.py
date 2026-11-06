@@ -43,7 +43,9 @@ from app.services.errors import (
 )
 from app.services import gen_quality
 from app.services.generation_files import generation_paths, merge_legacy_backfill_files, prepare_generation_paths
-from app.services.generation_artifacts import artifact_manifest, file_digest
+from app.services.generation_artifacts import artifact_manifest
+from app.services.artifacts.original import original_path
+from app.services.artifacts.original_scope import scoped_originals
 from app.services.table_quality import bind_table_reports, has_content_omission, reports_from_chunks, write_table_quality_report
 from app.services.generation_publication import _merge_tags, publish_prepared_document
 from app.services.generation_store import (
@@ -204,7 +206,8 @@ class Pipeline:
         self.okf_generator = OKFGenerator()
         self._abort_events: dict[str, threading.Event] = {}
         self._threads: dict[str, Future] = {}
-        self._executor = ThreadPoolExecutor(
+        from app.services.work.admission import durable_documents
+        self._executor = None if durable_documents(self.settings) else ThreadPoolExecutor(
             max_workers=self.settings.pipeline_max_workers,
             thread_name_prefix="document-pipeline",
         )
@@ -256,10 +259,23 @@ class Pipeline:
         *, is_admin: bool = False, processing_scope: dict | None = None,
         scope_request_id: str | None = None,
     ) -> None:
+        from app.services.work.admission import durable_documents, enqueue_existing_document
+        if durable_documents(self.settings):
+            enqueue_existing_document(self.settings, doc_id, "process", is_admin=is_admin,
+                processing_scope=processing_scope, scope_request_id=scope_request_id)
+            return
         self._start(doc_id, str(filepath), filename, user_tags or [], resume=False, is_admin=is_admin,
                     processing_scope=processing_scope,scope_request_id=scope_request_id)
 
+    @scoped_originals
     def resume(self, doc_id: str, *, is_admin: bool = False) -> None:
+        from app.services.work.admission import durable_documents, enqueue_existing_document
+        if durable_documents(self.settings):
+            from app.services.work.scope import resume_scope_change
+            if resume_scope_change(self.settings, doc_id, is_admin=is_admin) is not None:
+                return
+            enqueue_existing_document(self.settings, doc_id, "resume", is_admin=is_admin)
+            return
         doc = self.registry.get(doc_id)
         if not doc:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
@@ -274,8 +290,7 @@ class Pipeline:
             ):
                 raise DomainError("Нет контрольных данных для догенерации", code=codes.PARTIAL_REGENERATION_UNAVAILABLE)
         filename = doc["filename"]
-        ext = Path(filename).suffix.lower()
-        filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
+        filepath = original_path(self.settings, doc_id, filename)
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=True, is_admin=is_admin)
@@ -290,6 +305,7 @@ class Pipeline:
         if task and not task.done():
             raise ConflictError("Документ уже обрабатывается", code=codes.ALREADY_PROCESSING)
 
+    @scoped_originals
     def regenerate(self, doc_id: str, *, is_admin: bool = False, processing_scope: dict | None = None,
                    scope_request_id: str | None = None) -> None:
         """Полная перегенерация концептов документа с нуля (без учёта старых чекпоинтов).
@@ -304,8 +320,7 @@ class Pipeline:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         self._ensure_not_running(doc_id)
         filename = doc["filename"]
-        ext = Path(filename).suffix.lower()
-        filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
+        filepath = original_path(self.settings, doc_id, filename)
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
 
@@ -315,6 +330,11 @@ class Pipeline:
             if requires_action:
                 return
 
+        from app.services.work.admission import durable_documents, enqueue_existing_document
+        if durable_documents(self.settings):
+            enqueue_existing_document(self.settings, doc_id, "regenerate", is_admin=is_admin,
+                processing_scope=processing_scope, scope_request_id=scope_request_id)
+            return
         self._start(doc_id, str(filepath), filename, doc.get("tags") or [], resume=False,
                     reset_staging=True, is_admin=is_admin,processing_scope=processing_scope,
                     scope_request_id=scope_request_id)
@@ -351,6 +371,10 @@ class Pipeline:
         with self._start_lock:
             with session_scope() as session:
                 from app.db.models import Document, DocumentGenerationState, DocumentUpdateAttempt
+                from app.services.work.admission import durable_documents, lock_document_intents, invalidate_document_intents
+                durable = durable_documents(self.settings)
+                if durable:
+                    lock_document_intents(session, doc_id)
 
                 if not lock_document_write(session, doc_id, allow_deleted=False):
                     raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
@@ -376,6 +400,13 @@ class Pipeline:
                         target_id=doc_id, ip_address=ip_address,
                         new_value={"update_id": attempt.id, "previous_version_preserved": True},
                     )
+                if durable:
+                    invalidate_document_intents(session, doc_id)
+                    from app.services.work.scope import cancel_scope_receipts
+                    cancel_scope_receipts(session, doc_id)
+                    restore_canceled_update(session, doc_id)
+            if durable:
+                return  # Generation cleanup is coordinated separately; no unguarded cache deletion.
             event = self._abort_events.get(doc_id)
             if event:
                 event.set()
@@ -684,6 +715,7 @@ class Pipeline:
             except Exception:
                 pass
 
+    @scoped_originals
     def _process(
         self, doc_id: str, filepath: str, filename: str, user_tags: list[str], resume: bool,
         *, fresh_table_cache: bool = False,processing_scope: dict | None = None,
@@ -718,6 +750,7 @@ class Pipeline:
                 assert_full_regeneration_cache_safe(session,self.settings,doc_id,processing_scope)
             capture_published_update(session, doc_id, self.settings)
         self.registry.update(doc_id, status="processing", error=None, error_code=None, problem=None)
+        filepath = str(original_path(self.settings, doc_id, filename, legacy_path=filepath))
         source_file_hash = _sha256_file(filepath)
         staging = StagingStore(doc_id)
         with session_scope() as session:
@@ -1212,7 +1245,17 @@ class Pipeline:
         chunks_meta: list[dict] = []
         chunk_rows: list[dict] = []
         chunk_files: list[tuple[Path, int, str]] = []
-        for chunk_file in sorted(staging.dir.glob("chunk_*.md"), key=lambda path: int(path.stem.split("_")[-1])):
+        if manifest.get("checkpoint_version") == 2:
+            # A worker's directory may contain stale/unregistered cache files.
+            # Only the committed checkpoint inventory can become canonical data.
+            expected = list(range(manifest["total_chunks"]))
+            if sorted(manifest["processed_chunks"]) != expected:
+                from app.services.generation_artifacts import GenerationIntegrityError
+                raise GenerationIntegrityError()
+            input_files = (staging.dir / f"chunk_{index:02d}.md" for index in expected)
+        else:
+            input_files = sorted(staging.dir.glob("chunk_*.md"), key=lambda path: int(path.stem.split("_")[-1]))
+        for chunk_file in input_files:
             idx = int(chunk_file.stem.split("_")[-1])
             info = chunks_data.get(str(idx)) or {}
             text = chunk_file.read_text(encoding="utf-8")
@@ -1452,10 +1495,10 @@ class Pipeline:
             prepared['processing_scope']=processing_scope
         if projection_version is not None:
             prepared["chunk_projection_version"] = projection_version
-        publication_path = paths.uploads_root / "publication.json"
-        write_json_atomic(publication_path, prepared)
+        from app.services.artifacts.publication import write_prepared_publication
         with session_scope() as session:
-            mark_generation_ready(session, doc_id, generation_id, publication_hash=file_digest(publication_path),
+            publication_hash = write_prepared_publication(session, self.settings, prepared)
+            mark_generation_ready(session, doc_id, generation_id, publication_hash=publication_hash,
                                   table_schema_version=1 if self.settings.table_structure_enabled else None)
         finish_stage("index", indexing_started, counts={"concepts": len(okf_docs), "chunks": len(chunk_rows), "points": len(keep_point_ids)})
         indexed_concept_count = len(okf_docs)
@@ -1474,6 +1517,9 @@ class Pipeline:
         if not publish_prepared_document(self.settings, self.vector_store, doc_id, generation_id):
             return
         finish_stage("publish", publication_started)
+        from app.services.work.context import current_claim
+        if current_claim() is not None:
+            return  # R3 coordinates checkpoint retirement after the work transaction committed.
         # Keep incomplete generation checkpoints for selective recovery, even
         # after successful indexing. Clean runs release them after the DB update.
         try:
@@ -1510,6 +1556,10 @@ class Pipeline:
         Delete Points) и `deleted_at` в БД. Векторы/файлы/концепты остаются на
         месте — восстановление не требует пере-эмбеддинга.
         """
+        from app.services.work.admission import durable_documents
+        if durable_documents(self.settings):
+            self.registry.soft_delete(doc_id, deleted_by)
+            return
         with self._start_lock:
             self._stop_task(doc_id)
             try:
@@ -1525,6 +1575,10 @@ class Pipeline:
 
         Точки физически не удалялись — эмбеддинги не пересчитываются.
         """
+        from app.services.work.admission import durable_documents
+        if durable_documents(self.settings):
+            self.registry.restore(doc_id)
+            return
         with self._start_lock:
             try:
                 self.vector_store.set_document_deleted(doc_id, False)
@@ -1534,12 +1588,13 @@ class Pipeline:
                 )
             self.registry.restore(doc_id)
 
-    def _physical_cleanup(self, doc_id: str) -> None:
+    def _physical_cleanup(self, doc_id: str, *, delete_vectors: bool = True) -> None:
         """Удаляет точки Qdrant, файлы и staging (без строки БД)."""
-        try:
-            self.vector_store.delete_document(doc_id)
-        except Exception as exc:
-            logger.warning("Не удалось удалить векторы документа %s: %s", doc_id, exc)
+        if delete_vectors:
+            try:
+                self.vector_store.delete_document(doc_id)
+            except Exception as exc:
+                logger.warning("Не удалось удалить векторы документа %s: %s", doc_id, exc)
         for base in (self.settings.uploads_dir, self.settings.okf_dir):
             target = base / doc_id
             if target.exists():
@@ -1710,6 +1765,7 @@ class Pipeline:
                 del outcomes[key]
             outcomes[doc_id] = (now + _INTERACTIVE_BACKFILL_RETRY_SECONDS, code, message)
 
+    @scoped_originals
     def _backfill_chunks(self, doc_id: str) -> None:
         """Строит чанки из исходного файла и пишет их в document_chunks (без LLM).
 
@@ -1718,12 +1774,15 @@ class Pipeline:
         with session_scope() as session:
             if not _can_backfill_legacy_chunks(session, doc_id):
                 return
+            from app.services.work.admission import durable_documents
+            if durable_documents(self.settings):
+                raise DomainError("Для этого документа требуется подготовка существующего корпуса",
+                    code=codes.LEGACY_CORPUS_ADOPTION_REQUIRED)
         doc = self.registry.get(doc_id)
         if not doc:
             raise NotFoundError("Документ не найден", code=codes.DOCUMENT_NOT_FOUND)
         filename = doc["filename"]
-        ext = Path(filename).suffix.lower()
-        filepath = self.settings.uploads_dir / f"{doc_id}{ext}"
+        filepath = original_path(self.settings, doc_id, filename)
         if not filepath.is_file():
             raise NotFoundError("Исходный файл документа не найден", code=codes.FILE_NOT_FOUND)
         self.settings.staging_dir.mkdir(parents=True, exist_ok=True)
@@ -1825,6 +1884,8 @@ def _chunks_meta_from_dir(directory: Path, manifest: dict | None = None) -> list
     meta: list[dict] = []
     for f in sorted(directory.glob("chunk_*.md")):
         idx = int(f.stem.split("_")[-1])
+        if manifest.get("checkpoint_version") == 2 and str(idx) not in manifest.get("chunks_data", {}):
+            continue
         info = manifest.get("chunks_data", {}).get(str(idx), {})
         meta.append(
             {

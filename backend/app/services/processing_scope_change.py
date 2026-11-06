@@ -6,6 +6,8 @@ from copy import deepcopy
 import hashlib
 import json
 
+from app.services.artifacts.original_scope import scoped_originals
+
 SCOPE_CHANGE_ANALYSIS_VERSION = 2
 
 
@@ -330,8 +332,9 @@ def analyze_scope_change(base: ScopeBaseSnapshot, selection: dict) -> ScopeChang
     return result
 
 
+@scoped_originals
 def load_scope_base(doc_id: str, *, session=None) -> ScopeBaseSnapshot:
-    """Read a consistent canonical/derived snapshot; no parsing or provider calls."""
+    """Read canonical state and verified file caches; no parsing/model calls."""
     from sqlalchemy import select
     from app.config import get_settings
     from app.db.models import (Document, DocumentGeneration, DocumentGenerationState, DocumentProcessingReview,
@@ -341,7 +344,6 @@ def load_scope_base(doc_id: str, *, session=None) -> ScopeBaseSnapshot:
     from app.services.generation_store import lock_generation_read
     from app.services.generation_artifacts import file_digest
     from app.services.generation_files import _reject_links
-    from pathlib import Path
     from contextlib import nullcontext
 
     settings = get_settings()
@@ -353,6 +355,12 @@ def load_scope_base(doc_id: str, *, session=None) -> ScopeBaseSnapshot:
         state = session.get(DocumentGenerationState, doc_id)
         gid = state.active_generation_id if state else None
         generation = session.get(DocumentGeneration, gid) if gid else None
+        if gid:
+            from app.services.artifacts.publication import hydrate_publication
+            hydrate_publication(settings, doc_id, gid)
+        else:
+            from app.services.artifacts.legacy import hydrate_snapshot
+            hydrate_snapshot(settings, doc_id)
         rows = _canonical_rows(session, doc_id)
         rows["tables"] = [dict(row._mapping) for row in session.execute(
             select(DocumentTable.table_id, DocumentTable.source_id).where(
@@ -360,7 +368,8 @@ def load_scope_base(doc_id: str, *, session=None) -> ScopeBaseSnapshot:
         canonical_digest = scope_sql_digest(session, doc_id, canonical_rows=rows)
         # scope_sql_digest already covers the versioned tables/projections.
         # A second full table walk duplicated JSON decoding and hashing.
-        path = settings.uploads_dir / (doc_id + Path(document.filename).suffix.lower())
+        from app.services.artifacts.original import original_path
+        path = original_path(settings, doc_id, document.filename)
         _reject_links(path)
         current_hash = file_digest(path) if path.is_file() else "missing"
         original_hashes={}

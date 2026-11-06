@@ -67,13 +67,33 @@ def _read_hashed_json(path: Path, expected_hash: str | None) -> dict:
     return json.loads(decoded)
 
 
-def load_verified_publication(settings, doc_id: str, generation_id: str, expected_hash: str | None) -> dict:
+def load_verified_publication(settings, doc_id: str, generation_id: str, expected_hash: str | None, *, session=None) -> dict:
     try:
         paths = generation_paths(settings, doc_id, generation_id)
         manifest_path = paths.uploads_root / "publication.json"
         _reject_links(manifest_path)
         prepared = _read_hashed_json(manifest_path, expected_hash)
         if prepared.get("doc_id") != doc_id or prepared.get("generation_id") != generation_id:
+            raise GenerationIntegrityError()
+        version = prepared.get("version", 1)
+        if type(version) is not int or version not in {1, 2}:
+            raise GenerationIntegrityError()
+        if version == 2:
+            from app.services.artifacts.publication import canonical_hash, validate_v2, local_publication, verify_bindings
+            refs = validate_v2(prepared, doc_id, generation_id)
+            if canonical_hash(prepared) != expected_hash:
+                raise GenerationIntegrityError()
+            if session is None:
+                from app.db.session import session_scope
+                with session_scope() as metadata_session:
+                    verify_bindings(metadata_session, doc_id, generation_id, refs, expected_hash, manifest_path.stat().st_size)
+            else:
+                verify_bindings(session, doc_id, generation_id, refs, expected_hash, manifest_path.stat().st_size)
+            if artifact_manifest(settings, doc_id, generation_id) != {name: ref.sha256 for name, ref in refs.items()}:
+                raise GenerationIntegrityError()
+            return local_publication(prepared, paths)
+        if (getattr(settings, "artifact_backend", "local") != "local"
+                or getattr(settings, "app_role", "combined") != "combined"):
             raise GenerationIntegrityError()
         actual = artifact_manifest(settings, doc_id, generation_id)
         if prepared.get("artifacts") != actual:

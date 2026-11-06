@@ -146,6 +146,8 @@ def test_pipeline_cancel_does_not_cleanup_live_scope_writer(setup):
     p = preview(base)
     jobs.apply_scope_change(base.doc_id, p["plan_id"], "1" * 32, base.generation_id, "editor", {"fast_exclude"})
     pipeline = Pipeline.__new__(Pipeline)
+    from types import SimpleNamespace
+    pipeline.settings = SimpleNamespace(okf_deployment_schema=None, app_role="combined")
     pipeline._start_lock, pipeline._threads, pipeline._abort_events = RLock(), {}, {}
     pipeline._finish_canceled_update, pipeline._cleanup_document_generations = Mock(), Mock()
     with session_scope() as s:

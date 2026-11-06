@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "status": "selected-nas-relocation-proof-component-verified",
+  "scope": "DS211 DSM6.2.4-25556U8 NFS4.0 authenticated client binding and native target proof; component only",
+  "windows": {
+    "tests": 74,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "junit_sha256": "79abc6190854ca6cdea4ce4ff258b1fe9e87b7b529436c8c255ac5c53311f21b"
+  },
+  "linux": {
+    "exit_code": 0,
+    "oom": false,
+    "windows_case_ids_equal": true,
+    "source_unchanged": true
+  },
+  "linux_junit": {
+    "tests": 74,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "sha256": "394460590a81ad7048c4e5f03e87159eef4b2f32a87771a488801c0d3cdaceef"
+  },
+  "source_sha256": {
+    "backend/app/deployment/nas_restore.py": "a9b641670b7c633ae61d29350fecde805c903cb9fcbd10f3e6c192d50c0e0bb2",
+    "backend/app/deployment/rwx_restore.py": "2aa5f786903d97548fe9610e6e8fbd09a3ebc8b6e2a338d71a22c3b4bb7a6a40",
+    "backend/tests/test_replica_nas_restore.py": "83cf7a337d10dfb7eb0f7ee5bf49b5085de5fe52c024f48cd14145a162854529",
+    "backend/tests/test_replica_rwx_restore.py": "bb19300547d712da4420fe1cf478ad8e725e09cc7083751f4348197ddf3f2225",
+    "backend/tests/test_replica_restore_identity.py": "4740e8f345e316e3578d405cac9beb64ad8d41542f89001f7f21a22dc0e2529d"
+  },
+  "source_manifest_sha256": "32493303c0617ad0c737d80091fbc896e2ad32491420ee172b68d8559f4ffcb2",
+  "operation_id": "68515b160741485889b715907bc422c9",
+  "container_id": "1181a3a35679115c3271aae3c8664a397b62a4a38a75073a10665e9fc1bc73b9",
+  "memory_limit_bytes": 1073741824,
+  "host_reserve_bytes": 1073741824,
+  "memory_before": 3735060480,
+  "reserved_full_ci_growth": 1179484160,
+  "project_checks": {
+    "passed": true,
+    "npm_vulnerabilities": 0,
+    "log_sha256": "106f753e83abc1a35e4135e3dce4bca8f5868fafbcb6f90f3d68660a56a57429"
+  },
+  "server_filesystem_identity_claimed": false,
+  "old_nfs41_recipe_unchanged": true,
+  "native_target_restore_performed": false,
+  "full_linux_backend_ci": false,
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled"
+}

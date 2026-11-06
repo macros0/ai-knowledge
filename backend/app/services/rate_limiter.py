@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import threading
 import time
+import json
+import math
 from collections import defaultdict, deque
 
 
@@ -31,6 +33,16 @@ class RateLimiter:
         self._docs: dict[str, deque] = defaultdict(deque)  # user_id -> deque[(ts, weight)]
         self._actions: dict[tuple[str, str], deque] = defaultdict(deque)
 
+    @staticmethod
+    def _shared():
+        from app.config import get_settings
+        from app.services.work.admission import durable_documents
+        return durable_documents(get_settings())
+
+    @staticmethod
+    def _rate_key(domain, user_id, action=None):
+        return json.dumps([domain, user_id, action], separators=(",", ":"))
+
     def check_action(
         self,
         user_id: str,
@@ -40,6 +52,15 @@ class RateLimiter:
         window_seconds: float = 60.0,
     ) -> None:
         """Admission limit for expensive interactive actions (search/chat/export)."""
+        if self._shared():
+            from app.db.session import session_scope
+            from app.services.work.coordination import consume_rate
+            window = math.ceil(window_seconds)
+            with session_scope() as session:
+                if not consume_rate(session, key=self._rate_key("action", user_id, action),
+                        limit=max_requests, window_seconds=window):
+                    raise RateLimitExceeded(f"Превышен лимит запросов для операции {action}", retry_after=window)
+            return
         now = time.time()
         key = (user_id, action)
         with self._lock:
@@ -63,6 +84,20 @@ class RateLimiter:
         window_seconds: float = 3600.0,
     ) -> None:
         """Проверяет и регистрирует массовую перегенерацию. Бросает RateLimitExceeded."""
+        if self._shared():
+            from app.db.session import session_scope
+            from app.services.work.coordination import consume_rate
+            if type(doc_count) is not int or not 1 <= doc_count <= 10000:
+                raise ValueError("Invalid bounded bulk rate weight")
+            window = math.ceil(window_seconds)
+            with session_scope() as session:
+                if not consume_rate(session, key=self._rate_key("bulk_ops", user_id),
+                        limit=max_ops_per_hour, window_seconds=window):
+                    raise RateLimitExceeded("Превышен лимит массовых перегенераций в час", retry_after=window)
+                if not consume_rate(session, key=self._rate_key("bulk_docs", user_id),
+                        limit=max_docs_per_hour, window_seconds=window, weight=doc_count):
+                    raise RateLimitExceeded("Превышен лимит документов на перегенерацию в час", retry_after=window)
+            return
         now = time.time()
         with self._lock:
             ops = self._ops[user_id]

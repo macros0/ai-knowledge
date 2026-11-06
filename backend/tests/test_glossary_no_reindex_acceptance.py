@@ -129,8 +129,12 @@ def test_metrics_count_fulltext_before_exact_filter_and_exclude_fixture_indexing
     after = measure(corpus, "PA30", True)
     # Active-generation lookup is one batch for all hits. It must follow the
     # visibility lock so publication cannot mix old points with new SQL text.
-    assert baseline["sql_selects"] == 7  # visibility, generations, canonical identities/tree, concepts, chunks
-    assert after["sql_selects"] == 8  # same batched reads plus glossary revision
+    assert baseline["sql_selects"] - baseline["sql_guard_selects"] == 7
+    assert after["sql_selects"] - after["sql_guard_selects"] == 8  # plus glossary revision
+    # Maintenance/storage/runtime-identity fences are included in the total,
+    # including the additional planning transaction when glossary is enabled.
+    assert baseline["sql_guard_selects"] == 7
+    assert after["sql_guard_selects"] == 14
     assert baseline["hydration_bytes"] == sum(
         2 * len(content[:300].encode("utf-8")) for content in corpus.records.values()
     )

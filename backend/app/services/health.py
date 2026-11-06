@@ -127,8 +127,14 @@ def _check_database() -> dict:
 
         from app.db.session import get_engine
 
-        with get_engine().connect() as conn:
-            conn.execute(text("SELECT 1"))
+        if get_settings().okf_deployment_schema == "replicas-v1":
+            from app.db.session import session_scope
+            from sqlalchemy import literal, select
+            with session_scope() as session:
+                session.scalar(select(literal(1)))
+        else:
+            with get_engine().connect() as conn:
+                conn.execute(text("SELECT 1"))
         return {"status": "ok"}
     except Exception as exc:
         return {"status": "down", "error": str(exc)[:120]}
@@ -251,10 +257,21 @@ def get_readiness() -> dict:
     Не кэшируется: вызывается docker healthcheck'ом раз в интервал, а проверки
     дешёвые (SELECT 1, список коллекций Qdrant, метаданные провайдера).
     """
-    deps = _run_checks({
+    checks = {
         "database": _check_database,
         "qdrant": _check_qdrant,
         "pdf_parser": _check_pdf_provider,
-    })
+    }
+    if get_settings().okf_deployment_schema == "replicas-v1":
+        checks["artifacts"] = _check_artifacts
+    deps = _run_checks(checks)
     ready = all(dep["status"] == "ok" for dep in deps.values())
     return {"status": "ready" if ready else "not_ready", "dependencies": deps}
+
+
+def _check_artifacts():
+    from app.services.work.runtime import probe_artifacts
+    try:
+        return {"status": "ok" if probe_artifacts(get_settings()) else "down"}
+    except Exception:
+        return {"status": "down", "error": "artifact storage unavailable"}

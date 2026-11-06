@@ -509,21 +509,22 @@ def test_mail_hydration_batch_query_count_does_not_grow_per_hit():
     from copy import deepcopy
     from sqlalchemy import event
     from app.db.session import get_engine
+    from tests.sql_observer import SQLReadLog
     hits = _mail_filter_records(chunk_source='root', concept_source='root')
     counts = []
     for count in (1, 100):
-        statements = []
-        def observe(*args):
-            statements.append(args[2])
+        observe = SQLReadLog()
         event.listen(get_engine(), 'before_cursor_execute', observe)
         try:
             kept, _ = load_visible_retrieval_hits([deepcopy(hits[0]) for _ in range(count)], mail_mode='exclude')
             assert len(kept) == count
         finally:
             event.remove(get_engine(), 'before_cursor_execute', observe)
-        counts.append(len(statements))
+        assert not observe.other_statements
+        assert len(observe.guard_selects) == 7
+        counts.append((len(observe.data_selects), len(observe.statements)))
     assert counts[1] == counts[0]
-    assert counts[0] <= 10
+    assert counts[0][0] <= 10
 
 
 def test_strict_database_failure_never_falls_back_to_payload(monkeypatch):

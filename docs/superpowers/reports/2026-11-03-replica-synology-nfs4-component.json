@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "status": "remote-synology-nfs4.0-large-write-passed-quota-gate-open",
+  "scope": "Native current-image RwxBlobStore on remote Synology NFSv4.0, two fresh independent non-root Docker processes on VM103. Not Kubernetes/CSI, ordinary application, restore, NFSv4.1, sustained outage or physical-HA qualification.",
+  "server": "10.10.1.5",
+  "export": "/volume1/Vitaliy",
+  "nfs_version": "4.0",
+  "runtime_revision": "cf74f8a37ffce1c64b13e56c3d0e003f6d4e34a8",
+  "image_id": "sha256:62fd1ec2ec7bad660fa506d71093b934aaf004b0acf7b151be073ddf29e2b1ce",
+  "write": {
+    "operation_id": "69389dd850c6414a887919b1cba2edbf",
+    "mode": "write",
+    "uid": 1000,
+    "observed_server_uid": 65534,
+    "observed_server_gid": 65534,
+    "nfs_version": "4.0",
+    "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-rwx-native-69389dd850c6414a887919b1cba2edbf",
+    "mount_root": "/",
+    "directory_inode": 1590,
+    "ref": {
+      "object_id": "7e850ea62cdf4f64bbf8d7a1805ab8a2",
+      "key": "objects/7e850ea62cdf4f64bbf8d7a1805ab8a2",
+      "sha256": "eb98e0238750a1b18eb9886d9c434449904ba4597bc8c1f4a1673184cb0fa737",
+      "size": 268435456,
+      "media_type": "application/octet-stream",
+      "store_id": "synology-69389dd850c6414a887919b1cba2edbf"
+    },
+    "write_seconds": 22.666866522980854,
+    "adapter_put_fsync_and_atomic_publish": true,
+    "temporary_files": 0
+  },
+  "cold_read": {
+    "operation_id": "69389dd850c6414a887919b1cba2edbf",
+    "mode": "read",
+    "uid": 1000,
+    "observed_server_uid": 65534,
+    "observed_server_gid": 65534,
+    "nfs_version": "4.0",
+    "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-rwx-native-69389dd850c6414a887919b1cba2edbf",
+    "mount_root": "/",
+    "directory_inode": 1590,
+    "cold_bytes": 268435456,
+    "cold_sha256": "eb98e0238750a1b18eb9886d9c434449904ba4597bc8c1f4a1673184cb0fa737",
+    "read_seconds": 55.43741220107768,
+    "range_verified": true,
+    "conflicting_put_refused": true,
+    "temporary_files": 0
+  },
+  "cleanup": {
+    "operation_id": "69389dd850c6414a887919b1cba2edbf",
+    "mode": "cleanup",
+    "uid": 1000,
+    "observed_server_uid": 65534,
+    "observed_server_gid": 65534,
+    "nfs_version": "4.0",
+    "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-rwx-native-69389dd850c6414a887919b1cba2edbf",
+    "mount_root": "/",
+    "directory_inode": 1590,
+    "own_object_deleted": true,
+    "own_directory_empty": true,
+    "other_share_files_touched": 0
+  },
+  "final_state": {
+    "owned_directory_removed": true,
+    "mountpoint_removed": true,
+    "mounted": false,
+    "live_owned_containers": 0,
+    "exited_containers": [
+      {
+        "name": "okf-syno-69389dd850c6-write",
+        "id": "09195973732a6df8c8b6bccf5d0921b7ec11c21b0ce2ccf3e6c06d4208d8c4df",
+        "running": false,
+        "exit_code": 0,
+        "oom": false
+      },
+      {
+        "name": "okf-syno-69389dd850c6-read",
+        "id": "22cfa2178fc87cb9d08742096f8f8e769b879a65440827f65e64ba458b6f75ed",
+        "running": false,
+        "exit_code": 0,
+        "oom": false
+      },
+      {
+        "name": "okf-syno-69389dd850c6-cleanup",
+        "id": "b2abfa6c32ec927dd74b5384868c76d27ad3b0d25b87055424edf48281bdfcb8",
+        "running": false,
+        "exit_code": 0,
+        "oom": false
+      }
+    ]
+  },
+  "preserved_initial_refusal": {
+    "error_type": "AssertionError",
+    "phase_before_error": "own-directory-create-intent",
+    "native_blob_puts": 0
+  },
+  "identity_mapping": {
+    "client_uid": 1000,
+    "observed_uid": 65534,
+    "observed_gid": 65534,
+    "cause": "65534 owner mapping observed; supplied rule screenshot selects no squash mapping. Numeric/name idmap cause not independently resolved; no production authorization claim.",
+    "guard": "owned random directory plus actual mount/inode/observed owner checks; no product restore guard changed"
+  },
+  "protocol_checks": {
+    "nfs4_0": "actual read-only mount and current-image write/read passed",
+    "nfs4_1": "Protocol not supported even after user DSM setting confirmation",
+    "nfs3": "local rpc-statd masked; not enabled or bypassed"
+  },
+  "other_share_files_touched": 0,
+  "share_root_cleared": false,
+  "sql_access": false,
+  "secrets_mounted": false,
+  "kubernetes_objects_changed": 0,
+  "quota_proof": {
+    "operation_id": "8b2762510ea649e7b58bcf66c1b51761",
+    "probe_executed": true,
+    "quota_gate_passed": false,
+    "receipt": {
+      "operation_id": "8b2762510ea649e7b58bcf66c1b51761",
+      "mode": "quota",
+      "uid": 1000,
+      "observed_server_uid": 65534,
+      "observed_server_gid": 65534,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-rwx-native-8b2762510ea649e7b58bcf66c1b51761",
+      "mount_root": "/",
+      "directory_inode": 1590,
+      "storage_full_observed": false,
+      "cap_reached_without_storage_full": true,
+      "max_input_bytes": 1074790400,
+      "source_bytes_consumed": 1074790400,
+      "elapsed_seconds": 91.63471869903151,
+      "baseline_intact": true,
+      "temporary_files": 0,
+      "own_directory_empty": true,
+      "other_share_files_touched": 0
+    },
+    "cleanup": {
+      "owned_directory_removed": true,
+      "mountpoint_removed": true,
+      "live_containers": 0
+    },
+    "container": {
+      "name": "okf-syno-8b2762510ea6-quota",
+      "id": "927af6f84d90c4190a25c53dcd40e4eea34debe71e51858945a2cd53e7521cbc",
+      "running": false,
+      "exit_code": 0,
+      "oom": false
+    },
+    "conclusion": "1025MiB accepted without storage-full refusal for clientUID1000. This does not test the quota of a different named NAS account. Stop at cap; use a dedicated user quota with its actual UID/GID next."
+  },
+  "certification": null,
+  "production_backup_schedule": "disabled",
+  "upstream": [
+    "https://kb.synology.com/index.php/en-us/DSM/help/DSM/AdminCenter/file_winmacnfs_nfs?version=7",
+    "https://kb.synology.com/en-global/DSM/help/DSM/AdminCenter/file_share_privilege_nfs",
+    "https://kb.synology.com/vi-vn/DSM/help/DSM/AdminCenter/file_share_create?version=6",
+    "https://kb.synology.com/en-us/UG/Storage_Best_Practices_PAS7700/8"
+  ],
+  "post_verification": {
+    "prior_roles": {
+      "api": {
+        "desired": 2,
+        "ready": 2
+      },
+      "frontend": {
+        "desired": 2,
+        "ready": 2
+      },
+      "model-stub": {
+        "desired": 1,
+        "ready": 1
+      },
+      "worker": {
+        "desired": 2,
+        "ready": 2
+      }
+    },
+    "synology_test_live_containers": 0,
+    "synology_mountpoints_remaining": 0,
+    "kubernetes_mutations": 0
+  },
+  "remaining_gates": [
+    "Dedicated NAS user quota enforced for its matching numeric UID/GID and actual storage-full/retry",
+    "Kubernetes/CSI and ordinary application end-to-end on this Synology recipe",
+    "Controlled sustained client outage without interrupting other NAS users",
+    "NFSv4.1 selected restore recipe remains separate and unqualified by this v4.0 test",
+    "Cross-node/failure domains and production qualification",
+    "Synchronous export confirmation before preservation or power-loss acceptance"
+  ],
+  "quota_configuration": {
+    "user_clarification": "Synology quota is attached to a user; no folder quota option in this UI",
+    "next_requirement": "Dedicated NAS account/name/UID/GID with1GiB quota on volume1 and access to the test share; no password required for AUTH_SYS",
+    "independent_nfs_vm_proposal": "deferred, not created"
+  },
+  "user_screenshot": {
+    "nfs_client": "10.10.1.52",
+    "access": "read/write",
+    "squash_selection": "no mapping",
+    "async_checkbox": true,
+    "applied_state_independently_verified": false,
+    "consequence": "No power-loss durability claim; request synchronous export for preservation tests"
+  },
+  "subsequent_evidence": "2026-11-03-replica-synology-userquota-csi.json; correct UID1031/GID100 quota failure/retry and two-Pod CSI contract subsequently passed; original UID1000 probe and open-gate checkpoint below remain historical"
+}

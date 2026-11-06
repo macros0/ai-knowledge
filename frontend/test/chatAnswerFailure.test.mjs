@@ -9,6 +9,7 @@ import { transformSync } from "next/dist/build/swc/index.js";
 import * as answerState from "../src/lib/chatAnswerState.mjs";
 import * as renderState from "../src/lib/chatRenderState.mjs";
 import * as assessment from "../src/lib/chatSourceAssessment.mjs";
+import * as scenarios from "../src/lib/chatScenarios.mjs";
 import * as composer from "../src/lib/chatComposer.mjs";
 import * as selection from "../src/lib/chatSourceSelection.mjs";
 import * as api from "../src/lib/api.js";
@@ -76,6 +77,7 @@ function panelHarness(chat, responseMode = "fast") {
     if (id === "react") return {...React, useState:initial=>[initial,stub], useRef:initial=>({current:initial}),
       useEffect:stub, useCallback:fn=>fn, useMemo:fn=>fn()};
     if (modules[id]) return modules[id];
+    if (id === "@/lib/chatScenarios.mjs") return scenarios;
     if (id === "./ChatComposer") return ChatComposer;
     if (id.startsWith("./") || id === "next/link") return stub;
     return require(id);

@@ -1,0 +1,35 @@
+{
+  "status": "independent-predecessor-backup-verified-source-held",
+  "format": 3,
+  "backup_id": "4f3e1677bcb94fd88d5a271a979edb6b",
+  "namespace": "replica-test-r4o2s20261102",
+  "namespace_uid": "4b40533d-56bc-4c8b-875c-7080b50361b3",
+  "schema_revision": "rpl04_runtime_identity",
+  "source_epoch": 0,
+  "source_fence": "owned S4 token plus fresh normal-stop/node/CRI observations",
+  "runtime_configmap": "predecessor-source-runtime",
+  "runtime_fingerprint": "4d3dd068f8866dbbbf126901d768cb2c4bf5d0897b2bbebb0bb6bfbb1c70faf8",
+  "images": {
+    "api": "sha256:6b20daf9922ac1a3e5b3b87311e805edba55707c85f0735b32d52222a8cc98f0",
+    "worker": "sha256:6b20daf9922ac1a3e5b3b87311e805edba55707c85f0735b32d52222a8cc98f0",
+    "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b"
+  },
+  "consistent_at": "2026-11-02T15:53:18.901801+00:00",
+  "counts": {
+    "documents": 2,
+    "concepts": 2,
+    "chunks": 2,
+    "work_items": 369,
+    "audit_events": 6,
+    "blobs": 10
+  },
+  "encrypted_objects": 12,
+  "plaintext_bytes": 1260646,
+  "archive": "C:\\Users\\alexey\\ai-workspace\\ai-knowledge\\tests\\tmp\\replica-recovery-backups\\predecessor-r4o2s20261102-format3",
+  "application_replicas": 0,
+  "source_storage_replicas": 3,
+  "source_fence_retained": true,
+  "production_schedule": "disabled",
+  "restore_verified": false,
+  "schema_update_verified": false
+}

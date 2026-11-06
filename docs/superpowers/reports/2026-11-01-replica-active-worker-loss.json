@@ -1,0 +1,73 @@
+{
+  "status": "owned-active-worker-loss-recovery-passed",
+  "scope": "single-node-managed-s3-synthetic-stub",
+  "namespace": "replica-test-r5o2t20261101",
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "installation_id": "55555555555555555555555555555555",
+  "runtime_fingerprint": "e307fe8dbd829e79e9291353994dfe245d28cf944b5b4674365fa0ba52bec83c",
+  "operation_id": "5963fb36d08840d995b5836c8055447e",
+  "source_epoch": 4,
+  "recovery_epoch": 5,
+  "crashed_worker_containers": 2,
+  "provider_active_after_crash": 1,
+  "provider_image_digest": "sha256:138688c8f2aab7cee19efcff389a9df802f7ea744796af381317dfaba5ec29c4",
+  "quarantine": {
+    "provider_finished": true,
+    "db_clock_past_original_expiry": true,
+    "original_reservation_retained": true,
+    "busy_independent_apis": 2,
+    "extra_provider_requests": 0
+  },
+  "reconciliation": {
+    "proof_sha256": "05e7bfae4970a1f6ff17678d0b9dde5717a550c84b079111c8e8de5e22b4f678",
+    "observation_sha256": "32f900b975fa9aa7f0969a47f62c6d4b8c14409a086c29bbbf89b948aade82c0",
+    "live_kubernetes_and_cri_guards": true,
+    "unreachable_nodes": 0,
+    "unknown_writers": 0,
+    "provider_pods": 0,
+    "provider_endpoints": 0,
+    "audit_confirmed": true,
+    "held_corpus_verified_before_release": true
+  },
+  "recovered_document": {
+    "id": "1f6943d9b0714aff",
+    "sha256": "47e4d273def4c32cc53a1ca5afbb37edf4b271142df22f0f045372e72c3ef5b2",
+    "status": "done",
+    "problem": null,
+    "active_publications": 1,
+    "original_fence": 1,
+    "recovered_fence": 3,
+    "search_download_sha256_verified": true
+  },
+  "preserved_existing_documents": 9,
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8",
+      "worker": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "production_schedule": "disabled",
+  "verified_at": "2026-11-01T16:54:39.402338+00:00",
+  "remaining_runtime_faults": [
+    "postgres_partition",
+    "stale_worker_return",
+    "resource_load_qualification"
+  ],
+  "limitations": [
+    "not node or host failover",
+    "not a real/external-provider recovery recipe",
+    "no production SLA"
+  ]
+}

@@ -1,0 +1,21 @@
+deployment: {environment: home, mode: distributed}
+application: {enabled: false}
+frontend: {replicas: 2}
+api: {replicas: 2}
+worker: {replicas: 2}
+resilience: {class: basic}
+secrets: {existingSecret: customer-runtime}
+trust: {existingConfigMap: customer-public-roots}
+runtime:
+  environment: production
+  identityConfigMap: customer-runtime-identity
+  config:
+    ARTIFACT_S3_ENDPOINT: https://objects.example.invalid
+    ARTIFACT_S3_BUCKET: replace-with-provisioned-bucket
+    ARTIFACT_S3_PREFIX: installation/
+replicaStorage:
+  postgres: {provider: external}
+  qdrant: {provider: external, url: "https://vectors.example.invalid:6333"}
+  artifacts: {provider: external, backend: s3, storeId: replace-with-unique-store-id}
+# No storage workload, credential or PVC is created by this application release.
+# Resolve private SQL/CA credentials and explicit externalEgress before bootstrap.

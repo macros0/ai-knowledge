@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "scope": "owned-basic-managed-s3-synthetic",
+  "status": "partition_report_reader_fix_verified",
+  "base_revision": "621326379fa8cad62b11cc651718f683a36616d1",
+  "source_sha256": {
+    "scripts/kubernetes/replica_runtime_run.py": "c17e02535e3e4cc29a75bbac4c0c195c32878fbbf6576f77407af4b6267cec0d",
+    "backend/tests/test_replica_runtime_run.py": "0db0bb8308b02bd784b15b9440943935a5f745a0eced63d04912c5af849571d2"
+  },
+  "contract": {
+    "confirmed_return_operation_field": "fault_operation_id",
+    "offline_recovery_operation_field": "operation_id",
+    "every_present_alias_must_match_owned_operation": true
+  },
+  "regression": {
+    "red_failures": 3,
+    "red_guard_passes": 6,
+    "real_final_adapter_with_all_member_shapes": true,
+    "confirmed_and_recovery_epoch_chains_tested": true
+  },
+  "windows": {
+    "passed": 125,
+    "skipped": 0,
+    "seconds": 176.63,
+    "log_sha256": "0e92304164810ff966d8c94148c6a9afb8c8088987c9e22708eb4676da7797b7"
+  },
+  "linux": {
+    "container_id": "f32a155c5d07d6e0929afed47567802be70cf258d494fd576772c11bc0c3a810",
+    "Running": false,
+    "ExitCode": 0,
+    "OOMKilled": false,
+    "StartedAt": "2026-11-02T07:17:52.632402515Z",
+    "FinishedAt": "2026-11-02T07:21:33.471220861Z",
+    "junit": {
+      "tests": 125,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "ff462eece3df4c9762bcd6a3ce3d8316fa3bcc9e6f1cf531137483e14ad8b63b"
+    },
+    "failed_cases": []
+  },
+  "root_gate": {
+    "passed": true,
+    "audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff_passed": true,
+    "log_sha256": "b6436f55dfff4f98ae98657189b279ee08fac3829cccabc0b705b833c7b59e8d"
+  },
+  "native_read_only_reader_probe": {
+    "read_only": true,
+    "original_verified_report_accepted": true,
+    "namespace_fingerprint_parent_and_recovery_binding_checked": true,
+    "old_parent_sha256": "bc8de3d933b9bb2b11302f018fe657ef3bc24919123eff7fd29258be3cba8b83",
+    "old_parent_unchanged": true,
+    "old_parent_still_failed": true,
+    "current_runtime_qualified": false
+  },
+  "old_parent": {
+    "execution_id": "44f60bfbfd634491826ebac7ce6a2949",
+    "completed_stages": 16,
+    "failed_stage": "partition.verify",
+    "physical_children_verified": true,
+    "qualified": false
+  },
+  "current_runtime_qualified": false,
+  "full_ci_passed": false,
+  "production_backup_schedule_enabled": false
+}

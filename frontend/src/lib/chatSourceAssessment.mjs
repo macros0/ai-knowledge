@@ -39,6 +39,8 @@ export function historyAssessmentMessage(message, sessionId) {
     requestSourceLocales: req.source_locales, requestIncludeUnknownLocale: req.include_unknown_source_locale,
     requestSourceLocale: req.include_unknown_source_locale ? "unknown" : req.source_locales?.[0] ?? "",
     requestLocale: req.locale, requestDense: req.dense, requestBm25: req.bm25,
+    scenario: metadata.scenario, scenarioExecution: metadata.scenario_execution,
+    requestScenarioId: req.scenario_id ?? metadata.scenario?.id,
     responseMode: req.response_mode ?? metadata.response_mode ?? metadata.answer_attempt?.mode};
 }
 
@@ -47,7 +49,7 @@ export function editAssessmentOptions(message) {
   return options;
 }
 export function selectedAssessmentOptions(message) {
-  return {...retryRequestOptions(message), responseMode: "full", requestAssessSources: false, requestSourceSelection: {
+  return {...retryRequestOptions(message), responseMode: message.responseMode === "scenario" ? "scenario" : "full", requestAssessSources: false, requestSourceSelection: {
     attempt_id: message.attemptId, indexes: [...(message.selectedSourceIndexes ?? [])],
   }};
 }

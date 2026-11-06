@@ -6,3 +6,40 @@ tests/artifacts/diagnostics/integration-20261001/*.json -text
 tests/artifacts/diagnostics/node-memory-integration-20261001/*.json -text
 
 tests/artifacts/diagnostics/merged-release-20261001/**/*.json -text
+
+# Generated PDF guides contain binary streams and must not be normalized as text.
+*.pdf binary
+
+# Keep this hashed rehearsal receipt byte-identical on Windows and Linux.
+docs/superpowers/reports/2026-11-04-replica-crossnode-vm103.json text eol=lf
+docs/superpowers/reports/2026-11-04-replica-s3-application-full.json text eol=lf
+docs/superpowers/reports/2026-11-04-replica-all-external-runtime-recovery.json text eol=lf
+docs/superpowers/reports/2026-11-04-replica-frontend-split.json text eol=lf
+
+# Preserve the exact published bytes of selected acceptance reports.
+docs/superpowers/reports/2026-11-02-replica-backup-key-recovery.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-02-replica-current-artifact-ci.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-02-replica-predecessor-schema-recovery.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-03-replica-compact-independent-restore.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-03-replica-rwx-application.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-03-replica-rwx-source-s3-restore.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-03-replica-rwx-target-restore.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-04-replica-synology-application-outage.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-04-replica-synology-mixed-runtime.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-04-replica-synology-source-s3-restore.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-05-frontend-native-acceptance.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-05-frontend-oidc-native-acceptance.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-05-replica-final-backend-ci.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-05-replica-provider-matrix-closure.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-05-replica-provider-matrix.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-05-replica-s4-diagnostic-regression.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-05-replica-synology-target-restore.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-06-replica-evidence-byte-custody.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-06-replica-final-completion-audit.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-06-replica-s4-final-backend-ci.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-06-replica-s4-rwx-native-closure.json -text whitespace=cr-at-eol
+docs/superpowers/reports/2026-11-06-replica-synology-target-closure.json -text whitespace=cr-at-eol
+deploy/kubernetes/replicas/support-matrix.json text eol=lf
+docs/superpowers/reports/2026-11-05-replica-gateway-platform.json text eol=lf
+docs/superpowers/reports/2026-11-05-frontend-oidc-http-ci.json text eol=lf
+docs/superpowers/reports/2026-11-02-replica-local-backup-alerts.json text eol=lf

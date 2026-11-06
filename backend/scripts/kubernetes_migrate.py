@@ -29,6 +29,8 @@ def profile_for(settings) -> dict:
 
 
 def main() -> int:
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("kubernetes_migrate")
     from app.config import get_settings
     from qdrant_client import QdrantClient
 

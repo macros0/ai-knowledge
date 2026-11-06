@@ -87,6 +87,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backup-dir", type=Path, required=True)
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("write_backup_manifest")
     backup_dir = args.backup_dir.resolve()
     totals_path = backup_dir / "totals.json"
     totals = json.loads(totals_path.read_text(encoding="utf-8"))

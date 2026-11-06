@@ -88,6 +88,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="Apply missing additive objects")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_glossary")
     result = migrate(get_engine(), apply=args.apply)
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     if any(result.values()):

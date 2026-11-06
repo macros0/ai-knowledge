@@ -76,7 +76,11 @@ jobs:
         # (SQLite во временном каталоге, Qdrant/LLM замоканы).
         # Порог — чуть ниже текущего значения: гейт ловит крупный непокрытый
         # кусок, а не колеблется на единицах строк.
-        run: python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
+        # Match lab CI: passing test directories are reclaimed before tmpfs fills.
+        # A green run still executes the complete suite and the same coverage gate.
+        run: |
+          df -h /dev/shm
+          python -m pytest -q --maxfail=1 --basetemp=/dev/shm/okf-backend-tests -o tmp_path_retention_policy=failed --cov=app --cov-report=term-missing --cov-fail-under=85
 
   diagnostics-windows:
     name: diagnostics (Windows locks and offline CLI)

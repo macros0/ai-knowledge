@@ -22,6 +22,7 @@ from app.services.processing_scope import (
     append_scope_audit,
 )
 from app.services.registry import get_registry
+from app.services.artifacts.original_scope import scoped_originals
 from app.services.parser_supervisor import inspect_attachments_supervised, parse_document_supervised
 from docparser import ParseContext, parse_document, blocks_to_markdown
 from docparser.attachment_inventory import inspect_attachment_inventory
@@ -71,6 +72,7 @@ def _utc(value):
     return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 
 
+@scoped_originals
 def confirm_processing_scope(
     doc_id, review_id, revision, request_id, *, actor, is_admin=False, similarity_token=None,
     edit_owner_id=None, edit_token=None
@@ -81,6 +83,15 @@ def confirm_processing_scope(
     if not doc or doc.get("deleted_at"):
         raise ProcessingScopeConflict("Документ недоступен.")
     with session_scope() as session:
+        from app.services.work.admission import durable_documents
+        if durable_documents(settings):
+            from app.db.models import DocumentWorkInput
+            accepted = session.scalar(select(DocumentWorkInput).where(DocumentWorkInput.scope_request_id == request_id))
+            if accepted is not None:
+                frozen = accepted.processing_scope_json or {}
+                if accepted.doc_id != doc_id or frozen.get("review_id") != review_id or frozen.get("review_revision") != revision:
+                    raise ProcessingScopeConflict("Этот идентификатор подтверждения уже использован.")
+                return ProcessingAdmissionResult("already_accepted", doc)
         prior = session.scalar(
             select(DocumentGeneration).where(DocumentGeneration.scope_request_id == request_id)
         )
@@ -128,7 +139,8 @@ def confirm_processing_scope(
         snapshot["confirmed_at"] = now.isoformat()
         consent = row.similarity_confirmation_json
     try:
-        path = settings.uploads_dir / (doc_id + Path(doc["filename"]).suffix.lower())
+        from app.services.artifacts.original import original_path
+        path = original_path(settings, doc_id, doc["filename"])
         with path.open("rb") as stream:
             if hashlib.file_digest(stream, "sha256").hexdigest() != snapshot["source_file_hash"]:
                 raise ProcessingScopeConflict("Исходный файл изменился. Обновите состав.")
@@ -213,6 +225,9 @@ def confirm_processing_scope(
                         },
                     )
             with session_scope() as session:
+                from app.services.work.admission import durable_documents, lock_document_intents, enqueue_existing_document
+                if durable_documents(settings):
+                    lock_document_intents(session, doc_id)
                 row = locked_review(session, doc_id, review_id, revision)
                 if row.validation_token != token:
                     raise ProcessingScopeConflict()
@@ -234,6 +249,11 @@ def confirm_processing_scope(
                 append_scope_audit(
                     session, doc_id, actor, "document_processing_scope_confirmed", row
                 )
+                if durable_documents(settings):
+                    enqueue_existing_document(settings, doc_id, "regenerate" if doc.get("has_published_version") else "process",
+                        is_admin=is_admin, processing_scope=snapshot, scope_request_id=request_id, session=session)
+            if durable_documents(settings):
+                return ProcessingAdmissionResult("accepted", registry.get(doc_id))
             pipeline = get_pipeline()
             if doc.get("has_published_version"):
                 pipeline.regenerate(
@@ -268,6 +288,7 @@ def confirm_processing_scope(
         raise
 
 
+@scoped_originals
 def prepare_regeneration_scope(doc_id, settings):
     """Return (immutable scope, requires user action) without occupying a worker."""
     from app.services.processing_scope import scope_for_generation, create_review
@@ -297,7 +318,8 @@ def prepare_regeneration_scope(doc_id, settings):
                 snapshot = scope_for_generation(session, doc_id, review.generation_id)
     if snapshot is not None or not settings.attachment_review_enabled:
         return snapshot, False
-    path = settings.uploads_dir / (doc_id + Path(doc["filename"]).suffix.lower())
+    from app.services.artifacts.original import original_path
+    path = original_path(settings, doc_id, doc["filename"])
     with TemporaryDirectory(prefix="scope-regenerate-", dir=settings.uploads_dir) as folder:
         inventory, selection = prepare_upload_scope(
             path, doc["filename"], settings, attachments_dir=Path(folder)
@@ -318,6 +340,8 @@ def prepare_regeneration_scope(doc_id, settings):
             target = processing_review_paths(settings, doc_id, review.id)
             target.mkdir(parents=True, exist_ok=False)
             shutil.copytree(folder, target / "attachments")
+            from app.services.artifacts.review_files import seal_review_files
+            seal_review_files(session, settings, review)
             if not doc.get("has_published_version"):
                 session.get(Document, doc_id).status = "awaiting_attachments"
     return None, True

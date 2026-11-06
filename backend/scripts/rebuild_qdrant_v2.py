@@ -124,6 +124,8 @@ def main() -> None:
     parser.add_argument("--concepts-only", action="store_true", help="Только концепты (без чанков)")
     parser.add_argument("--parity", action="store_true", help="Сверка точек со старой коллекцией")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("rebuild_qdrant_v2")
 
     if args.parity:
         parity()

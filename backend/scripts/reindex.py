@@ -29,8 +29,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Пересобрать коллекцию Qdrant из PostgreSQL.")
     parser.add_argument("--concepts-only", action="store_true", help="Только концепты (без чанков)")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("reindex")
 
     settings = get_settings()
+    from app.services.artifacts.control import enforce_runtime
+    enforce_runtime(settings)
 
     vs = VectorStore()
     if vs.client.collection_exists(vs.collection):

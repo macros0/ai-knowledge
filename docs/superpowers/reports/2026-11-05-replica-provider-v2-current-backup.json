@@ -1,0 +1,30 @@
+{
+  "status": "independent-backup-verified",
+  "format": 3,
+  "backup_id": "2dd5a96687b442a084bff581651b51a7",
+  "archive": "C:\\Users\\alexey\\ai-workspace\\ai-knowledge\\tests\\tmp\\replica-recovery-backups\\provider-current-adc3c6d11044",
+  "namespace": "replica-test-pfv220261105",
+  "source_epoch": 4,
+  "runtime_configmap": "replica-image-9a88821f01aa-runtime",
+  "runtime_fingerprint": "7efcb6125d2e697938d9f6ca50a5a7e2d2221024a205afc6a14394b7d770d4d7",
+  "consistent_at": "2026-11-05T09:35:37.056246+00:00",
+  "counts": {
+    "documents": 3,
+    "concepts": 3,
+    "chunks": 3,
+    "work_items": 382,
+    "audit_events": 20,
+    "blobs": 15
+  },
+  "encrypted_objects": 17,
+  "physical_stop_observation": {
+    "retired_processes": 0,
+    "unknown_processes": 0,
+    "storage_processes": 3,
+    "physical_observation_sha256": "19b44813d0c0362167e50b44613bb0adb7a49e90ea498625215e8aa823c0a824",
+    "observed_at": "2026-11-05T09:36:31.160683+00:00"
+  },
+  "plaintext_bytes": 1296049,
+  "production_schedule": "disabled",
+  "restore_verified": false
+}

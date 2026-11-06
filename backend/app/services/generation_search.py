@@ -1,12 +1,13 @@
 """Exclude unpublished/retired points before Qdrant ranking.
 
-Keep generation records until their points are removed. Canonical hydration
-checks the active pointer again: publication can race with a Qdrant request.
+Work-generation exclusion identity survives point cleanup and document purge.
+Canonical hydration checks the active pointer again: publication can race with
+a Qdrant request.
 """
 from qdrant_client.http import models as qm
 from sqlalchemy import or_, select
 
-from app.db.models import DocumentGeneration
+from app.db.models import DocumentGeneration, DeletedWorkGeneration
 from app.db.session import session_scope
 
 
@@ -21,7 +22,8 @@ def generation_exclusions() -> list:
                 DocumentGeneration.legacy_cleanup_pending.is_(True),
             ))
         ).all()
-    hidden = [generation_id for generation_id, _, phase, _ in rows if phase != "active"]
+        deleted = list(session.scalars(select(DeletedWorkGeneration.generation_id)))
+    hidden = deleted + [generation_id for generation_id, _, phase, _ in rows if phase != "active"]
     legacy = sorted({doc_id for _, doc_id, _, pending in rows if pending})
     conditions = []
     if hidden:

@@ -51,6 +51,8 @@ EXPECTED_ACTION_TYPES = {
     "document_restore",
     "document_bulk_restore",
     "document_auto_delete",
+    "answer_scenario_create", "answer_scenario_update", "answer_scenario_publish",
+    "answer_scenario_unpublish", "answer_scenario_copy", "answer_scenario_delete",
     "chat_history_view",
     "chat_history_auto_delete",
     "document_export",
@@ -90,6 +92,7 @@ EXPECTED_ACTION_TYPES = {
     "diagnostic_bundle_requested", "diagnostic_bundle_ready", "diagnostic_bundle_failed",
     "diagnostic_bundle_download_started", "diagnostic_bundle_deleted", "diagnostic_bundle_expired",
     "diagnostic_view", "diagnostic_browser_invited", "diagnostic_browser_joined", "diagnostic_browser_left",
+    "replica_maintenance_enter", "replica_maintenance_leave", "replica_model_reconcile", "replica_runtime_upgrade",
 }
 
 

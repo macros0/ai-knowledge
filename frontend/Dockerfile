@@ -20,7 +20,7 @@ ENV NEXT_PUBLIC_APP_REVISION=${OKF_BUILD_REVISION}
 ENV BACKEND_URL=http://backend:8000
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY tooling/eslint-root-glob ./tooling/eslint-root-glob
+COPY tooling ./tooling
 RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false npm ci
 COPY . .
 RUN npm run build

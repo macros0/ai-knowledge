@@ -273,6 +273,8 @@ def main() -> int:
     mode.add_argument("--dry-run", action="store_true")
     parser.add_argument("--backup-file", type=Path)
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_glossary_identities")
     plan = json.loads(args.plan_file.read_text(encoding="utf-8"))
     if args.prepare:
         result = _set_ready(False, expected_revision=plan.get("expected_revision"))

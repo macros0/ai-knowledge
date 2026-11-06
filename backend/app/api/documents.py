@@ -3,12 +3,15 @@
 
 """Роуты загрузки и управления документами."""
 import json
+import hashlib
 import mimetypes
 import re
+from contextlib import contextmanager, suppress
 from tempfile import TemporaryDirectory
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Annotated, Literal
+from uuid import uuid4
 
 from sqlalchemy import func, or_, select
 
@@ -154,6 +157,49 @@ def _parse_source_locales(raw: str | None) -> list[str] | None:
     return codes or None
 
 
+def _prepare_upload_receipt(request, user, file, dest, size, tags, development_id, canonical_locale, allow_similar):
+    request.state.artifact_receipt = None
+    if not get_settings().artifact_uploads_enabled:
+        return
+    key = request.headers.get("idempotency-key")
+    if key is None:
+        return
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", key):
+        raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Некорректный ключ загрузки")
+    values = {"sha256": sha256_file(dest), "size": size, "filename": file.filename or "unknown",
+              "content_type": file.content_type or "", "tags": sorted(normalize_tags(tags)),
+              "development_id": development_id, "allow_similar": allow_similar,
+              "canonical_locale": canonical_locale or request_locale(request, fallback="und")}
+    request.state.artifact_receipt = {
+        "actor_id": hashlib.sha256(user.user_id.encode()).hexdigest(),
+        "idempotency_key": hashlib.sha256(key.encode()).hexdigest(),
+        "request_fingerprint": hashlib.sha256(json.dumps(values, sort_keys=True, ensure_ascii=True,
+                                                        separators=(",", ":")).encode()).hexdigest(),
+    }
+
+
+def _replay_upload(request):
+    receipt = getattr(request.state, "artifact_receipt", None)
+    if receipt is None:
+        return None
+    from app.db.models import UploadReceipt
+    with session_scope() as session:
+        row = session.get(UploadReceipt, {key: receipt[key] for key in ("actor_id", "idempotency_key")})
+        if row is None:
+            return None
+        if row.request_fingerprint != receipt["request_fingerprint"]:
+            raise ApiError(status_code=409, code="upload_idempotency_conflict", detail="Ключ уже использован для другой загрузки")
+        lock_generation_read(session, [row.document_id])
+        doc = session.get(Document, row.document_id)
+        if doc is None or doc.deleted_at is not None:
+            raise ApiError(status_code=410, code="upload_document_gone", detail="Загруженный документ удалён")
+        from app.services.registry import _document_dicts
+        result = _document_dicts(session, [doc])[0]
+    if result["status"] == "awaiting_attachments":
+        return JSONResponse(status_code=202, content=DocumentOut.model_validate(result).model_dump(mode="json"))
+    return result
+
+
 @router.post("", response_model=DocumentOut)
 def upload_document(
     file: UploadFile,
@@ -221,6 +267,16 @@ def upload_document(
         )
 
     # Дедупликация, уровень 1: точное совпадение байтов (SHA-256 файла).
+    try:
+        _prepare_upload_receipt(request, user, file, _dest, size, tags, development_id, canonical_locale, allow_similar)
+        with upload_admission_lock():
+            replay = _replay_upload(request)
+        if replay is not None:
+            _dest.unlink(missing_ok=True)
+            return replay
+    except Exception:
+        _dest.unlink(missing_ok=True)
+        raise
     settings = get_settings()
     file_hash = None
     preview_markdown = None
@@ -234,6 +290,13 @@ def upload_document(
             raise
         existing = file_hash_exists(file_hash)
         if existing is not None:
+            # Another replica may commit this exact receipt after our first
+            # lookup, but before this unlocked duplicate probe observes it.
+            with upload_admission_lock():
+                replay = _replay_upload(request)
+            if replay is not None:
+                _dest.unlink(missing_ok=True)
+                return replay
             _dest.unlink(missing_ok=True)
             return JSONResponse(
                 status_code=409,
@@ -265,11 +328,11 @@ def upload_document(
                             doc_id=doc_id,dest=_dest,size=size,file_hash=inventory.source_file_hash,
                             preview_markdown=None,preview_mail_fingerprint=None,trash_twin=trash_twin,
                             processing_inventory=inventory,processing_attempt=Path(scope_dir))
-                    if _registry.get(doc_id) is None:
+                    if (settings.okf_deployment_schema == "replicas-v1" and settings.app_role == "api") or _registry.get(doc_id) is None:
                         _dest.unlink(missing_ok=True)
                     return result
         except Exception as exc:
-            if _registry.get(doc_id) is None:
+            if (settings.okf_deployment_schema == "replicas-v1" and settings.app_role == "api") or _registry.get(doc_id) is None:
                 _dest.unlink(missing_ok=True)
             from docparser.attachment_inventory import InvalidRootDocument
             if isinstance(exc,InvalidRootDocument):
@@ -376,7 +439,7 @@ def upload_document(
                 processing_scope=processing_scope,
             )
     finally:
-        if _registry.get(doc_id) is None:
+        if (settings.okf_deployment_schema == "replicas-v1" and settings.app_role == "api") or _registry.get(doc_id) is None:
             _dest.unlink(missing_ok=True)
 
 
@@ -384,6 +447,9 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
                   user, doc_id, dest, size, file_hash, preview_markdown, preview_mail_fingerprint, trash_twin,
                   processing_scope=None,processing_inventory=None,processing_attempt=None):
     """Called under upload_admission_lock; publish signature before releasing it."""
+    replay = _replay_upload(request)
+    if replay is not None:
+        return replay
     duplicates = {"level2": [], "level3": []}
     # Another upload may have finished parsing while this request was parsing.
     if file_hash:
@@ -413,29 +479,81 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
     origin_locale = canonical_locale or request_locale(request, fallback="und")
     _tag_registry.add(user_tags, canonical_locale=origin_locale)
     scope_create_options={}
+    from app.services.work.admission import durable_documents
+    durable_work = durable_documents(get_settings())
+    bound_development_id: int | None = None
+    if durable_work:
+        scope_create_options["work_is_admin"] = "admin" in user.roles
+        scope_create_options["initial_processing_scope"] = processing_scope
+        if development_id is not None:
+            if get_development_registry().get(development_id) is None:
+                raise ApiError(status_code=422, code=errors.DEVELOPMENT_NOT_FOUND, detail="Разработка не найдена")
+            scope_create_options["initial_development"] = {
+                "development_id": development_id, "development_confidence": 1.0,
+                "development_confirmed_by": user.username, "development_suggestion": None}
+            bound_development_id = development_id
+        else:
+            initial_detection = detect("", file.filename or "unknown", doc_id)
+            if initial_detection.confidence is not None:
+                fields = {"development_confidence": initial_detection.confidence, "development_suggestion": initial_detection.suggestion}
+                if initial_detection.development_id is not None:
+                    fields["development_id"] = initial_detection.development_id
+                scope_create_options["initial_development"] = fields
+    artifact_ref = None
+    if get_settings().artifact_uploads_enabled:
+        from app.services.artifacts import get_blob_store
+        from app.services.artifacts.contract import BlobUnavailable
+        try:
+            with dest.open("rb") as source:
+                artifact_ref = get_blob_store(get_settings()).put(source, object_id=uuid4().hex,
+                    media_type="application/octet-stream")
+        except BlobUnavailable:
+            raise ApiError(status_code=503, code="artifact_unavailable", detail="Хранилище файлов недоступно") from None
+        except DomainError as exc:
+            raise errors.domain_error(exc, 507 if exc.code == errors.STORAGE_FULL else 503) from exc
+        scope_create_options.update(artifact_ref=artifact_ref,
+            upload_receipt=getattr(request.state, "artifact_receipt", None), file_hash=file_hash)
     if processing_inventory is not None:
         from app.services.processing_scope import assessment_limits
-        scope_create_options={'processing_inventory':processing_inventory,
+        scope_create_options.update({'processing_inventory':processing_inventory,
                               'processing_limits':assessment_limits(get_settings()),
                               'processing_artifacts_dir':processing_attempt,
-                              'processing_settings':get_settings()}
-    doc = _registry.create(
-        doc_id,
-        file.filename or "unknown",
-        file.content_type or "",
-        size,
-        tags=user_tags,
-        canonical_locale=origin_locale,
-        uploaded_by=user.username,
-        **scope_create_options,
-    )
-    if file_hash:
+                              'processing_settings':get_settings()})
+    audit_value = {"filename": file.filename or "unknown", "size": size}
+    if bound_development_id is not None:
+        audit_value["development_id"] = bound_development_id
+    if trash_twin is not None:
+        audit_value["duplicate_in_trash"] = {
+            "id": trash_twin.get("id"), "filename": trash_twin.get("filename"),
+        }
+    if artifact_ref is not None:
+        from app.services.diagnostics.context import current_context
+        scope_create_options["admission_audit"] = {
+            "user_id": user.user_id, "username": user.username,
+            "new_value": audit_value, "ip_address": _client_ip(request),
+            "event_context": audit.AuditContext(actor_type="user",
+                outcome=audit.CATALOG[audit.DOCUMENT_UPLOAD].outcome,
+                request_id=current_context().request_id),
+        }
+    try:
+        doc = _registry.create(
+            doc_id,
+            file.filename or "unknown",
+            file.content_type or "",
+            size,
+            tags=user_tags,
+            canonical_locale=origin_locale,
+            uploaded_by=user.username,
+            **scope_create_options,
+        )
+    except DomainError as exc:
+        raise errors.domain_error(exc, 503 if exc.code == errors.QUEUE_OVERLOADED else 409) from exc
+    if file_hash and artifact_ref is None:
         set_file_hash(doc_id, file_hash)
     # Явная привязка разработки из контекста загрузки (Этап 4a.1, «поиск →
     # загрузка»): важнее автоопределения — при заданном development_id regex/
     # LLM-детект не запускается, dev_tags проставит пайплайн в _finalize.
-    bound_development_id: int | None = None
-    if development_id is not None:
+    if development_id is not None and not durable_work:
         if get_development_registry().get(development_id) is None:
             raise ApiError(
             status_code=422,
@@ -453,7 +571,7 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
         bound_development_id = development_id
     # Автоопределение номера разработки по имени файла (regex, без LLM) до
     # запуска пайплайна. LLM-детекция с титульного листа — позже, в pipeline.
-    if bound_development_id is None:
+    if bound_development_id is None and not durable_work:
         detection = detect("", file.filename or "unknown", doc_id)
         if detection.confidence is not None:
             attach_development(doc_id, detection)
@@ -462,7 +580,7 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
         if preview_markdown is not None:
             index_document(doc_id, preview_markdown, preview_mail_fingerprint)
             doc = _registry.get(doc_id) or doc
-        if processing_inventory is None:
+        if processing_inventory is None and not durable_work:
             get_pipeline().ingest(
                 doc_id,
                 get_settings().uploads_dir / f"{doc_id}{Path(file.filename or '').suffix.lower()}",
@@ -474,8 +592,12 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
     except Exception as exc:
         # Admission has not started a worker, so there are no vectors to delete.
         # Also undo badges already published by index_document on its neighbors.
-        _registry.delete(doc_id)
-        dest.unlink(missing_ok=True)
+        if artifact_ref is None:
+            _registry.delete(doc_id)
+            dest.unlink(missing_ok=True)
+        else:
+            # A committed receipt cannot be undone after a worker may have run.
+            _registry.update(doc_id, status="paused", error="Не удалось запустить обработку", error_code="upload_admission_failed")
         neighbor_ids = {item["doc"]["id"] for group in duplicates.values() for item in group}
         refresh_duplicate_flags(doc_id, neighbor_ids)
         if isinstance(exc, DomainError):
@@ -494,14 +616,15 @@ def _admit_upload(*, file, request, tags, development_id, canonical_locale, allo
             "id": trash_twin.get("id"),
             "filename": trash_twin.get("filename"),
         }
-    audit.record(
-        user,
-        audit.DOCUMENT_UPLOAD,
-        audit.TARGET_DOCUMENT,
-        target_id=doc_id,
-        new_value=audit_value,
-        ip_address=_client_ip(request),
-    )
+    if artifact_ref is None:
+        audit.record(
+            user,
+            audit.DOCUMENT_UPLOAD,
+            audit.TARGET_DOCUMENT,
+            target_id=doc_id,
+            new_value=audit_value,
+            ip_address=_client_ip(request),
+        )
     if trash_twin is not None:
         doc = dict(doc)
         doc["duplicate_in_trash"] = trash_twin
@@ -686,7 +809,7 @@ def download_document_source(
 ):
     """Скачивает только зарегистрированный байтовый артефакт источника."""
     doc = _require_active_document(doc_id)
-    with session_scope() as session:
+    with _artifact_read_session() as session:
         lock_generation_read(session, [doc_id])
         doc = session.get(Document, doc_id)
         if doc is None or doc.deleted_at is not None:
@@ -694,6 +817,16 @@ def download_document_source(
         source = session.get(DocumentSource, {"doc_id": doc_id, "source_id": source_id})
         if source is None:
             raise ApiError(status_code=404, code=errors.DOCUMENT_NOT_FOUND, detail="Источник не найден")
+        registered = _source_byte_source(session, doc.id, source)
+        if registered is not None and registered.source_id == "root":
+            response = _bound_original_response(session, doc)
+            if response is not None:
+                return response
+        elif registered is not None:
+            response = _bound_generation_response(session, doc, registered.saved_path,
+                filename=registered.display_name or doc.filename)
+            if response is not None:
+                return response
         target, download_name = _source_download_path(session, doc, source)
         if target is None or not target.is_file():
             raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл источника не найден")
@@ -1330,6 +1463,92 @@ def bulk_tags(
     return result
 
 
+@contextmanager
+def _artifact_read_session():
+    responses = []
+    try:
+        with session_scope() as session:
+            session.info["artifact_download_responses"] = responses
+            yield session
+    except BaseException:
+        for response in responses:
+            with suppress(OSError):
+                response.close()
+        raise
+
+
+def _bound_original_response(session, doc):
+    from app.services.artifacts.repository import resolve_blob
+    ref = resolve_blob(session, owner_type="original", owner_id=doc.id, generation_id=None, logical_name="original")
+    if ref is None:
+        return None
+    return _blob_ref_response(session, ref, filename=doc.filename)
+
+
+def _bound_generation_response(session, doc, saved_path, *, filename, media_type="application/octet-stream", headers=None):
+    from app.db.models import DocumentGeneration
+    from app.services.artifacts.repository import resolve_blob
+    from app.services.artifacts.publication import _logical
+    from app.services.generation_artifacts import GenerationIntegrityError
+    state = session.get(DocumentGenerationState, doc.id)
+    active = session.get(DocumentGeneration, state.active_generation_id) if state and state.active_generation_id else None
+    if state and state.active_generation_id and active is None:
+        raise ApiError(status_code=503, code="artifact_unavailable", detail="Версия источника недоступна")
+    if active is None and (doc.legacy_artifacts_version != 1 or doc.legacy_artifacts_id is not None):
+        from app.services.artifacts.legacy import snapshot_ref
+        try:
+            ref = snapshot_ref(session, doc.id, None, saved_path)
+        except (ValueError, OSError):
+            raise ApiError(status_code=503, code="artifact_unavailable", detail="Не удалось проверить файл источника") from None
+        if ref is None:
+            raise ApiError(status_code=503, code="artifact_unavailable", detail="Файл источника не перенесён")
+        return _blob_ref_response(session, ref, filename=filename, media_type=media_type, headers=headers)
+    if active is None or active.publication_version == 1:
+        return None
+    try:
+        prefix = f"generations/{active.id}/"
+        if (active.doc_id != doc.id or active.phase != "active" or active.publication_version != 2
+                or not isinstance(saved_path, str) or not saved_path.startswith(prefix)):
+            raise GenerationIntegrityError()
+        name = _logical(saved_path[len(prefix):])
+        if not name.startswith("attachments/"):
+            raise GenerationIntegrityError()
+        manifest = resolve_blob(session, owner_type="generation", owner_id=doc.id,
+            generation_id=active.id, logical_name="publication.json")
+        ref = resolve_blob(session, owner_type="generation", owner_id=doc.id, generation_id=active.id, logical_name=name)
+        if (manifest is None or manifest.sha256 != active.publication_hash or ref is None
+                or ref.store_id != manifest.store_id):
+            raise GenerationIntegrityError()
+    except (ValueError, OSError):
+        raise ApiError(status_code=503, code="artifact_unavailable", detail="Не удалось проверить файл источника") from None
+    return _blob_ref_response(session, ref, filename=filename, media_type=media_type, headers=headers)
+
+
+def _blob_ref_response(session, ref, *, filename, media_type="application/octet-stream", headers=None):
+    from app.services.artifacts import get_blob_store
+    from app.services.artifacts.leased import LeasedBlobStore
+    from app.services.artifacts.contract import BlobNotFound, BlobUnavailable, BlobIntegrityError
+    from app.services.artifact_response import OpenedBlobResponse
+    settings = get_settings()
+    # Authorization/ref resolution is a completed snapshot before independent
+    # lease writes. Holding a SQLite read transaction here would block them.
+    session.commit()
+    try:
+        response = OpenedBlobResponse(store=LeasedBlobStore(get_blob_store(settings)), ref=ref,
+            scratch_root=settings.artifact_scratch_root or settings.data_dir / "artifact-scratch",
+            filename=filename, media_type=media_type, headers={"X-Content-Type-Options": "nosniff", **(headers or {})})
+        session.info.setdefault("artifact_download_responses", []).append(response)
+        return response
+    except BlobNotFound:
+        raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Исходный файл не найден") from None
+    except (BlobUnavailable, BlobIntegrityError):
+        raise ApiError(status_code=503, code="artifact_unavailable", detail="Не удалось проверить исходный файл") from None
+    except DomainError as exc:
+        raise errors.domain_error(exc, 507 if exc.code == errors.STORAGE_FULL else 503) from exc
+    except OSError:
+        raise ApiError(status_code=503, code="artifact_unavailable", detail="Локальное хранилище недоступно") from None
+
+
 @router.get("/{doc_id}/download")
 def download_document(doc_id: str, user: User = Depends(require_user)):
     """Скачивает активный root-файл по тем же правилам, что source download."""
@@ -1340,6 +1559,14 @@ def download_document(doc_id: str, user: User = Depends(require_user)):
             detail="Документ не найден",
         )
     doc = _require_active_document(doc_id)
+    with _artifact_read_session() as session:
+        lock_generation_read(session, [doc_id])
+        row = session.get(Document, doc_id)
+        if row is None or row.deleted_at is not None:
+            raise ApiError(status_code=404, code=errors.DOCUMENT_NOT_FOUND, detail="Документ не найден")
+        response = _bound_original_response(session, row)
+        if response is not None:
+            return response
     matches = sorted(get_settings().uploads_dir.glob(f"{doc_id}.*"))
     if not matches:
         raise ApiError(
@@ -1507,7 +1734,7 @@ def get_okf_attachment(doc_id: str, filename: str):
     # Этап 2b: бинарники вложений — в uploads/<doc_id>/attachments/ (байты-источники
     # в FS, описанные в okf_attachments), а не в производном бандле.
     attach_dir = (get_settings().uploads_dir / doc_id / "attachments").resolve()
-    with session_scope() as session:
+    with _artifact_read_session() as session:
         lock_generation_read(session, [doc_id])
         # Корзина закрывает и legacy-путь без активной генерации: байты вложений
         # лежат в uploads/ до физической очистки.
@@ -1525,6 +1752,11 @@ def get_okf_attachment(doc_id: str, filename: str):
             ))
             if registered is None:
                 raise ApiError(status_code=404, code=errors.FILE_NOT_FOUND, detail="Файл не найден")
+            response = _bound_generation_response(session, document, saved_path, filename=filename,
+                media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                headers={"Content-Disposition": "attachment"})
+            if response is not None:
+                return response
             attach_dir = generation_paths(get_settings(), doc_id, active_id).attachments.resolve()
         filepath = (attach_dir / filename).resolve()
         if not filepath.is_relative_to(attach_dir) or not filepath.is_file():
@@ -1565,6 +1797,7 @@ def get_chunk(doc_id: str, chunk_index: int):
     try:
         staging = StagingStore(doc_id)
         if staging.exists():
+            staging.load()  # Rebuild disposable chunk files from committed checkpoints.
             staging_path = staging.dir / f"chunk_{chunk_index:02d}.md"
             if staging_path.is_file():
                 return Response(content=staging_path.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
@@ -1654,6 +1887,7 @@ def get_document_fulltext(doc_id: str):
 # Статусы ошибок ленивого построения текста при чтении. Прочие доменные коды
 # (например, file_not_found) сохраняют прежний контракт — 400.
 _CHUNK_READ_ERROR_STATUS = {
+    errors.LEGACY_CORPUS_ADOPTION_REQUIRED: 409,
     errors.RATE_LIMITED: 429,
     errors.PARSER_TIMEOUT: 422,
     errors.PARSER_RESOURCE_LIMIT: 422,
@@ -1714,32 +1948,35 @@ def _source_sort_key(row: DocumentSource) -> tuple:
     return tuple(segment(value) for value in row.source_id.split("/"))
 
 
-def _source_download_path(
-    session, document: Document, source: DocumentSource
-) -> tuple[Path | None, str | None]:
-    """Разрешает зарегистрированный файл и его честное имя контейнера."""
+def _source_byte_source(session, doc_id, source):
+    """Resolve registered ancestry without consulting worker-local files."""
     seen: set[str] = set()
     current = source
-    document_root = (get_settings().uploads_dir / document.id).resolve()
     while current is not None and current.source_id not in seen:
         seen.add(current.source_id)
-        if current.source_id == "root":
-            suffix = Path(document.filename).suffix.lower()
-            return get_settings().uploads_dir / f"{document.id}{suffix}", document.filename
-        if current.saved_path:
-            candidate = (document_root / current.saved_path).resolve()
-            try:
-                candidate.relative_to(document_root)
-            except ValueError:
-                return None, None
-            return candidate, current.display_name
+        if current.source_id == "root" or current.saved_path:
+            return current
         if not current.container_source_id:
-            return None, None
+            return None
         current = session.get(
             DocumentSource,
-            {"doc_id": document.id, "source_id": current.container_source_id},
+            {"doc_id": doc_id, "source_id": current.container_source_id},
         )
-    return None, None
+    return None
+
+
+def _source_download_path(session, document: Document, source: DocumentSource) -> tuple[Path | None, str | None]:
+    """Resolve only the legacy local path after metadata-based blob resolution."""
+    current = _source_byte_source(session, document.id, source)
+    if current is None:
+        return None, None
+    if current.source_id == "root":
+        return get_settings().uploads_dir / f"{document.id}{Path(document.filename).suffix.lower()}", document.filename
+    document_root = (get_settings().uploads_dir / document.id).resolve()
+    candidate = (document_root / current.saved_path).resolve()
+    if not candidate.is_relative_to(document_root):
+        return None, None
+    return candidate, current.display_name
 
 
 def _client_ip(request: Request) -> str | None:

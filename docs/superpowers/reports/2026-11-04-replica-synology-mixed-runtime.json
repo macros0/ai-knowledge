@@ -1,0 +1,1211 @@
+{
+  "schema_version": 1,
+  "status": "selected-mixed-nas-runtime-and-user-quota-recovery-tested",
+  "scope": "Synthetic home/basic training recipe; managed PG17/Qdrant plus external Synology NFSv4.0, stub models and simulation auth.",
+  "source_revision": "96931d1cfa05dc7f3e685305016f792ad7a9ce50",
+  "current_runtime": {
+    "image": "okf-backend:replicas-96931d1-synr-2cbebc13dedf",
+    "docker_image_id": "sha256:5de05c5b9e5e302453b854048aa51a51f65b81cb945385a0a4819ba28b22bcd4",
+    "kind_image_id": "sha256:56c858bbebf1768827709a14b0029df4d6d851ddafe7d2daa2289588f05f4a37",
+    "build_fingerprint": "e0ddf48b48e9dba045562aa7f9a6a34509978c200e59009e01046a8c73502d33",
+    "source_identity": "1210b27d82a51dccf9d784ae74e56c97de283b39a1242bb9651aaa064070a14f",
+    "git_source_files": 574,
+    "all_app_files": 579,
+    "package_count": 117,
+    "packages_exact": true,
+    "changed_app_files": [
+      "app/services/work/runtime.py"
+    ],
+    "frontend": "okf-frontend:replicas-a95d589-current-47c3fb550152"
+  },
+  "linux_ci": {
+    "operation_id": "2cbebc13dedf408b8f2b06ec090df26d",
+    "tests": 6693,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 221,
+    "sha256": "2b9328aa904990e9904a042c2a7310d2c83e3a514a02c45e3c9fe4436a4991e9",
+    "passed": 6472,
+    "coverage": 87.68384442272283,
+    "source_files": 2443,
+    "source_unchanged": true,
+    "previous_cases_retained": true,
+    "added_cases": 6,
+    "optional_skip_ids_unchanged": true,
+    "case_ids_sha256": "f0cbeabad6b15ea09fc12aecad00d1ee75d4fe10e09f38a726e09401d308fd65"
+  },
+  "project_checks": {
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_optional_skips": 1,
+    "ruff": "passed",
+    "eslint": "passed with existing warnings"
+  },
+  "provider_inventory": {
+    "model": "DS211",
+    "dsm": "6.2.4-25556 Update 8",
+    "source": "user-confirmed",
+    "server": "10.10.1.5",
+    "nfs": "4.0"
+  },
+  "asynchronous_export_state": "disabled; user confirmed",
+  "nas_power_loss_qualification": false,
+  "identity": {
+    "version": 1,
+    "deployment_schema": "replicas-v1",
+    "installation_id": "cf6444f6b99944438c4ed295292c0dbe",
+    "artifact_backend": "rwx",
+    "artifact_store_id": "synr-5f4f1a2106b340c2",
+    "storage_receipt_digest": "sha256:cdab0a79774a7b1c65477a6807cfc0d4db53dfbb15d0962ac90284695195ef2f",
+    "runtime_fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7"
+  },
+  "mixed_operation": {
+    "operation_id": "5f4f1a2106b340c2b42e6d86e9a4cd76",
+    "namespace": "replica-test-synr20261104",
+    "namespace_uid": "2b02a536-f2c2-4f50-a79d-319bf6a7e545",
+    "initial_objects": 32,
+    "final_owned_objects": 36,
+    "artifact_claim": {
+      "pvc_uid": "07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+      "pv_name": "pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+      "pv_uid": "ce1841b7-b8b1-4bda-b7f1-c1c62d8fe139",
+      "csi": {
+        "driver": "okf-training-nfs.csi.k8s.io",
+        "volumeAttributes": {
+          "csi.storage.k8s.io/pv/name": "pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+          "csi.storage.k8s.io/pvc/name": "artifacts",
+          "csi.storage.k8s.io/pvc/namespace": "replica-test-synr20261104",
+          "mountPermissions": "0770",
+          "onDelete": "retain",
+          "server": "10.10.1.5",
+          "share": "/volume1/Vitaliy",
+          "storage.kubernetes.io/csiProvisionerIdentity": "1793713974150-3326-okf-training-nfs.csi.k8s.io",
+          "subDir": "okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f"
+        },
+        "volumeHandle": "10.10.1.5#volume1/Vitaliy#okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f#pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f#retain"
+      },
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f"
+    },
+    "artifact_root_inode": 16314,
+    "all_claims": [
+      {
+        "name": "artifacts",
+        "uid": "07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+        "phase": "Bound",
+        "volume": "pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+        "volume_uid": "ce1841b7-b8b1-4bda-b7f1-c1c62d8fe139"
+      },
+      {
+        "name": "syn-postgres",
+        "uid": "ebca2872-e088-45f8-b9e5-bd6f5cc8b923",
+        "phase": "Bound",
+        "volume": "pvc-ebca2872-e088-45f8-b9e5-bd6f5cc8b923",
+        "volume_uid": "15950163-76cb-4987-9fe5-de999051990f"
+      },
+      {
+        "name": "syn-qdrant",
+        "uid": "ee5c8461-4ad9-4213-bee2-15d4ed9ff97c",
+        "phase": "Bound",
+        "volume": "pvc-ee5c8461-4ad9-4213-bee2-15d4ed9ff97c",
+        "volume_uid": "c86ad5cd-4716-4f96-b12f-6df0d8afe273"
+      }
+    ],
+    "observed_application_replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "observed_ready_before_http": true,
+    "initial_ready_observation_restarts": 0,
+    "client_uid": 1031,
+    "client_gid": 100
+  },
+  "bootstrap": {
+    "active": 0,
+    "succeeded": 1,
+    "failed": 0,
+    "receipts": [
+      {
+        "identity": {
+          "version": 1,
+          "deployment_schema": "replicas-v1",
+          "installation_id": "cf6444f6b99944438c4ed295292c0dbe",
+          "artifact_backend": "rwx",
+          "artifact_store_id": "synr-5f4f1a2106b340c2",
+          "storage_receipt_digest": "sha256:cdab0a79774a7b1c65477a6807cfc0d4db53dfbb15d0962ac90284695195ef2f",
+          "runtime_fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7"
+        },
+        "rights": {
+          "tables": 81,
+          "denied": [
+            "maintenance_epoch",
+            "runtime_fingerprint",
+            "storage_control",
+            "audit_update",
+            "audit_delete",
+            "migration_head",
+            "password_catalog",
+            "public_ddl",
+            "temp_ddl",
+            "truncate"
+          ],
+          "allowed": [
+            "business_crud_rollback",
+            "row_lock_artifact_storage_control",
+            "row_lock_replica_maintenance_state",
+            "row_lock_replica_runtime_identity"
+          ],
+          "authentication": [
+            "authenticated-tls",
+            "invalid-password",
+            "authenticated-tls"
+          ],
+          "operator_secret_in_application": false
+        },
+        "artifact_probe": {
+          "version": 1,
+          "installation_id": "cf6444f6b99944438c4ed295292c0dbe",
+          "namespace": "replica-test-synr20261104",
+          "store_id": "synr-5f4f1a2106b340c2",
+          "backend": "rwx",
+          "descriptor_sha256": "bebad238e2f3f05a1fc1457f542cfd1f0b64a0413661b42d2a01f2f4bb72c165",
+          "selection_digest": "sha256:470a966126e8a68d6aff1a1549dc38301b3e713f91db4a95e40ed6f11122ab26",
+          "checks": [
+            "conditional_put",
+            "cold_read",
+            "range_read",
+            "delete"
+          ],
+          "qualification": "basic-bootstrap-only"
+        },
+        "uid": 1031,
+        "gid": 100,
+        "application_replicas": 0
+      }
+    ],
+    "errors": [],
+    "stages": [
+      "migrated",
+      "identity-committed-apps-off",
+      "scoped-role-committed"
+    ]
+  },
+  "component_recheck": {
+    "operation_id": "352ed9f28a194143b4e58d2f77914bc9",
+    "write": {
+      "operation_id": "352ed9f28a194143b4e58d2f77914bc9",
+      "mode": "write",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+      "mount_root": "/",
+      "directory_inode": 16314,
+      "ref": {
+        "object_id": "16655bbe7f604f01bae6974d06f3cae3",
+        "key": "objects/16655bbe7f604f01bae6974d06f3cae3",
+        "sha256": "699b8e33f59743f3b61f3c2edb8e89a7082773c790472de85842c82a590d12f3",
+        "size": 268435456,
+        "media_type": "application/octet-stream",
+        "store_id": "synology-352ed9f28a194143b4e58d2f77914bc9"
+      },
+      "write_seconds": 16.576826483011246,
+      "adapter_put_fsync_and_atomic_publish": true,
+      "temporary_files": 0
+    },
+    "read": {
+      "operation_id": "352ed9f28a194143b4e58d2f77914bc9",
+      "mode": "read",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+      "mount_root": "/",
+      "directory_inode": 16314,
+      "cold_bytes": 268435456,
+      "cold_sha256": "699b8e33f59743f3b61f3c2edb8e89a7082773c790472de85842c82a590d12f3",
+      "read_seconds": 58.724004207062535,
+      "range_verified": true,
+      "conflicting_put_refused": true,
+      "temporary_files": 0
+    },
+    "cleanup": {
+      "operation_id": "352ed9f28a194143b4e58d2f77914bc9",
+      "mode": "cleanup",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/okf-syn-replica-test-synr20261104-artifacts-pvc-07ba6194-da3f-465e-b2d3-cc98a6a7830f",
+      "mount_root": "/",
+      "directory_inode": 16314,
+      "own_object_deleted": true,
+      "own_directory_empty": true,
+      "other_share_files_touched": 0
+    },
+    "closure": {
+      "succeeded_pods": 2,
+      "live_cri": 0,
+      "target_nfs_mounts": 0,
+      "pvc_retained": true,
+      "pv_reclaim": "Retain",
+      "namespace_and_nondefault_storageclass_retained": true,
+      "other_nas_files_touched": 0
+    },
+    "new_storageclass": false,
+    "new_operator": false,
+    "driver_version": "4.13.6"
+  },
+  "http": {
+    "baseline": {
+      "exit_code": 0,
+      "receipt": {
+        "new_session_shared_across_two_frontends_and_two_apis": true,
+        "pinned_pod_uids": [
+          "46497bd9-1515-4e6a-92b9-24cfb543a5dc",
+          "264d578b-afe2-4f17-94da-b0b2c70b18ba",
+          "28959509-1bd1-4f29-b3d4-001b4b85c528",
+          "9dd8c032-257d-4783-a39b-b81462982030"
+        ]
+      }
+    },
+    "upload": {
+      "exit_code": 0,
+      "receipt": {
+        "document_id": "e3353f80040d498e",
+        "original_sha256": "48bffb83bce5692da63106832900b2f80d91831c3f4d7e61ce80b49e6e8fd23a",
+        "same_document_on_cross_frontend_idempotent_retry": true
+      }
+    },
+    "new-result": {
+      "exit_code": 0,
+      "receipt": {
+        "document_id": "e3353f80040d498e",
+        "done_without_problem": true,
+        "original_sha256_matches_all_four_endpoints": true,
+        "bm25_search_matches_all_four_endpoints": true
+      }
+    },
+    "export": {
+      "exit_code": 0,
+      "receipt": {
+        "job_id": 1
+      }
+    },
+    "export-result": {
+      "exit_code": 0,
+      "receipt": {
+        "job_id": 1,
+        "completed": true,
+        "export_sha256": "2bf2471d069db8b0d292bc7c0be029091e90e480875bff1758aebe27afdfc929",
+        "original_member_sha256_verified": true,
+        "all_four_endpoints": true
+      }
+    }
+  },
+  "native": {
+    "baseline": {
+      "processes": [
+        {
+          "role": "api",
+          "pod_uid": "28959509-1bd1-4f29-b3d4-001b4b85c528",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 6,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 1,
+              "sha256": "88dd05564ada1d541e0fe17a1155e3d967f0b27f38cb03328193b1c9333eeeb4"
+            },
+            "document_generations": {
+              "count": 1,
+              "sha256": "5fe90eb5b823c77a647bbff772884be20fb3a911123629a0fed56d1b486e86ae"
+            },
+            "artifact_objects": {
+              "count": 6,
+              "sha256": "f5175393472de1a39467ac3db2e641676971a7b6e6c63893db39ccc2aeef1802"
+            },
+            "artifact_bindings": {
+              "count": 3,
+              "sha256": "e7cd28c9debdee1f3e0d8fc941d7860962c2fa416fff703e26ebd51a18b8b5f0"
+            },
+            "upload_receipts": {
+              "count": 1,
+              "sha256": "4a7b454c6113dffa66232c1681567a7100cf551c46ad1947a7ad40487782f546"
+            },
+            "work_items": {
+              "count": 2,
+              "sha256": "59d024468ae78734f42945acc5219a2d4692398e4b548a178c426b3337ddf376"
+            }
+          },
+          "upload_audits": 1,
+          "work": [
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "api",
+          "pod_uid": "9dd8c032-257d-4783-a39b-b81462982030",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 6,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 1,
+              "sha256": "88dd05564ada1d541e0fe17a1155e3d967f0b27f38cb03328193b1c9333eeeb4"
+            },
+            "document_generations": {
+              "count": 1,
+              "sha256": "5fe90eb5b823c77a647bbff772884be20fb3a911123629a0fed56d1b486e86ae"
+            },
+            "artifact_objects": {
+              "count": 6,
+              "sha256": "f5175393472de1a39467ac3db2e641676971a7b6e6c63893db39ccc2aeef1802"
+            },
+            "artifact_bindings": {
+              "count": 3,
+              "sha256": "e7cd28c9debdee1f3e0d8fc941d7860962c2fa416fff703e26ebd51a18b8b5f0"
+            },
+            "upload_receipts": {
+              "count": 1,
+              "sha256": "4a7b454c6113dffa66232c1681567a7100cf551c46ad1947a7ad40487782f546"
+            },
+            "work_items": {
+              "count": 2,
+              "sha256": "59d024468ae78734f42945acc5219a2d4692398e4b548a178c426b3337ddf376"
+            }
+          },
+          "upload_audits": 1,
+          "work": [
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "worker",
+          "pod_uid": "6ee4d086-e443-4806-9354-e3f932762fdc",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 6,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 1,
+              "sha256": "88dd05564ada1d541e0fe17a1155e3d967f0b27f38cb03328193b1c9333eeeb4"
+            },
+            "document_generations": {
+              "count": 1,
+              "sha256": "5fe90eb5b823c77a647bbff772884be20fb3a911123629a0fed56d1b486e86ae"
+            },
+            "artifact_objects": {
+              "count": 6,
+              "sha256": "f5175393472de1a39467ac3db2e641676971a7b6e6c63893db39ccc2aeef1802"
+            },
+            "artifact_bindings": {
+              "count": 3,
+              "sha256": "e7cd28c9debdee1f3e0d8fc941d7860962c2fa416fff703e26ebd51a18b8b5f0"
+            },
+            "upload_receipts": {
+              "count": 1,
+              "sha256": "4a7b454c6113dffa66232c1681567a7100cf551c46ad1947a7ad40487782f546"
+            },
+            "work_items": {
+              "count": 2,
+              "sha256": "59d024468ae78734f42945acc5219a2d4692398e4b548a178c426b3337ddf376"
+            }
+          },
+          "upload_audits": 1,
+          "work": [
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "worker",
+          "pod_uid": "fdf97e5f-98c0-4ebb-be76-11513599e1bd",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 6,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 1,
+              "sha256": "88dd05564ada1d541e0fe17a1155e3d967f0b27f38cb03328193b1c9333eeeb4"
+            },
+            "document_generations": {
+              "count": 1,
+              "sha256": "5fe90eb5b823c77a647bbff772884be20fb3a911123629a0fed56d1b486e86ae"
+            },
+            "artifact_objects": {
+              "count": 6,
+              "sha256": "f5175393472de1a39467ac3db2e641676971a7b6e6c63893db39ccc2aeef1802"
+            },
+            "artifact_bindings": {
+              "count": 3,
+              "sha256": "e7cd28c9debdee1f3e0d8fc941d7860962c2fa416fff703e26ebd51a18b8b5f0"
+            },
+            "upload_receipts": {
+              "count": 1,
+              "sha256": "4a7b454c6113dffa66232c1681567a7100cf551c46ad1947a7ad40487782f546"
+            },
+            "work_items": {
+              "count": 2,
+              "sha256": "59d024468ae78734f42945acc5219a2d4692398e4b548a178c426b3337ddf376"
+            }
+          },
+          "upload_audits": 1,
+          "work": [
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        }
+      ]
+    },
+    "after-full-refusal": {
+      "processes": [
+        {
+          "role": "api",
+          "pod_uid": "28959509-1bd1-4f29-b3d4-001b4b85c528",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 6,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 1,
+              "sha256": "88dd05564ada1d541e0fe17a1155e3d967f0b27f38cb03328193b1c9333eeeb4"
+            },
+            "document_generations": {
+              "count": 1,
+              "sha256": "5fe90eb5b823c77a647bbff772884be20fb3a911123629a0fed56d1b486e86ae"
+            },
+            "artifact_objects": {
+              "count": 6,
+              "sha256": "f5175393472de1a39467ac3db2e641676971a7b6e6c63893db39ccc2aeef1802"
+            },
+            "artifact_bindings": {
+              "count": 3,
+              "sha256": "e7cd28c9debdee1f3e0d8fc941d7860962c2fa416fff703e26ebd51a18b8b5f0"
+            },
+            "upload_receipts": {
+              "count": 1,
+              "sha256": "4a7b454c6113dffa66232c1681567a7100cf551c46ad1947a7ad40487782f546"
+            },
+            "work_items": {
+              "count": 2,
+              "sha256": "59d024468ae78734f42945acc5219a2d4692398e4b548a178c426b3337ddf376"
+            }
+          },
+          "upload_audits": 1,
+          "work": [
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "api",
+          "pod_uid": "9dd8c032-257d-4783-a39b-b81462982030",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 6,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 1,
+              "sha256": "88dd05564ada1d541e0fe17a1155e3d967f0b27f38cb03328193b1c9333eeeb4"
+            },
+            "document_generations": {
+              "count": 1,
+              "sha256": "5fe90eb5b823c77a647bbff772884be20fb3a911123629a0fed56d1b486e86ae"
+            },
+            "artifact_objects": {
+              "count": 6,
+              "sha256": "f5175393472de1a39467ac3db2e641676971a7b6e6c63893db39ccc2aeef1802"
+            },
+            "artifact_bindings": {
+              "count": 3,
+              "sha256": "e7cd28c9debdee1f3e0d8fc941d7860962c2fa416fff703e26ebd51a18b8b5f0"
+            },
+            "upload_receipts": {
+              "count": 1,
+              "sha256": "4a7b454c6113dffa66232c1681567a7100cf551c46ad1947a7ad40487782f546"
+            },
+            "work_items": {
+              "count": 2,
+              "sha256": "59d024468ae78734f42945acc5219a2d4692398e4b548a178c426b3337ddf376"
+            }
+          },
+          "upload_audits": 1,
+          "work": [
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "worker",
+          "pod_uid": "6ee4d086-e443-4806-9354-e3f932762fdc",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 6,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 1,
+              "sha256": "88dd05564ada1d541e0fe17a1155e3d967f0b27f38cb03328193b1c9333eeeb4"
+            },
+            "document_generations": {
+              "count": 1,
+              "sha256": "5fe90eb5b823c77a647bbff772884be20fb3a911123629a0fed56d1b486e86ae"
+            },
+            "artifact_objects": {
+              "count": 6,
+              "sha256": "f5175393472de1a39467ac3db2e641676971a7b6e6c63893db39ccc2aeef1802"
+            },
+            "artifact_bindings": {
+              "count": 3,
+              "sha256": "e7cd28c9debdee1f3e0d8fc941d7860962c2fa416fff703e26ebd51a18b8b5f0"
+            },
+            "upload_receipts": {
+              "count": 1,
+              "sha256": "4a7b454c6113dffa66232c1681567a7100cf551c46ad1947a7ad40487782f546"
+            },
+            "work_items": {
+              "count": 2,
+              "sha256": "59d024468ae78734f42945acc5219a2d4692398e4b548a178c426b3337ddf376"
+            }
+          },
+          "upload_audits": 1,
+          "work": [
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "worker",
+          "pod_uid": "fdf97e5f-98c0-4ebb-be76-11513599e1bd",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 6,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 1,
+              "sha256": "88dd05564ada1d541e0fe17a1155e3d967f0b27f38cb03328193b1c9333eeeb4"
+            },
+            "document_generations": {
+              "count": 1,
+              "sha256": "5fe90eb5b823c77a647bbff772884be20fb3a911123629a0fed56d1b486e86ae"
+            },
+            "artifact_objects": {
+              "count": 6,
+              "sha256": "f5175393472de1a39467ac3db2e641676971a7b6e6c63893db39ccc2aeef1802"
+            },
+            "artifact_bindings": {
+              "count": 3,
+              "sha256": "e7cd28c9debdee1f3e0d8fc941d7860962c2fa416fff703e26ebd51a18b8b5f0"
+            },
+            "upload_receipts": {
+              "count": 1,
+              "sha256": "4a7b454c6113dffa66232c1681567a7100cf551c46ad1947a7ad40487782f546"
+            },
+            "work_items": {
+              "count": 2,
+              "sha256": "59d024468ae78734f42945acc5219a2d4692398e4b548a178c426b3337ddf376"
+            }
+          },
+          "upload_audits": 1,
+          "work": [
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        }
+      ]
+    },
+    "final": {
+      "processes": [
+        {
+          "role": "api",
+          "pod_uid": "28959509-1bd1-4f29-b3d4-001b4b85c528",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 11,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 2,
+              "sha256": "ce67e15e2e31636d0e196bb26cab80396a775e62f93d4c4e626115337e969345"
+            },
+            "document_generations": {
+              "count": 2,
+              "sha256": "c996c55d3ac9c1e6f24c3e372fbcf7a49d3101645ee91ea4e5a0d9ff3496c626"
+            },
+            "artifact_objects": {
+              "count": 11,
+              "sha256": "67d738781c5ef4258af562e1b5bd7ae188cb2275af9b623f66248d701d280917"
+            },
+            "artifact_bindings": {
+              "count": 5,
+              "sha256": "59d8b8eb8bba676f3fcf1ddb0ca168642125be4670e16ff5dfc33b8336b169a6"
+            },
+            "upload_receipts": {
+              "count": 2,
+              "sha256": "f2397d1ebfd5f61b38b43cb00868ce4163f2e74bc99eb00de1fb64694cbb532e"
+            },
+            "work_items": {
+              "count": 3,
+              "sha256": "1a5f73b855a203608c4b68474e9fa834cf3b5bbfc1868bf41eeb6b336e7bab62"
+            }
+          },
+          "upload_audits": 2,
+          "work": [
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "api",
+          "pod_uid": "9dd8c032-257d-4783-a39b-b81462982030",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 11,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 2,
+              "sha256": "ce67e15e2e31636d0e196bb26cab80396a775e62f93d4c4e626115337e969345"
+            },
+            "document_generations": {
+              "count": 2,
+              "sha256": "c996c55d3ac9c1e6f24c3e372fbcf7a49d3101645ee91ea4e5a0d9ff3496c626"
+            },
+            "artifact_objects": {
+              "count": 11,
+              "sha256": "67d738781c5ef4258af562e1b5bd7ae188cb2275af9b623f66248d701d280917"
+            },
+            "artifact_bindings": {
+              "count": 5,
+              "sha256": "59d8b8eb8bba676f3fcf1ddb0ca168642125be4670e16ff5dfc33b8336b169a6"
+            },
+            "upload_receipts": {
+              "count": 2,
+              "sha256": "f2397d1ebfd5f61b38b43cb00868ce4163f2e74bc99eb00de1fb64694cbb532e"
+            },
+            "work_items": {
+              "count": 3,
+              "sha256": "1a5f73b855a203608c4b68474e9fa834cf3b5bbfc1868bf41eeb6b336e7bab62"
+            }
+          },
+          "upload_audits": 2,
+          "work": [
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "worker",
+          "pod_uid": "6ee4d086-e443-4806-9354-e3f932762fdc",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 11,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 2,
+              "sha256": "ce67e15e2e31636d0e196bb26cab80396a775e62f93d4c4e626115337e969345"
+            },
+            "document_generations": {
+              "count": 2,
+              "sha256": "c996c55d3ac9c1e6f24c3e372fbcf7a49d3101645ee91ea4e5a0d9ff3496c626"
+            },
+            "artifact_objects": {
+              "count": 11,
+              "sha256": "67d738781c5ef4258af562e1b5bd7ae188cb2275af9b623f66248d701d280917"
+            },
+            "artifact_bindings": {
+              "count": 5,
+              "sha256": "59d8b8eb8bba676f3fcf1ddb0ca168642125be4670e16ff5dfc33b8336b169a6"
+            },
+            "upload_receipts": {
+              "count": 2,
+              "sha256": "f2397d1ebfd5f61b38b43cb00868ce4163f2e74bc99eb00de1fb64694cbb532e"
+            },
+            "work_items": {
+              "count": 3,
+              "sha256": "1a5f73b855a203608c4b68474e9fa834cf3b5bbfc1868bf41eeb6b336e7bab62"
+            }
+          },
+          "upload_audits": 2,
+          "work": [
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        },
+        {
+          "role": "worker",
+          "pod_uid": "fdf97e5f-98c0-4ebb-be76-11513599e1bd",
+          "fingerprint": "217578b1531b97ea27057ef414266d7aad1b7376dc6f2a4b80d86522a5cf44b7",
+          "mount_type": "nfs4",
+          "root_access": {
+            "read": true,
+            "write": false,
+            "execute": true
+          },
+          "mutation_directories": {
+            "objects": true,
+            "tmp": true
+          },
+          "artifact_readiness": true,
+          "ready_objects_cold_sha_verified": 11,
+          "scoped_original_scratch_files": 0,
+          "logical": {
+            "documents": {
+              "count": 2,
+              "sha256": "ce67e15e2e31636d0e196bb26cab80396a775e62f93d4c4e626115337e969345"
+            },
+            "document_generations": {
+              "count": 2,
+              "sha256": "c996c55d3ac9c1e6f24c3e372fbcf7a49d3101645ee91ea4e5a0d9ff3496c626"
+            },
+            "artifact_objects": {
+              "count": 11,
+              "sha256": "67d738781c5ef4258af562e1b5bd7ae188cb2275af9b623f66248d701d280917"
+            },
+            "artifact_bindings": {
+              "count": 5,
+              "sha256": "59d8b8eb8bba676f3fcf1ddb0ca168642125be4670e16ff5dfc33b8336b169a6"
+            },
+            "upload_receipts": {
+              "count": 2,
+              "sha256": "f2397d1ebfd5f61b38b43cb00868ce4163f2e74bc99eb00de1fb64694cbb532e"
+            },
+            "work_items": {
+              "count": 3,
+              "sha256": "1a5f73b855a203608c4b68474e9fa834cf3b5bbfc1868bf41eeb6b336e7bab62"
+            }
+          },
+          "upload_audits": 2,
+          "work": [
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "export",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            },
+            {
+              "kind": "document",
+              "status": "succeeded",
+              "attempts": 1,
+              "maintenance_epoch": 0,
+              "owner_id": null
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "quota": {
+    "scope": "Vitaly UID1031 on volume1; actual per-user quota, not PVC quota",
+    "configured_bytes": null,
+    "maximum_filler_client_write_bytes": 1074790400,
+    "client_accepted_write_bytes": 1074790400,
+    "nas_allocated_bytes": null,
+    "byte_count_limit_note": "Client-accepted writes are not NAS allocation; the decisive observation is fsync/write EDQUOT.",
+    "observed_errno": 122,
+    "producer_fd_closed": true,
+    "http": {
+      "request": {
+        "exit_code": 0,
+        "receipt": {
+          "http_status": 507,
+          "error_code": "storage_full",
+          "existing_original_readable_all_four_endpoints": true
+        }
+      },
+      "retry": {
+        "exit_code": 0,
+        "receipt": {
+          "document_id": "77a49862422a4624",
+          "original_sha256": "376618cb3fbf66fb7466fcdfa126ef95317f0af21b92f7082f4fa66daae0577b",
+          "same_idempotency_key_after_refusal": true
+        }
+      },
+      "result": {
+        "exit_code": 0,
+        "receipt": {
+          "document_id": "77a49862422a4624",
+          "done_without_problem": true,
+          "download_sha_and_search_all_four_endpoints": true
+        }
+      }
+    },
+    "logical_state_unchanged_after_refusal": true,
+    "own_filler_removed_by_exact_inode": true,
+    "same_idempotency_key_after_refusal": true,
+    "requested_test_quota_bytes": 1073741824,
+    "user_confirmed_dsm_setting": "1 GB on volume1; exact NAS allocation boundary not independently queried"
+  },
+  "readiness_regression": {
+    "actual_processes": 4,
+    "root_read_and_traverse": true,
+    "root_write": false,
+    "objects_and_tmp_read_write_traverse": true,
+    "fixed_readiness": true,
+    "actual_blob_crud_and_http": true,
+    "acl_relaxation": false
+  },
+  "closure": {
+    "maintenance": {
+      "operation_id": "d90b9d5f09464b54b142d0a0427325b6",
+      "owner_id": "owned-synology-rehearsal-stop",
+      "phase": "held1",
+      "observation": {
+        "active": 0,
+        "succeeded": 1,
+        "failed": 0,
+        "receipts": [
+          {
+            "operation_id": "d90b9d5f09464b54b142d0a0427325b6",
+            "owner_id": "owned-synology-rehearsal-stop",
+            "epoch": 1,
+            "held": true,
+            "running_work": 0,
+            "provider_owners": 0,
+            "active_captures": 0
+          }
+        ]
+      }
+    },
+    "physical": {
+      "all_application_and_provider_counts_zero": true,
+      "live_namespace_cri": 0,
+      "source_nfs_node_mounts": 0,
+      "owned_forward_processes_live": 0,
+      "loopback_ports_free": 4,
+      "claims_and_pvs_retained": 3,
+      "held_epoch": 1
+    }
+  },
+  "borrowed_capacity": {
+    "all_extra_loans_restored": true,
+    "extra_operations": {
+      "model": "90833659fe2a4e4cafbc44da61f45069",
+      "pg": "e055042784384b868f86f7e73287622a",
+      "q": "74bf24a34c7c47dfafea80641d68ccc5",
+      "s3": "5534e8210a1e4f3fab2c1b02ee37f1b5"
+    },
+    "old_namespace": "replica-test-r4o2t20261102",
+    "old_replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "canonical_tables_unchanged": 9,
+    "postgres_catalog_entries_unchanged": 109,
+    "qdrant_collections_unchanged": 1,
+    "qdrant_points_unchanged": 8,
+    "all_pvc_and_runtime_bindings_retained": true,
+    "cold_live_object_processes": 4,
+    "cold_live_objects": 8,
+    "data_mutations": 0
+  },
+  "preserved_failures": {
+    "prior_trial_report": "2026-11-04-replica-nfs-readiness-fix.json",
+    "http_preparation": {
+      "reason": "Missing os import in remote harness persist before first forward",
+      "proof": {
+        "no_forward_started": true,
+        "no_http_requests": true,
+        "ports_free": true,
+        "pending_preserved": true
+      },
+      "failed_directory": "http"
+    },
+    "initial_stop_check": "First immediate physical-stop check refused while normal termination was still running; only verification was repeated, scaling was not."
+  },
+  "remaining_gates": [
+    "independent NAS corpus backup and recovery",
+    "prolonged NAS/network outage",
+    "cross-node and physical-failure recovery",
+    "real model/IdP and customer acceptance",
+    "overall O1-O3 qualification"
+  ],
+  "certification": null,
+  "production_backup_schedule": "disabled",
+  "subsequent_backup_report": "2026-11-04-replica-synology-independent-backup.json"
+}

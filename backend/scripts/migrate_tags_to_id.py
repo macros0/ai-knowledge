@@ -31,6 +31,8 @@ from app.db.session import get_engine
 
 
 def main() -> None:
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_tags_to_id")
     engine = get_engine()
     insp = inspect(engine)
     tags_cols = {c["name"] for c in insp.get_columns("tags")}

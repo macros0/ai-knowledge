@@ -38,6 +38,8 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Только посчитать, ничего не менять")
     parser.add_argument("--fix-slugs", action="store_true", help="Дополнительно привести slug к stem (поточечно)")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("migrate_payload")
 
     vs = VectorStore()
     if args.qdrant_url:

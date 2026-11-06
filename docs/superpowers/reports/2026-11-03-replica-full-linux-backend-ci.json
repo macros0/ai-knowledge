@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "status": "full-linux-backend-ci-and-runtime-build-verified",
+  "completed_at": "2026-11-03T02:56:19.083283+00:00",
+  "revision": "5f5c43d2e9356ae251658e8b911cfb5e0a511ce6",
+  "scope": "Full frozen backend unit/optional-integration suite and exact-source runtime image; not a populated compact migration or provider qualification",
+  "source": {
+    "approved_archive_sha256": "58506441e2c7b0e5744202cc68588ad45f4c8c73286f2a1f27acf72f03327e09",
+    "files": 2418,
+    "canonical_git_bytes_verified": true,
+    "crlf_only_export_files_normalized": 2270,
+    "all_original_git_files_unchanged_after_tests": true
+  },
+  "linux": {
+    "revision": "5f5c43d2e9356ae251658e8b911cfb5e0a511ce6",
+    "container_id": "6075ba2b5345846fc57bf4da9294c910eb006bdd2a48fac38b37e72d9898c612",
+    "exit_code": 0,
+    "oom": false,
+    "tests": 6610,
+    "passed": 6390,
+    "skipped": 220,
+    "failures": 0,
+    "errors": 0,
+    "unique_nodes_exact": true,
+    "canonical_source_files_verified": 2418,
+    "coverage": {
+      "covered_lines": 38275,
+      "num_statements": 43681,
+      "percent_covered": 87.6239097090268,
+      "percent_covered_display": "88",
+      "missing_lines": 5406,
+      "excluded_lines": 58,
+      "percent_statements_covered": 87.6239097090268,
+      "percent_statements_covered_display": "88"
+    },
+    "skip_categories": {
+      "postgresql-opt-in": 203,
+      "platform": 12,
+      "real-enospc-opt-in": 5
+    },
+    "skip_modules": {
+      "tests.replica_postgres.test_artifact_gc_worker": 6,
+      "tests.replica_postgres.test_artifact_lifecycle": 20,
+      "tests.replica_postgres.test_compact_adoption": 8,
+      "tests.replica_postgres.test_compact_handoff": 6,
+      "tests.replica_postgres.test_file_consumers": 8,
+      "tests.replica_postgres.test_fresh_bootstrap_schema": 1,
+      "tests.replica_postgres.test_legacy_diagnostic_migration": 6,
+      "tests.replica_postgres.test_maintenance_fence": 3,
+      "tests.replica_postgres.test_managed_storage_live": 8,
+      "tests.replica_postgres.test_predecessor_backup": 8,
+      "tests.replica_postgres.test_predecessor_import": 3,
+      "tests.replica_postgres.test_runtime_identity": 3,
+      "tests.replica_postgres.test_schema_adoption": 6,
+      "tests.replica_postgres.test_storage_migration": 8,
+      "tests.test_answer_scenario_postgres": 4,
+      "tests.test_audit_denial_transport": 1,
+      "tests.test_audit_docker_startup": 1,
+      "tests.test_audit_main_migration": 1,
+      "tests.test_audit_postgres": 12,
+      "tests.test_audit_schema_v2": 3,
+      "tests.test_diagnostics_migration": 1,
+      "tests.test_generation_files": 1,
+      "tests.test_glossary_postgres_concurrency": 5,
+      "tests.test_mail_disk_full": 5,
+      "tests.test_mail_migration": 10,
+      "tests.test_parser_supervisor": 10,
+      "tests.test_reference_postgres_concurrency": 15,
+      "tests.test_reference_postgres_migration": 3,
+      "tests.test_reference_scope_postgres": 8,
+      "tests.test_reference_write_postgres": 1,
+      "tests.test_reference_writers_postgres": 6,
+      "tests.test_replica_audit": 5,
+      "tests.test_replica_auth_postgres": 1,
+      "tests.test_replica_chat_postgres": 3,
+      "tests.test_replica_coordination_postgres": 2,
+      "tests.test_replica_diagnostic_control_postgres": 1,
+      "tests.test_replica_diagnostic_store_postgres": 2,
+      "tests.test_replica_reference_cache_postgres": 2,
+      "tests.test_table_cells_storage": 2,
+      "tests.test_table_query_cell_context": 5,
+      "tests.test_work_recovery_postgres": 5,
+      "tests.test_work_runtime_postgres": 4,
+      "tests.test_work_store_postgres": 7
+    },
+    "artifacts": {
+      "junit.xml": {
+        "bytes": 983837,
+        "sha256": "be9d9addf38d1aaa2dcef9c1129e1b3a869ddcb1eccb06a04b43659cddb42e29"
+      },
+      "coverage.xml": {
+        "bytes": 1617162,
+        "sha256": "bee1c6a7fe070236ff29de34a1a6fe4cf9b254330c0a7e5d16262eba058b1051"
+      },
+      "coverage.json": {
+        "bytes": 2136236,
+        "sha256": "f75d6b895b756b5c2c8f643338e12ef7d349d8f90637ca4823d3b704fe0db86c"
+      },
+      ".coverage": {
+        "bytes": 106496,
+        "sha256": "976bbeffac97de097378ade0b3a98a245d56af011e8c21689f1290c688ccb50b"
+      }
+    },
+    "raw_ci_payload_exported": false
+  },
+  "environment_regression_probe": {
+    "container_id": "3ebed8f37517d415a61c98e8d42f15efe162ed1ba049da425b7e7aa851b6f153",
+    "running": false,
+    "exit_code": 0,
+    "oom": false,
+    "runner": {
+      "phase": "terminal",
+      "pid": 1,
+      "started_at": 1793670908.7862291,
+      "harness_version": 2,
+      "exit_code": 0,
+      "finished_at": 1793670922.2035892,
+      "retention_policy": "pytest failed-only",
+      "failed_inputs_retained_on_vm": true
+    },
+    "junit": {
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "47ba950fd38f734e7fc7a11c7dce19a44a1fb86c59fea25f024b57628ffa12e3"
+    },
+    "failed_cases": [],
+    "source_files_unchanged": true,
+    "verified": true
+  },
+  "runtime_image": {
+    "revision": "5f5c43d2e9356ae251658e8b911cfb5e0a511ce6",
+    "operation_id": "5bdf2cb4313a4e9fba5c50d2cac71c4a",
+    "image_id": "sha256:3d53d4e9b985f4beb9fc1b9da4f0aae11af67c96ce301db22625b40b6e995628",
+    "tag": "okf-backend:replicas-5f5c43d-5bdf2cb4313a",
+    "base_image": "python@sha256:dddfd7e07f9d15aeeca61529320492139d21cac7f0070c00609243e51e4e0016",
+    "application_deployed": false,
+    "schema_revision": "rpl05_maintenance_epoch",
+    "source_files_verified": 572,
+    "build_fingerprint": "562b09dd94745b2afa44dc7f9f43df59c247c6bde2f102e3bf6d81ae26d2c5f3",
+    "packages": {
+      "SQLAlchemy": "2.1.5",
+      "psycopg": "3.3.6",
+      "qdrant-client": "1.19.1",
+      "boto3": "1.43.117",
+      "alembic": "1.20.0",
+      "pypdfium2": "5.14.0",
+      "uvloop": "0.23.0"
+    }
+  },
+  "dependency_audit": {
+    "scanner": "pip-audit 2.10.1 in separate local tool environment",
+    "lock_git_sha256": "3512ee8a4d645efae745cdeba5e912a6e34c3f83dc92156fd7ea7c092b928f60",
+    "known_vulnerabilities": 0,
+    "method": "Audit Windows-selected public lock versions plus the sole additional Linux dependency uvloop; runtime lock unchanged",
+    "reports": {
+      "windows_markers": {
+        "dependencies": 116,
+        "known_vulnerabilities": 0,
+        "report_sha256": "eb53af3533b65c51ec94ac162733db299320f6c98354e9f58a9f48c9ce6d1da9"
+      },
+      "linux_only_uvloop": {
+        "dependencies": 1,
+        "known_vulnerabilities": 0,
+        "report_sha256": "8ebd99f63428e5e6fd8d964d3c663aaf252e8be69b622dece566f9234616144d"
+      }
+    }
+  },
+  "ci_capacity_recovery": {
+    "namespace": "replica-test-r4o2t20261102",
+    "namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+    "original_replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "canonical_tables_unchanged": 9,
+    "runtime_identity_verified": true,
+    "pvc_identities_unchanged": true,
+    "data_mutations": 0
+  },
+  "prior_attempts": [
+    {
+      "attempt": "a1",
+      "status": "failed",
+      "cause": "Unguarded spawn harness reentered pytest; out-of-memory"
+    },
+    {
+      "attempt": "a2",
+      "status": "failed",
+      "cause": "Insufficient tmpfs reserve/worker memory and global application environment overrides",
+      "application_or_test_source_changed": false
+    }
+  ],
+  "evidence_links": {
+    "prior_native_postgresql": "2026-11-03-replica-legacy-diagnostics.json"
+  },
+  "open_gates": [
+    "populated source-off compact Kubernetes adoption and independent restore",
+    "remaining O1/O3 profile/provider/fault acceptance and trusted producers",
+    "fresh whole-branch review"
+  ],
+  "actual_profile_certifications_issued": 0,
+  "production_backup_schedule": "disabled"
+}

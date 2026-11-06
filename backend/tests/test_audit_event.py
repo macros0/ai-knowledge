@@ -67,3 +67,10 @@ def test_record_preserves_verified_actor_and_server_context(monkeypatch,tmp_path
         with session_scope() as s:event=json.loads(s.scalar(select(AuditOutbox.payload).where(AuditOutbox.event_id==result['event_id'])))
         assert event['actor']['type']==kind
         assert event['request_id']==rid
+
+
+def test_scenario_copy_event_keeps_only_canonical_source_id():
+    source=str(uuid4())
+    event=build_event(entry(action_type="answer_scenario_copy",new_value={"version":1,"public":False,"source_id":source,"instructions":"CANARY"}),AuditContext(actor_type="user"))
+    assert event["new_value"]["source_id"]==source
+    assert b"CANARY" not in encode_event(event)

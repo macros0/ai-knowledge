@@ -158,12 +158,24 @@ def percentile(values, fraction):
 
 def measure(corpus, query, enabled):
     """Instrument actual hydrated text BEFORE filtering, plus all SQL SELECTs."""
-    counts = {"sql_selects": 0, "hydration_bytes": 0}
+    counts = {"sql_selects": 0, "sql_guard_selects": 0, "hydration_bytes": 0}
     stage = {}
     original = retrieval_hydration._enrich_retrieval_hits_in_session
 
-    def sql(_conn, _cursor, statement, _parameters, _context, _many):
-        counts["sql_selects"] += int(statement.lstrip().upper().startswith("SELECT"))
+    def sql(_conn, _cursor, statement, _parameters, context, _many):
+        if not statement.lstrip().upper().startswith("SELECT"):
+            return
+        counts["sql_selects"] += 1
+        # Count fences as real SQL, while exposing their fixed per-transaction
+        # cost separately from batched corpus reads. Unclassified SQL stays in
+        # the data count, so it cannot hide a new per-hit query.
+        compiled = context.compiled
+        query = compiled.statement if compiled is not None else None
+        if query is not None and getattr(query, "is_select", False):
+            tables = query.get_final_froms()
+            guards = {"replica_maintenance_state", "artifact_storage_control", "replica_runtime_identity"}
+            if tables and all(getattr(table, "name", None) in guards for table in tables):
+                counts["sql_guard_selects"] += 1
 
     def hydrated(hits, session, **kwargs):
         result = original(hits, session, **kwargs)

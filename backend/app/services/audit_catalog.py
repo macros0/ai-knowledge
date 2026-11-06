@@ -45,6 +45,8 @@ CATALOG = MappingProxyType({
     'document_restore': EventRule({}, 'success'),
     'document_bulk_restore': EventRule({}, 'success'),
     'document_auto_delete': EventRule({}, 'success'),
+    **{"answer_scenario_"+action: EventRule({"version":"int","public":"bool","source_id":"uuid"},"success")
+       for action in ("create","update","publish","unpublish","copy","delete")},
     'chat_history_view': EventRule({}, 'success'),
     'chat_history_auto_delete': EventRule({}, 'success'),
     'document_export': EventRule({}, 'success'),
@@ -96,4 +98,8 @@ CATALOG = MappingProxyType({
     'auth_login_denied': EventRule({}, 'denied'),
     'auth_login_success': EventRule({}, 'success'),
     'auth_logout': EventRule({}, 'success'),
+    'replica_maintenance_enter': EventRule({'epoch': 'int'}, 'success'),
+    'replica_maintenance_leave': EventRule({'epoch': 'int'}, 'success'),
+    'replica_model_reconcile': EventRule({'epoch': 'int', 'count': 'int'}, 'success'),
+    'replica_runtime_upgrade': EventRule({'epoch': 'int'}, 'success'),
 })

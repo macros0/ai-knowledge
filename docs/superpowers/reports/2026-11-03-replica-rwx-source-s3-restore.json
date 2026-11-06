@@ -1,0 +1,668 @@
+{
+  "schema_version": 1,
+  "status": "independent-rwx-source-to-real-s3-restore-functional-verified-closed",
+  "observed_at": "2026-11-03T17:22:55.556660+00:00",
+  "operation_id": "a6d111778be34b9ea54484faf448dfa5",
+  "source_namespace": "replica-test-rwx20261103",
+  "source_namespace_uid": "e723d1a6-f1e1-44cd-8c16-adf9ca9ba92e",
+  "target_namespace": "replica-test-rwxs20261103",
+  "target_namespace_uid": "9e360816-09ac-4e6e-b985-04f4460e5c80",
+  "installation_id": "fa7806131c5143619952cc6bc707b628",
+  "scope": "Synthetic selected RWX/NFS source recovered into disjoint real managed S3/PG17/Qdrant on one VM/kind node, using only the authenticated independent PC backup. No RWX target support or failure-domain certification is implied.",
+  "source_backend": "rwx",
+  "target_backend": "s3",
+  "target_implementation": "real RustFS1.0.4 with fresh dedicated RWO claim, bucket, prefix and scoped IAM user",
+  "backup": {
+    "backup_id": "b620bc6fc5284e6bbd2311e5acec427e",
+    "manifest_sha256": "ca29b51d4afe6cdd0e4bc9979ebfdd5a8399998f55cc37eb6e7e885b219b74ba",
+    "encrypted_objects": 13,
+    "plaintext_bytes": 1190017,
+    "custody": "user-declared independent PC; archive and authenticated adjacent physical source-binding retained",
+    "master_key_transferred_to_vm": false
+  },
+  "current_runtime": {
+    "image": "okf-backend:replicas-ccfcf9e-review-3e0d390d6e27",
+    "kind_image_id": "sha256:4d53e99f9ab8486741c0cd4396b2e117c70276191a627bab7ab588c9121f4e01",
+    "identity": {
+      "artifact_backend": "s3",
+      "artifact_store_id": "rwx-07f5ec199c9c4e81",
+      "deployment_schema": "replicas-v1",
+      "installation_id": "fa7806131c5143619952cc6bc707b628",
+      "runtime_fingerprint": "4a819c90ca5934c629b4c2022ac8067f476840de6bc1fcfc54a84a14ae278e86",
+      "storage_receipt_digest": "sha256:b74815dade58ea2ca7fd0f8edba0d85185d1b41b1464b5909df804f77e43279e",
+      "version": 1
+    },
+    "full_ci": "2026-11-03-replica-final-review-fixes.json; unchanged product ccfcf9e,6431 passes/221 explicit optional skips/zero failures",
+    "logical_store_id_preserved": true,
+    "blobref_or_descriptor_relabeling": false,
+    "official_restore_cli_unchanged": true
+  },
+  "source_unavailability_during_import_identity_and_functional_acceptance": {
+    "application_roles": 0,
+    "postgres_qdrant": 0,
+    "live_source_cri": 0,
+    "nfs_service": "inactive",
+    "nfs_threads": 0,
+    "nfs_tcp2049_listeners": 0,
+    "source_filesystem_unmounted": false,
+    "source_pvcs_retained": 3,
+    "root_stop_receipt": {
+      "operation_id": "a6d111778be34b9ea54484faf448dfa5",
+      "platform_operation": "c2e04101020a459797950f48dc6bc811",
+      "phase": "source-nfs-physically-unavailable",
+      "previous_invocation": "49094d3c2529448f973f4f769064541d",
+      "previous_threads": 4,
+      "mount_device": 1792,
+      "mount_inode": 2,
+      "restore_required": false,
+      "service": "inactive",
+      "kernel_threads": 0,
+      "tcp2049_listeners": 0,
+      "filesystem_unmounted": false,
+      "data_deleted": false
+    },
+    "fresh_node_controller_pvc_pv_provider_native_container_guard_each_stage": true,
+    "source_payload_reads_after_nfs_stop": 0
+  },
+  "independent_import": {
+    "postgres": {
+      "phase": "verified",
+      "entry_id": "cfda82d4b44841a69b8eddb7e8008b24",
+      "exit_code": 0,
+      "plaintext_sha256": "1bdfc7f7697070e266781cbcdf171780728cfd62c5c312ae22dafe13b33e9e89",
+      "catalog_sha256": "3b92f0c119aab6c77c385dbb4a273667016eefb4e8748f47a6d5092e2e5746d9",
+      "tables": 81,
+      "sequences": 28,
+      "control": {
+        "held": true,
+        "epoch": 1,
+        "backend": "rwx",
+        "identity": "fb3f7e70554842248e9105953a083f2e",
+        "operation": "b620bc6fc5284e6bbd2311e5acec427e",
+        "work_items": 163,
+        "auth_sessions": 1
+      }
+    },
+    "qdrant": {
+      "points": 4,
+      "points_sha256": "adc1bea49085157aebe0a8eb1e2950cc2153a56b92ddc1c047f8cdce73e20c59",
+      "native_snapshot": true
+    },
+    "ready_artifact_blobs": 11,
+    "all_sizes_and_cold_sha256_matched": true,
+    "all_imports_from_backup_reader_only": true,
+    "new_disjoint_claims": [
+      {
+        "name": "rwxs-artifacts",
+        "uid": "3cecd3c4-5890-4c1f-be48-0bbfeebd80c1",
+        "phase": "Bound",
+        "volume": "pvc-3cecd3c4-5890-4c1f-be48-0bbfeebd80c1",
+        "volume_uid": "e71b289a-07b2-4d2c-bd41-11a4b7e8b8cf"
+      },
+      {
+        "name": "rwxs-postgres",
+        "uid": "0cebc201-cee2-42b0-af20-a3ea9af53c2c",
+        "phase": "Bound",
+        "volume": "pvc-0cebc201-cee2-42b0-af20-a3ea9af53c2c",
+        "volume_uid": "35b6b636-3700-42da-a9f7-c5d4655c0860"
+      },
+      {
+        "name": "rwxs-qdrant",
+        "uid": "a19018aa-1b24-487a-9da1-69d04884a2ed",
+        "phase": "Bound",
+        "volume": "pvc-a19018aa-1b24-487a-9da1-69d04884a2ed",
+        "volume_uid": "9ff6dcb1-c707-4355-ba85-f2770f191bd9"
+      }
+    ],
+    "all81_tables28_sequences_exact_before_identity": true,
+    "sql_restore_single_transaction": true,
+    "source_work_items": 163,
+    "source_work_and_auth_rows_unchanged_before_identity": true,
+    "conditional_create_only_s3": true
+  },
+  "scoped_permissions": {
+    "pg": {
+      "ok": true,
+      "allowed": [
+        "business_crud_rollback",
+        "row_lock_artifact_storage_control",
+        "row_lock_replica_maintenance_state",
+        "row_lock_replica_runtime_identity"
+      ],
+      "denied": [
+        "maintenance_epoch",
+        "runtime_fingerprint",
+        "storage_control",
+        "audit_update",
+        "audit_delete",
+        "migration_head",
+        "operator_password_catalog",
+        "public_ddl",
+        "temporary_ddl",
+        "truncate"
+      ],
+      "wrong_password_denied": true,
+      "authentication": {
+        "route": "actual-pod-ip-scram",
+        "results": [
+          {
+            "exit": 0,
+            "correct_user_tls": true,
+            "password_denied": false
+          },
+          {
+            "exit": 2,
+            "correct_user_tls": false,
+            "password_denied": true
+          },
+          {
+            "exit": 0,
+            "correct_user_tls": true,
+            "password_denied": false
+          }
+        ]
+      }
+    },
+    "s3": {
+      "allowed": [
+        "dedicated_bucket_head_list",
+        "prefix_conditional_put",
+        "prefix_cold_range_read",
+        "prefix_delete",
+        "multipart_complete_conditional",
+        "multipart_abort"
+      ],
+      "denied": [
+        "foreign_prefix_read",
+        "foreign_prefix_write",
+        "foreign_prefix_delete",
+        "foreign_bucket_read",
+        "foreign_bucket_write",
+        "foreign_bucket_delete",
+        "foreign_bucket_list",
+        "iam_admin_list",
+        "wrong_secret"
+      ],
+      "tls_verified": true,
+      "bucket_listing_scope": "dedicated-installation-bucket",
+      "bucket_discovery": {
+        "mode": "filtered",
+        "visible_bucket_count": 1
+      }
+    },
+    "runtime_and_operator_secrets_separate": true,
+    "operator_url_projected_readonly": true,
+    "runtime_has_no_root_credential": true,
+    "pg_password_test_route": "actual Pod IP/SCRAM; correct/wrong/correct over TLS; native CA verification separately proved by application connections",
+    "loopback_trust_not_used_as_password_evidence": true,
+    "application_process_native_tls_ca_verification": true
+  },
+  "held_and_release": {
+    "identity_job_uid": "5a43e90b-e967-4eb3-aee0-f7a7add87650",
+    "identity_counts": {
+      "held_audit_events": 0,
+      "invalidated_oidc_flows": 0,
+      "invalidated_sessions": 1
+    },
+    "normal_held_proof": {
+      "uid": "3a5f8b1e-502f-414b-8949-376448578072",
+      "active": 0,
+      "succeeded": 1,
+      "failed": 0,
+      "receipts": [
+        {
+          "fingerprint": "4a819c90ca5934c629b4c2022ac8067f476840de6bc1fcfc54a84a14ae278e86",
+          "epoch": 2,
+          "held": true,
+          "normal_settings": true,
+          "application_principal": true,
+          "startup_denied": true,
+          "denied": [
+            "write",
+            "claim",
+            "artifact_runtime"
+          ],
+          "ready_blob_refs": 11,
+          "work_items": 163,
+          "owners": 0,
+          "auth_sessions": 0
+        }
+      ],
+      "error_types": []
+    },
+    "pre_release_catalog": {
+      "changed_only": [
+        "artifact_storage_control",
+        "audit_log",
+        "auth_sessions",
+        "replica_maintenance_state",
+        "replica_runtime_identity",
+        "audit_log_id_seq"
+      ],
+      "work_items": {
+        "kind": "table",
+        "name": "work_items",
+        "rows": 163,
+        "sha256": "e86609d03b8eda3d3184ea0b8a812be533c25da15f635681ede344575cecc60a"
+      },
+      "tables": 81,
+      "sequences": 28
+    },
+    "release": {
+      "uid": "a579b278-64c1-4359-9725-2fb180379451",
+      "active": 0,
+      "succeeded": 1,
+      "failed": 0,
+      "receipts": [
+        {
+          "epoch": 2,
+          "released": true,
+          "application_replicas_before_release": 0,
+          "source_unavailable": true
+        }
+      ],
+      "error_types": []
+    },
+    "restored_jobs_executed_before_release": 0,
+    "automatic_application_start": false
+  },
+  "http": {
+    "old-session": {
+      "actual_old_source_cookie_rejected_401_all_four": true
+    },
+    "baseline": {
+      "new_session_shared_across_two_frontends_and_two_apis": true,
+      "pinned_pod_uids": [
+        "91ee26a9-d8ab-4b77-aa1e-712af1df43a8",
+        "c2b44d47-ed64-415e-a9a4-a5690259a502",
+        "6d327ad1-9ec8-48ee-af39-25f7505743aa",
+        "f5d0759d-2c36-4d97-a5c6-59f6079c343f"
+      ]
+    },
+    "source-documents": {
+      "documents": 2,
+      "original_sha256_all_four": true,
+      "bm25_search_all_four": true,
+      "prior_export_sha256_and_docx_member_all_four": true,
+      "source_nfs_pg_q_off": true
+    },
+    "upload": {
+      "document_id": "3a592f04c0dd4ce5",
+      "original_sha256": "449bdabae946973e0bc541bed71b62428c304bd46f85375a84c08fcc75c2e741",
+      "same_document_on_cross_frontend_idempotent_retry": true
+    },
+    "new-result": {
+      "document_id": "3a592f04c0dd4ce5",
+      "done_without_problem": true,
+      "original_sha256_matches_all_four_endpoints": true,
+      "bm25_search_matches_all_four_endpoints": true
+    },
+    "export": {
+      "job_id": 2
+    },
+    "export-result": {
+      "job_id": 2,
+      "completed": true,
+      "export_sha256": "19859cb3cfa695a9965736668580bd7fe5f9228126155971301dfa39de337a7d",
+      "original_member_sha256_verified": true,
+      "all_four_endpoints": true
+    }
+  },
+  "native_processes": [
+    {
+      "pod_uid": "6d327ad1-9ec8-48ee-af39-25f7505743aa",
+      "fingerprint": "4a819c90ca5934c629b4c2022ac8067f476840de6bc1fcfc54a84a14ae278e86",
+      "role": "api",
+      "backend": "s3",
+      "cold_objects": 17,
+      "scratch_files": 0,
+      "legacy_business_work": [
+        {
+          "id": "43c862805316402ab345aaee21b0d828",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "7ff4eec2252c4fcb818e3691294bd722",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "9fa27783255446b486ffe8754212f582",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ],
+      "new_business_work": [
+        {
+          "id": "21b7d7aba32e4db2a72244b94e40574c",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        },
+        {
+          "id": "ac9b7c5847ce4c359d34c85a87274602",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        }
+      ],
+      "upload_audits": 3,
+      "documents": 3,
+      "maintenance_epoch": 2,
+      "application_principal": true,
+      "tls": true
+    },
+    {
+      "pod_uid": "f5d0759d-2c36-4d97-a5c6-59f6079c343f",
+      "fingerprint": "4a819c90ca5934c629b4c2022ac8067f476840de6bc1fcfc54a84a14ae278e86",
+      "role": "api",
+      "backend": "s3",
+      "cold_objects": 17,
+      "scratch_files": 0,
+      "legacy_business_work": [
+        {
+          "id": "43c862805316402ab345aaee21b0d828",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "7ff4eec2252c4fcb818e3691294bd722",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "9fa27783255446b486ffe8754212f582",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ],
+      "new_business_work": [
+        {
+          "id": "21b7d7aba32e4db2a72244b94e40574c",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        },
+        {
+          "id": "ac9b7c5847ce4c359d34c85a87274602",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        }
+      ],
+      "upload_audits": 3,
+      "documents": 3,
+      "maintenance_epoch": 2,
+      "application_principal": true,
+      "tls": true
+    },
+    {
+      "pod_uid": "9c7a4ee5-21e8-47b4-b6cf-0c63490d9ef9",
+      "fingerprint": "4a819c90ca5934c629b4c2022ac8067f476840de6bc1fcfc54a84a14ae278e86",
+      "role": "worker",
+      "backend": "s3",
+      "cold_objects": 17,
+      "scratch_files": 0,
+      "legacy_business_work": [
+        {
+          "id": "43c862805316402ab345aaee21b0d828",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "7ff4eec2252c4fcb818e3691294bd722",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "9fa27783255446b486ffe8754212f582",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ],
+      "new_business_work": [
+        {
+          "id": "21b7d7aba32e4db2a72244b94e40574c",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        },
+        {
+          "id": "ac9b7c5847ce4c359d34c85a87274602",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        }
+      ],
+      "upload_audits": 3,
+      "documents": 3,
+      "maintenance_epoch": 2,
+      "application_principal": true,
+      "tls": true
+    },
+    {
+      "pod_uid": "f0dd2b46-63f9-49d3-b0dc-382f8fc04871",
+      "fingerprint": "4a819c90ca5934c629b4c2022ac8067f476840de6bc1fcfc54a84a14ae278e86",
+      "role": "worker",
+      "backend": "s3",
+      "cold_objects": 17,
+      "scratch_files": 0,
+      "legacy_business_work": [
+        {
+          "id": "43c862805316402ab345aaee21b0d828",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "7ff4eec2252c4fcb818e3691294bd722",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        },
+        {
+          "id": "9fa27783255446b486ffe8754212f582",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 0,
+          "owner_id": null
+        }
+      ],
+      "new_business_work": [
+        {
+          "id": "21b7d7aba32e4db2a72244b94e40574c",
+          "kind": "export",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        },
+        {
+          "id": "ac9b7c5847ce4c359d34c85a87274602",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": null
+        }
+      ],
+      "upload_audits": 3,
+      "documents": 3,
+      "maintenance_epoch": 2,
+      "application_principal": true,
+      "tls": true
+    }
+  ],
+  "bounded_budget": {
+    "payload_bytes": 1190017,
+    "pvc_requested_bytes": 2684354560,
+    "scratch_budget_bytes": 536870912,
+    "extra_vm_free_floor_fraction": 0.1,
+    "large_upload_or_load_test": false,
+    "image_build": false,
+    "cache_prune_or_extra_scratch_deletion": false
+  },
+  "failed_attempts_preserved": {
+    "initial_disk_preflight": "Refused before namespace/create journal; absence verified, bounded dataset/PVC/scratch budget documented before one create",
+    "native_import_parent_closure": [
+      "artifact import exit1 after verified data:25s SSH closure timeout",
+      "read-only recheck55s SSH closure timeout; no import replay"
+    ],
+    "import_readonly_reconciliation": {
+      "phase": "verified",
+      "previous_parent_failures_preserved": [
+        "artifact import exit1 after verified data:25s SSH closure timeout",
+        "read-only recheck55s SSH closure timeout; no import replay"
+      ],
+      "prior_proof": {
+        "closed_prior_native_tunnel_attempts": [
+          "47d553482e7b458f878fc7967a5690b3",
+          "9ebd570dcf6b4e039c0de4dc98441643",
+          "9d453862e1784a92b7f456384d30afbd",
+          "08710be64fa4439ca37f27c384e95d54"
+        ],
+        "live_prior_forward_processes": 0
+      },
+      "new_closure": {
+        "remote_children_closed": true,
+        "standalone_client_closed": true,
+        "client_terminated_after_remote_exit": true
+      },
+      "sql81_and_sequences28_match": true,
+      "all4_full_points_match": true,
+      "all11_blob_sha_match": true,
+      "data_import_replayed": false
+    },
+    "data_import_replayed": false,
+    "password_probe": "Initial port-forward wrong-password test produced transport reset and was not accepted as an authentication refusal; direct Pod IP SCRAM proved the actual denial",
+    "held_job_v1": "Harness expected enforce_runtime_identity to return, but startup correctly refused active maintenance. Keep failed Job; v2 asserts this refusal.",
+    "held_job_v2": "Harness attempted guarded artifact-runtime access while held; correct maintenance refusal. v3 asserts denial. Cold object hashes already verified by independent native reader; app cold reads deferred until release.",
+    "public_auth_me_check": {
+      "exit_code": 1,
+      "error_types": [
+        "AssertionError"
+      ],
+      "reason": "Harness expected public auth/me to return 401; contract returns anonymous 200. Corrected read-only check uses protected document endpoint."
+    }
+  },
+  "closure": {
+    "target": {
+      "nonterminal_pods": 0,
+      "live_cri": 0,
+      "retained_bound_pvcs": 3,
+      "source_application_and_storage_off": true,
+      "source_nfs_active": "inactive"
+    },
+    "held_epoch": 3,
+    "closure_operation": "7278b3c43cad4a65b85b023f74883972",
+    "closure_job": {
+      "uid": "0762c218-80ed-4a52-a176-ba08d9591331",
+      "active": 0,
+      "succeeded": 1,
+      "failed": 0,
+      "receipts": [
+        {
+          "operation_id": "7278b3c43cad4a65b85b023f74883972",
+          "owner": "owned-rwxs-rehearsal-stop",
+          "held": true,
+          "epoch": 3,
+          "running_work": 0,
+          "provider_owners": 0,
+          "chat_and_capture_owners": 0
+        }
+      ],
+      "error_types": []
+    },
+    "exact_owned_http_forwards_live": 0,
+    "source_nfs_restored": {
+      "operation_id": "a6d111778be34b9ea54484faf448dfa5",
+      "platform_operation": "c2e04101020a459797950f48dc6bc811",
+      "phase": "same-owned-nfs-restored",
+      "mount_device": 1792,
+      "mount_inode": 2,
+      "service": "active",
+      "threads": 4,
+      "private_listener": "172.18.0.1:2049",
+      "new_invocation": "4de08e4daf8047dab589e4cc0ed9bf33",
+      "restore_required": false,
+      "data_deleted": false
+    },
+    "source_application_postgres_qdrant_still_zero": true,
+    "prior_namespace": "replica-test-r4o2t20261102",
+    "capacity_operation": "24e28c196b38412ca69ef00070e61897",
+    "prior_roles_restored": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "prior_runtime_pvcs_unchanged": true,
+    "prior_canonical_tables_unchanged": 9,
+    "data_deleted": false
+  },
+  "remaining": [
+    "Strict physical relocation proof and official adoption for a fresh RWX TARGET, rather than an S3 target",
+    "Previously failed large buffered NFS write; prolonged outage, cross-node and independent physical failure domains",
+    "Real customer external/mixed providers, IdP/Gateway/model acceptance and production key custody/monitoring"
+  ],
+  "restored": true,
+  "profile_qualified": false,
+  "certification": null,
+  "production_backup_schedule": "disabled",
+  "validation": {
+    "command": "node scripts/check-project.mjs",
+    "exit_code": 0,
+    "npm_audit_vulnerabilities": 0,
+    "eslint": "passed with existing warnings",
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "frontend_failed": 0,
+    "ruff": "passed",
+    "full_backend_repeated": false,
+    "reason": "No product code changed since the already-green ccfcf9e full Linux run"
+  }
+}

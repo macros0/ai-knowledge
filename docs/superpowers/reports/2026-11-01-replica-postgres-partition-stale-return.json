@@ -1,0 +1,91 @@
+{
+  "status": "owned-postgres-partition-stale-return-passed",
+  "scope": "single-node-managed-s3-synthetic-stub",
+  "namespace": "replica-test-r5o2t20261101",
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "installation_id": "55555555555555555555555555555555",
+  "runtime_fingerprint": "e307fe8dbd829e79e9291353994dfe245d28cf944b5b4674365fa0ba52bec83c",
+  "fault_operation_id": "773fca92d05342379da4b9c9413144c5",
+  "maintenance_epoch": 5,
+  "partition": {
+    "policy_uid": "36138714-8183-41f0-8eb8-2c3376354f71",
+    "policy_sha256": "1d0c8c2f44f236823a1bf1e5a3ad40d9634e6dae38d0e2fac72521dd9fa25117",
+    "selected_workers": 1,
+    "port": 5432,
+    "old_worker_live": true,
+    "old_worker_ready": false,
+    "healthy_worker_postgres_positive": true,
+    "qdrant_model_positive": true,
+    "provider_active_before_policy_patch": 1,
+    "provider_active_at_network_sample": 0,
+    "timing_limit": "first confirmed network sample followed provider finish; processing/publication still unfinished"
+  },
+  "stale_return": {
+    "original_pod_uid": "a77b0c82-f63a-4834-9d47-8701d4423013",
+    "same_container_no_restart": true,
+    "reclaimed_fence": 2,
+    "original_generation_abandoned": true,
+    "captured_old_owner_fence_publication_probe_rejected": true,
+    "probe_transaction_rolled_back": true,
+    "claims_total_at_return": 56.0,
+    "completed_total_at_return": 55.0,
+    "old_process_continued_work": true,
+    "process_lease_losses_delta": 0.0
+  },
+  "capacity": {
+    "original_slot_retained_until_reconnect": true,
+    "completion": "confirmed-provider-reply-acknowledged-normally",
+    "offline_reconciliation_required": false,
+    "provider_observations_after_reconnect": {
+      "test_only": true,
+      "active": 0,
+      "peak_active": 1,
+      "started": 3,
+      "finished": 3
+    },
+    "owned_slots_at_finish": 0
+  },
+  "recovered_document": {
+    "id": "638922a01683414f",
+    "sha256": "e2dddbcf70bed17b30ef91fb35f8c387fef9e38db0fb56c2cb0c0f503a2d4e84",
+    "status": "done",
+    "problem": null,
+    "original_fence": 1,
+    "recovered_fence": 2,
+    "active_publications": 1,
+    "search_download_sha256_verified": true
+  },
+  "preserved_existing_documents": 10,
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8",
+      "worker": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "normal_entrypoint_restored": true,
+  "policy_removed": true,
+  "model_scenario": "success",
+  "production_schedule": "disabled",
+  "verified_at": "2026-11-01T17:29:22.889681+00:00",
+  "test_instrumentation": "only runtime UUID source derived from Pod UID; full production worker entrypoint/queue/handlers/heartbeat unchanged",
+  "remaining_runtime_faults": [
+    "resource_load_qualification"
+  ],
+  "limitations": [
+    "not node or host failover",
+    "not external provider certification",
+    "no production SLA"
+  ]
+}

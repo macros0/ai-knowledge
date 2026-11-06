@@ -182,13 +182,57 @@ def test_prepare_detects_same_length_prefix_mutation_after_pin(tmp_path):
             "event_code": "operation_failed", "error_code": "internal_error"}), stream="baseline")
         view = store.pin_read_view(EventFilter(), now + timedelta(seconds=1))
         source = view.descriptors[0].path
+        pinned = source.stat()
         data = source.read_bytes()
-        source.write_bytes(data.replace(b"internal_error", b"network_error "))
+        changed = data.replace(b"internal_error", b"file_too_large")
+        assert changed != data and len(changed) == len(data)
+        import json
+        from app.services.diagnostics.sanitize import sanitize_event
+        assert sanitize_event(json.loads(changed))["error_code"] == "file_too_large"
+        source.write_bytes(changed)
+        # Pin integrity must survive coarse filesystem timestamps or preserved
+        # mtime; metadata alone does not establish immutable prefix bytes.
+        os.utime(source, ns=(pinned.st_atime_ns, pinned.st_mtime_ns))
+        assert source.stat().st_mtime_ns == view.descriptors[0].mtime_ns
         job = str(uuid4())
         try:
             result = prepare_in_child(store, view, job)
             assert result.counts["events"] == 0
             assert "segment_unavailable" in result.gaps
+        finally:
+            view.release()
+            store.delete_tree(store.root / "snapshots" / job)
+
+
+def test_prepare_discards_all_output_and_credits_if_source_changes_during_flush(tmp_path, monkeypatch):
+    import pytest
+    from app.services.diagnostics.worker_protocol import FrameError, QuotaBroker
+    now = datetime.now(timezone.utc)
+    with DiagnosticStore(tmp_path / "spool", DiagnosticLimits(min_free_bytes=0)) as store:
+        for _ in range(400):
+            assert store.append(encode_event({"schema_version": 1, "event_id": str(uuid4()),
+                "boot_id": str(uuid4()), "timestamp_utc": now.isoformat(), "component": "backend", "origin": "server",
+                "level": "ERROR", "event_code": "operation_failed", "error_code": "internal_error"}), stream="baseline")
+        view = store.pin_read_view(EventFilter(), now + timedelta(seconds=1))
+        source = view.descriptors[0].path
+        data, changed = source.read_bytes(), False
+        original = QuotaBroker.grant
+        def mutate(broker, *args, **kwargs):
+            nonlocal changed
+            if not changed:
+                changed = True
+                with source.open("r+b") as stream: stream.write(data.replace(b"internal_error", b"file_too_large"))
+                os.utime(source, ns=(view.descriptors[0].mtime_ns, view.descriptors[0].mtime_ns))
+            return original(broker, *args, **kwargs)
+        monkeypatch.setattr(QuotaBroker, "grant", mutate)
+        job = str(uuid4())
+        before = store.reserved_bytes
+        try:
+            with pytest.raises((FrameError, RuntimeError)):
+                prepare_in_child(store, view, job)
+            assert changed
+            assert not (store.root / "snapshots" / job).exists()
+            assert store.reserved_bytes == before
         finally:
             view.release()
             store.delete_tree(store.root / "snapshots" / job)

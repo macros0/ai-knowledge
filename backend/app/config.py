@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from docparser.attachment_limits import DEFAULT_ATTACHMENT_MAX_DEPTH, MAX_CONFIGURABLE_ATTACHMENT_DEPTH
 
@@ -36,10 +36,100 @@ class Settings(BaseSettings):
     knowledge_profile: str = "Основной контур"
     data_dir: Path = Path("./data")
 
+    # Opt-in contract only; runtime capability is enabled by code in a later stage.
+    okf_deployment_schema: str | None = None
+    app_role: str = "combined"
+    deployment_mode: str = "compact"
+    deployment_namespace: str = Field(default="", max_length=63, pattern=r"^$|^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
+    frontend_replicas: int = Field(default=1, ge=1, le=64)
+    api_replicas: int = Field(default=1, ge=1, le=64)
+    worker_replicas: int = Field(default=0, ge=0, le=64)
+    resilience_class: str = "basic"
+    runtime_identity_file: Path | None = None
+    runtime_image_id: str | None = Field(default=None, min_length=1, max_length=512)
+    runtime_trust_file: Path | None = None
+    _runtime_identity: Any = PrivateAttr(default=None)
+    _maintenance_epoch: int | None = PrivateAttr(default=None)
+    # Durable work foundation only: role/admission activation remains gated.
+    work_lease_seconds: int = Field(default=120, ge=5, le=3600)
+    work_heartbeat_seconds: int = Field(default=30, ge=1, le=600)
+    work_max_attempts: int = Field(default=3, ge=1, le=10)
+    work_max_pending_documents: int = Field(default=1000, ge=1, le=100000)
+    work_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
+    work_retry_backoff_seconds: tuple[int, int, int] = (5, 30, 120)
+    artifact_backend: str = "local"
+    postgres_provider: str = "managed"
+    qdrant_provider: str = "managed"
+    artifact_provider: str = "managed"
+    artifact_store_id: str = "local"
+    # Stage gate: pipeline/retention migration is completed in S3/S4.
+    artifact_uploads_enabled: bool = False
+    artifact_gc_enabled: bool = False
+    artifact_gc_interval_seconds: int = Field(default=60, ge=10, le=86400)
+    artifact_gc_grace_seconds: int = Field(default=86400, ge=86400, le=365 * 86400)
+    artifact_gc_batch_size: int = Field(default=100, ge=1, le=1000)
+    artifact_gc_verify_bytes: int = Field(default=2 * 1024 * 1024 * 1024, ge=1, le=8 * 1024 * 1024 * 10000)
+    artifact_root: Path | None = None
+    artifact_scratch_root: Path | None = None
+    artifact_max_bytes: int = Field(default=2 * 1024 * 1024 * 1024, gt=0, le=8 * 1024 * 1024 * 10000)
+    artifact_s3_endpoint: str | None = None
+    artifact_s3_bucket: str | None = None
+    artifact_s3_prefix: str = ""
+    artifact_s3_region: str = "us-east-1"
+    artifact_s3_addressing_style: Literal["path", "virtual"] = "path"
+    artifact_s3_ca_bundle: Path | None = None
+    artifact_s3_allow_http: bool = False
+    artifact_s3_access_key: str | None = Field(default=None, exclude=True, repr=False)
+    artifact_s3_secret_key: str | None = Field(default=None, exclude=True, repr=False)
+    artifact_s3_session_token: str | None = Field(default=None, exclude=True, repr=False)
+
+    @model_validator(mode="after")
+    def validate_replica_runtime(self):
+        from app.deployment.replica_profile import ReplicaProfile, validate_runtime_profile
+
+        if self.work_heartbeat_seconds * 3 > self.work_lease_seconds:
+            raise ValueError("Work heartbeat requires at least three intervals per lease")
+        if any(not 1 <= delay <= 3600 for delay in self.work_retry_backoff_seconds):
+            raise ValueError("Invalid bounded work retry backoff")
+        if self.artifact_uploads_enabled and self.environment == "production" and self.okf_deployment_schema != "replicas-v1":
+            raise ValueError("Artifact upload preview requires completed retention/migration before production")
+        if self.artifact_gc_enabled and (self.environment == "production" or self.app_role != "combined") and self.okf_deployment_schema != "replicas-v1":
+            raise ValueError("Artifact GC preview requires non-production combined execution until migration/runtime acceptance")
+        additional = {}
+        if self.okf_deployment_schema == "replicas-v1":
+            if not self.deployment_namespace:
+                raise ValueError("Replica runtime identity requires an explicit deployment namespace")
+            if self.environment == "production" and not self.runtime_image_id:
+                raise ValueError("Replica runtime identity requires an explicit image reference")
+            from sqlalchemy.engine import make_url
+            try:
+                dialect = make_url(self.db_url).get_backend_name()
+            except Exception:
+                raise ValueError("Replica database URL is invalid") from None
+            additional = {"database_dialect": dialect,
+                "shared_artifacts_verified": self.runtime_identity_file is not None}
+            if not self.artifact_uploads_enabled:
+                raise ValueError("Replica execution requires portable artifact uploads")
+        profile = ReplicaProfile(
+            mode=self.deployment_mode, frontend_replicas=self.frontend_replicas,
+            api_replicas=self.api_replicas, worker_replicas=self.worker_replicas, resilience=self.resilience_class,
+            role=self.app_role, artifact_backend=self.artifact_backend,
+            postgres_provider=self.postgres_provider, qdrant_provider=self.qdrant_provider,
+            artifact_provider=self.artifact_provider,
+            **additional,
+        )
+        validate_runtime_profile(self.okf_deployment_schema, profile)
+        if self.okf_deployment_schema == "replicas-v1":
+            from app.deployment.replica_profile import validate_replica_endpoints
+            validate_replica_endpoints(self)
+        return self
+
     # Diagnostics use a separate root so short-lived logs do not enter document backups.
     diagnostics_dir: Path = Path("./diagnostics")
     diagnostics_baseline_enabled: bool = True
     diagnostics_capture_enabled: bool = False
+    diagnostics_ingest_token: str | None = Field(default=None, min_length=32, max_length=512,
+                                               exclude=True, repr=False)
     diagnostics_bundle_enabled: bool = False
     diagnostics_download_enabled: bool = False
     diagnostics_total_mb: int = Field(default=500, ge=1)
@@ -326,6 +416,7 @@ class Settings(BaseSettings):
     llm_truncation_max_tokens_multiplier: float = 1.5
 
     llm_max_concurrency: int = 1
+    llm_global_max_concurrency: int = Field(default=1, ge=1, le=64)
     llm_interactive_concurrency: int = 2
     llm_retry_attempts: int = 5
     llm_retry_backoff_seconds: float = 2.0
@@ -539,6 +630,7 @@ class Settings(BaseSettings):
 
     # --- Контекст LLM (форматирование после merge/collapse) ---
     # Жёсткий лимит на суммарный объём контекста, передаваемого в LLM.
+    chat_scenarios_enabled: bool = True
     chat_max_context_chars: int = 32000
     chat_focus_named_objects: bool = False
     # Обрезка отдельного блока в контексте (концепт vs чанк).
@@ -818,6 +910,13 @@ class Settings(BaseSettings):
                 raise ValueError("PROD forbids EMBEDDING_PROVIDER=fake")
             if self.environment != "production":
                 raise ValueError("PROD requires ENVIRONMENT=production")
+        return self
+
+    @model_validator(mode="after")
+    def validate_common_runtime_identity(self):
+        if self.okf_deployment_schema == "replicas-v1":
+            from app.deployment.runtime_identity import validate_identity
+            self._runtime_identity = validate_identity(self)
         return self
 
     @field_validator("data_dir", mode="before")

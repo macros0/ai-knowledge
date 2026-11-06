@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "status": "owned-provider-native-component-ci-passed",
+  "scope": "native coordinator construction, focused Windows/Linux CI and existing-profile readonly component only",
+  "generated_at": "2026-11-05T07:20:07.851173+00:00",
+  "source_sha256": {
+    "backend/test_scripts/replica_provider_faults.py": "1e887bbdbc6b31f08a4b15592c5482cd23538aad343795ab592fcc4a713e807e",
+    "backend/tests/test_replica_provider_faults.py": "66a68fbd08f928dfa095a6745d049e4eabaa8abbc7180cef2347ece900888504",
+    "scripts/kubernetes/replica_provider_outage.py": "85bb8d05c0928f6caad3c0a6a587de944491cfe0a9af360cc1f807935be83ebb",
+    "scripts/kubernetes/replica_provider_native.py": "d2eaea48c17c08ca3adee657480c5122af25ca0bfeb64ecc12fc8f089afd4ba0",
+    "backend/tests/test_replica_provider_outage.py": "58bbacc55858b0dd8d119cf796737abbf992e634467fdf1ad2b26fe13ba8be60",
+    "backend/tests/test_replica_provider_native.py": "dd092422aae8a7749ee2f0a9e34c54f7aa3648741ca04167ec7607353f515df0"
+  },
+  "windows": {
+    "tests": 140,
+    "passed": 140,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junit_sha256": "012dbd3f8f8b9bef365b9d8688ab855c581f9edc386b9f00ec0eaf6fb327a4be"
+  },
+  "linux": {
+    "operation_id": "2bc9967f54b1427b9e833a8628b09c3e",
+    "base_revision": "fdfae89a6fe5302a9e389821c45d4ed0d56c9bb2",
+    "patch_files": 2,
+    "source_files": 2499,
+    "ci_image": "sha256:5ea412ca80682429ca77d6a5c970da1b1be8d18d554156f25ba8b5aa36d608eb",
+    "running": false,
+    "container_id": "bd6c41a0aec034d354abe6538ec1ed244d4aa8d1c8c11c02cd0b4546447d515a",
+    "exit_code": 0,
+    "oom": false,
+    "junit": {
+      "tests": 140,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sha256": "cf3d54c46c33d447dd1cb0e42f3a130512e3f8133e6836d10c3a105861edd68d"
+    },
+    "windows_case_ids_equal": true,
+    "source_unchanged": true,
+    "verified": true,
+    "failed_case_ids": [],
+    "base_focused_ci_operation_id": "1392c04e74394304abb2136422d53f76",
+    "source_patch_files_against_base_revision": 6
+  },
+  "readonly_native_component": {
+    "status": "owned-current-sql-readonly-component-passed",
+    "namespace": "replica-test-r5o2u20261102",
+    "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+    "documents": 22,
+    "observed_work_items": 1,
+    "active_publications": 1,
+    "model_owners": 0,
+    "data_mutations": 0,
+    "provider_fault_acceptance": false,
+    "network_positive_pods": 4,
+    "bound_objects": 52,
+    "bound_nodes": 1,
+    "bound_volumes": 3,
+    "sql_source_sha256": "623493cc1872bcc74afe5baafe993e3953d909515f9d526c3d5936fd2e52ecd7",
+    "native_source_sha256": "d2eaea48c17c08ca3adee657480c5122af25ca0bfeb64ecc12fc8f089afd4ba0"
+  },
+  "capacity_operations": [
+    {
+      "journal_name": "provider-fault-ci-capacity-v2.json",
+      "namespace": "replica-test-r5o2u20261102",
+      "namespace_uid": "f5d6033a-e3e3-4491-81b7-1c7fd156df4c",
+      "phase": "capacity-recovered-and-source-verified",
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "canonical_tables_unchanged": 9,
+      "claims_and_runtime_verified": true,
+      "journal_sha256": "eb1e66404983b3f4f165c8c9da6af4e1ff784c77c3601658fbb6223f13b9b61f"
+    },
+    {
+      "journal_name": "provider-fault-ci-secondary-capacity-v2.json",
+      "namespace": "replica-test-r4o2t20261102",
+      "namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+      "phase": "capacity-recovered-and-source-verified",
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "canonical_tables_unchanged": 9,
+      "claims_and_runtime_verified": true,
+      "journal_sha256": "f5694d09b44715ef44392c70950a3ae8c743d177c3dc48485f59062886644c01"
+    }
+  ],
+  "project_checks": {
+    "command": "node scripts/check-project.mjs",
+    "passed": true,
+    "npm_audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_existing_optional_skips": 1,
+    "ruff_findings": 0,
+    "log_sha256": "6e04c9100ba17195655d017672c31fb00a578b8fb5aadb99a3d6addd1087a0e1"
+  },
+  "actual_new_provider_fault_case_passed": false,
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled",
+  "remaining": [
+    "Fresh current managed-S3 same-schema upgrade and independent copies",
+    "Actual current scoped PostgreSQL stale-return and Qdrant/model outages",
+    "Final-source full backend Linux CI and scoped matrix/report publication",
+    "Customer provider, physical failure-domain and trusted release gates"
+  ],
+  "prior_component_ci": {
+    "report_sha256": "10dc4671ae7ea26e70ecbb1a33bcb4ec5417f465a51a5e1302d8e344660964c8",
+    "linux_operation_id": "1392c04e74394304abb2136422d53f76",
+    "windows_and_linux_tests": 137,
+    "status": "superseded-source-checkpoint-preserved"
+  }
+}

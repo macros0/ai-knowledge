@@ -8,15 +8,27 @@ import pytest
 from fastapi import FastAPI
 
 from app import main
+from app.config import Settings
+from app.db.session import get_engine
 from app.services.glossary.rule_registry import GlossaryRuleRegistry
 
 
 @pytest.mark.parametrize('environment', ['development', 'production'])
-def test_backend_startup_seeds_initial_rules_after_schema_is_ready(monkeypatch, environment):
+def test_backend_startup_seeds_initial_rules_after_schema_is_ready(monkeypatch, tmp_path, environment):
     # Exercise the real lifespan and database; isolate external services and
     # background workers, which are unrelated to initial glossary data.
     monkeypatch.setattr(main, '_validate_runtime_dependencies', lambda: None)
-    monkeypatch.setattr(main, 'get_settings', lambda: SimpleNamespace(environment=environment))
+    settings = Settings(
+        _env_file=None, environment=environment, data_dir=tmp_path,
+        database_url=str(get_engine().url), auth_provider="keycloak_oidc",
+        keycloak_url="https://identity.invalid", keycloak_realm="test",
+        keycloak_client_id="test", keycloak_client_secret="fixture-only",
+        keycloak_group_path_mode="full_path", auth_session_https_only=True,
+        app_secret_key="isolated-startup-fixture-secret-key",
+        audit_stdout_mode="disabled", artifact_gc_enabled=False,
+        artifact_uploads_enabled=False, app_role="combined", okf_deployment_schema=None,
+    )
+    monkeypatch.setattr(main, 'get_settings', lambda: settings)
     monkeypatch.setattr(main, 'VectorStore', Mock())
     monkeypatch.setattr(main, 'threading', SimpleNamespace(Thread=Mock(), Event=threading.Event))
     from app.services import job_queue, export_queue, trash, chat_history

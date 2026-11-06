@@ -1,0 +1,54 @@
+{
+  "status": "owned-same-schema-upgrade-passed",
+  "namespace": "replica-test-r5o2t20261101",
+  "namespace_uid": "58faa75d-e7e3-4a93-8e22-f281a7c82522",
+  "operation_id": "fd07c5dfcdd748709fca07745257eaa8",
+  "epoch": 4,
+  "installation_id": "55555555555555555555555555555555",
+  "image": "okf-backend:replicas-40b7972-559d6cb1e83e",
+  "old_fingerprint": "e2a95ba3946d6a74ed736c65117933f30867883a12cef3a1dc129fad534ba485",
+  "new_fingerprint": "e307fe8dbd829e79e9291353994dfe245d28cf944b5b4674365fa0ba52bec83c",
+  "identity_configmap": "replica-upgrade-fd07c5dfcdd7-identity",
+  "runtime_configmap": "replica-upgrade-fd07c5dfcdd7-runtime",
+  "held_corpus_unchanged": true,
+  "schema_revision": "rpl05_maintenance_epoch",
+  "runtime": {
+    "replicas": {
+      "frontend": 2,
+      "api": 2,
+      "worker": 2
+    },
+    "api_endpoints": 2,
+    "images": {
+      "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+      "api": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8",
+      "worker": "sha256:43015b36d8bc0d70355d96fbd5c8eaa25e6bd93f0bcf9204af241d71146b03c8"
+    },
+    "restarts": {
+      "frontend": 0,
+      "api": 0,
+      "worker": 0
+    }
+  },
+  "observed_at": "2026-11-01T16:01:49.825102+00:00",
+  "production_schedule": "disabled",
+  "functional_check": "passed",
+  "preserved_documents": 8,
+  "existing_download_sha256_matches": 7,
+  "existing_search_matches": 7,
+  "deleted_document_still_hidden": 1,
+  "new_document": {
+    "id": "cd3ae640367e43fc",
+    "sha256": "482e4d648c1ce626f2339293621cefd35906aea3e89b1b38eae2aaadd8d7b86b",
+    "status": "done",
+    "problem": null,
+    "search_download_verified": true,
+    "seconds": 25.5
+  },
+  "functional_verified_at": "2026-11-01T16:05:57.966167+00:00",
+  "failed_job_recovery": {
+    "cause": "wrong bootstrap policy role",
+    "held_epoch_preserved": true,
+    "same_operation_resumed": true
+  }
+}

@@ -216,7 +216,7 @@ export const previewDiagnosticBundle = (id) => jsonRequest(`${diagnosticBase}/bu
 export const deleteDiagnosticBundle = (id) => request(`${diagnosticBase}/bundles/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const diagnosticDownloadUrl = (id) => `${BASE}${diagnosticBase}/bundles/${encodeURIComponent(id)}/download`;
 
-export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale, allowSimilar = false } = {}) {
+export function uploadDocument(file, tags = [], { developmentId = null, canonicalLocale, allowSimilar = false, idempotencyKey } = {}) {
   const form = new FormData();
   form.append("file", file);
   if (allowSimilar) form.append("allow_similar", "true");
@@ -227,7 +227,9 @@ export function uploadDocument(file, tags = [], { developmentId = null, canonica
   if (developmentId != null) {
     form.append("development_id", String(developmentId));
   }
-  return request("/documents", { method: "POST", body: form });
+  return request("/documents", { method: "POST", body: form,
+    ...(idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : {}),
+  });
 }
 
 const scopeRoute = (docId) => `/documents/${encodeURIComponent(docId)}/processing-scope`;
@@ -258,7 +260,7 @@ export async function logoutAuth() {
 }
 
 export function listTags() {
-  return request("/tags").then((data) => data.tags ?? []);
+  return request("/tags", {cache: "no-store"}).then((data) => data.tags ?? []);
 }
 
 function referenceLeaseRoute({ resource_type, resource_id, kind, org_id }) {
@@ -560,6 +562,7 @@ export function chat(query, tags = [], topK = 5, mode = "hybrid", sessionId = nu
   if (options.dense != null) body.dense = options.dense;
   if (options.bm25 != null) body.bm25 = options.bm25;
   if (options.responseMode) body.response_mode = options.responseMode;
+  if (options.responseMode === "scenario" && options.scenarioId) body.scenario_id = options.scenarioId;
   if (options.searchDepth != null) body.search_depth = options.searchDepth;
   if (options.attemptId) body.attempt_id = options.attemptId;
   if (options.sourceSelection) body.source_selection = options.sourceSelection;
@@ -803,7 +806,7 @@ export function listDocumentDuplicates(docId) {
 // --- Языки и стоп-слова (Этап 7) ---
 
 export function listActiveLocales() {
-  return request("/locales").then((data) => data.locales ?? []);
+  return request("/locales", {cache: "no-store"}).then((data) => data.locales ?? []);
 }
 
 export function createBulkExport(docIds) {
@@ -927,7 +930,7 @@ export function backfillGlossaryTranslations(locale, termIds, expectedTranslatio
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ locale, term_ids: termIds, expected_translation_versions: expectedTranslationVersions }),
-  });
+  }).then(translationBackfillResult);
 }
 
 export function listGlossaryRules() {
@@ -969,12 +972,16 @@ export function commitGlossaryRuleMerge(data) {
 
 export async function getUiDictionary(locale) {
   try {
-    const r = await request(`/i18n/${encodeURIComponent(locale)}`);
+    const r = await request(`/i18n/${encodeURIComponent(locale)}`, {cache: "no-store"});
     return r.data ?? null;
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
+}
+
+export function getConfigRevisions({signal} = {}) {
+  return request("/settings/revisions", {cache: "no-store", signal}, 5000);
 }
 
 export function listLocales() {
@@ -1105,7 +1112,26 @@ export function backfillTranslations(locale, entities) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ locale, entities }),
-  });
+  }).then(translationBackfillResult);
+}
+
+async function translationBackfillResult(receipt) {
+  if (!receipt || !("job_id" in receipt)) return receipt;
+  if (!Number.isSafeInteger(receipt.job_id) || receipt.job_id < 1) {
+    throw new ApiError("", {status: 502, code: "internal_error"});
+  }
+  for (let attempt = 0; attempt < 900; attempt++) {
+    const job = await request(`/jobs/${receipt.job_id}`, {cache: "no-store"});
+    if (job.id !== receipt.job_id || !["reference_translation", "glossary_translation"].includes(job.job_type)) {
+      throw new ApiError("", {status: 502, code: "internal_error"});
+    }
+    if (job.status === "completed") return job.result;
+    if (["failed", "cancelled"].includes(job.status)) {
+      throw new ApiError("", {status: 503, code: job.result?.error_code || "internal_error"});
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  throw new ApiError("", {status: 408, code: "job_still_running"});
 }
 
 export function translationPending(locale, entities) {
@@ -1128,4 +1154,21 @@ export function getDocumentTableRows(docId, tableId, generationId, options = {})
   const query = new URLSearchParams({ generation_id: generationId });
   for (const [key, value] of Object.entries(options)) if (value != null) query.set(key, String(value));
   return request(`/documents/${encodeURIComponent(docId)}/tables/${encodeURIComponent(tableId)}/rows?${query}`);
+}
+
+
+export function listAnswerScenarios(params={}) {
+  return request(`/answer-scenarios?${new URLSearchParams(params)}`);
+}
+export const getAnswerScenario=id=>request(`/answer-scenarios/${encodeURIComponent(id)}`);
+export const createAnswerScenario=data=>request("/answer-scenarios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+export const updateAnswerScenario=(id,data)=>request(`/answer-scenarios/${encodeURIComponent(id)}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+export const deleteAnswerScenario=(id,version)=>request(`/answer-scenarios/${encodeURIComponent(id)}?expected_version=${version}`,{method:"DELETE"});
+export const copyAnswerScenario=(id,version)=>request(`/answer-scenarios/${encodeURIComponent(id)}/copy`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({expected_version:version})});
+export function previewAnswerScenario(body,options={}) {
+  return request("/answer-scenarios/preview/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:options.signal},undefined,
+    async response=>{
+      try {return await readChatStream(response,options.onText,()=>{},{onProgress:options.onProgress,idleTimeoutMs:CHAT_TIMEOUT_MS});}
+      catch(error) {if(error.name==="AbortError")throw error;throw new ApiError("Preview failed",{code:error.code ?? "dependency_unavailable",status:error.status ?? 503,requestId:error.requestId});}
+    });
 }

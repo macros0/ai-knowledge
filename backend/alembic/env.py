@@ -21,7 +21,12 @@ if config.config_file_name is not None:
 
 # URL берётся из настроек приложения (DATABASE_URL / DATABASE_URL_DEV / SQLite),
 # а не из alembic.ini — единый источник правды о подключении.
-config.set_main_option("sqlalchemy.url", get_settings().db_url)
+# ConfigParser treats percent escapes in a valid URL as interpolation syntax.
+# Escape only for the configuration transport; engine_from_config/get_main_option
+# decode them back to the original URL without changing credentials/options.
+provided_connection = config.attributes.get("connection")
+if provided_connection is None:
+    config.set_main_option("sqlalchemy.url", get_settings().db_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
@@ -42,6 +47,11 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
+    if provided_connection is not None:
+        context.configure(connection=provided_connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+        return
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

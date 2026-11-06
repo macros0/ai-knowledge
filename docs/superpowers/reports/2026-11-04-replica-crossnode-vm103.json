@@ -1,0 +1,1038 @@
+{
+  "schema_version": 1,
+  "status": "logical-cross-node-nas-worker-recovery-verified-closed",
+  "observed_at": "2026-11-04T12:18:15.407961+00:00",
+  "operation_id": "644d3e9f81ae42ae9e3db12541daa7f7",
+  "namespace": "replica-test-xrwx20261104",
+  "namespace_uid": "b84d80fa-42a1-4ca2-b180-4745234da418",
+  "installation_id": "2d9c31e2ff3343acb5a843f70d8e7a3c",
+  "scope": "Two logical kind nodes on one VM103 kernel/physical domain. Managed PG17/Qdrant on control-plane, external Synology DS211 DSM6.2.4-25556 Update8 NFS4.0 CSI4.13.6. Synthetic documents/model; no physical HA/provider certification.",
+  "runtime": {
+    "product_commit": "96931d1cfa05dc7f3e685305016f792ad7a9ce50",
+    "storage_chart_fix": "ccc2678",
+    "image": "okf-backend:replicas-96931d1-synr-2cbebc13dedf",
+    "identity": {
+      "version": 1,
+      "deployment_schema": "replicas-v1",
+      "installation_id": "2d9c31e2ff3343acb5a843f70d8e7a3c",
+      "artifact_backend": "rwx",
+      "artifact_store_id": "xrwx-644d3e9f81ae42ae",
+      "storage_receipt_digest": "sha256:27bfbcbff78ae929cc000b8fec0006905f84c0199834b09c5f2d6212765644c2",
+      "runtime_fingerprint": "ffce3500e67c4e9a983f89c59d33d0f8cec2aff085ef4d3fdebdb5f6472a4040"
+    },
+    "backend_ci": "6472 passes/221 identical optional skips on unchanged backend source; chart-only fix separately9 passes and mandatory project checks"
+  },
+  "platform": {
+    "authorization": "user call_dd93b9225d464094a786a12d8deb4473 explicit Разрешаю пакет VM103",
+    "proposal_sha256": "c1de06d2075da141f42037c8cae269e630a9fed2219013e740ef784803aa2cdf",
+    "root_disk_gib": 130,
+    "old_disk_gib": 100,
+    "partition_uuid_preserved": true,
+    "gpt_backup_independent_pc": true,
+    "platform_objects": 43,
+    "nodes": [
+      {
+        "name": "okf-crossnode-control-plane",
+        "uid": "297ea042-adda-40a0-9b4f-bc595d1f34b8",
+        "container_id": "5c63e0ea023f252fe762c314633e21afdb337d5484c892c940adedd393f6ba82",
+        "image": "sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+        "kind_image_id": "sha256:56c858bbebf1768827709a14b0029df4d6d851ddafe7d2daa2289588f05f4a37"
+      },
+      {
+        "name": "okf-crossnode-worker",
+        "uid": "6ad8e6c5-2661-448c-8d6d-b23205278c80",
+        "container_id": "df4fb790095a3ef291d476f9af6db2b5ceb0150413f1362b04f169c8f659bc6b",
+        "image": "sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+        "kind_image_id": "sha256:56c858bbebf1768827709a14b0029df4d6d851ddafe7d2daa2289588f05f4a37"
+      }
+    ],
+    "physical_failure_domains": 1,
+    "api": "127.0.0.1:26443",
+    "cluster": "okf-crossnode",
+    "separate_owner_only_kubeconfig": true,
+    "no_vm_reboot": true
+  },
+  "csi": {
+    "operation_id": "66f2491f6d4b4cb99256bf0704108cd5",
+    "phase": "terminal-verified",
+    "namespace": "replica-test-xrwx20261104",
+    "nodes": [
+      {
+        "name": "okf-crossnode-control-plane",
+        "uid": "297ea042-adda-40a0-9b4f-bc595d1f34b8",
+        "container_id": "5c63e0ea023f252fe762c314633e21afdb337d5484c892c940adedd393f6ba82",
+        "image": "sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+        "kind_image_id": "sha256:56c858bbebf1768827709a14b0029df4d6d851ddafe7d2daa2289588f05f4a37"
+      },
+      {
+        "name": "okf-crossnode-worker",
+        "uid": "6ad8e6c5-2661-448c-8d6d-b23205278c80",
+        "container_id": "df4fb790095a3ef291d476f9af6db2b5ceb0150413f1362b04f169c8f659bc6b",
+        "image": "sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+        "kind_image_id": "sha256:56c858bbebf1768827709a14b0029df4d6d851ddafe7d2daa2289588f05f4a37"
+      }
+    ],
+    "node_roles": {
+      "writer": "okf-crossnode-control-plane",
+      "reader": "okf-crossnode-worker"
+    },
+    "image": "okf-backend:replicas-96931d1-synr-2cbebc13dedf",
+    "client_uid": 1031,
+    "client_gid": 100,
+    "bytes": 268435456,
+    "manifest_sha256": "6f38f75f2dedc0a2a616852f831d9b2bf06250ee791028090674e046b7c026ee",
+    "binding": {
+      "pvc_uid": "3896c0b9-6326-4900-af9e-087897f404f3",
+      "pv_name": "pvc-3896c0b9-6326-4900-af9e-087897f404f3",
+      "pv_uid": "c096a1c8-935b-4811-bc23-b43108dd3f18",
+      "csi": {
+        "driver": "okf-training-nfs.csi.k8s.io",
+        "volumeAttributes": {
+          "csi.storage.k8s.io/pv/name": "pvc-3896c0b9-6326-4900-af9e-087897f404f3",
+          "csi.storage.k8s.io/pvc/name": "artifacts",
+          "csi.storage.k8s.io/pvc/namespace": "replica-test-xrwx20261104",
+          "mountPermissions": "0770",
+          "onDelete": "retain",
+          "server": "10.10.1.5",
+          "share": "/volume1/Vitaliy",
+          "storage.kubernetes.io/csiProvisionerIdentity": "1793783283950-6098-okf-training-nfs.csi.k8s.io",
+          "subDir": "crossnode-replica-test-xrwx20261104-artifacts-pvc-3896c0b9-6326-4900-af9e-087897f404f3"
+        },
+        "volumeHandle": "10.10.1.5#volume1/Vitaliy#crossnode-replica-test-xrwx20261104-artifacts-pvc-3896c0b9-6326-4900-af9e-087897f404f3#pvc-3896c0b9-6326-4900-af9e-087897f404f3#retain"
+      },
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/crossnode-replica-test-xrwx20261104-artifacts-pvc-3896c0b9-6326-4900-af9e-087897f404f3"
+    },
+    "pods": {
+      "reader": {
+        "name": "nas-reader-swcqs",
+        "uid": "1adcfab3-8c4d-4d74-98ed-8dab0f111f72",
+        "container_id": "9e427d1aedc4137ecab762c854b6d397314d373872d6d753aba13a812717b627"
+      },
+      "writer": {
+        "name": "nas-writer-sgzwv",
+        "uid": "ce1d07fe-e45c-439a-adf0-f87fbd4f0dad",
+        "container_id": "6d157cab1d4595ab1e5fcf95565206ce7ee559db3da9e0a35e0bc471e48afbf9"
+      }
+    },
+    "mount_receipts": [
+      {
+        "role": "writer",
+        "pod_uid": "ce1d07fe-e45c-439a-adf0-f87fbd4f0dad",
+        "uid": 1031,
+        "gid": 100,
+        "directory_inode": 16345,
+        "server_uid": 0,
+        "server_gid": 100,
+        "mode": "0o2770",
+        "nfs_source": "10.10.1.5:/volume1/Vitaliy/crossnode-replica-test-xrwx20261104-artifacts-pvc-3896c0b9-6326-4900-af9e-087897f404f3",
+        "nfs_version": "4.0",
+        "mount_root": "/",
+        "empty": true
+      },
+      {
+        "role": "reader",
+        "pod_uid": "1adcfab3-8c4d-4d74-98ed-8dab0f111f72",
+        "uid": 1031,
+        "gid": 100,
+        "directory_inode": 16345,
+        "server_uid": 0,
+        "server_gid": 100,
+        "mode": "0o2770",
+        "nfs_source": "10.10.1.5:/volume1/Vitaliy/crossnode-replica-test-xrwx20261104-artifacts-pvc-3896c0b9-6326-4900-af9e-087897f404f3",
+        "nfs_version": "4.0",
+        "mount_root": "/",
+        "empty": true
+      }
+    ],
+    "directory_inode": 16345,
+    "observed_server_uid": 0,
+    "observed_server_gid": 100,
+    "write": {
+      "operation_id": "66f2491f6d4b4cb99256bf0704108cd5",
+      "mode": "write",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/crossnode-replica-test-xrwx20261104-artifacts-pvc-3896c0b9-6326-4900-af9e-087897f404f3",
+      "mount_root": "/",
+      "directory_inode": 16345,
+      "ref": {
+        "object_id": "db88fca5aa48456db16e69c186a694c8",
+        "key": "objects/db88fca5aa48456db16e69c186a694c8",
+        "sha256": "0d488cc5d68f59882b3ac4a3c8fd4be19de9903b3b0030fda35313117c1e10bf",
+        "size": 268435456,
+        "media_type": "application/octet-stream",
+        "store_id": "synology-66f2491f6d4b4cb99256bf0704108cd5"
+      },
+      "write_seconds": 18.62104056100361,
+      "adapter_put_fsync_and_atomic_publish": true,
+      "temporary_files": 0
+    },
+    "ref": {
+      "object_id": "db88fca5aa48456db16e69c186a694c8",
+      "key": "objects/db88fca5aa48456db16e69c186a694c8",
+      "sha256": "0d488cc5d68f59882b3ac4a3c8fd4be19de9903b3b0030fda35313117c1e10bf",
+      "size": 268435456,
+      "media_type": "application/octet-stream",
+      "store_id": "synology-66f2491f6d4b4cb99256bf0704108cd5"
+    },
+    "read": {
+      "operation_id": "66f2491f6d4b4cb99256bf0704108cd5",
+      "mode": "read",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/crossnode-replica-test-xrwx20261104-artifacts-pvc-3896c0b9-6326-4900-af9e-087897f404f3",
+      "mount_root": "/",
+      "directory_inode": 16345,
+      "cold_bytes": 268435456,
+      "cold_sha256": "0d488cc5d68f59882b3ac4a3c8fd4be19de9903b3b0030fda35313117c1e10bf",
+      "read_seconds": 47.49208841996733,
+      "range_verified": true,
+      "conflicting_put_refused": true,
+      "temporary_files": 0
+    },
+    "cleanup": {
+      "operation_id": "66f2491f6d4b4cb99256bf0704108cd5",
+      "mode": "cleanup",
+      "uid": 1031,
+      "observed_server_uid": 0,
+      "observed_server_gid": 100,
+      "nfs_version": "4.0",
+      "nfs_source": "10.10.1.5:/volume1/Vitaliy/crossnode-replica-test-xrwx20261104-artifacts-pvc-3896c0b9-6326-4900-af9e-087897f404f3",
+      "mount_root": "/",
+      "directory_inode": 16345,
+      "own_object_deleted": true,
+      "own_directory_empty": true,
+      "other_share_files_touched": 0
+    },
+    "closure": {
+      "succeeded_pods": 2,
+      "live_cri": 0,
+      "target_nfs_mounts": 0,
+      "pvc_retained": true,
+      "pv_reclaim": "Retain",
+      "namespace_and_nondefault_storageclass_retained": true,
+      "other_nas_files_touched": 0
+    },
+    "source_receipt_sha256": "cdab18eda360469a2678f8e24b9216d56435f0fbccc52f547106b1cf4db43b36",
+    "platform_object_bodies_sha256": "ae0e8a72f4af9beb5c7b57f77ba61fea36c91159e9bbea85db5305baf0ca7977"
+  },
+  "network": {
+    "cross_node_pod_http": true,
+    "cross_node_dns_service_http": true,
+    "denied_client": {
+      "denied": true,
+      "error": "TimeoutError",
+      "seconds": 2.081354981055483
+    },
+    "positive_after_deny": {
+      "status": 200,
+      "body_exact": true,
+      "seconds": 0.08763071498833597
+    },
+    "allowed": [
+      {
+        "url": "http://10.248.1.164:18888/",
+        "status": 200,
+        "body_exact": true,
+        "seconds": 0.08634375198744237
+      },
+      {
+        "url": "http://right.replica-test-xnet20261104.svc.cluster.local:18888/",
+        "status": 200,
+        "body_exact": true,
+        "seconds": 0.012247991980984807
+      }
+    ],
+    "node_uids": [
+      "297ea042-adda-40a0-9b4f-bc595d1f34b8",
+      "6ad8e6c5-2661-448c-8d6d-b23205278c80"
+    ],
+    "pods": [
+      {
+        "name": "denied",
+        "uid": "ca9f6a0a-65f8-4739-a320-92cc639ff3c2",
+        "node": "okf-crossnode-control-plane",
+        "ip": "10.248.0.122"
+      },
+      {
+        "name": "left",
+        "uid": "78305d8c-a830-456d-ab47-cab938394aaa",
+        "node": "okf-crossnode-control-plane",
+        "ip": "10.248.0.239"
+      },
+      {
+        "name": "right",
+        "uid": "2054c7ec-9227-4f7c-b856-92586b27ffef",
+        "node": "okf-crossnode-worker",
+        "ip": "10.248.1.164"
+      }
+    ]
+  },
+  "frontend_storage_policy": {
+    "frontend": [
+      {
+        "pod_uid": "88f6af95-f6db-421a-9920-30ef61b9b7a9",
+        "node": "okf-crossnode-control-plane",
+        "denied": [
+          {
+            "host": "syn-storage-postgres",
+            "port": 5432,
+            "denied": true,
+            "error": "timeout",
+            "milliseconds": 2007
+          },
+          {
+            "host": "syn-storage-qdrant",
+            "port": 6333,
+            "denied": true,
+            "error": "timeout",
+            "milliseconds": 2001
+          },
+          {
+            "host": "10.10.1.5",
+            "port": 2049,
+            "denied": true,
+            "error": "timeout",
+            "milliseconds": 2002
+          }
+        ]
+      },
+      {
+        "pod_uid": "898a91a5-4607-457a-8f9d-e5377ede4279",
+        "node": "okf-crossnode-worker",
+        "denied": [
+          {
+            "host": "syn-storage-postgres",
+            "port": 5432,
+            "denied": true,
+            "error": "timeout",
+            "milliseconds": 2009
+          },
+          {
+            "host": "syn-storage-qdrant",
+            "port": 6333,
+            "denied": true,
+            "error": "timeout",
+            "milliseconds": 2001
+          },
+          {
+            "host": "10.10.1.5",
+            "port": 2049,
+            "denied": true,
+            "error": "timeout",
+            "milliseconds": 2002
+          }
+        ]
+      }
+    ],
+    "api_controls": [
+      {
+        "pod_uid": "30987de1-cbdb-4ca7-ad56-b6bdde1ec6e4",
+        "node": "okf-crossnode-worker",
+        "controls": [
+          {
+            "host": "syn-storage-postgres",
+            "port": 5432,
+            "tcp": true
+          },
+          {
+            "host": "syn-storage-qdrant",
+            "port": 6333,
+            "tcp": true
+          }
+        ]
+      },
+      {
+        "pod_uid": "2d94f802-e3bc-44d0-9af9-247f4e0bf13b",
+        "node": "okf-crossnode-control-plane",
+        "controls": [
+          {
+            "host": "syn-storage-postgres",
+            "port": 5432,
+            "tcp": true
+          },
+          {
+            "host": "syn-storage-qdrant",
+            "port": 6333,
+            "tcp": true
+          }
+        ]
+      }
+    ],
+    "host_nas_tcp_positive": true,
+    "frontend_denials": 6,
+    "api_positive_controls": 4
+  },
+  "independent_backup": {
+    "backup_id": "97f37d8cf28f4905bcacf1cad62f75e5",
+    "encrypted_objects": 8,
+    "verified": true,
+    "master_key_transferred": false,
+    "verification": {
+      "status": "independent-synology-client-backup-authenticated-cold-verified",
+      "backup_id": "97f37d8cf28f4905bcacf1cad62f75e5",
+      "format": 3,
+      "manifest_sha256": "700403823a58d2d377c4dfa02b0ac9f8fd9548539807342fa5c18f0fe6de66dc",
+      "encrypted_objects": 8,
+      "plaintext_bytes": 1137568,
+      "counts": {
+        "documents": 1,
+        "concepts": 1,
+        "chunks": 1,
+        "blobs": 6,
+        "work_items": 129,
+        "audit_events": 10
+      },
+      "postgres_tables": 81,
+      "postgres_sequences": 28,
+      "qdrant_points": 2,
+      "native_catalog_sha256": "0d8f69d4c3c48a00be1d21d4dee66513b3e8e15a200d42f39275c2944ba6ec9e",
+      "qdrant_points_sha256": "4ceadd0eed33a0b64b12edf49e3b77ddc40425ee3a6d4a40af4ee64760b7b3b4",
+      "source_binding_sha256": "52153b8aaf6734641b2d5b6ef289b266a0e9b7ba4b0e84b93e023868b65b4ba2",
+      "blobs_sha_verified": 6,
+      "source_application_writers": 0,
+      "source_still_held_epoch": 1,
+      "destination_independence": "user-declared separate PC",
+      "source_binding_file_required": true,
+      "key_transferred_to_vm": false,
+      "source_server_unavailable": false,
+      "source_access": "read-only native NAS client",
+      "server_filesystem_identity_claimed": false,
+      "restore_performed": false,
+      "production_schedule": "disabled"
+    },
+    "scope": "Vela baseline6 blobs/PG81tables28sequences/Q2points; predates later synthetic docs; no restore claimed"
+  },
+  "failed_predecessors": {
+    "pre_arm_trial_closed_without_stop": true,
+    "first_actual_node_loss": {
+      "operation_id": "ebbbaba40560484e84ef650191670032",
+      "automatic_pass": false,
+      "reason": "failed: all CoreDNS on lost worker; dead client SQL transaction retained work row lock after lease expiry",
+      "manual_reconciliation": {
+        "terminated": true,
+        "pid": 1572,
+        "backend_start": "2026-11-04T10:52:01.41946+00:00",
+        "only_dead_owned_backend": true,
+        "work_rows_edited": 0,
+        "capacity_slots_edited": 0,
+        "automatic_takeover_pass": false
+      },
+      "same_accepted_work_recovered_attempt2": true,
+      "preserved": true
+    }
+  },
+  "dependency_fix": {
+    "postgres_tcp": {
+      "tcp_keepalives_idle": 30,
+      "tcp_keepalives_interval": 10,
+      "tcp_keepalives_count": 3,
+      "tcp_user_timeout": 60000
+    },
+    "dns_required_hostname_anti_affinity": true,
+    "dns_actual_bindings": [
+      {
+        "uid": "96fa2dfa-d972-4494-a728-c9f93d7c8a91",
+        "node": "okf-crossnode-worker"
+      },
+      {
+        "uid": "99e3faa5-1bcd-48e9-ad86-c90e99170000",
+        "node": "okf-crossnode-control-plane"
+      }
+    ],
+    "namespaced_owned_workloads_only": true,
+    "statement_deadline_changed": false,
+    "unit_chart_tests": {
+      "red": 2,
+      "green": 9
+    }
+  },
+  "automatic_worker_loss": {
+    "operation_id": "a09fec90f3d848e89bf05477494cd2ce",
+    "target": {
+      "name": "worker-86f74bf5df-sm44s",
+      "uid": "2d9a781b-9a5a-4584-b182-e87c855103de",
+      "node": "okf-crossnode-worker",
+      "pod_ip": "10.248.1.245",
+      "container_id": "22c61b66e526ec48376f65a293127c0993087cbd5c9d46e80f1788cb46755446"
+    },
+    "scope_worker": {
+      "name": "okf-crossnode-worker",
+      "node_uid": "6ad8e6c5-2661-448c-8d6d-b23205278c80",
+      "container_id": "df4fb790095a3ef291d476f9af6db2b5ceb0150413f1362b04f169c8f659bc6b",
+      "image": "sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+      "cluster": "okf-crossnode"
+    },
+    "stable_node": {
+      "name": "okf-crossnode-control-plane",
+      "node_uid": "297ea042-adda-40a0-9b4f-bc595d1f34b8",
+      "container_id": "5c63e0ea023f252fe762c314633e21afdb337d5484c892c940adedd393f6ba82",
+      "image": "sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+      "cluster": "okf-crossnode"
+    },
+    "accepted": {
+      "document_id": "85b83036e496490e",
+      "original_sha256": "bc7946dbcc0dad2a01f041c7e6089c93a472db717f18a3cb322e01bcf3778c33",
+      "same_document_on_cross_frontend_idempotent_retry": true
+    },
+    "before_provider_admission": true,
+    "initial_attempt": 1,
+    "initial_fence": 1,
+    "gate_closed_explicitly": true,
+    "manual_backend_termination": false,
+    "work_lease_slots_edited": 0,
+    "samples": [
+      {
+        "elapsed_seconds": 42.62943186692428,
+        "original_worker_running": false,
+        "recovered": false,
+        "work": {
+          "id": "2e996c78a595420f88129d79da521d92",
+          "doc_id": "85b83036e496490e",
+          "kind": "document",
+          "status": "running",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": "3a87e3da64364f18bc7de0101b90888b/0",
+          "fence": 1,
+          "lease_seconds_remaining": 71.38217
+        },
+        "model": {
+          "test_only": true,
+          "active": 0,
+          "peak_active": 0,
+          "started": 0,
+          "finished": 0
+        },
+        "provider_owners": 0,
+        "previous_pg_client": null,
+        "stable_workers": []
+      },
+      {
+        "elapsed_seconds": 77.11076307599433,
+        "original_worker_running": false,
+        "recovered": false,
+        "work": {
+          "id": "2e996c78a595420f88129d79da521d92",
+          "doc_id": "85b83036e496490e",
+          "kind": "document",
+          "status": "running",
+          "attempts": 1,
+          "maintenance_epoch": 2,
+          "owner_id": "3a87e3da64364f18bc7de0101b90888b/0",
+          "fence": 1,
+          "lease_seconds_remaining": 36.844091
+        },
+        "model": {
+          "test_only": true,
+          "active": 0,
+          "peak_active": 0,
+          "started": 0,
+          "finished": 0
+        },
+        "provider_owners": 0,
+        "previous_pg_client": null,
+        "stable_workers": [
+          {
+            "uid": "7b852ced-d607-4073-9fea-7be42c4f33d3",
+            "name": "worker-5575bd46c7-44pgd",
+            "node": "okf-crossnode-control-plane"
+          }
+        ]
+      },
+      {
+        "elapsed_seconds": 116.01643905893434,
+        "original_worker_running": false,
+        "recovered": false,
+        "work": {
+          "id": "2e996c78a595420f88129d79da521d92",
+          "doc_id": "85b83036e496490e",
+          "kind": "document",
+          "status": "running",
+          "attempts": 2,
+          "maintenance_epoch": 2,
+          "owner_id": "2dbf1d14128c48ac964261ab6ad524c9/0",
+          "fence": 2,
+          "lease_seconds_remaining": 118.022613
+        },
+        "model": {
+          "test_only": true,
+          "active": 0,
+          "peak_active": 0,
+          "started": 0,
+          "finished": 0
+        },
+        "provider_owners": 0,
+        "previous_pg_client": [],
+        "stable_workers": [
+          {
+            "uid": "7b852ced-d607-4073-9fea-7be42c4f33d3",
+            "name": "worker-5575bd46c7-44pgd",
+            "node": "okf-crossnode-control-plane"
+          }
+        ]
+      },
+      {
+        "elapsed_seconds": 157.19627737195697,
+        "original_worker_running": false,
+        "recovered": false,
+        "work": {
+          "id": "2e996c78a595420f88129d79da521d92",
+          "doc_id": "85b83036e496490e",
+          "kind": "document",
+          "status": "running",
+          "attempts": 2,
+          "maintenance_epoch": 2,
+          "owner_id": "2dbf1d14128c48ac964261ab6ad524c9/0",
+          "fence": 2,
+          "lease_seconds_remaining": 106.844646
+        },
+        "model": {
+          "test_only": true,
+          "active": 1,
+          "peak_active": 1,
+          "started": 2,
+          "finished": 1
+        },
+        "provider_owners": 1,
+        "previous_pg_client": [],
+        "stable_workers": [
+          {
+            "uid": "7b852ced-d607-4073-9fea-7be42c4f33d3",
+            "name": "worker-5575bd46c7-44pgd",
+            "node": "okf-crossnode-control-plane"
+          }
+        ]
+      },
+      {
+        "elapsed_seconds": 210.3590642620111,
+        "original_worker_running": false,
+        "recovered": true,
+        "work": {
+          "id": "2e996c78a595420f88129d79da521d92",
+          "doc_id": "85b83036e496490e",
+          "kind": "document",
+          "status": "succeeded",
+          "attempts": 2,
+          "maintenance_epoch": 2,
+          "owner_id": null,
+          "fence": 2,
+          "lease_seconds_remaining": null
+        },
+        "model": {
+          "test_only": true,
+          "active": 0,
+          "peak_active": 1,
+          "started": 2,
+          "finished": 2
+        },
+        "provider_owners": 0,
+        "previous_pg_client": [],
+        "stable_workers": [
+          {
+            "uid": "7b852ced-d607-4073-9fea-7be42c4f33d3",
+            "name": "worker-5575bd46c7-44pgd",
+            "node": "okf-crossnode-control-plane"
+          }
+        ]
+      }
+    ],
+    "first_observed_done_seconds": 210.3590642620111,
+    "done_before_original_node_return": true,
+    "healing": {
+      "worker_running": true,
+      "node_ready": true,
+      "healing": {
+        "verified": true,
+        "operation_id": "a09fec90f3d848e89bf05477494cd2ce",
+        "worker_container_id": "df4fb790095a3ef291d476f9af6db2b5ceb0150413f1362b04f169c8f659bc6b",
+        "already_running": false,
+        "manual_early_request": false,
+        "started_at": "2026-11-04T12:03:10.897817587Z",
+        "observed_at": "2026-11-04T12:03:11.034138+00:00",
+        "one_owned_worker_only": true
+      }
+    },
+    "original_two_worker_spec_restored": true,
+    "actual_roles_per_node": {
+      "pods": [
+        {
+          "name": "api-58dbdc589b-n6js8",
+          "uid": "695bdfe6-82b2-4d4e-b3ca-302dfde4e3c0",
+          "role": "api",
+          "node": "okf-crossnode-control-plane",
+          "restarts": 0
+        },
+        {
+          "name": "api-58dbdc589b-pm57r",
+          "uid": "7e0892d1-e49e-48ed-9fa5-926db99e5e9c",
+          "role": "api",
+          "node": "okf-crossnode-worker",
+          "restarts": 1
+        },
+        {
+          "name": "frontend-69bbccd656-8vlqh",
+          "uid": "1827f7ca-3f7b-4308-80a9-659fe93e2ffc",
+          "role": "frontend",
+          "node": "okf-crossnode-control-plane",
+          "restarts": 0
+        },
+        {
+          "name": "frontend-69bbccd656-hwj4b",
+          "uid": "12548745-0839-4d24-a7cf-135b52a2ac01",
+          "role": "frontend",
+          "node": "okf-crossnode-worker",
+          "restarts": 1
+        },
+        {
+          "name": "worker-86fc5dd76-m2dlt",
+          "uid": "2f55eff4-a11b-44b4-8ddc-0f606089fdff",
+          "role": "worker",
+          "node": "okf-crossnode-worker",
+          "restarts": 0
+        },
+        {
+          "name": "worker-86fc5dd76-wstc4",
+          "uid": "8cce1ecd-5741-4718-b0f7-c21ee8436d75",
+          "role": "worker",
+          "node": "okf-crossnode-control-plane",
+          "restarts": 0
+        }
+      ],
+      "spread_restored": true
+    }
+  },
+  "http": {
+    "automatic_takeover_pass": true,
+    "pre_fault_shared_session": true,
+    "documents": [
+      "7fcb5511057145c9",
+      "91cd918459284730",
+      "85bf39f33b5b4ab3",
+      "85b83036e496490e"
+    ],
+    "all_four_original_sha256": true,
+    "bm25_all_four": true,
+    "both_prior_zip_sha256": true,
+    "all_four_endpoints": true
+  },
+  "new_export": {
+    "completed": true,
+    "job_id": 3,
+    "zip_sha256": "910feb2547c12543b233c06f500cebaabcfb20e80e0ee079afc23103b8b0cb1c",
+    "four_original_member_sha256": true,
+    "all_four_endpoints": true
+  },
+  "native": {
+    "processes": 4,
+    "objects_cold_sha_each": 23,
+    "scratch_files": 0,
+    "upload_audits": 4,
+    "business_work": [
+      {
+        "id": "2e996c78a595420f88129d79da521d92",
+        "kind": "document",
+        "status": "succeeded",
+        "attempts": 2,
+        "maintenance_epoch": 2,
+        "owner_id": null,
+        "payload_json": {
+          "action": "process",
+          "doc_id": "85b83036e496490e",
+          "source_file_hash": "bc7946dbcc0dad2a01f041c7e6089c93a472db717f18a3cb322e01bcf3778c33"
+        }
+      },
+      {
+        "id": "453d2efc016a456eb686ca71819d6a15",
+        "kind": "export",
+        "status": "succeeded",
+        "attempts": 1,
+        "maintenance_epoch": 2,
+        "owner_id": null,
+        "payload_json": {
+          "job_id": 3
+        }
+      },
+      {
+        "id": "4dde05cf8b1240cd8b7794548bf20497",
+        "kind": "export",
+        "status": "succeeded",
+        "attempts": 1,
+        "maintenance_epoch": 1,
+        "owner_id": null,
+        "payload_json": {
+          "job_id": 2
+        }
+      },
+      {
+        "id": "57a54c6b46bc4d639024fb4063bad39f",
+        "kind": "document",
+        "status": "succeeded",
+        "attempts": 1,
+        "maintenance_epoch": 0,
+        "owner_id": null,
+        "payload_json": {
+          "action": "process",
+          "doc_id": "7fcb5511057145c9",
+          "source_file_hash": "48bffb83bce5692da63106832900b2f80d91831c3f4d7e61ce80b49e6e8fd23a"
+        }
+      },
+      {
+        "id": "704d356617aa47639e0fd3bf8387aad7",
+        "kind": "export",
+        "status": "succeeded",
+        "attempts": 1,
+        "maintenance_epoch": 0,
+        "owner_id": null,
+        "payload_json": {
+          "job_id": 1
+        }
+      },
+      {
+        "id": "f391f08b62c9434dbc0f6fb246bb7b22",
+        "kind": "document",
+        "status": "succeeded",
+        "attempts": 2,
+        "maintenance_epoch": 1,
+        "owner_id": null,
+        "payload_json": {
+          "action": "process",
+          "doc_id": "85bf39f33b5b4ab3",
+          "source_file_hash": "4cc61bfceecf07442ebde75527dd5f3229e232c17e33c7fe33c90c3c2fcdca98"
+        }
+      },
+      {
+        "id": "f88a07fb7b33471ebed9c76960127a22",
+        "kind": "document",
+        "status": "succeeded",
+        "attempts": 1,
+        "maintenance_epoch": 1,
+        "owner_id": null,
+        "payload_json": {
+          "action": "process",
+          "doc_id": "91cd918459284730",
+          "source_file_hash": "196bc4a98dbe64a35fedc882e8777b6b4ecd4c8332705577e40a489479e78fc1"
+        }
+      }
+    ],
+    "logical": {
+      "documents": {
+        "count": 4,
+        "sha256": "f82396677bc27a8fd0d6ad19fb66d510df81b9adb12e4ce51f0c8cceea13e92a"
+      },
+      "document_generations": {
+        "count": 6,
+        "sha256": "1ea78349e1534053eb30d9efd61c4026fa2a94692b1676305225c7135efbea1f"
+      },
+      "artifact_objects": {
+        "count": 23,
+        "sha256": "ba93a44403f48117e1174d09b62a0060eb71799c55c595310fab341e3313faff"
+      },
+      "artifact_bindings": {
+        "count": 11,
+        "sha256": "c7cf9d5b9204c63ad0c82c8101c3be57ba7dab158d9e6b30bf4c439292298dba"
+      },
+      "upload_receipts": {
+        "count": 4,
+        "sha256": "0dd15372b149c951b7bb0210674cf1d8e3579e8a9a74dbe00bf4bb4faa0ed79b"
+      },
+      "work_items": {
+        "count": 7,
+        "sha256": "94f97a018e84487b014eaae99811cbbd9d35fd2cc036dbafd93f2e100519c6b3"
+      }
+    }
+  },
+  "closure": {
+    "epoch": 3,
+    "held": true,
+    "remaining_app_cri": 0,
+    "own_nfs_mounts": 0,
+    "pvcs_retained": 3,
+    "forwards_closed": true,
+    "all_gates_healers_closed": true,
+    "new_nodes_retained_off": {
+      "nodes": [
+        {
+          "name": "okf-crossnode-worker",
+          "container_id": "df4fb790095a3ef291d476f9af6db2b5ceb0150413f1362b04f169c8f659bc6b",
+          "running": false,
+          "state": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 130,
+            "Error": "",
+            "StartedAt": "2026-11-04T12:03:10.897817587Z",
+            "FinishedAt": "2026-11-04T12:12:59.310944425Z"
+          }
+        },
+        {
+          "name": "okf-crossnode-control-plane",
+          "container_id": "5c63e0ea023f252fe762c314633e21afdb337d5484c892c940adedd393f6ba82",
+          "running": false,
+          "state": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 137,
+            "Error": "",
+            "StartedAt": "2026-11-04T09:04:13.444925388Z",
+            "FinishedAt": "2026-11-04T12:13:29.664395854Z"
+          }
+        }
+      ],
+      "foreign_containers_unchanged": true,
+      "volumes_deleted": 0,
+      "old_clusters_stopped": 0,
+      "memory_available_bytes": 5845950464
+    },
+    "capacity_loans_returned": 6,
+    "old_primary_runtime": {
+      "api_endpoints": 2,
+      "images": {
+        "api": "sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba",
+        "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+        "worker": "sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba"
+      },
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "restarts": {
+        "api": 0,
+        "frontend": 0,
+        "worker": 0
+      }
+    },
+    "old_extra_runtime": {
+      "api_endpoints": 2,
+      "images": {
+        "api": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e",
+        "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+        "worker": "sha256:129e12dd493dcf109ffa88b10990e094572d51fd232575cb5c417d44a34d9c9e"
+      },
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "restarts": {
+        "api": 0,
+        "frontend": 0,
+        "worker": 0
+      }
+    },
+    "canonical_tables_unchanged_each": 9,
+    "provider_loans": [
+      {
+        "component": "model",
+        "phase": "restored",
+        "verification": {
+          "original_model_ready": true,
+          "data_mutations": 0
+        }
+      },
+      {
+        "component": "pg",
+        "phase": "restored",
+        "verification": {
+          "full_catalog_entries_unchanged": 109,
+          "owners": 0,
+          "claims_retained": true,
+          "data_mutations": 0
+        }
+      },
+      {
+        "component": "q",
+        "phase": "restored",
+        "verification": {
+          "full_catalog_entries_unchanged": 1,
+          "owners": 0,
+          "claims_retained": true,
+          "data_mutations": 0
+        }
+      },
+      {
+        "component": "s3",
+        "phase": "restored",
+        "verification": {
+          "provider_ready_marker_unchanged": true,
+          "owners": 0,
+          "claims_retained": true,
+          "data_mutations": 0
+        }
+      }
+    ],
+    "cold_old_objects": {
+      "phase": "all-capacity-restored-cold-live-blobs-verified",
+      "processes": [
+        {
+          "role": "api",
+          "pod_uid": "644b2c70-1433-45fe-bd96-7904441c25c5",
+          "live_objects_cold_sha_verified": 8,
+          "object_catalog_sha256": "3783fcbed2b4e3830499938b15c7609c0a68b1086a09e671d9ac7b199b100f65",
+          "fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3"
+        },
+        {
+          "role": "api",
+          "pod_uid": "99f40abd-7a3f-407b-9853-d6d7653f0ab0",
+          "live_objects_cold_sha_verified": 8,
+          "object_catalog_sha256": "3783fcbed2b4e3830499938b15c7609c0a68b1086a09e671d9ac7b199b100f65",
+          "fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3"
+        },
+        {
+          "role": "worker",
+          "pod_uid": "37cfc85d-ffbf-4ede-8b53-08426d1f60af",
+          "live_objects_cold_sha_verified": 8,
+          "object_catalog_sha256": "3783fcbed2b4e3830499938b15c7609c0a68b1086a09e671d9ac7b199b100f65",
+          "fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3"
+        },
+        {
+          "role": "worker",
+          "pod_uid": "1420e91a-5870-4b5c-b9ea-afa88b2c5e5a",
+          "live_objects_cold_sha_verified": 8,
+          "object_catalog_sha256": "3783fcbed2b4e3830499938b15c7609c0a68b1086a09e671d9ac7b199b100f65",
+          "fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3"
+        }
+      ],
+      "pvc_retained": true,
+      "data_mutations": 0
+    },
+    "original_sources": {
+      "verified": true,
+      "nas_and_s3": {
+        "source_application_and_storage_off": true,
+        "source_live_cri": 0,
+        "source_claim_unmounted": true,
+        "source_server_stopped": false,
+        "node_uid": "9020a1d9-843e-4947-8808-53477289b863",
+        "namespace_uid": "1f8bb3cc-d8da-4af4-9107-c96442a4ff0b"
+      },
+      "old_outage_source_off": true,
+      "old_outage_pvcs_retained": 3,
+      "new_owned_nodes_still_off": true
+    }
+  },
+  "production_schedule_enabled": false,
+  "certification": null,
+  "limits": [
+    "Both Kubernetes nodes share one VM/kernel/physical host.",
+    "Backend uses stub model/fake embeddings and test authentication; no real model/IdP/Gateway qualification.",
+    "Before-provider-admission node loss only; uncertain in-flight provider calls are not acknowledged by lease expiry.",
+    "Single Synology is not HA storage; NAS power-loss/synchronous durability is unqualified.",
+    "Initial unsuccessful trials and assisted recovery are retained; repeat result does not reclassify them."
+  ]
+}

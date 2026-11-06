@@ -151,6 +151,16 @@ def backfill_translations(
     Синхронно (admin), bulk-семафор LLM, идемпотентно (ручные переводы не
     перезаписываются). Возвращает счётчики created/failed по сущностям.
     """
+    from app.config import get_settings
+    from app.services.work.admission import durable_documents
+    if durable_documents(get_settings()):
+        from app.services.work.translations import admit_reference_translation
+        try:
+            return admit_reference_translation(body.locale, body.entities, user, ip_address=_client_ip(request))
+        except DomainError:
+            raise
+        except ValueError as exc:
+            raise ApiError(status_code=422, code=errors.INVALID_REQUEST, detail="Некорректные параметры перевода") from exc
     result = backfill_reference_data(
         body.locale, body.entities, user=user, ip_address=_client_ip(request)
     )

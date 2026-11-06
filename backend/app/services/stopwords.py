@@ -91,7 +91,7 @@ def default_stopwords() -> dict[str, dict[str, frozenset]]:
 # --- Кэш ---
 # kind -> (frozenset, expires_monotonic). Только чтение через get_stopwords;
 # инвалидация — из импорта/правки слов (синхронно до ответа API).
-_cache: dict[str, tuple[frozenset, float]] = {}
+_cache: dict[str, tuple[frozenset, float, int | None]] = {}
 _cache_lock = threading.Lock()
 
 
@@ -130,17 +130,23 @@ def get_stopwords(kind: str) -> frozenset:
     """
     if kind not in KINDS:
         raise ValueError(f"Неизвестный kind стоп-слов: {kind}")
+    settings, revision = get_settings(), None
+    from app.services.work.admission import durable_documents
+    if durable_documents(settings):
+        from app.services.work.coordination import config_revision
+        with session_scope() as session:
+            revision = config_revision(session, "references")
     now = time.monotonic()
     with _cache_lock:
         entry = _cache.get(kind)
-        if entry is not None and entry[1] > now:
+        if entry is not None and entry[1] > now and entry[2] == revision:
             return entry[0]
     words = _load_stopwords(kind)
     if not words and not _has_active_locales():
         words = _default_stopwords_by_locale()["ru"].get(kind, frozenset())
-    ttl = get_settings().stopwords_cache_ttl_seconds
+    ttl = settings.stopwords_cache_ttl_seconds
     with _cache_lock:
-        _cache[kind] = (words, time.monotonic() + ttl)
+        _cache[kind] = (words, time.monotonic() + ttl, revision)
     return words
 
 

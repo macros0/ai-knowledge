@@ -42,6 +42,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Восстановить data/tags.json из OKF-frontmatter.")
     parser.add_argument("--data-dir", type=Path, default=Path("./data"), help="Каталог данных (по умолчанию ./data)")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("rebuild_tags")
 
     bundles_dir = args.data_dir / "okf_bundles"
     counts = collect_tags(bundles_dir)

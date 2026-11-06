@@ -14,6 +14,8 @@ def main():
     parser.add_argument("--writers-stopped", action="store_true",
                         help="Operator confirms all HTTP/background/offline writers are stopped")
     args = parser.parse_args()
+    from app.services.work.cli import require_single_process_writer
+    require_single_process_writer("reference_editing_transition")
     url = os.environ.get("REFERENCE_MAINTENANCE_DATABASE_URL")
     if not url:
         parser.error("Set REFERENCE_MAINTENANCE_DATABASE_URL explicitly; no default database is used")

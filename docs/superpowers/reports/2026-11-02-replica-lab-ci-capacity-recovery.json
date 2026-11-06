@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "scope": "owned-lab-ci-scratch",
+  "status": "capacity_recovered_with_verified_pc_artifacts",
+  "observed_at": "2026-11-02T07:13:53.675798+00:00",
+  "initial_observed_free_bytes": 0,
+  "verified_duplicate_archive_bytes_removed": 1260810240,
+  "duplicate_archive_count": 15,
+  "completed_runs_archived": [
+    {
+      "revision": "0768dd95624be54aafa939e43782e6b9e92753f1",
+      "files_and_symlinks": 28419,
+      "source_content_bytes": 6353952637,
+      "pc_archive": {
+        "archive_sha256": "667335e6085b276d53f05c45774e50074a18ccbd95f5282356c56fc65ae286c3",
+        "archive_bytes": 166362142,
+        "source_manifest_sha256": "b7790505d845edd99e81ed6b5c34239eb300f6011c47664ab611f53cd2f8f36a",
+        "all_content_and_symlinks_verified": true,
+        "remote_unchanged": true,
+        "special_inode_metadata_preserved_separately": 0
+      },
+      "removed_remote_only": [
+        "shard-0/tests/tmp/pytest-runs",
+        "shard-1/tests/tmp/pytest-runs"
+      ]
+    },
+    {
+      "revision": "36579d2f574478333b81f29882a5f885d6586da5",
+      "files_and_symlinks": 28312,
+      "source_content_bytes": 6290445267,
+      "pc_archive": {
+        "archive_sha256": "e71473628e2aa1746081466978cf3a690f82be62e0043e2704ef8f47f19ab210",
+        "archive_bytes": 164706195,
+        "source_manifest_sha256": "dab7f7d3f75708250383a25825d1e47fcad2fc269f805185c6bc1571fea69943",
+        "all_content_and_symlinks_verified": true,
+        "remote_unchanged": true,
+        "special_inode_metadata_preserved_separately": 0
+      },
+      "removed_remote_only": [
+        "shard-0/tests/tmp/pytest-runs",
+        "shard-1/tests/tmp/pytest-runs"
+      ]
+    }
+  ],
+  "free_bytes_after": 14004887552,
+  "total_bytes": 102888095744,
+  "node_conditions": [
+    {
+      "name": "okf-policy-control-plane",
+      "conditions": {
+        "MemoryPressure": "False",
+        "DiskPressure": "False",
+        "Ready": "True"
+      }
+    }
+  ],
+  "ready_application_replicas": {
+    "api": 2,
+    "frontend": 2,
+    "worker": 2,
+    "model-stub": 1
+  },
+  "application_restarts": 0,
+  "source_checkouts_junit_logs_images_volumes_retained": true,
+  "other_workloads_changed": false,
+  "full_ci_snapshot_unqualified": {
+    "revision": "56cbe85372e19e0211259d9e88b50ba9400f5cf6",
+    "collection_count": 6070,
+    "shards": [
+      {
+        "index": 0,
+        "container_id": "6312fc58bf53cc0ff0b3ebf07c5dabb6157f56dfe08e90cf7d0a2a76ded994d3",
+        "expected_cases": 3035,
+        "Running": false,
+        "ExitCode": 1,
+        "OOMKilled": false,
+        "StartedAt": "2026-11-02T04:45:01.840612319Z",
+        "FinishedAt": "2026-11-02T06:51:48.867655909Z",
+        "tail_reports_no_space_left": true,
+        "junit_bytes": 0,
+        "junit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "junit_parse_error": "ParseError"
+      },
+      {
+        "index": 1,
+        "container_id": "70b83a8ee5ef1d9b8e82b97441dcd7e4ecaaf86d32452a2fdaf31841160c0421",
+        "expected_cases": 3035,
+        "Running": false,
+        "ExitCode": 1,
+        "OOMKilled": false,
+        "StartedAt": "2026-11-02T04:45:02.313609129Z",
+        "FinishedAt": "2026-11-02T06:52:20.647043339Z",
+        "tail_reports_no_space_left": true,
+        "junit_bytes": 0,
+        "junit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "junit_parse_error": "ParseError"
+      }
+    ],
+    "complete": true,
+    "passed": false
+  },
+  "future_full_ci_free_budget": "10% VM filesystem plus8GiB working budget",
+  "app_storage_full_qualification": false,
+  "production_backup_schedule_enabled": false
+}

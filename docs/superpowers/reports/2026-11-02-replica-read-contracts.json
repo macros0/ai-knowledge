@@ -1,0 +1,51 @@
+{
+  "status": "focused-checkpoint-scope-reference-regressions-passed",
+  "scope": "isolated SQLite fixtures on Windows and hermetic Linux; only tests changed, no application rollout",
+  "base_revision": "1026c8df0f1e281712812a9c4b569b1a55f9a0d3",
+  "source_overlay_sha256": {
+    "backend/tests/sql_observer.py": "4d931ed6bcf50b44a39dc674c80a124123fde1b8217d4d1fc79a6e99b6a0d9d5",
+    "backend/tests/test_portable_staging.py": "b13dac25064123bbb9848a1e48ea5b9b29d9fcd956fe3d6e834340ff8448e6d6",
+    "backend/tests/test_processing_scope_migration.py": "bd51c3dc35a7997f7765b41f09b7d004f060fad27320071b30e1556dfcfc54cf",
+    "backend/tests/test_processing_scope_summary.py": "1d8744fb6121d390f1b0a6fc5aa056c90a0978a02012dde11d11bee41291392a",
+    "backend/tests/test_reference_operations.py": "f6b91d8fa11f673fd708208fd793ea3bb068288a09c4fa23e78aae59e8c802bf"
+  },
+  "source_archive_sha256": "8d21efa4d2e318a7db590e0f9b44d8333f27865f9dc9b75474c869952f3412e0",
+  "windows": {
+    "passed": 40,
+    "failures": 0,
+    "skipped": 0,
+    "log_sha256": "e35d62aa857123aeea288c9a79995228ac7364faa68f7f7a0bc8b39a4fb8cc34"
+  },
+  "linux": {
+    "container_id": "7d69a3587615f5c8cc25471edd3b5fa25334d49bed000384e747fb8b35cbcd27",
+    "image": "sha256:a6e7dba25780ad19b10a360fd15658d5de0b95380e60b5a2af1fc3ba6fb7c25b",
+    "junit": {
+      "tests": 40,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "4b4104755a47f17232c5e5db683617642c21d2ca56ce14db38489d11f5d9f252"
+    },
+    "exit_code": 0,
+    "no_oom": true,
+    "network": "none"
+  },
+  "invariants": [
+    "portable staging downgrade refuses protocol loss; accepted checkpoint content remains readable with real Settings",
+    "historical migration seeded through reflected historical tables, without inserting future ORM columns",
+    "legacy downgrade retains document/generation rows; refused downgrade retains full review/scope columns and values",
+    "scope metadata uses 3 batched data reads for both 1 and 100 documents; complete inventory not selected",
+    "reference development uses 2 batched reads and tag snapshot 1 coherent read; content, translation, counts and revision retained",
+    "all fixed replica guard SELECTs recorded separately; unclassified SELECTs count as data and unexpected non-read SQL refuses the test"
+  ],
+  "project_gate": {
+    "passed": true,
+    "log_sha256": "4d59767e1a20a08968f5173f999f06a781df0745a94fb50362022da1fa332544"
+  },
+  "full_backend_pass": false,
+  "production_provider_certification": false,
+  "limitations": [
+    "full frozen36579d2 CI still running independently; these receipts do not replace final full-tip CI",
+    "current Kubernetes app image and provider/node qualification unchanged"
+  ]
+}

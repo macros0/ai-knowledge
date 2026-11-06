@@ -39,6 +39,12 @@ def export_okf_bundle(doc_id: str, dest_dir: Path) -> list[str]:
         from app.services.chunk_projection_maintenance import generation_projection_version, verified_chunk_parts
         from app.db.models import DocumentChunkProjection
         generation_id = active_generations.get(doc_id)
+        if generation_id:
+            from app.services.artifacts.publication import hydrate_publication
+            hydrate_publication(settings, doc_id, generation_id)
+        else:
+            from app.services.artifacts.legacy import hydrate_snapshot
+            hydrate_snapshot(settings, doc_id)
         projection_version = generation_projection_version(s, doc_id, generation_id)
         filename = doc.filename or ""
         global_tags = [item.tag_rel.canonical_text for item in doc.tags_rel]

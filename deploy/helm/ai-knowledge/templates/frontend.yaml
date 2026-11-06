@@ -1,0 +1,87 @@
+{{- if and .Values.application.enabled (has .Values.deployment.mode (list "frontend-split" "distributed")) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    {{- include "okf.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {okf-role: frontend}
+  template:
+    metadata:
+      labels:
+        okf-role: frontend
+        {{- include "okf.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.security.uid }}
+        runAsGroup: {{ .Values.security.gid }}
+        fsGroup: {{ .Values.security.gid }}
+        seccompProfile: {type: RuntimeDefault}
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: {{ .Values.placement.topologyKey | quote }}
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              okf-role: frontend
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      containers:
+        - name: frontend
+          image: {{ include "okf.image" (dict "image" .Values.images.frontend "tier" .Values.deployment.environment) | quote }}
+          imagePullPolicy: {{ .Values.images.frontend.pullPolicy }}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          ports: [{name: frontend, containerPort: 3000}]
+          env:
+            - {name: BACKEND_URL, value: "http://backend:8000"}
+            - {name: DIAGNOSTICS_INGEST_URL, value: "http://backend:8000"}
+            - name: DIAGNOSTICS_INGEST_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.secrets.existingSecret | quote }}, key: DIAGNOSTICS_INGEST_TOKEN}
+            - name: OKF_INSTANCE_ID
+              valueFrom: {fieldRef: {fieldPath: metadata.uid}}
+            - {name: OKF_FRONTEND_DIAGNOSTICS_DIR, value: /diagnostics/frontend}
+            {{- if .Values.trust.existingConfigMap }}
+            - {name: NODE_EXTRA_CA_CERTS, value: /etc/okf/trust/ca-bundle.crt}
+            {{- end }}
+          volumeMounts:
+            - {name: scratch, mountPath: /diagnostics}
+            {{- if .Values.trust.existingConfigMap }}
+            - {name: runtime-trust, mountPath: /etc/okf/trust, readOnly: true}
+            {{- end }}
+          startupProbe:
+            tcpSocket: {port: 3000}
+            {{- include "okf.probeTiming" .Values.probes.frontend.startup | nindent 12 }}
+          readinessProbe:
+            tcpSocket: {port: 3000}
+            {{- include "okf.probeTiming" .Values.probes.frontend.readiness | nindent 12 }}
+          livenessProbe:
+            tcpSocket: {port: 3000}
+            {{- include "okf.probeTiming" .Values.probes.frontend.liveness | nindent 12 }}
+          resources: {{ toYaml .Values.resources.frontend | nindent 12 }}
+      volumes:
+        - name: scratch
+          emptyDir: {sizeLimit: 64Mi}
+        {{- if .Values.trust.existingConfigMap }}
+        - name: runtime-trust
+          configMap:
+            name: {{ .Values.trust.existingConfigMap | quote }}
+            items: [{key: ca-bundle.crt, path: ca-bundle.crt}]
+        {{- end }}
+{{- end }}

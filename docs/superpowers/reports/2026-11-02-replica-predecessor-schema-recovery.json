@@ -1,0 +1,329 @@
+{
+  "schema_version": 1,
+  "status": "source-off-predecessor-schema-changing-recovery-passed",
+  "scope": "owned synthetic single-node managed-S3 recipe; real rpl04 archive to new rpl05 namespace",
+  "code_revision": "45403fc550d8e8833d6b64c856692e3f4e7c2922",
+  "operation_id": "f555294879e14071adf1e6eb8f615dd5",
+  "backup_id": "4f3e1677bcb94fd88d5a271a979edb6b",
+  "source_namespace": "replica-test-r4o2s20261102",
+  "source_namespace_uid": "4b40533d-56bc-4c8b-875c-7080b50361b3",
+  "target_namespace": "replica-test-r4o2t20261102",
+  "target_namespace_uid": "d3126f9f-f3b4-472d-b112-f7fca43f1979",
+  "source_unavailable_through_recovery": true,
+  "source_volumes": [
+    [
+      "predecessor-source-artifacts",
+      "d586dbfa-f29a-4b6f-bf18-1256fbb13055",
+      "pvc-d586dbfa-f29a-4b6f-bf18-1256fbb13055"
+    ],
+    [
+      "predecessor-source-postgres",
+      "2fbeeb10-ea4c-47b9-a7f3-d4d67cc89a49",
+      "pvc-2fbeeb10-ea4c-47b9-a7f3-d4d67cc89a49"
+    ],
+    [
+      "predecessor-source-qdrant",
+      "189a2a20-bc0f-4ecd-9dd5-95c54d7f9b0e",
+      "pvc-189a2a20-bc0f-4ecd-9dd5-95c54d7f9b0e"
+    ]
+  ],
+  "target_volumes": [
+    [
+      "predecessor-target-artifacts",
+      "e0b7d6ed-f08e-4d3d-a9df-3d4d87ea3888",
+      "pvc-e0b7d6ed-f08e-4d3d-a9df-3d4d87ea3888"
+    ],
+    [
+      "predecessor-target-postgres",
+      "0f5c7125-13e3-4cd5-a64b-a68f581456b8",
+      "pvc-0f5c7125-13e3-4cd5-a64b-a68f581456b8"
+    ],
+    [
+      "predecessor-target-qdrant",
+      "5352a6d5-c20c-4863-974e-5a27e2d1619b",
+      "pvc-5352a6d5-c20c-4863-974e-5a27e2d1619b"
+    ]
+  ],
+  "source_pvcs_deleted": false,
+  "old_source_schema_modified": false,
+  "image": {
+    "alembic_head": "rpl05_maintenance_epoch",
+    "application_deployed": false,
+    "code_revision": "45403fc550d8e8833d6b64c856692e3f4e7c2922",
+    "image": "okf-backend:replicas-45403fc-02406dfb05d5",
+    "image_id": "sha256:afeb97a371e0aba02d32f81461cd43402b0fcd70866165db6b328b574225ba50",
+    "operation_id": "0f895383344244708b366e867bdf48d3",
+    "packages": {
+      "SQLAlchemy": "2.1.5",
+      "alembic": "1.20.0",
+      "boto3": "1.43.117",
+      "psycopg": "3.3.6",
+      "pypdfium2": "5.14.0",
+      "qdrant-client": "1.19.1"
+    },
+    "recipe_revision": "45403fc550d8e8833d6b64c856692e3f4e7c2922",
+    "schema_revision": "rpl05_maintenance_epoch",
+    "source_identity": "02406dfb05d5b612a92a9553c730f35649d8e3c52d2782d9dfd1f83c317f2d80",
+    "status": "current-image-source-verified",
+    "verified_source_files": 509
+  },
+  "source_transport": "exact committed Git blobs; no dirty-worktree overlay",
+  "runtime_image_mapping": {
+    "cri_image_id": "sha256:9593392a5df66174f19d79785859bba3222db5f013cacb43a9a117d7429e0604",
+    "docker_image_id": "sha256:afeb97a371e0aba02d32f81461cd43402b0fcd70866165db6b328b574225ba50",
+    "repo_digests": [
+      "docker.io/library/import-2026-11-02@sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba"
+    ],
+    "same_rootfs_and_config": true
+  },
+  "schema_transition": {
+    "from": "rpl04_runtime_identity",
+    "to": "rpl05_maintenance_epoch",
+    "real_transactional_alembic_migration": true,
+    "old_s4_token_retained_until_atomic_migration": true,
+    "migration_created_held_epoch": 1,
+    "new_installation_held_epoch": 2,
+    "release_epoch": 2,
+    "new_installation_id": "88888888888888888888888888888888",
+    "schema_job_uid": "a34fb5ed-37a9-4375-88f8-0201d95e31e5",
+    "native_operator_script_sha256": "f021095e31f87ee3c4b0d199fb7388a9384fd44cab33a428cb2c9606237419de",
+    "source_identity_retained_through_provider_import": true,
+    "restored_work_items": 369,
+    "restored_executed_jobs_before_release": 0
+  },
+  "held_checks": {
+    "canonical_tables_unchanged": 9,
+    "held_work_progress_unchanged": true,
+    "held_work_state_sha256": "557baf92848a73a50495be737137c2d3267ac52bd9602acd65987981b43ae83a",
+    "artifact_hashes_verified": 10,
+    "qdrant_points": 4,
+    "qdrant_vectors_sha256": "1b4e005488d63556d38ad29c1f285b3beee4946733d58a80b8631a7358bf8375",
+    "held_write_attempt": "denied",
+    "invalidated_source_auth_sessions": 2,
+    "source_oidc_flows": 0,
+    "old_auth_sessions_before_release": 0
+  },
+  "scoped_credentials": {
+    "separate_new_sql_and_s3_principals": true,
+    "sql_tls_verified": true,
+    "sql_mutations_denied": [
+      "ddl",
+      "identity_fingerprint",
+      "storage_fence",
+      "maintenance_epoch",
+      "audit_update",
+      "audit_delete"
+    ],
+    "s3_out_of_scope_mutations_denied": 2,
+    "actual_scoped_artifact_contract_probe": true,
+    "admin_credentials_in_application": false,
+    "offline_operator_projection_mode": "0440",
+    "runtime_config_identity_and_secret_immutable": true
+  },
+  "old_binary_schema_guard": {
+    "job_uid": "722590f5-cdbe-4ee8-9c4d-a0454d06435d",
+    "actual_database_schema": "rpl05_maintenance_epoch",
+    "identity_and_storage_matched": true,
+    "old_binary_schema": "rpl04_runtime_identity",
+    "old_transaction_guard_refused": true,
+    "scope": "direct old-image transactional guard with genuine current identity; not normal startup",
+    "sql_transaction_read_only": true
+  },
+  "release_job_uid": "5f56f477-8bf4-4ca8-b52e-c320f78bb6c8",
+  "functional": {
+    "fresh_roundtrip_documents": 2,
+    "identity": {
+      "fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3",
+      "schema_revision": "rpl05_maintenance_epoch"
+    },
+    "native": {
+      "clean_active_generations": 4,
+      "documents": 4,
+      "fresh_documents": 2,
+      "preserved_documents": 2,
+      "released_epoch": 2,
+      "scoped_sql_tls": true,
+      "source_content_and_generation_unchanged": true
+    },
+    "old_auth_sessions_deleted_before_start": 2,
+    "old_cookie_http_rejection_tested": false,
+    "preserved_search_download_sha": 2,
+    "quiescent": {
+      "model_owners": 0,
+      "running_chats": 0,
+      "running_documents": 0
+    },
+    "runtime": {
+      "api_endpoints": 2,
+      "images": {
+        "api": "sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba",
+        "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+        "worker": "sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba"
+      },
+      "replicas": {
+        "api": 2,
+        "frontend": 2,
+        "worker": 2
+      },
+      "restarts": {
+        "api": 0,
+        "frontend": 0,
+        "worker": 0
+      }
+    },
+    "smoke_passed_checks": 7,
+    "source_unavailable": true
+  },
+  "runtime_smoke_checks": [
+    {
+      "name": "runtime.scope",
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "api_endpoints": 2,
+        "images": {
+          "api": "sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba",
+          "frontend": "sha256:ab52bc18345a2b0565c40fe461f12aaa80930a965edcb97587e5fcb022a2479b",
+          "worker": "sha256:201e922a9be7e9edd3ae1cb22be85ca6b4b6ce4e155874c7c1ff3e338a561bba"
+        },
+        "replicas": {
+          "api": 2,
+          "frontend": 2,
+          "worker": 2
+        },
+        "restarts": {
+          "api": 0,
+          "frontend": 0,
+          "worker": 0
+        }
+      },
+      "name": "runtime.role_inventory",
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "fingerprint": "4ce2c3786a9b1035abf2161ecf9d042cbcbdd361e8c29c42fa203a608814a0b3",
+        "schema_revision": "rpl05_maintenance_epoch"
+      },
+      "name": "runtime.common_identity",
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "distinct_apis": 2,
+        "shared_session": true
+      },
+      "name": "runtime.shared_session",
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "api_positive_endpoints": 3,
+        "frontend_denied_endpoints": 6,
+        "frontend_pods": 2
+      },
+      "name": "runtime.frontend_storage_boundary",
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "documents": 2,
+        "documents_per_minute": 3.906377160717058,
+        "download_sha256_matches": 2,
+        "duration_seconds": 30.71899999998277,
+        "embeddings": "fake",
+        "model": "stub",
+        "search_matches": 2,
+        "upload_seconds": [
+          2.625,
+          2.312000000005355
+        ]
+      },
+      "name": "runtime.document_roundtrip",
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "container_samples": {
+          "api": [
+            {
+              "memory_current_bytes": 582184960,
+              "memory_peak_bytes": 631619584
+            },
+            {
+              "memory_current_bytes": 498790400,
+              "memory_peak_bytes": 588439552
+            }
+          ],
+          "frontend": [
+            {
+              "memory_current_bytes": 83431424,
+              "memory_peak_bytes": 113479680
+            },
+            {
+              "memory_current_bytes": 55144448,
+              "memory_peak_bytes": 80633856
+            }
+          ],
+          "worker": [
+            {
+              "memory_current_bytes": 631271424,
+              "memory_peak_bytes": 631529472
+            },
+            {
+              "memory_current_bytes": 607272960,
+              "memory_peak_bytes": 616800256
+            }
+          ]
+        },
+        "includes_probe_overhead": true,
+        "production_sizing": false
+      },
+      "name": "runtime.memory_samples",
+      "status": "passed"
+    }
+  ],
+  "verified_at": "2026-11-02T17:31:43.228779+00:00",
+  "operator_recovery": {
+    "staging_local_name_collision_failed_closed_before_role_changes": true,
+    "same_identity_configmap_uid_reused_after_exact_data_check": true,
+    "schema_identity_sql_job_repeated": false,
+    "maintenance_epoch_incremented_for_staging_retry": false
+  },
+  "build_capacity": {
+    "reduced_only_idle_owned_target6_to": {
+      "frontend": 0,
+      "api": 1,
+      "worker": 1
+    },
+    "restored_target6_replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "target6_canonical_tables_unchanged": 9,
+    "target6_pvc_and_runtime_identity_preserved": true,
+    "foreign_services_stopped": false
+  },
+  "project_checks": {
+    "npm_audit_vulnerabilities": 0,
+    "eslint": "passed",
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "ruff": "passed",
+    "initial_sandbox_registry_access_failed": true,
+    "authorized_network_retry_passed": true
+  },
+  "not_proven": [
+    "in-place update of the retained old namespace",
+    "compact/NULL-generation adoption",
+    "other RWX/external/mixed provider recipes",
+    "physical node/failure-domain HA",
+    "fresh full active-fault R5 qualification of this new runtime",
+    "full final backend CI",
+    "independent key recovery and delivered backup alerts",
+    "production RPO/RTO SLA"
+  ],
+  "production_backup_schedule": "disabled"
+}

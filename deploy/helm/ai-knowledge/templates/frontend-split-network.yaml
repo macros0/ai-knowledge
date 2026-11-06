@@ -1,0 +1,67 @@
+{{- if and .Values.networkPolicy.enabled (eq .Values.deployment.mode "frontend-split") }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: frontend-split-default-deny}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/instance: {{ .Release.Name }}}}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: frontend-boundaries}
+spec:
+  podSelector: {matchLabels: {okf-role: frontend, app.kubernetes.io/instance: {{ .Release.Name }}}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.gateway.namespace | quote }}}}
+      ports: [{protocol: TCP, port: 3000}]
+  egress:
+    - to: [{podSelector: {matchLabels: {okf-role: application, app.kubernetes.io/instance: {{ .Release.Name }}}}}]
+      ports: [{protocol: TCP, port: 8000}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: combined-boundaries}
+spec:
+  podSelector: {matchLabels: {okf-role: application, app.kubernetes.io/instance: {{ .Release.Name }}}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {okf-role: frontend, app.kubernetes.io/instance: {{ .Release.Name }}}}}]
+      ports: [{protocol: TCP, port: 8000}]
+  egress:
+    {{- range $role, $port := dict "postgres" 5432 "qdrant" 6333 "model-stub" 8000 }}
+    - to: [{podSelector: {matchLabels: {okf-role: {{ $role }}, app.kubernetes.io/instance: {{ $.Release.Name }}}}}]
+      ports:
+        - {protocol: TCP, port: {{ $port }}}
+        {{- if eq $role "qdrant" }}
+        - {protocol: TCP, port: 6334}
+        {{- end }}
+    {{- end }}
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    {{- with .Values.networkPolicy.externalEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- range $role, $port := dict "postgres" 5432 "qdrant" 6333 "model-stub" 8000 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: {{ $role }}-boundaries}
+spec:
+  podSelector: {matchLabels: {okf-role: {{ $role }}, app.kubernetes.io/instance: {{ $.Release.Name }}}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {okf-role: application, app.kubernetes.io/instance: {{ $.Release.Name }}}}}]
+      ports:
+        - {protocol: TCP, port: {{ $port }}}
+        {{- if eq $role "qdrant" }}
+        - {protocol: TCP, port: 6334}
+        {{- end }}
+  egress: []
+{{- end }}
+{{- end }}

@@ -14,6 +14,14 @@ LIVE = {"admitted", "processing", "copying", "ready"}
 
 @contextmanager
 def scope_write_guard(doc_id, plan_id, owner_token):
+    from app.config import get_settings
+    from app.services.work.admission import durable_documents
+    from app.services.work.context import current_claim
+    from app.services.work.models import LostOwnership
+    work = current_claim()
+    if durable_documents(get_settings()) and (work is None or work.spec.kind != "scope_change"
+            or work.spec.doc_id != doc_id or work.spec.payload.get("plan_id") != plan_id):
+        raise LostOwnership("Scope writes require their durable work claim")
     with session_scope() as session:
         if not lock_document_write(session, doc_id, allow_deleted=False):
             raise DocumentUpdateCancelled("Document no longer writable")
@@ -23,7 +31,11 @@ def scope_write_guard(doc_id, plan_id, owner_token):
             attempt is not None and attempt.cancel_requested
         ):
             raise DocumentUpdateCancelled("Scope worker ownership or cancellation changed")
-        row.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=60)
+        if work is not None:
+            from app.db.models import WorkItem
+            row.lease_expires_at = session.get(WorkItem, work.work_id).lease_until
+        else:
+            row.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=60)
         yield session
 
 
@@ -35,6 +47,10 @@ def scope_update_in_progress(doc_id):
 
 @contextmanager
 def register_update_worker(doc_id, plan_id, owner_token):
+    from app.services.work.context import current_claim
+    if current_claim() is not None:
+        yield
+        return
     stopped = Event()
     def heartbeat():
         while not stopped.wait(20):
@@ -65,6 +81,9 @@ def request_update_cancel(doc_id):
 
 
 def finish_update_worker(doc_id, plan_id, owner_token):
+    from app.services.work.context import current_claim
+    if current_claim() is not None:
+        return
     with session_scope() as session:
         lock_document_write(session, doc_id)
         row = session.get(DocumentScopeChange, plan_id)

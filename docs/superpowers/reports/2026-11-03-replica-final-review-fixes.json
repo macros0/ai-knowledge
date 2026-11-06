@@ -1,0 +1,337 @@
+{
+  "schema_version": 1,
+  "status": "review-fix-pass-verified",
+  "observed_at": "2026-11-03T13:41:55.495339+00:00",
+  "revision": "ccfcf9e9082eb178c01d44272c8fbbfff9210bf7",
+  "scope": "Single consolidated fix pass after one independent whole-branch review; not a production/profile certificate",
+  "reviewed_range": {
+    "base": "94d88697cc4629c63ab12fbd4fb7350f14eec3f9",
+    "head": "b5a97759472a0e2113ecf2e814ecb15e6b8cc98c",
+    "verdict": "request-changes",
+    "critical": 0,
+    "important": 5,
+    "minor": 0,
+    "second_review_performed": false
+  },
+  "fixes": [
+    {
+      "id": "I1",
+      "change": "Document, receipt, queued work and upload audit/outbox share one admission transaction",
+      "regression": "test_upload_admission_audit.py",
+      "red_failures": 4,
+      "commit": "0db9850dc02d887da9c42745c4c1bb8f7018645b"
+    },
+    {
+      "id": "I2",
+      "change": "Same-key dedup-enabled race rechecks the actor-bound receipt under admission lock before duplicate refusal",
+      "regression": "test_upload_receipt_dedup_race.py",
+      "red_failures": 1,
+      "commit": "0db9850dc02d887da9c42745c4c1bb8f7018645b"
+    },
+    {
+      "id": "I3",
+      "change": "Replica originals have request/stream/work/service lifetimes; locked private materializations and owned crash cleanup; combined originals retained",
+      "regressions": [
+        "test_original_scratch_lifetime.py",
+        "test_materialize_scratch_recovery.py",
+        "test_work_document_scope.py"
+      ],
+      "initial_red_failures": 5,
+      "additional_direct_service_red_failures": 3,
+      "commits": [
+        "0db9850dc02d887da9c42745c4c1bb8f7018645b",
+        "12433e8bd203229424479019e1dbbfadb3c4abba",
+        "ccfcf9e9082eb178c01d44272c8fbbfff9210bf7"
+      ]
+    },
+    {
+      "id": "I4",
+      "change": "Replica metadata session ends before provider I/O, allowing independent object-lease renewal and Work heartbeats",
+      "regression": "replica_postgres/test_original_read_renewal.py",
+      "actual_postgres": "17.11",
+      "red_failures": 1,
+      "native_slow_read_passed": true,
+      "commit": "0db9850dc02d887da9c42745c4c1bb8f7018645b"
+    },
+    {
+      "id": "I5",
+      "change": "Current-runtime training backup binds live writer/node/storage identities before stop; every guard refreshes Kubernetes and CRI and refuses incomplete/surviving processes",
+      "regression": "test_replica_backup_live_stop.py",
+      "red_failures": 8,
+      "live_read_only_collector": {
+        "namespace": "replica-test-r4o2t20261102",
+        "node_uids": {
+          "okf-policy-control-plane": "9020a1d9-843e-4947-8808-53477289b863"
+        },
+        "writer_pods_bound": 6,
+        "storage_processes_bound": 3,
+        "provider_bound": true,
+        "running_application_refused": true,
+        "mutations": 0
+      },
+      "actual_stopped_backup_rehearsal_of_new_guard": false,
+      "commit": "0db9850dc02d887da9c42745c4c1bb8f7018645b"
+    }
+  ],
+  "verification": {
+    "upload_combined": {
+      "passed": 41,
+      "skipped": 0
+    },
+    "original_focused": {
+      "passed": 9,
+      "skipped": 0
+    },
+    "work_scope": {
+      "passed": 17,
+      "skipped": 0
+    },
+    "backup_coordinator_provider": {
+      "passed": 46,
+      "skipped": 0
+    },
+    "native_postgres": {
+      "tests": 95,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 8,
+      "sha256": "ed50f6a3802dc95d1d8ecd43032790486560cbac444feab6e8c4745cef0b418a"
+    },
+    "native_provider_skips": "Eight managed-storage tests require explicit separate service inputs",
+    "admission_scope_final": {
+      "tests": 51,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "db2e58728b91c4acb77e5313a08ddefad3fa92b86f2aedbfcbe43f5abd69f310"
+    },
+    "legacy_compatibility_final": {
+      "tests": 42,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "d3900003a55073c5f30160fea7d8b12479786c067341869b0a9a517b827adaec"
+    },
+    "earlier_windows_broader": {
+      "tests": 611,
+      "failures": 3,
+      "errors": 0,
+      "skipped": 18,
+      "sha256": "8af419227a87db60d327398fff08f91c903662d764a8d3a0e8103f57f8c39616"
+    },
+    "earlier_windows_broader_status": "Failed; its three direct-service scope regressions pass in the final 51-case cohort; not relabeled green",
+    "mandatory_project_checks": {
+      "npm_audit_vulnerabilities": 0,
+      "frontend_passed": 756,
+      "frontend_skipped": 1,
+      "ruff": "passed"
+    },
+    "final_linux_ci": {
+      "operation_id": "3e0d390d6e2749028a9555c9769c8009",
+      "container_id": "4d7c6254231a9b370b596be9f6d4fdd76adecc18eb743e2f0c4dc78214686061",
+      "state": "terminal",
+      "source_files": 2429,
+      "source_manifest_sha256": "554fa4d954efa7f3dd1635db3717efedaa4a7e8f8d95f2d08f082f2dc8d0d96d",
+      "expected_cases": 6652,
+      "coverage_threshold_percent": 85,
+      "network": "none",
+      "user": "1000:1000",
+      "read_only_root": true,
+      "cpus": 2,
+      "memory_limit_bytes": 2952790016,
+      "raw_outputs_retained_on_vm": true,
+      "verified": true,
+      "running": false,
+      "exit_code": 0,
+      "oom": false,
+      "junit": {
+        "tests": 6652,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 221,
+        "sha256": "7191c85b70f499b8e14b6c7bf7395f4c617a2f87438990d2c9c0eb6d487cac4d"
+      },
+      "expected_case_count_matches": true,
+      "failed_cases": [],
+      "source_unchanged": true,
+      "case_ids_complete": true,
+      "case_ids_sha256": "5f275956f844c21746f8ba5e1958c703d257a3fe0966fe0e18da50e243972086",
+      "coverage_totals": {
+        "covered_lines": 38426,
+        "num_statements": 43828,
+        "percent_covered": 87.67454595235922,
+        "percent_covered_display": "88",
+        "missing_lines": 5402,
+        "excluded_lines": 58,
+        "percent_statements_covered": 87.67454595235922,
+        "percent_statements_covered_display": "88"
+      }
+    },
+    "earlier_linux_ci": {
+      "revision": "0db9850dc02d887da9c42745c4c1bb8f7018645b",
+      "status": "explicitly-interrupted-superseded-not-green",
+      "exit_code": 2,
+      "oom": false,
+      "source_unchanged": true
+    },
+    "earlier_full_linux_ci": {
+      "revision": "12433e8bd203229424479019e1dbbfadb3c4abba",
+      "status": "failed-legacy-compatibility-not-relabeled-green",
+      "container_id": "53c2cfd5e7087acdf8d987184b8e6f31f6dd42e80c4a177f3ee324805ed170c1",
+      "running": false,
+      "exit_code": 1,
+      "oom": false,
+      "junit": {
+        "tests": 6652,
+        "failures": 16,
+        "errors": 0,
+        "skipped": 221,
+        "sha256": "500a76ee554e1e9f15da65f51e35643a109144748f7fdbee169c63217291cc76"
+      },
+      "expected_case_count_matches": true,
+      "failed_cases": [
+        {
+          "classname": "tests.test_diagnostics_context",
+          "name": "test_pipeline_resume_gets_new_operation_and_parent_request"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_resume_waiting_for_worker_is_queued_and_preserves_progress"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_queue_status_counts_admitted_work_and_frees_capacity"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_full_queue_keeps_paused_document_resumable"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_submit_failure_restores_status_and_releases_capacity"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_delete_and_restore_waiting_document_can_resume_again"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_resume_api_reports_queue_in_response_and_document_list"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_admin_can_admit_work_beyond_regular_limit_and_stops_at_own_limit"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_cancel_and_finish_return_admin_capacity"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_document_api_uses_authenticated_role_for_admission[demo.editor-503-upload]"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_document_api_uses_authenticated_role_for_admission[demo.editor-503-resume]"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_document_api_uses_authenticated_role_for_admission[demo.editor-503-regenerate]"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_document_api_uses_authenticated_role_for_admission[demo.admin-200-upload]"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_document_api_uses_authenticated_role_for_admission[demo.admin-200-resume]"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_document_api_uses_authenticated_role_for_admission[demo.admin-200-regenerate]"
+        },
+        {
+          "classname": "tests.test_pipeline_queue",
+          "name": "test_concurrent_admin_starts_do_not_exceed_admission_limit"
+        }
+      ],
+      "source_unchanged": true,
+      "case_ids_complete": true,
+      "case_ids_sha256": "5f275956f844c21746f8ba5e1958c703d257a3fe0966fe0e18da50e243972086",
+      "coverage_totals": {
+        "covered_lines": 38409,
+        "num_statements": 43828,
+        "percent_covered": 87.63575796294606,
+        "percent_covered_display": "88",
+        "missing_lines": 5419,
+        "excluded_lines": 58,
+        "percent_statements_covered": 87.63575796294606,
+        "percent_statements_covered_display": "88"
+      },
+      "verified": false
+    }
+  },
+  "resource_closure": {
+    "private_postgres_25503": "stopped-gracefully-data-retained",
+    "old_training_replicas": "restored2/2/2-same-runtime-pvc-nine-canonical-tables-verified",
+    "compact_source": "all-off-original-backup-fence-retained",
+    "compact_target": "all-off-held-epoch3-four-pvc-retained"
+  },
+  "release": {
+    "certification": null,
+    "production_backup_schedule": "disabled",
+    "outstanding": [
+      "current-image-and-provider-profile-qualification",
+      "RWX-platform-and-external-mixed-end-to-end",
+      "physical-failure-domain-and-real-model-auth-qualification",
+      "trusted-evidence-producers"
+    ]
+  },
+  "legacy_compatibility_correction": {
+    "observed_full_ci_failures": 16,
+    "cause": "Reduced legacy Settings callers lack okf_deployment_schema",
+    "change": "Only explicit replicas-v1 selects the distributed path; preserve legacy local original behavior",
+    "red_to_green_cases": 42,
+    "commit": "ccfcf9e9082eb178c01d44272c8fbbfff9210bf7"
+  },
+  "runtime_image_material": {
+    "build_exit": 0,
+    "operation_id": "3e0d390d6e2749028a9555c9769c8009",
+    "revision": "ccfcf9e9082eb178c01d44272c8fbbfff9210bf7",
+    "tag": "okf-backend:replicas-ccfcf9e-review-3e0d390d6e27",
+    "image_id": "sha256:82db855fcfb845676676a43fe7fab9a3eba08212f2944c6b03f1f4e68ca386ad",
+    "build_fingerprint": "29e462d6258e3a4317f5bf4a0d056d87383e4b060a17ed2409bf4b056177a90a",
+    "source_identity": "b50ed0aa6fd0df31bc3306c0f7be740e699173720c38b71a872f1113f6f7149f",
+    "git_source_files": 573,
+    "all_app_files": 578,
+    "changed_app_files": [
+      "app/api/documents.py",
+      "app/main.py",
+      "app/services/artifacts/materialize.py",
+      "app/services/artifacts/original.py",
+      "app/services/artifacts/original_scope.py",
+      "app/services/export_queue.py",
+      "app/services/generation_publication.py",
+      "app/services/pipeline.py",
+      "app/services/processing_admission.py",
+      "app/services/processing_scope_change.py",
+      "app/services/registry.py",
+      "app/services/work/context.py",
+      "app/services/work/scratch.py"
+    ],
+    "packages_exact": true,
+    "package_count": 117,
+    "schema_revision": "rpl05_maintenance_epoch",
+    "kind_import": {
+      "producer_exit": 0,
+      "consumer_exit": 0,
+      "operation_id": "2a99d70de6b5471e88a26ec44638ada6",
+      "kind_image_id": "sha256:4d53e99f9ab8486741c0cd4396b2e117c70276191a627bab7ab588c9121f4e01",
+      "kind_repo_digests": [
+        "docker.io/library/import-2026-11-03@sha256:d76075d3b6ffa56894677d3819133ef9479e96922635360a691ba6656646b27c"
+      ],
+      "rootfs_exact": true
+    },
+    "scope": "Exact-source material/runtime build and kind import; not a full application/provider qualification"
+  }
+}

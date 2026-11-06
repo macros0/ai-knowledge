@@ -48,6 +48,8 @@ def capture_published_update(session, doc_id: str, settings, *, fresh: bool = Fa
         from app.services.generation_artifacts import load_verified_publication
 
         active = session.get(DocumentGeneration, active_id)
+        from app.services.artifacts.publication import hydrate_publication
+        hydrate_publication(settings, doc_id, active_id)
         publication = load_verified_publication(settings, doc_id, active_id, active.publication_hash)
         fields.update({key: value for key, value in publication["document_fields"].items() if key in PUBLISHED_FIELDS})
         fields["total_chunks"] = session.scalar(select(func.count()).select_from(DocumentChunk).where(

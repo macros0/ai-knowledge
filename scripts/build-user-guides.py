@@ -110,7 +110,7 @@ class GuideDocument(BaseDocTemplate):
             canvas.line(MARGIN, HEIGHT-15*mm, WIDTH-MARGIN, HEIGHT-15*mm)
             canvas.line(MARGIN, 14*mm, WIDTH-MARGIN, 14*mm)
             canvas.setFont('Guide', 8)
-            canvas.drawString(MARGIN, 9*mm, '18.10.2026')
+            canvas.drawString(MARGIN, 9*mm, '23.10.2026')
             canvas.drawRightString(WIDTH-MARGIN, 9*mm, str(doc.page))
         else:
             canvas.setFillColor(INK)

@@ -12,8 +12,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # пользователь Linux; при несовпадении собирайте с APP_UID=$(id -u).
 ARG APP_UID=1000
 ARG APP_GID=1000
-ARG OKF_BUILD_REVISION=unknown
-ENV OKF_BUILD_REVISION=${OKF_BUILD_REVISION}
 
 WORKDIR /app
 
@@ -47,6 +45,9 @@ RUN --mount=type=secret,id=pip_config,target=/etc/pip.conf,required=false \
     pip check && \
     python -c "import importlib.metadata as m, importlib.util; assert m.version('pypdfium2'); assert importlib.util.find_spec('pymupdf') is None; assert importlib.util.find_spec('fitz') is None"
 
+# A source revision must not invalidate locked dependency installation layers.
+ARG OKF_BUILD_REVISION=unknown
+ENV OKF_BUILD_REVISION=${OKF_BUILD_REVISION}
 COPY backend/app ./app
 COPY backend/prompts ./prompts
 COPY backend/seeds ./seeds
@@ -74,7 +75,7 @@ RUN groupadd --gid "${APP_GID}" app && \
     chmod +x /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-EXPOSE 8000
+EXPOSE 8000 8001
 
 # 0.0.0.0 нужен для межконтейнерной связи (frontend -> backend:8000); сам
 # контейнер наружу не публикуется (см. docker-compose.yml без ports у backend).

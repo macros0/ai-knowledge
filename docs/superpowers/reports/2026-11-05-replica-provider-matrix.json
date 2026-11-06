@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "scope": "owned-basic-managed-s3-current-provider-branches",
+  "selected_provider_matrix_passed": true,
+  "source_parent_completed_stages": 10,
+  "source_parent_total_stages": 14,
+  "source_parent_all_stages_passed": false,
+  "documents_preserved": 4,
+  "model_recovered_fence": 4,
+  "qualification_complete": false,
+  "certification": null,
+  "production_schedule": "disabled",
+  "full_backend_ci": false,
+  "required_skips": 0,
+  "failed": 0,
+  "namespace_uid": "adeadac9-7a37-461b-9b9e-5f06268e6a79",
+  "installation_id": "000355b4864949949cb98e70e7138cb9",
+  "runtime_fingerprint": "7efcb6125d2e697938d9f6ca50a5a7e2d2221024a205afc6a14394b7d770d4d7",
+  "postgres_operation": "6f2db2a452dc47bf8e429e0db7c16faf",
+  "qdrant_execution": "9ef5ebcefe5c4f00a787a77a1f7a80e0",
+  "model_recovery_operation": "2a18181afb2947be8ab5085f09e7db3a",
+  "collector_sha256": "9593807b74373f71d910bf4d8ae6ec63a315fce4263457ba890e2ec03bc383cc",
+  "namespace": "replica-test-pfv220261105",
+  "initial_epoch": 5,
+  "final_epoch": 6,
+  "verified_at": "2026-11-05T16:06:37.486124+00:00",
+  "qdrant_recovered_work": {
+    "work_id": "5ef458cfcd864aeb99cde68c4f49426c",
+    "active_generation_id": "549a6ad33a8249158863fb92d6c05f2e",
+    "original_sha256": "b069302c2ef0194def61cb773b1102c6430ad384dc587d277aa4aaab0bd859ee",
+    "attempts": 2,
+    "fence": 2
+  },
+  "model_recovered_work": {
+    "work_id": "7b6c7dd3220f431a9624d1e45f1c16ef",
+    "active_generation_id": "879ca716400040f7baac3af3714bbcd9",
+    "original_sha256": "b069302c2ef0194def61cb773b1102c6430ad384dc587d277aa4aaab0bd859ee",
+    "attempts": 4,
+    "fence": 4
+  },
+  "source_audit": {
+    "q_parent_code_reconstructed": true,
+    "model_recipe_reconstructed": true,
+    "worker_physical_methods_unchanged": true,
+    "verification_only_worker_difference": true,
+    "historical_cases_reexecuted": false,
+    "q_code_files": 39,
+    "model_code_files": 39,
+    "verified_pc_eol_differences": [
+      "backend/app/services/diagnostics/paths.py"
+    ]
+  },
+  "fresh_current": {
+    "verified": true,
+    "actual_database_matches_verified_child": true,
+    "inventory_and_platform_unchanged": true,
+    "replicas": {
+      "api": 2,
+      "frontend": 2,
+      "worker": 2
+    },
+    "current_observation_sha256": "b95283a76a827ca3d5aaca1e8f1cd3478e487a955876a1eefc35086c85119ab8"
+  },
+  "input_sha256": {
+    "config": "c577402ae8f9930954969785feb94fa55133e42d7445f04618d7c66e53e45af2",
+    "manifest": "37ce6247d6747b36b0c4c834a343e5cb410fb15b2e47b4d44d67d404c311ad43",
+    "model": "e3159a406cee126412e99cc7f8084c2f603c0c9b4eb927b80265b03300e2cf8f",
+    "model_ci": "6f6c3dd87af24a5568b5443b727b6f8fe9ca349983bcaabb7603f5a6b166487f",
+    "model_report": "1bd40abba9a2f917ed62e98410bc6844e7cde51a3ea04c27e730d1f18ca722c9",
+    "parent": "8a0ec0544f39929cdbd6830c0a1d146ea250622bb173af859978459280f77951",
+    "pg": "e7b8ff088d8b4a9d1903694b247afa8d8954f0d0ecf5f40aa1fd87a586a503b7",
+    "pg_report": "e5f219d761887098ee4b280d0ee9e016a73fba55f330f42ae003b12daa0bb9ac",
+    "q_ci": "6fc0dd3cb89ad481808a2bd0970905f2dc60fda3d2b40b1dfd4afd86e80bae7f"
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "status": "trusted-file-evidence-and-offline-runner-windows-validated",
+  "completed_at": "2026-11-02T19:47:13.902926+00:00",
+  "scope": "implementation tests with temporary synthetic Ed25519 issuers; not actual deployment qualification",
+  "source_sha256": {
+    "backend/test_scripts/replica_evidence.py": "964f7a15c003e75437150f38061f6d53c8fae1297507a555ef287c6827d4a967",
+    "backend/test_scripts/run_replica_acceptance.py": "f0d054d0486f5476ac537f28d673a3681caa4d0512e7c257cd59a0328abc2010",
+    "backend/test_scripts/replica_acceptance_report.py": "3045d3d015ff6d1807002e44637bb4d0e0892ba353f9d8f6498495135f241b85",
+    "backend/tests/replica_evidence_fixture.py": "bb5609ca0d303d8d36b95c4a5242b753afff80f0113fd71fca7bd1d90a1f8b03",
+    "backend/tests/test_replica_evidence.py": "1e4c156c1a018c7d3ede7b00d17b5ffa8aafe2e14401712d2f4481d937754d5b",
+    "backend/tests/test_replica_evidence_runner.py": "36528821ce25657558da103ed6d05f77023bfc1d1e702bfd3c5373c4ab93aeee",
+    "backend/tests/test_replica_acceptance_report.py": "29a8e09b95983b72d41a95f5ce393b38fcfefa4df0f898ec1f6340b4113b7860",
+    "backend/tests/test_replica_acceptance_safety.py": "842b17edb3050156774fada7e9ac89eaf3ee226cd8760feae4a8e8690b39dd9d",
+    "backend/tests/test_replica_runtime_acceptance.py": "df18a6efb865282c5a9bbd35a06c07f7c873b9cfd0574bd8e00e4f43b0b68988",
+    "backend/tests/test_replica_runtime_run.py": "0db0bb8308b02bd784b15b9440943935a5f745a0eced63d04912c5af849571d2",
+    ".github/workflows/kubernetes.yml": "d08aa4cbfc82420df88f51344c09bda9b7ce5b54341f2595bbd811c48498aaef"
+  },
+  "windows": {
+    "passed": 186,
+    "skipped": 1,
+    "failed": 0,
+    "duration_seconds": 262.04,
+    "skip_scope": "POSIX FIFO refusal requires Linux",
+    "log_sha256": "1586b388d46b7535def007e46631021238ffce09d5771b489205923b6b78afea"
+  },
+  "root_check": {
+    "exit_code": 0,
+    "audit_vulnerabilities": 0,
+    "frontend_passed": 756,
+    "frontend_skipped": 1,
+    "eslint": "passed",
+    "ruff": "passed",
+    "log_sha256": "c6773caa044421b5ca90a26118b55d6796cb6f5b82f1e779562ed3378a0d4f38"
+  },
+  "provenance_contract": {
+    "signature": "Ed25519",
+    "authority": "operator-selected public issuers outside evidence root",
+    "issuer_permissions": [
+      "enabled issuer",
+      "exact producer SHA",
+      "explicit check name",
+      "separate terminal bundle permission"
+    ],
+    "scope": [
+      "binding SHA",
+      "run ID",
+      "namespace UID",
+      "installation ID",
+      "unique acceptance ID"
+    ],
+    "artifact_bytes_sha_verified": true,
+    "strict_bounded_outcomes": true,
+    "terminal_receipt_set_authenticated": true,
+    "native_reference_hashes": "attested by configured harness; underlying observations not replayed",
+    "real_issuer_configured": false,
+    "historical_reports_retroactively_signed": false
+  },
+  "meaningful_red_cases": [
+    {
+      "case": "terminal receipt set modification",
+      "failed": 1,
+      "passed_control": 1,
+      "duration_seconds": 12.32
+    },
+    {
+      "case": "parent alias disguising embedded trust policy",
+      "failed": 1,
+      "duration_seconds": 10.75
+    }
+  ],
+  "linux": {
+    "run": false,
+    "reason": "explicit source-transfer authorization pending after automatic approval review rejection",
+    "source_transfer_performed": false,
+    "container_started": false,
+    "raw_artifacts_transferred": false,
+    "workflow_contract_step_added": true,
+    "workflow_executed": false
+  },
+  "lab_preservation": {
+    "temporary_application_capacity_reduction_recovered": true,
+    "frontend": 2,
+    "api": 2,
+    "worker": 2,
+    "canonical_tables_unchanged": 9,
+    "pvcs_preserved": true,
+    "source_still_off": true,
+    "source_pvcs_retained": 3,
+    "target_pvcs_retained": 3,
+    "local_alert_receiver_events": 4
+  },
+  "open_gates": [
+    "actual trusted issuer custody and terminal producer integration",
+    "Linux cohort and final full backend CI",
+    "actual remaining profile/fault/adoption evidence",
+    "fresh whole-branch review"
+  ],
+  "actual_profile_certifications_issued": 0,
+  "release_status": "incomplete",
+  "deployment_authorized": false,
+  "production_backup_schedule": "disabled"
+}

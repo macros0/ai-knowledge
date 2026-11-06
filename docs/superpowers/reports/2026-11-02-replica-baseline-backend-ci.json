@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "status": "baseline-backend-ci-passed",
+  "revision": "e3c7025db2c0d7cda9fc24b3eb90513b91f0ec30",
+  "scope": "complete-backend-test-collection-at-recorded-revision",
+  "collected": 6093,
+  "passed": 5910,
+  "skipped": 183,
+  "failures": 0,
+  "errors": 0,
+  "shards": [
+    {
+      "index": 0,
+      "container_id": "fbb31cb5e6b77e85f02105729da290a6fcc735f70f6321a1479ec9ddf8b99147",
+      "expected_cases": 3047,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "StartedAt": "2026-11-02T07:47:13.823625018Z",
+      "FinishedAt": "2026-11-02T10:15:50.895940326Z",
+      "junit": {
+        "tests": 3047,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 93,
+        "sha256": "5aaaa8120578a72e1fd7d6e829c0443299a2d9575bdd2a5ed22fca4963c59f4e",
+        "exact_case_ids_match": true
+      }
+    },
+    {
+      "index": 1,
+      "container_id": "a6fe297e1013d77f8286453538c2d191eec747d6eb1b256e850990192994b764",
+      "expected_cases": 3046,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "StartedAt": "2026-11-02T07:47:14.270470336Z",
+      "FinishedAt": "2026-11-02T10:12:54.396931716Z",
+      "junit": {
+        "tests": 3046,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 90,
+        "sha256": "3ba1bc0e7b0540501b2bd9a73b612589860ef2ab56391394a03df004ca0436ec",
+        "exact_case_ids_match": true
+      }
+    }
+  ],
+  "raw_fixture_preservation": {
+    "destination": "independent-PC",
+    "archive_sha256": "0947ad2e97025c95418bb54579d6fc4f72e2ff00bf6b4007ac1ccd7d1a11bd3b",
+    "compressed_bytes": 169632988,
+    "verified_content_bytes": 6494740682,
+    "remote_removed_only": [
+      "shard-0/tests/tmp/pytest-runs",
+      "shard-1/tests/tmp/pytest-runs"
+    ],
+    "junit_checkouts_logs_retained": true
+  },
+  "final_version_ci": false,
+  "limitations": [
+    "This snapshot predates subsequent bounded-snapshot, capacity-oracle and scoped-restore changes.",
+    "Skipped cases remain skipped; this is not provider/runtime qualification or a zero-required-skip acceptance report.",
+    "The earlier ENOSPC failures remain retained failures; this is a separate completed run."
+  ]
+}
