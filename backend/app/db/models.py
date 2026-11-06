@@ -628,7 +628,8 @@ class DocumentWorkInput(Base):
     """Immutable, private policy captured in the same transaction as admission."""
     __tablename__ = "document_work_inputs"
     work_id: Mapped[str] = mapped_column(ForeignKey("work_items.id"), primary_key=True)
-    doc_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Match the deployed rpl02a column; FK type inference would narrow it to 16.
+    doc_id: Mapped[str] = mapped_column(String(64), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
     processing_scope_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     scope_request_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
 

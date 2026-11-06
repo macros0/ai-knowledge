@@ -51,7 +51,8 @@ def migrate_fenced_predecessor(session, settings, plan, *, operation_id, target_
             raise ValueError('Predecessor work or provider state is uncertain')
     for key, table in {'documents': 'documents', 'concepts': 'okf_concepts', 'chunks': 'document_chunks',
             'work_items': 'work_items', 'audit_events': 'audit_log'}.items():
-        if connection.scalar(text('SELECT count(*) FROM ' + table)) != getattr(plan.counts, key):
+        # Identifiers come only from the literal mapping above, never backup input.
+        if connection.scalar(text('SELECT count(*) FROM ' + table)) != getattr(plan.counts, key):  # nosec B608
             raise ValueError('Predecessor snapshot counts changed')
     if connection.scalar(text("SELECT count(*) FROM artifact_objects WHERE state='ready'")) != plan.counts.blobs:
         raise ValueError('Predecessor artifact count changed')

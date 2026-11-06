@@ -10,7 +10,8 @@ from app.services.work.runtime import start_runtime
 
 
 class WorkerHealthServer:
-    def __init__(self, health, *, host="0.0.0.0", port=8001, metrics=None):
+    # Kubelet/Pod health and aggregate metrics; no Service, default-deny ingress.
+    def __init__(self, health, *, host="0.0.0.0", port=8001, metrics=None):  # nosec B104
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_args):
                 pass
@@ -68,7 +69,8 @@ def main(argv=None, *, settings=None, stop_event=None):
     if settings.app_role != "worker" or settings.okf_deployment_schema != "replicas-v1":
         raise ValueError("The command requires the replicas-v1 worker role")
     parser = argparse.ArgumentParser(description="Durable background worker with an internal health port")
-    parser.add_argument("--health-host", default="0.0.0.0")
+    # Same Pod-only listener as WorkerHealthServer, reachable by kubelet probes.
+    parser.add_argument("--health-host", default="0.0.0.0")  # nosec B104
     parser.add_argument("--health-port", type=int, default=8001)
     parser.add_argument("--shutdown-timeout", type=float, default=60)
     args = parser.parse_args(argv)

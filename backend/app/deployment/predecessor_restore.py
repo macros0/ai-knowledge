@@ -79,7 +79,8 @@ def rebind_predecessor_target(session, settings, plan, *, installation_id, opera
     for key, table in {'documents': 'documents', 'concepts': 'okf_concepts', 'chunks': 'document_chunks',
             'work_items': 'work_items', 'audit_events': 'audit_log'}.items():
         expected = counts[key] + int(replay and key == 'audit_events' and get_audit_mode(settings).db_enabled)
-        if session.scalar(text('SELECT count(*) FROM ' + table)) != expected:
+        # Identifiers come only from the literal mapping above, never backup input.
+        if session.scalar(text('SELECT count(*) FROM ' + table)) != expected:  # nosec B608
             raise ValueError('Imported predecessor metadata counts differ')
     if session.scalar(text("SELECT count(*) FROM artifact_objects WHERE state='ready'")) != counts['blobs']:
         raise ValueError('Imported predecessor artifact inventory differs')

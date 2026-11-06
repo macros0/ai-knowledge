@@ -14,7 +14,7 @@ def test_document_work_migration_preserves_generations_and_refuses_lost_fencing(
     url = "sqlite:///" + path.as_posix()
     engine = create_engine(url)
     Base.metadata.create_all(engine)
-    from app.db.models import Document, DocumentGeneration
+    from app.db.models import Document, DocumentGeneration, DocumentWorkInput
     with Session(engine) as session:
         session.add(Document(id="legacy", filename="legacy.pdf", status="done"))
         session.flush()
@@ -37,6 +37,8 @@ def test_document_work_migration_preserves_generations_and_refuses_lost_fencing(
     config.set_main_option("script_location", str(root / "alembic"))
     command.stamp(config, "rpl02_work_items")
     command.upgrade(config, "rpl02b_work_progress")
+    migrated_doc_id = next(column for column in inspect(engine).get_columns("document_work_inputs") if column["name"] == "doc_id")
+    assert migrated_doc_id["type"].length == DocumentWorkInput.__table__.c.doc_id.type.length
     assert {"work_id", "work_fence", "work_cleanup_done"} <= {column["name"] for column in inspect(engine).get_columns("document_generations")}
     with engine.begin() as connection:
         assert connection.scalar(text("SELECT phase FROM document_generations")) == "active"

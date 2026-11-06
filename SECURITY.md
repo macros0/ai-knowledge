@@ -3405,3 +3405,17 @@ partial; no fabricated crash receipt or implicit TTL acknowledgement is allowed.
 Only that synthetic run's session may be retained in protected local storage
 for restart continuity and one-shot logout. Snapshot drift, wrong frozen export,
 remaining old-cookie access or a report path alias blocks verification.
+
+## Fixed predecessor SQL identifiers and worker health listener
+
+The predecessor restore/upgrade count queries select table names exclusively
+from a literal mapping in the function. Backup counts are compared as values;
+backup/request input never becomes a SQL identifier. The two B608 annotations
+cover only those fixed-identifier expressions.
+
+The replicas worker intentionally binds its health/aggregate-metrics port to
+Pod interfaces so kubelet probes can reach it. The chart publishes no worker
+Service or Gateway route and applies default-deny worker ingress through
+`distributed-network.yaml`. The two B104 annotations cover only that internal
+listener declaration/default; they do not authorize public exposure of port
+8001. External monitoring needs an explicit scoped network policy.
