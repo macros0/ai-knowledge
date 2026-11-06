@@ -76,7 +76,9 @@ jobs:
         # (SQLite во временном каталоге, Qdrant/LLM замоканы).
         # Порог — чуть ниже текущего значения: гейт ловит крупный непокрытый
         # кусок, а не колеблется на единицах строк.
-        run: python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
+        # Keep per-test SQLite databases on the runner's tmpfs, matching lab CI.
+        # This changes temporary storage only; all tests and coverage gates run.
+        run: python -m pytest -q --basetemp=/dev/shm/okf-backend-tests --cov=app --cov-report=term-missing --cov-fail-under=85
 
   diagnostics-windows:
     name: diagnostics (Windows locks and offline CLI)

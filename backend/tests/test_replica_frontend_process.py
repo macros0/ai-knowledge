@@ -70,8 +70,10 @@ def test_gateway_forward_uses_only_bound_access_namespace_tls_port_and_process(t
     def launch(argv,**kwargs):
         called.append(argv);kwargs['stdout'].write(b'Forwarding from 127.0.0.1:25443 -> 8443\n');kwargs['stdout'].flush()
         return SimpleNamespace(pid=43210)
-    monkeypatch.setattr(tool.subprocess,'Popen',launch);monkeypatch.setattr(tool.os,'getuid',lambda:1000,raising=False)
-    current.describe=lambda pid:dict(pid=pid,start_ticks='bound',uid=1000,argv=called[-1])
+    # Preserve the real filesystem owner while stubbing process identity.
+    uid = os.getuid() if hasattr(os, 'getuid') else 1000
+    monkeypatch.setattr(tool.subprocess,'Popen',launch);monkeypatch.setattr(tool.os,'getuid',lambda:uid,raising=False)
+    current.describe=lambda pid:dict(pid=pid,start_ticks='bound',uid=uid,argv=called[-1])
     pod={'name':'home-gateway-0','uid':'01234567-89ab-cdef-0123-456789abcdef'}
     assert hasattr(current,'forward_gateway'),'Separate admitted Gateway forward missing'
     route=current.forward_gateway('gw-https',pod,8443,tls=True)
@@ -99,8 +101,10 @@ def test_oidc_stream_child_uses_isolated_python_and_never_replays(tmp_path,monke
     tool=module();current=tool.OwnedProcesses(tmp_path,{'functional_recipe':'owned-keycloak-local-v1'})
     called=[]
     def launch(argv,**kwargs):called.append(argv);return SimpleNamespace(pid=43210)
-    monkeypatch.setattr(tool.subprocess,'Popen',launch);monkeypatch.setattr(tool.os,'getuid',lambda:1000,raising=False)
-    current.describe=lambda pid:dict(pid=pid,start_ticks='bound',uid=1000,argv=called[-1])
+    # Preserve the real filesystem owner while stubbing process identity.
+    uid = os.getuid() if hasattr(os, 'getuid') else 1000
+    monkeypatch.setattr(tool.subprocess,'Popen',launch);monkeypatch.setattr(tool.os,'getuid',lambda:uid,raising=False)
+    current.describe=lambda pid:dict(pid=pid,start_ticks='bound',uid=uid,argv=called[-1])
     current.start_client('pass',{'directory':str(tmp_path)})
     assert called[0][:3]==[sys.executable,'-I','-c']
     with pytest.raises(ValueError):current.start_client('pass',{'directory':str(tmp_path)})
