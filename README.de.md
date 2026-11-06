@@ -128,6 +128,75 @@ Upload (docx / xlsx / pdf / eml / msg)
 | Parser | Eigenes Paket `doc-parser` (python-docx, openpyxl, pypdf) |
 | LLM / Embeddings | Beliebiger OpenAI-kompatibler Endpoint (Ollama, vLLM, OpenRouter, …) |
 
+## Deployment, Speicher und Replikate
+
+Der native Start unter Windows/macOS/Linux und Docker auf einem einzelnen Server
+bleiben verfügbar. Kubernetes ermöglicht separate Deployments für Frontend, API
+und Worker, wenn eine unabhängige Skalierung erforderlich ist.
+
+### Speicheroptionen
+
+Metadaten und dauerhafter Auftragszustand liegen in PostgreSQL, Suchvektoren in
+Qdrant. Dokumentoriginale, erzeugte Bundles und weitere binäre Artefakte verwenden
+einen separaten Speicher. SQLite ist eine Alternative für die lokale Entwicklung,
+keine verteilte Datenbank.
+
+| Deployment | PostgreSQL / Qdrant | Artefaktspeicher |
+| :-- | :-- | :-- |
+| Native lokale Entwicklung | Lokale Prozesse oder konfigurierte vorhandene Dienste | Lokales Dateisystem |
+| Docker Compose `bundled` | Auf demselben Server enthalten, mit persistenten Volumes und ohne veröffentlichte Datenbankports | Persistentes lokales Anwendungsvolume |
+| Docker Compose `external` | Vorhandene Dienste des Kunden | Persistentes lokales Anwendungsvolume |
+| Kubernetes compact | Mitgelieferte Dienste, vom Anwendungs-Chart verwaltet | Lokales persistentes Volume |
+| Kubernetes distributed, managed | Vom Deployment verwaltete PostgreSQL- und Qdrant-Instanzen | RWX-Volume der Plattform oder vom Deployment verwalteter S3-kompatibler Speicher |
+| Kubernetes distributed, external oder mixed | Verwaltete oder kundeneigene Anbieter für jede Komponente unabhängig wählbar | Kundeneigener oder vom Deployment verwalteter S3-kompatibler Speicher oder gemeinsames RWX-Dateisystem, etwa NFS über CSI |
+
+Compose unterstützt genau zwei Speichermodi: `STORAGE_MODE=bundled` zusammen mit
+`COMPOSE_PROFILES=bundled` oder `STORAGE_MODE=external` mit dem externen Overlay.
+Dieselbe ausgewählte env-Datei muss über `OKF_RUNTIME_ENV_FILE` und
+`docker compose --env-file` übergeben werden. Konfiguration, Backup und
+Wiederherstellung beschreibt die [Produktionsanleitung](docs/PRODUCTION_DEPLOYMENT.md).
+
+Für verteiltes Kubernetes bietet das separate
+[Speicher-Chart](deploy/helm/ai-knowledge-storage) grundlegende Rezepte mit jeweils
+einer Instanz für PostgreSQL, Qdrant und den S3-kompatiblen RustFS. Externe Anbieter
+sind die Voreinstellung; die Ressourcenbereitstellung wird ausdrücklich aktiviert.
+Die verwalteten Einzelinstanzen bieten keine Hochverfügbarkeit des Speichers.
+Anbieterauswahl, persistente Volumes, Zugangsdaten und Backup-Verantwortung sind im
+[Speicherbetrieb](docs/REPLICA_STORAGE_OPERATIONS.md) beschrieben.
+
+### Replikat-Topologien
+
+| Kubernetes-Modus | Anwendungstopologie | Skalierungsumfang |
+| :-- | :-- | :-- |
+| `compact` | Ein Pod mit kombiniertem Backend und Frontend | Eine Anwendungsinstanz |
+| `frontend-split` | Separates Frontend-Deployment; ein kombiniertes Backend | Mehrere Frontend-Replikate |
+| `distributed` | Separate Deployments für Frontend, API und Worker | Unabhängige Replikatzahl je Rolle; das Basisbeispiel verwendet 2 / 2 / 2 |
+
+Der verteilte Betrieb wird ausdrücklich mit `OKF_DEPLOYMENT_SCHEMA=replicas-v1`
+aktiviert. API- und Worker-Replikate teilen PostgreSQL, Qdrant, einen RWX- oder
+S3-Artefaktspeicher und die installierte Laufzeitidentität. Jeder Backend-Pod
+führt einen Prozess mit privatem temporärem Speicher aus. Eine höhere Replikatzahl
+allein richtet keinen gemeinsamen Zustand ein. Das
+[verteilte Beispiel](deploy/kubernetes/profiles/distributed-basic.values.example.yaml)
+lässt die Anwendung deaktiviert, bis Speicher-Bootstrap und Installation der
+Laufzeitidentität abgeschlossen sind. Siehe die
+[Kubernetes-Anleitung](docs/KUBERNETES_DEPLOYMENT.md) und die
+[Plattformanforderungen](docs/REPLICA_PLATFORM_CONTRACT.md).
+
+Ausgewählte `basic`-Konfigurationen wurden im Schulungscluster getestet; `basic`
+erlaubt Speicherausfallzeiten. Anwendungsreplikate belegen keine physische
+Ausfallsicherheit von Hosts oder Speicher. Die Abnahme auf der Kundenplattform
+bleibt erforderlich; das Profil `resilient` ist geplant und noch nicht qualifiziert.
+Getestete Kombinationen und offene Voraussetzungen stehen in der
+[Support-Matrix](deploy/kubernetes/replicas/support-matrix.json) und der
+[Abnahmematrix](docs/REPLICA_ACCEPTANCE_MATRIX.md).
+
+Ein vorhandener Dokumentbestand erfordert eine ausdrückliche Migration mit
+Integritätsprüfung; ein anderer Endpoint allein verschiebt keine Daten.
+[Artefaktmigration](docs/ARTIFACT_STORAGE_MIGRATION.md) und
+[Kubernetes-Wiederherstellung](docs/KUBERNETES_REPLICAS_RECOVERY.md) beschreiben die
+jeweils geeigneten Offline-Migrations-, Backup- und Umschaltverfahren.
+
 ## Schnellstart
 
 ### Docker (lokaler bundled-Stack)
@@ -207,6 +276,9 @@ committen). Für lokale Läufe `ENVIRONMENT=development` setzen.
 - **[SECURITY.md](SECURITY.md)** — Sicherheitsrichtlinie: Bedrohungsmodell,
   Vertrauensgrenzen, Authentifizierung/RBAC, Audit-Log, Aufbewahrung. *(englisch)*
 - Checkliste für das Produktions-Deployment: [PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md) *(russisch)*
+- Kubernetes und Replikate: [Deployment-Anleitung](docs/KUBERNETES_DEPLOYMENT.md),
+  [Speicherbetrieb](docs/REPLICA_STORAGE_OPERATIONS.md),
+  [Abnahmematrix](docs/REPLICA_ACCEPTANCE_MATRIX.md)
 - Architektur & Roadmap: [OKF_Knowledge_Service_Roadmap.md](docs/OKF_Knowledge_Service_Roadmap.md) *(russisch)*
 - Datenbankschema & Migrationen: [MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md) *(russisch)*
 - Reproduzierbarkeit und Qualität der Suche: [SEARCH_REPRODUCTION.md](docs/SEARCH_REPRODUCTION.md) *(russisch)*

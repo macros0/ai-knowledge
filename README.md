@@ -114,6 +114,71 @@ Upload (docx / xlsx / pdf / eml / msg)
 | Parser | Custom `doc-parser` package (python-docx, openpyxl, pypdf) |
 | LLM / embeddings | Any OpenAI-compatible endpoint (Ollama, vLLM, OpenRouter, …) |
 
+## Deployment, storage and replicas
+
+The native Windows/macOS/Linux launch and the single-server Docker launch remain
+available. Kubernetes adds separate frontend, API and worker deployments when
+independent scaling is needed.
+
+### Storage choices
+
+Metadata and durable work state live in PostgreSQL; search vectors live in Qdrant.
+Document originals, generated bundles and other binary artifacts use a separate
+artifact store. SQLite is a local development fallback, not a distributed database.
+
+| Deployment | PostgreSQL / Qdrant | Artifact storage |
+| :-- | :-- | :-- |
+| Native local development | Local processes or configured existing services | Local filesystem |
+| Docker Compose `bundled` | Included on the same server, with persistent volumes and no published database ports | Persistent local application volume |
+| Docker Compose `external` | Existing customer services | Persistent local application volume |
+| Kubernetes compact | Bundled services managed by the application chart | Local persistent volume |
+| Kubernetes distributed, managed | Deployment-managed PostgreSQL and Qdrant | Platform-provided RWX volume or deployment-managed S3-compatible storage |
+| Kubernetes distributed, external or mixed | Select managed or customer-owned providers independently for each component | Customer-owned or deployment-managed S3-compatible storage, or shared RWX filesystem (for example NFS through CSI) |
+
+Compose supports exactly two storage modes: `STORAGE_MODE=bundled` with
+`COMPOSE_PROFILES=bundled`, or `STORAGE_MODE=external` with the external overlay.
+Pass the same selected env file through `OKF_RUNTIME_ENV_FILE` and
+`docker compose --env-file`; use the
+[production deployment guide](docs/PRODUCTION_DEPLOYMENT.md) for configuration,
+backup and restore commands.
+
+For distributed Kubernetes, the separate
+[storage chart](deploy/helm/ai-knowledge-storage) provides basic single-instance
+PostgreSQL, Qdrant and S3-compatible RustFS recipes. External providers are the
+default; provisioning is explicit. Managed storage instances do not provide storage
+HA. See [storage operations](docs/REPLICA_STORAGE_OPERATIONS.md) for provider
+selection, persistent volumes, credentials and backup ownership.
+
+### Replica topologies
+
+| Kubernetes mode | Application topology | Scaling scope |
+| :-- | :-- | :-- |
+| `compact` | One combined backend and frontend Pod | Single application instance |
+| `frontend-split` | Separate frontend Deployment; one combined backend | Multiple frontend replicas |
+| `distributed` | Separate frontend, API and worker Deployments | Independent replica counts for all three roles; the basic example uses 2 / 2 / 2 |
+
+Distributed operation explicitly opts into `OKF_DEPLOYMENT_SCHEMA=replicas-v1`.
+API and worker replicas share PostgreSQL, Qdrant, an RWX or S3 artifact store and
+the installed runtime identity. Each backend Pod runs one process with private
+temporary scratch. Increasing a replica count alone does not configure shared
+state. The [distributed example](deploy/kubernetes/profiles/distributed-basic.values.example.yaml)
+keeps application workloads disabled until storage bootstrap and runtime identity
+installation are complete. Follow the [Kubernetes deployment guide](docs/KUBERNETES_DEPLOYMENT.md)
+and [platform requirements](docs/REPLICA_PLATFORM_CONTRACT.md).
+
+Selected `basic` configurations have passed training-cluster tests; `basic` permits
+storage downtime. Application replicas do not establish physical host or storage
+fault tolerance. Customer platform acceptance remains required, and the
+`resilient` profile is planned and unqualified. Exact tested combinations and
+remaining gates are recorded in the [support matrix](deploy/kubernetes/replicas/support-matrix.json)
+and [acceptance matrix](docs/REPLICA_ACCEPTANCE_MATRIX.md).
+
+Existing document storage requires an explicit migration and integrity checks;
+changing an endpoint alone does not move the corpus. Consult
+[artifact migration](docs/ARTIFACT_STORAGE_MIGRATION.md) and
+[Kubernetes recovery procedures](docs/KUBERNETES_REPLICAS_RECOVERY.md) for the
+applicable offline migration, backup and cutover procedure.
+
 ## Quick start
 
 ### Docker (bundled local stack)
@@ -192,6 +257,9 @@ documented there; never commit real secrets). Set `ENVIRONMENT=development` for 
 - **[SECURITY.md](SECURITY.md)** — security policy: threat model, trust boundaries,
   authentication/RBAC, audit log, retention. (English)
 - Production deployment checklist: [PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md) *(Russian)*
+- Kubernetes deployment and replicas: [deployment guide](docs/KUBERNETES_DEPLOYMENT.md),
+  [storage operations](docs/REPLICA_STORAGE_OPERATIONS.md),
+  [acceptance matrix](docs/REPLICA_ACCEPTANCE_MATRIX.md)
 - Architecture & roadmap: [OKF_Knowledge_Service_Roadmap.md](docs/OKF_Knowledge_Service_Roadmap.md) *(Russian)*
 - Database schema & migrations: [MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md) *(Russian)*
 - Search reproduction & quality: [SEARCH_REPRODUCTION.md](docs/SEARCH_REPRODUCTION.md) *(Russian)*
