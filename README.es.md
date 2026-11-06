@@ -149,9 +149,9 @@ local, no una base de datos distribuida.
 | Desarrollo local nativo | Procesos locales o servicios existentes configurados | Sistema de archivos local |
 | Docker Compose `bundled` | Incluidos en el mismo servidor, con volúmenes persistentes y sin publicar puertos de las bases de datos | Volumen local persistente de la aplicación |
 | Docker Compose `external` | Servicios existentes del cliente | Volumen local persistente de la aplicación |
-| Kubernetes compact | Servicios incluidos o externos | Volumen persistente local |
+| Kubernetes compact | Servicios incluidos gestionados por el chart de la aplicación | Volumen persistente local |
 | Kubernetes distributed, managed | PostgreSQL y Qdrant gestionados por el despliegue | Volumen RWX de la plataforma o almacenamiento compatible con S3 gestionado por el despliegue |
-| Kubernetes distributed, external o mixed | Selección independiente de proveedores gestionados o del cliente para cada componente | Almacenamiento externo compatible con S3 o sistema de archivos RWX compartido, por ejemplo NFS mediante CSI |
+| Kubernetes distributed, external o mixed | Selección independiente de proveedores gestionados o del cliente para cada componente | Almacenamiento compatible con S3 del cliente o gestionado por el despliegue, o sistema de archivos RWX compartido, por ejemplo NFS mediante CSI |
 
 Compose admite exactamente dos modos: `STORAGE_MODE=bundled` junto con
 `COMPOSE_PROFILES=bundled`, o `STORAGE_MODE=external` con el overlay externo.

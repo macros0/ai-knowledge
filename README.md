@@ -131,9 +131,9 @@ artifact store. SQLite is a local development fallback, not a distributed databa
 | Native local development | Local processes or configured existing services | Local filesystem |
 | Docker Compose `bundled` | Included on the same server, with persistent volumes and no published database ports | Persistent local application volume |
 | Docker Compose `external` | Existing customer services | Persistent local application volume |
-| Kubernetes compact | Bundled or external services | Local persistent volume |
+| Kubernetes compact | Bundled services managed by the application chart | Local persistent volume |
 | Kubernetes distributed, managed | Deployment-managed PostgreSQL and Qdrant | Platform-provided RWX volume or deployment-managed S3-compatible storage |
-| Kubernetes distributed, external or mixed | Select managed or customer-owned providers independently for each component | External S3-compatible storage or shared RWX filesystem (for example NFS through CSI) |
+| Kubernetes distributed, external or mixed | Select managed or customer-owned providers independently for each component | Customer-owned or deployment-managed S3-compatible storage, or shared RWX filesystem (for example NFS through CSI) |
 
 Compose supports exactly two storage modes: `STORAGE_MODE=bundled` with
 `COMPOSE_PROFILES=bundled`, or `STORAGE_MODE=external` with the external overlay.
